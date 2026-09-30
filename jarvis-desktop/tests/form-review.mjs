@@ -200,6 +200,28 @@ await check("while App lock is on nothing is shown, and it asks again after the 
   assert.equal(imgOf(t.box).alt, WORDS.alt);
 });
 
+await check('"Hide memory lists and chat history": no picture, one plain line, asked again once it is off', async () => {
+  assert.equal(WORDS.hidden,
+    'The picture of the form is hidden because "Hide memory lists and chat history" is on. ' +
+    "Turn that off in Settings to see it, or read the details below before you approve.");
+  let hidden = true;
+  const t = mount(async () => (hidden ? { ok: false, hidden: true } : { ok: true, jpeg: JPEG }));
+  await t.view.show(row());
+  assert.equal(t.box.hidden, false);
+  assert.equal(t.box.children.length, 1);
+  assert.equal(t.box.children[0].textContent, WORDS.hidden);
+  hidden = false;
+  await t.view.show(row());
+  assert.equal(t.calls.length, 2);
+  assert.equal(imgOf(t.box).alt, WORDS.alt);
+  // Rust decides, before it asks the PC for anything.
+  const rs = read("src-tauri/src/brain/form_review.rs");
+  const cmd = rs.slice(rs.indexOf("pub async fn form_review_picture"));
+  assert.ok(cmd.includes("private_hidden") || rs.includes("crate::lock::private_hidden"));
+  assert.ok(cmd.indexOf("hidden(&app)") < cmd.indexOf(".get("), "checked before asking the PC");
+  assert.ok(cmd.lastIndexOf("hidden(&app)") > cmd.indexOf(".send()"), "and again after, in case it was turned on meanwhile");
+});
+
 await check("neither the id nor the picture is logged or stored", async () => {
   assert.equal(storageTouched, false);
   for (const line of logged) {

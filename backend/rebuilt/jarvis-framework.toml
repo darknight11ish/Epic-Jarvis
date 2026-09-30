@@ -325,6 +325,14 @@ screen_picture_enable = "ask"
 # "ask": anything else and the switch refuses to turn on at all.
 obscura_enable = "ask"
 
+# --- "Fill in the form, show me, then send it" (2026-09-30) ---------------
+# A browser plan whose last click is marked final (the click that sends a
+# form): Jarvis fills the fields, stops, and raises THIS card - the site,
+# every word typed and a picture of the page - before that click. One card
+# per form; never "always allow"; decided by tapping only. Must stay "ask":
+# anything else and the form is not sent at all (jarvis_form_review.py).
+browser_form_submit = "ask"
+
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
 # that Jarvis Wiki folder, on this PC, using the model on the second card -

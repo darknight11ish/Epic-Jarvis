@@ -899,6 +899,20 @@ $PATCHES = @(
     # says so and the route is simply not there - the visible browser is
     # unchanged.
     'browser-engine.patch'
+    # "Fill in the form, show me, then send it" (the owner's decision of
+    # 2026-09-30; docs/FORM-REVIEW-DESIGN.md): a browser plan's last click may
+    # be marked final; Jarvis stops before it and raises a SECOND card
+    # (browser_form_submit, tier ask, a risky approval) with the site, every
+    # word typed and a picture of the page, and GET /api/form-review/picture
+    # serves that picture while the card waits. Three hunks: in jarvis_gate.py
+    # the new action joins the "acts only on tier ask" list and gets its _RISK
+    # line - both right after browser-engine.patch's own last lines - and in
+    # jarvis_hud.py ONE install block right after browser-engine's, the last
+    # before `_loopback_companion`. So it goes last. Needs
+    # jarvis_form_review.py copied in; without it the banner says so and the
+    # plan card still says its last step waits for a second card that cannot
+    # be raised - so nothing is sent.
+    'form-review.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1096,6 +1110,7 @@ $SHIPPED = @(
     # --- the headless browser, Obscura (2026-09-29, browser-engine.patch) ---
     'jarvis_obscura.py'          # the driver for Obscura, a browser with no window: started over standard input/output (no port), --stealth always, no proxy, allow-listed tools only, one program at a time, hard limits; the owner's install line and check
     'jarvis_browser_engine.py'   # which browser Jarvis uses (visible or headless), the switch (off by default, ON is one card), the mode rule, GET/POST /api/browser/engine (browser-engine.patch)
+    'jarvis_form_review.py'      # "fill in the form, show me, then send it": the second card (browser_form_submit), the picture of the page held in memory only while that card waits, GET /api/form-review/picture (form-review.patch)
     'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)

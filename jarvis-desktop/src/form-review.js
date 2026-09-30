@@ -12,7 +12,9 @@
  *  - the picture is asked for only when the row says it has one, and only
  *    while its card is showing; it is held in memory only (no storage, no
  *    cache, no console) and dropped when the card goes;
- *  - while App lock is on Rust answers `locked` and nothing is shown;
+ *  - while App lock is on Rust answers `locked` and nothing is shown; while
+ *    "Hide memory lists and chat history" is on it answers `hidden`, nothing is
+ *    fetched, and one line says why (owner, 2026-09-30);
  *  - if it cannot be loaded the card says so in one plain sentence and the
  *    written details below it are what the owner reads - Approve and Deny
  *    keep every rule they already have (nothing here touches them);
@@ -28,6 +30,9 @@ export const WORDS = Object.freeze({
   loading: "Loading the picture of the form...",
   failed:
     "Jarvis could not load the picture of the form. Read the details below before you approve.",
+  hidden:
+    'The picture of the form is hidden because "Hide memory lists and chat history" is on. ' +
+    "Turn that off in Settings to see it, or read the details below before you approve.",
 });
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -177,6 +182,15 @@ export function mountFormReview(box, { invoke, onChange = () => {}, announce = (
       box.replaceChildren();
       box.hidden = true;
       key = null;
+      onChange();
+      return;
+    }
+    if (answer && answer.hidden === true) {
+      // "Hide memory lists and chat history": no picture, and one line why.
+      // Asked again when the card is painted again after the switch is off.
+      key = null;
+      say(WORDS.hidden);
+      announce(WORDS.hidden);
       onChange();
       return;
     }

@@ -1,0 +1,49 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -170,6 +170,7 @@
+     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
+     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
+     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
++    "browser_form_submit",  # jarvis_form_review.py / jarvis_agent.py acts only on tier "ask": ONE card, before the click that sends a filled-in form, showing the site, every word typed and a picture of the page (form-review.patch)
+ })
+ 
+ 
+@@ -835,6 +836,15 @@
+     # the internet, and every page, click and box it fills is still its own
+     # plan card first. Stealth is on. Turning it off is instant and stops it.
+     "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant"),
++    # form-review.patch (jarvis_form_review.py, jarvis_agent.py; the owner's
++    # decision of 2026-09-30: "fill out forms and book appointments for me
++    # ... send me a screenshot of all the details it filled in for me to
++    # check and approve"). The SECOND card of a browser plan that ends in a
++    # form-sending click: Jarvis has filled the form and stopped; this card
++    # shows the site, every word typed and a picture of the page exactly as
++    # it looks. What is typed goes to the site named on the card, and once
++    # sent it cannot be taken back, so a risky approval.
++    "browser_form_submit": ("no", "outbound", "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3525,6 +3525,20 @@
+     except Exception as exc:
+         print(f"  browser    NOT ON ({type(exc).__name__}) - the headless browser setting is off")
+         print("             until jarvis_browser_engine.py is back: run apply-patches.ps1 again")
++    # form-review.patch (the owner's decision of 2026-09-30): GET
++    # /api/form-review/picture?id= - the picture of a filled-in form that is
++    # waiting on its second card (browser_form_submit), for both apps' card.
++    # Held in memory only, for that one card, and never for an id whose card
++    # is no longer waiting; the rules are all in jarvis_form_review.py.
++    # Wrapped round Handler here, before anything listens, like browser
++    # above.
++    try:
++        import jarvis_form_review
++        print(jarvis_form_review.install(Handler, origin_ok=_origin_ok,
++                                         token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  form       NOT ON ({type(exc).__name__}) - the picture on a form's second card is off")
++        print("             until jarvis_form_review.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

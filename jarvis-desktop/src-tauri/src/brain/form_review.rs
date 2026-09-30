@@ -14,8 +14,11 @@
 //!   never held on a stale link (seeing the picture decides nothing). While
 //!   App lock has locked Jarvis it asks the PC for nothing and answers
 //!   `{"ok": false, "locked": true}`: the picture shows only inside the
-//!   unlocked app. A picture the PC no longer holds (404) answers
-//!   `{"ok": false}`.
+//!   unlocked app. The same while "Hide memory lists and chat history" is on
+//!   (`crate::lock::private_hidden`, the switch that hides the Used list and
+//!   chat history): nothing is asked of the PC and the answer is
+//!   `{"ok": false, "hidden": true}` (owner, 2026-09-30). A picture the PC no
+//!   longer holds (404) answers `{"ok": false}`.
 //!
 //! The picture is the owner's own screen, shown as it is (nothing blacked out:
 //! the owner needs to read the name and number), and it only ever goes to this
@@ -79,24 +82,30 @@ pub(crate) fn picture_answer(status: u16, body: &str) -> Result<serde_json::Valu
     }
     // Not `backend_refusal(status, body)`: it may quote the body, and this
     // route's bodies are never worth quoting.
-    Err(format!("Jarvis could not give the picture (HTTP {status})."))
+    Err(format!(
+        "Jarvis could not give the picture (HTTP {status})."
+    ))
 }
 
 fn locked(app: &AppHandle) -> bool {
     crate::lock::app_locked(app)
 }
 
+fn hidden(app: &AppHandle) -> bool {
+    crate::lock::private_hidden(app)
+}
+
 /// The picture for one waiting "submit this form" card. A read.
 #[tauri::command]
-pub async fn form_review_picture(
-    app: AppHandle,
-    id: String,
-) -> Result<serde_json::Value, String> {
+pub async fn form_review_picture(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
     if !valid_id(&id) {
         return Err("That is not a picture Jarvis could have made.".to_string());
     }
     if locked(&app) {
         return Ok(serde_json::json!({ "ok": false, "locked": true }));
+    }
+    if hidden(&app) {
+        return Ok(serde_json::json!({ "ok": false, "hidden": true }));
     }
     let base = commands::jarvis_base(&app);
     let response = commands::jarvis_client(Some(READ_TIMEOUT))?
@@ -113,6 +122,9 @@ pub async fn form_review_picture(
     if locked(&app) {
         return Ok(serde_json::json!({ "ok": false, "locked": true }));
     }
+    if hidden(&app) {
+        return Ok(serde_json::json!({ "ok": false, "hidden": true }));
+    }
     answer
 }
 
@@ -123,7 +135,16 @@ mod tests {
     #[test]
     fn only_plain_ids_go_in_a_url() {
         assert!(valid_id("fr_0123abcDEF-9"));
-        for bad in ["", "a b", "a/b", "a?b", "a&id=b", "../x", "é", &"a".repeat(65)] {
+        for bad in [
+            "",
+            "a b",
+            "a/b",
+            "a?b",
+            "a&id=b",
+            "../x",
+            "é",
+            &"a".repeat(65),
+        ] {
             assert!(!valid_id(bad), "{bad:?}");
         }
     }

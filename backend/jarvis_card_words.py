@@ -114,6 +114,7 @@ TITLES = {
     "second_card_third_assign": "move a second-card feature onto a third graphics card",
     "screen_picture_enable": "let it read pictures of your screen (slow, uses your main chip)",
     "obscura_enable": "read web pages with a browser that has no window (Obscura)",
+    "browser_form_submit": "send a form you were shown on a website",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",
