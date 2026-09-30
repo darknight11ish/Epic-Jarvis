@@ -272,6 +272,54 @@ def _label(role: str, name: str, within: str) -> str:
     return f'{role} "{name}"{where}'
 
 
+def _step_words(st: dict) -> str:
+    """One step as the card words it: what was opened, clicked, chosen or typed."""
+    act = st.get("action")
+    where = _label(st.get("role", ""), st.get("name", ""), st.get("within", ""))
+    if act == "navigate":
+        return f"opened {st.get('value')!r}"
+    if act == "click":
+        return f"clicked {where}"
+    if act == "select":
+        return f"chose {st.get('value')!r} in {where}"
+    return f"typed {st.get('value')!r} into {where}"
+
+
+#: At most this many earlier steps are remembered for one turn's Submit card.
+MAX_EARLIER = 80
+
+
+def remember_steps(kept: list, result: dict) -> list:
+    """`kept` plus the steps a finished browser run DID (its `done` list): only
+    navigate, click, type and select, each with its site (host name), a saved
+    secret by name only. Reads are left out. Never raises; a result without
+    steps leaves `kept` as it was. Newest kept if there are too many."""
+    from urllib.parse import urlparse
+    import jarvis_browser_control as B
+    out = list(kept or [])
+    for st in (result.get("done") if isinstance(result, dict) else None) or []:
+        if not isinstance(st, dict) or st.get("action") not in ("navigate", "click", "type", "select"):
+            continue
+        try:
+            host = (urlparse(str(st.get("url") or "")).hostname or "").lower()
+            if st.get("action") == "navigate":
+                host = (urlparse(str(st.get("value") or "")).hostname or host).lower()
+        except Exception:
+            host = ""
+        act = st["action"]
+        out.append({"host": host, "action": act, "role": st.get("role", ""),
+                    "name": st.get("name", ""), "within": st.get("within_name", ""),
+                    "value": B._secret_words(st.get("value")) if act in ("type", "select", "navigate") else ""})
+    return out[-MAX_EARLIER:]
+
+
+def earlier_for_site(kept: list, site: str) -> list:
+    """The remembered steps that were on this site, without their host field."""
+    want = (site or "").lower()
+    return [{k: v for k, v in st.items() if k != "host"}
+            for st in kept or [] if isinstance(st, dict) and st.get("host") == want]
+
+
 def card_text(info: dict, *, has_picture: bool) -> str:
     """The card: the site, every step done with every word, what is about to
     be clicked, and what the picture is (or why there is none). Built only
@@ -281,21 +329,17 @@ def card_text(info: dict, *, has_picture: bool) -> str:
     lines = [f"Jarvis wants to submit a form on {site}. It goes only if you approve, and "
              "nothing was sent yet.", "",
              f"Site: {site}", "", "What Jarvis did on the page, in order:"]
+    earlier = info.get("earlier") or []
+    if earlier:
+        lines[-1:] = ["Earlier pages of this same form, already filled in on this site:"]
+        for n, st in enumerate(earlier, 1):
+            lines.append(f"  E{n}. {_step_words(st)}")
+        lines += ["", "What Jarvis did on the page you are looking at now, in order:"]
     steps = info.get("steps") or []
     if not steps:
         lines.append("  (nothing - the form was already on the page)")
     for n, st in enumerate(steps, 1):
-        act = st.get("action")
-        if act == "navigate":
-            lines.append(f"  {n}. opened {st.get('value')!r}")
-        elif act == "click":
-            lines.append(f"  {n}. clicked {_label(st.get('role', ''), st.get('name', ''), st.get('within', ''))}")
-        elif act == "select":
-            lines.append(f"  {n}. chose {st.get('value')!r} in "
-                         f"{_label(st.get('role', ''), st.get('name', ''), st.get('within', ''))}")
-        else:
-            lines.append(f"  {n}. typed {st.get('value')!r} into "
-                         f"{_label(st.get('role', ''), st.get('name', ''), st.get('within', ''))}")
+        lines.append(f"  {n}. {_step_words(st)}")
     lines.append("")
     if has_picture:
         lines.append("The picture shown with this card is the page exactly as it looks now "

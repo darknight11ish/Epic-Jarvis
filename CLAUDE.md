@@ -1691,6 +1691,13 @@ job, one permission model, named elements only):
   Known limit, said plainly: an earlier TURN of the same conversation that
   used any tool still taints the conversation, so a form must be opened and
   filled in one turn (the normal flow).
+- **A form of several pages** (owner, 2026-09-30): one `browser_control` call
+  per page, all in one turn; **up to 8 cards in a turn (instead of 5) while ONE
+  website's form is being filled** and nothing else has asked - a card for any
+  other tool or a second website puts it back to 5 (a loosening of the
+  2026-09-25 limit, for the form only, confirmed by the owner); and **the
+  Submit card lists every page's typed words** (JARVIS-API §98.1b), the
+  picture staying the last page.
 - **Pillow is a named requirement** (owner, 2026-09-30) so a very tall form
   still gets a picture; it was already in `requirements.lock`.
 - **Model advice stays as it is** (owner, 2026-09-30, "improve what exists"):

@@ -15598,8 +15598,28 @@ installed, not switched on by it.**
   are two calls in one turn. A conversation that read outside text in an EARLIER turn
   still counts (`jarvis_chat_log.conversation_tainted` has no "browser only"
   exception) - ask again in a new message you type yourself. A form that ends in a
-  final click cannot be a step of a `propose_plan` plan. If the plan card is already
-  the fifth card of the turn the second is refused: the form stays filled, unsent.
+  final click cannot be a step of a `propose_plan` plan.
+
+### 98.1b A form of several pages (owner, 2026-09-30)
+
+* **One call per page.** A plan is bound to the page showing when it is made, so a
+  form of several pages is several `browser_control` calls in ONE turn (each page its
+  own plan card; a click on "Next" that moves the page is fine). Only the last call
+  ends with the `final` click.
+* **More cards for one site's form: 8, not 5.** `jarvis_agent._card_limit`: while only
+  ONE website has been read this turn and no card has been raised for anything other
+  than the form (`watch.cards_browser` against `watch.cards`), `browser_control`'s plan
+  cards and the Submit card may use `FORM_CARDS_PER_TURN` (8) instead of
+  `CARDS_PER_TURN` (5). Every card is still its own yes. A card for any other tool, or
+  a second website this turn, puts the limit back to 5. At the limit the next card is
+  refused in words with the real number; the form stays filled, unsent.
+* **The Submit card lists every page's words.** The steps each earlier call of this
+  turn DID on the same site (navigate, click, type, choose - never reads; a saved
+  secret only by name) are kept on the turn (`watch.form_steps`, at most 80, newest
+  kept) and shown on the Submit card under "Earlier pages of this same form, already
+  filled in on this site" (E1, E2, ...), before the current page's own steps. Steps on
+  another site are never shown there. The picture is still only the last page. A card
+  that would not fit the gate's detail limit is refused, never cut.
 
 ### 98.2 The picture
 

@@ -936,6 +936,107 @@ def t_a_different_site_read_earlier_in_the_turn_refuses_the_form():
         B.run = real_run
 
 
+def t_a_long_form_may_use_eight_cards_but_only_for_one_site():
+    """Owner, 2026-09-30: up to 8 cards while ONE website's form is being filled;
+    everything else keeps 5."""
+    AG = _agent()
+    w = _watch(AG)
+    check("the default limit is unchanged", AG.CARDS_PER_TURN == 5)
+    check("another tool: 5", AG._card_limit(w, "web_search") == 5)
+    check("a form's own tool, nothing else asked yet: 8", AG._card_limit(w, "browser_control") == 8)
+    w.cards, w.cards_browser = 6, 6
+    check("six form cards so far: the form may still ask", w.cards < AG._card_limit(w, "browser_control"))
+    w.cards, w.cards_browser = 8, 8
+    check("eight form cards so far: stop", w.cards >= AG._card_limit(w, "browser_control"))
+    w = _watch(AG)
+    w.cards, w.cards_browser = 3, 2
+    check("a card for something else was raised: back to 5", AG._card_limit(w, "browser_control") == 5)
+    w = _watch(AG)
+    w.browser_hosts = {"clinic.example", "news.example"}
+    check("two websites this turn: back to 5", AG._card_limit(w, "browser_control") == 5)
+    w = _watch(AG)
+    w.browser_hosts = {"clinic.example"}
+    check("one website this turn: 8", AG._card_limit(w, "browser_control") == 8)
+    check("no watch: 5", AG._card_limit(None, "browser_control") == 5)
+    # the second card is refused by the SAME limit
+    FR._reset_for_tests()
+    seen = {}
+    real_run = B.run
+    B.run = lambda plan, **kw: seen.update(kw) or {"ok": True}
+    try:
+        f = Form()
+        p = make_plan(f)
+        w = _watch(AG)
+        w.cards, w.cards_browser = 7, 7
+        AG._run_browser_control({}, p, checker=lambda *a: Verdict(True), watch=w, out=None)
+        check("at seven form cards the Submit card may still be asked for",
+              seen["review"]({"site": "clinic.example", "steps": [], "final": {"name": "Submit"}})
+              ["reason"] != AG.CARD_LIMIT_ERROR.format(n=8))
+        w.cards = w.cards_browser = 8
+        res = seen["review"]({"site": "clinic.example", "steps": [], "final": {"name": "Submit"}})
+        check("at eight it is refused in words, with the real number",
+              res["approved"] is False and "8 times" in res["reason"], repr(res))
+    finally:
+        B.run = real_run
+
+
+def t_the_submit_card_lists_every_page_of_the_same_form():
+    AG = _agent()
+    FR._reset_for_tests()
+    # remember_steps keeps what a run DID, with a saved secret by name only
+    res = {"ok": True, "done": [
+        {"action": "navigate", "url": "about:blank", "value": "https://clinic.example/step1"},
+        {"action": "type", "url": "https://clinic.example/step1", "role": "textbox", "name": "Name",
+         "value": "Jo Smith", "within_name": ""},
+        {"action": "type", "url": "https://clinic.example/step1", "role": "textbox", "name": "Password",
+         "value": "<secret>clinic_pw</secret>", "within_name": ""},
+        {"action": "read", "url": "https://clinic.example/step1", "role": "textbox", "name": "Name", "value": "x"},
+        {"action": "click", "url": "https://clinic.example/step1", "role": "button", "name": "Next",
+         "value": None, "within_name": ""}], "not_run": []}
+    kept = FR.remember_steps([], res)
+    check("reads are left out; the rest is kept", [k["action"] for k in kept] == ["navigate", "type", "type", "click"], repr(kept))
+    check("a saved secret only by name", "clinic_pw" in kept[2]["value"] and "<secret>" not in kept[2]["value"])
+    check("every kept step knows its site", {k["host"] for k in kept} == {"clinic.example"})
+    check("a step on another site is not shown on this site's card",
+          FR.earlier_for_site(kept + [dict(kept[1], host="other.example", value="'leak'")], "clinic.example")
+          == [{k: v for k, v in s.items() if k != "host"} for s in kept])
+    check("the cap keeps the newest", len(FR.remember_steps([{"host": "a", "action": "click"}] * 200, {"done": []})) == FR.MAX_EARLIER)
+    # the card text
+    info = {"site": "clinic.example", "steps": [{"action": "click", "role": "button", "name": "Confirm", "within": "", "value": ""}],
+            "final": {"role": "button", "name": "Submit", "within": ""}, "picture": None,
+            "earlier": FR.earlier_for_site(kept, "clinic.example")}
+    text = FR.card_text(info, has_picture=False)
+    check("the card names the earlier pages' words", "Earlier pages of this same form" in text
+          and "'Jo Smith'" in text and "E1." in text and "E4." in text, text)
+    check("...and never a saved secret's value", "<secret>" not in text and "saved secret 'clinic_pw'" in text)
+    check("...and still the current page and the final click",
+          "1. clicked" in text and 'Jarvis will now click button "Submit"' in text)
+    check("with no earlier pages the card is as it was", "Earlier pages" not in
+          FR.card_text(dict(info, earlier=[]), has_picture=False))
+    # the agent passes them through to the card, from earlier calls of this turn
+    seen = {}
+    real_run = B.run
+    B.run = lambda plan, **kw: seen.update(kw) or {"ok": True}
+    try:
+        f = Form()
+        p = make_plan(f)
+        w = _watch(AG)
+        w.form_steps = kept
+        details = []
+        class V:
+            allowed = True; outcome = "approved"; tier = "ask"
+        AG._run_browser_control({}, p, checker=lambda a, d, pr: details.append(d) or V(), watch=w, out=None)
+        seen["review"]({"site": "clinic.example", "steps": [], "final": {"name": "Submit"}})
+        check("the agent puts earlier pages on the second card", details and "'Jo Smith'" in details[0]["text"], repr(details)[:200])
+        # and records what a run did for the next page
+        B.run = lambda plan, **kw: dict(res)
+        w2 = _watch(AG)
+        AG._run_browser_control({}, p, checker=lambda *a: V(), watch=w2, out=None)
+        check("a run's steps are remembered on the turn's watch", len(w2.form_steps) == 4, repr(w2.form_steps))
+    finally:
+        B.run = real_run
+
+
 def t_the_headless_browser_gets_no_picture_hooks_but_still_the_second_card():
     AG = _agent()
     FR._reset_for_tests()

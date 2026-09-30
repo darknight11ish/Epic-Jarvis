@@ -504,19 +504,36 @@ def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None
             if checker is not None:
                 review = FR.make_review(
                     checker, tier_of=_tier_of,
-                    cannot_ask=(lambda: CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)
-                                if watch is not None and watch.cards >= CARDS_PER_TURN
+                    cannot_ask=(lambda: CARD_LIMIT_ERROR.format(
+                                    n=_card_limit(watch, "browser_control"))
+                                if watch is not None
+                                and watch.cards >= _card_limit(watch, "browser_control")
                                 else ""),
                     set_status=(out.set_status if out is not None else None),
                     card_answered=(out.card_answered if out is not None else None),
                     card_shown=(_count_card(watch) if watch is not None else None))
+                # The Submit card also lists what earlier calls this turn did
+                # on the same site (every page's words, in one place).
+                earlier = list(getattr(watch, "form_steps", []) or []) if watch is not None else []
+                if earlier:
+                    base_review = review
+                    review = (lambda info, _b=base_review, _e=earlier:
+                              _b(dict(info, earlier=FR.earlier_for_site(_e, info.get("site")))))
                 if getattr(plan_obj, "engine", "visible") == "visible":
                     snapshot, fingerprint = FR.capture, FR.fingerprint
         except Exception:
             review = snapshot = fingerprint = None
-    return B.run(plan_obj, announce=announce, checkpoint=checkpoint,
-                 approved=True, review=review, snapshot=snapshot,
-                 fingerprint=fingerprint)
+    result = B.run(plan_obj, announce=announce, checkpoint=checkpoint,
+                   approved=True, review=review, snapshot=snapshot,
+                   fingerprint=fingerprint)
+    if watch is not None and isinstance(result, dict):
+        # Remember what this call did, for the Submit card of a later page.
+        try:
+            import jarvis_form_review as FR
+            watch.form_steps = FR.remember_steps(watch.form_steps, result)
+        except Exception:
+            pass
+    return result
 
 
 def _count_card(watch: "_TurnWatch"):
@@ -525,6 +542,7 @@ def _count_card(watch: "_TurnWatch"):
     def count(verdict) -> None:
         if _a_card_was_shown(verdict):
             watch.cards += 1
+            watch.cards_browser += 1
     return count
 
 
@@ -2449,6 +2467,26 @@ def _a_person_said_yes(verdict) -> bool:
 #: each. The owner confirmed five, 2026-09-25.
 CARDS_PER_TURN = 5
 
+#: A form of several pages needs one plan card per page and the Submit card
+#: (owner, 2026-09-30): while only ONE website's form is being filled, and no
+#: card has been raised for anything else, the limit is this instead of
+#: CARDS_PER_TURN. Every card is still its own yes; everything else keeps 5.
+FORM_CARDS_PER_TURN = 8
+
+
+def _card_limit(watch, name: str = "") -> int:
+    """How many cards this turn may still use for `name`: FORM_CARDS_PER_TURN
+    for browser_control while only one site is involved and nothing else has
+    asked, CARDS_PER_TURN for everything else."""
+    if name != "browser_control" or watch is None:
+        return CARDS_PER_TURN
+    if watch.cards - getattr(watch, "cards_browser", 0) > 0:
+        return CARDS_PER_TURN          # a card for something other than the form
+    if len(getattr(watch, "browser_hosts", ()) or ()) > 1:
+        return CARDS_PER_TURN          # more than one website this turn
+    return FORM_CARDS_PER_TURN
+
+
 CARD_LIMIT_ERROR = ("refused: this answer has already asked the owner for approval "
                     "{n} times, the most one answer may ask. Nobody was asked and "
                     "nothing ran. Stop here and tell the owner what is left to do; "
@@ -3618,6 +3656,11 @@ class _TurnWatch:
         self.noted = False           # OUTSIDE_NOTE added to the turn
         self.reasked = False         # a round was asked again (Ollama)
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
+        self.cards_browser = 0       # ...of which browser_control's own (_card_limit)
+        # What earlier browser_control calls this turn DID on the form's site:
+        # words typed, things chosen, clicks - listed on the Submit card so the
+        # owner sees every page's words in one place (jarvis_form_review.py).
+        self.form_steps: list = []
         self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
         self.secrets: list = []      # KINDS of password or key read, never values
         # The websites (host names) browser_control read this turn, for the
@@ -7022,16 +7065,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return
-    if watch.cards >= CARDS_PER_TURN and not lights_ok and _would_ask(name, action_name):
+    if watch.cards >= _card_limit(watch, name) and not lights_ok and _would_ask(name, action_name):
         # Refused BEFORE a card is raised - see CARDS_PER_TURN.
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content(
-                          {"ok": False, "error": CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)})})
+                          {"ok": False, "error": CARD_LIMIT_ERROR.format(n=_card_limit(watch, name))})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         if "(card limit)" not in watch.told and tell_owner is not None:
             watch.told.add("(card limit)")
-            tell_owner(CARD_LIMIT_LINE.format(n=CARDS_PER_TURN))
+            tell_owner(CARD_LIMIT_LINE.format(n=_card_limit(watch, name)))
         return
     if lights_ok:
         # No card: the owner's own setting, for exactly this set of named
@@ -7049,6 +7092,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         out.set_status("thinking")
         if _a_card_was_shown(verdict):
             watch.cards += 1
+            if name == "browser_control":
+                watch.cards_browser += 1
     # What the GATE said, never what the model said: the outcome is read off
     # the verdict (gate-outcome.patch), and a verdict without one is recorded
     # as "unknown" rather than guessed at.
