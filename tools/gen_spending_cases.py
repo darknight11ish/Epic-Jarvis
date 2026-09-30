@@ -82,7 +82,7 @@ def _fresh() -> None:
 
 def _setup(path: Path) -> dict:
     got = SP.read_rows(str(path), roots=[str(path.parent)])
-    prop = SP.propose(got["rows"], name=path.name)
+    prop = SP.propose_layout(got["rows"], name=path.name)
     body = dict(prop["guess"], confirm=True)
     SP.confirm(body, rows=got["rows"], name=path.name, real=got["real"])
     return prop
@@ -129,7 +129,7 @@ def cases() -> dict:
     out["view_pc_nothing_saved"] = SP.view(here=True)
     out["view_phone_nothing_saved"] = SP.view(here=False)
     got = SP.read_rows(str(d / "h_ambiguous.csv"), roots=[str(d)])
-    out["proposal_date_order_unsettled"] = _relative(SP.propose(got["rows"], name="h_ambiguous.csv"))
+    out["proposal_date_order_unsettled"] = _relative(SP.propose_layout(got["rows"], name="h_ambiguous.csv"))
     SP.run_tool({"action": "summary", "path": str(d / "b_debit_credit.csv")}, roots=[str(d)])
     out["view_pc_file_waiting"] = _relative(SP.view(here=True), str(d))
     out["view_phone_file_waiting"] = SP.view(here=False)

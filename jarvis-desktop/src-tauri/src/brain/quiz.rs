@@ -6,11 +6,15 @@
 //! and the owner types an answer to each. Five commands, one per route, each
 //! its own power, modelled on [`super::goals`]:
 //!
-//! * [`brain_quiz_start`] - `POST /api/quiz {"text", "count"?, "title"?}`.
+//! * [`brain_quiz_start`] - `POST /api/quiz {"text", "count"?, "title"?}`;
+//!   Spanish practice (JARVIS-API section 102.4) adds `mode`, `level`,
+//!   `exercise` and `topic`, and its `text` is optional.
 //! * [`brain_quiz_get`] - `GET /api/quiz/<id>`: a read, used to paint the
 //!   quiz again after "Show" ends a hidden state.
 //! * [`brain_quiz_answer`] - `POST /api/quiz/<id>/answer {"n", "answer"}`.
-//! * [`brain_quiz_finish`] - `POST /api/quiz/<id>/finish`.
+//! * [`brain_quiz_finish`] - `POST /api/quiz/<id>/finish`; with the optional
+//!   `keep` body (JARVIS-API section 102.1) it keeps chosen questions in a
+//!   deck first. The app sends only each card's `n` and `answer`.
 //! * [`brain_quiz_stop`] - `POST /api/quiz/<id>/stop`.
 //!
 //! No card is raised: the text is the owner's own, only the local model sees
@@ -102,8 +106,9 @@ pub(crate) fn quiz_answer(
             .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(true))
             .filter(|v| {
                 // A crisis answer (JARVIS-API 98.4) has no mark: it carries the
-                // PC's help words instead, and passes through as it is.
-                (need == Some("mark") && is_crisis(v))
+                // PC's help words instead, and passes through as it is. So does
+                // a finish that had a crisis phrase in a kept back (102.1).
+                (matches!(need, Some("mark") | Some("summary")) && is_crisis(v))
                     || need.is_none_or(|k| v.get(k).is_some_and(|x| !x.is_null()))
             })
             .ok_or_else(|| UNREADABLE.to_string());
@@ -143,6 +148,11 @@ pub(crate) fn redact_mark(mark: &mut serde_json::Value) {
     if let Some(m) = mark.as_object_mut() {
         m.insert("comment".into(), serde_json::json!(""));
         m.insert("passage".into(), serde_json::json!(""));
+        // The key word is the owner's text too (Spanish practice); a null stays
+        // null so a mark with no key still reads as one.
+        if m.get("expected").is_some_and(|e| e.is_string()) {
+            m.insert("expected".into(), serde_json::json!(""));
+        }
     }
 }
 
@@ -171,23 +181,92 @@ fn hide_if_private(app: &AppHandle, answer: serde_json::Value) -> serde_json::Va
     }
 }
 
-/// Writes the questions for a pasted text. The text goes to the PC's local
-/// model only. No card. Held on a stale link.
-#[tauri::command]
-pub async fn brain_quiz_start(
-    app: AppHandle,
-    text: String,
+/// The six levels, and the four exercises, and the two modes, as the PC
+/// names them (JARVIS-API section 102.4).
+const LEVELS: [&str; 6] = ["A1", "A2", "B1", "B2", "C1", "C2"];
+const EXERCISES: [&str; 4] = ["translate", "blank", "complete", "mixed"];
+const TOPIC_MAX: usize = 60;
+
+/// The body of `POST /api/quiz` for the owner's choices, or the plain reason
+/// it cannot be sent. Text mode sends what it always sent; Spanish sends
+/// `mode` and only the choices that were made, and `text` only if there is
+/// some (blank means "the model writes the sentences").
+pub(crate) fn start_body(
+    text: Option<&str>,
     count: Option<i64>,
-    title: Option<String>,
+    title: Option<&str>,
+    mode: Option<&str>,
+    level: Option<&str>,
+    exercise: Option<&str>,
+    topic: Option<&str>,
 ) -> Result<serde_json::Value, String> {
-    require_link_live(&app)?;
-    let mut body = serde_json::json!({ "text": text });
+    let spanish = match mode {
+        None | Some("text") => false,
+        Some("spanish") => true,
+        Some(_) => return Err("That is not a quiz mode.".to_string()),
+    };
+    let mut body = serde_json::json!({});
+    let text = text.filter(|t| !t.trim().is_empty());
+    match (text, spanish) {
+        (Some(t), _) => body["text"] = serde_json::json!(t),
+        (None, false) => body["text"] = serde_json::json!(""),
+        (None, true) => {}
+    }
     if let Some(count) = count {
         body["count"] = serde_json::json!(count);
     }
     if let Some(title) = title.filter(|t| !t.trim().is_empty()) {
         body["title"] = serde_json::json!(title);
     }
+    if spanish {
+        body["mode"] = serde_json::json!("spanish");
+        if let Some(level) = level.filter(|l| !l.is_empty()) {
+            if !LEVELS.contains(&level) {
+                return Err("That is not a level from A1 to C2.".to_string());
+            }
+            body["level"] = serde_json::json!(level);
+        }
+        if let Some(exercise) = exercise.filter(|e| !e.is_empty()) {
+            if !EXERCISES.contains(&exercise) {
+                return Err("That is not one of the exercises.".to_string());
+            }
+            body["exercise"] = serde_json::json!(exercise);
+        }
+        if let Some(topic) = topic.map(str::trim).filter(|t| !t.is_empty()) {
+            if topic.chars().count() > TOPIC_MAX {
+                return Err("Keep the topic to 60 characters or fewer.".to_string());
+            }
+            body["topic"] = serde_json::json!(topic);
+        }
+    }
+    Ok(body)
+}
+
+/// Writes the questions for a pasted text (or, in Spanish practice, for a
+/// level, an exercise and an optional topic). The text goes to the PC's
+/// local model only. No card. Held on a stale link.
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn brain_quiz_start(
+    app: AppHandle,
+    text: Option<String>,
+    count: Option<i64>,
+    title: Option<String>,
+    mode: Option<String>,
+    level: Option<String>,
+    exercise: Option<String>,
+    topic: Option<String>,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = start_body(
+        text.as_deref(),
+        count,
+        title.as_deref(),
+        mode.as_deref(),
+        level.as_deref(),
+        exercise.as_deref(),
+        topic.as_deref(),
+    )?;
     let answer = post(&app, "/api/quiz", body, Some("quiz")).await?;
     Ok(hide_if_private(&app, answer))
 }
@@ -234,21 +313,80 @@ pub async fn brain_quiz_answer(
     Ok(hide_if_private(&app, out))
 }
 
+/// The longest a kept back may be (JARVIS-API 102.1).
+const KEEP_ANSWER_MAX: usize = 2000;
+/// The longest a new deck's name may be.
+const KEEP_NAME_MAX: usize = 60;
+
+/// The `keep` body for finish, rebuilt from the page's request so that only
+/// what the contract lets an app send goes out: the deck (an id, or null with
+/// a `new_deck` name) and, per card, only `n` and `answer`. The PC takes each
+/// front and passage from its own open quiz. Errors are plain words.
+pub(crate) fn keep_body(keep: &serde_json::Value) -> Result<serde_json::Value, String> {
+    let deck = keep.get("deck").cloned().unwrap_or(serde_json::Value::Null);
+    let mut out = serde_json::json!({});
+    match &deck {
+        serde_json::Value::Null => {
+            let name = keep
+                .get("new_deck")
+                .and_then(|n| n.as_str())
+                .map(str::trim)
+                .unwrap_or("");
+            if name.is_empty() || name.chars().count() > KEEP_NAME_MAX {
+                return Err("A deck name is 1 to 60 characters.".to_string());
+            }
+            out["deck"] = serde_json::Value::Null;
+            out["new_deck"] = serde_json::json!(name);
+        }
+        serde_json::Value::String(id) if valid_id(id) => out["deck"] = deck.clone(),
+        _ => return Err("Choose a deck or name a new one.".to_string()),
+    }
+    let cards = keep
+        .get("cards")
+        .and_then(|c| c.as_array())
+        .ok_or_else(|| "Tick at least one question to keep.".to_string())?;
+    if cards.is_empty() {
+        return Err("Tick at least one question to keep.".to_string());
+    }
+    let mut sent = Vec::with_capacity(cards.len());
+    for card in cards {
+        let n = card
+            .get("n")
+            .and_then(|n| n.as_i64())
+            .filter(|n| *n >= 1)
+            .ok_or_else(|| "That is not one of this quiz's questions.".to_string())?;
+        let answer = card.get("answer").and_then(|a| a.as_str()).unwrap_or("");
+        if answer.chars().count() > KEEP_ANSWER_MAX {
+            return Err("That answer is too long. Keep it to 2,000 characters or fewer.".to_string());
+        }
+        sent.push(serde_json::json!({ "n": n, "answer": answer }));
+    }
+    out["cards"] = serde_json::Value::Array(sent);
+    Ok(out)
+}
+
 /// Ends the quiz and asks for the short summary; the PC forgets the quiz.
-/// Held on a stale link.
+/// With `keep`, the chosen questions go into a deck first (all or nothing;
+/// on a failure the quiz stays open). Held on a stale link.
 #[tauri::command]
-pub async fn brain_quiz_finish(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+pub async fn brain_quiz_finish(
+    app: AppHandle,
+    id: String,
+    keep: Option<serde_json::Value>,
+) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     if !valid_id(&id) {
         return Err(NO_SUCH_QUIZ.to_string());
     }
-    post(
-        &app,
-        &format!("/api/quiz/{id}/finish"),
-        serde_json::json!({}),
-        Some("summary"),
-    )
-    .await
+    let mut body = serde_json::json!({});
+    if let Some(keep) = keep.filter(|k| !k.is_null()) {
+        if crate::lock::private_hidden(&app) {
+            return Err("Turn off Hide memory lists to keep questions".to_string());
+        }
+        body["keep"] = keep_body(&keep)?;
+    }
+    let answer = post(&app, &format!("/api/quiz/{id}/finish"), body, Some("summary")).await?;
+    Ok(hide_if_private(&app, answer))
 }
 
 /// Stops the quiz and makes the PC forget it. Held on a stale link.
@@ -397,11 +535,10 @@ mod tests {
             quiz_answer(200, plain, Some("mark")).unwrap_err(),
             UNREADABLE
         );
-        // The crisis pass-through applies to the answer route only.
-        assert_eq!(
-            quiz_answer(200, body, Some("summary")).unwrap_err(),
-            UNREADABLE
-        );
+        // The crisis pass-through applies to the answer and finish routes
+        // (a crisis phrase in a kept back), not to start.
+        assert!(quiz_answer(200, body, Some("summary")).is_ok());
+        assert_eq!(quiz_answer(200, body, Some("quiz")).unwrap().get("quiz").is_some(), true);
     }
 
     #[test]

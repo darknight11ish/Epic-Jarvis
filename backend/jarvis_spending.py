@@ -724,7 +724,7 @@ def locate(rows: list, profiles: Optional[dict] = None) -> tuple:
 #   A proposal for a layout Jarvis has not seen (the "Check these columns" box)
 # --------------------------------------------------------------------------
 
-def propose(rows: list, *, name: str = "") -> dict:
+def propose_layout(rows: list, *, name: str = "") -> dict:
     """What the box shows: the guessed columns, the first five rows (hidden),
     which choices the file cannot settle (the owner must pick), and a plain
     sentence about the sign rule."""
@@ -1716,7 +1716,7 @@ def handle_get(path: str, query: dict, peer=None, local=None) -> tuple:
             return 200, {"ok": True, "known": True, "fingerprint": fp, "saved": prof.get("saved", ""),
                          "label": prof.get("label", ""), "profile": _public_profile(prof)}
         try:
-            out = propose(got["rows"], name=got["name"])
+            out = propose_layout(got["rows"], name=got["name"])
         except SpendingError as exc:
             return 400, {"ok": False, "error": exc.code, "message": exc.message}
         return 200, out

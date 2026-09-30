@@ -1054,6 +1054,38 @@ class JarvisApi(
         }
 
     /**
+     * Every "My study decks" call (`/api/decks...`, `/api/review...`;
+     * docs/QUIZ-DECKS-DESIGN.md, contract C4): [json] null makes it a GET,
+     * otherwise a POST. The status and body come back whole ([Decks.Reply])
+     * because the PC's error code and its own `message` are what the screen
+     * shows. Card words travel in the request body only - never in a URL,
+     * never logged. Reviewing calls no model, so the short client is enough.
+     */
+    suspend fun decksCall(path: String, json: String?): ApiResult<Decks.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Decks.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/used?ids=`: the words of the few facts an answer used
      * (its `X-Jarvis-Route` names them by id only), or that automatic
      * learning just saved (the `memory_saved` event's ids) - the owner's

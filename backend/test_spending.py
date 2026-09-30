@@ -106,7 +106,7 @@ def setup(path: Path, **overrides) -> dict:
     file could not settle, saved."""
     got = SP.read_rows(str(path), roots=[str(path.parent)])
     assert got["ok"], got
-    prop = SP.propose(got["rows"], name=path.name)
+    prop = SP.propose_layout(got["rows"], name=path.name)
     body = dict(prop["guess"])
     body.update(overrides)
     body["confirm"] = True
@@ -271,12 +271,12 @@ def t_the_guesses_are_what_the_owner_would_pick():
     listed(d)
     for name, (sign, order, dec) in want.items():
         got = SP.read_rows(str(d / name), roots=[str(d)])
-        p = SP.propose(got["rows"], name=name)["guess"]
+        p = SP.propose_layout(got["rows"], name=name)["guess"]
         check(f"{name}: sign {sign}, dates {order}, decimal {dec!r}",
               (p["sign"], p["date_order"], p["decimal"]) == (sign, order, dec), p)
     got = SP.read_rows(str(d / "c_thousands.csv"), roots=[str(d)])
     check("c_thousands: the £ is the currency",
-          SP.propose(got["rows"])["guess"]["currency"] == "£")
+          SP.propose_layout(got["rows"])["guess"]["currency"] == "£")
 
 
 def t_categories_months_and_the_total_agree():
@@ -419,7 +419,7 @@ def t_an_ambiguous_date_column_asks():
     d = folder("Ambiguous", "h_ambiguous.csv")
     listed(d)
     got = SP.read_rows(str(d / "h_ambiguous.csv"), roots=[str(d)])
-    prop = SP.propose(got["rows"])
+    prop = SP.propose_layout(got["rows"])
     check("the proposal asks for the date order", "date_order" in prop["questions"]
           and prop["guess"]["date_order"] is None, prop["questions"])
     body = dict(prop["guess"], confirm=True)
@@ -471,7 +471,7 @@ def t_a_header_the_words_do_not_recognise_is_named_by_the_owner():
     d = folder("Odd", text={"odd.csv": text})
     listed(d)
     got = SP.read_rows(str(d / "odd.csv"), roots=[str(d)])
-    prop = SP.propose(got["rows"], name="odd.csv")
+    prop = SP.propose_layout(got["rows"], name="odd.csv")
     check("no header found: the box asks for the header row and offers no guess",
           prop["guess"] is None and prop["questions"] == ["header_row"] and prop["header_index"] == []
           and len(prop["preview"]) == 3, prop)
@@ -665,7 +665,7 @@ def t_account_and_card_numbers_never_show():
             "99887766,2026-01-06,LIDL,-6.00\n")
     d2 = folder("Hide2", text={"acct.csv": text})
     got = SP.read_rows(str(d2 / "acct.csv"), roots=[str(d2)])
-    prop = SP.propose(got["rows"], name="acct.csv")
+    prop = SP.propose_layout(got["rows"], name="acct.csv")
     check("an account column is dropped from the header, the preview and the guess's choices",
           prop["hidden_columns"] == 1 and prop["hidden_note"] == SP.HIDDEN_COLUMNS_NOTE
           and "99887766" not in everything(prop) and "Account" not in everything(prop["header"], prop["preview"])
