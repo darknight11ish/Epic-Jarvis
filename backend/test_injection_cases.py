@@ -496,7 +496,10 @@ def t_taint_and_pasted_words_are_named_on_cards():
 def _shipped_tier():
     """The tier the SHIPPED jarvis-framework.toml gives an action, resolved
     the way the gate resolves it (unknown -> unknown_action_tier)."""
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     cfg = tomllib.loads((HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))
     tiers, unknown = cfg["autonomy"]["tiers"], cfg["autonomy"].get("unknown_action_tier", "ask")
     return lambda action: str(tiers.get(action, unknown))

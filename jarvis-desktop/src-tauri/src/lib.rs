@@ -1030,6 +1030,7 @@ pub fn run() {
             backup::backup_now,
             backup::preview_restore,
             backup::restore_backup,
+            backup::delete_older_backups,
             devices::pair_phone_address,
             devices::pair_start,
             devices::pair_session,

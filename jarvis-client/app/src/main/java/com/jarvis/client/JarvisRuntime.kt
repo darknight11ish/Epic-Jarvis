@@ -4125,11 +4125,15 @@ object JarvisRuntime {
         } catch (e: Exception) {
             return SignedApproval.KEY_NOT_MADE
         }
+        val wordsList = com.jarvis.client.data.PairWords.load(context)
+        val words = if (wordsList != null && wordsList.size >= 1296) {
+            SignedApproval.wordsForSpki(der, wordsList)
+        } else null
         return when (val r = api.approvalPost(SignedApproval.KEY_PATH, SignedApproval.registerBody(der))) {
             is ApiResult.Ok -> {
-                val (ok, words) = SignedApproval.registerAnswer(r.value.first, r.value.second)
+                val (ok, text) = SignedApproval.registerAnswer(r.value.first, r.value.second, words)
                 if (!ok) com.jarvis.client.platform.ApprovalKey.delete()
-                words
+                text
             }
             is ApiResult.Failed -> {
                 com.jarvis.client.platform.ApprovalKey.delete()

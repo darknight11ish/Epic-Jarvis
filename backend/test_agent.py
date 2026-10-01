@@ -417,7 +417,10 @@ def _shipped_tiers():
     [autonomy.tiers] in rebuilt/jarvis-framework.toml -> unknown_action_tier.
     Read from the real files, not restated here."""
     import re
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     here = Path(__file__).resolve().parent
     cfg = tomllib.loads((here / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8"))
     tiers = cfg["autonomy"]["tiers"]

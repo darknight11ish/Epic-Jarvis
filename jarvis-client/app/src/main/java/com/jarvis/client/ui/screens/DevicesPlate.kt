@@ -226,6 +226,14 @@ internal fun DevicesSection() {
                     // shared key from a phone that uses it would cut it off (the
                     // PC refuses that anyway, design §6.4).
                     if (!shared.retired && v.usesOwnKey) {
+                        if (signedState == SignedApproval.State.ON) {
+                            Gap(4)
+                            Text(
+                                Devices.SHARED_PROMPT_RETIRE,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.warnInk,
+                            )
+                        }
                         Gap(6)
                         if (!askingRetire) {
                             Secondary("Retire for other devices", enabled = !busy, modifier = Modifier.fillMaxWidth()) {

@@ -67,8 +67,25 @@ internal fun BackupSection() {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
-                else -> Text(Backup.line(v), style = MaterialTheme.typography.bodySmall,
-                    color = chrome.textHi)
+                else -> {
+                    Text(Backup.line(v), style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+                    if (v.pendingDeleteOlder) {
+                        Gap(4)
+                        Text("A card to delete older backups is waiting on your PC.",
+                            style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+                    } else if (!v.lastDeleteOlder?.message.isNullOrBlank()) {
+                        Gap(4)
+                        Text(v.lastDeleteOlder!!.message!!, style = MaterialTheme.typography.bodySmall,
+                            color = if (v.lastDeleteOlder.outcome == "deleted") chrome.okInk else chrome.textMid)
+                    }
+                    if (!v.eraseLimit.isNullOrBlank()) {
+                        Gap(6)
+                        Text(v.eraseLimit, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        Gap(4)
+                        Text("To delete older backup copies now, use Delete older backups in Jarvis Desktop (Settings > Backups).",
+                            style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    }
+                }
             }
         }
     }

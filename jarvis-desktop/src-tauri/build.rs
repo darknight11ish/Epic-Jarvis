@@ -312,6 +312,7 @@ fn main() {
             "backup_now",
             "preview_restore",
             "restore_backup",
+            "delete_older_backups",
             // Settings' "Devices" (docs/PAIRING-DESIGN.md, phase 1): the
             // address for the QR code, start / watch / cancel a pairing
             // (the QR code drawn in Rust; the window hidden from screen

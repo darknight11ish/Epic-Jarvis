@@ -203,10 +203,26 @@ class SignedApprovalTest {
     @Test
     fun `registering is read`() {
         assertEquals(true to SignedApproval.WAITING_WORDS_SETTINGS, SignedApproval.registerAnswer(202, obj("""{"waiting": true}""")))
+        val words = listOf("apple", "breeze", "cloud", "dance")
+        assertEquals(
+            true to "${SignedApproval.WAITING_WORDS_SETTINGS} Check that your PC's card shows these four words: apple · breeze · cloud · dance",
+            SignedApproval.registerAnswer(202, obj("""{"waiting": true}"""), words),
+        )
         assertEquals(false to SignedApproval.MISSING, SignedApproval.registerAnswer(404, null))
         assertEquals(false to "needs cryptography", SignedApproval.registerAnswer(503, obj("""{"error": "needs cryptography"}""")))
         assertEquals(false to SignedApproval.NEEDS_CRYPTO, SignedApproval.registerAnswer(503, null))
         assertEquals(false to "Not turned on. Try again.", SignedApproval.registerAnswer(500, null))
+    }
+
+    @Test
+    fun `words for spki derives four words within dictionary range`() {
+        val dummyWords = (0 until 1296).map { "word$it" }
+        val der = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
+        val words = SignedApproval.wordsForSpki(der, dummyWords)
+        assertEquals(4, words.size)
+        for (w in words) {
+            assertTrue(dummyWords.contains(w))
+        }
     }
 
     @Test

@@ -679,7 +679,10 @@ def t_file_read_opens_the_path_it_checked():
 # ---------------------------------------------------------------------- L8
 
 def t_no_setting_claims_a_sandbox_that_does_not_exist():
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     cfg = tomllib.loads((REPO / "backend" / "rebuilt" / "jarvis-framework.toml")
                         .read_text(encoding="utf-8"))
     claims = sorted(k for k in cfg.get("security", {}) if k.startswith("sandbox"))

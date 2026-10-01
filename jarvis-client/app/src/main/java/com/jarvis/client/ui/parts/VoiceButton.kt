@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -73,6 +74,7 @@ fun VoiceButton(
     val haptics = LocalHapticFeedback.current
     var wouldCancel by remember { mutableStateOf(false) }
     val cancelPx = with(LocalDensity.current) { CANCEL_SLIDE_DP.dp.toPx() }
+    val isCapturing = capturing
 
     Box(
         modifier
@@ -104,45 +106,27 @@ fun VoiceButton(
                     radius = size.minDimension / 2f * (0.55f + 0.45f * level),
                 )
             }
-            .pointerInput(enabled) {
+            .pointerInput(enabled, isCapturing) {
                 if (!enabled) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     down.consume()
                     wouldCancel = false
-                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    onBegin()
+                    val downTime = System.currentTimeMillis()
+                    val wasCapturingAtDown = isCapturing
+
+                    if (!wasCapturingAtDown) {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onBegin()
+                    }
+
                     var cancelled = false
-                    // Set only by the loop below finishing on its own terms,
-                    // which is the one thing that distinguishes a finger
-                    // actually coming off the glass from this coroutine being
-                    // torn down under it. `cancelled` cannot carry that: it
-                    // tracks the slide-up gesture, and a teardown slides
-                    // nothing, so it is false in exactly the case the comment
-                    // below says must never send.
                     var released = false
-                    // try/finally, because this coroutine is cancellable and the
-                    // thing it owns is an open microphone.
-                    //
-                    // `pointerInput(enabled)` restarts whenever `enabled`
-                    // changes, and enabled is `link == CONNECTED && !streaming`.
-                    // So a link blip mid-hold — which happens every time the
-                    // server recycles the hour-long SSE connection — tore this
-                    // coroutine down between `onBegin()` and the release. With
-                    // the release never delivered, `releaseRequested` stayed
-                    // false, the recorder ran to its 30-second cap with the
-                    // finger long since lifted, and then SENT it. The doc at the
-                    // top of this file promises that when the button is not held
-                    // the microphone is not open; without this it was a promise
-                    // the code did not keep.
                     try {
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
                             val nowCancelled = (down.position.y - change.position.y) > cancelPx
-                            // Fires once, on the transition into "would cancel" -
-                            // not on every event while the finger sits past the
-                            // threshold, which is most of them.
                             if (nowCancelled && !cancelled) {
                                 haptics.performHapticFeedback(HapticFeedbackType.Reject)
                             }
@@ -154,48 +138,38 @@ fun VoiceButton(
                         released = true
                     } finally {
                         wouldCancel = false
-                        // A torn-down gesture is a cancel, never a send: audio
-                        // captured while nobody was holding the button must not
-                        // reach the desktop.
-                        //
-                        // Which is why this asks `released` and not just
-                        // `cancelled`. Testing `cancelled` alone sent on every
-                        // teardown — the link blip described above reached the
-                        // `else` branch with `cancelled` false and uploaded the
-                        // half-held clip, which is the exact outcome the
-                        // try/finally was added to prevent.
-                        if (released && !cancelled) onRelease() else onCancel()
+                        val duration = System.currentTimeMillis() - downTime
+                        if (cancelled) {
+                            onCancel()
+                        } else if (released) {
+                            if (wasCapturingAtDown) {
+                                // Second tap while capturing: stop and send.
+                                onRelease()
+                            } else if (duration >= HOLD_THRESHOLD_MS) {
+                                // Sustained hold-to-talk released: send.
+                                onRelease()
+                            }
+                            // Otherwise, a quick tap (< 400ms) entered capturing mode;
+                            // recording continues until second tap or Smart Turn pause detection.
+                        } else {
+                            // Torn down gesture without release: cancel.
+                            onCancel()
+                        }
                     }
                 }
             }
-            // What TalkBack says (a11y-10).
-            //
-            // The node used to carry "Hold to talk" and nothing else: no
-            // role, and no word about how a screen-reader user actually
-            // holds something. With TalkBack on, the way to hold is
-            // double-tap-and-hold, so the description now says exactly that,
-            // and the button role makes it announce as a control. A
-            // disabled button says so rather than going silent.
-            //
-            // Words only - no accessibility ACTION is added, deliberately.
-            // The audit suggested `onLongClick(label = "talk") { false }`,
-            // which would make TalkBack speak its own "double-tap and hold"
-            // hint. Whether TalkBack then passes the real press through to
-            // the pointerInput above, or performs that do-nothing action
-            // INSTEAD of passing it through, has not been checked on a
-            // phone, and the second outcome would break voice input under
-            // TalkBack. A sentence cannot change what the gesture does.
-            // There is no onClick either: a tap-to-start toggle is what the
-            // hold design exists to avoid (a press with no release once
-            // uploaded up to two minutes of audio - see MainActivity).
             .semantics {
                 contentDescription = if (capturing) {
-                    "Recording. Lift your finger to send, or slide up to cancel."
+                    "Recording. Tap to send, or wait for pause to send automatically. Slide up to cancel."
                 } else {
-                    "Talk to Jarvis. Double-tap and hold, speak, then lift your finger to send."
+                    "Talk to Jarvis. Tap or hold to speak."
                 }
                 role = Role.Button
                 if (!enabled) disabled()
+                onClick(label = if (capturing) "Stop and send" else "Talk to Jarvis") {
+                    if (capturing) onRelease() else onBegin()
+                    true
+                }
             },
         contentAlignment = Alignment.Center,
     ) {
@@ -257,3 +231,6 @@ fun VoiceStrip(
 
 /** How far up the finger must travel before a release cancels instead of sends. */
 private const val CANCEL_SLIDE_DP = 64
+
+/** Sustained press duration that distinguishes hold-to-talk from tap-to-talk. */
+private const val HOLD_THRESHOLD_MS = 400L

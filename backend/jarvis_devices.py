@@ -1933,20 +1933,31 @@ def _device_only(you) -> Optional[tuple]:
     return None
 
 
-def key_card_text(name: str, replacing: bool = False) -> str:
-    return (KEY_REPLACE_CARD_TEXT if replacing else KEY_CARD_TEXT).format(name=name)
+def words_for_spki(spki_der: bytes) -> list:
+    import hashlib
+    d = hashlib.sha256(spki_der).digest()
+    return words_for([(d[2 * i] * 256 + d[2 * i + 1]) % 1296 for i in range(4)])
+
+
+def key_card_text(name: str, replacing: bool = False, words: Optional[Sequence[str]] = None) -> str:
+    base = (KEY_REPLACE_CARD_TEXT if replacing else KEY_CARD_TEXT).format(name=name)
+    if words:
+        four = " · ".join(words)
+        return f"{base}\n\nCheck that the phone shows these same four words:\n{four}"
+    return base
 
 
 def _k_decide(device_id: str, pid: str, spki: str, name: str, gate: Callable,
               tier_of: Callable, replacing: bool = False) -> None:
     """Raise the register_approval_key card and wait for it (its own thread).
     `replacing`: the device already has a key, so the card says it is a swap."""
-    text = key_card_text(name, replacing)
+    words = words_for_spki(_unb64u(spki))
+    text = key_card_text(name, replacing, words)
     try:
         if tier_of(KEY_ACTION) != "ask":
             raise LookupError("tier")
         v = gate(KEY_ACTION, {"text": text, "what": "let a phone approve risky actions with "
-                              "its fingerprint or PIN", "device_name": name,
+                              "its fingerprint or PIN", "device_name": name, "words": words,
                               "leaves_this_pc": False}, text)
         outcome, why = _verdict(v, KEY_ACTION, tier_of)
     except LookupError:

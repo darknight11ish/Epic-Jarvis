@@ -281,7 +281,16 @@ def t_every_module_here_is_shipped():
 
 
 def t_every_import_is_accounted_for():
-    std = set(sys.stdlib_module_names)
+    if hasattr(sys, "stdlib_module_names"):
+        std = set(sys.stdlib_module_names)
+    else:
+        import os
+        lib_dir = Path(os.__file__).parent
+        std = set(sys.builtin_module_names) | {
+            p.stem for p in lib_dir.glob("*.py")
+        } | {
+            p.name for p in lib_dir.iterdir() if (p / "__init__.py").is_file()
+        } | {"tomllib", "zoneinfo", "winreg", "msvcrt", "winsound", "_winapi"}
     sources = {p: imports_of_source((HERE / p).read_text(encoding="utf-8")) for p in SHIPPED}
     patches = sorted(HERE.glob("*.patch")) + sorted((HERE / "rebuilt-patches").glob("*.patch"))
     for pp in patches:
@@ -321,7 +330,13 @@ def t_repo_only_imports_are_guarded():
             catches = any(isinstance(h.type, ast.Name) and h.type.id in ("ImportError",
                                                                           "Exception")
                           for h in node.handlers)
-            names = {m for s in node.body for m in imports_of_source(ast.unparse(s))}
+            names = set()
+            for s in node.body:
+                for n in ast.walk(s):
+                    if isinstance(n, ast.Import):
+                        names |= {a.name.split(".")[0] for a in n.names}
+                    elif isinstance(n, ast.ImportFrom) and n.level == 0 and n.module:
+                        names.add(n.module.split(".")[0])
             guarded = guarded or (catches and mod in names)
         check(f"{who} imports {mod} only inside a try that catches ImportError ({why})",
               guarded)

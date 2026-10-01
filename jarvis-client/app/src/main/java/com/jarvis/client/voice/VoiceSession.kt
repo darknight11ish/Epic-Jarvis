@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
  * different things and only one of them is a transcript. See [Heard.Outcome].
  */
 class VoiceSession(
-    context: Context,
+    private val context: Context,
     private val api: JarvisApi,
     private val scope: CoroutineScope,
     /**
@@ -144,6 +144,12 @@ class VoiceSession(
 
     val recorder = Recorder(context)
     val speaker = Speaker(context)
+
+    private val turnModel: TurnModel? by lazy {
+        runCatching {
+            OrtTurnModel.load(context.assets.open("turn/${OrtTurnModel.FILE}").use { it.readBytes() })
+        }.getOrNull()
+    }
 
     private val _phase = MutableStateFlow(Phase.OFF)
     val phase: StateFlow<Phase> = _phase.asStateFlow()
@@ -960,10 +966,47 @@ class VoiceSession(
             // cannot be interrupted any faster than that.
             releasing?.join()
             val maxSeconds = status.value.audioIn.maxSeconds.toFloat()
+            val stTurn = status.value.turn
+            val smartTurn = if (turnModel != null && TurnSettings.useModel(stTurn, true)) {
+                SmartTurn(turnModel!!, TurnSettings.threshold(stTurn))
+            } else {
+                null
+            }
+            val turnEnd = TurnEnd(
+                graceSeconds = 4.0f,
+                askAfterSeconds = TurnSettings.askAfterSeconds(stTurn),
+                maxPauseSeconds = if (smartTurn != null) {
+                    TurnSettings.maxPauseSeconds(stTurn)
+                } else {
+                    TurnEnd.PAUSE_WITHOUT_MODEL
+                },
+                maxSeconds = maxSeconds,
+                useModel = smartTurn != null,
+            )
             val captured = recorder.record(
                 maxSeconds = maxSeconds,
                 onLevel = { setMicLevel(turn, it) },
                 stopWhen = { turn.releaseRequested },
+                onBuffer = { buf, n, samples, count, rate ->
+                    val seconds = n / rate.toFloat()
+                    val rms = Wav.rms(buf, n)
+                    val step = turnEnd.push(rms, seconds)
+                    if (step == TurnEnd.Step.END) {
+                        true
+                    } else if (step == TurnEnd.Step.ASK && smartTurn != null) {
+                        val samples16k = if (rate == Wav.SAMPLE_RATE) {
+                            samples.copyOf(count)
+                        } else {
+                            Wav.resample(samples.copyOf(count), rate)
+                        }
+                        val finished = runCatching {
+                            smartTurn.complete(samples16k, samples16k.size)
+                        }.getOrDefault(false)
+                        turnEnd.answer(finished) == TurnEnd.Step.END
+                    } else {
+                        false
+                    }
+                },
             )
             setMicLevel(turn, null)
 
