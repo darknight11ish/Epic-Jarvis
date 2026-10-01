@@ -454,6 +454,10 @@ $PATCHES = @(
     # jarvis_manner.py copied in; without it the routes answer 503 and
     # answers are worded as before.
     'manner.patch'
+    # Per-model thinking levels (2026-10-01, Section 5.5): GET and POST
+    # /api/thinking, no approval card either way. Its context is manner's
+    # route blocks. Needs jarvis_thinking.py copied in.
+    'thinking.patch'
     # "Stop everything" (the owner's decision of 2026-09-25): POST
     # /api/stop_all halts a running task, the tools of the answer being
     # written, and anything registered with jarvis_stop_all; it never
@@ -1262,6 +1266,8 @@ $SHIPPED = @(
     'jarvis_quiz_cloud.py'       # quiz-cloud.patch: ONE card per request (quiz_cloud_grade) listing exactly what leaves the PC, then one message to the cheapest set-up cloud service (jarvis_chatbot_api.py); never for a private quiz or after a crisis answer
     # --- "Show or hide menus" (2026-09-30, no patch) ---
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
+    # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
+    'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -6073,16 +6073,30 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
     return keep_rules_first(out)
 
 
-def chat_body(model: str, messages: list, opts: dict, tools=None) -> dict:
+def chat_body(model: str, messages: list, opts: dict, tools=None, *,
+              spoken: bool = False, question: str = "", role: str = "everyday",
+              ollama_url: Optional[str] = None) -> dict:
     """One request to Ollama's /v1/chat/completions, in the order its fields
     have always been sent: model, messages, stream, stream_options, the
     app's temperature/top_p and max_tokens (`opts`), reasoning_effort
-    (unless this Ollama refused it once), tools. No `options`, no num_ctx,
-    no keep_alive: the model's own settings decide those
+    (from jarvis_thinking unless this Ollama refused it once), tools. No `options`,
+    no num_ctx, no keep_alive: the model's own settings decide those
     (jarvis-primary.Modelfile says why)."""
     body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
     if not _reasoning_field_refused:
-        body.update(REASONING_OFF)
+        reasoning = None
+        try:
+            import jarvis_thinking
+            reasoning = jarvis_thinking.reasoning_parameters(
+                model, question=question, spoken=spoken,
+                ollama_url=ollama_url, role=role
+            )
+        except Exception:
+            pass
+        if reasoning is not None:
+            body.update(reasoning)
+        else:
+            body.update(REASONING_OFF)
     if tools:
         body["tools"] = tools
     return body
@@ -6318,7 +6332,8 @@ def warm_prefix(model: str, *, ollama_url: str, enabled_tools, why: str = "",
         head, tools = chat_prefix(enabled_tools, ollama_url=ollama_url, model=model,
                                   manner=manner)
         body = chat_body(model, head + [{"role": "user", "content": WARM_WORD}],
-                         {"max_tokens": WARM_MAX_TOKENS}, tools)
+                         {"max_tokens": WARM_MAX_TOKENS}, tools, spoken=True,
+                         ollama_url=ollama_url)
         with _LIVE_LOCK:
             if _LIVE["turns"]:
                 return done("skipped", "a question is being answered")
@@ -6673,13 +6688,23 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # (warm_prefix), so what it sends cannot drift from this. Older tool
         # results in a long answer are cleared first (clear_old_tool_results),
         # so trimming never has to drop the owner's earlier words for them.
+        question_text = ""
+        for m in reversed(msgs):
+            if isinstance(m, dict) and m.get("role") == "user":
+                c = m.get("content")
+                if isinstance(c, str):
+                    question_text = c
+                    break
+        base_url = chat_url().rsplit("/v1", 1)[0] if "/v1" in chat_url() else chat_url()
         body = chat_body(cur["model"],
                          dress_messages(fit_messages(clear_old_tool_results(msgs, room), room),
                                         manner=manner,
                                         focus=focus_brief, next_time=next_time["note"],
                                         spoken=watch.spoken, live=watch.live,
                                         cut_off=watch.cut_off, crisis=watch.crisis),
-                         opts, offer["schemas"] if offer_tools else None)
+                         opts, offer["schemas"] if offer_tools else None,
+                         spoken=watch.spoken, question=question_text, role="everyday",
+                         ollama_url=base_url)
         stripper = _ThinkStripper()
         first = {"text": True}
         # A spending table is on the screen for this answer: the model's words

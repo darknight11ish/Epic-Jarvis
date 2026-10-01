@@ -2137,6 +2137,32 @@ class JarvisApi(
         }
 
     /**
+     * `GET /api/thinking` - Per-model thinking levels (Section 5.5; [Thinking.parse]). A read.
+     */
+    suspend fun thinking(): ApiResult<JsonObject> = probe(Thinking.PATH)
+
+    /**
+     * `POST /api/thinking` with ONE change ([Thinking.bodyString]): at once, no card
+     * either way.
+     */
+    suspend fun thinkingPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(Thinking.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/sky` - the sun, moon and weather behind the animal faces
      * ([SkySettings.parse]): whether they show, the town as the PC's list
      * names it and its position rounded to 0.1 degree, the weather now as

@@ -2249,6 +2249,21 @@ object JarvisRuntime {
         return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
     }
 
+    // ------------------------------------------ thinking levels (5.5) ----
+
+    /** `GET /api/thinking`. A read: never held. */
+    suspend fun thinking(): ApiResult<JsonObject> = api.thinking()
+
+    /**
+     * Changes thinking level for a model/role with no approval card.
+     * Held on a stale link like every change sent to the PC ([actionBlocker], rule 4).
+     */
+    suspend fun setThinking(role: String, level: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Thinking.bodyString(role, level)
+        return com.jarvis.client.net.Thinking.replyLine(api.thinkingPost(body), level)
+    }
+
     // ------------------------------------------ sun, moon and weather ----
 
     /**

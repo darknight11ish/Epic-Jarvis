@@ -1,0 +1,43 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1564,6 +1564,22 @@
+                 import jarvis_manner
+                 code, out = jarvis_manner.handle_get()
+                 return self._send(code, out)
+             except Exception as exc:
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
++        if path == "/api/thinking":
++            # thinking.patch - per-model thinking levels (jarvis_thinking.py, Section 5.5).
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_thinking
++                code, out = jarvis_thinking.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++
+@@ -2156,6 +2172,25 @@
+             code, out = jarvis_manner.handle_set(body)
+             return self._send(code, out)
+ 
++        if route == "/api/thinking":
++            # thinking.patch - setting per model, at once, with NO approval card.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_thinking
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            code, out = jarvis_thinking.handle_set(body)
++            return self._send(code, out)
++

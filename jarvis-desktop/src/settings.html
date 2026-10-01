@@ -962,6 +962,24 @@
         </div>
       </section>
 
+      <!-- ── Thinking levels ──────────────────────────────────────────────
+           Off / Quick / Deep / Auto per running model (thinking-settings.js;
+           src-tauri/src/plain_errors.rs get_thinking, set_thinking; backend
+           jarvis_thinking.py, Section 5.5). No approval card either way.
+           Notice explains that thinking spends conversation room. -->
+      <section class="card" id="thinking">
+        <h2>Thinking levels</h2>
+        <p class="note" id="th-detail">Lets Jarvis think through complex questions before answering. Thinking spends some of your conversation room.</p>
+        <p class="note warning" id="th-notice"></p>
+        <p class="state" id="th-state" role="status">Asking Jarvis…</p>
+        <div id="th-body" hidden>
+          <div id="th-models"></div>
+          <div class="row">
+            <span class="status" id="th-status" role="status"></span>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Morning briefing ─────────────────────────────────────────────
            When the briefing arrives, and what it includes (briefing-settings.js;
            brain/briefing.rs get_briefing_setup, set_briefing, stop_briefing).
@@ -2386,6 +2404,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="thinking-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
   </body>
 </html>
