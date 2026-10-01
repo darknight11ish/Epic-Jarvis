@@ -58,6 +58,7 @@ class Recorder(private val context: Context) {
         maxSeconds: Float = 30f,
         onLevel: (Float) -> Unit = {},
         stopWhen: () -> Boolean,
+        onBuffer: ((buffer: ShortArray, n: Int, captured: ShortArray, count: Int, rate: Int) -> Boolean)? = null,
     ): Result = withContext(Dispatchers.IO) {
         if (!hasPermission()) return@withContext Result.Refused(Failure.NoPermission)
 
@@ -121,6 +122,7 @@ class Recorder(private val context: Context) {
                 }
                 System.arraycopy(buffer, 0, captured, count, take)
                 count += take
+                if (onBuffer?.invoke(buffer, n, captured, count, rate) == true) break
             }
         } catch (e: IllegalStateException) {
             Log.w(TAG, "capture failed", e)

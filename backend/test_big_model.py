@@ -1118,7 +1118,10 @@ def t_the_toml():
     section = toml[toml.index("\n[big_model]\n"):].split("\n[", 2)[1]
     check("no switch lives in it (they are in big-model.json)",
           not re.search(r"^\s*(master|wiki|deep_questions)\s*=", section, re.M))
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     data = tomllib.loads(toml)
     check("it parses, and the models are commented out (nothing is on by default)",
           data["big_model"]["port"] == 8765 and "models" not in data["big_model"])

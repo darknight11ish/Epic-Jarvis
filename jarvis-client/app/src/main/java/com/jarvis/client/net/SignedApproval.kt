@@ -141,11 +141,26 @@ object SignedApproval {
 
     private val HEX64 = Regex("[0-9a-fA-F]{64}")
 
+    fun wordsForSpki(spkiDer: ByteArray, wordsList: List<String>): List<String> {
+        val hash = MessageDigest.getInstance("SHA-256").digest(spkiDer)
+        return (0 until 4).map { i ->
+            val num = (((hash[2 * i].toInt() and 0xFF) shl 8) or (hash[2 * i + 1].toInt() and 0xFF)) % 1296
+            wordsList[num]
+        }
+    }
+
     /** `POST /api/devices/approval-key`, read: true when the PC now waits for its card. */
-    fun registerAnswer(code: Int, body: JsonObject?): Pair<Boolean, String> {
+    fun registerAnswer(code: Int, body: JsonObject?, words: List<String>? = null): Pair<Boolean, String> {
         val why = (body?.get("error") as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
         return when (code) {
-            200, 202 -> true to WAITING_WORDS_SETTINGS
+            200, 202 -> {
+                val text = if (words.isNullOrEmpty()) {
+                    WAITING_WORDS_SETTINGS
+                } else {
+                    "$WAITING_WORDS_SETTINGS Check that your PC's card shows these four words: ${words.joinToString(" · ")}"
+                }
+                true to text
+            }
             503 -> false to (why?.takeIf { it.isNotBlank() } ?: NEEDS_CRYPTO)
             404 -> false to MISSING
             else -> false to (why?.takeIf { it.isNotBlank() }?.let { "Not turned on. $it" } ?: "Not turned on. Try again.")
