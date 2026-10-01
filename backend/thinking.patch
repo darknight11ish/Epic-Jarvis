@@ -1,9 +1,8 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index 7008260..5e9b57c 100644
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -1564,6 +1564,22 @@
-                 import jarvis_manner
-                 code, out = jarvis_manner.handle_get()
-                 return self._send(code, out)
+@@ -1742,6 +1742,19 @@ def _auth_headers(extra: dict | None = None) -> dict:
              except Exception as exc:
                  return self._send(503, {"available": False, "error": type(exc).__name__})
  
@@ -20,7 +19,10 @@
 +            except Exception as exc:
 +                return self._send(503, {"available": False, "error": type(exc).__name__})
 +
-@@ -2156,6 +2172,25 @@
+         if path in ("/api/focus", "/api/focus/diag", "/api/focus/callout"):
+             # focus.patch - focus sessions (jarvis_focus.py, the owner's decision
+             # of 2026-09-25): a timer plus Quiet, and Jarvis naming a drift out
+@@ -2549,6 +2562,23 @@ def _auth_headers(extra: dict | None = None) -> dict:
              code, out = jarvis_manner.handle_set(body)
              return self._send(code, out)
  
@@ -41,3 +43,6 @@
 +            code, out = jarvis_thinking.handle_set(body)
 +            return self._send(code, out)
 +
+         if route in ("/api/schedule/add", "/api/schedule/act"):
+             # schedule.patch - one job at a time (jarvis_schedule.py).
+             #   add {"kind": "todo"|"timer"|"alarm"|"reminder", ...}: a
