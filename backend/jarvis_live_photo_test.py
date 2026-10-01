@@ -376,8 +376,8 @@ def run(*, lane=None, main_url: Optional[str] = None, folder: Optional[Path] = N
     doc = {"passed": False, "model": "", "lane_model": "", "models": {}, "problem": "",
            "at": int(clock()), "pass_bar": dict(PASS_BAR)}
     if lane is None:
-        doc["problem"] = ("The second card's Pictures lane is not running. Install the 12 GB card, "
-                          "switch Pictures on in \"Your second graphics card\", then run this again.")
+        doc["problem"] = ("The Pictures lane is not running. Turn Pictures on in \"Your second "
+                          "graphics card\", then run this again.")
         return doc
     doc["lane_model"] = getattr(lane, "model", "")
     if not _loopback(getattr(lane, "url", "")):

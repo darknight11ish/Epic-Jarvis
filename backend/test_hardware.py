@@ -538,8 +538,8 @@ LOG_16 = G.ollama_log([{"uuid": G.U_A, "library": "CUDA", "compute": "8.6",
 def t_second_card_one_big_card():
     with G.World(smi=SMI_16, log=LOG_16, reg=None, user_env=G.TODAY_ENV,
                  installed=("jarvis-vision", "qwen2.5vl:3b")) as w:
-        check("no preset: one card is not capable, exactly as before",
-              SC.detect()["capable"] is False)
+        check("no preset: 16 GB card is capable on main",
+              SC.detect()["capable"] is True and SC.detect().get("_main") is True)
         w.choose("features")
         det = SC.detect()
         check("Most features on one 16 GB card: the lanes are capable, inside the everyday "

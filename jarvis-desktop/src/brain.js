@@ -1553,6 +1553,16 @@ function renderModels() {
   }
 
   dom.models.append(installForm());
+
+  const comp = state.data.compute || {};
+  const compPlan = comp.plan && typeof comp.plan === "object" ? comp.plan : comp;
+  const devices = Array.isArray(compPlan.devices) ? compPlan.devices : [];
+  const firstMb = Number(devices[0]?.total_mb ?? compPlan.total_mb ?? comp.total_mb ?? 0);
+  if (firstMb >= 15360 && firstMb <= 35000) {
+    dom.models.append(
+      el("p", "note model-preset-suggestion", "Your card can hold the 14B at 32K — try the Smartest preset in Settings > Hardware and models.")
+    );
+  }
 }
 
 /**
@@ -1854,6 +1864,12 @@ function renderCompute() {
     return dom.compute.append(el("p", "empty", "No compute plan reported."));
   }
   dom.compute.append(dl);
+  const firstMb = Number(devices[0]?.total_mb ?? body.total_mb ?? 0);
+  if (firstMb >= 15360 && firstMb <= 35000) {
+    dom.compute.append(
+      el("p", "note model-preset-suggestion", "Your card can hold the 14B at 32K — try the Smartest preset in Settings > Hardware and models.")
+    );
+  }
 }
 
 function renderSkills() {
