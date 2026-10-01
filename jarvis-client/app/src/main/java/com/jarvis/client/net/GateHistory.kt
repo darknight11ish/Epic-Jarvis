@@ -117,7 +117,7 @@ private fun normaliseGateHistoryRow(row: JsonElement): GateHistoryItem? {
     val notice = (obj["notice"] as? JsonObject)?.let {
         runCatching { JarvisJson.decodeFromJsonElement(Notice.serializer(), it) }.getOrNull()
     }
-    val summary = textOf(obj["summary"]) ?: notice?.summary ?: textOf(obj["detail_one_line"]) ?: textOf(obj["what"])
+    val summary = textOf(obj["summary"]) ?: notice?.body?.takeIf { it.isNotBlank() } ?: textOf(obj["detail_one_line"]) ?: textOf(obj["what"])
     return GateHistoryItem(
         id = id,
         action = action,

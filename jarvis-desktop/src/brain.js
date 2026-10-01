@@ -656,6 +656,7 @@ const dom = {
   jobs: $("jobs"),
   undo: $("undo"),
   activity: $("activity"),
+  activityFilters: $("activity-filters"),
   focus: $("focus"),
   focusForm: $("focus-form"),
   focusMinutes: $("focus-minutes"),
@@ -11358,35 +11359,34 @@ function renderActivity() {
     return outcome === filterDecision;
   });
 
-  dom.activity.replaceChildren();
-
-  const filterRow = el("div", "activity-filters", "");
-  filterRow.style.display = "flex";
-  filterRow.style.gap = "8px";
-  filterRow.style.marginBottom = "8px";
-  const decisions = [
-    { id: "all", label: "All" },
-    { id: "approved", label: "Approved" },
-    { id: "denied", label: "Denied" },
-    { id: "timed_out", label: "Timed out" },
-  ];
-  for (const d of decisions) {
-    const btn = el("button", "btn btn-subtle", d.label);
-    if (filterDecision === d.id) {
-      btn.style.fontWeight = "bold";
-      btn.dataset.active = "true";
+  if (dom.activityFilters) {
+    const filterRow = el("div", "activity-filters", "");
+    filterRow.style.display = "flex";
+    filterRow.style.gap = "8px";
+    filterRow.style.marginBottom = "8px";
+    const decisions = [
+      { id: "all", label: "All" },
+      { id: "approved", label: "Approved" },
+      { id: "denied", label: "Denied" },
+      { id: "timed_out", label: "Timed out" },
+    ];
+    for (const d of decisions) {
+      const btn = el("button", "btn btn-subtle", d.label);
+      if (filterDecision === d.id) {
+        btn.style.fontWeight = "bold";
+        btn.dataset.active = "true";
+      }
+      btn.onclick = () => {
+        state.activityFilterDecision = d.id;
+        renderActivity();
+      };
+      filterRow.append(btn);
     }
-    btn.onclick = () => {
-      state.activityFilterDecision = d.id;
-      renderActivity();
-    };
-    filterRow.append(btn);
+    dom.activityFilters.replaceChildren(filterRow);
   }
-  dom.activity.append(filterRow);
 
-  const listContainer = el("div", "activity-list", "");
   rows(
-    listContainer,
+    dom.activity,
     filtered,
     (h) => {
       const outcome = activityOutcome(h);
@@ -11405,7 +11405,6 @@ function renderActivity() {
     },
     "Nothing decided yet."
   );
-  dom.activity.append(listContainer);
 }
 
 /** `approved` / `denied` / `expired` (approvals.state) or `timed_out`

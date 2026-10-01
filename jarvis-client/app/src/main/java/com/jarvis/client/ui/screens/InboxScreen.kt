@@ -121,6 +121,7 @@ fun InboxScreen(
         reads.all { it == SectionRead.Read || it == SectionRead.Absent } &&
             reads.any { it == SectionRead.Read }
         )
+    var activityFilter by rememberSaveable { mutableStateOf("all") }
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         TopBar("Inbox", onBack, subtitle = budgetLine(attention))
 

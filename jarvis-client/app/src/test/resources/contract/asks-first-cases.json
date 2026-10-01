@@ -952,7 +952,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2018,7 +2018,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -3079,7 +3079,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -4135,7 +4135,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -5191,7 +5191,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -6261,7 +6261,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -7322,7 +7322,7 @@
        "note": "Checking is read-only - it only reports, never installs anything. It asks once, the first time you ever press the button; after that one yes it never asks again, and this cannot be changed from an app.",
        "says": "Asks the first time only, then never again",
        "tier": "ask",
-       "title": "Check PyPI, crates.io and GitHub for tool updates"
+       "title": "Check online for tool updates"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"

@@ -241,6 +241,7 @@ object QuickTiles {
             TileAction.STOP_EVERYTHING -> "Stop everything sent. Open Jarvis to see what stopped."
             TileAction.PC_PLAY_PAUSE -> said
             TileAction.BRIEF_ME -> said
+            TileAction.COMING_UP, TileAction.LOOK, TileAction.LIVE -> said
         }
     }
 
