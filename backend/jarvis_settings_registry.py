@@ -222,6 +222,9 @@ SECTIONS: tuple = (
     # Spending (2026-09-30): a card on the desktop.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
             app="desktop"),
+    # Notifications (2026-10-01): a card on the desktop.
+    Section("notifications", ("notifications", "notification settings", "desktop notifications"),
+            app="desktop"),
 )
 
 #: id -> Section, for a direct lookup once a name has matched.

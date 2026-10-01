@@ -356,6 +356,8 @@ permissions = [
   "allow-restart-app",
   "allow-get-api-settings",
   "allow-set-api-settings",
+  # "Send test notification" in notification settings.
+  "allow-notify-user",
   # "Show the token for my phone": returns the pairing token to this one
   # page, on a click, so the owner can type it into the phone. Here and
   # nowhere else - the other windows never need to see it.

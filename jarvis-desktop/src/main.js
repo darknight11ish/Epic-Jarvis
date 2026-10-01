@@ -2639,6 +2639,21 @@ setInterval(() => {
   if (state.approval && !dom.approval.hidden) paintApprovalClock();
 }, 1000);
 
+function desktopUndoNotice(approval) {
+  if (!approval) return null;
+  const risk = approval.risk || {};
+  if (risk.reversible === "no") return "This cannot be undone.";
+  const action = approval.action;
+  if (action === "tidy_inbox") return "Inbox tidy: 10 minutes to undo.";
+  if (action === "forget_time_frame" || action === "forget_fact") return "Memory: 10 minutes to undo.";
+  if (action === "reminder_create" || action === "reminder_delete") return "Reminders: say “cancel that” to undo.";
+  if (action === "model_switch" || action === "model_install") return "Model: roll back anytime in settings.";
+  if (action === "setting_change" || action === "toggle_feature") return "Settings: turn back off anytime.";
+  if (action === "write_note" || action === "smart_home_light") return null;
+  if (risk.reversible === "yes") return "Undo is available for this action.";
+  return null;
+}
+
 /**
  * Sends the decision and reports the outcome in the answer card.
  *
@@ -2669,9 +2684,12 @@ async function decideApproval(approved, optionId = null) {
       inboxTidyView.watchQuickly();
     }
     // The card's own title (card-words.js), not the code name.
-    state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
-      approved ? "Approved" : "Denied"
-    } in the Jarvis bar: ${cardTitle(approval)}.`;
+    let decisionLine = `${approved ? "Approved" : "Denied"} in the Jarvis bar: ${cardTitle(approval)}.`;
+    if (approved) {
+      const cue = desktopUndoNotice(approval);
+      if (cue) decisionLine += `\n> ${cue}`;
+    }
+    state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${decisionLine}`;
     openCard(approved ? "Approved" : "Denied");
     paint({ immediate: true });
   } catch (error) {

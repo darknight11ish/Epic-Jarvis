@@ -72,7 +72,7 @@
     },
     {
       "action": "check_tool_updates",
-      "title": "Jarvis wants to check PyPI, crates.io and GitHub for tool updates"
+      "title": "Jarvis wants to check online for tool updates"
     },
     {
       "action": "control_browser",

@@ -337,6 +337,9 @@ async fn post_raw(
 /// words only - never a line of the briefing, locked or not. Once per run
 /// (a replayed event after a reconnect does not toast twice).
 pub async fn toast_ready(app: AppHandle, base: String, data: serde_json::Value) {
+    if !crate::brain::schedule::wants_toast(&data) {
+        return;
+    }
     if data.get("kind").and_then(|v| v.as_str()) != Some("briefing") {
         return;
     }
@@ -346,14 +349,32 @@ pub async fn toast_ready(app: AppHandle, base: String, data: serde_json::Value) 
     if !valid_id(&id) {
         return;
     }
-    let fired_at = read_job(&app, &base, &id)
-        .await
+    let job = read_job(&app, &base, &id).await;
+    let fired_at = job
         .as_ref()
         .and_then(|j| j.get("fired_at"))
         .and_then(|v| v.as_f64())
         .unwrap_or(0.0) as i64;
     // The same set the "fired" toasts use, keyed apart from them.
     if !first_time(&format!("{id}:ready"), fired_at) {
+        return;
+    }
+    let age_s = job
+        .as_ref()
+        .and_then(|j| j.get("age_s"))
+        .and_then(|v| v.as_f64())
+        .or_else(|| data.get("age_s").and_then(|v| v.as_f64()));
+    if crate::brain::schedule::is_late(fired_at, crate::brain::schedule::now_secs(), age_s) {
+        let went_off = job
+            .as_ref()
+            .and_then(|j| j.get("went_off_at"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        crate::brain::schedule::show_quiet(
+            &app,
+            TOAST_TITLE,
+            &crate::brain::schedule::missed_words(went_off, LOCK_SCREEN),
+        );
         return;
     }
     commands::notify(&app, TOAST_TITLE, LOCK_SCREEN);

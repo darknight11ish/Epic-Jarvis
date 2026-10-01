@@ -597,6 +597,8 @@ data class HomeActions(
     val onInterrupt: () -> Unit,
     val onApprove: (PendingItem) -> Unit,
     val onDeny: (PendingItem) -> Unit,
+    val onApproveWithReset: ((PendingItem, onReset: () -> Unit) -> Unit)? = null,
+    val onDenyWithReset: ((PendingItem, onReset: () -> Unit) -> Unit)? = null,
     /** A note before the first decision - AUTONOMY-PROPOSALS.md §3b. See ApprovalCard. */
     val onAmend: suspend (id: String, note: String) -> Unit,
     val onReconnect: () -> Unit,
@@ -1006,8 +1008,17 @@ fun HomeScreen(
             // the cards and exists whenever any card does - which a found
             // index guarantees. Adding an item to this list above the cards
             // means adding it here too.
+            val busy = (state.activity != Activity.IDLE && state.activity != Activity.ERROR) ||
+                state.streaming || state.voicePhase == VoiceSession.Phase.SPEAKING
             val leading =
+                (if (busy) 1 else 0) +
+                (if (state.lockdown) 1 else 0) +
+                (if (state.watchSign != null) 1 else 0) +
+                (if (state.phoneWatchSign != null || state.phoneWatchOffered) 1 else 0) +
                 (if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) 1 else 0) +
+                1 +
+                1 +
+                (if (state.inboxTidy != null) 1 else 0) +
                 (if (state.notice != null) 1 else 0) +
                 (if (state.approvalsOff) 1 else 0) +
                 1
@@ -1306,8 +1317,14 @@ private fun ConversationList(
                     // 4 - nothing is ever approved without a deliberate
                     // decision - is untouched by it.
                     focused = item.id == state.focusApproval,
-                    onApprove = { actions.onApprove(item) },
-                    onDeny = { actions.onDeny(item) },
+                    onApprove = { onReset ->
+                        val handler = actions.onApproveWithReset
+                        if (handler != null) handler(item, onReset) else actions.onApprove(item)
+                    },
+                    onDeny = { onReset ->
+                        val handler = actions.onDenyWithReset
+                        if (handler != null) handler(item, onReset) else actions.onDeny(item)
+                    },
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     swipeAllowed = state.swipeDecides,
                     pictureHidden = state.memoryHidden,

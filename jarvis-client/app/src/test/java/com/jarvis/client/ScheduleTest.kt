@@ -397,6 +397,11 @@ class ScheduleTest {
         assertTrue(Schedule.heardLate(went, went + 601))
         assertFalse("unread: shown as before", Schedule.heardLate(null, went))
         assertFalse(Schedule.heardLate(went, went - 5))
+        // ageSeconds directly from PC
+        assertFalse(Schedule.heardLate(went, went + 600, ageSeconds = 600.0))
+        assertTrue(Schedule.heardLate(went, went, ageSeconds = 601.0))
+        assertFalse(Schedule.heardLate(null, went, ageSeconds = 100.0))
+        assertTrue(Schedule.heardLate(null, went, ageSeconds = 601.0))
         assertEquals("Missed at 07:00. Wake up", Schedule.missedWords("07:00", "Wake up"))
         assertEquals("Missed earlier. Jarvis: alarm.", Schedule.missedWords("", "Jarvis: alarm."))
         // The desktop's words, word for word.
@@ -408,6 +413,12 @@ class ScheduleTest {
             assertTrue(rs.contains("\"Missed earlier.\""))
             assertTrue(rs.contains("format!(\"Missed at {at}.\")"))
         }
+    }
+
+    @Test
+    fun ageSecondsIsParsedFromJobJson() {
+        val j = Schedule.job(obj("""{"id":"s0000000001","kind":"alarm","text":"wake up","state":"fired","age_s":45.0}"""))!!
+        assertEquals(45.0, j.ageSeconds!!, 0.0)
     }
 
     @Test

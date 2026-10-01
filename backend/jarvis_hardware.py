@@ -936,7 +936,7 @@ def lane_plan() -> Optional[dict]:
         ch = _choice()
         if not ch.get("preset"):
             return None
-        det = detect()
+        det = detect(fresh=True)
         planned = det["planned"]
         fp = cards_fingerprint(planned)
         if not planned or ch.get("fingerprint") != fp:
@@ -1410,7 +1410,7 @@ def _master_off_if_moved(old: Optional[str], new: Optional[str]) -> str:
     second-card switch goes OFF: the safe direction, and the owner's yes was
     for the old place. Its card, asked again, names the new one. Returns the
     sentence to add, or ""."""
-    if new is None or old == new:
+    if old is None or old == new:
         return ""
     sw = _switches()
     if sw is None or not sw["master"]:
@@ -1444,8 +1444,8 @@ def _lanes_now() -> Optional[str]:
         return "main" if lc is None else (lc.uuid or lc.key)
     try:
         import jarvis_second_card as SC
-        second = SC.detect().get("_second")
-        return (second.uuid or None) if second is not None else None
+        second = SC.detect(fresh=True).get("_second")
+        return (second.uuid or getattr(second, "key", None) or "second") if second is not None else None
     except Exception:
         return None
 

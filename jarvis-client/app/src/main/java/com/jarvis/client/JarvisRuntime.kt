@@ -3421,6 +3421,9 @@ object JarvisRuntime {
                     refreshPending()
                     // An inbox tidy approved here: its Undo strip shows at once.
                     if (approve && item.action == "tidy_inbox") watchInboxTidyQuickly()
+                    if (approve) {
+                        undoNoticeFor(item)?.let { _notice.value = it }
+                    }
                 }
                 is ApiResult.Failed -> {
                     if (result.error == ApiError.AlreadyHandled) {
@@ -3443,6 +3446,19 @@ object JarvisRuntime {
             return result
         } finally {
             _deciding.update { it - item.id }
+        }
+    }
+
+    private fun undoNoticeFor(item: PendingItem): String? {
+        if (item.risk.reversible == "no") return "This cannot be undone."
+        return when (item.action) {
+            "tidy_inbox" -> "Inbox tidy: 10 minutes to undo."
+            "forget_time_frame", "forget_fact" -> "Memory: 10 minutes to undo."
+            "reminder_create", "reminder_delete" -> "Reminders: say “cancel that” to undo."
+            "model_switch", "model_install" -> "Model: roll back anytime in settings."
+            "setting_change", "toggle_feature" -> "Settings: turn back off anytime."
+            "write_note", "smart_home_light" -> null
+            else -> if (item.risk.reversible == "yes") "Undo is available for this action." else null
         }
     }
 
@@ -5653,7 +5669,7 @@ object JarvisRuntime {
             // Heard more than ten minutes after it went off (the phone was
             // out of reach, or restarted): a silent "Missed at 07:00." notice,
             // never an alarm ringing as if it were now (the owner, 2026-09-26).
-            val late = com.jarvis.client.net.Schedule.heardLate(job?.firedAt, arrived / 1000.0)
+            val late = com.jarvis.client.net.Schedule.heardLate(job?.firedAt, arrived / 1000.0, job?.ageSeconds)
             com.jarvis.client.service.ScheduleNotifier.post(
                 context, id, kind, title,
                 if (late) com.jarvis.client.net.Schedule.missedWords(job?.wentOffAt.orEmpty(), text) else text,
@@ -5671,7 +5687,8 @@ object JarvisRuntime {
      * words) and show it; urgent rings until seen. While App lock or "Hide
      * memory lists and chat history" is on, only the generic words. Once per
      * match, even when a reconnect replays the event. It only tells: nothing
-     * here acts.
+     * here acts. Late urgent alerts become a silent "Missed" notice (owner
+     * decision 2026-09-30).
      */
     private fun onTellMeMatched(id: String, urgent: Boolean, eventId: String? = null) {
         val context = appContext ?: return
@@ -5692,10 +5709,14 @@ object JarvisRuntime {
             val security = settings.security.value
             val locked = security.appLock || security.privateLists
             val (title, text) = com.jarvis.client.net.Schedule.notification(kind, job, locked)
+            val late = com.jarvis.client.net.Schedule.heardLate(job?.alertAt ?: job?.firedAt, arrived / 1000.0, job?.ageSeconds)
             com.jarvis.client.service.ScheduleNotifier.post(
-                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_LOCK_SCREEN,
-                ring = com.jarvis.client.net.Schedule.rings(kind, urgent),
+                context, id, kind, title,
+                if (late) com.jarvis.client.net.Schedule.missedWords(job?.wentOffAt.orEmpty(), text) else text,
+                com.jarvis.client.net.Schedule.TELLME_LOCK_SCREEN,
+                ring = if (late) false else com.jarvis.client.net.Schedule.rings(kind, urgent),
                 key = key,
+                quiet = late,
             )
         }
     }
@@ -6993,9 +7014,13 @@ object JarvisRuntime {
             // The fixed words only - on the lock screen AND inside it, whatever
             // the privacy settings: the briefing itself is read in the app.
             val words = com.jarvis.client.net.Briefing.LOCK_SCREEN
+            val late = com.jarvis.client.net.Schedule.heardLate(job?.firedAt, arrived / 1000.0, job?.ageSeconds)
             com.jarvis.client.service.ScheduleNotifier.post(
                 context, id, com.jarvis.client.net.Briefing.KIND,
-                com.jarvis.client.net.Briefing.TITLE, words, words, openBriefing = true,
+                com.jarvis.client.net.Briefing.TITLE,
+                if (late) com.jarvis.client.net.Schedule.missedWords(job?.wentOffAt.orEmpty(), words) else words,
+                words, openBriefing = true,
+                quiet = late,
             )
         }
     }

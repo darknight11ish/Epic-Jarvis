@@ -1,5 +1,7 @@
 package com.jarvis.client.ui.screens
 
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -373,6 +375,64 @@ private fun CapturedRow() {
     }
 }
 
+@Composable
+private fun NotificationPreferencesRow() {
+    val chrome = LocalChrome.current
+    val context = LocalContext.current
+    var testSent by remember { mutableStateOf(false) }
+
+    Gap(16)
+    Text(
+        "Alerts and reminders on this phone",
+        style = MaterialTheme.typography.titleSmall,
+        color = chrome.textHi,
+    )
+    Gap(6)
+    Text(
+        "Timers, scheduled reminders, and morning briefings go off while connected to your PC's Jarvis. " +
+            "Alarms and urgent alerts ring through Do Not Disturb when alarms are allowed on your phone. " +
+            "If an alert arrives more than 10 minutes late, it appears as a silent \"Missed\" notice.",
+        style = MaterialTheme.typography.bodySmall,
+        color = chrome.textMid,
+    )
+    Gap(10)
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Secondary(
+            "Android notification settings",
+            modifier = Modifier.weight(1f),
+            onClick = {
+                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                runCatching { context.startActivity(intent) }
+            },
+        )
+        Secondary(
+            "Send test",
+            modifier = Modifier.weight(1f),
+            onClick = {
+                com.jarvis.client.service.ScheduleNotifier.post(
+                    context,
+                    jobId = "test-job",
+                    kind = "reminder",
+                    title = "Jarvis test notification",
+                    text = "This is a test notification from Jarvis. Reminders and channels are working.",
+                    lockScreen = "Jarvis: test notification",
+                )
+                testSent = true
+            },
+        )
+    }
+    if (testSent) {
+        Gap(4)
+        Text(
+            "Test notification sent.",
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.okInk,
+            modifier = Modifier.liveStatus(),
+        )
+    }
+}
+
 /**
  * "Phone notifications" - a section of its own, beside [WatchNotifySection].
  */
@@ -389,6 +449,7 @@ internal fun PhoneNotificationsSection(
             NotificationAccessRow(granted = notificationAccessGranted, onOpen = onOpenNotificationAccess)
             AllowedAppsList()
             CapturedRow()
+            NotificationPreferencesRow()
         }
     }
 }

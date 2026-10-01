@@ -57,6 +57,7 @@ data class GateHistoryItem(
      */
     val device: String? = null,
     val notice: Notice? = null,
+    val summary: String? = null,
 ) {
     /** What the card was, safe for a lock screen - same rule as a live card. */
     val title: String
@@ -116,6 +117,7 @@ private fun normaliseGateHistoryRow(row: JsonElement): GateHistoryItem? {
     val notice = (obj["notice"] as? JsonObject)?.let {
         runCatching { JarvisJson.decodeFromJsonElement(Notice.serializer(), it) }.getOrNull()
     }
+    val summary = textOf(obj["summary"]) ?: notice?.body?.takeIf { it.isNotBlank() } ?: textOf(obj["detail_one_line"]) ?: textOf(obj["what"])
     return GateHistoryItem(
         id = id,
         action = action,
@@ -125,5 +127,6 @@ private fun normaliseGateHistoryRow(row: JsonElement): GateHistoryItem? {
         state = state,
         device = device,
         notice = notice,
+        summary = summary,
     )
 }

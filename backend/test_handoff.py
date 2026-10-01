@@ -532,6 +532,36 @@ def t_words():
           r.returncode == 0, r.stdout + r.stderr)
 
 
+def t_event():
+    fresh()
+    events = []
+    fake = types.ModuleType("jarvis_events")
+
+    class _FakeBus:
+        def publish(self, kind, data):
+            events.append((kind, data))
+
+    fake.BUS = _FakeBus()
+    saved = sys.modules.get("jarvis_events")
+    sys.modules["jarvis_events"] = fake
+    try:
+        s = session(code="captcha")
+        off = HO.offer()
+        check("offer() publishes a handoff event", len(events) == 1 and events[0][0] == "handoff", events)
+        if events:
+            check("event carries the offer data", events[0][1].get("available") is True
+                  and events[0][1].get("site") == "Gemini"
+                  and events[0][1].get("reason") == "captcha", events[0][1])
+        HO.offer()
+        check("duplicate offer does not republish", len(events) == 1, len(events))
+    finally:
+        if saved is not None:
+            sys.modules["jarvis_events"] = saved
+        else:
+            sys.modules.pop("jarvis_events", None)
+
+
+
 # ==========================================================================
 #   With a real browser
 # ==========================================================================
@@ -636,7 +666,7 @@ def main():
     a = None
     try:
         for fn in (t_code, t_nothing_offered_unless_paused_at_an_owner_page, t_a_whole_hand_off,
-                   t_ends, t_support_chat, t_routes, t_words):
+                   t_ends, t_support_chat, t_routes, t_words, t_event):
             print(f"--- {fn.__name__} ---")
             try:
                 fn()

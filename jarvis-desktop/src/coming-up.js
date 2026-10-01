@@ -210,6 +210,7 @@ export function aloudFor(frame, listening) {
   if (!listening || !frame || frame.kind !== "schedule") return null;
   const d = frame.data || {};
   if (d.state !== "fired" || d.kind !== "timer" || d.notify === false) return null;
+  if (typeof d.age_s === "number" && d.age_s > 600) return null;
   return TIMER_ALOUD;
 }
 

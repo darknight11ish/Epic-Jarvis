@@ -86,12 +86,12 @@ object JarvisWidgets {
     const val MAX_NAME = 40
     const val MAX_TEXT = 60
     const val MAX_LABEL = 40
-    const val SLOTS = 3
+    const val SLOTS = 5
 
     /** Sources whose words are the owner's own (or another program's). */
-    val PRIVATE_SOURCES = listOf("now_playing", "reminders", "timers", "today", "todo")
+    val PRIVATE_SOURCES = listOf("current_task", "now_playing", "reminders", "timers", "today", "todo")
     private val KNOWN_SOURCES = PRIVATE_SOURCES + listOf(
-        "disk_free", "email_count", "events_count", "focus", "reminders_count", "todo_count",
+        "approvals_count", "disk_free", "email_count", "events_count", "focus", "gpu_memory", "reminders_count", "todo_count", "tokens_per_second",
     )
 
     sealed interface Block {
