@@ -295,6 +295,8 @@ await check("\"tell me when\": its words in both apps, its row, and ringing", as
   // Said aloud: a timer going off, only while listening hands-free.
   const fired = { kind: "schedule", data: { id: "s0000000001", kind: "timer", state: "fired" } };
   assert.equal(aloudFor(fired, true), TIMER_ALOUD);
+  assert.equal(aloudFor({ ...fired, data: { ...fired.data, age_s: 601 } }, true), null);
+  assert.equal(aloudFor({ ...fired, data: { ...fired.data, age_s: 60 } }, true), TIMER_ALOUD);
   assert.equal(aloudFor(fired, false), null);
   assert.equal(aloudFor({ ...fired, data: { ...fired.data, kind: "reminder" } }, true), null);
   assert.equal(aloudFor({ ...fired, data: { ...fired.data, state: "changed" } }, true), null);

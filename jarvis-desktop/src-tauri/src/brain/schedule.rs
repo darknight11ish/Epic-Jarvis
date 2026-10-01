@@ -499,6 +499,17 @@ pub(crate) fn heard_late(fired_at: i64, now: i64) -> bool {
     fired_at > 0 && now - fired_at > LATE_RING_LIMIT_S
 }
 
+/// Whether a job is late, using `age_s` sent directly by the PC first
+/// to prevent clock skew and catch stale alarms when fired_at is 0.
+pub(crate) fn is_late(fired_at: i64, now: i64, age_s: Option<f64>) -> bool {
+    if let Some(age) = age_s {
+        if age >= 0.0 && age > LATE_RING_LIMIT_S as f64 {
+            return true;
+        }
+    }
+    heard_late(fired_at, now)
+}
+
 /// The quiet notice's words: when it went off (the PC's own clock words,
 /// `went_off_at`), then what it was - both apps' words.
 pub(crate) fn missed_words(went_off_at: &str, body: &str) -> String {
@@ -516,7 +527,7 @@ pub(crate) fn missed_words(went_off_at: &str, body: &str) -> String {
     }
 }
 
-fn now_secs() -> i64 {
+pub(crate) fn now_secs() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -600,10 +611,15 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, body) = toast_words(&kind, job.as_ref(), private);
+    let age_s = job
+        .as_ref()
+        .and_then(|j| j.get("age_s"))
+        .and_then(|v| v.as_f64())
+        .or_else(|| data.get("age_s").and_then(|v| v.as_f64()));
     // Heard more than ten minutes after it went off (the app was closed,
     // or restarted and replayed the event): a quiet notice saying when,
     // never a ringing alarm as if it were happening now, and no Snooze.
-    if heard_late(fired_at, now_secs()) {
+    if is_late(fired_at, now_secs(), age_s) {
         let at = job
             .as_ref()
             .and_then(|j| j.get("went_off_at"))
@@ -626,8 +642,12 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
 /// "urgent"}`): read its `alert` by id and show it - ringing until dismissed
 /// when it is urgent. Only ever a notice: nothing here acts, and the toast's
 /// only button is Windows' own Dismiss. Once per match, even when a
-/// reconnect replays the event.
+/// reconnect replays the event. A late urgent alert becomes a quiet "Missed"
+/// notice (owner decision, 2026-09-30).
 pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value) {
+    if !wants_toast(&data) {
+        return;
+    }
     let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
         return;
     };
@@ -648,6 +668,20 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, body) = toast_words("tellme", job.as_ref(), private);
+    let age_s = job
+        .as_ref()
+        .and_then(|j| j.get("age_s"))
+        .and_then(|v| v.as_f64())
+        .or_else(|| data.get("age_s").and_then(|v| v.as_f64()));
+    if is_late(at, now_secs(), age_s) {
+        let went_off = job
+            .as_ref()
+            .and_then(|j| j.get("went_off_at"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        show_quiet(&app, &title, &missed_words(went_off, &body));
+        return;
+    }
     show(&app, &title, &body, rings("tellme", &data), None);
 }
 
@@ -658,6 +692,9 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
 /// urgent watch included: only a real match rings. Once per telling, even
 /// when a reconnect replays the event.
 pub async fn toast_broken(app: AppHandle, base: String, data: serde_json::Value) {
+    if !wants_toast(&data) {
+        return;
+    }
     let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
         return;
     };
@@ -726,7 +763,7 @@ pub(crate) fn removes_on_change(id: &str, kind: &str) -> bool {
 }
 
 /// A toast without a sound: a job heard about too late to ring.
-fn show_quiet(app: &AppHandle, title: &str, body: &str) {
+pub(crate) fn show_quiet(app: &AppHandle, title: &str, body: &str) {
     #[cfg(windows)]
     {
         crate::winrt_toast::notify_quiet(app, title, body);
@@ -927,6 +964,11 @@ mod tests {
             "Missed earlier. Jarvis: alarm."
         );
         assert_eq!(missed_words("07:00", " "), "Missed at 07:00.");
+        // age_s tests
+        assert!(!is_late(went, went + 600, Some(600.0)));
+        assert!(is_late(went, went, Some(601.0)));
+        assert!(!is_late(0, went, Some(100.0)));
+        assert!(is_late(0, went, Some(601.0)));
     }
 
     #[test]

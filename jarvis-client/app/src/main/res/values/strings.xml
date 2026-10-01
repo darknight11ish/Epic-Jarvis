@@ -55,6 +55,8 @@
     <string name="channel_alarm_desc">An alarm, or a "tell me when" you marked urgent.
         Rings and vibrates until you look. It uses the alarm sound, so Do Not Disturb
         lets it through if your phone allows alarms then.</string>
+    <string name="channel_schedule_name">Reminders and timers</string>
+    <string name="channel_schedule_desc">Timers, scheduled reminders, and morning briefings from your Jarvis.</string>
     <string name="approval_locked">A decision is waiting. Unlock to see it.</string>
     <string name="approvals_waiting">%1$d approvals waiting</string>
     <string name="approval_deny_action">Deny</string>

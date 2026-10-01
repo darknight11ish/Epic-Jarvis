@@ -111,6 +111,7 @@ object OpenPlace {
         "crash-notes",
         "start-jarvis",
         "spending",
+        "notifications",
     )
 
     /** Every id this file has made a decision about - for the test. */

@@ -60,6 +60,7 @@
           <a href="#voice">Voice</a>
           <a href="#manner">How Jarvis talks</a>
           <a href="#briefing-settings">Morning briefing</a>
+          <a href="#notifications">Notifications</a>
           <a href="#menu-visibility">Show or hide menus</a>
         </div>
         <div class="settings-jump-group">
@@ -1006,6 +1007,73 @@
           <span class="status" id="br-senders-status" role="status"></span>
           <p class="note" id="br-spoken"></p>
           <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
+        </div>
+      </section>
+
+      <section class="card" id="notifications">
+        <h2>Notifications</h2>
+        <p class="note">
+          Choose what Jarvis notifies you about on this PC. Decisions waiting for your yes
+          always notify you and cannot be turned off.
+        </p>
+
+        <h3 class="subhead">What notifies you</h3>
+        <label class="toggle" id="notif-alarms-row">
+          <input id="notif-alarms" type="checkbox" checked />
+          <span>
+            Alarms and urgent alerts
+            <span class="toggle-detail">Alarms and urgent "tell me when" alerts ring until dismissed. They break through Windows Focus Assist so you do not miss them.</span>
+          </span>
+        </label>
+
+        <label class="toggle" id="notif-reminders-row">
+          <input id="notif-reminders" type="checkbox" checked />
+          <span>
+            Reminders, timers and to-dos
+            <span class="toggle-detail">Timers, reminders and to-do items chime once when they are due and offer Snooze.</span>
+          </span>
+        </label>
+
+        <label class="toggle" id="notif-briefing-row">
+          <input id="notif-briefing" type="checkbox" checked />
+          <span>
+            Morning briefing
+            <span class="toggle-detail">Tells you when your morning briefing is ready to read in the Brain.</span>
+          </span>
+        </label>
+
+        <label class="toggle" id="notif-handoff-row">
+          <input id="notif-handoff" type="checkbox" checked />
+          <span>
+            Website needs you (Solve it here)
+            <span class="toggle-detail">Tells you when a website or support chat pauses at a captcha or sign-in page.</span>
+          </span>
+        </label>
+
+        <h3 class="subhead">Quiet hours</h3>
+        <p class="note">
+          Silences non-urgent notifications during these hours. Quiet hours never silence urgent alerts or decisions waiting for you.
+        </p>
+        <label class="toggle" id="notif-quiet-row">
+          <input id="notif-quiet-enabled" type="checkbox" />
+          <span>
+            Turn on quiet hours
+          </span>
+        </label>
+        <div class="row" id="notif-quiet-times">
+          <label for="notif-quiet-start">From</label>
+          <input id="notif-quiet-start" type="time" value="22:00" step="60" />
+          <label for="notif-quiet-end">to</label>
+          <input id="notif-quiet-end" type="time" value="07:00" step="60" />
+        </div>
+
+        <h3 class="subhead">Test notifications</h3>
+        <p class="note">
+          Send a sample notification to make sure Windows notifications and sounds are working.
+        </p>
+        <div class="row">
+          <button class="btn" id="notif-send-test" type="button">Send test notification</button>
+          <span class="status" id="notif-status" role="status"></span>
         </div>
       </section>
 
@@ -2299,6 +2367,7 @@
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
     <script type="module" src="briefing-settings.js"></script>
+    <script type="module" src="notifications-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="account-secrets-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>

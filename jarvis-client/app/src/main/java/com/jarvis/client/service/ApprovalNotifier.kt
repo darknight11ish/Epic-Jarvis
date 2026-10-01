@@ -238,8 +238,13 @@ object ApprovalNotifier {
      * the payload a notification must not show. Posting nothing would be
      * worse: an approval nobody is told about is the failure this whole file
      * exists to prevent.
+     * While App lock or "Hide memory lists and chat history" is on, only the
+     * generic words are shown (owner decision, 2026-09-30).
      */
-    private fun textFor(item: PendingItem): Pair<String, String> {
+    private fun textFor(context: Context, item: PendingItem, locked: Boolean): Pair<String, String> {
+        if (locked) {
+            return context.getString(R.string.app_name) to context.getString(R.string.approval_locked)
+        }
         val notice = item.notice
         if (notice != null && notice.title.isNotBlank()) {
             return notice.title to notice.body.ifBlank { "Nothing has happened yet." }
@@ -255,7 +260,9 @@ object ApprovalNotifier {
     }
 
     private fun build(context: Context, item: PendingItem, notificationId: Int): Notification {
-        val (title, body) = textFor(item)
+        val sec = JarvisRuntime.settings.security.value
+        val locked = sec.appLock || sec.privateLists
+        val (title, body) = textFor(context, item, locked)
 
         // Which channel, not which priority. On Android 8 and later the
         // decision to interrupt belongs to the channel; `setPriority` below is

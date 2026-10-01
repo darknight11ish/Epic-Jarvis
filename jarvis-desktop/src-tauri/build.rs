@@ -25,6 +25,7 @@ fn main() {
             "get_pending_approvals",
             "refresh_link",
             "decide_approval",
+            "notify_user",
             // The HUD page's requests, made in Rust so the page holds no
             // token (apps security audit M2; hud_proxy.rs).
             "hud_get",
