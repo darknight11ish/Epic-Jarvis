@@ -235,14 +235,14 @@ def reasoning_parameters(model: str, question: str = "", *,
                          ollama_url: Optional[str] = None,
                          role: str = "everyday") -> dict:
     """Computes the reasoning_effort parameters to pass to Ollama chat.
-    Voice answers (spoken=True) are always fast (forced to 'none' or omitted).
-    If the model lacks thinking capability, returns {} (never sends reasoning_effort).
+    Voice answers (spoken=True) are always fast (forced to 'none').
+    Defaults to 'none' when off or when model does not think.
     """
-    if not supports_thinking(model, ollama_url):
-        return {}
-
     if spoken:
         # Voice answers are always fast
+        return {"reasoning_effort": "none"}
+
+    if not supports_thinking(model, ollama_url):
         return {"reasoning_effort": "none"}
 
     lvl = get_level(role)

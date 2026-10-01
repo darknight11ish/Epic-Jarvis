@@ -6093,7 +6093,7 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
             )
         except Exception:
             pass
-        if reasoning is not None:
+        if reasoning:
             body.update(reasoning)
         else:
             body.update(REASONING_OFF)

@@ -79,8 +79,8 @@ class TestThinkingUnits(unittest.TestCase):
         JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "smart-model")] = ["thinking"]
         JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "plain-model")] = []
 
-        # Plain model without thinking gets empty dict (no reasoning_effort sent)
-        self.assertEqual(JT.reasoning_parameters("plain-model"), {})
+        # Plain model without thinking gets reasoning_effort none (thinking off)
+        self.assertEqual(JT.reasoning_parameters("plain-model"), {"reasoning_effort": "none"})
 
         # Voice answers (spoken=True) are always fast
         JT.set_level("everyday", "deep")
@@ -199,9 +199,9 @@ class TestThinkingAgentIntegration(unittest.TestCase):
         body_spoken = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=True, ollama_url="http://127.0.0.1:11434")
         self.assertEqual(body_spoken.get("reasoning_effort"), "none")
 
-        # Model without thinking has no reasoning_effort field
+        # Model without thinking gets reasoning_effort none (thinking off)
         body_no_think = jarvis_agent.chat_body("test-no-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
-        self.assertNotIn("reasoning_effort", body_no_think)
+        self.assertEqual(body_no_think.get("reasoning_effort"), "none")
 
 
 if __name__ == "__main__":
