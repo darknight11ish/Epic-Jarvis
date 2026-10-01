@@ -403,8 +403,8 @@ mod tests {
                 Some(b) => (post["status"].as_u64().unwrap() as u16, b),
                 None => (200, post),
             };
-            let got = change_answer(status, &body.to_string())
-                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            let got =
+                change_answer(status, &body.to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert_eq!(&got, body, "{name}: a field was dropped or changed");
         }
         let list = &all["list"];
