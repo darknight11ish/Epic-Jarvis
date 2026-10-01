@@ -959,23 +959,23 @@
           <div class="row">
             <span class="status" id="mn-status" role="status"></span>
           </div>
-        </div>
-      </section>
 
-      <!-- ── Thinking levels ──────────────────────────────────────────────
-           Off / Quick / Deep / Auto per running model (thinking-settings.js;
-           src-tauri/src/plain_errors.rs get_thinking, set_thinking; backend
-           jarvis_thinking.py, Section 5.5). No approval card either way.
-           Notice explains that thinking spends conversation room. -->
-      <section class="card" id="thinking">
-        <h2>Thinking levels</h2>
-        <p class="note" id="th-detail">Lets Jarvis think through complex questions before answering. Thinking spends some of your conversation room.</p>
-        <p class="note warning" id="th-notice"></p>
-        <p class="state" id="th-state" role="status">Asking Jarvis…</p>
-        <div id="th-body" hidden>
-          <div id="th-models"></div>
-          <div class="row">
-            <span class="status" id="th-status" role="status"></span>
+          <!-- ── Thinking levels ──────────────────────────────────────────────
+               Off / Quick / Deep / Auto per running model (thinking-settings.js;
+               src-tauri/src/plain_errors.rs get_thinking, set_thinking; backend
+               jarvis_thinking.py, Section 5.5). No approval card either way.
+               Notice explains that thinking spends conversation room. -->
+          <div id="thinking">
+            <h3 class="subhead" id="th-title">Thinking levels</h3>
+            <p class="note" id="th-detail">Lets Jarvis think through complex questions before answering. Thinking spends some of your conversation room.</p>
+            <p class="note warning" id="th-notice"></p>
+            <p class="state" id="th-state" role="status">Asking Jarvis…</p>
+            <div id="th-body" hidden>
+              <div id="th-models"></div>
+              <div class="row">
+                <span class="status" id="th-status" role="status"></span>
+              </div>
+            </div>
           </div>
         </div>
       </section>
