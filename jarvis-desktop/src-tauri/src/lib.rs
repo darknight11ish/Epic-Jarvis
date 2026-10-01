@@ -801,6 +801,7 @@ pub fn run() {
             commands::temporary_chat_available,
             commands::cancel_chat,
             commands::decide_approval,
+            commands::notify_user,
             // The HUD page's requests, made in Rust so the page holds no
             // token (apps security audit M2; hud_proxy.rs).
             hud_proxy::hud_get,

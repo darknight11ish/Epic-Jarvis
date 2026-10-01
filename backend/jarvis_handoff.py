@@ -245,6 +245,17 @@ def _target(kind: str, target: str):
     return None
 
 
+_NOTIFIED_TARGETS: set = set()
+
+
+def _publish(kind: str, data: dict) -> None:
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish(kind, data)
+    except Exception:
+        pass
+
+
 def offer() -> dict:
     """What both apps read (GET /api/chatbot/status, `handoff`): is a page
     waiting for the owner, which site and why - never a picture, never a
@@ -256,14 +267,24 @@ def offer() -> dict:
         active = cur.id if cur is not None and not cur.ended else ""
         last_end = dict(_ENDED)
     if not rows:
+        with _LOCK:
+            _NOTIFIED_TARGETS.clear()
         return {"available": False, "active": "", "ended": last_end}
     kind, tid, site, reason, _a = rows[-1]
-    return {"available": True, "kind": kind, "id": tid, "site": site, "reason": reason,
-            "reason_words": reason_words(reason),
-            "title": WORDS["alert_title"].format(site=site),
-            "text": WORDS["alert_text"].format(reason=reason_words(reason)),
-            "active": active if cur is not None and cur.target == tid else "",
-            "ended": last_end}
+    res = {"available": True, "kind": kind, "id": tid, "site": site, "reason": reason,
+           "reason_words": reason_words(reason),
+           "title": WORDS["alert_title"].format(site=site),
+           "text": WORDS["alert_text"].format(reason=reason_words(reason)),
+           "active": active if cur is not None and cur.target == tid else "",
+           "ended": last_end}
+    target_key = f"{kind}:{tid}:{reason}"
+    with _LOCK:
+        should_publish = target_key not in _NOTIFIED_TARGETS
+        if should_publish:
+            _NOTIFIED_TARGETS.add(target_key)
+    if should_publish:
+        _publish("handoff", res)
+    return res
 
 
 # ============================================================================
@@ -594,6 +615,7 @@ def _reset_for_tests(clock: Optional[Callable[[], float]] = None) -> None:
     with _LOCK:
         _CURRENT = None
         _ENDED.clear()
+        _NOTIFIED_TARGETS.clear()
     _clock = clock or time.monotonic
 
 

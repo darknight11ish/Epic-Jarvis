@@ -2001,7 +2001,15 @@ class MainActivity : FragmentActivity() {
                             items = items,
                             onRequestNotifications = {
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                                    if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
+                                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                    } else {
+                                        runCatching { startActivity(intent) }.onFailure {
+                                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                        }
+                                    }
                                 }
                             },
                             onRequestBatteryExemption = ::requestBatteryExemption,

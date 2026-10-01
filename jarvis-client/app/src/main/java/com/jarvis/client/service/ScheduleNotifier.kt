@@ -58,6 +58,9 @@ object ScheduleNotifier {
     /** The one id every schedule notification has; its tag tells them apart. */
     const val NOTIFICATION_ID = NotificationIds.SCHEDULE
 
+    /** Dedicated channel for reminders, timers, and briefings (owner decision, 2026-09-30). */
+    const val SCHEDULE_CHANNEL_ID = "jarvis_schedule"
+
     /** The kinds that carry a Snooze (jarvis_schedule.SNOOZABLE). */
     private val SNOOZABLE = com.jarvis.client.net.Schedule.SNOOZABLE
 
@@ -130,7 +133,7 @@ object ScheduleNotifier {
             postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs)
             return
         }
-        val n = NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
+        val n = NotificationCompat.Builder(context, SCHEDULE_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
             // notifications on a compatible watch" (Brain, off by default) -
             // Android bridges notifications to a paired device otherwise.
@@ -243,7 +246,7 @@ object ScheduleNotifier {
     const val STOP = "Stop"
 
     private fun locked(context: Context, lockScreen: String): Notification =
-        NotificationCompat.Builder(context, ApprovalNotifier.CHANNEL_ID)
+        NotificationCompat.Builder(context, SCHEDULE_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
             // notifications on a compatible watch" (Brain, off by default) -
             // Android bridges notifications to a paired device otherwise.

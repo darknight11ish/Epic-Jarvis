@@ -668,6 +668,8 @@ class LiveService : Service() {
          * on it. Fixed words only; gone after 30 seconds.
          */
         fun showMoveOffer(context: Context, device: String) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
             val manager = ContextCompat.getSystemService(context, NotificationManager::class.java) ?: return
             runCatching {
                 manager.createNotificationChannel(
@@ -713,6 +715,8 @@ class LiveService : Service() {
          * chat - after App lock, and held on a stale link like the button.
          */
         fun showResume(context: Context, endedWords: String, forMs: Long) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED) return
             val manager = ContextCompat.getSystemService(context, NotificationManager::class.java) ?: return
             runCatching {
                 manager.createNotificationChannel(

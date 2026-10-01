@@ -349,6 +349,8 @@ object Schedule {
          */
         val today: String = "",
         val showsAt: String = "",
+        /** Seconds since it went off, by the PC's clock (backend jarvis_schedule.py). */
+        val ageSeconds: Double? = null,
     )
 
     /** A named list: its name as the PC keeps it, its title, how many open items. */
@@ -400,6 +402,7 @@ object Schedule {
             about = o.text("about") ?: "",
             today = o.text("today") ?: "",
             showsAt = o.text("shows_at") ?: "",
+            ageSeconds = o.num("age_s"),
         )
     }
 
@@ -809,9 +812,17 @@ object Schedule {
      */
     const val LATE_RING_LIMIT_S = 10 * 60
 
-    /** Whether a job that went off at [firedAt] (seconds) is heard too late to ring at [nowS]. */
-    fun heardLate(firedAt: Double?, nowS: Double): Boolean =
-        firedAt != null && firedAt > 0 && nowS - firedAt > LATE_RING_LIMIT_S
+    /**
+     * Whether a job that went off at [firedAt] (seconds) or with [ageSeconds]
+     * is heard too late to ring at [nowS]. When [ageSeconds] is provided by
+     * the PC, it is preferred to avoid clock skew.
+     */
+    fun heardLate(firedAt: Double?, nowS: Double, ageSeconds: Double? = null): Boolean {
+        if (ageSeconds != null && ageSeconds >= 0.0) {
+            return ageSeconds > LATE_RING_LIMIT_S
+        }
+        return firedAt != null && firedAt > 0 && nowS - firedAt > LATE_RING_LIMIT_S
+    }
 
     /** The quiet notice's words - both apps' (`missed_words` on the desktop). */
     fun missedWords(wentOffAt: String, body: String): String {

@@ -806,6 +806,13 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         // row, the bar's strip) follows it (look.rs). Fanned out below too.
         "screen_watch" => crate::look::on_event(app, &event.data),
 
+        // A captcha or sign-in page is waiting for the owner (backend jarvis_handoff.py).
+        // Shows a toast telling the owner which site needs them ("{site} needs you"),
+        // or generic words under App lock.
+        "handoff" => {
+            tauri::async_runtime::spawn(toast_handoff(app.clone(), event.data.clone()));
+        }
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.
@@ -820,6 +827,32 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
     crate::emit_all(app, crate::events::JARVIS_EVENT, frame.clone());
     // The HUD gets the same frame by a different road; see `push_to_hud`.
     crate::push_to_hud(app, "event", &frame);
+}
+
+/// Shows a toast when a captcha or sign-in page is waiting for the owner
+/// (backend jarvis_handoff.py). While App lock or "Hide memory lists" is on,
+/// only generic words are shown so the site name is not exposed.
+async fn toast_handoff(app: AppHandle, data: serde_json::Value) {
+    if data["available"].as_bool() != Some(true) {
+        return;
+    }
+    let locked = crate::commands::toast_privacy_on(&app);
+    let (title, body) = if locked {
+        (
+            "A website needs you".to_string(),
+            "A website Jarvis is using needs you. Unlock to see which.".to_string(),
+        )
+    } else {
+        let site = data["site"].as_str().unwrap_or("A website");
+        let reason_words = data["reason_words"]
+            .as_str()
+            .unwrap_or("a captcha or sign-in page");
+        (
+            format!("{site} needs you"),
+            format!("Jarvis paused: {reason_words}. Solve it on your PC or tap to solve it on your phone."),
+        )
+    };
+    crate::commands::notify(&app, &title, &body);
 }
 
 /// The state out of an `activity` event. Two shapes: the state at the top

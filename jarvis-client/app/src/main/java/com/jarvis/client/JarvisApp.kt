@@ -121,5 +121,20 @@ class JarvisApp : Application() {
                 )
             },
         )
+
+        // Dedicated channel for timers, scheduled reminders, and morning briefings
+        // (owner decision 2026-09-30). Its own channel so silencing or tuning
+        // reminders does not affect approvals and vice versa.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                ScheduleNotifier.SCHEDULE_CHANNEL_ID,
+                getString(R.string.channel_schedule_name),
+                NotificationManager.IMPORTANCE_HIGH,
+            ).apply {
+                description = getString(R.string.channel_schedule_desc)
+                setShowBadge(true)
+                enableVibration(true)
+            },
+        )
     }
 }

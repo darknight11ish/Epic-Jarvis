@@ -1193,11 +1193,14 @@ fn tooltip(app: &AppHandle, link: &LinkState) -> String {
     // facts presented as current ones - the phone drops the same extras.
     if link.connected && !link.stale {
         parts.push(power_label(link));
-        if link.approvals > 0 {
-            parts.push(approvals_label(link));
-        }
-        if link.attention.pending > 0 {
-            parts.push(waiting_label(link));
+        let locked = crate::lock::locked_now(app) || crate::lock::app_locked(app);
+        if !locked {
+            if link.approvals > 0 {
+                parts.push(approvals_label(link));
+            }
+            if link.attention.pending > 0 {
+                parts.push(waiting_label(link));
+            }
         }
     }
     if let Some(a) = accel(app, "toggle_quickbar") {
