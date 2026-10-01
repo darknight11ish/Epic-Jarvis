@@ -2535,7 +2535,7 @@ def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool,
     lines = []
     if watch.read or watch.tainted:
         lines.append(WEB_SEARCH_READ)
-    if watch.money or watch.spending_asked:
+    if getattr(watch, "money", False) or getattr(watch, "spending_asked", False):
         lines.append(WEB_SEARCH_MONEY)
     if watch.memory:
         lines += web_search_memory_lines(watch.facts, query, watch.owner_words)

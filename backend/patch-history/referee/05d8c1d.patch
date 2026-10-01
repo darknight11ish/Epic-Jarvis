@@ -1,0 +1,48 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -171,5 +171,6 @@
+     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
+     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+     "topic_loosen",  # jarvis_topics.py acts only on tier "ask": ONE card to turn a private topic back on (topics.patch)
++    "referee_tick",  # jarvis_referee.py acts only on tier "ask": ONE card per goal step whose number reached its target; only the owner's tap ticks it (referee.patch)
+ })
+ 
+@@ -841,6 +842,12 @@
+     # cleared, when a batch of its facts is moved out to a looser topic, or when any
+     # loosening is asked from outside text. It only changes which saved facts Jarvis may
+     # learn about or use; nothing is sent anywhere. Turning a topic OFF is instant.
+     "topic_loosen": ("yes", "local", "lets Jarvis learn about or use a private topic again (health, money, or one you marked private), or move its facts to a more open topic; the facts stay on this PC, sensitive ones are still kept on screen and never read aloud, and new sensitive ones still wait for your yes; switching a topic off again is instant"),
++    # referee.patch (jarvis_referee.py, JARVIS-API section 108; the owner's decision of
++    # 2026-09-30). ONE card per goal step whose benchmark number reached its target: "This
++    # looks done - tick it?", with the numbers on it. Yes ticks that one step, exactly as the
++    # owner's own tick would (and it can be unticked at once); the model never writes a tick and
++    # no test is run. Nothing leaves this PC. At most a few cards a day.
++    "referee_tick": ("yes", "local", "ticks one step of one of your goals whose number reached its target, exactly as if you had ticked it yourself; you can untick it at once, and it never runs a test or ticks anything on its own"),
+ }
+ 
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3679,6 +3679,23 @@
+                                     token_ok=_token_ok, read_body=_read_body))
+     except Exception as exc:
+         print(f"  topics     NOT ON ({type(exc).__name__}) - Topic controls are off")
+         print("             until jarvis_topics.py is back: run apply-patches.ps1 again")
++    # referee.patch ("Referee suggestions", the owner's decision of 2026-09-30; JARVIS-API
++    # section 108, a second-card switch): keeps the quiet hourly "This looks done - tick
++    # it?" look on the one scheduler in step with the switch. It adds no route and no tool;
++    # its only output is one approval card, and only the owner's tap ticks a step.
++    # Then, "Study helper": hands the quiz its model call, so it uses the second card
++    # while that switch is on (after the quiz install above, which resets its settings).
++    try:
++        import jarvis_referee
++        print(jarvis_referee.install())
++    except Exception as exc:
++        print(f"  referee    NOT ON ({type(exc).__name__}) - Referee suggestions are off")
++        print("             until jarvis_referee.py is back: run apply-patches.ps1 again")
++    try:
++        import jarvis_second_card
++        print(jarvis_second_card.wire_study())
++    except Exception as exc:
++        print(f"  study      NOT WIRED ({type(exc).__name__}) - the quiz keeps using the everyday model")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)

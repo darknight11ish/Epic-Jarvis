@@ -128,7 +128,7 @@ def well_formed(text: bytes) -> bool:
         for target in targets:
             f = d / target
             for hunk, pre in _stack.hunks(decoded, target):
-                f.write_text("\n".join(pre) + ("\n" if pre else ""), encoding="utf-8", newline="\n")
+                f.write_text("\n".join(pre) + ("\n" if pre else ""), encoding="utf-8")
                 if not _stack._apply(git_bin, d, target, hunk):
                     return False
         return True

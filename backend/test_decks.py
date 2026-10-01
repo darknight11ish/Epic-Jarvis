@@ -1245,6 +1245,11 @@ def t_wording_and_the_shared_fixture():
 
 def main() -> int:
     try:
+        import fsrs  # noqa: F401
+    except Exception:
+        print("skip  test_decks.py: py-fsrs is not installed (py -3 -m pip install -r backend/requirements.txt)")
+        return 0
+    try:
         for name, fn in list(globals().items()):
             if name.startswith("t_") and callable(fn):
                 print(f"--- {name} ---")

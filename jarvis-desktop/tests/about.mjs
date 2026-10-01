@@ -21,7 +21,7 @@ const check = async (name, fn) => {
 
 const VIEW = { width: 760, height: 1400 };
 const open = (data = {}) => K.open(browser, base, "settings.html", data, VIEW);
-const aboutCard = (page) => page.locator(".card", { hasText: "About Jarvis" });
+const aboutCard = (page) => page.locator("#about");
 
 await check("the About card is present with version, maker, licence, source and notices", async () => {
   const page = await open();

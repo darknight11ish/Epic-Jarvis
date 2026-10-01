@@ -524,7 +524,11 @@ def t_encodings_and_excel():
         if got:
             check(f"{n}: the pound sign survived", res["_table"]["sections"][0]["currency"] == "£")
     # Excel: a real workbook, dates and numbers as cells, a formula cell that is only read.
-    import openpyxl
+    try:
+        import openpyxl
+    except ImportError:
+        print("skip  test_spending.py: openpyxl is not installed (skipping Excel cases)")
+        return
     import datetime as dt
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -1410,15 +1414,20 @@ def t_a_layout_that_does_not_fit_the_file_is_not_trusted():
     (d2 / "footers.csv").write_text(ok, encoding="utf-8")
     check("footer rows with words for dates do not condemn a layout", summary(d2 / "footers.csv").get("ok") is True)
     # the kind of file is part of the key
-    import openpyxl
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    for r in [["Date", "Description", "Amount"], ["2026-03-01", "SHOP1", -1.5], ["2026-03-02", "SHOP2", -2.5]]:
-        ws.append(r)
-    wb.save(d2 / "same_header.xlsx")
-    res = summary(d2 / "same_header.xlsx")
-    check("a CSV layout is not applied to an Excel file with the same header",
-          res["ok"] is False and res.get("code") == "needs_setup", res)
+    try:
+        import openpyxl
+        has_openpyxl = True
+    except ImportError:
+        has_openpyxl = False
+    if has_openpyxl:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        for r in [["Date", "Description", "Amount"], ["2026-03-01", "SHOP1", -1.5], ["2026-03-02", "SHOP2", -2.5]]:
+            ws.append(r)
+        wb.save(d2 / "same_header.xlsx")
+        res = summary(d2 / "same_header.xlsx")
+        check("a CSV layout is not applied to an Excel file with the same header",
+              res["ok"] is False and res.get("code") == "needs_setup", res)
     # 'Using layout X' in the sources line
     res = summary(d2 / "iso.csv")
     check("the card's sources line says which layout was used",
@@ -1494,8 +1503,12 @@ def t_confirm_enforces_the_questions_and_shows_the_counts():
 
 def t_excel_numbers_dates_and_sheets():
     """Audit finding 3."""
+    try:
+        import openpyxl
+    except ImportError:
+        print("skip  test_spending.py: openpyxl is not installed (skipping Excel numbers test)")
+        return
     import datetime as dt
-    import openpyxl
     fresh()
     d = folder("Xl", text={})
     listed(d)
@@ -1805,15 +1818,23 @@ def t_a_conversation_that_added_up_spending_is_money_sensitive():
 
 def t_listing_and_waiting_do_not_read_files_again():
     """Audit finding 7."""
-    import openpyxl
+    try:
+        import openpyxl
+        has_openpyxl = True
+    except ImportError:
+        has_openpyxl = False
     fresh()
     d = folder("Perf", text={f"w{i}.csv": "Date,Description,Amount\n" + "2026-03-01,A,-1\n" * 50 for i in range(3)})
     listed(d)
-    wb = openpyxl.Workbook()
-    wb.active.append(["Date", "Description", "Amount"])
-    wb.active.append(["2026-03-01", "A", -1])
-    wb.save(d / "wait.xlsx")
-    for n in ("w0.csv", "w1.csv", "wait.xlsx"):
+    if has_openpyxl:
+        wb = openpyxl.Workbook()
+        wb.active.append(["Date", "Description", "Amount"])
+        wb.active.append(["2026-03-01", "A", -1])
+        wb.save(d / "wait.xlsx")
+        check_files = ("w0.csv", "w1.csv", "wait.xlsx")
+    else:
+        check_files = ("w0.csv", "w1.csv", "w2.csv")
+    for n in check_files:
         summary(d / n)                                  # each has no layout: they wait
     check("three files wait", len(SP.view(here=True)["waiting"]) == 3)
     reads, spawned = [], []
@@ -1829,7 +1850,7 @@ def t_listing_and_waiting_do_not_read_files_again():
           (len(reads), len(spawned)))
     check("... the waiting files are still listed", len(v["waiting"]) == 3)
     check("... and the PC's picker lists the files found", {f["name"] for f in v["bank_files"]}
-          >= {"w0.csv", "w1.csv", "wait.xlsx"}, [f["name"] for f in v["bank_files"]])
+          >= set(check_files), [f["name"] for f in v["bank_files"]])
     check("... each with its path (this PC only)", all("path" in f for f in v["bank_files"])
           and "bank_files" not in SP.view(here=False))
     # the waiting list is bounded

@@ -120,7 +120,7 @@ await check("reading the PC's quiz: questions, marks, the guess flag and a summa
   assert.equal(q.questions[1].kind, "recall", "an unknown kind falls back");
   // An older PC sends no marked_by / expected / key_label: its marks are the model's.
   assert.deepEqual(q.questions[0].mark, { level: "partly", comment: "c", passage: "p",
-    markedBy: "model", expected: null, keyLabel: null });
+    markedBy: "model", expected: null, keyLabel: null, service: null });
   assert.equal(q.mode, "", "no mode means an older PC (JARVIS-API 102.4)");
   assert.equal(q.level, null);
   assert.equal(q.notice, "");

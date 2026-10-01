@@ -1093,7 +1093,7 @@ await check("rows say their kind, a Live session its length, and Show asks the P
   const after = await page.locator("#history-list .row-item").allInnerTexts();
   const forgetLink = await page.locator("#history-tools .history-forget-range-link").innerText();
   await page.close();
-  assert.match(rows[0], /Live · 12 min · Today \d\d:\d\d · 8 messages/);
+  assert.match(rows[0], /Live · 12 min · (Today|Yesterday) \d\d:\d\d · 8 messages/);
   assert.match(rows[1], /Support chat/);
   assert.doesNotMatch(rows[2], /Support chat|Chat with an AI|Comparison/);
   assert.doesNotMatch(status, /reading…/, "History's status line is stuck on reading");

@@ -216,6 +216,12 @@ SECTIONS: tuple = (
     # uses, and the install line.
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
+    # "Show or hide menus" (2026-09-30): a card on the desktop and Settings row on the phone.
+    Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
+                                "the menus", "menus")),
+    # Spending (2026-09-30): a card on the desktop.
+    Section("spending", ("spending", "spending settings", "my spending", "bank files"),
+            app="desktop"),
 )
 
 #: id -> Section, for a direct lookup once a name has matched.
