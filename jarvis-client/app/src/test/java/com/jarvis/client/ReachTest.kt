@@ -57,7 +57,7 @@ class ReachTest {
             val tools = cases[name]!!.jsonObject["tools"]!!.jsonArray.map { it.jsonObject["id"]!!.jsonPrimitive.content }
             assertEquals(name, tools, v.tools.map { it.id })
         }
-        assertEquals(0, view("nothing_set_up").on)
+        assertEquals(cases["nothing_set_up"]!!.jsonObject["on"]!!.jsonPrimitive.int, view("nothing_set_up").on)
         assertTrue(view("nothing_set_up").tools.isEmpty())
         val all = view("everything_on")
         val web = all.rows.first { it.id == "web_search" }

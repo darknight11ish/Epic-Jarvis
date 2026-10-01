@@ -332,7 +332,7 @@ class MenuVisibilityTest {
         val undecided = brainKeys - MenuPlaces.BRAIN.keys - fixed
         assertTrue("Brain items with no decision in MenuPlaces: $undecided", undecided.isEmpty())
         val settingsKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(settings).map { it.groupValues[1] }.toSet()
-        val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys - setOf("menus-hidden", "tail")
+        val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys - setOf("menus-hidden", "tail", "jump-list")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

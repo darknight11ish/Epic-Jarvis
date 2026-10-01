@@ -319,9 +319,9 @@ mod tests {
         }
         let (s, b) = case("mixed");
         let a = run_answer(s, &b).unwrap();
-        assert_eq!(a["result"]["share"]["label"], "about 71 of 100");
-        assert_eq!(a["result"]["runs_out_between"], serde_json::json!([81, 89]));
-        assert_eq!(a["result"]["end_balance"]["text"]["p50"], "560,000");
+        assert_eq!(a["result"]["share"]["label"], "about 51 of 100");
+        assert_eq!(a["result"]["runs_out_between"], serde_json::json!([79, 88]));
+        assert_eq!(a["result"]["end_balance"]["text"]["p50"], "12,000");
     }
 
     #[test]

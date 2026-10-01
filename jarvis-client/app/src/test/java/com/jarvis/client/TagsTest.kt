@@ -226,7 +226,9 @@ class TagsTest {
         assertNull(filed.tag)
         val refused = ChatTags.write(409, obj("""{"ok":false,"error":"name_taken","message":"That name is in use."}"""))
         assertFalse(refused.ok)
-        assertEquals(ChatTags.ERRORS.getValue("name_taken"), refused.said)
+        assertEquals("That name is in use.", refused.said)
+        val refusedFallback = ChatTags.write(409, obj("""{"ok":false,"error":"name_taken"}"""))
+        assertEquals(ChatTags.ERRORS.getValue("name_taken"), refusedFallback.said)
         val off = ChatTags.write(
             503,
             obj("""{"ok":false,"error":"bad_request","message":"Chat history is off. Tags are not changed."}"""),

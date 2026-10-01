@@ -416,6 +416,12 @@ class _FakeCredentials:
 
 def _make_deck(conf: Path, key: bytes, name="Plants", front="What absorbs sunlight?"):
     import jarvis_decks as DK
+    if DK.fsrs is None:
+        DK.fsrs = types.SimpleNamespace(
+            Scheduler=lambda **k: types.SimpleNamespace(
+                repeat=lambda *a, **kw: (None, None),
+            )
+        )
     d = DK.Decks(conf / "study.db", lambda: key, scheduler=types.SimpleNamespace(
         jobs_of=lambda kind: [], act=lambda *a: None, add_repeat=lambda *a, **k: None))
     v = d.create_deck(name)

@@ -399,12 +399,13 @@ mod tests {
             "number_reached",
         ] {
             let post = &all[name];
-            let got = change_answer(
-                post["status"].as_u64().unwrap() as u16,
-                &post["body"].to_string(),
-            )
-            .unwrap_or_else(|e| panic!("{name}: {e}"));
-            assert_eq!(got, post["body"], "{name}: a field was dropped or changed");
+            let (status, body) = match post.get("body") {
+                Some(b) => (post["status"].as_u64().unwrap() as u16, b),
+                None => (200, post),
+            };
+            let got = change_answer(status, &body.to_string())
+                .unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(&got, body, "{name}: a field was dropped or changed");
         }
         let list = &all["list"];
         let got = list_answer(200, &list.to_string()).unwrap();
