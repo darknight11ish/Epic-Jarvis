@@ -333,7 +333,6 @@ class BoardButtonCallback : ActionCallback {
             // "not connected" line these used to show.
             QuickTiles.Decision.OpenBriefing -> QuickTileService.say(app, OPEN_FOR_BRIEFING)
             QuickTiles.Decision.OpenChooser -> QuickTileService.say(app, JarvisWidgets.W_NONE_SUB)
-            QuickTiles.Decision.OpenComingUp, QuickTiles.Decision.OpenLive, QuickTiles.Decision.OpenLook -> QuickTileService.say(app, "Open Jarvis to see this.")
         }
     }
 

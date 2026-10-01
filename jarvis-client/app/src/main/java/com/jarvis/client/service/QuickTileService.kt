@@ -105,9 +105,6 @@ abstract class QuickTileService(private val slot: Int) : TileService() {
         when (decision) {
             QuickTiles.Decision.OpenChooser -> openApp(MainActivity.ACTION_OPEN_TILE_SETTINGS)
             QuickTiles.Decision.OpenBriefing -> openApp(MainActivity.ACTION_OPEN_BRIEFING)
-            QuickTiles.Decision.OpenLive -> openApp(MainActivity.ACTION_OPEN_LIVE)
-            QuickTiles.Decision.OpenLook -> openApp(MainActivity.ACTION_OPEN_LOOK)
-            QuickTiles.Decision.OpenComingUp -> openApp(null)
             QuickTiles.Decision.Reconnect -> {
                 // The link tile's offline tap, exactly: start the link, open the app.
                 if (paired) EventService.start(this)
@@ -192,8 +189,8 @@ abstract class QuickTileService(private val slot: Int) : TileService() {
                         is ApiResult.Ok -> true to StopEverything.describe(r.value, null)
                         is ApiResult.Failed -> false to StopEverything.describe(null, r.error)
                     }
-                    // Never reaches here: QuickTiles.decide opens the app for them.
-                    TileAction.BRIEF_ME, TileAction.COMING_UP, TileAction.LOOK, TileAction.LIVE -> return@launchDetached
+                    // Never reaches here: QuickTiles.decide opens the app for it.
+                    TileAction.BRIEF_ME -> return@launchDetached
                 }
                 val words = QuickTiles.shown(action, ok, said, private)
                 JarvisRuntime.setNotice(words)
