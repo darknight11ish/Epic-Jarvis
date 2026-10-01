@@ -192,7 +192,26 @@ await check("Devices page: each phone's signed-approvals state, the shared-key s
   assert.match(rows[2], /Signed approvals: on/);
   assert.match(rows[3], /Signed approvals: waiting for your yes \(approve the card\)/);
   assert.ok(sharedShown);
-  assert.equal(shared, "Risky approvals from this device are not yet signed - pair it and turn on signed approvals.");
+  assert.equal(shared, SHARED_PROMPT_RETIRE);
+
+  const unsignedPage = await open({
+    devices: {
+      list: {
+        ...list({
+          extra: [
+            { id: "bbb222222", name: "Fold", kind: "phone", created: 1790000000, last_seen: NOW - 60,
+              removable: true, approval_key: false },
+          ],
+          shared: seen,
+        }),
+        signed_approvals: true,
+      },
+    },
+  });
+  await unsignedPage.waitForTimeout(400);
+  const unsignedShared = await unsignedPage.locator("#dv-shared-signed").innerText();
+  await unsignedPage.close();
+  assert.equal(unsignedShared, "Risky approvals from this device are not yet signed - pair it and turn on signed approvals.");
 
   const older = await open({ devices: { list: list({ extra, shared: seen }) } });
   await older.waitForTimeout(400);

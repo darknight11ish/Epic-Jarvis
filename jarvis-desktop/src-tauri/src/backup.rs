@@ -119,7 +119,7 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 /// card) and restoring (a card that needs Windows Hello) do; "Back up now",
 /// listing and previewing never do - none of them raises a card.
 pub(crate) fn held_on_stale(path: &str) -> bool {
-    path == FOLDER_PATH || path == RESTORE_PATH
+    path == FOLDER_PATH || path == RESTORE_PATH || path == DELETE_OLDER_PATH
 }
 
 fn stale(app: &AppHandle) -> bool {

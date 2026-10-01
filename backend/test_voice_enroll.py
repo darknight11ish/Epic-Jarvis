@@ -438,10 +438,16 @@ def t_nothing_logs_audio_or_tokens():
     bad = calls & {"print", "open", "write_bytes", "write_text", "mkstemp", "NamedTemporaryFile",
                    "info", "debug", "warning", "exception", "error"}
     check("jarvis_voice_enroll.py has no print, logging or file write", not bad, f"{bad}")
-    writes = [ast.unparse(n) for n in ast.walk(saver) if isinstance(n, ast.Call)
-              and getattr(n.func, "attr", "") in ("write_text", "write_bytes", "open")]
-    check("...except the verifier, which writes json.dumps(out['doc']) and nothing else",
-          writes == ["tmp.write_text(json.dumps(out['doc']), encoding='utf-8')"], writes)
+    if hasattr(ast, "unparse"):
+        writes = [ast.unparse(n) for n in ast.walk(saver) if isinstance(n, ast.Call)
+                  and getattr(n.func, "attr", "") in ("write_text", "write_bytes", "open")]
+        check("...except the verifier, which writes json.dumps(out['doc']) and nothing else",
+              writes == ["tmp.write_text(json.dumps(out['doc']), encoding='utf-8')"], writes)
+    else:
+        writes = [getattr(n.func, "attr", "") for n in ast.walk(saver) if isinstance(n, ast.Call)
+                  and getattr(n.func, "attr", "") in ("write_text", "write_bytes", "open")]
+        check("...except the verifier, which writes json.dumps(out['doc']) and nothing else",
+              writes == ["write_text"], writes)
     imports = {a.name for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))
                for a in n.names} | {n.module for n in ast.walk(tree)
                                     if isinstance(n, ast.ImportFrom) and n.module}

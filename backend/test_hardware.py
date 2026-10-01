@@ -751,6 +751,8 @@ def main():
                 traceback.print_exc()
                 check(f"{name} ran without crashing", False, repr(exc))
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    if FAILED:
+        print("failed in test_hardware: " + ", ".join(FAILED))
     return 1 if FAILED else 0
 
 

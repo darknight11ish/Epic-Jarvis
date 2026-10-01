@@ -28,7 +28,10 @@ import run_suites as R  # noqa: E402
 try:
     import tomllib
 except ImportError:  # Python < 3.11
-    tomllib = None
+    try:
+        import tomli as tomllib
+    except ImportError:
+        tomllib = None
 
 FAILED, PASSED = [], []
 SUITE = "test_task_control.py"      # writes task.* audit events through jarvis_framework

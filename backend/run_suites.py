@@ -202,6 +202,9 @@ def main(only=()) -> int:
         else:
             failed.append(s.name)
             print(f"FAIL  {s.name:<34} {took}  (exit {code})")
+            fail_lines = [l for l in out.splitlines() if l.startswith("FAIL") or "Traceback" in l or "failed:" in l]
+            for fl in fail_lines:
+                print("      " + fl)
             print("\n".join("      " + line for line in out.strip().splitlines()[-40:]))
     if not real:
         shutil.rmtree(backend, ignore_errors=True)
