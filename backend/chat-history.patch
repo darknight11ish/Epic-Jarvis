@@ -1,11 +1,12 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -2053,7 +2053,27 @@
+@@ -2053,7 +2053,28 @@
              if code == 200:
                  return self._send(200, out, ctype="audio/wav")
              return self._send(code, out)
  
-+        if path in ("/api/history", "/api/history/conversation"):
++        if path in ("/api/history", "/api/history/conversation",
++                    "/api/history/tags", "/api/history/tags/suggest"):
 +            # chat-history.patch - the chats this PC has kept (jarvis_chat_log.py):
 +            # the list, newest first (?limit=&before=), and one conversation
 +            # (?id=). Read-only. Behind the token like every memory route:
@@ -28,14 +29,16 @@
          if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
                      "/api/compute", "/api/memory/facts", "/api/memory/export"):
              if not _origin_ok(self):
-@@ -2480,9 +2500,41 @@
+@@ -2480,9 +2501,43 @@
              try:
                  code, out = jarvis_voices.handle_post(route, body)
              except Exception as exc:
                  return self._send(500, {"error": type(exc).__name__})
              return self._send(code, out)
  
-+        if route in ("/api/history/delete", "/api/history/settings"):
++        if route in ("/api/history/delete", "/api/history/settings",
++                     "/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",
++                     "/api/history/fork", "/api/history/mark"):
 +            # chat-history.patch (jarvis_chat_log.py).
 +            #   delete {"id": "<conversation id>"}: that one conversation is
 +            #   deleted. One per request; there is no delete-all.
@@ -70,7 +73,7 @@
          if route in ("/api/memory/forget", "/api/memory/edit",
                       "/api/memory/learning", "/api/memory/sleep_time",
                       "/api/memory/keep_both"):
-@@ -2770,4 +2822,11 @@
+@@ -2770,4 +2825,11 @@
              body = dict(payload); body["model"] = lane
 +            # chat-history.patch: the apps' own bookkeeping (provenance,
 +            # conversation_id, device) never reaches a model - not on the
@@ -82,7 +85,7 @@
              if lane != local_model:
                  # cloud-one-turn.patch. A lane that is not the local model gets
                  # the NEWEST user turn and nothing else - not the earlier ones.
-@@ -2800,6 +2859,13 @@
+@@ -2800,6 +2862,13 @@
          lane = decision.lane
          upstream = None
          first_error = None
@@ -96,7 +99,7 @@
          # Times this answer: first word, total, words and tokens per second.
          # Numbers only, to a file on this PC - speed-record.patch and
          # jarvis_speed.py. None if that module is not there, and every use
-@@ -2990,6 +3056,9 @@
+@@ -2990,6 +3059,9 @@
                      # leaving, by returning rather than raising, so only an
                      # answer that really finished is recorded.
                      _turn = _turn or {}
@@ -106,7 +109,7 @@
                      if (_speed is not None and _turn.get("finish_reason")
                              and not _turn.get("client_gone")):
                          _speed.finish(lane, tools=int(_turn.get("rounds") or 1) > 1)
-@@ -3110,6 +3179,21 @@
+@@ -3110,6 +3182,21 @@
                      LEARNER.offer(body.get("messages") or [], origin="owner")
              except Exception:
                  pass
@@ -128,7 +131,7 @@
  
  
  # Keys whose values are content rather than plumbing. Walking only these
-@@ -3300,7 +3384,33 @@
+@@ -3300,7 +3387,33 @@
                   "client_fallback_ok": fallback_ok,
                   "reason": reason}
  

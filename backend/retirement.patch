@@ -1,0 +1,21 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3638,6 +3638,18 @@
+     except Exception as exc:
+         print(f"  spending   NOT ON ({type(exc).__name__}) - Spending summaries are off")
+         print("             until jarvis_spending.py is back: run apply-patches.ps1 again")
++    # retirement.patch ("Retirement what-if", the owner's decision of 2026-09-30;
++    # docs/FINANCE-DESIGN.md part B, JARVIS-API section 103): GET /api/retirement/defaults
++    # and POST /api/retirement/run. A pure calculation on numbers the owner typed: no
++    # file, no network, nothing stored, no card. The answer is screen-only money.
++    # Wrapped round Handler here, before anything listens, like spending above.
++    try:
++        import jarvis_retirement
++        print(jarvis_retirement.install(Handler, origin_ok=_origin_ok,
++                                        token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  retirement NOT ON ({type(exc).__name__}) - the Retirement what-if is off")
++        print("             until jarvis_retirement.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-review-more"
+description = "Enables the brain_review_more command without any pre-configured scope."
+commands.allow = ["brain_review_more"]
+
+[[permission]]
+identifier = "deny-brain-review-more"
+description = "Denies the brain_review_more command without any pre-configured scope."
+commands.deny = ["brain_review_more"]

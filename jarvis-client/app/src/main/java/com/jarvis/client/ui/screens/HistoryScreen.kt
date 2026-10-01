@@ -1,8 +1,12 @@
 package com.jarvis.client.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -10,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,6 +25,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -34,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -43,8 +50,14 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.HistoryViewPrefs
+import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.ChatFork
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.net.ChatMark
+import com.jarvis.client.net.ChatTags
+import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
@@ -60,6 +73,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
+
+/** How long a "file it under" request waits for a tap before it lapses. */
+private const val FILING_BANNER_MS = 10 * 60 * 1000L
 
 /**
  * Chat history on the PC ([ChatLog], docs/JARVIS-API.md section 18) - the
@@ -115,17 +131,58 @@ fun HistoryScreen(
     onContinue: suspend (String) -> String? = { null },
     /** "Forget a time frame…": the Brain's plate. */
     onOpenForgetRange: () -> Unit = {},
+    /**
+     * "Label my chat about the boiler as Home": open with [ChatTags.FileUnder]'s
+     * search filled in and a banner; a tap on a chat files it (nothing is
+     * filed before that). Null for a normal visit.
+     */
+    fileUnder: ChatTags.FileUnder? = null,
+    /** The banner was used or cancelled: MainActivity forgets the request. */
+    onFileUnderDone: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var reads by remember { mutableIntStateOf(0) }
+    // Only the tag lists are read again (a chat was filed or moved).
+    var tagReads by remember { mutableIntStateOf(0) }
     // The list keeps its place when a conversation is opened and closed again
     // (the second chat audit, phone C8: Back used to land at the top).
     val mainList = rememberLazyListState()
     // "Show": one kind of conversation, or "" for every kind (the owner's
     // decision, 2026-09-28: History can be filtered to Live sessions only).
     var kind by rememberSaveable { mutableStateOf("") }
+    // Chat tags (docs/CHAT-TAGS-DESIGN.md section 10). The PC keeps them; this
+    // screen reads them when it opens and holds them only while it is open.
+    // The chip: "" is All, else a tag id. Folded sections are the one thing
+    // kept on the phone - flags only (HistoryViewPrefs), never a name.
+    var tagFilter by rememberSaveable { mutableStateOf("") }
+    var tagView by remember { mutableStateOf<ChatTags.View?>(null) }
+    var tagsOld by remember { mutableStateOf(false) }
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    val viewPrefs = remember { HistoryViewPrefs(context) }
+    var closed by remember { mutableStateOf(viewPrefs.closed()) }
+    // The row whose "Move to" list is open.
+    var moveFor by remember { mutableStateOf<String?>(null) }
+    var filing by remember(fileUnder) { mutableStateOf(fileUnder) }
+    // The "file it under" request does not outlive this visit: it goes when
+    // the screen is left (a rotation is not leaving) and after ten quiet
+    // minutes, so the banner is not waiting the next time History opens.
+    DisposableEffect(Unit) {
+        onDispose {
+            var host: Context? = context
+            while (host is ContextWrapper && host !is Activity) host = host.baseContext
+            val rotating = (host as? Activity)?.isChangingConfigurations == true
+            if (!rotating && filing != null) onFileUnderDone()
+        }
+    }
+    LaunchedEffect(filing) {
+        if (filing == null) return@LaunchedEffect
+        delay(FILING_BANNER_MS)
+        filing = null
+        onFileUnderDone()
+    }
     // "History settings", folded until opened: the list comes first.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var status by remember { mutableStateOf<ChatLog.Status?>(null) }
@@ -140,6 +197,12 @@ fun HistoryScreen(
     var keepToConfirm by remember { mutableStateOf<Int?>(null) }
     // The conversation open for reading. Saveable, so a rotation keeps it open.
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    // The sentence "Fork from here" left for the chat it opened: (that chat's id, the words).
+    // Dropped when the conversation is closed, so it never shows on a later visit.
+    var forkNote by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(openId) {
+        if (openId == null) forkNote = null
+    }
     var listSaid by remember { mutableStateOf<String?>(null) }
     // The search box (docs/JARVIS-API.md section 71). Two letters or more:
     // the PC searches what was SAID in the kept chats, opening each in its
@@ -147,7 +210,7 @@ fun HistoryScreen(
     // the AI. One letter, or a PC without the search: the loaded list, by
     // title. `remember`, not `rememberSaveable`: the words searched for are
     // not put in the saved screen state either.
-    var search by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf(fileUnder?.query.orEmpty()) }
     var found by remember { mutableStateOf<ChatLog.Search?>(null) }
     var searching by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
@@ -184,6 +247,46 @@ fun HistoryScreen(
         }
     }
 
+    // The tags, read with the list. Nothing is asked and no name is held
+    // while the private lists are hidden (tag names hide with titles).
+    LaunchedEffect(reads, tagReads, privateHidden) {
+        if (privateHidden) {
+            tagView = null
+            return@LaunchedEffect
+        }
+        when (val r = JarvisRuntime.historyTags()) {
+            null -> Unit
+            is ApiResult.Ok -> {
+                val v = ChatTags.view(r.value)
+                if (v == null) {
+                    tagView = null
+                    tagsOld = true
+                } else {
+                    tagView = v
+                    tagsOld = false
+                    // A tag deleted elsewhere: its chip goes back to All.
+                    if (tagFilter.isNotEmpty() && tagFilter != ChatTags.NONE_FILTER &&
+                        v.tags.none { it.id.toString() == tagFilter }) tagFilter = ""
+                }
+            }
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                tagView = null
+                tagsOld = true
+            } else {
+                Unit
+            }
+        }
+    }
+    // A request to file an older chat: search filled in, no filter in the way.
+    LaunchedEffect(fileUnder) {
+        val f = fileUnder ?: return@LaunchedEffect
+        search = f.query
+        kind = ""
+        tagFilter = ""
+        openId = null
+        editorOpen = false
+    }
+
     val queue by JarvisRuntime.pending.collectAsState()
     val cardInQueue = ChatLog.cardWaiting(queue.map { it.action })
     // The ON card leaving the queue (approved, denied or expired) reads the
@@ -197,8 +300,8 @@ fun HistoryScreen(
             reads += 1
         }
     }
-    LaunchedEffect(reads, kind) {
-        when (val r = JarvisRuntime.history(kind = kind.ifEmpty { null })) {
+    LaunchedEffect(reads, kind, tagFilter) {
+        when (val r = JarvisRuntime.history(kind = kind.ifEmpty { null }, tag = tagFilter.ifEmpty { null })) {
             is ApiResult.Ok -> {
                 val page = ChatLog.page(r.value)
                 status = page.status
@@ -212,15 +315,42 @@ fun HistoryScreen(
 
     // Back closes an open conversation first, then leaves History.
     val open = openId
-    BackHandler(enabled = open != null) { openId = null }
+    BackHandler(enabled = open != null || editorOpen) {
+        if (open != null) openId = null else editorOpen = false
+    }
+
+    // Files ONE chat (or unfiles it with a null tag). The row is updated here
+    // at once; the tag counts are read again. Held on a stale link by the runtime.
+    fun fileChat(id: String, tagId: Int?, fromBanner: Boolean) {
+        scope.launch {
+            val w = JarvisRuntime.fileChat(id, tagId)
+            if (w.ok) {
+                rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
+                    ?.filter { ChatTags.matchesFilter(tagFilter, it.tagId) }
+                found = found?.let { f ->
+                    f.copy(found = f.found.map { h -> if (h.row.id == id) h.copy(row = h.row.copy(tagId = tagId)) else h })
+                }
+                moveFor = null
+                val name = tagView?.tags?.firstOrNull { it.id == tagId }?.name
+                listSaid = if (name != null) ChatTags.filed(name) else ChatTags.UNFILED
+                tagReads += 1
+                if (fromBanner) {
+                    filing = null
+                    onFileUnderDone()
+                }
+            } else {
+                listSaid = w.said
+            }
+        }
+    }
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar(
-            if (open == null) "History" else "Conversation",
-            onBack = { if (openId != null) openId = null else onBack() },
+            if (open != null) "Conversation" else if (editorOpen) ChatTags.EDITOR_TITLE else "History",
+            onBack = { if (openId != null) openId = null else if (editorOpen) editorOpen = false else onBack() },
             subtitle = "Chat history, kept on your PC",
         ) {
-            if (open == null) Quiet("Refresh", onClick = { reads += 1 })
+            if (open == null && !editorOpen) Quiet("Refresh", onClick = { reads += 1 })
         }
 
         if (open != null) {
@@ -233,6 +363,26 @@ fun HistoryScreen(
                     id = open,
                     initialFind = findFirst,
                     onContinue = onContinue,
+                    canAct = canAct,
+                    notice = forkNote?.takeIf { it.first == open }?.second,
+                    onForked = { newId, sentence ->
+                        // The new chat opens at once; the list is read again so the
+                        // fork shows beside the original. The original is untouched.
+                        forkNote = newId to sentence
+                        listSaid = sentence
+                        findFirst = ""
+                        openId = newId
+                        reads += 1
+                    },
+                    tags = tagView?.tags.orEmpty(),
+                    onTagged = { id, tagId ->
+                        rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
+                            ?.filter { ChatTags.matchesFilter(tagFilter, it.tagId) }
+                        found = found?.let { f ->
+                            f.copy(found = f.found.map { h -> if (h.row.id == id) h.copy(row = h.row.copy(tagId = tagId)) else h })
+                        }
+                        tagReads += 1
+                    },
                     modifier = Modifier.weight(1f),
                     onDeleted = { id, sentence ->
                         rows = rows?.filterNot { it.id == id }
@@ -240,6 +390,28 @@ fun HistoryScreen(
                         listSaid = sentence
                         openId = null
                     },
+                )
+            }
+            return@Column
+        }
+
+        // The "Tags" editor takes the place of the list, like an opened chat.
+        if (editorOpen) {
+            if (privateHidden) {
+                Column(Modifier.fillMaxWidth().weight(1f).padding(16.dp)) {
+                    HiddenSection(ChatTags.EDITOR_TITLE, busy = showPrivateBusy, onShow = onShowPrivate)
+                    // The overnight switch holds no chat words, so it stays reachable.
+                    Gap(12)
+                    SuggestTagsRow(canAct = canAct)
+                }
+            } else {
+                TagsEditor(
+                    canAct = canAct,
+                    view = tagView,
+                    oldPc = tagsOld,
+                    // Deleting a tag untags its chats, so the list is read again too.
+                    onChanged = { reads += 1 },
+                    modifier = Modifier.weight(1f),
                 )
             }
             return@Column
@@ -294,6 +466,31 @@ fun HistoryScreen(
             } else {
                 val shown = rows
                 val err = readError
+                val view = tagView
+                val groupedTags = view != null && view.tags.isNotEmpty()
+                val wanted = filing
+                // "Tap the chat to file it under Home." Nothing is filed until a tap.
+                if (wanted != null) {
+                    item(key = "filing") {
+                        val target = view?.tags?.firstOrNull { it.id == wanted.tagId }
+                        Plate {
+                            Text(
+                                when {
+                                    target != null -> ChatTags.banner(target.name)
+                                    view != null -> ChatTags.errorSentence("tag_not_found")
+                                    else -> "Reading…"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = chrome.textHi,
+                                modifier = Modifier.liveStatus(),
+                            )
+                            Quiet(ChatTags.CANCEL, color = chrome.textMid, onClick = {
+                                filing = null
+                                onFileUnderDone()
+                            })
+                        }
+                    }
+                }
                 // One letter, or a PC without the word search: the box
                 // narrows `shown` by title, for display only - paging ("Load
                 // older") still works from the full, unfiltered list. Two
@@ -307,9 +504,15 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Kicker("Conversations")
-                            // At the top of History, not only deep in Brain
-                            // (the chat audit, 2026-09-28).
-                            Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // The tag editor (docs/CHAT-TAGS-DESIGN.md).
+                                if (!tagsOld) {
+                                    Quiet(ChatTags.EDITOR_TITLE, color = chrome.textMid, onClick = { editorOpen = true })
+                                }
+                                // At the top of History, not only deep in Brain
+                                // (the chat audit, 2026-09-28).
+                                Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
+                            }
                         }
                         Gap(4)
                         // "Show": every kind, Live only, support chats, chats
@@ -340,6 +543,18 @@ fun HistoryScreen(
                                 )
                             }
                         }
+                        // "All" and one chip per tag: shows one tag's chats.
+                        if (view != null && groupedTags) {
+                            Gap(2)
+                            TagFilterChips(view.tags, view.untagged, tagFilter, onPick = { picked ->
+                                if (picked != tagFilter) {
+                                    tagFilter = picked
+                                    rows = null
+                                    mayHaveOlder = false
+                                    readError = null
+                                }
+                            })
+                        }
                         Gap(6)
                         if (shown != null && shown.isNotEmpty()) {
                             TextInput(
@@ -358,7 +573,7 @@ fun HistoryScreen(
                                 color = if (err != null) chrome.warnInk else chrome.textLo,
                             )
                             shown.isEmpty() -> Text(
-                                if (kind.isNotEmpty()) ChatLog.FILTER_NONE else ChatLog.EMPTY,
+                                if (kind.isNotEmpty() || tagFilter.isNotEmpty()) ChatLog.FILTER_NONE else ChatLog.EMPTY,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.textMid,
                             )
@@ -413,11 +628,25 @@ fun HistoryScreen(
                 if (wordSearch && !searching) {
                     val f = found
                     if (f != null && f.queryOk) {
-                        items(f.found, key = { "f-" + it.row.id }) { hit ->
-                            FoundRow(hit, onOpen = {
-                                findFirst = search.trim()
-                                openId = hit.row.id
-                            })
+                        // A tag chosen narrows the words too (the PC's search takes no tag).
+                        val hits = when (val key = ChatTags.filterKey(tagFilter)) {
+                            null -> f.found
+                            ChatTags.UNTAGGED_KEY -> f.found.filter { it.row.tagId == null }
+                            else -> f.found.filter { it.row.tagId == key }
+                        }
+                        items(hits, key = { "f-" + it.row.id }) { hit ->
+                            FoundRow(
+                                hit,
+                                tag = view?.tags?.firstOrNull { it.id == hit.row.tagId },
+                                onOpen = {
+                                    if (wanted != null) {
+                                        fileChat(hit.row.id, wanted.tagId, fromBanner = true)
+                                    } else {
+                                        findFirst = search.trim()
+                                        openId = hit.row.id
+                                    }
+                                },
+                            )
                         }
                         ChatLog.searchMoreLine(f)?.let { more ->
                             item(key = "search-more") {
@@ -427,11 +656,61 @@ fun HistoryScreen(
                     }
                 }
                 if (visible != null) {
-                    items(visible, key = { "c-" + it.id }) { row ->
-                        ConversationRow(row, onOpen = {
-                            findFirst = ""
-                            openId = row.id
-                        })
+                    // One row: opens the chat - or, with the "file it" banner up, files it.
+                    val rowContent: @Composable (ChatLog.Summary) -> Unit = { row ->
+                        val here = view?.tags?.firstOrNull { it.id == row.tagId }
+                        ConversationRow(
+                            row,
+                            tag = here,
+                            tags = if (wanted == null) view?.tags.orEmpty() else emptyList(),
+                            moveOpen = moveFor == row.id,
+                            onToggleMove = { moveFor = if (moveFor == row.id) null else row.id },
+                            onMove = { tagId -> fileChat(row.id, tagId, fromBanner = false) },
+                            onOpen = {
+                                if (wanted != null) {
+                                    fileChat(row.id, wanted.tagId, fromBanner = true)
+                                } else {
+                                    findFirst = ""
+                                    openId = row.id
+                                }
+                            },
+                        )
+                    }
+                    if (view != null && groupedTags && !wordSearch) {
+                        // Sections, one per tag in the owner's order, newest
+                        // first inside, Untagged last. Each header says its
+                        // name, icon and count, and folds shut.
+                        // A "Show" kind or title words narrow the list: then a header
+                        // counts the rows shown, not the PC's whole number (the desktop's rule).
+                        val narrowed = kind.isNotEmpty() || search.isNotBlank()
+                        val sections = ChatTags.group(
+                            visible, view.tags, view.untagged, ChatTags.filterKey(tagFilter), exact = !narrowed,
+                        )
+                        sections.forEach { sec ->
+                            val isOpen = sec.key !in closed
+                            val count = sec.count
+                            item(key = "sec-${sec.key}") {
+                                TagSectionHeader(sec.tag, count, isOpen, onToggle = {
+                                    val next = if (isOpen) closed + sec.key else closed - sec.key
+                                    closed = next
+                                    viewPrefs.saveClosed(next)
+                                })
+                            }
+                            if (isOpen) {
+                                if (sec.rows.isEmpty()) {
+                                    item(key = "sec-${sec.key}-none") {
+                                        Text(
+                                            ChatTags.NONE_LOADED,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = chrome.textLo,
+                                        )
+                                    }
+                                }
+                                items(sec.rows, key = { "c-" + it.id }) { row -> rowContent(row) }
+                            }
+                        }
+                    } else {
+                        items(visible, key = { "c-" + it.id }) { row -> rowContent(row) }
                     }
                     if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
                         item(key = "older") {
@@ -446,7 +725,7 @@ fun HistoryScreen(
                                         loadingOlder = true
                                         scope.launch {
                                             try {
-                                                when (val r = JarvisRuntime.history(before, kind.ifEmpty { null })) {
+                                                when (val r = JarvisRuntime.history(before, kind.ifEmpty { null }, tagFilter.ifEmpty { null })) {
                                                     is ApiResult.Ok -> {
                                                         val page = ChatLog.page(r.value)
                                                         val had = rows.orEmpty()
@@ -599,19 +878,42 @@ fun HistoryScreen(
 
 /** One row of the list: the title, when and where, and its marks in words. */
 @Composable
-private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
+private fun ConversationRow(
+    row: ChatLog.Summary,
+    tag: ChatTags.Tag?,
+    tags: List<ChatTags.Tag>,
+    moveOpen: Boolean,
+    onToggleMove: () -> Unit,
+    onMove: (Int?) -> Unit,
+    onOpen: () -> Unit,
+) {
     val chrome = LocalChrome.current
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
-    Plate(Modifier.pressable(onClick = onOpen)) {
-        Text(row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
-        Gap(2)
-        Text(
-            ChatLog.rowLine(row, zone, today),
-            style = MaterialTheme.typography.labelSmall,
-            color = chrome.textLo,
-        )
-        RowMarks(row)
+    Column(Modifier.fillMaxWidth()) {
+        Plate(Modifier.pressable(onClick = onOpen)) {
+            Text(row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
+            Gap(2)
+            Text(
+                ChatLog.rowLine(row, zone, today),
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
+            RowMarks(row, tag)
+        }
+        // "Move to": the tags and "No tag" - only when the PC has tags, and not
+        // while the "file it" banner is up (a tap on the row files it then).
+        if (tags.isNotEmpty()) {
+            Quiet(
+                if (moveOpen) ChatTags.CANCEL else ChatTags.MOVE_TO,
+                color = chrome.textMid,
+                modifier = Modifier.semantics {
+                    contentDescription = (if (moveOpen) "Close move list for " else "${ChatTags.MOVE_TO}: ") + row.title
+                },
+                onClick = onToggleMove,
+            )
+            if (moveOpen) MoveToList(tags, row.tagId, onPick = onMove)
+        }
     }
 }
 
@@ -620,13 +922,17 @@ private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
  * says so in its line instead - "Live · 12 min · Today 14:05"), said aloud,
  * read outside text.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RowMarks(row: ChatLog.Summary) {
+private fun RowMarks(row: ChatLog.Summary, chatTag: ChatTags.Tag? = null) {
     val chrome = LocalChrome.current
     val tag = ChatLog.KIND_TAG[row.kind].orEmpty().takeIf { row.kind != "live" && it.isNotEmpty() }
-    if (tag == null && !row.hasVoice && !row.tainted) return
+    if (tag == null && chatTag == null && !row.hasVoice && !row.tainted) return
     Gap(4)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // FlowRow: a tag chip beside the kind and voice marks wraps rather than squeezes.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // The chat's own tag: icon and name, so colour is never the only clue.
+        if (chatTag != null) TagChip(chatTag)
         if (tag != null) {
             Pill(tag, modifier = Modifier.semantics { contentDescription = ChatLog.KIND_TITLE[row.kind].orEmpty() })
         }
@@ -645,7 +951,7 @@ private fun hitStyle(current: Boolean = false): SpanStyle = SpanStyle(
 
 /** One search result: the row, then the snippet with the search words marked. */
 @Composable
-private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
+private fun FoundRow(hit: ChatLog.Found, tag: ChatTags.Tag?, onOpen: () -> Unit) {
     val chrome = LocalChrome.current
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
@@ -670,7 +976,7 @@ private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
         )
         Gap(4)
         Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-        RowMarks(hit.row)
+        RowMarks(hit.row, tag)
     }
 }
 
@@ -691,6 +997,14 @@ private fun Conversation(
     id: String,
     initialFind: String,
     onContinue: suspend (String) -> String?,
+    /** The link is up and fresh: "Fork from here" writes a new chat, so it waits for it (rule 4). */
+    canAct: Boolean,
+    /** A sentence to show at the top, e.g. what Fork from here just did. */
+    notice: String?,
+    /** A fork worked: the new chat's id and the "Forked into ..." words. */
+    onForked: (newId: String, sentence: String) -> Unit,
+    tags: List<ChatTags.Tag>,
+    onTagged: (id: String, tagId: Int?) -> Unit,
     modifier: Modifier,
     onDeleted: (id: String, sentence: String) -> Unit,
 ) {
@@ -701,9 +1015,24 @@ private fun Conversation(
     var continuing by remember(id) { mutableStateOf(false) }
     // Kept over a rotation: a plain sentence, no words of the chat.
     var continueSaid by rememberSaveable(id) { mutableStateOf<String?>(null) }
+    // "Fork from here": which message's request is running (one at a time), and
+    // the plain sentence a refusal left. The success sentence arrives as [notice].
+    var forking by remember(id) { mutableStateOf<Int?>(null) }
+    var forkSaid by remember(id) { mutableStateOf<String?>(notice) }
+    // "New section here" (section 106): the turn numbers a divider sits above (the
+    // PC's list, replaced by its answer after every change), which button's request
+    // is running, and the polite sentence the last change left.
+    var marks by remember(id) { mutableStateOf<Set<Int>>(emptySet()) }
+    var marking by remember(id) { mutableStateOf<Int?>(null) }
+    var markSaid by remember(id) { mutableStateOf<String?>(null) }
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
     var loaded by remember(id) { mutableStateOf<ChatLog.Transcript?>(null) }
+    // This chat's tag: the PC's answer when it opened, then whatever the owner
+    // moved it to. A tag the list no longer has shows as no tag.
+    var chatTagId by remember(id) { mutableStateOf<Int?>(null) }
+    var moveOpen by remember(id) { mutableStateOf(false) }
+    var tagSaid by remember(id) { mutableStateOf<String?>(null) }
     var err by remember(id) { mutableStateOf<String?>(null) }
     var confirm by remember(id) { mutableStateOf(false) }
     var busy by remember(id) { mutableStateOf(false) }
@@ -748,7 +1077,11 @@ private fun Conversation(
         when (val r = JarvisRuntime.historyConversation(id)) {
             is ApiResult.Ok -> {
                 val t = ChatLog.transcript(r.value)
-                if (t == null) err = "Your PC sent something this app could not read." else loaded = t
+                if (t == null) err = "Your PC sent something this app could not read." else {
+                    loaded = t
+                    chatTagId = t.tagId
+                    marks = t.marks
+                }
             }
             is ApiResult.Failed -> err = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
         }
@@ -796,6 +1129,40 @@ private fun Conversation(
                     Text(ChatLog.KIND_TITLE[t.kind].orEmpty(), style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid)
                 }
+                // The chat's tag and "Move to" (docs/CHAT-TAGS-DESIGN.md section 10),
+                // the same list the rows have. Only when the PC has tags.
+                if (t != null && tags.isNotEmpty()) {
+                    Gap(6)
+                    tags.firstOrNull { it.id == chatTagId }?.let { TagChip(it) }
+                    Quiet(
+                        if (moveOpen) ChatTags.CANCEL else ChatTags.MOVE_TO,
+                        color = chrome.textMid,
+                        modifier = Modifier.semantics {
+                            contentDescription = (if (moveOpen) "Close move list for " else "${ChatTags.MOVE_TO}: ") + t.title
+                        },
+                        onClick = { moveOpen = !moveOpen },
+                    )
+                    if (moveOpen) {
+                        MoveToList(tags, chatTagId, onPick = { picked ->
+                            scope.launch {
+                                val w = JarvisRuntime.fileChat(id, picked)
+                                if (w.ok) {
+                                    chatTagId = picked
+                                    moveOpen = false
+                                    val name = tags.firstOrNull { it.id == picked }?.name
+                                    tagSaid = if (name != null) ChatTags.filed(name) else ChatTags.UNFILED
+                                    onTagged(id, picked)
+                                } else {
+                                    tagSaid = w.said
+                                }
+                            }
+                        })
+                    }
+                    tagSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                            modifier = Modifier.liveStatus())
+                    }
+                }
                 // "Continue this chat" (the owner's decision, 2026-09-28): Home
                 // carries it on - the same conversation, the newest kept
                 // messages that fit, its outside-text mark carried over. A
@@ -827,6 +1194,25 @@ private fun Conversation(
                     }
                     continueSaid?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk,
+                            modifier = Modifier.liveStatus())
+                    }
+                    // "Fork from here" (JARVIS-API section 110): a chat that cannot be
+                    // forked says why where the buttons would be; an older PC says nothing.
+                    t.forkWhy?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    }
+                    // Forking writes a new chat, so the buttons wait for a fresh link.
+                    if (t.forkable && !canAct) {
+                        Text(PlainErrors.shown("link_stale").text, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid)
+                    }
+                    forkSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                            modifier = Modifier.liveStatus())
+                    }
+                    // What "New section here" just did (or why not), announced politely.
+                    markSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
                             modifier = Modifier.liveStatus())
                     }
                 }
@@ -981,6 +1367,44 @@ private fun Conversation(
             val chatbot = turn.role == "chatbot"
             val answer = turn.role == "assistant"
             Column(Modifier.fillMaxWidth()) {
+                // A section break sits ABOVE the message it was set on: a heading-level
+                // landmark with its own Remove (the same tap, both directions).
+                val markAt = turn.idx
+                if (ChatMark.dividerAbove(markAt, marks) && markAt != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(Modifier.weight(1f).height(1.dp).background(chrome.textLo))
+                        Text(
+                            ChatMark.DIVIDER,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = chrome.textMid,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        Box(Modifier.weight(1f).height(1.dp).background(chrome.textLo))
+                        Quiet(
+                            ChatMark.REMOVE,
+                            color = chrome.textMid,
+                            enabled = canAct && marking == null,
+                            modifier = Modifier.semantics { contentDescription = ChatMark.REMOVE_LABEL },
+                            onClick = {
+                                marking = markAt
+                                markSaid = null
+                                scope.launch {
+                                    try {
+                                        val r = JarvisRuntime.markSection(id, markAt, false)
+                                        r.marks?.let { marks = it }
+                                        markSaid = r.said
+                                    } finally {
+                                        marking = null
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1052,6 +1476,66 @@ private fun Conversation(
                         color = chrome.textMid,
                         modifier = Modifier.semantics { contentDescription = ChatLog.COPY_TITLE },
                         onClick = { PrivateClipboard.copy(context, turn.text) },
+                    )
+                }
+                // "Fork from here" on the owner's messages and Jarvis's kept answers
+                // (never a support, chatbot or comparison record - not forkable).
+                // Its screen-reader name holds the visible words and says which message.
+                val forkAt = turn.idx
+                if (forkAt != null && ChatFork.offered(loaded?.forkable == true, turn.role, forkAt)) {
+                    val thisOne = forking == forkAt
+                    Quiet(
+                        if (thisOne) ChatFork.BUSY else ChatFork.BUTTON,
+                        color = chrome.textMid,
+                        enabled = canAct && forking == null,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (thisOne) ChatFork.BUSY else ChatFork.label(turn.role)
+                        },
+                        onClick = {
+                            forking = forkAt
+                            forkSaid = null
+                            scope.launch {
+                                try {
+                                    val r = JarvisRuntime.forkChat(id, forkAt)
+                                    val newId = r.id
+                                    if (r.ok && newId != null) {
+                                        onForked(newId, r.said)
+                                    } else {
+                                        // Stay on the original chat and say why.
+                                        forkSaid = r.said
+                                    }
+                                } finally {
+                                    forking = null
+                                }
+                            }
+                        },
+                    )
+                }
+                // "New section here" on the owner's own messages only, when the PC says the
+                // chat is markable (10+ messages, a chat or Live session). Nothing is drawn
+                // otherwise. A divider is only ever a divider: nothing reaches a model.
+                if (markAt != null && ChatMark.offered(loaded?.markable == true, turn.role, markAt, marks)) {
+                    val thisOne = marking == markAt
+                    Quiet(
+                        if (thisOne) ChatMark.BUSY else ChatMark.BUTTON,
+                        color = chrome.textMid,
+                        enabled = canAct && marking == null,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (thisOne) ChatMark.BUSY else ChatMark.BUTTON_LABEL
+                        },
+                        onClick = {
+                            marking = markAt
+                            markSaid = null
+                            scope.launch {
+                                try {
+                                    val r = JarvisRuntime.markSection(id, markAt, true)
+                                    r.marks?.let { marks = it }
+                                    markSaid = r.said
+                                } finally {
+                                    marking = null
+                                }
+                            }
+                        },
                     )
                 }
             }

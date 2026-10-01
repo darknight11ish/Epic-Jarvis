@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-history-tag-suggest"
+description = "Enables the brain_history_tag_suggest command without any pre-configured scope."
+commands.allow = ["brain_history_tag_suggest"]
+
+[[permission]]
+identifier = "deny-brain-history-tag-suggest"
+description = "Denies the brain_history_tag_suggest command without any pre-configured scope."
+commands.deny = ["brain_history_tag_suggest"]

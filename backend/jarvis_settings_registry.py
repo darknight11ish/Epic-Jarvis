@@ -72,6 +72,11 @@ choice function, picked because each already has a proven `handle_*`/
   * phone_notifications   - jarvis_phone_notifications.request() (2026-09-28)
   * screen_picture        - jarvis_screen_picture.request() (2026-09-29): ON is one card
   * headless_browser      - jarvis_browser_engine.request() (2026-09-29): ON is one card
+  * topic mode            - jarvis_topics.set_mode() (2026-09-30): the four-choice
+                            picker's own function. Stricter is at once; looser on a
+                            private topic raises its ONE card (topic_loosen). "Switch
+                            off my work topic" is ambiguous, so jarvis_quick opens the
+                            picker instead of guessing (find_topic / set_topic_mode).
   * briefing_senders      - jarvis_briefing.handle_senders()
   * loosen_asks_first     - jarvis_asks_first.handle_tier()   (PC_ONLY_ACTIONS)
   * enable_reading_tool   - jarvis_asks_first.handle_tools()  (PC_ONLY_ACTIONS)
@@ -211,6 +216,12 @@ SECTIONS: tuple = (
     # uses, and the install line.
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
+    # "Show or hide menus" (2026-09-30): a card on the desktop and Settings row on the phone.
+    Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
+                                "the menus", "menus")),
+    # Spending (2026-09-30): a card on the desktop.
+    Section("spending", ("spending", "spending settings", "my spending", "bank files"),
+            app="desktop"),
 )
 
 #: id -> Section, for a direct lookup once a name has matched.
@@ -376,6 +387,41 @@ def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
         return _missing("the headless browser")
     code, out = BE.request(bool(on), BE.set_obscura)
     return _say(code, out)
+
+
+# --- topic controls: a topic's mode (jarvis_topics.py) ---------------------
+
+def find_topic(words: str) -> Optional[dict]:
+    """The one topic `words` names exactly (case ignored), or None."""
+    try:
+        import jarvis_topics as T
+        want = _bare(words).casefold()
+        with T._db() as c:
+            for t in T.topics_of(c):
+                if t["name"].casefold() == want:
+                    return t
+    except Exception:
+        return None
+    return None
+
+
+def set_topic_mode(topic_id: int, mode: str, *, peer=None, local=None) -> Outcome:
+    """The exact function the picker calls (POST /api/topics/mode). Stricter:
+    at once. Looser on a private topic: its one card, and nothing changes until
+    it is approved. Never asked from outside text (jarvis_quick refuses first)."""
+    try:
+        import jarvis_topics as T
+    except Exception:
+        return _missing("topic controls")
+    code, out = T.set_mode(topic_id, mode)
+    if code == 202:
+        return Outcome(True, T.WORDS["waiting"] + " Approve the card and the change is made.",
+                       waiting=True)
+    if code >= 400 or out.get("ok") is False:
+        return Outcome(False, str(out.get("message") or "That did not work."))
+    row = next((t for t in out.get("topics", []) if t["id"] == int(topic_id)), None)
+    name = row["name"] if row else "That topic"
+    return Outcome(True, T.WORDS["moved_line"].format(name=name, mode=T.MODE_NAME[mode]))
 
 
 # --- morning briefing: senders shown (jarvis_briefing.py) -----------------

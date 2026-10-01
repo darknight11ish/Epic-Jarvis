@@ -304,8 +304,11 @@ object MemoryCards {
                     null
                 },
                 reason = null,
-                acceptLabel = "Keep",
-                discardLabel = "Discard",
+                // "This might be about Work, which you set to not learn." (docs/
+                // JARVIS-API.md section 107): the card's two buttons are the answers
+                // "Save under Unsorted" and "Skip it" - the same accept and decline.
+                acceptLabel = Topics.askLabels(row)?.first ?: "Keep",
+                discardLabel = Topics.askLabels(row)?.second ?: "Discard",
                 explainer = when {
                     kind != MemoryCardKind.CORRECTION -> null
                     bothOk -> CORRECTION_EXPLAINER_BOTH

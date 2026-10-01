@@ -22,13 +22,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Goals
+import com.jarvis.client.net.Projects
 import com.jarvis.client.net.Schedule
 import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
@@ -98,6 +103,25 @@ internal fun GoalsSection(
     // for as long as it says "waiting" - see [Goals]'s own doc comment for
     // why this is the one place that state is kept once read.
     var waitingCheckins by remember { mutableStateOf(mapOf<String, Schedule.Job>()) }
+    // The numbers a draft's step could follow (benchmarks with a target),
+    // read only while a draft is on screen and the lists are shown.
+    var options by remember { mutableStateOf<List<Goals.MeasureOption>>(emptyList()) }
+    // The step just ticked, so an Undo can untick it (by its id).
+    var undo by remember { mutableStateOf<TickUndo?>(null) }
+    val hasDraft = view?.goals?.any { it.status == "draft" } == true
+
+    LaunchedEffect(hasDraft, privateHidden, reads) {
+        if (!hasDraft || privateHidden) return@LaunchedEffect
+        val listed = (JarvisRuntime.projectsRead(Projects.PATH) as? ApiResult.Ok)?.value
+            ?.takeIf { it.code in 200..299 }?.body?.let { Projects.parseList(it) }
+            ?: return@LaunchedEffect
+        val full = listed.projects.take(20).mapNotNull { p ->
+            val path = Projects.projectPath(p.id) ?: return@mapNotNull null
+            (JarvisRuntime.projectsRead(path) as? ApiResult.Ok)?.value
+                ?.takeIf { it.code in 200..299 }?.let { Projects.projectOf(it) }
+        }
+        options = Goals.measureOptions(full)
+    }
 
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.goals()) {
@@ -193,6 +217,10 @@ internal fun GoalsSection(
                             goal = goal,
                             plan = edits[goal.id] ?: goal.plan,
                             maxSteps = shown.limits?.steps ?: Goals.MAX_STEPS,
+                            maxNeeds = shown.limits?.needs ?: Goals.MAX_NEEDS,
+                            options = options,
+                            undo = undo?.takeIf { it.goalId == goal.id },
+                            onSay = { said = it },
                             hidden = privateHidden,
                             enabled = canAct && busyId == null,
                             waiting = waitingCheckins[goal.id],
@@ -219,14 +247,30 @@ internal fun GoalsSection(
                                     }
                                 }
                             },
-                            onStep = { index, done ->
+                            onStep = { step, index, done ->
                                 busyId = goal.id
                                 said = null
+                                undo = null
                                 scope.launch {
+                                    var ok = false
                                     try {
-                                        said = JarvisRuntime.setGoalStep(goal.id, index, done).third
+                                        // By the step's id when the PC gave one; else by position.
+                                        val r = JarvisRuntime.setGoalStep(goal.id, step.id, index, done)
+                                        ok = r.first
+                                        val name = if (privateHidden) "" else step.step
+                                        if (!ok) {
+                                            // The PC's own sentence, as sent (a locked step's 409 too).
+                                            said = r.third
+                                        } else if (done) {
+                                            // A tick can be taken back at once; the Undo untick is the same route.
+                                            undo = TickUndo(goal.id, step.id, index, name)
+                                        } else {
+                                            said = if (name.isEmpty()) r.third else Goals.w("unticked", step = name)
+                                        }
                                     } finally {
                                         busyId = null
+                                        // A refused tick (a stale screen) reads the list again to catch up.
+                                        if (!ok) reads += 1
                                     }
                                 }
                             },
@@ -286,18 +330,25 @@ internal fun GoalsSection(
     }
 }
 
+/** The step just ticked: which goal, its id (its position if the PC gave none) and its words ("" while hidden). */
+private data class TickUndo(val goalId: String, val stepId: String, val index: Int, val name: String)
+
 /** One goal: its own words, its plan, and whichever of its own controls apply to its status. */
 @Composable
 private fun GoalRow(
     goal: Goals.Goal,
     plan: List<Goals.Step>,
     maxSteps: Int,
+    maxNeeds: Int,
+    options: List<Goals.MeasureOption>,
+    undo: TickUndo?,
+    onSay: (String) -> Unit,
     hidden: Boolean,
     enabled: Boolean,
     waiting: Schedule.Job?,
     onPlanChange: (List<Goals.Step>) -> Unit,
     onAccept: () -> Unit,
-    onStep: (Int, Boolean) -> Unit,
+    onStep: (Goals.Step, Int, Boolean) -> Unit,
     onStop: () -> Unit,
 ) {
     val chrome = LocalChrome.current
@@ -353,13 +404,21 @@ private fun GoalRow(
                         Goals.REMOVE_STEP,
                         color = chrome.badInk,
                         enabled = enabled && plan.size > 1,
-                        onClick = { onPlanChange(plan.filterIndexed { idx, _ -> idx != i }) },
+                        onClick = {
+                            val name = s.step.trim()
+                            val (next, touched) = Goals.removeStep(plan, i)
+                            onPlanChange(next)
+                            // The PC does not clean the others' "Do these first": done here, and said.
+                            if (touched) onSay(Goals.w("needs_cleaned", step = name.ifEmpty { "the step" }))
+                        },
                     )
                 }
+                StepLinks(plan, i, maxNeeds, options, enabled, onPlanChange)
             } else {
                 // The whole row is one checkbox with its words (the box itself
                 // takes no taps), so TalkBack reads the step and its state.
-                val stepEnabled = enabled && goal.status == "active"
+                val shownStep = if (hidden) Goals.HIDDEN_TEXT else s.step
+                val stepEnabled = enabled && goal.status == "active" && Goals.canTick(s)
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -367,7 +426,7 @@ private fun GoalRow(
                             value = s.done,
                             enabled = stepEnabled,
                             role = Role.Checkbox,
-                            onValueChange = { onStep(i, it) },
+                            onValueChange = { onStep(s, i, it) },
                         ),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -376,13 +435,44 @@ private fun GoalRow(
                         enabled = stepEnabled,
                         onCheckedChange = null,
                     )
-                    Column(Modifier.weight(1f)) {
+                    // One spoken line per row: "<step>, locked, after: <steps>".
+                    Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = Goals.spoken(s, shownStep) }) {
                         Text(
-                            if (hidden) Goals.HIDDEN_TEXT else s.step,
-                            style = MaterialTheme.typography.bodySmall, color = chrome.textHi,
+                            shownStep,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (s.locked) chrome.textMid else chrome.textHi,
                         )
                         if (!hidden && s.by.isNotEmpty()) {
                             Text(s.by, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        }
+                        // Greyed is never the only signal: the word "locked" and the PC's own reason.
+                        // "number reached" is the desktop's tag too: a met number, not a tick.
+                        val reachedTag = s.reached && s.state != "done"
+                        if (s.locked || reachedTag || s.lockWords.isNotEmpty()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (s.locked) Pill(Goals.w("locked"), color = chrome.textMid)
+                                if (reachedTag) Pill(Goals.w("reached_tag"), color = chrome.textMid)
+                                if (s.lockWords.isNotEmpty()) {
+                                    Text(
+                                        s.lockWords, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
+                        // Reached is not a tick: the owner still ticks it.
+                        if (s.reached && s.reachedWords.isNotEmpty()) {
+                            Text(s.reachedWords, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        }
+                        if (s.measure != null) {
+                            if (s.measureGone) {
+                                Text(Goals.w("measure_gone"), style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+                            } else if (s.measureName.isNotEmpty()) {
+                                Text(
+                                    "${Goals.FOLLOWS_LABEL}: ${s.measureName}",
+                                    style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
+                                )
+                            }
                         }
                     }
                 }
@@ -391,7 +481,7 @@ private fun GoalRow(
         if (editable) {
             Gap(6)
             if (plan.size < maxSteps) {
-                Quiet(Goals.ADD_STEP, enabled = enabled, onClick = { onPlanChange(plan + Goals.Step("", "", false)) })
+                Quiet(Goals.ADD_STEP, enabled = enabled, onClick = { onPlanChange(plan + Goals.newStep(plan)) })
             } else {
                 Text(Goals.TOO_MANY_STEPS, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
             }
@@ -404,9 +494,99 @@ private fun GoalRow(
             )
         } else if (goal.status == "active") {
             Gap(6)
+            if (undo != null) {
+                // The tick just made, said plainly, with one tap to take it back (no card).
+                Text(
+                    if (undo.name.isEmpty()) Goals.TICKED_GENERIC else Goals.w("ticked", step = undo.name),
+                    style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                    modifier = Modifier.liveStatus(),
+                )
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (undo != null) {
+                    Quiet(Goals.UNDO, enabled = enabled, onClick = {
+                        // The step that was ticked, found by its id (its position if the PC gave none).
+                        val i = plan.indexOfFirst { undo.stepId.isNotEmpty() && it.id == undo.stepId }
+                            .takeIf { it >= 0 } ?: undo.index
+                        plan.getOrNull(i)?.let { onStep(it, i, false) }
+                    })
+                }
                 Quiet(Goals.STOP, color = chrome.badInk, enabled = enabled, onClick = onStop)
             }
+        }
+    }
+}
+
+/**
+ * A draft step's two pickers, before Accept: "Do these first" (the other
+ * steps it waits on, at most [maxNeeds]) and "Follows a number" (a
+ * benchmark with a target). Shown under a tap so seven steps stay short.
+ */
+@Composable
+private fun StepLinks(
+    plan: List<Goals.Step>,
+    i: Int,
+    maxNeeds: Int,
+    options: List<Goals.MeasureOption>,
+    enabled: Boolean,
+    onPlanChange: (List<Goals.Step>) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val s = plan[i]
+    var open by remember(s.id, i) { mutableStateOf(false) }
+    val others = plan.withIndex().filter { it.index != i && it.value.id.isNotEmpty() }
+    val summary = buildList {
+        if (s.needs.isNotEmpty()) add("${Goals.DO_FIRST}: ${s.needs.size}")
+        if (s.measure != null) add(Goals.FOLLOWS_LABEL)
+    }.joinToString(" · ")
+    Quiet(
+        if (open) "Hide links" else if (summary.isEmpty()) "${Goals.DO_FIRST} / ${Goals.FOLLOWS}" else summary,
+        color = chrome.textMid,
+        onClick = { open = !open },
+    )
+    if (!open) return
+    Text(Goals.DO_FIRST.uppercase(), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    if (others.isEmpty()) {
+        Text(Goals.w("needs_none"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    } else {
+        Text(Goals.w("needs_under"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        if (s.needs.size >= maxNeeds) {
+            Text(Goals.w("needs_limit", max = maxNeeds), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        others.forEach { (j, o) ->
+            val on = o.id in s.needs
+            Quiet(
+                if (on) "✓ ${Goals.label(plan, j)}" else Goals.label(plan, j),
+                color = if (on) null else chrome.textMid,
+                // The picker stops at the limit; the PC would refuse a fourth.
+                enabled = enabled && (on || s.needs.size < maxNeeds),
+                onClick = { onPlanChange(Goals.toggleNeed(plan, i, o.id, maxNeeds)) },
+            )
+        }
+    }
+    Gap(4)
+    Text(Goals.FOLLOWS.uppercase(), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    if (options.isEmpty() && s.measure == null) {
+        Text(Goals.w("follows_empty"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    } else {
+        Text(Goals.w("follows_under"), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Quiet(
+            if (s.measure == null) "✓ ${Goals.w("follows_none")}" else Goals.w("follows_none"),
+            color = if (s.measure == null) null else chrome.textMid,
+            enabled = enabled,
+            onClick = { onPlanChange(Goals.setMeasure(plan, i, null)) },
+        )
+        options.forEach { o ->
+            val on = s.measure == o.measure
+            Quiet(
+                if (on) "✓ ${o.label}" else o.label,
+                color = if (on) null else chrome.textMid,
+                enabled = enabled,
+                onClick = { onPlanChange(Goals.setMeasure(plan, i, o.measure)) },
+            )
+        }
+        if (s.measure != null && options.none { it.measure == s.measure } && s.measureName.isNotEmpty()) {
+            Text("${Goals.FOLLOWS_LABEL}: ${s.measureName}", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
     }
 }

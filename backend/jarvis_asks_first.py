@@ -324,10 +324,11 @@ HARD_LIMITS = frozenset({
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     "app_merge_change",
-    "run_plan", "phone_notifications_read", "browser_form_submit",
+    "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
+    "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key",
-    "support_chat", "support_offer",
+    "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -343,10 +344,10 @@ MUST_ASK = frozenset({
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
-    "browser_form_submit",
+    "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
-    "support_chat", "support_offer",
+    "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -360,7 +361,7 @@ GROUPS = (
                             "edit_logseq_page", "delete_joplin_note", "delete_logseq_page",
                             "write_notes_after_outside_text", "wiki_update"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
-                              "schedule_repeat"]),
+                              "referee_tick", "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
     # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
     # two cards are change_own_config cards, decided in the code; these rows
@@ -374,7 +375,8 @@ GROUPS = (
                       "post_to_external_service",
                       "open_public_tunnel",
                       "news_read", "page_read", "github_read", "chatbot_session",
-                      "support_chat", "support_offer", "fixed:handoff"]),
+                      "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+                      "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
@@ -394,6 +396,7 @@ GROUPS = (
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
         "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
         "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
+        "topic_loosen", "chat_tags_suggest_on", "chat_tag_suggest",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
         "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
@@ -1663,7 +1666,7 @@ LOCKDOWN_ACTIONS = frozenset({
     # sending, saving and tidying email
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
-    "news_read", "page_read", "github_read",
+    "news_read", "page_read", "github_read", "youtube_captions_read", "quiz_cloud_grade",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

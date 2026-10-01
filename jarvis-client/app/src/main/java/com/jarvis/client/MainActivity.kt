@@ -1178,6 +1178,9 @@ class MainActivity : FragmentActivity() {
         // The answer's id (`turn_id`) and the owner's mark on it, for the
         // Right / Wrong buttons under the answer. Ids only, memory only.
         val answerTurnId by chat.turnId.collectAsState()
+        // The spending table's id under that answer (an id only; the table is
+        // fetched and held in memory by the screen that draws it).
+        val answerTableId by chat.tableId.collectAsState()
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
@@ -1209,6 +1212,9 @@ class MainActivity : FragmentActivity() {
         // only) - docs/JARVIS-API.md sections 18.1 and 4, 2026-09-25.
         val temporaryChat by chat.temporary.collectAsState()
         val usedIds by chat.usedIds.collectAsState()
+        // Topic controls (2026-09-30): how many facts the owner's topic settings kept out
+        // of the answer on screen - a count only ([com.jarvis.client.net.Topics]).
+        val topicsLeftOut by chat.topicsLeftOut.collectAsState()
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
@@ -1295,6 +1301,10 @@ class MainActivity : FragmentActivity() {
             val target = openSettingsTarget ?: return@LaunchedEffect
             when (val where = OpenPlace.whereFor(target)) {
                 is OpenPlace.Where.Go -> {
+                    // A link to a menu the owner hid ("Show or hide menus") opens it for THIS visit
+                    // only, before the screen is drawn; the screen ends the visit when it is left.
+                    com.jarvis.client.ui.MenuPlaces.menuFor(where.screen.name, where.section)
+                        ?.let { JarvisRuntime.menus.showForVisit(it) }
                     pendingSection = where.section
                     pendingSectionScreen = where.screen.name
                     nav.go(where.screen)
@@ -1302,6 +1312,17 @@ class MainActivity : FragmentActivity() {
                 is OpenPlace.Where.OnPc -> JarvisRuntime.setNotice(where.notice)
             }
             chat.consumeOpenSettings()
+        }
+        // "Hide the finance menu" by voice or chat (X-Jarvis-Route `menu_visibility`,
+        // docs/JARVIS-API.md section 109.2): per device, so the PC changed nothing and this phone
+        // applies it to its own list - once, then it is consumed, like face_tuning below. Hiding
+        // only tidies: no card, nothing turned off. A menu this phone does not have, and a
+        // never-hideable one, are ignored (MenuLogic); the answer already said what was done.
+        val menuChangeTarget by chat.menuChange.collectAsState()
+        LaunchedEffect(menuChangeTarget) {
+            val change = menuChangeTarget ?: return@LaunchedEffect
+            JarvisRuntime.menus.apply(change.action, change.target)
+            chat.consumeMenuChange()
         }
         // "Make the animal sharper" by voice or chat (X-Jarvis-Route
         // `face_tuning`, 2026-09-28): per device, so the PC changed nothing
@@ -1320,11 +1341,38 @@ class MainActivity : FragmentActivity() {
             }
             chat.consumeFaceTuningChange()
         }
+        // "Label my chat about the boiler as Home" (X-Jarvis-Route
+        // `open_brain: "history"` with `file_under` and `history_q`,
+        // docs/CHAT-TAGS-DESIGN.md section 10): open History with the search
+        // filled in and a banner, and file NOTHING until the owner taps a
+        // chat. Kept as two plain values so a rotation keeps the banner.
+        val fileUnderTarget by chat.fileUnder.collectAsState()
+        var filingTag by rememberSaveable { mutableStateOf<Int?>(null) }
+        var filingQuery by rememberSaveable { mutableStateOf("") }
+        LaunchedEffect(fileUnderTarget) {
+            val target = fileUnderTarget ?: return@LaunchedEffect
+            filingTag = target.tagId
+            filingQuery = target.query
+            nav.go(Screen.HISTORY)
+            chat.consumeFileUnder()
+        }
+        // "Switch off my work topic" (X-Jarvis-Route `open_brain: "topics"` with
+        // `topic_id`, docs/TOPIC-CONTROLS-DESIGN.md C4): Brain is opened at Topics by
+        // the `open_settings` path above (OpenPlace, "topics"); the topic id goes to
+        // the plate, which shows the four-choice picker and changes NOTHING until the
+        // owner taps Change.
+        val topicPickTarget by chat.topicPick.collectAsState()
+        LaunchedEffect(topicPickTarget) {
+            val target = topicPickTarget ?: return@LaunchedEffect
+            JarvisRuntime.requestTopicPick(target)
+            chat.consumeTopicPick()
+        }
         // An empty Quick Settings tile slot was tapped: the same one-time
         // scroll, to "Quick Settings tiles".
         LaunchedEffect(openTileSettingsRequested.value) {
             if (!openTileSettingsRequested.value) return@LaunchedEffect
             openTileSettingsRequested.value = false
+            JarvisRuntime.menus.showForVisit("settings.quick-tiles")
             pendingSection = QUICK_TILES_SECTION
             pendingSectionScreen = Screen.SETTINGS.name
             nav.resetTo(Screen.HOME)
@@ -2420,6 +2468,13 @@ class MainActivity : FragmentActivity() {
                             // voice or chat (OpenPlace).
                             initialSection = sectionFor(Screen.BRAIN),
                             onSectionConsumed = sectionConsumed,
+                            // "3 hidden - Show" at the bottom of Brain: Settings, at the
+                            // "Show or hide menus" list.
+                            onOpenMenuList = {
+                                pendingSection = "menu-visibility"
+                                pendingSectionScreen = Screen.SETTINGS.name
+                                nav.go(Screen.SETTINGS)
+                            },
                         )
                     }
 
@@ -2444,9 +2499,16 @@ class MainActivity : FragmentActivity() {
                         // Brain's plate, as "forget what you learned last
                         // week" opens it (OpenPlace).
                         onOpenForgetRange = {
+                            JarvisRuntime.menus.showForVisit("brain.history.forget-range")
                             pendingSection = "forget-range"
                             pendingSectionScreen = Screen.BRAIN.name
                             nav.go(Screen.BRAIN)
+                        },
+                        // "Tap the chat to file it under Home."
+                        fileUnder = filingTag?.let { com.jarvis.client.net.ChatTags.FileUnder(it, filingQuery) },
+                        onFileUnderDone = {
+                            filingTag = null
+                            filingQuery = ""
                         },
                         modifier = root,
                     )
@@ -2761,7 +2823,9 @@ class MainActivity : FragmentActivity() {
                                 .takeIf { keepAliveOfferShown },
                             temporary = temporaryChat,
                             usedIds = usedIds,
+                            topicsLeftOut = topicsLeftOut,
                             answerTurnId = answerTurnId,
+                            answerTableId = answerTableId,
                             crisisAnswer = crisisAnswer,
                             cloudOffer = cloudOffer,
                             inboxTidy = inboxTidyHeld?.let { held ->
@@ -2894,6 +2958,7 @@ class MainActivity : FragmentActivity() {
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
                                 onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
                                 onLoadSources = { tid -> JarvisRuntime.chatSources(tid) },
+                                onLoadSpendingTable = { tid -> JarvisRuntime.spendingTable(tid) },
                                 onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that
                                 // leaves the machine, cannot be undone, or arrived

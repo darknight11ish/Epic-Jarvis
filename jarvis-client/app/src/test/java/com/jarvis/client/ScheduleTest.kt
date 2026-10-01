@@ -421,4 +421,17 @@ class ScheduleTest {
         assertEquals("s0000000001@t10", Schedule.shownKey("s0000000001", null, null, 10L))
         assertEquals("s0000000001#match@ev3", Schedule.shownKey("s0000000001", 0.0, "3", 1L, "#match@"))
     }
+
+    @Test
+    fun theReviewDecksDailyJobIsNamedPlainlyAndOffersNoButtons() {
+        // Decks owns the job (made with the first deck, removed with the last):
+        // Pause or Delete here would only fight it.
+        val job = Schedule.job(obj(
+            """{"id":"s00000000c1","kind":"review","state":"active","text":"","repeats":true,"repeat":"every day at 04:00","note":"3 cards ready"}""",
+        ))!!
+        assertEquals(emptyList<String>(), Schedule.actionsOf(job))
+        assertEquals("card review, repeats", Schedule.tagOf(job))
+        assertEquals("card review", Schedule.tag("review"))
+        assertEquals("Card review", Schedule.titleOf(job))
+    }
 }

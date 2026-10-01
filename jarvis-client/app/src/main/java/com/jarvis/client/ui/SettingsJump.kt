@@ -27,6 +27,7 @@ object SettingsJump {
     val ENTRIES: List<Entry> = listOf(
         Entry("Voice", "voice"),
         Entry("Security", "security"),
+        Entry("Show or hide menus", "menu-visibility"),
         Entry("Appearance", "appearance"),
         Entry("Floating Jarvis", "floating-avatar"),
         Entry("How Jarvis talks", "manner"),

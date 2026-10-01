@@ -1,0 +1,630 @@
+{
+ "about": "The shared words of Review decks and Spanish practice (docs/QUIZ-DECKS-DESIGN.md, Slice contract C5), word for word, plus worked examples of the small rules and the frozen reply shapes of C2 and C4. Written by tools/gen_decks_cases.py: both apps' tests (src/decks.js, src/quiz.js, Decks.kt, Quiz.kt) read this file.",
+ "accents": [
+  "á",
+  "é",
+  "í",
+  "ó",
+  "ú",
+  "ñ",
+  "ü",
+  "¿",
+  "¡"
+ ],
+ "banned": [
+  "streak",
+  "missed",
+  "overdue",
+  "behind",
+  "in a row",
+  "keep it up",
+  "XP",
+  "hearts",
+  "lost",
+  "leaderboard",
+  "league"
+ ],
+ "examples": {
+  "can_review": [
+   [
+    {
+     "cards": 8,
+     "name": "ready",
+     "paused": false,
+     "ready": 3
+    },
+    true,
+    false,
+    true
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "ready",
+     "paused": false,
+     "ready": 3
+    },
+    true,
+    true,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "ready",
+     "paused": false,
+     "ready": 3
+    },
+    false,
+    false,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "none ready",
+     "paused": false,
+     "ready": 0
+    },
+    true,
+    false,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "none ready",
+     "paused": false,
+     "ready": 0
+    },
+    true,
+    true,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "none ready",
+     "paused": false,
+     "ready": 0
+    },
+    false,
+    false,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "paused with cards ready",
+     "paused": true,
+     "ready": 3
+    },
+    true,
+    false,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "paused with cards ready",
+     "paused": true,
+     "ready": 3
+    },
+    true,
+    true,
+    false
+   ],
+   [
+    {
+     "cards": 8,
+     "name": "paused with cards ready",
+     "paused": true,
+     "ready": 3
+    },
+    false,
+    false,
+    false
+   ],
+   [
+    {
+     "cards": 0,
+     "name": "empty",
+     "paused": false,
+     "ready": 0
+    },
+    true,
+    false,
+    false
+   ],
+   [
+    {
+     "cards": 0,
+     "name": "empty",
+     "paused": false,
+     "ready": 0
+    },
+    true,
+    true,
+    false
+   ],
+   [
+    {
+     "cards": 0,
+     "name": "empty",
+     "paused": false,
+     "ready": 0
+    },
+    false,
+    false,
+    false
+   ]
+  ],
+  "can_review_all": [
+   [
+    0,
+    true,
+    false,
+    false
+   ],
+   [
+    0,
+    true,
+    true,
+    false
+   ],
+   [
+    0,
+    false,
+    false,
+    false
+   ],
+   [
+    1,
+    true,
+    false,
+    true
+   ],
+   [
+    1,
+    true,
+    true,
+    false
+   ],
+   [
+    1,
+    false,
+    false,
+    false
+   ],
+   [
+    7,
+    true,
+    false,
+    true
+   ],
+   [
+    7,
+    true,
+    true,
+    false
+   ],
+   [
+    7,
+    false,
+    false,
+    false
+   ]
+  ],
+  "cards_label": [
+   [
+    0,
+    "0 cards"
+   ],
+   [
+    1,
+    "1 card"
+   ],
+   [
+    2,
+    "2 cards"
+   ],
+   [
+    8,
+    "8 cards"
+   ],
+   [
+    1000,
+    "1000 cards"
+   ]
+  ],
+  "format_day": [
+   [
+    "2026-10-03",
+    "3 Oct 2026"
+   ],
+   [
+    "2027-01-31",
+    "31 Jan 2027"
+   ],
+   [
+    "2026-12-25",
+    "25 Dec 2026"
+   ],
+   [
+    null,
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "soon",
+    "soon"
+   ]
+  ],
+  "kept_line": [
+   [
+    1,
+    "Kept 1 question"
+   ],
+   [
+    2,
+    "Kept 2 questions"
+   ],
+   [
+    3,
+    "Kept 3 questions"
+   ],
+   [
+    20,
+    "Kept 20 questions"
+   ]
+  ],
+  "next_ready_line": [
+   [
+    "2026-10-03",
+    "Next cards ready on 3 Oct 2026"
+   ],
+   [
+    "2027-01-31",
+    "Next cards ready on 31 Jan 2027"
+   ],
+   [
+    "2026-12-25",
+    "Next cards ready on 25 Dec 2026"
+   ],
+   [
+    null,
+    ""
+   ],
+   [
+    "",
+    ""
+   ],
+   [
+    "soon",
+    "Next cards ready on soon"
+   ]
+  ],
+  "per_deck_note": [
+   [
+    [
+     3,
+     2
+    ],
+    5,
+    false
+   ],
+   [
+    [
+     3,
+     3
+    ],
+    5,
+    true
+   ],
+   [
+    [
+     3,
+     3
+    ],
+    3,
+    true
+   ],
+   [
+    [],
+    0,
+    false
+   ],
+   [
+    [
+     5
+    ],
+    5,
+    false
+   ],
+   [
+    [
+     0,
+     0
+    ],
+    0,
+    false
+   ]
+  ]
+ },
+ "pc_words": {
+  "key_label_model": "Answer key written by the model",
+  "spanish_notice": "Jarvis cannot recognise a crisis message written in Spanish. If you are in danger, call or text 988, or 911."
+ },
+ "ratings": [
+  "again",
+  "hard",
+  "good",
+  "easy"
+ ],
+ "samples": {
+  "cards": {
+   "cards": [
+    {
+     "back": "Chlorophyll",
+     "due_day": null,
+     "front": "What absorbs sunlight?",
+     "id": "c1a2b3c4d5e6",
+     "key_label": null,
+     "key_source": "text",
+     "kind": "recall",
+     "level": null,
+     "new": true,
+     "passage": "Chlorophyll absorbs sunlight."
+    }
+   ],
+   "deck": {
+    "id": "d1a2b3c4d5e6",
+    "name": "Plants"
+   },
+   "ok": true
+  },
+  "decks": {
+   "available": true,
+   "decks": [
+    {
+     "cards": 8,
+     "id": "d1a2b3c4d5e6",
+     "kind": "study",
+     "name": "Plants",
+     "paused": false,
+     "ready": 3
+    },
+    {
+     "cards": 1,
+     "id": "d2b3c4d5e6f7",
+     "kind": "spanish",
+     "name": "Verbos",
+     "paused": true,
+     "ready": 0
+    }
+   ],
+   "limits": {
+    "back": 2000,
+    "cards": 1000,
+    "decks": 20,
+    "front": 500,
+    "name": 60,
+    "new_per_day": 20
+   },
+   "line": "3 cards ready",
+   "new_left": 2,
+   "new_per_day": 5,
+   "next_ready_day": "2026-10-03",
+   "ok": true,
+   "ready": 3,
+   "why": ""
+  },
+  "decks_unavailable": {
+   "available": false,
+   "decks": [],
+   "limits": {
+    "back": 2000,
+    "cards": 1000,
+    "decks": 20,
+    "front": 500,
+    "name": 60,
+    "new_per_day": 20
+   },
+   "line": "2 cards ready",
+   "new_left": 2,
+   "new_per_day": 5,
+   "next_ready_day": null,
+   "ok": true,
+   "ready": 2,
+   "why": "Decks are not set up on this PC: no key in Credential Manager."
+  },
+  "keep_crisis": {
+   "crisis": true,
+   "message": "Call **988** any time.",
+   "ok": true,
+   "quiz": {
+    "answered": 1,
+    "grader_verified": false,
+    "id": "qz0001",
+    "key_source": "model",
+    "level": "B1",
+    "mode": "spanish",
+    "notice": "n",
+    "questions": [
+     {
+      "kind": "blank",
+      "mark": null,
+      "n": 1,
+      "prompt": "El libro _____ en la mesa."
+     }
+    ],
+    "title": "Plantas"
+   }
+  },
+  "keep_ok": {
+   "kept": 3,
+   "ok": true,
+   "summary": {
+    "again": [
+     2
+    ],
+    "counts": {
+     "got_it": 0,
+     "not_yet": 0,
+     "partly": 1
+    }
+   }
+  },
+  "rate": {
+   "comes_back": "2026-10-03",
+   "line": "2 cards ready",
+   "new_left": 1,
+   "next": {
+    "deck": "d1a2b3c4d5e6",
+    "front": "Second card",
+    "id": "c2b3c4d5e6f7",
+    "kind": "recall",
+    "level": null,
+    "new": false
+   },
+   "ok": true,
+   "ready": 2,
+   "run": {
+    "done": 1,
+    "limit": 20
+   },
+   "state": "card"
+  },
+  "reveal": {
+   "back": {
+    "answer": "Chlorophyll",
+    "passage": "Chlorophyll absorbs sunlight."
+   },
+   "key_label": null,
+   "ok": true
+  },
+  "review_card": {
+   "card": {
+    "deck": "d1a2b3c4d5e6",
+    "front": "What absorbs sunlight?",
+    "id": "c1a2b3c4d5e6",
+    "kind": "recall",
+    "level": null,
+    "new": true
+   },
+   "line": "3 cards ready",
+   "new_left": 2,
+   "ok": true,
+   "ready": 3,
+   "run": {
+    "done": 0,
+    "limit": 20
+   },
+   "state": "card"
+  },
+  "spanish_quiz": {
+   "ok": true,
+   "quiz": {
+    "answered": 1,
+    "grader_verified": false,
+    "id": "qz0001",
+    "key_source": "model",
+    "level": "B1",
+    "mode": "spanish",
+    "notice": "Jarvis cannot recognise a crisis message written in Spanish. If you are in danger, call or text 988, or 911.",
+    "questions": [
+     {
+      "kind": "blank",
+      "mark": {
+       "comment": "Check the accent: it is `está`.",
+       "expected": "está",
+       "key_label": "Answer key written by the model",
+       "level": "partly",
+       "marked_by": "code",
+       "passage": "El libro está en la mesa."
+      },
+      "n": 1,
+      "prompt": "El libro _____ en la mesa."
+     },
+     {
+      "kind": "translate",
+      "mark": null,
+      "n": 2,
+      "prompt": "The cat is on the table."
+     }
+    ],
+    "title": "Plantas"
+   }
+  }
+ },
+ "words": {
+  "accent_row_label": "Spanish letters",
+  "answer_line_example": "Answer: está",
+  "back_answer": "Answer",
+  "cards_link": "Cards",
+  "cards_many": "8 cards",
+  "cards_one": "1 card",
+  "cards_ready": "Cards ready",
+  "choose_deck": "Choose a deck",
+  "deck_name": "Deck name",
+  "delete": "Delete",
+  "delete_card": "Delete this card",
+  "delete_confirm": "Are you sure? Deleting is immediate. Copies in older backups stay until they age out.",
+  "delete_deck": "Delete this deck",
+  "edit": "Edit",
+  "empty_state": "Keep questions from a quiz to make your first deck.",
+  "enough": "That's enough for now",
+  "exercise_blank": "Fill the blank",
+  "exercise_complete": "Finish the sentence",
+  "exercise_mixed": "Mixed",
+  "exercise_translate": "Translate",
+  "guess_label": "Jarvis's guess",
+  "keep_back_placeholder": "Type the answer in your own words",
+  "keep_button": "Keep these questions",
+  "keep_cancel": "Cancel",
+  "keep_finish": "Keep and finish",
+  "keep_hidden": "Turn off Hide memory lists to keep questions",
+  "kept_many": "Kept 3 questions",
+  "kept_one": "Kept 1 question",
+  "key_label_model": "Answer key written by the model",
+  "kind_blank": "Fill the blank",
+  "kind_complete": "Finish the sentence",
+  "kind_translate": "Translate",
+  "level_heading": "Level (roughly)",
+  "level_label_b1": "Level B1 (roughly)",
+  "mode_spanish": "Spanish practice",
+  "mode_text": "Text",
+  "model_unavailable": "The model on this PC did not answer. Nothing was changed - try again in a moment.",
+  "more": "Do 10 more",
+  "new_deck": "New deck",
+  "new_per_day": "New cards a day",
+  "nothing_ready": "Nothing ready today",
+  "passage_example": "Example sentence",
+  "passage_from_text": "From the text",
+  "pause": "Pause",
+  "per_deck_note": "New cards a day is shared by every deck, so the decks can show more cards ready than the total above.",
+  "quiz_intro": "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.",
+  "rating_again": "Didn't remember",
+  "rating_easy": "Easy",
+  "rating_good": "Remembered",
+  "rating_hard": "Remembered, with effort",
+  "ready_row": "3 ready",
+  "resume": "Resume",
+  "review": "Review",
+  "review_all": "Review all decks",
+  "review_hidden": "Turn off Hide memory lists to review",
+  "save": "Save",
+  "section_title": "My study decks",
+  "show_answer": "Show answer",
+  "spanish_intro": "Type your answers in Spanish. Paste some Spanish text of your own and the questions come from it, or leave the box empty and Jarvis writes the sentences. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.",
+  "spanish_placeholder": "Paste Spanish text (optional)",
+  "start_button": "Write questions",
+  "stop": "Stop",
+  "topic_counter": "0 / 60",
+  "topic_label": "Topic (optional)",
+  "typed_placeholder": "Type your answer (only for you - it is not sent or marked)"
+ }
+}

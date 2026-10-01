@@ -1,0 +1,8 @@
+{
+  "_note": "Hand-labelled topic of each made-up fact in golden_facts.jsonl (the ground truth for eval_topics.py). A fact not listed is Unsorted. Made up: no data of the owner's.",
+  "Work": ["f05", "f06", "f20", "f21", "f22", "f61", "f68", "f69"],
+  "Family": ["f01", "f02", "f03", "f04", "f08", "f09", "f34"],
+  "Health": ["f17", "f41", "f57"],
+  "Money": ["f62"],
+  "Hobbies": ["f23", "f24", "f25", "f26", "f27", "f28", "f29", "f48", "f54", "f64", "f65", "f70", "f71"]
+}

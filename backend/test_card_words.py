@@ -25,8 +25,11 @@ Runs anywhere: standard library only, no owner's files.
 import builtins
 import re
 import sys
-import tomllib
 import traceback
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent

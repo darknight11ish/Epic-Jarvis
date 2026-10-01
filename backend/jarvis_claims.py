@@ -50,7 +50,7 @@ CLAIMS_DONE = re.compile(
 #: change, a reminder, an email, a plug-in tool - counts as an action.
 READ_ONLY_TOOLS = frozenset({
     "calculator", "memory_search", "file_read", "github_search", "web_search",
-    "calendar_read", "email_check", "notes_search", "my_files", "home_read",
+    "calendar_read", "email_check", "notes_search", "my_files", "my_spending", "retirement_whatif", "home_read",
     "coming_up", "more_tools",
 })
 

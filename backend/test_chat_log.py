@@ -821,7 +821,7 @@ def t_list_paging_and_conversation_routes():
         check("one conversation", code == 200 and body["turns"][1]["text"] == "answer 1", body)
         check("user turns carry provenance and read_outside; answers do not",
               set(body["turns"][0]) >= {"role", "text", "at", "provenance", "read_outside"}
-              and set(body["turns"][1]) == {"role", "text", "at"}, body["turns"])
+              and set(body["turns"][1]) == {"idx", "role", "text", "at"}, body["turns"])
         # "Continue this chat" warns when new messages will not be kept (the
         # owner, 2026-09-29): the conversation says whether history is keeping
         # them, with the list's own words for it.
@@ -1346,8 +1346,8 @@ def t_the_patch():
           "\n".join(frag).index("record_turn(") < "\n".join(frag).index("LEARNER.offer("))
 
     # The routes.
-    get_i = hud.find('if path in ("/api/history", "/api/history/conversation"):')
-    post_i = hud.find('if route in ("/api/history/delete", "/api/history/settings"):')
+    get_i = hud.find('if path in ("/api/history", "/api/history/conversation",')
+    post_i = hud.find('if route in ("/api/history/delete", "/api/history/settings",')
     check("GET /api/history and /api/history/conversation are routed", get_i >= 0)
     check("POST /api/history/delete and /api/history/settings are routed", post_i >= 0)
     for name, at, call in (("GET", get_i, "jarvis_chat_log.handle_get("),

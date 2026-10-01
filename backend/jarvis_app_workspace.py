@@ -250,7 +250,8 @@ def create_project(name: str, kind: str, title: str = "") -> dict:
             raise WorkspaceError(f"there is already an app called {name}")
         d.mkdir(parents=True)
         try:
-            _git(["init", "-q", "-b", "main"], d)
+            _git(["init", "-q"], d)
+            _git(["checkout", "-B", "main"], d)
             (d / "README.md").write_text(f"# {title}\n\n{KINDS[kind].capitalize()}, "
                                          "built with Jarvis.\n", encoding="utf-8")
             (d / ".gitignore").write_text(GITIGNORE, encoding="utf-8")
@@ -457,7 +458,7 @@ def apply_change(name: str, task: str, changes: list, summary: str) -> dict:
         for op, rel, target, content in checked:
             if op == "write":
                 target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(content, encoding="utf-8", newline="")
+                target.write_bytes(content.encode("utf-8"))
             else:
                 target.unlink()
         _git(["add", "-A"], tdir)

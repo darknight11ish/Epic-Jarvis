@@ -80,6 +80,8 @@ class ChatStreamContractTest {
                     error = r.message
                     true
                 }
+                // A spending table's id (`: jarvis-table <id>`): not text, not a stop.
+                is ChatChunkParser.Result.Table -> false
                 ChatChunkParser.Result.Ignored -> false
             }
             if (stop) break

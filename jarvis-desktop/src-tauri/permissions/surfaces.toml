@@ -760,17 +760,29 @@ permissions = [
 # too, held back the same way: the PC opens each kept turn in memory for
 # that one search, keeps no index, and nothing reaches the AI model.
 #
+# Chat tags (docs/CHAT-TAGS-DESIGN.md section 10, 2026-09-30): read the
+# owner's tags, add/rename/restyle/reorder/delete one, and file one chat under
+# one. No approval card (the owner's own tidying, nothing leaves the PC); the
+# names are the owner's words, so Rust hides them with the private lists and
+# holds every write on a stale link.
+#
 # "Continue this chat" (the chat audit, 2026-09-28) brings up the Jarvis bar
 # and names the chat to carry on - the id only; the bar reads it itself
 # (chat_continue_open, in quickbar-surface). Copy on an opened old answer
 # uses the same private copy as the bar's own Copy (clipboard_privacy.rs).
 [[set]]
 identifier = "brain-history"
-description = "List, read and search the chat history kept on the PC, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
+description = "List, read and search the chat history kept on the PC, sort chats under the owner's own tags (and switch on overnight tag suggestions, which only ever raise a card), put a divider above one of their own messages, fork a chat from a message into a new one, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
   "allow-brain-history-search",
+  "allow-brain-history-tags",
+  "allow-brain-history-tags-edit",
+  "allow-brain-history-tag",
+  "allow-brain-history-mark",
+  "allow-brain-history-tag-suggest",
+  "allow-brain-history-fork",
   "allow-brain-history-delete",
   "allow-brain-history-settings",
   "allow-brain-continue-chat",
@@ -856,6 +868,112 @@ permissions = [
   "allow-brain-goals-accept",
   "allow-brain-goals-step",
   "allow-brain-goals-stop",
+]
+
+# Activity heatmap and balance chart (docs/GOALS-PROGRESS-DESIGN.md part C;
+# brain/progress.rs, backend jarvis_progress.py; JARVIS-API.md section 105).
+# Two pictures in Brain -> Projects, drawn from what the PC sends. No approval
+# card and nothing saved here; choosing the chart's areas is the owner's own
+# display choice, held on a stale link; a picture with a health or money item in
+# it is taken out while the private lists are hidden or App lock is on.
+[[set]]
+identifier = "brain-progress"
+description = "Read the activity heatmap and the balance chart, and save which 3 to 8 areas the chart shows - no card, nothing kept by the app, the save held on a stale link, the picture hidden with the private lists."
+permissions = [
+  "allow-brain-progress-activity",
+  "allow-brain-progress-balance",
+  "allow-brain-progress-balance-save",
+]
+
+# Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11; brain/quiz.rs,
+# backend jarvis_quiz.py; JARVIS-API.md section 98). The owner pastes a text,
+# the PC's local model writes questions, the owner types answers and gets a
+# mark. No approval card and nothing saved: the quiz lives in the PC's memory
+# only. Every change held on a stale link; the words hidden with the private
+# lists.
+[[set]]
+identifier = "brain-quiz"
+description = "Write quiz questions for a pasted text, read the open quiz, check one typed answer, finish, and stop and forget the quiz - no card, nothing saved, every change held on a stale link."
+permissions = [
+  "allow-brain-quiz-start",
+  "allow-brain-quiz-get",
+  "allow-brain-quiz-answer",
+  "allow-brain-quiz-finish",
+  "allow-brain-quiz-stop",
+]
+
+# Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md section 14;
+# brain/youtube.rs, backend jarvis_youtube.py; JARVIS-API.md section 112). The
+# owner pastes a YouTube link; the PC raises ONE approval card (a risky
+# approval, decided in the ordinary approval screens), and only after a yes
+# reads the video's caption text and writes questions. The link is sent once,
+# in a request body, and kept nowhere by the app; the start is held on a stale
+# link, polling and Cancel never; the link and the quiz's words are hidden
+# with the private lists.
+[[set]]
+identifier = "brain-youtube"
+description = "Ask whether the PC has YouTube quizzes, send a pasted video link (the PC raises one approval card), poll the request, and cancel it while its card waits - the link is kept nowhere, the start held on a stale link."
+permissions = [
+  "allow-brain-youtube-info",
+  "allow-brain-youtube-start",
+  "allow-brain-youtube-get",
+  "allow-brain-youtube-cancel",
+]
+
+# Retirement what-if (docs/FINANCE-DESIGN.md part B; brain/retirement.rs,
+# backend jarvis_retirement.py; JARVIS-API.md section 103). The owner types a
+# few numbers, the PC plays out 10,000 made-up futures and answers with ranges.
+# No approval card and nothing saved; the run is held on a stale link; nothing
+# is asked or sent while the private lists are hidden or App lock is on.
+[[set]]
+identifier = "brain-retirement"
+description = "Read the retirement what-if's form and play out the numbers the owner typed - no card, nothing saved, the run held on a stale link, nothing sent while the private lists are hidden or App lock is on."
+permissions = [
+  "allow-brain-retirement-defaults",
+  "allow-brain-retirement-run",
+]
+
+# Review decks (docs/QUIZ-DECKS-DESIGN.md; brain/decks.rs, backend
+# jarvis_decks.py; JARVIS-API.md section 102). Questions the owner kept from a
+# quiz, asked again on a schedule the PC works out. No approval card: the
+# owner's own tap saves the owner's own words on the PC. Every change held on
+# a stale link; the words hidden with the private lists.
+[[set]]
+identifier = "brain-decks"
+description = "Read and manage the owner's study decks and cards, and run a review session - no card, nothing leaves the PC, every change held on a stale link."
+permissions = [
+  "allow-brain-decks",
+  "allow-brain-decks-create",
+  "allow-brain-decks-settings",
+  "allow-brain-decks-act",
+  "allow-brain-decks-cards",
+  "allow-brain-decks-card-act",
+  "allow-brain-review",
+  "allow-brain-review-reveal",
+  "allow-brain-review-rate",
+  "allow-brain-review-more",
+]
+
+# Topic controls (docs/TOPIC-CONTROLS-DESIGN.md; brain/topics.rs, backend
+# jarvis_topics.py; JARVIS-API.md section 107). Every saved fact sits under one
+# topic and each topic has a mode: learn and use, use but do not learn, learn
+# but do not use, or off. The PC enforces the modes and raises the only cards
+# (a private topic turned back on); this app carries the owner's taps. Every
+# write is held on a stale link; topic names, keywords and both fact lists are
+# taken out in Rust while "Hide memory lists and chat history" is on. Nothing
+# here approves a card or changes topics in bulk.
+[[set]]
+identifier = "brain-topics"
+description = "Read the topics, change one topic's mode or the list itself (add, rename, colour, reorder, keywords, delete with a home for its facts), file facts under a topic, and read the two fact lists - the PC raises any approval card, every change held on a stale link, names hidden with the private lists."
+permissions = [
+  "allow-brain-topics",
+  "allow-brain-topics-edit",
+  "allow-brain-topics-mode",
+  "allow-brain-topics-file",
+  "allow-brain-topics-settings",
+  "allow-brain-topics-preview",
+  "allow-brain-topics-review",
+  "allow-brain-topics-hidden",
 ]
 
 # "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
@@ -975,6 +1093,36 @@ description = "Read whether an inbox tidy is open to Undo, and Undo it within 10
 permissions = [
   "allow-inbox-tidy-read",
   "allow-inbox-tidy-undo",
+]
+
+# "Spending summaries" (backend/spending.patch; JARVIS-API section 100; the
+# owner's decision of 2026-09-30). The Jarvis bar reads the table a chat answer
+# announced, by id: a read, never held on a stale link, and never asked for
+# while the private lists are hidden or App lock has locked Jarvis. It cannot
+# write anything and cannot reach the Settings box's commands.
+[[set]]
+identifier = "spending-table"
+description = "Read the spending table a chat answer announced, by its id (a read; hidden in Rust while the private lists are hidden or Jarvis is locked)."
+permissions = [
+  "allow-chat-table",
+]
+
+# The Settings box for the same feature: read the saved bank layouts and the
+# categories, check the columns of a new bank file, save or forget a layout,
+# save or reset the category words, ask for suggestions. PC only on the
+# backend (403 from any other device); no approval card; the writes are held
+# on a stale link in Rust. Settings window only.
+[[set]]
+identifier = "spending-settings"
+description = "Settings, Spending: read the layouts and categories, check a bank file's columns, save or forget a layout, edit the categories. No approval card; PC only on the backend."
+permissions = [
+  "allow-get-spending",
+  "allow-spending-profile-read",
+  "allow-spending-profile-save",
+  "allow-spending-profile-delete",
+  "allow-spending-categories-save",
+  "allow-spending-categories-reset",
+  "allow-spending-suggest",
 ]
 
 # The picture of a filled-in web form on the "Jarvis wants to submit this form"

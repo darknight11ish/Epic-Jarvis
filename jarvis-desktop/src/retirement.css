@@ -1,0 +1,167 @@
+/* The retirement what-if card on the Brain's Work tab (retirement.js).
+   Calm and neutral on purpose: no red, no green, no pass or fail colours. A
+   poor outcome looks exactly like a good one - only the words differ - and
+   nothing moves, so reduced motion needs nothing switched off. Tokens only. */
+
+.ret-form {
+  display: grid;
+  gap: 12px;
+}
+
+.ret-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 12px 16px;
+}
+
+.ret-field {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  min-width: 0;
+}
+
+.ret-label {
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.ret-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.ret-input[aria-invalid="true"] {
+  border-color: var(--border-accent);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.ret-limit,
+.ret-help {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.ret-error {
+  margin: 2px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+/* The small tag beside a made-up figure. Shape and word, not colour. */
+.ret-assumed {
+  display: inline-block;
+  padding: 0 6px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  color: var(--text-muted);
+  font-size: var(--text-2xs);
+  line-height: 1.6;
+  vertical-align: 1px;
+}
+
+.ret-line {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid var(--accent);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.ret-hidden-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.ret-hidden {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.ret-result-slot:not(:empty) {
+  margin-top: 14px;
+}
+
+.ret-result {
+  padding: 12px 14px;
+  border: var(--stroke-hair) solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface-2);
+}
+
+.ret-headline {
+  margin: 0 0 8px;
+  color: var(--text);
+  font-size: var(--text-md);
+  line-height: 1.5;
+}
+
+.ret-headline:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.ret-summary {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.ret-disclaimer {
+  margin: 0 0 10px;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+.ret-meter {
+  margin: 4px 0 12px;
+}
+
+.ret-meter-svg {
+  display: block;
+  width: 100%;
+  height: 12px;
+}
+
+.ret-meter-track {
+  fill: var(--surface-sunken);
+  stroke: var(--border);
+  stroke-width: 0.3;
+}
+
+.ret-meter-band {
+  fill: var(--border-strong);
+}
+
+.ret-meter-tick {
+  fill: var(--text);
+}
+
+.ret-meter-labels {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.ret-used {
+  margin: 0 0 8px;
+  padding-left: 18px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+}
+
+.ret-used-label {
+  color: var(--text-muted);
+}

@@ -33,6 +33,11 @@ ON_EARLIER_LINES = (
     "screen-picture.patch",
     "form-review.patch",
     "web-search-switch.patch",
+    "topics.patch",
+    "referee.patch",
+    "tag-suggest.patch",
+    "youtube.patch",
+    "quiz-cloud.patch",
 )
 
 failures = 0
@@ -59,7 +64,9 @@ if text is not None:
     end = text.find("})", start)
     block = text[start:end]
     for entry in ('"phone_notifications_read"', '"chatbot_session"', '"memory_forget_range"',
-                  '"app_merge_change"', '"browser_form_submit"'):
+                  '"app_merge_change"', '"browser_form_submit"', '"web_search_enable"',
+                  '"topic_loosen"', '"referee_tick"', '"chat_tag_suggest"',
+                  '"youtube_captions_read"', '"quiz_cloud_grade"'):
         check(block.count(entry) == 1, f"{entry} is in the tier-ask set exactly once")
 
 print()

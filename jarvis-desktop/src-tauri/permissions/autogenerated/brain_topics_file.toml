@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-topics-file"
+description = "Enables the brain_topics_file command without any pre-configured scope."
+commands.allow = ["brain_topics_file"]
+
+[[permission]]
+identifier = "deny-brain-topics-file"
+description = "Denies the brain_topics_file command without any pre-configured scope."
+commands.deny = ["brain_topics_file"]

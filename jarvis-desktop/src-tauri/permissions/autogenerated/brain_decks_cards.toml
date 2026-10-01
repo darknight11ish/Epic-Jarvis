@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-decks-cards"
+description = "Enables the brain_decks_cards command without any pre-configured scope."
+commands.allow = ["brain_decks_cards"]
+
+[[permission]]
+identifier = "deny-brain-decks-cards"
+description = "Denies the brain_decks_cards command without any pre-configured scope."
+commands.deny = ["brain_decks_cards"]

@@ -591,7 +591,7 @@ def t_what_did_i_miss_covers_timed_out_cards_auto_facts_and_real_matches():
     # Facts saved automatically: a fake list_auto, so no real memory store
     # is needed here - the real one has its own tests.
     real_list_auto = AL.list_auto
-    AL.list_auto = lambda limit=None, now=None: {"facts": [
+    AL.list_auto = lambda limit=None, now=None, topics=None: {"facts": [
         {"id": 1, "text": "The owner's sister likes jazz.",
          "saved_at": int(local(2026, 9, 25, 13, 30))},
         {"id": 2, "text": "Too early to count - before 'since'.",

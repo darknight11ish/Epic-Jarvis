@@ -221,12 +221,20 @@ import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 // "Inbox tidy by voice" (2026-09-28): the Undo strip under the input.
 import { mountInboxTidy } from "./inbox-tidy.js";
+// "Spending summaries" (2026-09-30): the table a spending answer announced.
+import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending.js";
 import { mountFormReview } from "./form-review.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
 import { DEVICE_CHANGES, stepTuning } from "./animal-shared.js";
 import { loadFaceTuning, saveFaceTuning } from "./face-tuning.js";
+import {
+  apply as applyMenuVisibility,
+  loadState as loadMenuState,
+  parseRoute as parseMenuRoute,
+  saveState as saveMenuState,
+} from "./menu-visibility.js";
 // Jarvis Live: the same rules as the phone's (live-rules.js, 2026-09-28).
 import {
   BUTTONS,
@@ -409,6 +417,7 @@ const dom = {
   captureFindDate: $("capture-find-date"),
   photoProposal: $("photo-proposal"),
   inboxTidy: $("inbox-tidy"),
+  spendingTable: $("spending-table"),
   approvalPicture: $("approval-picture"),
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
@@ -737,6 +746,27 @@ if (dom.inboxTidy) {
   window.addEventListener("focus", () => inboxTidyView.refresh());
 }
 
+/** The spending table under the newest answer (spending.js), mounted just
+ *  below. Declared BEFORE it is mounted, like the strip above. */
+let spendingView = null;
+
+/**
+ * "Spending summaries" (JARVIS-API.md section 100): the stream said
+ * `: jarvis-table <id>` before the answer's sentence, so this asks the PC for
+ * the table and draws it under the sentence. In memory only - never stored,
+ * never read aloud, no export. Under "Hide memory lists and chat history"
+ * and while App lock has locked Jarvis it shows "Spending table hidden" and
+ * the PC is not asked (Rust, spending.rs `chat_table`).
+ */
+if (dom.spendingTable) {
+  spendingView = mountSpendingTable(dom.spendingTable, {
+    invoke: (command, args) => invokeStrict(command, args),
+    announce,
+    onChange: () => syncWindowHeight(),
+  });
+  window.addEventListener("focus", () => spendingView.recheck());
+}
+
 /**
  * The picture of a filled-in web form on a "submit this form" card
  * (form-review.js; docs/FORM-REVIEW-DESIGN.md). Only this bar's full card
@@ -1003,6 +1033,7 @@ function closeCard({ wasTemporary = temporaryChat.on, quiet = false } = {}) {
   paintYouLine("");
   dom.answer.innerHTML = "";
   dom.answer.classList.remove("wellbeing-crisis");
+  if (spendingView) spendingView.clear();
   dom.cardStat.textContent = "";
   paintProblem(null, "");
   dom.cursor.hidden = true;
@@ -1454,10 +1485,25 @@ function applyHeaderRoute(route) {
   applyFaceTuningFromRoute(state.turnRoute);
   cloudOfferFromRoute(state.turnRoute);
   openBrainFromRoute(state.turnRoute);
+  menuVisibilityFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
   applyRoute(next);
+}
+
+/**
+ * "Show or hide menus" by voice or chat (jarvis_menus.py, jarvis_quick.py,
+ * 2026-09-30; docs/MENU-VISIBILITY-DESIGN.md, JARVIS-API section 109):
+ * `menu_visibility` in X-Jarvis-Route names the action and target. Applies
+ * immediately to localStorage with no confirmation card.
+ */
+function menuVisibilityFromRoute(route) {
+  const parsed = parseMenuRoute(route);
+  if (!parsed) return;
+  const st = loadMenuState();
+  applyMenuVisibility(st, parsed.action, parsed.target, "desktop");
+  saveMenuState(st);
 }
 
 /**
@@ -1528,7 +1574,60 @@ function cloudOfferFromRoute(route) {
  * approves the card.
  */
 function openBrainFromRoute(route) {
-  if (!route || route.open_brain !== FORGET_RANGE_PLACE) return;
+  if (!route) return;
+  // "Label my chat about the boiler as Home" (docs/CHAT-TAGS-DESIGN.md
+  // section 10): History opens with the search words filled in and a banner
+  // to file the tapped chat under the tag `file_under`. Only those two
+  // fields ride along, and the Brain checks them again; nothing is filed
+  // until the owner taps a chat.
+  if (route.open_brain === "history") {
+    const left = { place: "history", at: Date.now() };
+    if (typeof route.file_under === "string" && typeof route.history_q === "string") {
+      left.file_under = route.file_under;
+      left.history_q = route.history_q;
+    }
+    try {
+      localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify(left));
+    } catch {
+      /* no storage: the Brain opens where it was, and the answer's own words say where */
+    }
+    // The Brain removes the key the moment it reads it (takeAnyPlace). If it
+    // never opens, the search words are not left lying about: gone in a minute.
+    setTimeout(() => {
+      try {
+        const now = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
+        if (now && now.at === left.at) localStorage.removeItem(BRAIN_PLACE_KEY);
+      } catch {
+        /* nothing to clear */
+      }
+    }, 65_000);
+    invoke("open_fix_place", { place: "brain" });
+    return;
+  }
+  // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md C1): "switch off my work
+  // topic" is ambiguous, so the PC opens the picker instead of guessing.
+  // Only the place and a whole-number topic id ride along; the Brain checks
+  // the id again and changes nothing until the owner taps Change.
+  if (route.open_brain === "topics") {
+    const left = { place: "topics", at: Date.now() };
+    if (Number.isInteger(route.topic_id) && route.topic_id >= 1) left.topic_id = route.topic_id;
+    try {
+      localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify(left));
+    } catch {
+      /* no storage: the Brain opens where it was, and the answer's own words say where */
+    }
+    setTimeout(() => {
+      try {
+        const now = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
+        if (now && now.at === left.at) localStorage.removeItem(BRAIN_PLACE_KEY);
+      } catch {
+        /* nothing to clear */
+      }
+    }, 65_000);
+    invoke("open_fix_place", { place: "brain" });
+    return;
+  }
+  if (route.open_brain !== FORGET_RANGE_PLACE) return;
   try {
     localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify({ place: FORGET_RANGE_PLACE, at: Date.now() }));
   } catch {
@@ -2810,6 +2909,10 @@ function consumeLine(rawLine) {
   if (line.startsWith(":")) {
     const status = /^:\s*jarvis-status\s+(\w+)/.exec(line);
     if (status) showWaitStatus(status[1]);
+    // `: jarvis-table <id>` (spending summaries): a table to fetch and draw
+    // under this answer. Not the answer's words, so never appended.
+    const tableId = tableIdFromLine(line);
+    if (tableId && spendingView) spendingView.arrived(tableId);
     return false;
   }
 
@@ -2835,6 +2938,10 @@ function consumeLine(rawLine) {
     appendDelta(line);
     return false;
   }
+
+  // A `stream: false` style body names its table as a top-level field.
+  const bodyTable = tableIdFromBody(chunk);
+  if (bodyTable && spendingView) spendingView.arrived(bodyTable);
 
   if (chunk.error) {
     // The PC's own failure (jarvis_agent's plain sentence, with a `code`):
@@ -3242,6 +3349,8 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   // any) says otherwise - the last answer's offer does not carry over.
   state.cloudOffer = null;
   paintCloudOffer();
+  // ...and the last answer's spending table goes too (it is not kept).
+  if (spendingView) spendingView.clear();
   spokenUpTo = 0;
   // "Stop" silences one turn, not every turn after it: a new question is
   // allowed to be answered out loud again. Cleared only past the guard
@@ -4994,6 +5103,9 @@ document.addEventListener("click", (event) => {
 listen("focus-input", () => {
   focusInput();
   refreshHealth();
+  // A spending table still on screen is asked for again: hidden if the PC
+  // has been locked meanwhile, drawn again once it is unlocked.
+  if (spendingView) spendingView.recheck();
   // Rust sizes the bar back to its short height every time it is shown; the
   // height this window last reported would then look current and nothing
   // would grow it again - a chat still in memory sat invisible under the
@@ -5006,6 +5118,8 @@ listen("focus-input", () => {
 
 // "Hide memory lists and chat history" came back on: the thread goes at once.
 listen("private-hidden", () => {
+  // The spending table goes at once, before anything else is decided.
+  if (spendingView) spendingView.hide();
   if (state.threadHidden) return;
   state.threadHidden = true;
   renderPreviousAnswer({ open: dom.previousAnswer.open });

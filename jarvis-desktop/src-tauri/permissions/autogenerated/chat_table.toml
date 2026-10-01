@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chat-table"
+description = "Enables the chat_table command without any pre-configured scope."
+commands.allow = ["chat_table"]
+
+[[permission]]
+identifier = "deny-chat-table"
+description = "Denies the chat_table command without any pre-configured scope."
+commands.deny = ["chat_table"]

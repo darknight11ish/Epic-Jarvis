@@ -228,7 +228,8 @@ pub fn get_link_state(app: AppHandle) -> LinkState {
 #[tauri::command]
 pub fn get_pending_approvals(app: AppHandle) -> serde_json::Value {
     let state = app.state::<StreamState>();
-    let items = state.pending();
+    let mut items = state.pending();
+    hide_private_cards(&mut items, crate::lock::private_hidden(&app));
     serde_json::json!({
         "count": items.len(),
         "items": items,
@@ -1183,12 +1184,67 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
         }
     }
 
+    let mut shown = items.clone();
+    hide_private_cards(&mut shown, crate::lock::private_hidden(app));
     crate::emit_all(
         app,
         crate::events::APPROVALS_CHANGED,
-        serde_json::json!({ "count": items.len(), "items": items, "available": available }),
+        serde_json::json!({ "count": shown.len(), "items": shown, "available": available }),
     );
     true
+}
+
+/// The gate action of an overnight tag suggestion (JARVIS-API section 104.3).
+const TAG_SUGGEST_ACTION: &str = "chat_tag_suggest";
+
+/// While the private lists are hidden ("Windows Hello for private answers"),
+/// a tag-suggestion card must not carry the chat's title: its `detail.text`,
+/// `prompt` and `summary` become the PC's `detail.text_hidden` (the same card
+/// with the `Chat:` line reading `A chat from 28 Sep, 14:05`), and
+/// `text_hidden` itself is dropped. A card with no usable `text_hidden`
+/// fails closed to no words at all (its title still says what it is). Every
+/// other card is untouched. `hidden` false leaves the list as it is.
+pub(crate) fn hide_private_cards(items: &mut [serde_json::Value], hidden: bool) {
+    if !hidden {
+        return;
+    }
+    for item in items.iter_mut() {
+        if item["action"].as_str() != Some(TAG_SUGGEST_ACTION) {
+            continue;
+        }
+        let detail = match &item["detail"] {
+            serde_json::Value::String(raw) => serde_json::from_str::<serde_json::Value>(raw).ok(),
+            other => Some(other.clone()),
+        };
+        let safe = detail
+            .as_ref()
+            .and_then(|d| d["text_hidden"].as_str())
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .unwrap_or("")
+            .to_string();
+        if let Some(obj) = item.as_object_mut() {
+            obj.insert("detail".into(), serde_json::json!({ "text": safe }));
+            for key in ["prompt", "summary"] {
+                if obj.contains_key(key) {
+                    obj.insert(key.into(), serde_json::json!(safe));
+                }
+            }
+        }
+    }
+}
+
+/// Sends the queue to every window again with the private cards hidden. Called
+/// the moment the private lists become hidden, so a suggestion card already on
+/// screen loses its chat title then, not at the next queue read.
+pub(crate) fn rebroadcast_pending(app: &AppHandle) {
+    let mut items = app.state::<StreamState>().pending();
+    hide_private_cards(&mut items, true);
+    crate::emit_all(
+        app,
+        crate::events::APPROVALS_CHANGED,
+        serde_json::json!({ "count": items.len(), "items": items, "available": true }),
+    );
 }
 
 /// The ids that were in the previous queue and are not in the new one: the
@@ -1432,6 +1488,42 @@ mod power_prime_tests {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_tag_suggestion_card_loses_the_chat_title_while_lists_are_hidden() {
+        let card = || {
+            serde_json::json!({
+                "id": "p1", "action": "chat_tag_suggest",
+                "prompt": "Chat: \"Roof budget\"",
+                "detail": {"text": "Chat: \"Roof budget\"", "text_hidden": "Chat: A chat from 28 Sep, 14:05", "what": "x"},
+            })
+        };
+        let other =
+            serde_json::json!({"id": "p2", "action": "send_email", "detail": {"text": "keep"}});
+        let mut same = vec![card(), other.clone()];
+        hide_private_cards(&mut same, false);
+        assert_eq!(same[0], card());
+        let mut hidden = vec![card(), other.clone()];
+        hide_private_cards(&mut hidden, true);
+        assert_eq!(
+            hidden[0]["detail"]["text"],
+            "Chat: A chat from 28 Sep, 14:05"
+        );
+        assert!(hidden[0]["detail"].get("text_hidden").is_none());
+        assert_eq!(hidden[0]["prompt"], "Chat: A chat from 28 Sep, 14:05");
+        assert!(!hidden[0].to_string().contains("Roof"));
+        assert_eq!(hidden[1], other);
+        // A detail that arrived as an unparsed string still hides the title;
+        // one with no hidden text fails closed to no words.
+        let mut odd = vec![
+            serde_json::json!({"action": "chat_tag_suggest", "detail": card()["detail"].to_string()}),
+            serde_json::json!({"action": "chat_tag_suggest", "detail": "Chat: \"Roof\" (cut off"}),
+        ];
+        hide_private_cards(&mut odd, true);
+        assert_eq!(odd[0]["detail"]["text"], "Chat: A chat from 28 Sep, 14:05");
+        assert_eq!(odd[1]["detail"]["text"], "");
+        assert!(!odd.iter().any(|i| i.to_string().contains("Roof")));
+    }
     use super::*;
 
     /// The toast's title is the one every window shows: the notice's, else

@@ -1,0 +1,770 @@
+{
+ "_note": "Made by the real backend/jarvis_retirement.py (handle_get / handle_post) with tools/gen_retirement_cases.py, for both apps' tests. Not shipped in the app.",
+ "defaults": {
+  "status": 200,
+  "body": {
+   "ok": true,
+   "available": true,
+   "title": "Retirement what-if",
+   "detail": "Type your own numbers and Jarvis plays out 10,000 made-up futures. The answer is a range, never one exact figure. It stays on screen only: never read aloud, never remembered, never sent to a web search or a chatbot, and not saved.",
+   "fields": [
+    {
+     "key": "current_age",
+     "label": "Your age now",
+     "unit": "years",
+     "kind": "age",
+     "min": 18,
+     "max": 100,
+     "default": null,
+     "placeholder": false,
+     "help": "A whole number.",
+     "required": true
+    },
+    {
+     "key": "retirement_age",
+     "label": "Age you stop working",
+     "unit": "years",
+     "kind": "age",
+     "min": 18,
+     "max": 100,
+     "default": null,
+     "placeholder": false,
+     "help": "A whole number. If you already have, type your age now.",
+     "required": true
+    },
+    {
+     "key": "plan_to_age",
+     "label": "Plan the money to age",
+     "unit": "years",
+     "kind": "age",
+     "min": 18,
+     "max": 110,
+     "default": 95,
+     "placeholder": true,
+     "help": "How long the money should last. Must be after the age you stop working.",
+     "required": false
+    },
+    {
+     "key": "savings",
+     "label": "Savings you have now",
+     "unit": "money",
+     "kind": "money",
+     "min": 0,
+     "max": 1000000000,
+     "default": null,
+     "placeholder": false,
+     "help": "In today's money. Type 0 if none.",
+     "required": true
+    },
+    {
+     "key": "yearly_saving",
+     "label": "You add each year until you stop working",
+     "unit": "money per year",
+     "kind": "money",
+     "min": 0,
+     "max": 1000000000,
+     "default": null,
+     "placeholder": false,
+     "help": "In today's money. Type 0 if none.",
+     "required": true
+    },
+    {
+     "key": "yearly_spending",
+     "label": "You spend each year in retirement",
+     "unit": "money per year",
+     "kind": "money",
+     "min": 0,
+     "max": 1000000000,
+     "default": null,
+     "placeholder": false,
+     "help": "In today's money.",
+     "required": true
+    },
+    {
+     "key": "other_income",
+     "label": "Pension or other income each year (optional)",
+     "unit": "money per year",
+     "kind": "money",
+     "min": 0,
+     "max": 1000000000,
+     "default": 0,
+     "placeholder": false,
+     "help": "In today's money. It only ever covers spending; extra is not saved.",
+     "required": false
+    },
+    {
+     "key": "other_income_start_age",
+     "label": "That income starts at age (optional)",
+     "unit": "years",
+     "kind": "age",
+     "min": 18,
+     "max": 110,
+     "default": null,
+     "placeholder": false,
+     "help": "Leave empty to start when you stop working.",
+     "required": false
+    },
+    {
+     "key": "expected_return_percent",
+     "label": "Expected yearly return before inflation",
+     "unit": "percent",
+     "kind": "percent",
+     "min": -5.0,
+     "max": 15.0,
+     "default": 6.0,
+     "placeholder": true,
+     "help": "A placeholder for a mix of stocks and bonds, not a forecast. 6% is about 3.4% a year after the placeholder 2.5% inflation. Change it.",
+     "required": false
+    },
+    {
+     "key": "volatility_percent",
+     "label": "How much yearly returns swing",
+     "unit": "percent",
+     "kind": "percent",
+     "min": 0.0,
+     "max": 40.0,
+     "default": 12.0,
+     "placeholder": true,
+     "help": "A placeholder for a mix of stocks and bonds, not a forecast. Change it.",
+     "required": false
+    },
+    {
+     "key": "inflation_percent",
+     "label": "Expected yearly inflation",
+     "unit": "percent",
+     "kind": "percent",
+     "min": 0.0,
+     "max": 15.0,
+     "default": 2.5,
+     "placeholder": true,
+     "help": "A placeholder, not a forecast. Change it.",
+     "required": false
+    }
+   ],
+   "paths": 10000,
+   "seed": 20260930,
+   "max_years": 90,
+   "disclaimer": "This is a simplified what-if, not financial advice.",
+   "placeholder_note": "The return, swing and inflation figures are placeholders for a mix of stocks and bonds, not a forecast. You can change them. Real life will differ.",
+   "todays_money": "All amounts are in today's money, so inflation is already taken out.",
+   "band_points": 1.0,
+   "words": {
+    "hidden": "Retirement what-if hidden",
+    "busy": "Another what-if is still being worked out. Try again in a moment.",
+    "too_slow": "That took too long to work out, so it was stopped. Try again."
+   },
+   "private": true,
+   "read_aloud": false,
+   "remember": false
+  }
+ },
+ "mixed": {
+  "status": 200,
+  "body": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "kind": "retirement",
+    "version": 1,
+    "title": "Retirement what-if",
+    "paths": 10000,
+    "seed": 20260930,
+    "used": [
+     {
+      "key": "current_age",
+      "label": "Your age now",
+      "value": "40",
+      "assumed": false
+     },
+     {
+      "key": "retirement_age",
+      "label": "Age you stop working",
+      "value": "65",
+      "assumed": false
+     },
+     {
+      "key": "plan_to_age",
+      "label": "Plan the money to age",
+      "value": "95",
+      "assumed": true
+     },
+     {
+      "key": "savings",
+      "label": "Savings you have now",
+      "value": "100,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_saving",
+      "label": "You add each year until you stop working",
+      "value": "12,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_spending",
+      "label": "You spend each year in retirement",
+      "value": "30,000",
+      "assumed": false
+     },
+     {
+      "key": "expected_return_percent",
+      "label": "Expected yearly return before inflation",
+      "value": "6%",
+      "assumed": true
+     },
+     {
+      "key": "volatility_percent",
+      "label": "How much yearly returns swing",
+      "value": "12%",
+      "assumed": true
+     },
+     {
+      "key": "inflation_percent",
+      "label": "Expected yearly inflation",
+      "value": "2.5%",
+      "assumed": true
+     },
+     {
+      "key": "paths",
+      "label": "Simulated futures",
+      "value": "10,000",
+      "assumed": false
+     },
+     {
+      "key": "seed",
+      "label": "Random seed (the same every time)",
+      "value": "20260930",
+      "assumed": false
+     }
+    ],
+    "todays_money": "All amounts are in today's money, so inflation is already taken out.",
+    "placeholder_note": "The return, swing and inflation figures are placeholders for a mix of stocks and bonds, not a forecast. You can change them. Real life will differ.",
+    "disclaimer": "This is a simplified what-if, not financial advice.",
+    "private": true,
+    "read_aloud": false,
+    "remember": false,
+    "words": {
+     "hidden": "Retirement what-if hidden"
+    },
+    "state": "mixed",
+    "reason": null,
+    "share": {
+     "per_100": 51,
+     "label": "about 51 of 100",
+     "all": false,
+     "none": false
+    },
+    "bands": {
+     "lower": {
+      "per_100": 31,
+      "label": "about 31 of 100",
+      "all": false,
+      "none": false,
+      "points": -1.0
+     },
+     "higher": {
+      "per_100": 71,
+      "label": "about 71 of 100",
+      "all": false,
+      "none": false,
+      "points": 1.0
+     }
+    },
+    "end_balance": {
+     "p10": 0,
+     "p50": 12000,
+     "p90": 1800000,
+     "age": 95,
+     "text": {
+      "p10": "0",
+      "p50": "12,000",
+      "p90": "1,800,000"
+     }
+    },
+    "poor_case": {
+     "lasts": false,
+     "age": 78
+    },
+    "runs_out_between": [
+     79,
+     88
+    ],
+    "middle_lasts_to": 95,
+    "summary": [
+     "In about 51 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 79 to 88.",
+     "If yearly returns are 1 point lower, that becomes about 31 of 100; 1 point higher, about 71 of 100.",
+     "In a poor case (1 in 10) the money runs out at about age 78.",
+     "The middle case leaves about 12,000 at age 95; a good case (1 in 10) about 1,800,000."
+    ],
+    "text": "In about 51 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 79 to 88. If yearly returns are 1 point lower, that becomes about 31 of 100; 1 point higher, about 71 of 100. In a poor case (1 in 10) the money runs out at about age 78. The middle case leaves about 12,000 at age 95; a good case (1 in 10) about 1,800,000. This is a simplified what-if, not financial advice."
+   }
+  }
+ },
+ "never_runs_out": {
+  "status": 200,
+  "body": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "kind": "retirement",
+    "version": 1,
+    "title": "Retirement what-if",
+    "paths": 10000,
+    "seed": 20260930,
+    "used": [
+     {
+      "key": "current_age",
+      "label": "Your age now",
+      "value": "40",
+      "assumed": false
+     },
+     {
+      "key": "retirement_age",
+      "label": "Age you stop working",
+      "value": "65",
+      "assumed": false
+     },
+     {
+      "key": "plan_to_age",
+      "label": "Plan the money to age",
+      "value": "95",
+      "assumed": true
+     },
+     {
+      "key": "savings",
+      "label": "Savings you have now",
+      "value": "100,000,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_saving",
+      "label": "You add each year until you stop working",
+      "value": "12,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_spending",
+      "label": "You spend each year in retirement",
+      "value": "30,000",
+      "assumed": false
+     },
+     {
+      "key": "expected_return_percent",
+      "label": "Expected yearly return before inflation",
+      "value": "6%",
+      "assumed": true
+     },
+     {
+      "key": "volatility_percent",
+      "label": "How much yearly returns swing",
+      "value": "12%",
+      "assumed": true
+     },
+     {
+      "key": "inflation_percent",
+      "label": "Expected yearly inflation",
+      "value": "2.5%",
+      "assumed": true
+     },
+     {
+      "key": "paths",
+      "label": "Simulated futures",
+      "value": "10,000",
+      "assumed": false
+     },
+     {
+      "key": "seed",
+      "label": "Random seed (the same every time)",
+      "value": "20260930",
+      "assumed": false
+     }
+    ],
+    "todays_money": "All amounts are in today's money, so inflation is already taken out.",
+    "placeholder_note": "The return, swing and inflation figures are placeholders for a mix of stocks and bonds, not a forecast. You can change them. Real life will differ.",
+    "disclaimer": "This is a simplified what-if, not financial advice.",
+    "private": true,
+    "read_aloud": false,
+    "remember": false,
+    "words": {
+     "hidden": "Retirement what-if hidden"
+    },
+    "state": "never_runs_out",
+    "reason": null,
+    "share": {
+     "per_100": 99,
+     "label": "more than 99 of 100",
+     "all": true,
+     "none": false
+    },
+    "bands": {
+     "lower": {
+      "per_100": 99,
+      "label": "more than 99 of 100",
+      "all": true,
+      "none": false,
+      "points": -1.0
+     },
+     "higher": {
+      "per_100": 99,
+      "label": "more than 99 of 100",
+      "all": true,
+      "none": false,
+      "points": 1.0
+     }
+    },
+    "end_balance": {
+     "p10": 140000000,
+     "p50": 440000000,
+     "p90": 1300000000,
+     "age": 95,
+     "text": {
+      "p10": "140,000,000",
+      "p50": "440,000,000",
+      "p90": "1,300,000,000"
+     }
+    },
+    "poor_case": {
+     "lasts": true,
+     "age": null
+    },
+    "runs_out_between": null,
+    "middle_lasts_to": 95,
+    "summary": [
+     "In all 10,000 simulated futures your money lasts to age 95. That does not mean it is guaranteed.",
+     "If yearly returns are 1 point lower, that becomes more than 99 of 100; 1 point higher, more than 99 of 100.",
+     "Even in a poor case (1 in 10) it lasts, leaving about 140,000,000 at age 95.",
+     "The middle case leaves about 440,000,000 at age 95; a good case (1 in 10) about 1,300,000,000."
+    ],
+    "text": "In all 10,000 simulated futures your money lasts to age 95. That does not mean it is guaranteed. If yearly returns are 1 point lower, that becomes more than 99 of 100; 1 point higher, more than 99 of 100. Even in a poor case (1 in 10) it lasts, leaving about 140,000,000 at age 95. The middle case leaves about 440,000,000 at age 95; a good case (1 in 10) about 1,300,000,000. This is a simplified what-if, not financial advice."
+   }
+  }
+ },
+ "always_runs_out": {
+  "status": 200,
+  "body": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "kind": "retirement",
+    "version": 1,
+    "title": "Retirement what-if",
+    "paths": 10000,
+    "seed": 20260930,
+    "used": [
+     {
+      "key": "current_age",
+      "label": "Your age now",
+      "value": "40",
+      "assumed": false
+     },
+     {
+      "key": "retirement_age",
+      "label": "Age you stop working",
+      "value": "65",
+      "assumed": false
+     },
+     {
+      "key": "plan_to_age",
+      "label": "Plan the money to age",
+      "value": "95",
+      "assumed": true
+     },
+     {
+      "key": "savings",
+      "label": "Savings you have now",
+      "value": "1,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_saving",
+      "label": "You add each year until you stop working",
+      "value": "0",
+      "assumed": false
+     },
+     {
+      "key": "yearly_spending",
+      "label": "You spend each year in retirement",
+      "value": "90,000",
+      "assumed": false
+     },
+     {
+      "key": "expected_return_percent",
+      "label": "Expected yearly return before inflation",
+      "value": "6%",
+      "assumed": true
+     },
+     {
+      "key": "volatility_percent",
+      "label": "How much yearly returns swing",
+      "value": "12%",
+      "assumed": true
+     },
+     {
+      "key": "inflation_percent",
+      "label": "Expected yearly inflation",
+      "value": "2.5%",
+      "assumed": true
+     },
+     {
+      "key": "paths",
+      "label": "Simulated futures",
+      "value": "10,000",
+      "assumed": false
+     },
+     {
+      "key": "seed",
+      "label": "Random seed (the same every time)",
+      "value": "20260930",
+      "assumed": false
+     }
+    ],
+    "todays_money": "All amounts are in today's money, so inflation is already taken out.",
+    "placeholder_note": "The return, swing and inflation figures are placeholders for a mix of stocks and bonds, not a forecast. You can change them. Real life will differ.",
+    "disclaimer": "This is a simplified what-if, not financial advice.",
+    "private": true,
+    "read_aloud": false,
+    "remember": false,
+    "words": {
+     "hidden": "Retirement what-if hidden"
+    },
+    "state": "always_runs_out",
+    "reason": null,
+    "share": {
+     "per_100": 0,
+     "label": "fewer than 1 of 100",
+     "all": false,
+     "none": true
+    },
+    "bands": {
+     "lower": {
+      "per_100": 0,
+      "label": "fewer than 1 of 100",
+      "all": false,
+      "none": true,
+      "points": -1.0
+     },
+     "higher": {
+      "per_100": 0,
+      "label": "fewer than 1 of 100",
+      "all": false,
+      "none": true,
+      "points": 1.0
+     }
+    },
+    "end_balance": {
+     "p10": 0,
+     "p50": 0,
+     "p90": 0,
+     "age": 95,
+     "text": {
+      "p10": "0",
+      "p50": "0",
+      "p90": "0"
+     }
+    },
+    "poor_case": {
+     "lasts": false,
+     "age": 65
+    },
+    "runs_out_between": [
+     65,
+     65
+    ],
+    "middle_lasts_to": 65,
+    "summary": [
+     "In none of the 10,000 simulated futures does your money last to age 95; it runs out at about age 65.",
+     "If yearly returns are 1 point lower, that becomes fewer than 1 of 100; 1 point higher, fewer than 1 of 100.",
+     "In a poor case (1 in 10) the money runs out at about age 65.",
+     "In the middle case the money runs out at about age 65."
+    ],
+    "text": "In none of the 10,000 simulated futures does your money last to age 95; it runs out at about age 65. If yearly returns are 1 point lower, that becomes fewer than 1 of 100; 1 point higher, fewer than 1 of 100. In a poor case (1 in 10) the money runs out at about age 65. In the middle case the money runs out at about age 65. This is a simplified what-if, not financial advice."
+   }
+  }
+ },
+ "not_enough_to_say": {
+  "status": 200,
+  "body": {
+   "ok": true,
+   "result": {
+    "ok": true,
+    "kind": "retirement",
+    "version": 1,
+    "title": "Retirement what-if",
+    "paths": 10000,
+    "seed": 20260930,
+    "used": [
+     {
+      "key": "current_age",
+      "label": "Your age now",
+      "value": "40",
+      "assumed": false
+     },
+     {
+      "key": "retirement_age",
+      "label": "Age you stop working",
+      "value": "65",
+      "assumed": false
+     },
+     {
+      "key": "plan_to_age",
+      "label": "Plan the money to age",
+      "value": "95",
+      "assumed": true
+     },
+     {
+      "key": "savings",
+      "label": "Savings you have now",
+      "value": "100,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_saving",
+      "label": "You add each year until you stop working",
+      "value": "12,000",
+      "assumed": false
+     },
+     {
+      "key": "yearly_spending",
+      "label": "You spend each year in retirement",
+      "value": "0",
+      "assumed": false
+     },
+     {
+      "key": "expected_return_percent",
+      "label": "Expected yearly return before inflation",
+      "value": "6%",
+      "assumed": true
+     },
+     {
+      "key": "volatility_percent",
+      "label": "How much yearly returns swing",
+      "value": "12%",
+      "assumed": true
+     },
+     {
+      "key": "inflation_percent",
+      "label": "Expected yearly inflation",
+      "value": "2.5%",
+      "assumed": true
+     },
+     {
+      "key": "paths",
+      "label": "Simulated futures",
+      "value": "10,000",
+      "assumed": false
+     },
+     {
+      "key": "seed",
+      "label": "Random seed (the same every time)",
+      "value": "20260930",
+      "assumed": false
+     }
+    ],
+    "todays_money": "All amounts are in today's money, so inflation is already taken out.",
+    "placeholder_note": "The return, swing and inflation figures are placeholders for a mix of stocks and bonds, not a forecast. You can change them. Real life will differ.",
+    "disclaimer": "This is a simplified what-if, not financial advice.",
+    "private": true,
+    "read_aloud": false,
+    "remember": false,
+    "words": {
+     "hidden": "Retirement what-if hidden"
+    },
+    "state": "not_enough_to_say",
+    "reason": "no_spending",
+    "share": null,
+    "bands": null,
+    "end_balance": null,
+    "poor_case": null,
+    "runs_out_between": null,
+    "middle_lasts_to": null,
+    "summary": [
+     "There is nothing to test: with no spending in retirement the money cannot run out. Type what you expect to spend each year."
+    ],
+    "text": "There is nothing to test: with no spending in retirement the money cannot run out. Type what you expect to spend each year. This is a simplified what-if, not financial advice."
+   }
+  }
+ },
+ "errors": {
+  "missing": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "missing",
+    "field": "current_age",
+    "message": "Please type in \"Your age now\". I will not guess it."
+   }
+  },
+  "bad_number": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "bad_number",
+    "field": "current_age",
+    "message": "Your age now must be a whole number from 18 to 100."
+   }
+  },
+  "negative": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "negative",
+    "field": "savings",
+    "message": "Savings you have now cannot be negative."
+   }
+  },
+  "out_of_range": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "out_of_range",
+    "field": "current_age",
+    "message": "Your age now must be a whole number from 18 to 100."
+   }
+  },
+  "plan_not_after": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "plan_not_after",
+    "field": "plan_to_age",
+    "message": "The age to plan the money to must be after the age you stop working (and after your age now)."
+   }
+  },
+  "too_many_years": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "too_many_years",
+    "field": "plan_to_age",
+    "message": "That is more than 90 years from your age now. Pick a nearer age."
+   }
+  },
+  "unknown_field": {
+   "status": 400,
+   "body": {
+    "ok": false,
+    "error": "unknown_field",
+    "field": "zzz",
+    "message": "That is not one of the what-if's fields."
+   }
+  }
+ },
+ "busy": {
+  "status": 429,
+  "body": {
+   "ok": false,
+   "error": "busy",
+   "field": "",
+   "message": "Another what-if is still being worked out. Try again in a moment."
+  }
+ },
+ "too_slow": {
+  "status": 503,
+  "body": {
+   "ok": false,
+   "error": "too_slow",
+   "field": "",
+   "message": "That took too long to work out, so it was stopped. Try again."
+  }
+ }
+}

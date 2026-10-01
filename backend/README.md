@@ -107,7 +107,7 @@ on a throwaway copy instead.
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
 | `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. Since 2026-09-29 its sound block also serves `POST /api/voice/voices/sample` ("Hear it": one fixed line in a named built-in voice, changes nothing) and needs `jarvis_kokoro.py` (Kokoro v1.0, voices by name) - "Kokoro v1.0 voices, saved by name", at the very end. |
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
-| `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them (`provenance`, `conversation_id`, `device`, and since 2026-09-25 `interrupted` - the voice flow's cut-off sentence), and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
+| `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them (`provenance`, `conversation_id`, `device`, and since 2026-09-25 `interrupted` - the voice flow's cut-off sentence), and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). **Chat tags (2026-09-30, `docs/CHAT-TAGS-DESIGN.md`, JARVIS-API §99):** the same file also keeps the owner's tags - `GET/POST /api/history/tags`, `POST /api/history/tag`, `GET /api/history?tag=`; a sealed tag registry in `meta`, a plain `tag_id` column on each chat, no card, and it works while history is off (only the key is needed). Tested by `test_chat_tags.py`. **Fork from here (2026-09-30, JARVIS-API §110):** `POST /api/history/fork {"id", "upto"}` copies the first turns of a kept chat into a new "Fork of ..." chat (re-sealed under the new id, tag and outside-text marks kept, its own learning hush so nothing is learned twice, never a crisis, support, chatbot or comparison chat, no card, works with history off); every conversation row copy now reads one column list (`CONV_COLS`). Tested by `test_chat_fork.py`. Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
 | `memory-erase.patch` | `jarvis_hud.py` | **"Erase the words"** (the owner's decision, 2026-09-24). Adds `POST /api/memory/erase {"id", "also_delete_conversation"}`: ONE fact's words wiped for good - its text, its word-search entry, its meaning vector, the copies in the review queue, and the old bytes in `memory.db` and `memory.db-wal` - while its row and dates stay. `also_delete_conversation` (2026-09-27, off by default): also deletes the one chat this fact came from, in `jarvis_chat_log.py`. Same checks as forget, no card. The work is in the shipped `rebuilt/jarvis_memory.py` (`erase()`, `handle_erase()`). See its own section. |
 | `past-recall.patch` | `jarvis_hud.py` | **Questions about the past get the old facts, labelled** (memory wave 1, 2026-09-24). "Where did I live before?" also recalls the matching retired facts, each ending "(no longer true since <date>)"; every other question gets exactly the search it got before. One line of the chat turn's recall. After `auto-learn.patch`. Needs `jarvis_past.py` - without it the old search runs. See "Memory wave 1", near the end. |
@@ -164,6 +164,14 @@ on a throwaway copy instead.
 | `screen-picture.patch` | `jarvis_gate.py` | **Picture mode for "Look at this" and "Watch with me" on a one-card PC** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 96.1). Two hunks, both right after `inbox-tidy.patch`'s own last lines: `screen_picture_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only), and gets its `_RISK` line (`"yes", "local"` - a small picture model on this PC's processor in a separate copy of Ollama that only this PC can reach; secrets blacked out first; nothing saved or sent anywhere; the owner downloads the model, not the card; off again is instant). Goes last in the list, after `screen.patch`. Needs `jarvis_screen_picture.py` copied in; the routes are `jarvis_screen.py`'s, so no `jarvis_hud.py` hunk. See "Picture mode for the screen", at the very end. |
 | `browser-engine.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The headless browser, Obscura** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 97). Three hunks: in `jarvis_gate.py`, `obscura_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only) and gets its `_RISK` line (`"yes", "outbound"` - a new program on this PC and a new way onto the web, so a risky approval; stealth is on; each step is still its own card; it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises; it cannot open your own network; off again is instant) - both right after `screen-picture.patch`'s own lines - and in `jarvis_hud.py` ONE install block right after `screen.patch`'s, the last before `_loopback_companion`. Goes last in the list. Needs `jarvis_obscura.py` and `jarvis_browser_engine.py` copied in. See "The headless browser (Obscura)", at the very end. |
 | `form-review.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Fill in the form, show me, then send it"** (the owner's decision of 2026-09-30; `docs/FORM-REVIEW-DESIGN.md`). Three hunks: in `jarvis_gate.py`, `browser_form_submit` joins "acts only on tier ask" and gets its `_RISK` line (`"no", "outbound"` - what is typed goes to the site named on the card and cannot be taken back, so a risky approval; Jarvis clicks only after this card and only if the page is still as it looked in the picture; the picture goes to your own devices only and is not saved) - both right after `browser-engine.patch`'s own lines - and in `jarvis_hud.py` ONE install block right after browser-engine's, the last before `_loopback_companion`. Goes last in the list. Needs `jarvis_form_review.py` copied in and `browser_form_submit = "ask"` in `jarvis-framework.toml` (the rebuilt one has it). A plan's last click may be marked `final`: `jarvis_browser_control.run()` fills the earlier steps, stops, takes ONE picture of the page (visible browser only, in memory only, 1600 px / q70 / 1.5 MiB, dropped when the card is decided or after 10 minutes) and raises this second card with the site, every word typed and the picture id in `detail.picture`; the picture is served by `GET /api/form-review/picture?id=` while the card waits. Refused outright on a turn that read outside text. No hook, a denial, or a page that changed after the picture: nothing is sent. |
+| `quiz.patch` | `jarvis_hud.py` | **"Quiz me on a text"** (the owner's decision of 2026-09-30; `docs/STUDY-FROM-TEXT-DESIGN.md`, `docs/JARVIS-API.md` section 98). ONE install block, `jarvis_quiz.install(Handler, ...)`, right after `browser-engine.patch`'s own (the last one before `_loopback_companion`), so it goes last. Answers `POST /api/quiz` and `GET /api/quiz/<id>`, `POST .../answer`, `.../finish`, `.../stop`: the local model writes questions from a pasted text and marks typed answers against the source passage only. No card; quizzes live in memory only (3 open, 60 minutes); nothing is saved, learned or written to chat history. `grader_verified` stays false until `eval_quiz_grader.py` has been run against the real model on the owner's PC (apply-patches.ps1 ships it and `quiz_grader_cases.json` into the backend folder; one PowerShell line, with the real backend folder in the first quotes - it writes `quiz_grader_results.json` in that same folder and opens it: `$b = 'C:\PASTE\YOUR\BACKEND\FOLDER'; py -3 "$b\eval_quiz_grader.py" --backend-dir $b; explorer $b`) and `quiz_grader_results.json` shows 80% right and no injection winning. Needs `jarvis_quiz.py` (and `quiz_grader_cases.json`, `eval_quiz_grader.py` for the measurement); without it, or on any error, the banner says "quiz NOT ON" and the routes are not there. See `test_quiz.py`. |
+| `decks.patch` | `jarvis_hud.py` | **"Review decks"** (the owner's decision of 2026-09-30; `docs/QUIZ-DECKS-DESIGN.md`, `docs/JARVIS-API.md` section 102). ONE install block, `jarvis_decks.install(Handler, ...)`, right after `quiz.patch`'s own (so it goes after it, last before `_loopback_companion`). Answers `GET`/`POST /api/decks`, `POST /api/decks/settings`, `POST /api/decks/<id>/act`, `GET /api/decks/<id>/cards`, `POST /api/decks/<id>/cards/<cid>/act`, `GET /api/review` and `POST /api/review/reveal`\|`rate`\|`more`, and hands the quiz the function that keeps chosen questions in a deck (`jarvis_quiz.configure(keep=...)`; the quiz module itself imports no deck code). A finished quiz's `POST /api/quiz/<id>/finish` may carry a `keep` body: the server takes each question's prompt and passage from its own open quiz, the app sends only the question number and the owner's words for the back, all or nothing, and the quiz stays open on any failure. Cards are **sealed** (AES-256-GCM, the chat-history scheme, its own Credential Manager key "Jarvis Backend/study decks key") in `study.db`; no key or no `cryptography` means nothing is kept, with the reason in words. **py-fsrs 6.3.2** (pinned in `requirements.txt` and `requirements.lock`, never its optimizer/torch extra) works out when a card comes back; the owner rates each card themselves and **review calls no model**. New cards a day: 5 (0-20); a run shows at most 20 cards, "Do 10 more" adds 10. One quiet scheduler kind, `review` (`jarvis_schedule.KIND_MODULES` imports `jarvis_decks`), exists only while a deck does and gives the "N cards ready" line under Coming up; no card, no notification. The quiz also gained **typed Spanish practice** (`mode: "spanish"`; blanks cut and marked by code, translations and sentence endings marked by the local model, model-written answer keys labelled "Answer key written by the model"). No card anywhere in this feature. **The decks are in the locked backup** (`study.db` and its key travel under the same recovery code; a restore reopens them). Needs `jarvis_decks.py` and the `fsrs` package (`py -3 -m pip install -r backend\requirements.txt`, re-run `apply-patches.ps1` after updating): without `fsrs` the decks screen says so and refuses to keep anything or to make a deck (nothing is kept, no card can be rated), and if `jarvis_decks.py` itself cannot be loaded the banner says "decks NOT ON" and the routes are not there. See `test_decks.py` (and the Spanish parts of `test_quiz.py`); `decks_fsrs_golden.json` is made by `tools/gen_decks_golden.py`. |
+| `spending.patch` | `jarvis_hud.py` | **"Spending summaries"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part A, `docs/JARVIS-API.md` section 100). ONE install block, `jarvis_spending.install(Handler, ...)`, right after `decks.patch`'s own, answering `GET /api/spending`, `GET`/`POST /api/spending/profile`, `POST /api/spending/profile/delete`, `/categories`, `/suggest` (this PC only) and `GET /api/chat/table?id=<id>`. No card and no gate line: the `my_spending` tool in `jarvis_agent.py` is decided under `file_read`'s action, and it reads a file in a folder the owner already listed. Needs `jarvis_spending.py` and `jarvis_money_parse.py`; without them, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Spending summaries", at the very end. |
+| `retirement.patch` | `jarvis_hud.py` | **"Retirement what-if"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part B, `docs/JARVIS-API.md` section 103). ONE install block, `jarvis_retirement.install(Handler, ...)`, right after `spending.patch`'s own, answering `GET /api/retirement/defaults` and `POST /api/retirement/run` on any paired device. A pure calculation on numbers the owner typed: no file, no network, nothing stored, no card and no gate line. Needs `jarvis_retirement.py` (plain Python, no numpy); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Retirement what-if", at the very end. |
+| `progress.patch` | `jarvis_hud.py` | **"Activity heatmap and balance chart"** (the owner's decision of 2026-09-30; `docs/GOALS-PROGRESS-DESIGN.md` part C, `docs/JARVIS-API.md` section 105). ONE install block, `jarvis_progress.install(Handler, ...)`, right after `retirement.patch`'s own, answering `GET /api/progress/activity`, `GET` and `POST /api/progress/balance`. Reads the owner's ticked goal steps and logged numbers; the only thing kept is the owner's choice of chart areas (a small table in `projects.db`; no card, no gate line). Health and money numbers only shade a day and are never named. NOT a model tool: a test fails if any other module mentions it. Needs `jarvis_progress.py` (and `jarvis_projects.py`, `jarvis_goals.py`); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Activity heatmap and balance chart", at the very end. |
+| `topics.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Topic controls"** (the owner's decision of 2026-09-30; `docs/TOPIC-CONTROLS-DESIGN.md`, `docs/JARVIS-API.md` section 107). Three hunks: in `jarvis_gate.py` the new action `topic_loosen` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `browser-engine.patch`'s own last lines); in `jarvis_hud.py` ONE install block right after `progress.patch`'s, and ONE line after `auto-learn.patch`'s `injected_sensitive` line that puts `topics_left_out` (a count) in the chat route's header. Needs `jarvis_topics.py` and the rebuilt `jarvis_memory.py` (its three tables and the `topics=` search filter). A mode per topic - Learn and use / Use but don't learn / Learn but don't use / Off; turning a private topic back on is ONE card. With every topic on "Learn and use" nothing changes. See "Topic controls", at the very end. |
+| `referee.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Referee suggestions" and "Study helper"** (the owner's decisions of 2026-09-30; `docs/JARVIS-API.md` section 108, `docs/STUDY-FROM-TEXT-DESIGN.md` section 13). Two more switches on the second graphics card, both built OFF until the card is installed and measured. THREE hunks: in `jarvis_gate.py` the new action `referee_tick` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `topics.patch`'s own last lines, so it goes after it); in `jarvis_hud.py` ONE block right after `topics.patch`'s, which installs the quiet hourly "This looks done - tick it?" look and hands the quiz its model call (`jarvis_second_card.wire_study()`), so the quiz uses the second card while "Study helper" is on. It adds no route and no tool. Needs `jarvis_referee.py` (and the rebuilt `jarvis-framework.toml`'s `referee_tick = "ask"` line). Both switches are rows in `GET /api/second-card`; turning either on is the ordinary second-card card. Referee suggestions only proposes: the owner's tap ticks a goal step. See "Referee suggestions and Study helper", at the very end. |
+| `tag-suggest.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Suggest tags overnight"** (the owner's decision of 2026-09-30; `docs/JARVIS-API.md` section 104, `docs/OVERNIGHT-TAGS-DESIGN.md`; up to 3 cards a night). TWO gate hunks: `chat_tags_suggest_on` and `chat_tag_suggest` join the "acts only on tier ask" set and get their `_RISK` lines (right after `referee.patch`'s own, so it goes after it); ONE `jarvis_hud.py` block right after `referee.patch`'s that keeps the quiet hourly `tag_suggest` look on the one scheduler in step with the switch. It adds no tool; the routes `GET`/`POST /api/history/tags/suggest` and `POST /api/history/mark` are named in `chat-history.patch` and answered by `jarvis_chat_log.py`. Needs `jarvis_tag_suggest.py` (and the rebuilt `jarvis-framework.toml`'s two `ask` lines). Off by default; turning it on is one card; each suggested tag is one more card and is filed only on a tap. The local model reads only the owner's own first six messages of an untagged, ordinary chat that never read outside text (ARCHITECTURE section 5). Tests: `test_tag_suggest.py`, `test_chat_marks.py` (the "New section here" divider, JARVIS-API section 106, is in `jarvis_chat_log.py` and `chat-history.patch`). |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -17908,4 +17916,256 @@ To stop it: the switch (instant), "Stop everything", or delete the folder
 python3 backend/test_obscura.py
 python3 backend/test_browser_engine.py
 node jarvis-desktop/tests/browser-engine.mjs
+```
+
+# Goal step locks and the finish-time range (2026-09-30, JARVIS-API section 101)
+
+Build queue item 3 (`docs/GOALS-PROGRESS-DESIGN.md` parts A and B). **No patch
+changed** - `goals.patch` and `projects.patch` only install routes, and the
+routes are the same. What changed is whole modules:
+
+- `jarvis_goals.py` (shipped whole, changed): a step now has a stable `id`,
+  `done_at`, `needs` (up to 3 step ids) and `measure` (a benchmark that meets
+  the step when it reaches its target - never ticks it). A tick on a locked
+  step is refused (HTTP 409); cycles, unknown ids and more than 3 needs are
+  refused on save by a plain depth-first walk; the weekly check-in skips
+  locked steps, says "Waiting on ..." and may add one neutral pace line
+  (non-private benchmarks only). Old plans load with defaults; ids are
+  written the next time they are saved.
+- `jarvis_forecast.py` (**new**, shipped whole, pure - no file, network, model,
+  random numbers or numpy): "about N to M weeks", six separate answers, "never
+  reached" its own answer (the argmax pitfall). It is a separate module, not
+  more lines in the 2000-line `jarvis_projects.py`, because goals reads the
+  same answer and it can be tested with no database; the cost is one line in
+  `apply-patches.ps1`'s `$SHIPPED` and one in `_where.SHIPPED`.
+- `jarvis_projects.py` (shipped whole, one small change): the benchmark read
+  with `?points=N` gains `forecast`.
+
+Owner step: none beyond `apply-patches.ps1` (it copies `jarvis_forecast.py`).
+Not checked: nothing ran on the owner's PC with real numbers; both apps'
+screens (rows with lock states, the dashed range band) are separate work
+against the "Slice contract (frozen)" in `docs/GOALS-PROGRESS-DESIGN.md`.
+
+Test it:
+
+```
+python3 backend/test_forecast.py
+python3 backend/test_goals.py
+python3 backend/test_projects.py
+python3 tools/gen_projects_cases.py --check
+```
+
+## Spending summaries (2026-09-30, JARVIS-API section 100)
+
+"How much did I spend on food last month?", added up from a bank CSV or Excel
+export the owner dropped into a folder Jarvis may look in. Every number comes
+from plain code; the model only writes one sentence round the table, and the
+sentence is thrown away unless every number in it is in the table.
+
+What is here:
+
+- `jarvis_money_parse.py` (shipped whole): money in whole cents with `Decimal`
+  (`1,234.56`, `1.234,56`, `(45.10)`, `45.10-`, `CR`/`DR`), dates that are never
+  guessed (a column with both parts 12 or under is left for the owner), the
+  header-row finder and the column guesser. Shared with the retirement what-if
+  to come. No `float` anywhere in it (`test_spending.py` checks the code tokens).
+- `jarvis_spending.py` (shipped whole): reading a file (CSV in this process;
+  Excel in a `python -I` child with the allowlisted environment, macros refused),
+  layouts (`spending-profiles.json`, keyed by a hash of the header, choices only),
+  categories (`spending-categories.json`, a 12-name starter list), adding up,
+  overlapping exports (the larger count of any one file, never the sum), hiding
+  (`jarvis_secrets` plus any run of 8 or more digits), the sentence check, the
+  routes and the table kept in memory for two hours.
+- `spending.patch`: the one install block. `jarvis_agent.py` (shipped whole) holds
+  the `my_spending` tool: offered only while a folder is listed, refused after
+  outside text or on a pasted or shared message, one table an answer, and the
+  model's words held back until code has checked them.
+- `fixtures/spending/` (invented files) and `expected.json` (worked out by hand).
+
+Owner steps: `apply-patches.ps1` (it also installs the pinned `openpyxl==3.1.5` from
+`requirements.txt`, which Excel files need), then add `my_spending` to `[tools].enabled`
+in the settings file (`[tools]` section of `jarvis-framework.toml`; it is opt-in, like
+`my_files`, and stays a settings-file tool - there is no switch for it in the PC app),
+then run `apply-patches.ps1` once more if it was already run before the change, restart
+Jarvis and ask in chat. It needs a folder on "Folders Jarvis may look in". The first
+time a bank file's layout is new, Jarvis says so and the columns are checked once
+on the PC (Settings, Spending - the desktop's screen is separate work against the
+"Slice contract (frozen)" in `docs/FINANCE-DESIGN.md`).
+
+Not checked, said plainly: no real bank export was read, and no real model wrote a
+sentence round a table (the tests script the model); Excel reading ran only on
+Linux with openpyxl 3.1.5; how the two apps draw the table is separate work.
+
+Test it:
+
+```
+python3 backend/test_spending.py
+python3 tools/gen_spending_cases.py --check
+python3 backend/test_agent.py
+python3 backend/test_shipped_modules.py
+python3 tools/gen_reach_cases.py --check
+python3 tools/gen_private_aloud_cases.py --check
+```
+
+## Retirement what-if (2026-09-30, JARVIS-API section 103)
+
+The owner types their own numbers (age now, age they stop working, savings, what they add each
+year, what they spend each year in retirement, optional pension) and the code plays out 10,000
+made-up futures. The answer is only ever a range: "in about 78 of 100 simulated futures your
+money lasts to age 95", with "1 point lower / higher" answers and a poor / middle / good case.
+The sentence "This is a simplified what-if, not financial advice." is added by code every time.
+
+What is here:
+
+- `jarvis_retirement.py` (shipped whole): plain Python (no numpy, no scipy, no monteplan: the
+  backend still supports Python 3.10 and starts without numpy), a fixed random seed so the same
+  numbers always give the same answer, every input checked and bounded, the routes, and the
+  model-callable door (`tool_call`, wired into `jarvis_agent.py` as `retirement_whatif`; section
+  103.6: the chat shows code-written text only, and the tool is opt-in like `my_spending`: add
+  `retirement_whatif` to `[tools].enabled`).
+- `retirement.patch`: the one install block.
+- `test_retirement.py` (174 checks): paper-worked cases, every bound, "more savings never lowers
+  the share", the argmax pitfall, the middle-case wording, the code-written chat text, no leaks, the
+  time cap, the one-run lock, the patch. `test_agent_retirement_wiring.py` (66): the tool in the chat
+  loop. `tools/gen_retirement_cases.py` writes both apps' fixture.
+
+Owner steps: `apply-patches.ps1`. Nothing to switch on. The forms in the two apps are separate
+work against the "Retirement contract (frozen)" in `docs/FINANCE-DESIGN.md`.
+
+Not checked, said plainly: the default return (6%), spread and inflation are placeholders for a mix of
+stocks and bonds, not researched; the simulation agreed with an independent numpy version on 5
+parameter sets but was not compared with monteplan; no real model has called the chat tool; nothing
+was run on Windows or the phone.
+
+Test it:
+
+```
+python3 backend/test_retirement.py
+python3 backend/test_shipped_modules.py
+python3 backend/test_patch_history.py
+```
+
+## Activity heatmap and balance chart (2026-09-30, JARVIS-API section 105)
+
+Two small pictures for Brain -> Projects: 12 weeks of days shaded by what was done (steps ticked and
+numbers logged), and a radar of 3 to 8 areas the owner picks, each against its own target. No streak,
+no percentage, no red, no overall score; every number and sentence comes from code.
+
+What is here:
+
+- `jarvis_progress.py` (shipped whole): the counting (local days, daylight-saving safe), the chart
+  maths, the routes and `install()`. Reads `projects.db` and `goals.db` through their own classes.
+  Imports nothing that reaches a model, a speaker or the network.
+- `jarvis_projects.py` gained the `balance_axes` table, an index on `results (at)` and small read
+  methods; deleting a benchmark or a project removes its chart areas.
+- `progress.patch`: the one install block.
+- `test_progress.py` (120 checks), `tools/gen_progress_cases.py` (`progress-cases.json` for both apps,
+  with the reference grid and radar geometry).
+
+Health and money: a private number shades its day and is never named; the answer says
+`keep_on_screen` so the apps hide the picture under "Hide memory lists and chat history". Nothing here
+is a model tool, is spoken, searched or sent (`test_progress.py` checks that no backend module reaches
+it).
+
+Owner steps: `apply-patches.ps1`. Nothing to switch on. The screens in the two apps are separate work
+against the "Progress contract (frozen)" in `docs/GOALS-PROGRESS-DESIGN.md`.
+
+Not checked, said plainly: no app draws either picture yet; nothing ran on the owner's PC (its time zone
+and daylight saving are tested by passing a zone in).
+
+Test it:
+
+```
+python3 backend/test_progress.py
+python3 tools/gen_progress_cases.py --check
+python3 backend/test_shipped_modules.py
+python3 backend/test_patch_history.py
+```
+
+## Topic controls (2026-09-30, JARVIS-API section 107)
+
+The owner asked to "adjust the brain of Jarvis to include or exclude different topics". Every saved fact
+sits under one topic (Work, Health, Money, Family, Hobbies, Projects, Ideas, the owner's own, or
+Unsorted), and each topic has a mode: **Learn and use**, **Use, but don't learn**, **Learn, but don't
+use**, **Off**. Nothing is deleted by any of them.
+
+What is here:
+
+- `jarvis_topics.py` (shipped whole): the topic list and its limits, the sorting (sensitive patterns, then
+  English keywords, then - only if the owner turns it on - the local model as a suggestion), the modes and
+  the one card, the routes and `install()`, the labelling of facts already saved.
+- `rebuilt/jarvis_memory.py`: three tables (`topics`, `fact_topics`, `topic_skips`) and
+  `MemoryStore.search(topics="use")` - the default - which keeps a topic that may not be USED out of the
+  candidate lists themselves. `topics="all"` is for the readers that only protect the owner.
+- `jarvis_intake.py` (drops a sure "don't learn" fact before the queue), `jarvis_auto_learn.py` (checks
+  again at save time; an unsure fact becomes a card with a reason; `Remember:` on such a topic asks
+  first), `jarvis_places.py`, `jarvis_tidy.py`, `jarvis_briefing.py`, `jarvis_entities.py` (each filters
+  what it shows), `jarvis_chatbot.py` and `jarvis_search.py` (`topics="all"`: they only protect),
+  `jarvis_quick.py` and `jarvis_settings_registry.py` ("stop using my work topic", by voice or chat),
+  `jarvis_schedule.py` (one quiet hourly `topic_sort` step).
+- `topics.patch`; `topic_loosen` in `jarvis-framework.toml`, `jarvis_asks_first.py` ("What asks first")
+  and `jarvis_card_words.py`.
+- Tests: `test_topics.py`, `test_topics_leaks.py` (the guard: fails the build when a module that reads
+  facts is not on its list), the `topic` cases in `eval/learner_cases.jsonl`, `eval_topics.py` (part of
+  the memory self-test: parity, leaks, sorting). `tools/gen_topics_cases.py` writes `topics-cases.json`
+  for both apps; `tools/topic_accuracy.py` is the sorting-accuracy script for the PC, over
+  `backend/topic_cases/`.
+
+Said plainly:
+
+- **`memory.db` is a plain SQLite file.** A topic's name sits in the clear beside the fact text. It is
+  hidden under "Hide memory lists and chat history" in the apps, never logged.
+- **How well the sorting guesses on real facts is not measured.** English only. A fact wrongly filed under
+  a topic that is on can still reach an answer; a fact wrongly filed under one that is off is left out.
+  That is why the check list exists and why an unchecked label already counts.
+- Nothing ran on the owner's PC. The real embedding model and the real learner model were not used.
+
+Owner steps: `apply-patches.ps1`. Nothing to switch on: every topic starts on "Learn and use". The
+screens (Brain -> Memory -> Topics in both apps) are separate work against the "Slice contract (frozen)"
+in `docs/TOPIC-CONTROLS-DESIGN.md`.
+
+Test it:
+
+```
+python3 backend/test_topics.py
+python3 backend/test_topics_leaks.py
+python3 tools/gen_topics_cases.py --check
+python3 backend/eval_memory.py --words-only --sizes 0,100,1000
+python3 backend/test_shipped_modules.py
+```
+
+## Referee suggestions and Study helper (2026-09-30, JARVIS-API section 108)
+
+Two more switches on the second graphics card, built OFF until the card is installed and measured
+(CLAUDE.md: nothing that depends on the 12 GB card is switched on before then). Both are rows in the
+`features` list of `GET /api/second-card`, both follow the five older switches exactly: needs a capable
+second card and says so plainly on a one-card PC, turning ON is one approval card (`second_card_enable`,
+tier `ask`) that names the card, turning OFF is at once.
+
+- **Study helper** (`study`): the quiz's model call (`jarvis_quiz.configure(call=...)`) goes to the
+  second card's model while the switch is working. `jarvis_second_card.study_call()` is that call and
+  `wire_study()` hands it over at startup (`referee.patch`); `jarvis_quiz.py` still imports nothing
+  from the second-card module. Off, or with the lane down or silent, the quiz runs exactly as before.
+  The marks stay "Jarvis's guess" until the grader test has been run on the second card's model too.
+  Using the bigger model (`qwen3:14b`) for marking is a follow-up, not built.
+- **Referee suggestions** (`referee`): `jarvis_referee.py`. When an open, unlocked step of an active
+  goal follows a number that has reached its target (`jarvis_forecast.better_reached`), it raises ONE
+  card "This looks done - tick it?" (`referee_tick`, tier `ask`, reversible, local). Yes ticks that
+  step through `Goals.mark_step`, exactly as the owner's own tick; the ordinary untick undoes it. It is
+  propose-only: no route, no tool, no model, no test run, no benchmark result written. At most three
+  cards in 24 hours, none while one waits, none in a focus session, Quiet, Standby or mid-chat, and a
+  "no" is heard for 1, 7, then 30 days (`jarvis_backoff`). A health or money number is marked
+  keep-on-screen. Runs as the quiet hourly kind `referee` on the one scheduler. It loads no model today
+  (`model_free`), so it starts no second Ollama.
+
+Test it:
+
+```
+python3 backend/test_referee.py
+python3 backend/test_second_card.py
+python3 backend/test_backoff_rule.py
+python3 backend/test_shipped_modules.py
+python3 tools/gen_second_card_cases.py --check
+python3 tools/gen_asks_first_cases.py --check
+python3 tools/gen_card_words_cases.py --check
 ```

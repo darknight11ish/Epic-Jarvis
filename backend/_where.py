@@ -44,9 +44,27 @@ USAGE
 Importing this module also puts `BACKEND` on `sys.path`, so `import
 jarvis_memory` works without each test repeating it.
 """
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
+
+# Python < 3.10 compatibility: Path.write_text did not accept newline
+try:
+    Path("").write_text("", newline="\n")
+except TypeError:
+    _orig_write_text = Path.write_text
+
+    def _compat_write_text(self, data, encoding=None, errors=None, newline=None):
+        if newline is not None:
+            with self.open(mode="w", encoding=encoding, errors=errors, newline=newline) as f:
+                return f.write(data)
+        return _orig_write_text(self, data, encoding=encoding, errors=errors)
+
+    Path.write_text = _compat_write_text
+except Exception:
+    pass
 
 _HERE = Path(__file__).resolve().parent
 
@@ -287,6 +305,9 @@ SHIPPED = (
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
     "jarvis_projects.py",
+    # "about N to M weeks": the pure finish-time range jarvis_projects.py
+    # and jarvis_goals.py read (2026-09-30, JARVIS-API section 101)
+    "jarvis_forecast.py",
     # ... and its Gemini website adapter: a visible browser window,
     # stopping at any captcha or sign-in page (chatbot.patch gives
     # the gate its _RISK line)
@@ -366,6 +387,43 @@ SHIPPED = (
     # docs/PAIRING-DESIGN.md phase 1): the check on every request's key,
     # the registry of key hashes, the pairing session and its card
     "jarvis_devices.py",
+    # "Quiz me on a text" (2026-09-30; quiz.patch): questions from a pasted
+    # text, marked by the local model, in memory only.
+    "jarvis_quiz.py",
+    # ... and the script that checks the quiz's marking against the real local
+    # model (quiz_grader_cases.json is copied beside it, apply-patches.ps1 step 3b)
+    "eval_quiz_grader.py",
+    # "Review decks" (2026-09-30; decks.patch): kept quiz questions, spaced
+    # review with py-fsrs, sealed in study.db.
+    "jarvis_decks.py",
+    # "Spending summaries" (2026-09-30; spending.patch): totals from a bank
+    # export, and the money/date reader it and the retirement what-if share.
+    "jarvis_spending.py",
+    "jarvis_money_parse.py",
+    # "Retirement what-if" (2026-09-30; retirement.patch): a simplified
+    # what-if from numbers the owner typed, answered only as ranges.
+    "jarvis_retirement.py",
+    # "Activity heatmap and balance chart" (2026-09-30; progress.patch): the
+    # heatmap and the owner's balance chart. Not reachable from any model.
+    "jarvis_progress.py",
+    # "Topic controls" (2026-09-30; topics.patch): a mode per topic (learn /
+    # use), the sorting, the one card. The search filter is in the rebuilt
+    # jarvis_memory.py; test_topics_leaks.py lists every reader of facts.
+    "jarvis_topics.py",
+    # "Referee suggestions" (2026-09-30; referee.patch): the propose-only
+    # "This looks done - tick it?" card. No route, no tool, no model.
+    "jarvis_referee.py",
+    # "Suggest tags overnight" (2026-09-30; tag-suggest.patch): cards only.
+    "jarvis_tag_suggest.py",
+    # "Quiz me on a YouTube video" (2026-09-30; youtube.patch): one card per
+    # link, caption text only, quizzed on as outside text.
+    "jarvis_youtube.py",
+    # "Grade this better" (2026-09-30; quiz-cloud.patch): one card per request,
+    # the whole message shown, the cheapest set-up cloud service; never private.
+    "jarvis_quiz_cloud.py",
+    # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
+    # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
+    "jarvis_menus.py",
 )
 
 

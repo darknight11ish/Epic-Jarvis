@@ -703,7 +703,10 @@ def t_the_shipped_settings_and_the_case_table_agree():
     never-loosened list - ships asking (feasibility audit step 0.3,
     2026-09-26: it shipped "auto")."""
     import ast
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     toml = tomllib.loads((REPO / "backend" / "rebuilt" / "jarvis-framework.toml")
                          .read_text(encoding="utf-8"))
     tiers = toml["autonomy"]["tiers"]

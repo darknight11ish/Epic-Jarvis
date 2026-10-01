@@ -173,6 +173,7 @@ object Schedule {
 
     /** The standby schedule, both apps' words (coming-up.js). */
     const val STANDBY_TITLE = "Standby schedule"
+    const val REVIEW_JOB_TITLE = "Card review"
     const val STANDBY_DETAIL =
         "Jarvis goes on standby at night and wakes in the morning - but it wakes only if the " +
             "schedule put it on standby: if you chose Standby yourself, it stays on until you choose " +
@@ -267,6 +268,8 @@ object Schedule {
         "goal_checkin" -> "goal check-in"
         NEXT_TIME -> "next time"
         TODAY_CARD -> "today card"
+        // Review decks' own daily job (backend jarvis_decks.KIND): named plainly.
+        "review" -> "card review"
         else -> kind
     }
 
@@ -522,6 +525,8 @@ object Schedule {
     /** A row's title: the owner's words, or what kind of thing it is. */
     fun titleOf(job: Job): String {
         if (job.kind == "standby") return STANDBY_TITLE
+        // Review decks' daily job has no words of its own; its note is the meta line.
+        if (job.kind == "review") return REVIEW_JOB_TITLE
         val words = if (job.hidden) HIDDEN_TEXT else job.text
         if (job.kind == "timer") {
             return if (words.isNotEmpty()) "$words timer" else lengthWords(job.duration ?: 0.0) + " timer"
@@ -616,6 +621,8 @@ object Schedule {
      */
     fun actionsOf(job: Job): List<String> = when {
         job.kind == "goal_checkin" -> emptyList()
+        // The review decks' daily job: Decks owns it and removes it with the last deck.
+        job.kind == "review" -> emptyList()
         job.kind == "todo" -> listOf("done", "delete")
         job.state == "waiting" -> listOf("delete")
         // A reminder for next time has no time of its own to pause.

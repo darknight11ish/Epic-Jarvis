@@ -1661,6 +1661,52 @@ the rule blocking it"):
   stealth lives in its own files (`backend/jarvis_browser_engine*.py`), not
   in the chatbot driver's.
 
+Decided 2026-09-30, after checking an outside list of learning repos
+(`docs/STUDY-FROM-TEXT-DESIGN.md`): the owner said **any rule can change if
+the change is worth it**, and chose:
+- **A quiz on text the owner pastes or opens**, marked by the local model,
+  in a temporary chat, first.
+- **Reading a YouTube video's captions is allowed, one card per link**
+  (caption text only). This reverses the 2026-09-26 "left out" decision; the
+  owner accepts that it breaks YouTube's terms and may be blocked.
+- **Grading is local first, cloud on request:** a card lists exactly what goes,
+  bending rule 1 for that one quiz. Nothing is built yet.
+
+Also decided 2026-09-30: **study features that need the second graphics card
+are built switched off until the card is installed and measured** - a "Study
+helper" switch (quiz writing and marking on the second card, possibly with the
+bigger local model) and, later, multilingual speech-to-text for spoken
+practice. Video/audio download from YouTube stays refused; a second card does
+not change that (`docs/STUDY-FROM-TEXT-DESIGN.md` section 9).
+
+Decided 2026-09-30: **chat tags** (`docs/CHAT-TAGS-DESIGN.md`) - History gets
+collapsible coloured sections for tagged chats (a starter set the owner can
+rename and add to; one tag per chat), and the owner can ask Jarvis to label the
+current chat (applies at once, no card) or an older one (Jarvis shows matches and
+the owner taps the chat; it never guesses). **No automatic tagging**, and no
+tree index or clustering of past chats (ChatIndex, BERTopic and the others were
+checked and turned down).
+
+Decided 2026-09-30, the owner ticked every item in `docs/BUILD-QUEUE-2026-09-30.md`
+and said any rule can be changed if worth it: **spending summaries from bank
+CSV/Excel files** (bank connections such as Plaid stay refused; numbers by code,
+screen only), **review decks with py-fsrs and typed Spanish practice** as quiz
+modes, **goal step locks, a forecast range and step completion dates**, a
+**retirement what-if calculator** ("not financial advice"), **overnight suggested
+tags on cards only** (off by default; this reverses the earlier "no automatic
+tagging" answer to "no tagging without a tap"), an **activity heatmap and
+owner-defined balance chart** (no streaks, no wilting), a **Galaxy facts panel**
+and a manual **"new section here"** marker. Also decided: the tldraw canvas,
+React Flow, Datasette, Evidence, BERTopic and the other chat-clustering repos
+stay refused; the Galaxy is not swapped for a library.
+
+Standing instruction, 2026-09-30: **never open a pull request into `main` (or any
+branch) unless the owner asks for one.** (The owner then asked for exactly one, at the end of
+the 2026-09-30 batch, to be merged once its checks pass: see docs/BUILD-QUEUE-2026-09-30.md,
+"Final sequence".) Work is committed and pushed to the
+session's own branch only. This overrides the earlier plans in this file to open
+"one pull request" per batch: those wait until the owner says so.
+
 Decided 2026-09-30, the owner's answers on filling in forms and booking
 appointments (`docs/FORM-REVIEW-DESIGN.md`; Gemini's browser-use, LaVague,
 OmniParser, UI-TARS, Midscene, Stagehand, Agent-S and steel-browser suggestions

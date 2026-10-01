@@ -666,6 +666,48 @@ MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
   magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
   (PSFL) and charset-normalizer (MIT).
 
+SPENDING SUMMARIES (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+openpyxl, MIT - https://openpyxl.readthedocs.io
+  Used directly by backend/jarvis_spending.py, in a separate program (python
+  -I, no passwords in its environment), to read the values of a bank export
+  saved as Excel (.xlsx; formulas are never run, macros refused). Pinned in
+  backend/requirements.txt as openpyxl==3.1.5, hash-locked in
+  backend/requirements.lock; not shipped here and none of its code is copied.
+  It was already installed through MarkItDown (named above); it is named on
+  its own so a later MarkItDown change cannot remove it unnoticed. The MIT
+  text is the one given for browser-use above.
+
+REVIEW DECKS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+py-fsrs (the `fsrs` package, version 6.3.2), MIT - https://github.com/open-spaced-repetition/py-fsrs
+  Used by backend/jarvis_decks.py to work out when a kept quiz question comes
+  back (the FSRS spaced-repetition schedule, default parameters, no optimizer).
+  Installed on the PC by pip from backend/requirements.txt (fsrs==6.3.2, never
+  its [optimizer] extra, which needs torch); not shipped here and none of its
+  code is copied. Its wheel's metadata (fsrs-6.3.2-py3-none-any.whl, PyPI,
+  released 2026-08-09) says "License: MIT License" and carries a LICENSE file;
+  the MIT text is the one given for browser-use above, with the copyright
+  line its LICENSE file gives: Copyright (c) 2022 Open Spaced Repetition. It brings, also by pip,
+  typing-extensions (PSF-2.0), named as its installed metadata names it.
+
+YOUTUBE CAPTIONS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+youtube-transcript-api (version 1.2.4), MIT - https://github.com/jdepoix/youtube-transcript-api
+  Used by backend/jarvis_youtube.py to fetch a video's CAPTION TEXT (the
+  subtitles) after the owner's own approval card for that one link. Installed
+  on the PC by pip from backend/requirements.txt (youtube-transcript-api==1.2.4);
+  not shipped here and none of its code is copied. Its wheel's metadata
+  (youtube_transcript_api-1.2.4-py3-none-any.whl, PyPI, released 2026-01-29)
+  says "License: MIT" and carries a LICENSE file with the copyright line
+  Copyright (c) 2018 Jonas Depoix; the MIT text is the one given for
+  browser-use above. It is an unofficial reader: using it breaks YouTube's
+  terms of service and YouTube may block it (the owner accepted this on
+  2026-09-30; the approval card says so every time). Jarvis uses it for caption
+  text only - never a video or audio download, no cookies, no proxy service.
+  It brings, also by pip, requests (Apache-2.0, already installed) and
+  defusedxml (PSF-2.0, already installed through MarkItDown).
+
 THE FACES' SHAPE MATHS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Inigo Quilez - https://iquilezles.org/articles/distfunctions/ and

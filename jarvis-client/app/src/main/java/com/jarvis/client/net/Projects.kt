@@ -153,7 +153,51 @@ object Projects {
         val notRunnableWhy: String,
         /** The chart's points, oldest first - only from a benchmark's own read. */
         val points: List<Point>?,
+        /** The finish-time range (section 101.4); null on a list read or from an older PC. */
+        val forecast: Forecast? = null,
     )
+
+    // ------------------------------------------------------ the forecast ----
+
+    /** A dated value on the dashed line or a band corner: seconds since 1970, and the number. */
+    data class ForePoint(val at: Double, val value: Double)
+
+    /** The dashed straight line; [clipped] = it goes on past the drawing's edge. */
+    data class ForeLine(val from: ForePoint, val to: ForePoint, val clipped: Boolean)
+
+    /** One far corner of the band; [open] (slow end only) = there is no upper end. */
+    data class ForeEnd(val at: Double, val value: Double, val clipped: Boolean, val open: Boolean)
+
+    data class ForeBand(val from: ForePoint, val fast: ForeEnd, val slow: ForeEnd)
+
+    /**
+     * `benchmark.forecast` as the PC sends it (section 101.4). [words] are
+     * shown as sent, never rebuilt. [line] and [band] are set only for
+     * "range" and "open_ended". "never" is its own state: nothing is drawn
+     * and no number of weeks is ever made up for it.
+     */
+    data class Forecast(
+        val state: String,
+        val words: String,
+        val basis: String,
+        val lowWeeks: Int?,
+        val highWeeks: Int?,
+        val overTwoYears: Boolean,
+        val why: String,
+        val used: Int,
+        val needed: Int,
+        val firstAt: Double?,
+        val lastAt: Double?,
+        val horizonAt: Double?,
+        val crossLowAt: Double?,
+        val crossAt: Double?,
+        val crossHighAt: Double?,
+        val line: ForeLine?,
+        val band: ForeBand?,
+    ) {
+        /** Whether there is a dashed line and a band to draw (range / open_ended, both present). */
+        val drawable: Boolean get() = (state == "range" || state == "open_ended") && line != null && band != null
+    }
 
     data class Folder(val path: String, val name: String, val listed: Boolean, val said: String)
 
@@ -236,6 +280,72 @@ object Projects {
             command = o.text("command").orEmpty(),
             notRunnableWhy = o.text("not_runnable_why").orEmpty(),
             points = points,
+            forecast = parseForecast(o.obj("forecast")),
+        )
+    }
+
+    private fun forePoint(o: JsonObject?): ForePoint? {
+        if (o == null) return null
+        val at = o.number("at") ?: return null
+        val value = o.number("value") ?: return null
+        return ForePoint(at, value)
+    }
+
+    /**
+     * `forecast`, read with defaults; unknown keys are ignored. Null when
+     * there is none (an older PC sends none). Blank words keep the forecast: it is
+     * still drawn and only the words line is left out.
+     * A `line` or `band` with a missing corner is dropped whole, never
+     * half-drawn.
+     */
+    fun parseForecast(o: JsonObject?): Forecast? {
+        if (o == null) return null
+        val state = o.text("state")?.takeIf { it.isNotBlank() } ?: return null
+        // Blank words do not drop the forecast: it is still drawn, and no words line shows.
+        val words = o.text("words").orEmpty()
+        val drawn = state == "range" || state == "open_ended"
+        val line = if (!drawn) null else o.obj("line")?.let { l ->
+            val from = forePoint(l.obj("from"))
+            val to = forePoint(l.obj("to"))
+            if (from != null && to != null) ForeLine(from, to, l.flag("clipped")) else null
+        }
+        val band = if (!drawn) null else o.obj("band")?.let { b ->
+            val from = forePoint(b.obj("from"))
+            val fast = b.obj("fast")
+            val slow = b.obj("slow")
+            val fa = fast?.number("at")
+            val fv = fast?.number("value")
+            val sa = slow?.number("at")
+            val sv = slow?.number("value")
+            if (from != null && fast != null && slow != null && fa != null && fv != null && sa != null && sv != null) {
+                ForeBand(
+                    from,
+                    ForeEnd(fa, fv, fast.flag("clipped"), false),
+                    ForeEnd(sa, sv, slow.flag("clipped"), slow.flag("open")),
+                )
+            } else {
+                null
+            }
+        }
+        return Forecast(
+            state = state,
+            words = words,
+            basis = o.text("basis").orEmpty(),
+            lowWeeks = o.whole("low_weeks"),
+            highWeeks = o.whole("high_weeks"),
+            overTwoYears = o.flag("over_two_years"),
+            why = o.text("why").orEmpty(),
+            used = o.whole("used") ?: 0,
+            needed = o.whole("needed") ?: 0,
+            firstAt = o.number("first_at"),
+            lastAt = o.number("last_at"),
+            horizonAt = o.number("horizon_at"),
+            crossLowAt = o.number("cross_low_at"),
+            crossAt = o.number("cross_at"),
+            crossHighAt = o.number("cross_high_at"),
+            // A line without its band (or the reverse) is not drawn at all.
+            line = if (line != null && band != null) line else null,
+            band = if (line != null && band != null) band else null,
         )
     }
 
@@ -375,12 +485,108 @@ object Projects {
         return placed to t
     }
 
-    /** "3 numbers. Latest: 12 km." - the chart's words for TalkBack. */
+    /**
+     * "3 numbers. Latest: 12 km." - the chart's words for TalkBack - and,
+     * when the PC sent a forecast, a space and its `words`:
+     * "5 numbers. Latest: 76 min. About 6 weeks at this pace." An empty
+     * chart says only that it is empty.
+     */
     fun chartSummary(b: Bench): String {
         val count = if (b.results > 0) b.results else b.points?.size ?: 0
         val latest = b.latest ?: return w("chart_empty")
         if (count == 0) return w("chart_empty")
-        return fill(w("chart_summary"), "count" to count, "latest" to withUnit(latest.value, b.unit))
+        val base = fill(w("chart_summary"), "count" to count, "latest" to withUnit(latest.value, b.unit))
+        val words = b.forecast?.words
+        return if (words.isNullOrBlank()) base else "$base $words"
+    }
+
+    /** Where a chart with a forecast has its edges: x in seconds, y in the chart's numbers. */
+    data class Extent(val xLo: Double, val xHi: Double, val yLo: Double, val yHi: Double)
+
+    /**
+     * The edges once a forecast is drawn - the same as tools/gen_projects_cases.py's
+     * `forecast_extent`: x runs from the first number to the farthest of the
+     * last number, the dashed line's end and the band's two ends; y is
+     * [chartScale] over the numbers, the target and, with a line, the line's
+     * two values and the band's three corners. A forecast with nothing to
+     * draw (or none) changes nothing.
+     */
+    fun forecastExtent(points: List<Point>, f: Forecast?, target: Double?): Extent {
+        val xs = points.map { it.at }.toMutableList()
+        val ys = points.map { it.value }.toMutableList()
+        val line = f?.line
+        val band = f?.band
+        if (f != null && f.drawable && line != null && band != null) {
+            xs += listOf(line.to.at, band.fast.at, band.slow.at)
+            ys += listOf(line.from.value, line.to.value, band.from.value, band.fast.value, band.slow.value)
+        }
+        val (yLo, yHi) = chartScale(ys, target)
+        return if (xs.isEmpty()) Extent(0.0, 1.0, yLo, yHi) else Extent(xs.min(), xs.max(), yLo, yHi)
+    }
+
+    /** A forecast chart's drawing as numbers (all in a box of the given size, y downward). */
+    data class ForecastDrawing(
+        val points: List<Placed>,
+        val target: Float?,
+        val lineFrom: Placed,
+        val lineTo: Placed,
+        val bandFrom: Placed,
+        val bandFast: Placed,
+        val bandSlow: Placed,
+        /** The bracket on the target level, x from..to; null unless both ends exist (and there is a target). */
+        val bracketFrom: Float?,
+        val bracketTo: Float?,
+        /** Small arrows pointing right at ends that go on past the edge (or, for the slow end, are open). */
+        val arrowLine: Boolean,
+        val arrowFast: Boolean,
+        val arrowSlow: Boolean,
+    )
+
+    /**
+     * Places the numbers, the dashed line, the band, the bracket and the
+     * arrows by [forecastExtent]. Null when [f] has nothing to draw: the
+     * chart is then the plain [chartGeometry] one and only the words show.
+     */
+    fun forecastGeometry(
+        points: List<Point>,
+        f: Forecast?,
+        target: Double?,
+        width: Float,
+        height: Float,
+        inset: Float = 8f,
+    ): ForecastDrawing? {
+        val line = f?.line ?: return null
+        val band = f.band ?: return null
+        if (!f.drawable) return null
+        val e = forecastExtent(points, f, target)
+        val w = width - inset * 2
+        val h = height - inset * 2
+        val span = e.xHi - e.xLo
+        val rise = e.yHi - e.yLo
+        fun x(at: Double): Float {
+            val v = if (span > 0) inset + ((at - e.xLo) / span).toFloat() * w else inset + w / 2
+            return min(max(v, 0f), width)
+        }
+        fun y(v: Double): Float = (inset + h - ((v - e.yLo) / rise) * h).toFloat()
+        fun at(p: ForePoint) = Placed(x(p.at), y(p.value))
+        val targetY = target?.takeIf { it.isFinite() }?.let { y(it) }
+        val low = f.crossLowAt
+        val high = f.crossHighAt
+        val bracket = targetY != null && low != null && high != null
+        return ForecastDrawing(
+            points = points.map { Placed(x(it.at), y(it.value)) },
+            target = targetY,
+            lineFrom = at(line.from),
+            lineTo = at(line.to),
+            bandFrom = at(band.from),
+            bandFast = Placed(x(band.fast.at), y(band.fast.value)),
+            bandSlow = Placed(x(band.slow.at), y(band.slow.value)),
+            bracketFrom = if (bracket) x(low!!) else null,
+            bracketTo = if (bracket) x(high!!) else null,
+            arrowLine = line.clipped,
+            arrowFast = band.fast.clipped,
+            arrowSlow = band.slow.clipped || band.slow.open,
+        )
     }
 
     /** What the private-mark button does, or null: never while a card waits. */

@@ -310,6 +310,94 @@ happen, write down which line and what you saw instead.
   the step and your mail provider if anything is off.
 - [ ] **Backup:** Settings → Backups → make one now. A locked file appears
   in the folder you chose, and the recovery code is shown once.
+- [ ] **Review decks and Spanish practice** (added 2026-09-30). **First run
+  `apply-patches.ps1` again** (Round 1's step 1): it copies in the new
+  `jarvis_decks.py` and `decks.patch`, and it installs **one new pinned
+  package, py-fsrs 6.3.2** (from `backend\requirements.txt`; it works out when
+  a card comes back, and Jarvis never installs its optimizer, which needs
+  torch). Without that package the decks screen says so in a red line and
+  refuses to keep anything. Then: Brain, Work, **Quiz me on a text**, answer a
+  question or two, press **Keep these questions**, write the answer in your own
+  words and press **Keep and finish** (for a Spanish quiz the sheet also shows
+  the line saying Jarvis cannot recognise a crisis message written in Spanish).
+  **My study decks** now lists the deck; press **Review** (a deck with cards
+  ready), **Show answer**, then one of the four buttons. **Review all decks**
+  (PC) and **Review** over the list (phone) do every deck in one go, and the
+  phone can now rename a deck (**Edit**). Under **Coming up** the daily job is
+  called **Card review** and has no Pause or Delete. **The decks are in the
+  locked backup**, with their own key, under the same recovery code; a restore
+  brings the decks back and the app reopens them (**nobody has restored one on
+  a real PC yet - tell us if it does not**).
+- [ ] **Retirement what-if** (PC: Brain → Work → Retirement; phone: Brain →
+  Retirement). Type: age now 40, stop working at 65, savings 100000, add 12000
+  a year, spend 30000, then press **Work it out**. You get a range ("in about
+  N of 100 simulated futures ..."), the line "This is a simplified what-if,
+  not financial advice." right under it, and a "What I used" list. The return
+  box starts at **6** and is marked "assumed" (a placeholder for a mix of
+  stocks and bonds, not a forecast); the pension box shows a grey **0**.
+  Turn on "Hide memory lists and chat history": the card shows only
+  "Retirement what-if hidden" and a **Show** button, and nothing you typed
+  comes back. Nothing is read aloud or saved. **In chat** (after you add
+  `"retirement_whatif"` to `[tools].enabled`): type "what if I retire at 65
+  with 100,000 saved, adding 12,000 a year and spending 30,000 a year?". The
+  answer is Jarvis's own fixed text with that same disclaimer, not a chatty
+  sentence, and no approval card appears. Leave out a number ("what if I retire
+  at 65?") and Jarvis asks for it instead of guessing. Ask by voice: the answer
+  is written on screen and the numbers are not read out. Ask it right after
+  Jarvis read an email in the same chat: it refuses and tells you to type the
+  numbers in a new message.
+
+- [ ] **Spending summaries** (chat, and PC: Settings → Spending). Spending is a
+  settings-file tool, not a switch in the PC app: add `"my_spending"` to
+  `[tools].enabled` in `jarvis-framework.toml` (the `[tools]` section, beside
+  `my_files`), run `apply-patches.ps1` once (it installs `openpyxl 3.1.5`, which Excel
+  files need), restart Jarvis, and make sure a folder is listed under "Folders Jarvis may
+  look in". Drop a bank export (CSV or Excel) in it and ask "how much did I spend on food
+  last month?". The first time, Jarvis says the columns must be checked on the PC:
+  Settings → Spending → pick the file → **Check these columns**. The box now says how
+  many rows count as money out and as money in **before** you save; if that looks wrong
+  the box warns you. **Check the columns again** never deletes the layout: it opens the
+  same box with your saved choices and Save writes over it. Ask a second question in the
+  same chat and then a web search: the search asks first ("Jarvis looked at your bank
+  spending earlier in this conversation"). Jarvis's one sentence only ever uses the totals
+  and the rows it names; if it cannot make a table it shows a plain sentence and no
+  figures.
+
+- [ ] **Progress: the activity map and the balance chart** (PC: Brain →
+  Projects, at the top; phone: Brain → Projects, "Progress"). **First run
+  `apply-patches.ps1` again** (Round 1's step 1): this round changed
+  `jarvis_projects.py` and `jarvis_goals.py` as well as the new
+  `jarvis_progress.py`, and the script copies them all in. Then: (1) tick a
+  goal's step and log a number on a benchmark - today's square gets darker; the
+  five shades are clearly different from each other in every theme (try
+  Daylight); a quiet day is just an outline. (2) In **Choose what to show**, pick
+  3 to 8 numbers or goals and press **Save the chart**: both apps say **Chart
+  saved.**; the chart keeps the order it had and a newly ticked area goes last.
+  (3) Stop a goal that is on the chart: it leaves the chart, and steps you had
+  ticked in it leave the map. (4) Turn on "Hide memory lists and chat history"
+  with a health or money number on the chart: each picture shows only the
+  "Hidden while memory lists and chat history are hidden." line and a **Show**
+  button, there is no **Choose what to show** button, and nothing can be saved.
+  On the PC with App lock on, Show says to unlock Jarvis first. (5) Phone: pick an
+  area whose value is long ("1234567.5 of 2000000 kg") - its label wraps and stays
+  inside the picture. Nothing here is read aloud or sent anywhere.
+
+- [ ] **Study helper and Referee suggestions (only once the 12 GB card is in;
+  both are OFF and cannot be turned on before, and say why).** (1) Settings →
+  Second graphics card (or the phone's Brain) now lists seven switches. With one
+  card, **Study helper** and **Referee suggestions** say "Needs a capable second
+  graphics card". (2) With the card in, turn on **Study helper**: one card naming
+  the card and `qwen3:8b`. Paste a text into "Quiz me on a text": the questions
+  come from the second card (`ollama ps` on port 11435 shows the model) and the
+  marks still say "Jarvis's guess" until you run
+  `OLLAMA_URL=http://127.0.0.1:11435 JARVIS_LOCAL_MODEL=qwen3:8b python backend\eval_quiz_grader.py`.
+  Turn it off: the quiz works as before. (3) Turn on **Referee suggestions**: one
+  card, no model, no second Ollama starts. Make a goal step follow a number
+  (Projects), set a target, then log a number that reaches it: within the hour a
+  card "This looks done - tick it?" shows the numbers and says "a suggestion from a
+  number, not a check". Say no: nothing is ticked and it does not ask again for a
+  day. Say yes: the step is ticked; untick it in Goals. For a weight or money
+  number the card says it is private. **Nobody has seen either card on a real PC.**
 
 ### Measurements only your PC can make
 

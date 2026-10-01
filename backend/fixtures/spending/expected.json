@@ -1,0 +1,103 @@
+{
+ "_about": "Worked out BY HAND with a calculator from the fixture files next to this one (invented rows, no real data), before jarvis_spending.py was run on them. Each entry: category -> [net spent, rows]; refunds are already taken off their category. test_spending.py fails on a difference of even one cent.",
+ "a_signed": {
+  "all": {
+   "categories": {"Food and groceries": ["70.40", 2], "Eating out": ["7.00", 2], "Transport": ["12.25", 1], "Subscriptions": ["9.99", 1]},
+   "uncategorised": ["20.00", 1], "total": ["119.64", 7],
+   "refunds": "5.10", "income": "2,000.00", "transfers_out": "500.00", "transfers_in": null,
+   "months": {"2026-03": "89.24", "2026-04": "30.40"}, "skipped": 0, "counted_once": 0
+  },
+  "2026-03": {
+   "categories": {"Food and groceries": ["40.00", 1], "Eating out": ["7.00", 2], "Transport": ["12.25", 1], "Subscriptions": ["9.99", 1]},
+   "uncategorised": ["20.00", 1], "total": ["89.24", 6],
+   "refunds": "5.10", "income": "2,000.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-03": "89.24"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "b_debit_credit": {
+  "all": {
+   "categories": {"Food and groceries": ["52.30", 1], "Eating out": ["4.20", 1], "Health": ["8.75", 1], "Home and bills": ["60.00", 1]},
+   "uncategorised": ["0.00", 0], "total": ["125.25", 4],
+   "refunds": null, "income": "350.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-03": "65.25", "2026-04": "60.00"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "c_thousands": {
+  "all": {
+   "categories": {"Home and bills": ["1,234.56", 1], "Food and groceries": ["57.15", 2], "Shopping": ["1,000.00", 1]},
+   "uncategorised": ["0.00", 0], "total": ["2,291.71", 4],
+   "refunds": null, "income": "2,500.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-05": "2,291.71"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "d_european": {
+  "all": {
+   "categories": {"Food and groceries": ["1,234.56", 1], "Eating out": ["45.90", 1], "Transport": ["8.50", 1]},
+   "uncategorised": ["0.00", 0], "total": ["1,288.96", 3],
+   "refunds": null, "income": "3,000.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-06": "1,288.96"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "e_card_positive": {
+  "all": {
+   "categories": {"Food and groceries": ["88.10", 1], "Transport": ["41.20", 1], "Shopping": ["29.99", 1]},
+   "uncategorised": ["0.00", 0], "total": ["159.29", 3],
+   "refunds": null, "income": null, "transfers_out": null, "transfers_in": "500.00",
+   "months": {"2026-07": "159.29"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "f_tricky": {
+  "all": {
+   "categories": {"Food and groceries": ["20.00", 1], "Eating out": ["5.00", 2]},
+   "uncategorised": ["125.00", 2], "total": ["150.00", 5],
+   "refunds": "10.00", "income": null, "transfers_out": null, "transfers_in": null,
+   "months": {"2026-08": "150.00"}, "skipped": 2, "counted_once": 0
+  }
+ },
+ "g_full": {
+  "all": {
+   "categories": {"Food and groceries": ["50.00", 3], "Eating out": ["6.00", 2], "Transport": ["20.00", 1], "Subscriptions": ["13.00", 2]},
+   "uncategorised": ["0.00", 0], "total": ["89.00", 8],
+   "refunds": null, "income": "1,000.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-01": "59.00", "2026-02": "30.00"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "g_overlap": {
+  "all": {
+   "categories": {"Food and groceries": ["50.00", 3], "Eating out": ["6.00", 2], "Transport": ["20.00", 1], "Subscriptions": ["13.00", 2]},
+   "uncategorised": ["0.00", 0], "total": ["89.00", 8],
+   "refunds": null, "income": "1,000.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-01": "59.00", "2026-02": "30.00"}, "skipped": 0, "counted_once": 2
+  }
+ },
+ "h_ambiguous": {
+  "dmy": {
+   "categories": {"Food and groceries": ["18.00", 3]},
+   "uncategorised": ["0.00", 0], "total": ["18.00", 3],
+   "refunds": null, "income": null, "transfers_out": null, "transfers_in": null,
+   "months": {"2026-02": "5.00", "2026-04": "6.00", "2026-06": "7.00"}, "skipped": 0, "counted_once": 0
+  },
+  "mdy": {
+   "categories": {"Food and groceries": ["18.00", 3]},
+   "uncategorised": ["0.00", 0], "total": ["18.00", 3],
+   "refunds": null, "income": null, "transfers_out": null, "transfers_in": null,
+   "months": {"2026-01": "5.00", "2026-03": "6.00", "2026-05": "7.00"}, "skipped": 0, "counted_once": 0
+  }
+ },
+ "i_bad": {
+  "all": {
+   "categories": {},
+   "uncategorised": ["11.00", 2], "total": ["11.00", 2],
+   "refunds": null, "income": null, "transfers_out": null, "transfers_in": null,
+   "months": {"2026-01": "11.00"}, "skipped": 2, "counted_once": 0
+  }
+ },
+ "j_drcr": {
+  "all": {
+   "categories": {"Food and groceries": ["20.00", 1], "Subscriptions": ["10.00", 1]},
+   "uncategorised": ["0.00", 0], "total": ["30.00", 2],
+   "refunds": null, "income": "500.00", "transfers_out": null, "transfers_in": null,
+   "months": {"2026-09": "30.00"}, "skipped": 0, "counted_once": 0
+  }
+ }
+}

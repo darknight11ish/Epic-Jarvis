@@ -134,7 +134,7 @@ await check("the contract's list and conversation are read as the PC sends them"
   assert.equal(v.keepDays, 0);
   assert.deepEqual(v.conversations[0], { id: "c0nv-phone-0001", title: "Dentist on Tuesday",
     started: NOW - 3600, updated: NOW - 3300, turns: 6, device: "phone", hasVoice: true, tainted: false,
-    kind: "chat", project: null });
+    kind: "chat", project: null, tagId: null });
   const c = readConversation(CONV);
   assert.equal(c.turns.length, 2);
   assert.equal(c.turns[0].provenance, "typed");
@@ -1093,7 +1093,7 @@ await check("rows say their kind, a Live session its length, and Show asks the P
   const after = await page.locator("#history-list .row-item").allInnerTexts();
   const forgetLink = await page.locator("#history-tools .history-forget-range-link").innerText();
   await page.close();
-  assert.match(rows[0], /Live · 12 min · Today \d\d:\d\d · 8 messages/);
+  assert.match(rows[0], /Live · 12 min · (Today|Yesterday) \d\d:\d\d · 8 messages/);
   assert.match(rows[1], /Support chat/);
   assert.doesNotMatch(rows[2], /Support chat|Chat with an AI|Comparison/);
   assert.doesNotMatch(status, /reading…/, "History's status line is stuck on reading");

@@ -362,13 +362,25 @@ object AutoLearn {
          * 2021"), else null. Shown as "true from 1 January 2021".
          */
         val trueFrom: String? = null,
+        /**
+         * The fact's topic id (docs/JARVIS-API.md section 107), or null when
+         * the PC did not say: "Learn, but don't use" topics tag their facts
+         * "not used in answers" ([Topics.notUsedTag]).
+         */
+        val topic: Int? = null,
     ) {
         /** Said aloud to Jarvis (a verified voice turn), not typed. */
         val aloud: Boolean get() = provenance == Provenance.VOICE
     }
 
     /** One page: its facts, whether there may be older ones, and the two switches. */
-    data class Page(val facts: List<Fact>, val mayHaveOlder: Boolean, val status: Status)
+    data class Page(
+        val facts: List<Fact>,
+        val mayHaveOlder: Boolean,
+        val status: Status,
+        /** Facts of an Off topic the PC left out of this list (`topics_hidden`), 0 when it did not say. */
+        val topicsHidden: Int = 0,
+    )
 
     /**
      * One page, newest first. [before] is the `saved_at` of the oldest fact
@@ -404,9 +416,16 @@ object AutoLearn {
                     ?.takeIf { it in 1..Int.MAX_VALUE.toLong() }?.toInt() ?: 0,
                 // As sent, not trimmed: the desktop reads it the same way.
                 trueFrom = (o["true_from"] as? JsonPrimitive)?.takeIf { it.isString }?.content,
+                topic = o.prim("topic")?.takeIf { !it.isString }?.longOrNull?.takeIf { it > 0 }?.toInt(),
             )
         }
-        return Page(facts, mayHaveOlder = (raw?.size ?: 0) >= asked, status = statusFromList(body))
+        return Page(
+            facts,
+            mayHaveOlder = (raw?.size ?: 0) >= asked,
+            status = statusFromList(body),
+            topicsHidden = body.prim("topics_hidden")?.takeIf { !it.isString }?.longOrNull
+                ?.coerceIn(0L, Int.MAX_VALUE.toLong())?.toInt() ?: 0,
+        )
     }
 
     /** [more] after [shown], without a fact twice: two can share one `saved_at` second. */

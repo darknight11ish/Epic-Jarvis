@@ -1,0 +1,439 @@
+{
+ "about": "The shared words and small rules of \"Quiz me on a YouTube video\" (docs/STUDY-FROM-TEXT-DESIGN.md section 14, JARVIS-API section 112), word for word, plus sample replies of the frozen shapes. Written by tools/gen_youtube_cases.py: both apps' tests read this file.",
+ "failures": {
+  "age_restricted": "This video is age-restricted. Jarvis does not sign in to YouTube, so it cannot read its captions.",
+  "fetch_timeout": "YouTube took too long to answer. Nothing was changed - try again later.",
+  "library_missing": "Your PC's Jarvis does not have the caption reader installed yet - run apply-patches.ps1 on the PC.",
+  "model_unavailable": "The model on this PC did not answer. Nothing was changed - try again in a moment.",
+  "no_captions": "No captions for this video. The person who posted it may have turned them off, or there are none.",
+  "no_captions_language": "This video has no captions in that language.",
+  "quiz_failed": "The captions were read, but a quiz could not be made from them.",
+  "too_little_text": "The captions are too short to make a quiz from.",
+  "video_unavailable": "YouTube says this video is not available. It may be private, removed, or blocked where you are.",
+  "youtube_failed": "Could not read the captions from YouTube. It may have changed how it works. Nothing was changed.",
+  "youtube_refused": "YouTube refused the request. It sometimes blocks programs like this one - try again later. Nothing was changed."
+ },
+ "link_max": 300,
+ "phases": {
+  "denied": "ended",
+  "failed": "ended",
+  "fetching": "working",
+  "ready": "ready",
+  "refused": "ended",
+  "timed_out": "ended",
+  "waiting": "waiting",
+  "withdrawn": "ended",
+  "writing": "working"
+ },
+ "poll_seconds": 2,
+ "refusals": {
+  "already_started": {
+   "message": "It is already reading the captions and can no longer be cancelled.",
+   "status": 409
+  },
+  "bad_count": {
+   "message": "Ask for between 1 and 10 questions.",
+   "status": 400
+  },
+  "bad_language": {
+   "message": "The caption language must be a short code such as en or es.",
+   "status": 400
+  },
+  "bad_link": {
+   "message": "That does not look like a link. Paste the video's address, which starts with https.",
+   "status": 400
+  },
+  "card_unavailable": {
+   "message": "Jarvis could not raise the approval card. Nothing was fetched.",
+   "status": 503
+  },
+  "link_has_login": {
+   "message": "That link has a name or password in it, so Jarvis will not use it. Paste the plain video address.",
+   "status": 400
+  },
+  "no_video": {
+   "message": "That link does not point to one video. Paste a video's own address.",
+   "status": 400
+  },
+  "not_a_web_link": {
+   "message": "That is not a web link. A YouTube address starts with https.",
+   "status": 400
+  },
+  "not_found": {
+   "message": "That YouTube request is not open any more. Start a new one.",
+   "status": 404
+  },
+  "not_youtube": {
+   "message": "That is not a YouTube video link. Jarvis only reads captions from youtube.com or youtu.be.",
+   "status": 400
+  },
+  "outside_text_turn": {
+   "message": "Jarvis has just read outside text or private things in this conversation, so it will not fetch a video's captions now. Start from the Quiz page.",
+   "status": 409
+  },
+  "playlist_link": {
+   "message": "That link is a playlist. Paste the link to one video.",
+   "status": 400
+  },
+  "request_waiting": {
+   "message": "A YouTube card is already waiting. Answer it first.",
+   "status": 409
+  },
+  "tier_not_ask": {
+   "message": "This needs your yes every time, but the settings file says otherwise, so it is switched off.",
+   "status": 503
+  },
+  "too_many_quizzes": {
+   "message": "Three quizzes are already open. Finish or stop one first.",
+   "status": 409
+  }
+ },
+ "samples": {
+  "denied": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "You said no, so nothing was fetched.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "denied",
+     "truncated": false
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ended",
+    "shown": "You said no, so nothing was fetched."
+   },
+   "status": 200
+  },
+  "failed_no_captions": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": "no_captions",
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "No captions for this video. The person who posted it may have turned them off, or there are none.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "failed",
+     "truncated": false
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ended",
+    "shown": "No captions for this video. The person who posted it may have turned them off, or there are none."
+   },
+   "status": 200
+  },
+  "fetching": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Reading the captions from YouTube...",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "fetching",
+     "truncated": false
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "working",
+    "shown": "Reading the captions from YouTube..."
+   },
+   "status": 200
+  },
+  "info": {
+   "body": {
+    "available": true,
+    "intro": "Paste a YouTube link and Jarvis reads the video's captions (the words shown as subtitles), then quizzes you on them. It asks with a card first, every time.",
+    "latest": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Waiting for your yes on the approval card.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "waiting",
+     "truncated": false
+    },
+    "limits": {
+     "count_max": 10,
+     "count_min": 1,
+     "link": 300,
+     "text": 20000
+    },
+    "ok": true,
+    "outside": "The captions are treated as outside text: Jarvis never learns facts from them. Your answers are marked by the model on this PC.",
+    "terms": "This breaks YouTube's terms and may be blocked. Only the caption text is fetched - never the video or its sound. The link tells YouTube which video you are studying.",
+    "title": "Quiz me on a YouTube video"
+   },
+   "expect": {
+    "available": true,
+    "latest_phase": "waiting",
+    "link_max": 300
+   },
+   "status": 200
+  },
+  "info_no_latest": {
+   "body": {
+    "available": true,
+    "latest": null,
+    "limits": {
+     "link": 300
+    },
+    "ok": true
+   },
+   "expect": {
+    "available": true,
+    "latest_phase": null,
+    "link_max": 300
+   },
+   "status": 200
+  },
+  "ready": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Ready.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": {
+      "answered": 0,
+      "grader_verified": false,
+      "id": "q1a2b3c4d5e6",
+      "provenance": "outside",
+      "questions": [
+       {
+        "kind": "recall",
+        "n": 1,
+        "prompt": "What is the video mainly about?"
+       },
+       {
+        "kind": "explain",
+        "n": 2,
+        "prompt": "Why does the speaker say so?"
+       }
+      ],
+      "source": "youtube",
+      "title": "Quiz on a YouTube video"
+     },
+     "source": "youtube",
+     "state": "ready",
+     "truncated": false
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ready",
+    "questions": 2,
+    "quiz_id": "q1a2b3c4d5e6",
+    "shown": "Ready.",
+    "source": "youtube",
+    "truncated": false
+   },
+   "status": 200
+  },
+  "ready_truncated": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Ready. The video is long, so the quiz covers only the first part (about 42 minutes).",
+     "minutes": 42,
+     "provenance": "outside",
+     "quiz": {
+      "answered": 0,
+      "grader_verified": false,
+      "id": "q1a2b3c4d5e6",
+      "provenance": "outside",
+      "questions": [
+       {
+        "kind": "recall",
+        "n": 1,
+        "prompt": "What is the video mainly about?"
+       },
+       {
+        "kind": "explain",
+        "n": 2,
+        "prompt": "Why does the speaker say so?"
+       }
+      ],
+      "source": "youtube",
+      "title": "Quiz on a YouTube video"
+     },
+     "source": "youtube",
+     "state": "ready",
+     "truncated": true
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ready",
+    "questions": 2,
+    "shown": "Ready. The video is long, so the quiz covers only the first part (about 42 minutes).",
+    "truncated": true
+   },
+   "status": 200
+  },
+  "ready_without_quiz": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Ready.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "ready",
+     "truncated": false
+    }
+   },
+   "expect": {
+    "ok": false,
+    "phase": "ended",
+    "unreadable": true
+   },
+   "status": 200
+  },
+  "refused_not_youtube": {
+   "body": {
+    "error": "not_youtube",
+    "message": "That is not a YouTube video link. Jarvis only reads captions from youtube.com or youtu.be.",
+    "ok": false
+   },
+   "expect": {
+    "code": "not_youtube",
+    "ok": false,
+    "shown": "That is not a YouTube video link. Jarvis only reads captions from youtube.com or youtu.be."
+   },
+   "status": 400
+  },
+  "refused_request_waiting": {
+   "body": {
+    "error": "request_waiting",
+    "message": "A YouTube card is already waiting. Answer it first.",
+    "ok": false
+   },
+   "expect": {
+    "code": "request_waiting",
+    "ok": false,
+    "shown": "A YouTube card is already waiting. Answer it first."
+   },
+   "status": 409
+  },
+  "started": {
+   "body": {
+    "message": "Waiting for your yes on the approval card.",
+    "ok": true,
+    "request": {
+     "error": null,
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Waiting for your yes on the approval card.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "waiting",
+     "truncated": false
+    },
+    "waiting": true
+   },
+   "expect": {
+    "ok": true,
+    "phase": "waiting",
+    "shown": "Waiting for your yes on the approval card."
+   },
+   "status": 202
+  },
+  "too_many_quizzes_keeps_pcs_words": {
+   "body": {
+    "error": "too_many_quizzes",
+    "message": "Three quizzes are already open. Finish or stop one first.",
+    "ok": false
+   },
+   "expect": {
+    "code": "too_many_quizzes",
+    "ok": false,
+    "shown": "Three quizzes are already open. Finish or stop one first."
+   },
+   "status": 409
+  },
+  "unknown_state_with_extra_keys": {
+   "body": {
+    "ok": true,
+    "request": {
+     "error": null,
+     "future_key": [
+      1,
+      2
+     ],
+     "id": "0123456789ab",
+     "link": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+     "message": "Still on it.",
+     "minutes": null,
+     "provenance": "outside",
+     "quiz": null,
+     "source": "youtube",
+     "state": "thinking_hard",
+     "truncated": false
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "working",
+    "shown": "Still on it."
+   },
+   "status": 200
+  }
+ },
+ "state_words": {
+  "denied": "You said no, so nothing was fetched.",
+  "failed": "Could not make a quiz from that video.",
+  "fetching": "Reading the captions from YouTube...",
+  "ready": "Ready.",
+  "refused": "The card could not be answered, so nothing was fetched.",
+  "timed_out": "Nobody answered the card in time, so nothing was fetched.",
+  "waiting": "Waiting for your yes on the approval card.",
+  "withdrawn": "You cancelled before the card was answered, so nothing was fetched.",
+  "writing": "Writing the questions..."
+ },
+ "unknown_state_limit_seconds": 180,
+ "words": {
+  "cancel": "Cancel",
+  "intro": "Paste a YouTube link and Jarvis reads the video's captions (the words shown as subtitles), then quizzes you on them. It asks with a card first, every time.",
+  "label": "From YouTube captions",
+  "missing": "Your PC's Jarvis does not have YouTube quizzes yet - run apply-patches.ps1 on the PC.",
+  "outside": "The captions are treated as outside text: Jarvis never learns facts from them. Your answers are marked by the model on this PC.",
+  "placeholder": "Paste a YouTube video link",
+  "start": "Read the captions and write questions",
+  "terms": "This breaks YouTube's terms and may be blocked. Only the caption text is fetched - never the video or its sound. The link tells YouTube which video you are studying.",
+  "title": "Quiz me on a YouTube video"
+ }
+}

@@ -38,6 +38,11 @@ list):
   * "Remind me to call Mom at 6pm." -> reminder_set
   * "Add milk to the shopping list." -> todo_add (a named list, 2026-09-25)
   * "Brief me now." -> briefing_now (jarvis_briefing.py)
+  * "Label this chat Work." -> chat_tag (jarvis_chat_log.py)
+  * "Open my topics." / "Stop using my Money topic." -> topic_mode (topic
+    controls, 2026-09-30): the first opens Brain -> Topics, the second is a
+    stricter change and happens at once; a looser one on a private topic still
+    raises its one card.
 Chosen to show the spread the audit's own examples pointed at (timers,
 "what did I miss?", "tell me when ...", focus) plus three more real ones
 (a plain reminder, a named list, and the briefing) - not a grab-bag of every
@@ -76,6 +81,9 @@ SENTENCES = (
     "Remind me to call Mom at 6pm.",
     "Add milk to the shopping list.",
     "Brief me now.",
+    "Label this chat Work.",
+    "Open my topics.",
+    "Stop using my Money topic.",
 )
 
 #: Three of the list, for the walkthrough's screen 2 (never screen 1 or 3;

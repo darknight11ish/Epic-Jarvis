@@ -1199,10 +1199,13 @@ def t_status_shape_and_no_secrets():
           set(st["detected"]) == {"capable", "why", "primary", "second", "cards"})
     check("each feature row has exactly its keys",
           all(set(f) == {"id", "name", "what", "enabled", "active", "available", "needs", "model",
-                         "model_installed", "memory_gib", "why"} for f in st["features"]))
-    check("the five feature ids, in order",
+                         "model_installed", "memory_gib", "why", "model_free"} for f in st["features"]))
+    check("model_free is true for referee (loads no model) and false for every other row",
+          all(f["model_free"] is (f["id"] == "referee") for f in st["features"]),
+          [(f["id"], f["model_free"]) for f in st["features"]])
+    check("the seven feature ids, in order (study and referee since 2026-09-30)",
           [f["id"] for f in st["features"]] == ["long_context", "vision", "learning",
-                                                 "browser_control", "wiki"])
+                                                 "browser_control", "wiki", "study", "referee"])
     text = json.dumps(st)
     check("no token or key in it", "s3cr3t" not in text and "token" not in text.lower())
     check("pin_command is ONE line, 5.1-safe (no ?? and no newline)",
@@ -1658,7 +1661,7 @@ def t_the_toml():
           re.search(r'^second_card_combined_enable\s*=\s*"ask"', toml, re.M) is not None)
     check("the shipped toml has a [second_card] section", "\n[second_card]\n" in toml)
     check("and no switch lives in it (the switches are in second-card.json)",
-          not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki)\s*=",
+          not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki|study|referee)\s*=",
                         toml[toml.index("\n[second_card]\n"):].split("\n[", 2)[1], re.M))
 
 
@@ -2046,6 +2049,323 @@ def t_the_real_file():
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has /api/second-card (second-card.patch applied)",
           '"/api/second-card"' in s)
+
+
+# ------------------------------------------- "Study helper" and "Referee suggestions" --
+# 2026-09-30, JARVIS-API section 108. Two more switches, built OFF like the rest.
+
+def _row(st, fid):
+    return next(f for f in st["features"] if f["id"] == fid)
+
+
+def t_study_and_referee_rows():
+    with G.World(G.SMI["one_card"]) as w:
+        st = SC.status()
+        for fid in ("study", "referee"):
+            r = _row(st, fid)
+            check(f"{fid}: on a one-card PC it is off and says why (the same words as the rest)",
+                  r["enabled"] is False and r["active"] is False and r["available"] is False
+                  and r["why"].startswith("Needs a capable second graphics card: only one "
+                                          "graphics card found"), r["why"])
+        check("study: the row's what names the quiz and says it stays on the PC",
+              "Quiz questions are written" in _row(st, "study")["what"]
+              and "stay on this PC" in _row(st, "study")["what"])
+        check("referee: the row's what says only your tap ticks, never a test",
+              "Only your tap ticks it" in _row(st, "referee")["what"]
+              and "never runs a test" in _row(st, "referee")["what"])
+        check("the switches did not start anything", not w.started)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        st = SC.status()
+        check("capable card, everything off (the default): both off, 'Off.'",
+              _row(st, "study")["why"] == "Off." and _row(st, "referee")["why"] == "Off."
+              and _row(st, "study")["model"] == "qwen3:8b" and _row(st, "study")["memory_gib"] == 7.69,
+              (_row(st, "study"), _row(st, "referee")))
+        r = _row(st, "referee")
+        check("referee carries no model and no memory (it loads none)",
+              r["model"] is None and r["memory_gib"] is None and r["model_installed"] is None
+              and r["needs"] == [], r)
+        w.switches(master=True, referee=True)
+        st = SC.status()
+        r = _row(st, "referee")
+        check("referee ON: working at once, no lane needed, no Ollama started, no model installed check",
+              r["enabled"] and r["active"] and r["available"] and not w.started
+              and r["why"].startswith("Working: it compares the numbers you log with your targets")
+              and "loads no model" in r["why"], r)
+        check("... and the second lane says nothing is switched on for it",
+              st["lane"]["state"] == "off" and SC.lane_for("referee") is None and not w.started)
+        w.switches(master=True, study=True)
+        st = SC.status()
+        r = _row(st, "study")
+        check("study ON: the second Ollama starts (it has a model to serve) and the row is working",
+              len(w.started) == 1 and r["available"] is True
+              and r["why"].startswith("Working: qwen3:8b on the NVIDIA GeForce RTX 2060"), r["why"])
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:14b",)) as w:
+        w.switches(master=True, study=True)
+        r = _row(SC.status(), "study")
+        check("study with its model missing: says how to install it, not working",
+              r["model_installed"] is False and r["available"] is False
+              and "ollama pull qwen3:8b" in r["why"], r)
+    with G.World(G.SMI["one_card"]) as w:
+        w.switches(master=True, study=True, referee=True)
+        st = SC.status()
+        check("both saved ON but the card is gone: 'Your choice is kept', neither active",
+              all(_row(st, f)["enabled"] and not _row(st, f)["active"]
+                  and "Your choice is kept" in _row(st, f)["why"] for f in ("study", "referee")))
+        check("and referee_active reads false without the card", SC.feature_active("referee") is False
+              and SC.feature_active("study") is False and not w.started)
+
+
+def t_study_and_referee_cards():
+    with G.World(G.SMI["2080s_2060"]) as w:
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        SC.request_change("master", True, gate=gate)
+        seen.clear()
+        code, out = SC.request_change("study", True, gate=gate)
+        check("study ON: one card, action second_card_enable, tier ask path",
+              code == 200 and len(seen) == 1 and seen[0][0] == "second_card_enable", seen)
+        d, text = seen[0][1], seen[0][2]
+        check("the study card names the card, the model, the quiz and that nothing leaves",
+              "Turn on \"Study helper\" on the second graphics card?" in text
+              and "RTX 2060" in text and "qwen3:8b" in text and "Quiz questions are written" in text
+              and "Nothing leaves this PC" in text and "If you say no" in text
+              and d["model"] == "qwen3:8b" and d["feature"] == "study"
+              and d["leaves_this_pc"] is False, text)
+        check("study is on after the yes", SC._read_switches()["features"]["study"] is True
+              and len(w.started) == 1)
+        seen.clear()
+        with mock.patch.dict(sys.modules, {"jarvis_referee": mock.Mock()}) as _m:
+            code, out = SC.request_change("referee", True, gate=gate)
+            ref_calls = sys.modules["jarvis_referee"].ensure_job.call_count
+        d, text = seen[0][1], seen[0][2]
+        check("referee ON: one card, the same action (second_card_enable), tier ask",
+              code == 200 and len(seen) == 1 and seen[0][0] == "second_card_enable", seen)
+        check("the referee card says plainly: no model yet, no second Ollama, your tap ticks",
+              "Turn on \"Referee suggestions\"?" in text and "RTX 2060" in text
+              and "Which model: none yet" in text and "no second copy of Ollama" in text
+              and "Your tap ticks the step" in text and "never runs a test" in text
+              and "at most a few cards a day" in text and d["model"] is None
+              and d["memory_gib"] is None and d["leaves_this_pc"] is False, text)
+        check("... and it never says qwen3 or any memory figure", "qwen3" not in text
+              and " GB of the card" not in text, text)
+        check("referee is on, and turning it on tells the scheduler to add its hourly look",
+              SC._read_switches()["features"]["referee"] is True and ref_calls >= 1, ref_calls)
+        n_started = len(w.started)
+        # OFF is immediate, no card, and also tells the scheduler.
+        seen.clear()
+        with mock.patch.dict(sys.modules, {"jarvis_referee": mock.Mock()}):
+            code, out = SC.request_change("referee", False)
+            off_calls = sys.modules["jarvis_referee"].ensure_job.call_count
+        check("referee OFF: at once, no card, and the scheduler is told",
+              code == 200 and out["enabled"] is False and not seen and off_calls == 1
+              and SC._read_switches()["features"]["referee"] is False)
+        code, out = SC.request_change("study", False)
+        check("study OFF: at once, no card", code == 200 and not seen
+              and SC._read_switches()["features"]["study"] is False)
+        check("the lane stopped when the last lane-using switch went off",
+              w.running() is False and len(w.started) == n_started)
+        # A yes that is not a person: refused for both.
+        for fid in ("study", "referee"):
+            for label, v in (("tier notify", Verdict(True, "notify", "notify")),
+                             ("denied", Verdict(False, "ask", "denied")),
+                             ("timed out", Verdict(False, "ask", "timed_out"))):
+                SC.request_change(fid, True, gate=lambda a, dd, p, v=v: v)
+                check(f"{fid}, {label}: stays off", SC._read_switches()["features"][fid] is False)
+        code, out = SC.request_change("study", True, gate=gate, tier_of=lambda a: "auto")
+        check("tier not 'ask': refused before any card", code == 503 and "be 'ask'" in out["error"])
+        w.switches(master=False)
+        seen.clear()
+        code, out = SC.request_change("referee", True, gate=gate)
+        check("referee before the main switch: refused in words, no card",
+              code == 400 and "main switch" in out["error"] and not seen, out)
+    with G.World(G.SMI["one_card"]):
+        seen = []
+        for fid in ("study", "referee"):
+            code, out = SC.request_change(fid, True, gate=lambda *a: seen.append(a))
+            check(f"{fid} ON with no capable card: 503 with the reason, no card",
+                  code == 503 and "only one graphics card" in out["error"] and not seen, out)
+
+
+def t_referee_takes_no_lane_and_blocks_nothing():
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, referee=True)
+        st = SC.status()
+        check("referee alone starts no second Ollama and holds no card",
+              not w.started and SC.lane_state() == "off")
+        check("... and it does not stop 'One bigger model on both cards' from being turned on",
+              SC._combined_conflict(SC._read_switches()) is False
+              and st["combined"]["conflict"] is False)
+        gate = lambda a, d, p: Verdict(True, "ask", "approved")
+        code, out = SC.request_change("combined", True, gate=gate)
+        check("combined ON with referee on: a card is raised and it turns on",
+              code == 200 and SC._read_switches()["combined"] is True, out)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, study=True)
+        check("study (it has a model) DOES conflict with combined, as the other features do",
+              SC._combined_conflict(SC._read_switches()) is True)
+        code, out = SC.request_change("combined", True, gate=lambda a, d, p: Verdict(True, "ask", "approved"))
+        check("combined ON with study on: refused (409)", code == 409, out)
+        w.switches(master=True, combined=True, study=True)
+        cst = SC.status()["combined"]
+        check("... and with both saved on, the combined row names Study helper among the "
+              "switches to turn off", cst["conflict"] is True and "Study helper" in cst["why"], cst)
+    with G.World(G.SMI["2080s_2060"]) as w:
+        w.switches(master=True, referee=True)
+        code, out = SC.request_change("third", assign="referee")
+        check("referee cannot be moved to a third card: it loads no model",
+              code == 400 and "loads no model" in out["error"], out)
+
+
+def t_study_call_routes_to_the_lane():
+    import jarvis_quiz as JQ
+    chats = []
+    real = None
+
+    def http(url, payload=None, timeout=2.0):
+        if url.endswith("/api/chat"):
+            chats.append((url, payload))
+            return {"done_reason": "stop", "message": {"content": '{"questions": []}'}}
+        return real(url, payload, timeout)
+
+    fallback = mock.Mock(return_value='{"from": "everyday"}')
+    with G.World(G.SMI["2080s_2060"]) as w:
+        real = SC._http_json            # the World's stand-in, installed just now
+        call = SC.study_call(fallback)
+        with mock.patch.object(SC, "_http_json", http):
+            out = call("sys", "usr", {"type": "object"}, 300)
+        check("study OFF (the default): the everyday call answers, the lane is never asked",
+              out == '{"from": "everyday"}' and not chats and fallback.call_count == 1
+              and not w.started)
+        w.switches(master=True, study=True)
+        with mock.patch.object(SC, "_http_json", http):
+            out = call("sys", "usr", {"type": "object"}, 300)
+        check("study ON with the lane up: the second card answers, on 127.0.0.1:11435",
+              out == '{"questions": []}' and len(chats) == 1
+              and chats[0][0] == "http://127.0.0.1:11435/api/chat" and fallback.call_count == 1, chats)
+        body = chats[0][1]
+        check("... with the lane's model and context, the schema as the format, no other model",
+              body["model"] == "qwen3:8b" and body["options"]["num_ctx"] == 32768
+              and body["format"] == {"type": "object"} and body["stream"] is False
+              and body["messages"][0] == {"role": "system", "content": "sys"}
+              and body["messages"][1] == {"role": "user", "content": "usr"}, body)
+        check("the model that answered is recorded for the grader check",
+              call.active_model() == "qwen3:8b")
+        check("... and rides on the reply itself (per call, not a shared global)",
+              getattr(out, "model", None) == "qwen3:8b")
+        import threading as _th
+        seen_other = []
+        _t = _th.Thread(target=lambda: seen_other.append(call.active_model()))
+        _t.start()
+        _t.join(5)
+        check("another thread's call never sees this thread's model", seen_other == [""], str(seen_other))
+        # The lane does not answer: fall back to today's behaviour, this call only.
+        def broken(url, payload=None, timeout=2.0):
+            if url.endswith("/api/chat"):
+                raise OSError("down")
+            return real(url, payload, timeout)
+        with mock.patch.object(SC, "_http_json", broken):
+            out = call("sys", "usr", {"type": "object"}, 300)
+        check("the lane fails: the everyday call answers instead (unchanged local behaviour)",
+              out == '{"from": "everyday"}' and fallback.call_count == 2
+              and call.active_model() == "")
+        # A cut-short reply from the lane is a failure too.
+        def cut(url, payload=None, timeout=2.0):
+            if url.endswith("/api/chat"):
+                return {"done_reason": "length", "message": {"content": "{"}}
+            return real(url, payload, timeout)
+        with mock.patch.object(SC, "_http_json", cut):
+            out = call("sys", "usr", {"type": "object"}, 300)
+        check("a reply cut short is not used", fallback.call_count == 3)
+        # No fallback at all: an error, which the quiz turns into model_unavailable.
+        try:
+            SC.study_call(None)("s", "u", {}, 10)
+            raised = False
+        except Exception:
+            raised = True
+        check("with study off and no fallback, it raises (the quiz says model_unavailable)", raised)
+        w.switches(master=True, study=True, third_feature="study")
+        check("never a non-loopback lane",
+              SC._study_chat(SC.Lane("http://10.0.0.5:11435", "qwen3:8b", 32768, "x"),
+                             "s", "u", {}, 10) is None)
+
+
+def t_wire_study_into_the_quiz():
+    import jarvis_quiz as JQ
+    JQ._reset_for_tests()
+    try:
+        keep = lambda spec, cards: 0
+        JQ.configure(keep=keep)
+        banner = SC.wire_study()
+        check("wire_study hands the quiz a call and says so in one banner line",
+              banner.startswith("  study      Study helper wired") and JQ._STATE["call"] is not None
+              and JQ._STATE["call"].__name__ == "call", banner)
+        check("... and leaves the deck 'keep' function alone", JQ._STATE["keep"] is keep)
+        # The quiz end to end, study ON: questions are written by the lane's model.
+        replies = []
+        real = None
+
+        def http(url, payload=None, timeout=2.0):
+            if url.endswith("/api/chat"):
+                replies.append((url, payload["model"]))
+                if "questions" in json.dumps(payload["format"]):
+                    return {"done_reason": "stop", "message": {"content": json.dumps(
+                        {"questions": [{"kind": "recall", "prompt": "What is Ohm's law?",
+                                        "passage": PASSAGE}]})}}
+                return {"done_reason": "stop", "message": {"content": json.dumps(
+                    {"level": "got_it", "comment": "You said what the passage says."})}}
+            return real(url, payload, timeout)
+        PASSAGE = ("Ohm's law says the voltage across a resistor equals the current through "
+                   "it times its resistance.")
+        text = (PASSAGE + " ") * 4
+        with G.World(G.SMI["2080s_2060"]) as w:
+            real = SC._http_json
+            w.switches(master=True, study=True)
+            with mock.patch.object(SC, "_http_json", http):
+                code, out = JQ.handle_post("/api/quiz", {"text": text, "count": 1})
+                qid = out["quiz"]["id"] if code == 200 else None
+                code2, out2 = JQ.handle_post(f"/api/quiz/{qid}/answer",
+                                             {"n": 1, "answer": "voltage is current times resistance"})
+            check("study ON: the quiz was written AND marked on the second card's model",
+                  code == 200 and code2 == 200 and len(replies) == 2
+                  and all(u == "http://127.0.0.1:11435/api/chat" and m == "qwen3:8b"
+                          for u, m in replies), (code, code2, replies))
+            check("... and 'grader_verified' stays false: no grader result exists for this model",
+                  out2["quiz"]["grader_verified"] is False)
+            # A result measured on THIS model vouches for it; one measured on another does not.
+            import tempfile
+            with tempfile.TemporaryDirectory() as td:
+                res = Path(td) / "quiz_grader_results.json"
+                base = {"total": 20, "correct": 19, "injection_cases": 3, "injection_wins": 0}
+                with mock.patch.object(JQ, "RESULTS_PATH", res):
+                    res.write_text(json.dumps(dict(base, model="jarvis-primary")), encoding="utf-8")
+                    check("a result measured on the everyday model, quiz on the lane's: not verified",
+                          JQ.grader_verified() is False)
+                    res.write_text(json.dumps(dict(base, model="qwen3:8b")), encoding="utf-8")
+                    check("a result measured on qwen3:8b: verified while it is the lane answering",
+                          JQ.grader_verified() is True)
+                    SC._STUDY.model = ""
+                    res.write_text(json.dumps(dict(base, model="jarvis-primary")), encoding="utf-8")
+                    check("... and the everyday model's own result counts again when it answers",
+                          JQ.grader_verified() is True)
+        # Study OFF again: the default call runs, i.e. the everyday model (a stand-in here).
+        seen = []
+        JQ.configure(call=SC.study_call(lambda s, u, sc, n: seen.append(n) or json.dumps(
+            {"questions": [{"kind": "recall", "prompt": "What is Ohm's law?",
+                            "passage": PASSAGE}]})))
+        with G.World(G.SMI["2080s_2060"]) as w:
+            code, out = JQ.handle_post("/api/quiz", {"text": text, "count": 1})
+            check("study OFF: the quiz runs on the everyday call, nothing asked of the lane",
+                  code == 200 and len(seen) == 1 and not w.http and not w.started)
+    finally:
+        JQ._reset_for_tests()
+    # jarvis_quiz keeps its import rule: it does not import this module.
+    src = (HERE / "jarvis_quiz.py").read_text(encoding="utf-8")
+    imports = re.findall(r"^\s*(?:import|from)\s+(jarvis_\w+)", src, re.M)
+    check("jarvis_quiz.py still imports only jarvis_local_http and jarvis_wellbeing",
+          set(imports) <= {"jarvis_local_http", "jarvis_wellbeing"}, imports)
+    check("... and never the second-card module", "jarvis_second_card" not in re.sub(
+        r'(?s)""".*?"""', "", src.replace("second_card.study_call", "")).replace(
+        "# jarvis_second_card", ""), "the quiz names the second card")
 
 
 if __name__ == "__main__":

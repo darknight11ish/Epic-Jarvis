@@ -102,6 +102,11 @@ from typing import Callable, Optional
 from urllib.parse import parse_qs, urlsplit
 
 try:
+    import jarvis_forecast as _forecast
+except Exception:  # pragma: no cover - shipped beside it on the PC
+    _forecast = None  # type: ignore
+
+try:
     import jarvis_framework as fw
 except Exception:  # pragma: no cover - shipped beside it on the PC
     fw = None  # type: ignore
@@ -458,6 +463,18 @@ CREATE TABLE IF NOT EXISTS results (
     logged REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS results_by_bench ON results (bench, at);
+CREATE INDEX IF NOT EXISTS results_by_at ON results (at);
+-- The owner's balance chart (JARVIS-API section 105):
+-- 3 to 8 rows, in the order drawn. kind "bench" (ref = benchmark id) or
+-- "goal" (ref = goal id). `label` is the owner's own name for the spoke, or
+-- '' for the default. No numbers and no words of a benchmark live here.
+CREATE TABLE IF NOT EXISTS balance_axes (
+    position INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    project TEXT NOT NULL DEFAULT '',
+    ref TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT ''
+);
 CREATE INDEX IF NOT EXISTS bench_by_project ON benchmarks (project);
 """
 
@@ -608,7 +625,23 @@ class Projects:
             v["points"] = [{"id": p["id"], "at": p["at"], "value": p["value"]}
                            for p in reversed(pts)]
             v["points_shown"] = len(pts)
+            if _forecast is not None:
+                try:
+                    v["forecast"] = self._forecast(c, b)
+                except Exception:
+                    pass          # no range is better than a broken benchmark read
         return v
+
+    def _forecast(self, c, b) -> dict:
+        """"About N to M weeks" (jarvis_forecast.py, JARVIS-API section 101).
+        Read from the benchmark's own recent numbers - never from the
+        `points` count a chart asked for - so every reader gets the same
+        answer. The benchmark's own `keep_on_screen` covers it: a health or
+        money benchmark's range is for its screen only."""
+        rows = c.execute("SELECT value, at FROM results WHERE bench = ? "
+                         "ORDER BY at DESC, logged DESC LIMIT 200", (b["id"],)).fetchall()
+        return _forecast.forecast([(r["at"], r["value"]) for r in rows], b["target"],
+                                  b["better"], self.clock())
 
     def _view(self, c, r, *, full: bool = False) -> dict:
         folder = r["folder"]
@@ -906,6 +939,7 @@ class Projects:
                 c.execute("DELETE FROM results WHERE bench = ?", (bid,))
             c.execute("DELETE FROM benchmarks WHERE project = ?", (pid,))
             c.execute("DELETE FROM projects WHERE id = ?", (pid,))
+            self._drop_axes(c, "bench", benches)
         _withdraw_share(pid)
         for bid in benches:
             _withdraw_unmark(bid)
@@ -1074,6 +1108,7 @@ class Projects:
             self._bench_row(c, pid, bid)
             c.execute("DELETE FROM results WHERE bench = ?", (bid,))
             c.execute("DELETE FROM benchmarks WHERE id = ?", (bid,))
+            self._drop_axes(c, "bench", [bid])
         _withdraw_unmark(bid)
         _audit("projects.benchmark.delete", {"project": pid, "id": bid})
         return True
@@ -1151,6 +1186,104 @@ class Projects:
                  "sensitive": marks(r["name"], r["unit"], r["owner_sensitive"],
                                     r["auto_cleared"])["sensitive"]}
                 for r in rows]
+
+    # ---- the progress side (the heatmap and balance chart; JARVIS-API section 105) ----
+    # Read-only for the heatmap and the balance chart, plus the owner's own
+    # choice of axes. Nothing here is ever put in a chat answer or sent.
+
+    def _drop_axes(self, c, kind: str, refs) -> None:
+        """Take deleted things off the balance chart and close the gaps in
+        the order. Inside the caller's transaction."""
+        refs = [r for r in refs if isinstance(r, str)]
+        if not refs:
+            return
+        c.executemany("DELETE FROM balance_axes WHERE kind = ? AND ref = ?",
+                      [(kind, r) for r in refs])
+        rows = c.execute("SELECT rowid AS rid FROM balance_axes ORDER BY position, rowid").fetchall()
+        for i, r in enumerate(rows):
+            c.execute("UPDATE balance_axes SET position = ? WHERE rowid = ?", (i, r["rid"]))
+
+    def activity_results(self, lo: float, hi: float) -> list:
+        """[(at, sensitive)] for every logged number dated between `lo` and
+        `hi` (seconds), oldest first - only the date and whether the
+        benchmark is private, never a name or a value. Nothing is created."""
+        if not self.exists():
+            return []
+        with self._lock, self._db() as c:
+            rows = c.execute(
+                "SELECT r.at AS at, b.name AS name, b.unit AS unit, b.owner_sensitive AS own, "
+                "b.auto_cleared AS cleared FROM results r JOIN benchmarks b ON b.id = r.bench "
+                "WHERE r.at >= ? AND r.at < ? ORDER BY r.at", (float(lo), float(hi))).fetchall()
+        cache: dict = {}
+        out = []
+        for r in rows:
+            key = (r["name"], r["unit"], r["own"], r["cleared"])
+            if key not in cache:
+                cache[key] = marks(*key)["sensitive"]
+            out.append((r["at"], cache[key]))
+        return out
+
+    def progress_bench(self, bid) -> Optional[dict]:
+        """One number benchmark for the balance chart: its name, unit, target,
+        which way is better, whether it is private, how many numbers it has,
+        and the first and the latest (by date). None when it is gone."""
+        if not isinstance(bid, str) or not _ID.fullmatch(bid) or not self.exists():
+            return None
+        with self._lock, self._db() as c:
+            b = c.execute("SELECT b.*, p.name AS project_name FROM benchmarks b JOIN projects p "
+                          "ON p.id = b.project WHERE b.id = ?", (bid,)).fetchone()
+            if b is None or b["kind"] != "number":
+                return None
+            n = c.execute("SELECT COUNT(*) FROM results WHERE bench = ?", (bid,)).fetchone()[0]
+            first = c.execute("SELECT value FROM results WHERE bench = ? "
+                              "ORDER BY at ASC, logged ASC LIMIT 1", (bid,)).fetchone()
+            last = c.execute("SELECT value FROM results WHERE bench = ? "
+                             "ORDER BY at DESC, logged DESC LIMIT 1", (bid,)).fetchone()
+        return {"id": b["id"], "project": b["project"], "project_name": b["project_name"],
+                "name": b["name"], "unit": b["unit"], "better": b["better"],
+                "target": b["target"], "count": int(n),
+                "first": first["value"] if first else None,
+                "latest": last["value"] if last else None,
+                "sensitive": marks(b["name"], b["unit"], b["owner_sensitive"],
+                                   b["auto_cleared"])["sensitive"]}
+
+    def progress_benchmarks(self) -> list:
+        """Every number benchmark that has a target and a direction (the
+        ones a balance axis can follow), in creation order."""
+        if not self.exists():
+            return []
+        with self._lock, self._db() as c:
+            ids = [r["id"] for r in c.execute(
+                "SELECT id FROM benchmarks WHERE kind = 'number' AND target IS NOT NULL "
+                "AND better IN ('higher','lower') ORDER BY created, id").fetchall()]
+        return [b for b in (self.progress_bench(i) for i in ids) if b]
+
+    def axes_read(self) -> list:
+        if not self.exists():
+            return []
+        with self._lock, self._db() as c:
+            rows = c.execute("SELECT kind, project, ref, label FROM balance_axes "
+                             "ORDER BY position, rowid").fetchall()
+        return [{"kind": r["kind"], "project": r["project"], "ref": r["ref"],
+                 "label": r["label"]} for r in rows]
+
+    def axes_write(self, axes: list) -> None:
+        """Replace the whole chart (already checked by the caller)."""
+        with self._lock, self._db() as c:
+            c.execute("DELETE FROM balance_axes")
+            for i, a in enumerate(axes):
+                c.execute("INSERT INTO balance_axes (position, kind, project, ref, label) "
+                          "VALUES (?,?,?,?,?)",
+                          (i, a["kind"], a.get("project", ""), a["ref"], a.get("label", "")))
+        _audit("projects.balance.set", {"axes": len(axes)})
+
+    def axes_drop_goal(self, goal_ref: str) -> None:
+        """A goal that was stopped or removed leaves the balance chart, the
+        order closes up. Nothing is created when there is no projects.db."""
+        if not self.exists():
+            return
+        with self._lock, self._db() as c:
+            self._drop_axes(c, "goal", [goal_ref])
 
 
 def _list_title(key: Optional[str]) -> str:

@@ -230,6 +230,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -483,6 +492,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -854,6 +881,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -1242,6 +1296,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -1495,6 +1558,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -1866,6 +1947,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -2251,6 +2359,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -2503,6 +2620,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -2873,6 +3008,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -3253,6 +3415,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -3505,6 +3676,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -3875,6 +4064,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -4255,6 +4471,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -4507,6 +4732,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -4877,6 +5120,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -5269,6 +5539,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -5522,6 +5801,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -5893,6 +6190,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -6278,6 +6602,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -6530,6 +6863,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -6900,6 +7251,33 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",

@@ -55,6 +55,7 @@ import {
   saveInterrupt,
 } from "./live-rules.js";
 import { mountCardLink } from "./card-link.js";
+import { menuManager, showForVisit } from "./menu-visibility-settings.js";
 import {
   describeHeard,
   describeMoment,
@@ -803,6 +804,11 @@ function goToPlace() {
   if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
   const target = $(left.place);
   if (!target) return;
+  const card = target.closest("section.card");
+  const menuId = card?.dataset?.menuId || (card ? `settings.${card.id}` : null);
+  if (menuId && menuManager.isHidden(menuId)) {
+    showForVisit(menuId, card);
+  }
   const details = target.closest("details");
   if (details && !details.open) details.open = true;
   // After the page has loaded and laid out: a scroll made earlier is undone
@@ -1753,9 +1759,17 @@ function scGigabytes(mb) {
 /** The model a feature uses, and whether it is installed - with the exact
  *  name to type when it is not. There is no catalogue: the Brain's Install
  *  box is the existing way, a typed name and an approval card. */
-function scModelLine(feature) {
+function scModelLine(feature, capable) {
   const model = typeof feature.model === "string" ? feature.model.trim() : "";
-  if (!model) return "No model is chosen for this on your graphics cards right now (the switch's line above says why).";
+  // A switch that loads no model at all (Referee suggestions) has nothing to
+  // say about one: on a capable PC a null model means "none", not "not chosen
+  // yet". Only a PC without a capable card gets the "chosen once..." line.
+  if (feature.model_free === true) return "";
+  if (!model) {
+    return capable === true
+      ? "No model is chosen for this on your graphics cards right now (the switch's line above says why)."
+      : "The model is chosen once a capable second card is found.";
+  }
   if (feature.model_installed === true) return `Model: ${model}, installed.`;
   if (feature.model_installed === false) {
     return `Model: ${model}, not installed yet. To install it, open the Brain window, go to ` +
@@ -1833,7 +1847,7 @@ function scSwitchRow(sw, status, names) {
   }
   if (held && !capable) describedBy.push("sc-blocked");
   if (sw.id !== "master") {
-    addLine("sc-model", scModelLine(sw));
+    addLine("sc-model", scModelLine(sw, capable));
     addLine("sc-memory", scMemoryLine(sw));
   }
   if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));

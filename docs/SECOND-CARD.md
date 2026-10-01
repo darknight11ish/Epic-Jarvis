@@ -40,7 +40,10 @@ one your monitor is plugged into; else the first one `nvidia-smi` lists.
 With the monitors on the 2080 Super, that is the 2080 Super, which is what
 you want: it is the faster card.
 
-## The five switches
+## The seven switches
+
+(Five since 2026-09-24; **Study helper** and **Referee suggestions** joined on 2026-09-30, both off
+until the card is installed and measured - see the two rows at the end of the table.)
 
 There is one main switch ("use the second card") and one switch per feature.
 The main switch must be on before any feature can be.
@@ -52,6 +55,8 @@ The main switch must be on before any feature can be.
 | **Learning in the background** (`learning`) | The memory learner (which suggests facts for you to review) runs on the second card, so it never slows chat down, and it waits only 10 seconds of quiet instead of 45. If the second card does not answer, that pass is skipped (it is not moved to the main card after only the short wait). For the next 10 minutes learning then works as it did before: the full wait, on the main card. After that the second card is tried again. | same as Longer conversations | shared |
 | **Browser control** (`browser_control`) | Jarvis can work a web page for you, one approved step at a time. Needs Longer conversations on too, and `"browser_control"` in `[tools].enabled`. Its approval card is a different kind from the others (`second_card_browser_enable` in `jarvis-framework.toml`, which must stay `"ask"`), and it says plainly that the pages are on the internet, so what Jarvis types or clicks there reaches that website. | same as Longer conversations | shared |
 | **Wiki builder** (`wiki`) | Turns documents you put in your vault's `Jarvis Wiki/Sources` folder into linked wiki pages, one approval card each. See "Wiki builder" below. | same as Longer conversations | shared |
+| **Study helper** (`study`) | "Quiz me on a text" and Spanish practice write their questions, and mark your answers, on the second card, so a quiz never slows the everyday chat. Your text and answers stay on this PC. The marks stay "Jarvis's guess" until the grader test has been run on this model too (`eval_quiz_grader.py`, JARVIS-API section 108.3). Using the bigger model for marking is not built. | same as Longer conversations | shared |
+| **Referee suggestions** (`referee`) | When a goal step's number reaches its target, Jarvis asks "This looks done - tick it?" on a card with the numbers. Only your tap ticks it; it never runs a test and never ticks by itself (at most 3 cards a day, none in a focus session or Quiet). Today it compares numbers on this PC and loads **no model**, so it starts no second Ollama and does not stop "One bigger model on both cards". It needs the card only because the later version (reading a project's changes) will use its model. JARVIS-API section 108. | none yet | none |
 
 The second card holds **one model at a time**. If Pictures and Longer
 conversations are both on, the second card swaps between the two models as

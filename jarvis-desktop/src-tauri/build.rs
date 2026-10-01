@@ -115,6 +115,17 @@ fn main() {
             // "Search what was said" (JARVIS-API.md section 71): a read,
             // refused while the private lists are hidden. Brain only.
             "brain_history_search",
+            // Chat tags (docs/CHAT-TAGS-DESIGN.md section 10): read them,
+            // change one, file one chat. No card; hidden under "Hide memory
+            // lists"; edits held on a stale link. Brain only.
+            "brain_history_tags",
+            "brain_history_tags_edit",
+            "brain_history_tag",
+            // "New section here" (JARVIS-API section 106) and the "Suggest
+            // tags overnight" switch (section 104). Brain only.
+            "brain_history_mark",
+            "brain_history_tag_suggest",
+            "brain_history_fork",
             // "Continue this chat" (the chat audit, 2026-09-28): the Brain
             // tells the Jarvis bar which chat to carry on (the id only), and
             // the bar reads that one chat - never a support, chatbot or
@@ -270,6 +281,23 @@ fn main() {
             "add_folder",
             "remove_folder",
             "import_notion",
+            // "Spending summaries" (backend/spending.patch; JARVIS-API section
+            // 100; the owner's decision of 2026-09-30). The chat table: read
+            // by id once the stream announced it (the Jarvis bar only; not
+            // asked for at all while the private lists are hidden or App lock
+            // has locked Jarvis). The Settings box: read the layouts and
+            // categories, read the columns of a waiting file, and save or
+            // forget a layout, save or reset the categories, ask for
+            // suggestions. PC only on the backend; no card; writes held on a
+            // stale link.
+            "chat_table",
+            "get_spending",
+            "spending_profile_read",
+            "spending_profile_save",
+            "spending_profile_delete",
+            "spending_categories_save",
+            "spending_categories_reset",
+            "spending_suggest",
             // Settings' "Backups" (backend/jarvis_backup.py, backup.patch;
             // the owner's decision of 2026-09-27): one locked backup file
             // with a recovery code shown once. Setting the folder reuses
@@ -455,6 +483,71 @@ fn main() {
             "brain_goals_accept",
             "brain_goals_step",
             "brain_goals_stop",
+            // Activity heatmap and balance chart (docs/GOALS-PROGRESS-DESIGN.md
+            // part C, JARVIS-API.md section 105): read the days, read the
+            // balance areas, save the picked areas. No card; the save held on a
+            // stale link; the picture taken out while the private lists are
+            // hidden or App lock is on. Brain only.
+            "brain_progress_activity",
+            "brain_progress_balance",
+            "brain_progress_balance_save",
+            // Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11,
+            // JARVIS-API.md section 98): write questions for a pasted text,
+            // read the quiz again, check one answer, finish, stop. No card,
+            // nothing saved; every write held on a stale link. Brain only.
+            "brain_quiz_start",
+            "brain_quiz_get",
+            "brain_quiz_answer",
+            "brain_quiz_finish",
+            "brain_quiz_stop",
+            "brain_quiz_cloud_info",
+            "brain_quiz_cloud_start",
+            "brain_quiz_cloud_get",
+            "brain_quiz_cloud_cancel",
+            // Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md
+            // section 14, JARVIS-API.md section 112): ask whether the PC has it,
+            // send the pasted link (ONE approval card on the PC), poll the
+            // request, cancel it while its card waits. The link is sent once
+            // and kept nowhere; the start held on a stale link, cancel never.
+            // Brain only.
+            "brain_youtube_info",
+            "brain_youtube_start",
+            "brain_youtube_get",
+            "brain_youtube_cancel",
+            // Retirement what-if (docs/FINANCE-DESIGN.md part B, JARVIS-API.md
+            // section 103): read the form, play out the typed numbers. No card,
+            // nothing saved; the run held on a stale link; nothing asked or sent
+            // while the private lists are hidden or App lock is on. Brain only.
+            "brain_retirement_defaults",
+            "brain_retirement_run",
+            // Review decks (JARVIS-API section 102): the owner's kept questions,
+            // asked again on a schedule the PC works out. No card; every write
+            // held on a stale link; words hidden with the private lists. Brain only.
+            "brain_decks",
+            "brain_decks_create",
+            "brain_decks_settings",
+            "brain_decks_act",
+            "brain_decks_cards",
+            "brain_decks_card_act",
+            "brain_review",
+            "brain_review_reveal",
+            "brain_review_rate",
+            "brain_review_more",
+            // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md; JARVIS-API.md
+            // section 107; the owner's request of 2026-09-30): the topics and
+            // their four modes, one change to the list, one mode change, filing
+            // facts, the "local model may help sort" switch, the preview of a
+            // change, and the two fact lists (Check these, Show them). The PC
+            // raises the only cards; every write is held on a stale link; names
+            // and both fact lists are hidden with the private lists. Brain only.
+            "brain_topics",
+            "brain_topics_edit",
+            "brain_topics_mode",
+            "brain_topics_file",
+            "brain_topics_settings",
+            "brain_topics_preview",
+            "brain_topics_review",
+            "brain_topics_hidden",
             // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
             // dates in a picture, read on the PC and PROPOSED (a scan sets
             // nothing up), and the owner's tap adding ONE reminder - no

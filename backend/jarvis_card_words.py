@@ -79,6 +79,10 @@ TITLES = {
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",
+    # jarvis_youtube.py (2026-09-30): ONE card per YouTube link, caption text only
+    "youtube_captions_read": "fetch the caption text of a YouTube video for a quiz",
+    # jarvis_quiz_cloud.py (2026-09-30): ONE card per "grade this better" request
+    "quiz_cloud_grade": "send a quiz to a cloud AI service to be graded better",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     "web_search_enable": "turn web search back on",
     # --- notes
@@ -133,6 +137,14 @@ TITLES = {
     "learning_sensitive_enable": "also learn sensitive topics automatically",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
+    # jarvis_topics.py (2026-09-30): turning a private topic back on, and the
+    # other loosenings of topic controls
+    "topic_loosen": "turn a private topic back on, or let it learn or be used again",
+    # jarvis_referee.py (2026-09-30): "This looks done - tick it?"
+    "referee_tick": "tick a goal step whose number reached its target",
+    # jarvis_tag_suggest.py (2026-09-30): overnight suggested tags
+    "chat_tags_suggest_on": "let it read a few of your old chats at night to suggest tags",
+    "chat_tag_suggest": "file one chat under a tag it suggests",
     # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
     "memory_forget_range": "forget what it learned and delete chats from the days you chose",
     "user_profile_manage": "change your profile",

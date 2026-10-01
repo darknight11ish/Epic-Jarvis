@@ -415,6 +415,12 @@ data class PendingItem(
      */
     @SerialName("sign_text") val signText: String = "",
     /**
+     * Only on a "Suggested tag for a chat" card ([TagSuggest.CARD_ACTION]): the
+     * PC's `text_hidden`, the card with the chat's title taken out. Set by
+     * [normalisePendingRow]; null on every other card.
+     */
+    @SerialName("summary_hidden") val summaryHidden: String? = null,
+    /**
      * The id of the picture of a filled-in web form that rides on a "submit
      * this form" card (`detail.picture`, FormReview), worked out from the RAW
      * wire `detail` by [normalisePendingRow], which always overwrites this
@@ -422,6 +428,20 @@ data class PendingItem(
      */
     @SerialName("form_picture") val formPicture: String? = null,
 ) {
+    /**
+     * The text under the card's title. A tag-suggestion card carries a chat's
+     * title in [summary]; while "Hide memory lists and chat history" is on it
+     * shows [summaryHidden] instead - and NOTHING if the PC sent none (fail
+     * closed; the title still says what the card is). Every other card shows
+     * [summary] as always.
+     */
+    fun shownSummary(hideLists: Boolean): String =
+        if (action == TagSuggest.CARD_ACTION) {
+            TagSuggest.cardText(summary, summaryHidden, hideLists)
+        } else {
+            summary
+        }
+
     /**
      * Whether approving needs an option named alongside it.
      *

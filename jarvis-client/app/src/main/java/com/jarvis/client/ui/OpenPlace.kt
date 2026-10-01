@@ -67,6 +67,8 @@ object OpenPlace {
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").
         "quick-tiles" to Where.Go(Screen.SETTINGS, "quick-tiles"),
+        // Hidden navigation menus section (SettingsScreen.kt, item "menu-visibility").
+        "menu-visibility" to Where.Go(Screen.SETTINGS, "menu-visibility"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).
@@ -90,6 +92,9 @@ object OpenPlace {
         // place "forget what you learned last week" opens, named by the
         // answer's `open_brain` (net/ForgetRange.kt, ChatSession).
         com.jarvis.client.net.ForgetRange.PLACE to Where.Go(Screen.BRAIN, "forget-range"),
+        // "Switch off my work topic" (2026-09-30): not a settings section - the place
+        // named by the answer's `open_brain` (net/Topics.kt, ChatSession).
+        com.jarvis.client.net.Topics.PLACE to Where.Go(Screen.BRAIN, "topics"),
     )
 
     /**
@@ -105,6 +110,7 @@ object OpenPlace {
         "more-options",
         "crash-notes",
         "start-jarvis",
+        "spending",
     )
 
     /** Every id this file has made a decision about - for the test. */

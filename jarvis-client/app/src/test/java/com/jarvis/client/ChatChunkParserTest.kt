@@ -155,4 +155,67 @@ class ChatChunkParserTest {
         assertEquals(real, JarvisApi.headerSafe(real))
         assertFalse(JarvisApi.headerSafe("abc\n123").contains('\n'))
     }
+
+    // ------------------------------------------------------ spending table ---
+
+    private val tableId = "3f9c0a5e1d7b4c2a8e6f01b2c3d4e5f6"
+
+    /**
+     * `: jarvis-table <32 hex>` (docs/JARVIS-API.md section 100.2) comes right
+     * before the answer's sentence. It is an SSE comment: it must never become
+     * text, must not stop the stream, and must leave the id for the caller.
+     */
+    @Test
+    fun `a spending table line gives its id and is never text`() {
+        assertEquals(
+            ChatChunkParser.Result.Table(tableId),
+            ChatChunkParser.consume(": jarvis-table $tableId"),
+        )
+        // Trailing spaces and a carriage return, as a proxy may leave them.
+        assertEquals(
+            ChatChunkParser.Result.Table(tableId),
+            ChatChunkParser.consume(": jarvis-table $tableId \r"),
+        )
+        // The status comment next to it still reads as before.
+        assertEquals(ChatChunkParser.Result.Status("working"), ChatChunkParser.consume(": jarvis-status working"))
+    }
+
+    @Test
+    fun `a malformed spending table line is ignored, never text and never an id`() {
+        for (bad in listOf(
+            ": jarvis-table",
+            ": jarvis-table ",
+            ": jarvis-table ${tableId.take(31)}",
+            ": jarvis-table ${tableId}0",
+            ": jarvis-table ${tableId.uppercase()}",
+            ": jarvis-table not-a-hex-id-not-a-hex-id-nope!",
+            ": jarvis-table $tableId extra",
+        )) {
+            assertEquals(bad, ChatChunkParser.Result.Ignored, ChatChunkParser.consume(bad))
+        }
+        // Without the leading colon it is not a comment at all, so it is text
+        // and NOT a table: only the comment form carries an id.
+        assertFalse(ChatChunkParser.consume("jarvis-table $tableId") is ChatChunkParser.Result.Table)
+    }
+
+    @Test
+    fun `the table line does not disturb the sentence that follows it`() {
+        val lines = listOf(
+            ": jarvis-table $tableId",
+            "",
+            """data: {"choices":[{"delta":{"content":"You spent 89.24 in March."}}]}""",
+            "data: [DONE]",
+        )
+        var id: String? = null
+        val said = StringBuilder()
+        for (l in lines) {
+            when (val r = ChatChunkParser.consume(l)) {
+                is ChatChunkParser.Result.Table -> id = r.id
+                is ChatChunkParser.Result.Text -> said.append(r.delta)
+                else -> {}
+            }
+        }
+        assertEquals(tableId, id)
+        assertEquals("You spent 89.24 in March.", said.toString())
+    }
 }

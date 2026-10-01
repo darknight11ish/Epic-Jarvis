@@ -35,6 +35,28 @@ THE FEATURES (the ids are the API contract - both apps build against them):
     wiki             "Wiki builder": the lane jarvis_wiki.py's builder
                      runs on (lane_for("wiki")); it runs nowhere else.
 
+TWO MORE (2026-09-30, JARVIS-API section 108, both built OFF until the second
+card is installed and measured - the same rule as the five above):
+
+    study            "Study helper": quiz questions are written, and answers
+                     marked, on the second card's model (jarvis_quiz's model
+                     call, handed in by study_call()/wire_study(); the quiz
+                     module itself never imports this one). Off, or with the
+                     lane down, the quiz runs exactly as before. The bigger
+                     local model ("qwen3:14b", "One bigger model on both
+                     cards") for marking stays a follow-up, not built here.
+    referee          "Referee suggestions": PROPOSE-ONLY. jarvis_referee.py may
+                     raise a card "This looks done - tick it?" when a goal
+                     step's benchmark number reaches its target. The owner's
+                     tap ticks the step (Goals.mark_step, as their own tick
+                     would); nothing here ever writes a tick. Today it compares
+                     numbers in code and loads NO model ("model_free": True in
+                     FEATURES) - so it starts no second Ollama, and does not
+                     count against "One bigger model on both cards". The
+                     second card is required to switch it on because the later
+                     step (reading a project task's change summary) will use
+                     the card's model.
+
 A THIRD MODE, alongside these five and alongside a chosen hardware preset's
 single-card lanes (docs/HARDWARE-PROFILES.md 4.3): "One bigger model on both
 cards" (the switch id is "combined", not one of the five FEATURE_IDS above -
@@ -590,7 +612,10 @@ GAP_GIB = 0.75
 #: to beat for "Longer conversations" to be worth anything.
 MAIN_CARD_CTX = 16384
 
-#: The five features, in the order both apps show them.
+#: The seven features, in the order both apps show them. `model_free`: the
+#: feature loads no model today (referee), so it starts no second Ollama, does
+#: not tie up the cards (it never blocks "One bigger model on both cards") and
+#: cannot be moved to a third card.
 FEATURES = (
     {"id": "long_context", "name": "Longer conversations", "needs": [],
      "what": ("When a conversation grows past what the main card has room for, "
@@ -609,9 +634,25 @@ FEATURES = (
      "what": ("Lets the wiki builder use the second card: documents you put in "
               "your vault's Jarvis Wiki/Sources folder become linked pages, each one "
               "after its own approval card.")},
+    # 2026-09-30 (JARVIS-API section 108). Built OFF like the rest.
+    {"id": "study", "name": "Study helper", "needs": [],
+     "what": ("Quiz questions are written, and your answers marked, on the second card, "
+              "so a quiz never slows the everyday chat. The text you paste and the "
+              "answers you type stay on this PC.")},
+    {"id": "referee", "name": "Referee suggestions", "needs": [], "model_free": True,
+     "what": ("When a goal step's number reaches your target, Jarvis asks \"This looks "
+              "done - tick it?\" on a card that shows the numbers. Only your tap ticks "
+              "it: Jarvis never ticks a step by itself and never runs a test. Today it "
+              "compares numbers on this PC and loads no model.")},
 )
 FEATURE_IDS = tuple(f["id"] for f in FEATURES)
 _BY_ID = {f["id"]: f for f in FEATURES}
+
+
+def _model_free(feature: str) -> bool:
+    """A feature that loads no model today (see FEATURES): it needs the second
+    card to be switched on, but starts no lane and holds no card memory."""
+    return bool(_BY_ID.get(feature, {}).get("model_free"))
 
 # --------------------------------------------------------------------------
 #   The third mode: one bigger model, split across both cards by Ollama's
@@ -2079,7 +2120,7 @@ def _wanted(sw: dict, det: dict) -> bool:
     # (2026-09-28).
     return bool(not sw.get("combined") and sw["master"] and det.get("capable")
                 and any(_feature_active(f, sw, det) and not _on_third(f, sw, det)
-                        for f in FEATURE_IDS))
+                        and not _model_free(f) for f in FEATURE_IDS))
 
 
 def _feature_active(feature: str, sw: dict, det: dict, card=None) -> bool:
@@ -2100,6 +2141,8 @@ def _idle_why(sw: dict, det: dict) -> str:
     if not sw["master"]:
         return "the second-card switch is off"
     moved = [f for f in FEATURE_IDS if _feature_active(f, sw, det) and _on_third(f, sw, det)]
+    # (A model-free feature, "Referee suggestions", is on without a lane: the
+    # second Ollama has nothing to start for it.)
     if moved:
         names = ", ".join(f"\"{_BY_ID[f]['name']}\"" for f in moved)
         return f"{names} {'is' if len(moved) == 1 else 'are'} moved to the third card"
@@ -2155,7 +2198,8 @@ def _reconcile(sw: dict, det: dict) -> None:
 def _combined_conflict(sw: dict) -> bool:
     """Is a per-card feature genuinely on, so "One bigger model on both
     cards" must not run (it needs both cards to itself)?"""
-    return bool(sw["master"] and any(sw["features"].get(f) for f in FEATURE_IDS))
+    return bool(sw["master"] and any(sw["features"].get(f) for f in FEATURE_IDS
+                                     if not _model_free(f)))
 
 
 def _combined_wanted(sw: dict, det: dict) -> bool:
@@ -2394,8 +2438,8 @@ def lane_for(feature: str) -> Optional[Lane]:
     """Where `feature`'s model calls go, or None to carry on exactly as
     before. Never raises."""
     try:
-        if feature not in _BY_ID:
-            return None
+        if feature not in _BY_ID or _model_free(feature):
+            return None         # a model-free feature has no lane to route to
         sw = _read_switches()
         # The cheap checks first: with the switches off (the default) this
         # reads one small file and returns, on every chat turn.
@@ -2586,6 +2630,118 @@ def learning_llm(llm: Callable[[str], Optional[str]]) -> Callable[[str], Optiona
 
 
 # --------------------------------------------------------------------------
+#   "Study helper": the quiz module's model call, on the second card
+# --------------------------------------------------------------------------
+#
+# jarvis_quiz.configure(call=...) is the quiz's one injection point, and the
+# quiz imports nothing from this module (its import rule). So the wiring is
+# done HERE: wire_study() (called once at startup by referee.patch's block,
+# after the quiz is installed) hands the quiz study_call(), which asks
+# lane_for("study") on every model call. The lane is up: the question or the
+# mark is written by the second card's model. Off, or the lane is down or does
+# not answer: the quiz's own default call runs, exactly as it did before this
+# existed. Loopback only; nothing about the text or the answer is kept here.
+
+class StudyReply(str):
+    """The lane's reply text, carrying the model that wrote it (`.model`; ""
+    for an everyday-model reply, which is a plain str). The quiz reads it off
+    the reply of ITS OWN call, so two quizzes asking at once cannot label each
+    other's marks: "Jarvis's guess" stays on the marks until the grader test
+    has been run on THIS model too."""
+    model: str = ""
+
+
+#: Only for `call.active_model()` (the eval script and the quiz's fallback
+#: probe): the model of the LAST call made on THIS thread. Never shared
+#: between threads, so concurrent calls cannot mislabel each other.
+_STUDY = threading.local()
+
+
+def _study_chat(lane: Lane, system: str, user: str, schema: dict,
+                num_predict: int) -> Optional[str]:
+    """One structured /api/chat answer from the lane, or None. jarvis_quiz's
+    default_call, pointed at the lane: same body, num_ctx = the lane's."""
+    if lane is None or not _is_loopback_url(lane.url):
+        return None
+    body = {"model": lane.model, "stream": False, "think": False, "format": schema,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": user}],
+            "options": {"temperature": 0, "num_predict": int(num_predict),
+                        "num_ctx": int(lane.num_ctx)}}
+    for attempt in (1, 2):
+        try:
+            out = _http_json(f"{lane.url}/api/chat", body, timeout=120.0)
+        except urllib.error.HTTPError as exc:
+            if attempt == 1 and exc.code == 400 and "think" in body:
+                body.pop("think", None)     # a model that does not know `think`
+                continue
+            return None
+        except Exception:
+            return None
+        if not isinstance(out, dict) or out.get("done_reason") == "length":
+            return None
+        msg = out.get("message")
+        content = msg.get("content") if isinstance(msg, dict) else None
+        return content if isinstance(content, str) else None
+    return None
+
+
+def study_call(fallback: Optional[Callable] = None) -> Callable:
+    """The quiz's model call: `call(system, user, schema, num_predict)` ->
+    the reply's JSON text. On the second card while "Study helper" is working
+    there; otherwise `fallback` (jarvis_quiz.default_call - the unchanged local
+    behaviour), or an error when there is none. It raises on failure, as the
+    quiz expects (it turns that into its plain "model_unavailable")."""
+    def call(system: str, user: str, schema: dict, num_predict: int):
+        lane = None
+        try:
+            lane = lane_for("study")
+        except Exception:
+            lane = None
+        if lane is not None:
+            out = _study_chat(lane, system, user, schema, num_predict)
+            if out is not None:
+                _STUDY.model = lane.model
+                reply = StudyReply(out)
+                reply.model = lane.model
+                return reply
+        _STUDY.model = ""
+        if fallback is None:
+            raise RuntimeError("the second card did not answer and there is no other model call")
+        return fallback(system, user, schema, num_predict)
+
+    call.active_model = lambda: getattr(_STUDY, "model", "")      # type: ignore[attr-defined]
+    return call
+
+
+def wire_study() -> str:
+    """Hand jarvis_quiz the study call. Call it AFTER jarvis_quiz.install() (which
+    resets the quiz's settings) - referee.patch's startup block does. Touches
+    only the quiz's model call; the deck `keep` function is left alone. One
+    banner line; never raises."""
+    try:
+        import jarvis_quiz
+        jarvis_quiz.configure(call=study_call(jarvis_quiz.default_call))
+        return "  study      Study helper wired (the quiz uses the second card only while that switch is on)"
+    except Exception as exc:
+        return f"  study      NOT WIRED ({type(exc).__name__}) - the quiz keeps using the everyday model"
+
+
+def feature_active(feature: str) -> bool:
+    """Is this second-card switch genuinely on right now: the main switch and
+    the feature on, a capable second card here, and everything it needs on?
+    For modules that must be switched on this way (jarvis_referee). Reads the
+    state file and the card list; starts and stops nothing. Never raises;
+    False when in doubt."""
+    try:
+        if feature not in _BY_ID:
+            return False
+        return bool(_feature_active(feature, _read_switches(), detect()))
+    except Exception:
+        return False
+
+
+# --------------------------------------------------------------------------
 #   Is the everyday Ollama kept off the second card?
 # --------------------------------------------------------------------------
 
@@ -2694,11 +2850,15 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     fid = f["id"]
     enabled = bool(sw["features"].get(fid))
     active = _feature_active(fid, sw, det)
-    model, ctx, gib = _feature_model(fid, det)
+    free = _model_free(fid)
+    model, ctx, gib = (None, None, None) if free else _feature_model(fid, det)
     installed = _model_installed(model) if model else None
     main = bool(det.get("_main"))
     running = main or lane_state == "running"
     available = bool(active and running and installed is True)
+    if free:
+        # No model, no lane: nothing else has to be running for it to work.
+        available = active
     missing = [d for d in f["needs"] if not sw["features"].get(d)]
     names = ", ".join(_BY_ID[d]["name"] for d in missing)
     unsupported = _unsupported(fid, det)
@@ -2723,6 +2883,9 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
         why = "On, but the main second-card switch is off."
     elif missing:
         why = f"On, but it needs {names} to be on as well."
+    elif free:
+        why = ("Working: it compares the numbers you log with your targets on this PC and "
+               "loads no model, so it uses none of the card's memory yet.")
     elif not running:
         why = f"On. The second copy of Ollama is {lane_state}: {lane_why}."
     elif installed is None:
@@ -2739,7 +2902,10 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     return {"id": fid, "name": f["name"], "what": _what(f, det), "enabled": enabled,
             "active": active, "available": available, "needs": list(f["needs"]),
             "model": model, "model_installed": installed,
-            "memory_gib": gib, "why": why}
+            "memory_gib": gib, "why": why,
+            # True for a switch that loads no model at all (Referee suggestions):
+            # an app shows no "model" line for it. Optional for a reader.
+            "model_free": bool(free)}
 
 
 def status() -> dict:
@@ -2812,7 +2978,8 @@ def _combined_status(sw: dict, det: dict, pending: list) -> dict:
                else f"Needs two capable graphics cards: {capable_why}.")
     elif conflict:
         why = ("On, but a second-card feature (Longer conversations, Pictures, Learning in "
-               "the background, Browser control or Wiki builder) is on too, and this mode "
+               "the background, Browser control, Wiki builder or Study helper) is on too, "
+               "and this mode "
                "needs both cards to itself. Turn the other one off first."
                if enabled else "Off.")
     elif not enabled:
@@ -2900,7 +3067,7 @@ def _third_status(sw: dict, det: dict, pending: list) -> dict:
             # Not one this card cannot run (an 8 GB card and "Longer
             # conversations" - 2026-09-30).
             "assignable": [f for f in FEATURE_IDS
-                           if sw["master"] and sw["features"].get(f) and f not in unavailable],
+                           if sw["master"] and sw["features"].get(f) and not _model_free(f) and f not in unavailable],
             # Additive (2026-09-30): {feature: why} for a switch this card
             # cannot run. The apps do not need it; it is here to be read.
             "unavailable": unavailable,
@@ -3066,7 +3233,8 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
                    "feature stays off; each has its own switch and its own card.")
         else:
             yes = ("If you say yes: nothing starts yet. Each feature (Longer conversations, "
-                   "Pictures, Learning in the background, Browser control, Wiki builder) has "
+                   "Pictures, Learning in the background, Browser control, Wiki builder, "
+                   "Study helper, Referee suggestions) has "
                    f"its own switch and its own card. Once one of them is on, {lane}")
         return (
             f"{head}\n\n"
@@ -3076,6 +3244,8 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
             f"If you say no: nothing changes. Everything keeps running on the "
             f"{p.get('name', 'main card')}.")
     f = _BY_ID[feature]
+    if _model_free(feature):
+        return _describe_model_free(f, det, card, p)
     model, ctx, gib = _feature_model(feature, det)
     mem = (f"about {gib:.1f} GB of the card's {_gb(s['total_mb'])}"
            + (" (an estimate: the picture model's size was not checked)"
@@ -3110,6 +3280,27 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
         "If you did not just ask for this, say no.\n\n"
         "If you say no: nothing changes. This keeps working the way it does today, on "
         f"the {p.get('name', 'main card')}.")
+
+
+def _describe_model_free(f: dict, det: dict, card: str, primary: dict) -> str:
+    """The approval card for a switch that loads no model today ("Referee
+    suggestions"). It says so plainly: no second copy of Ollama starts, no
+    model loads, and what the switch DOES allow - a card that only ever asks
+    you to tick a step - is on it word for word."""
+    return (
+        f"Turn on \"{f['name']}\"?\n\n"
+        f"What it does: {_what(f, det)}\n\n"
+        f"Which card: {card} - it must be there to switch this on, because the later "
+        f"version (reading a project's changes) will use its model.\n"
+        f"Which model: none yet. Nothing is loaded and no second copy of Ollama is "
+        f"started for this. Nothing leaves this PC.\n\n"
+        "How it asks: at most a few cards a day, one at a time, never while you are in a "
+        "focus session or Jarvis is in Quiet or Standby. Each card shows the numbers and "
+        "says \"a suggestion from a number, not a check\". Your tap ticks the step, the same "
+        "as ticking it yourself, and you can untick it at once. It never runs a test, and "
+        "it only looks at your own goals.\n\n"
+        "If you did not just ask for this, say no.\n\n"
+        "If you say no: nothing changes. Goal steps are ticked only by you, as today.")
 
 
 def describe_third_assign(feature: str, det: dict) -> str:
@@ -3245,6 +3436,9 @@ def _request_change_third(assign: Optional[str], gate: Callable, tier_of: Callab
     if assign not in _BY_ID:
         return 400, {"error": f"there is no second-card feature called {str(assign)[:40]!r}"}
     label = f"\"{_BY_ID[assign]['name']}\""
+    if _model_free(assign):
+        return 400, {"error": f"{label} loads no model, so there is nothing to move to the "
+                              f"third card."}
     sw = _read_switches()
     det0 = detect()
     if _third_feature_now(sw, det0) == assign:
@@ -3368,7 +3562,9 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
     if refused:
         return _finish(feature, pid, "refused", f"it cannot run on this card: {refused}")
     text = describe_on(feature, det)
-    model, ctx, gib = _feature_model(feature, det) if feature != "master" else (None, None, None)
+    model, ctx, gib = (_feature_model(feature, det)
+                       if feature != "master" and not _model_free(feature)
+                       else (None, None, None))
     web = _brings_browser(feature, _read_switches(), det)
     detail = {"text": text, "what": f"turn on the second graphics card: {feature}",
               "feature": feature, "card": det["second"]["name"],
@@ -3429,6 +3625,21 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
         return _finish(feature, pid, "failed", err, rid)
     _finish(feature, pid, "enabled", "", rid)
     _reconcile(_read_switches(), detect())
+    _referee_sync(feature)
+
+
+def _referee_sync(feature: str) -> None:
+    """Referee suggestions (and the main switch) went on or off: the quiet hourly
+    look on the one scheduler follows the switch at once, not at the next
+    restart. Best effort; never raises. A switch that changes nothing here (any
+    other feature) does nothing."""
+    if feature not in ("referee", "master"):
+        return
+    try:
+        import jarvis_referee
+        jarvis_referee.ensure_job()
+    except Exception:
+        pass
 
 
 def _describe_combined(det: dict, why: str = "") -> str:
@@ -3458,7 +3669,8 @@ def _describe_combined(det: dict, why: str = "") -> str:
         f"the extra card is not installed yet.\n\n"
         f"This uses both cards for the one model, so it cannot run at the same time as the "
         f"second card's other features (Longer conversations, Pictures, Learning in the "
-        f"background, Browser control, Wiki builder) - turn those off first, or this stays "
+        f"background, Browser control, Wiki builder, Study helper) - turn those off first, or "
+        f"this stays "
         f"off until you do.\n\n"
         + (f"If this is not something you want right now, say no - Jarvis will wait a while "
            f"before suggesting it again, and \"When to suggest the bigger model\" in Settings "
@@ -3840,6 +4052,7 @@ def request_change(feature: str, enabled: bool = False, *, assign: Optional[str]
             return 500, {"error": err}
         _audit("second_card.off", {"feature": feature})
         _reconcile(_read_switches(), detect())
+        _referee_sync(feature)
         return 200, {"ok": True, "enabled": False, "pending": False,
                      "message": f"{label} is off."}
 
@@ -3867,7 +4080,9 @@ def request_change(feature: str, enabled: bool = False, *, assign: Optional[str]
         if missing:
             names = ", ".join(f"\"{_BY_ID[d]['name']}\"" for d in missing)
             return 400, {"error": f"{label} needs {names} on first."}
-    if (feature != "master" or any(sw["features"].values())) and not det.get("_main"):
+    if ((feature != "master" and not _model_free(feature))
+            or (feature == "master" and any(v for k, v in sw["features"].items()
+                                            if not _model_free(k)))) and not det.get("_main"):
         # This ON would start the second Ollama. Not while the big model is
         # on the card: the approval would turn on something that cannot run.
         held = big_model_holds(det["second"]["uuid"], det["second"]["name"])
@@ -3930,6 +4145,7 @@ def _reset_for_tests() -> None:
         _SUGGEST_FP.clear()
     _TAGS.clear()
     _LEARN.update(failed_at=-1e9, short=False)
+    _STUDY.model = ""
     wake()
     try:
         _LANE.stop("reset")

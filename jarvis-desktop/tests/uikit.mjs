@@ -497,8 +497,8 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube }) {
   const listeners = {};
   window.__calls = [];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
@@ -1587,12 +1587,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             g.reads += 1;
             if (g.fails) throw new Error(g.fails);
             const out = JSON.parse(JSON.stringify({ available: true, goals: g.goals,
-              limits: { text: 300, steps: 7, goals: 20, by: 40 } }));
+              limits: { text: 300, steps: 7, goals: 20, by: 40, needs: 3 } }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               for (const gl of out.goals) {
                 gl.text = "";
-                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "" }));
+                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "", lock_words: "",
+                  reached_words: "", measure_name: "" }));
                 gl.hidden = true;
               }
               out.hidden = true;
@@ -1631,7 +1632,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               return { ok: false, error: "there are already 20 goals - stop tracking one before adding another" };
             }
             const plan = Array.isArray(args.plan) && args.plan.length
-              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              ? args.plan.map((s) => ({ ...s, step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
               : [{ step: text, by: "", done: false }];
             const goal = { id: "g" + g.goals.length.toString(16).padStart(10, "0"), text, plan,
               status: "draft", created: Date.now() / 1000, changed: Date.now() / 1000 };
@@ -1646,8 +1647,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (!goal) return { ok: false, error: "no such goal" };
             if (goal.status !== "draft") return { ok: false, error: "that goal is not waiting to be accepted" };
             const plan = Array.isArray(args.plan) && args.plan.length
-              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              ? args.plan.map((s) => ({ ...s, step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
               : goal.plan;
+            if (g.refuseAccept) throw g.refuseAccept;
             if (!plan.length) return { ok: false, error: "a plan needs at least one step" };
             if (plan.length > 7) {
               return { ok: false, error: "a plan can have at most 7 steps - keep the big ones and drop the rest" };
@@ -1670,11 +1672,19 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const g = window.__goals;
             const goal = g.goals.find((x) => x.id === args.id);
             if (!goal) return { ok: false, error: "no such goal" };
-            const i = args.index;
+            const i = args.stepId ? goal.plan.findIndex((s) => s.id === args.stepId) : args.index;
             if (typeof i !== "number" || i < 0 || i >= goal.plan.length) {
               return { ok: false, error: "that is not one of this goal's steps" };
             }
+            // A locked step is refused with the PC's own sentence (a 409 that
+            // Rust hands on as an error); nothing changes.
+            if (args.done && goal.plan[i].state === "locked") {
+              throw g.lockedError || "Do the earlier step first, or tick it if it is already done.";
+            }
             goal.plan[i].done = Boolean(args.done);
+            if (goal.plan[i].state === "done" || goal.plan[i].state === "open") {
+              goal.plan[i].state = args.done ? "done" : "open";
+            }
             goal.changed = Date.now() / 1000;
             return { ok: true, goal: { ...goal } };
           }
@@ -1691,6 +1701,513 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               window.__schedule.jobs = window.__schedule.jobs.filter((j) => j.id !== jobId);
             }
             return { ok: true, goal: { ...goal } };
+          }
+          // brain/progress.rs (Activity heatmap and balance chart, JARVIS-API 105).
+          // `window.__progress` is null - an older PC with no such route, which
+          // Rust answers `{available: false}` - unless the scenario names
+          // `progress: {activity, balance, saved?, saveError?}`: the PC's answers
+          // as in tests/fixtures/progress-cases.json. Like Rust, an answer with
+          // `keep_on_screen` is replaced by the hidden words while the private
+          // lists are hidden or App lock is on, and a private picker row loses
+          // its name. A save is held on a stale link, recorded in `calls` (the
+          // axes exactly as sent) and answers `saved` (or the balance again), or
+          // throws `saveError` - the PC's sentence as sent.
+          case "brain_progress_activity":
+          case "brain_progress_balance":
+          case "brain_progress_balance_save": {
+            const pg = window.__progress;
+            if (!pg) {
+              if (cmd === "brain_progress_balance_save") throw new Error("Your PC's Jarvis does not have the Progress pictures yet - run apply-patches.ps1 on the PC.");
+              return { available: false };
+            }
+            pg.calls.push({ cmd, ...(cmd === "brain_progress_balance_save" ? { axes: JSON.parse(JSON.stringify(args.axes)) } : {}) });
+            const listsHidden = (window.__security.hidden && !window.__security.revealed) || window.__appLock;
+            if (cmd === "brain_progress_balance_save") {
+              if (state.stale) throw new Error("the event stream is stale");
+              // Like Rust: while the lists are hidden (or App lock is locked) the chart cannot be changed.
+              if (listsHidden) throw new Error("Hidden while memory lists and chat history are hidden.");
+              if (pg.saveError) throw pg.saveError;
+              pg.balance = JSON.parse(JSON.stringify(pg.saved || pg.balance));
+            }
+            let out = JSON.parse(JSON.stringify(cmd === "brain_progress_activity" ? pg.activity : pg.balance));
+            if (listsHidden) {
+              const anyPrivate = out.keep_on_screen === true
+                || (out.axes || []).some((a) => a.keep_on_screen === true);
+              if (anyPrivate) {
+                return { ok: true, available: true, title: out.title, hidden: true, keep_on_screen: true,
+                  lists_hidden: true,
+                  hidden_words: out.hidden_words || "Hidden while memory lists and chat history are hidden." };
+              }
+              for (const c of out.choices || []) {
+                if (c.keep_on_screen === true) Object.assign(c, { name: "", project_name: "", hidden: true });
+              }
+              out.lists_hidden = true;
+            }
+            return out;
+          }
+          // brain/retirement.rs (the retirement what-if). `window.__retirement` is
+          // null - a PC without it, which Rust answers with the "run
+          // apply-patches.ps1" sentence - unless the scenario names
+          // `retirement: {form, script, delayMs}`. `form` is the PC's answer to
+          // GET /api/retirement/defaults; each run answers the next entry of
+          // `script` (the last one repeats) exactly as Rust hands it on (the
+          // real answers are in tests/fixtures/retirement-cases.json). While
+          // the private lists are hidden, or App lock is on, neither command
+          // asks the PC: both answer the hidden words, as Rust does. Every
+          // call is recorded in `calls` (the typed numbers stay in this test
+          // page's memory, like everything in this stand-in).
+          case "brain_retirement_defaults":
+          case "brain_retirement_run": {
+            const rt = window.__retirement;
+            if (!rt) throw new Error("Your PC's Jarvis cannot work out a retirement what-if yet - run apply-patches.ps1 on the PC.");
+            rt.calls.push({ cmd, ...(cmd === "brain_retirement_run" ? { values: args.values } : {}) });
+            if (cmd === "brain_retirement_run" && state.stale) throw new Error("the event stream is stale");
+            if ((window.__security.hidden && !window.__security.revealed) || window.__appLock) {
+              return { ok: true, hidden: true, words: { hidden: "Retirement what-if hidden" } };
+            }
+            if (cmd === "brain_retirement_defaults") return JSON.parse(JSON.stringify(rt.form));
+            if (rt.delayMs) await new Promise((r) => setTimeout(r, rt.delayMs));
+            const next = rt.script.length > 1 ? rt.script.shift() : rt.script[0];
+            return JSON.parse(JSON.stringify(next));
+          }
+          // brain/quiz.rs (Quiz me on a text). `window.__quiz` is null - a PC
+          // without Quiz, which Rust answers with the "run apply-patches.ps1"
+          // sentence - unless the scenario names `quiz: {...}`. It behaves like
+          // the contract (docs/STUDY-FROM-TEXT-DESIGN.md section 11): start
+          // makes `count` questions, answer marks with the scenario's `levels`
+          // in turn, finish/stop delete the session. `refuse: {cmd: code}` makes
+          // that command answer a refusal with the code. Words come out while
+          // the private lists are hidden, as brain/quiz.rs redact_answer does.
+          case "brain_quiz_start":
+          case "brain_quiz_get":
+          case "brain_quiz_answer":
+          case "brain_quiz_finish":
+          case "brain_quiz_stop": {
+            const z = window.__quiz;
+            if (!z) throw new Error("Your PC's Jarvis does not have Quiz yet - run apply-patches.ps1 on the PC.");
+            z.calls.push({ cmd, ...args });
+            if (cmd !== "brain_quiz_get" && state.stale) throw new Error("the event stream is stale");
+            const no = (error) => ({ ok: false, error, message: "the PC's own words for " + error });
+            if (z.refuse && z.refuse[cmd]) return no(z.refuse[cmd]);
+            const hideIt = () => window.__security.hidden && !window.__security.revealed;
+            const view = () => {
+              const q = JSON.parse(JSON.stringify(z.quiz));
+              if (hideIt()) {
+                q.title = ""; q.hidden = true;
+                for (const x of q.questions) {
+                  x.prompt = "";
+                  if (x.mark) {
+                    x.mark.comment = ""; x.mark.passage = "";
+                    if (typeof x.mark.expected === "string") x.mark.expected = "";
+                  }
+                }
+              }
+              return q;
+            };
+            if (cmd === "brain_quiz_start") {
+              const t = String(args.text || "");
+              const spanish = args.mode === "spanish" && !z.noMode;
+              if (spanish && t) {
+                if (t.length < 200) return no("text_too_short");
+              } else if (!spanish) {
+                if (t.length < 200) return no("text_too_short");
+              }
+              if (t.length > 20000) return no("text_too_long");
+              const n = args.count || 5;
+              if (spanish) {
+                const exercise = args.exercise || "mixed";
+                const kinds = exercise === "mixed" ? ["blank", "translate", "complete"] : [exercise];
+                z.quiz = { id: "qz0001", title: args.topic || "Spanish", grader_verified: false,
+                  mode: "spanish", level: args.level || "A2", key_source: t ? "text" : "model",
+                  notice: z.notice || "STAND-IN NOTICE: Spanish crisis words are not recognised. Call or text 988, or 911.",
+                  answered: 0, questions: Array.from({ length: Math.min(n, z.questions || 3) }, (_, i) => ({
+                    n: i + 1, kind: kinds[i % kinds.length],
+                    prompt: kinds[i % kinds.length] === "blank" ? "El libro _____ en la mesa " + (i + 1) + "."
+                      : "Spanish prompt number " + (i + 1), mark: null })) };
+              } else {
+                const kinds = ["recall", "explain", "apply"];
+                z.quiz = { id: "qz0001", title: args.title || "Bread", grader_verified: Boolean(z.verified),
+                  answered: 0, questions: Array.from({ length: Math.min(n, z.questions || 3) }, (_, i) => ({
+                    n: i + 1, kind: kinds[i % 3], prompt: "Question text number " + (i + 1) + "?", mark: null })) };
+                if (!z.noMode) { z.quiz.mode = "text"; z.quiz.level = null; z.quiz.key_source = null; }
+              }
+              z.marks = {};
+              return { ok: true, quiz: view(), ...(hideIt() ? { hidden: true } : {}) };
+            }
+            if (!z.quiz || args.id !== z.quiz.id) return no("not_found");
+            if (cmd === "brain_quiz_get") return { ok: true, quiz: view() };
+            if (cmd === "brain_quiz_stop") { z.quiz = null; return { ok: true }; }
+            if (cmd === "brain_quiz_finish") {
+              const counts = { got_it: 0, partly: 0, not_yet: 0 };
+              const again = [];
+              for (const x of z.quiz.questions) {
+                if (!x.mark) { again.push(x.n); continue; } // skipped: looked at again, not counted
+                counts[x.mark.level] += 1;
+                if (x.mark.level !== "got_it") again.push(x.n);
+              }
+              let kept;
+              if (args.keep) {
+                const k = args.keep;
+                const d = window.__decks;
+                if (z.keepRefuse) return no(z.keepRefuse);
+                if (!Array.isArray(k.cards) || !k.cards.length) return no("nothing_to_keep");
+                for (const c of k.cards) {
+                  const it = z.quiz.questions.find((x) => x.n === c.n);
+                  if (!it || !it.mark) return no("bad_question");
+                }
+                if (z.crisisWord && k.cards.some((c) => String(c.answer).includes(z.crisisWord))) {
+                  return { ok: true, crisis: true, message: "STAND-IN HELP WORDS.\n\nCall **988** any time.", quiz: view() };
+                }
+                if (d && d.available !== false) {
+                  let deck = k.deck ? d.decks.find((x) => x.id === k.deck) : null;
+                  if (k.deck && !deck) return no("deck_not_found");
+                  if (!deck) {
+                    deck = { id: "dnew" + (d.decks.length + 1), name: k.new_deck, paused: false, cards: [] };
+                    d.decks.push(deck);
+                  }
+                  for (const c of k.cards) {
+                    const it = z.quiz.questions.find((x) => x.n === c.n);
+                    deck.cards.push({ id: "cnew" + it.n, front: it.prompt, back: c.answer, passage: it.mark.passage,
+                      kind: it.kind, level: z.quiz.level || null, due: true, new: true });
+                  }
+                }
+                kept = k.cards.length;
+              }
+              z.quiz = null;
+              return { ok: true, summary: { counts, again }, ...(kept !== undefined ? { kept } : {}) };
+            }
+            const item = z.quiz.questions.find((x) => x.n === args.n);
+            if (!item) return no("bad_question");
+            if (item.mark) return no("already_answered");
+            const a = String(args.answer || "");
+            if (!a.trim()) return no("answer_empty");
+            if (a.length > 2000) return no("answer_too_long");
+            // A crisis answer (JARVIS-API 98.4): the scenario's `crisisWord`
+            // stands in for the PC's check. No mark, question stays open, the
+            // PC's own (stand-in) help words come back.
+            if (z.crisisWord && a.includes(z.crisisWord)) {
+              return { ok: true, crisis: true, message: "STAND-IN HELP WORDS.\n\nCall **988** any time.",
+                quiz: view() };
+            }
+            const levels = z.levels || ["got_it", "partly", "not_yet"];
+            item.mark = { level: levels[z.quiz.answered % levels.length],
+              comment: "The passage says otherwise.", passage: "SOURCE PASSAGE " + item.n };
+            if (z.quiz.mode === "spanish") {
+              item.mark.marked_by = item.kind === "blank" ? "code" : "model";
+              item.mark.expected = "está";
+              item.mark.key_label = z.quiz.key_source === "model" ? "Answer key written by the model" : null;
+            }
+            z.quiz.answered += 1;
+            return { ok: true, mark: JSON.parse(JSON.stringify(item.mark)), quiz: view() };
+          }
+          case "brain_youtube_info":
+          case "brain_youtube_start":
+          case "brain_youtube_get":
+          case "brain_youtube_cancel": {
+            const y = window.__youtube;
+            if (!y) {
+              if (cmd === "brain_youtube_info") return { ok: true, available: false };
+              throw new Error("Your PC's Jarvis does not have YouTube quizzes yet - run apply-patches.ps1 on the PC.");
+            }
+            y.calls.push({ cmd, ...args });
+            if (cmd === "brain_youtube_start" && state.stale) throw new Error("the event stream is stale");
+            if (y.throws && y.throws[cmd]) throw new Error(y.throws[cmd]);
+            const hideIt = () => window.__security.hidden && !window.__security.revealed;
+            const redact = (a) => {
+              a = JSON.parse(JSON.stringify(a));
+              if (!hideIt() || a.ok !== true) return a;
+              for (const k of ["request", "latest"]) {
+                const r = a[k];
+                if (!r) continue;
+                if (typeof r.link === "string") r.link = null;
+                if (r.quiz) {
+                  r.quiz.title = ""; r.quiz.hidden = true;
+                  for (const x of r.quiz.questions) x.prompt = "";
+                }
+                r.hidden = true;
+              }
+              a.hidden = true;
+              return a;
+            };
+            let body;
+            if (cmd === "brain_youtube_info") {
+              body = y.info || { ok: true, available: true, latest: null, limits: { link: 300 } };
+            } else if (cmd === "brain_youtube_start") {
+              body = y.start;
+            } else if (cmd === "brain_youtube_get") {
+              y.reads += 1;
+              body = y.script.length > 1 ? y.script.shift() : y.script[0];
+              if (body && body.__throw) throw new Error(body.__throw);
+            } else {
+              body = y.cancel;
+            }
+            if (y.delayMs) await new Promise((r) => setTimeout(r, y.delayMs));
+            return redact(body);
+          }
+          // brain/decks.rs (Review decks). `window.__decks` is null - a PC
+          // without decks, which Rust answers with the "run apply-patches.ps1"
+          // sentence - unless the scenario names `decks: {...}`. It behaves like
+          // JARVIS-API section 102: a card is ready when its `due` is true and
+          // its deck is not paused; a run shows `limit` cards; a rating needs a
+          // reveal first. Words come out while the private lists are hidden and
+          // review is not asked at all, as brain/decks.rs does.
+          case "brain_decks":
+          case "brain_decks_create":
+          case "brain_decks_settings":
+          case "brain_decks_act":
+          case "brain_decks_cards":
+          case "brain_decks_card_act":
+          case "brain_review":
+          case "brain_review_reveal":
+          case "brain_review_rate":
+          case "brain_review_more": {
+            const d = window.__decks;
+            if (!d) throw new Error("Your PC's Jarvis does not have study decks yet - run apply-patches.ps1 on the PC.");
+            d.calls.push({ cmd, ...args });
+            const writes = !["brain_decks", "brain_decks_cards", "brain_review"].includes(cmd);
+            if (writes && state.stale) throw new Error("the event stream is stale");
+            const no = (error) => ({ ok: false, error, message: "the PC's own words for " + error });
+            if (d.refuse && d.refuse[cmd]) return no(d.refuse[cmd]);
+            const hideIt = () => window.__security.hidden && !window.__security.revealed;
+            const ready = (deck) => deck.paused ? 0 : deck.cards.filter((c) => c.due).length;
+            const line = (n) => n === 0 ? "Nothing ready today" : (n === 1 ? "1 card ready" : n + " cards ready");
+            const deckOut = (x) => ({ id: x.id, name: hideIt() ? "" : x.name, cards: x.cards.length,
+              ready: ready(x), paused: Boolean(x.paused), kind: x.cards.length ? "study" : "empty" });
+            const total = () => d.decks.reduce((a, x) => a + ready(x), 0);
+            const cardFull = (c) => ({ id: c.id, front: hideIt() ? "" : c.front, back: hideIt() ? "" : c.back,
+              passage: hideIt() ? "" : (c.passage || ""), kind: c.kind || "recall", level: c.level || null,
+              key_source: c.keySource || null, key_label: c.keyLabel || null, new: Boolean(c.new), due_day: null });
+            const view = (c) => c ? { id: c.id, front: c.front, kind: c.kind || "recall", level: c.level || null,
+              deck: c.deck, new: Boolean(c.new) } : null;
+            const queue = (deckId) => {
+              const out = [];
+              for (const x of d.decks) {
+                if (deckId && x.id !== deckId) continue;
+                if (x.paused) continue;
+                for (const c of x.cards) if (c.due) out.push({ ...c, deck: x.id });
+              }
+              return out;
+            };
+            const reviewOut = (deckId) => {
+              const q = queue(deckId);
+              const base = { ok: true, ready: total(), new_left: 2, line: line(total()),
+                run: { done: d.done, limit: d.limit } };
+              if (!d.decks.length) return { ...base, state: "no_decks", card: null, line: "" };
+              if (deckId && d.decks.find((x) => x.id === deckId) && d.decks.find((x) => x.id === deckId).paused) {
+                return { ...base, state: "paused", card: null, line: "This deck is paused" };
+              }
+              if (!q.length) return { ...base, state: d.decks.every((x) => x.paused) ? "paused" : "empty", card: null,
+                line: d.decks.every((x) => x.paused) ? "All decks paused" : "Nothing ready today" };
+              if (d.done >= d.limit) return { ...base, state: "enough", card: null };
+              return { ...base, state: "card", card: view(q[0]) };
+            };
+            if (cmd === "brain_decks") {
+              return { ok: true, available: d.available !== false, why: d.available === false ? d.why : "",
+                decks: d.available === false ? [] : d.decks.map(deckOut), ready: total(), new_per_day: d.newPerDay,
+                new_left: 2, next_ready_day: d.nextReadyDay || null, line: d.decks.length ? line(total()) : "",
+                limits: { decks: 20, cards: 1000, name: 60, front: 500, back: 2000, new_per_day: 20 },
+                ...(hideIt() ? { hidden: true } : {}) };
+            }
+            if (cmd === "brain_decks_create") {
+              if (!String(args.name || "").trim()) return no("bad_deck_name");
+              const x = { id: "dmade" + (d.decks.length + 1), name: args.name, paused: false, cards: [] };
+              d.decks.push(x);
+              return { ok: true, deck: deckOut(x) };
+            }
+            if (cmd === "brain_decks_settings") { d.newPerDay = args.newPerDay; return { ok: true, new_per_day: args.newPerDay }; }
+            if (cmd === "brain_decks_act") {
+              const x = d.decks.find((y) => y.id === args.id);
+              if (!x) return no("deck_not_found");
+              if (args.action === "delete") { d.decks = d.decks.filter((y) => y !== x); return { ok: true, deleted: true }; }
+              if (args.action === "pause") x.paused = true;
+              if (args.action === "resume") x.paused = false;
+              if (args.action === "rename") x.name = args.name;
+              return { ok: true, deck: deckOut(x) };
+            }
+            if (cmd === "brain_decks_cards") {
+              const x = d.decks.find((y) => y.id === args.id);
+              if (!x) return no("deck_not_found");
+              return { ok: true, deck: { id: x.id, name: hideIt() ? "" : x.name }, cards: x.cards.map(cardFull),
+                ...(hideIt() ? { hidden: true } : {}) };
+            }
+            if (cmd === "brain_decks_card_act") {
+              const x = d.decks.find((y) => y.id === args.id);
+              if (!x) return no("deck_not_found");
+              const c = x.cards.find((y) => y.id === args.cid);
+              if (!c) return no("card_not_found");
+              if (args.action === "delete") { x.cards = x.cards.filter((y) => y !== c); return { ok: true, deleted: true }; }
+              if (typeof args.front === "string") c.front = args.front;
+              if (typeof args.back === "string") c.back = args.back;
+              return { ok: true, card: cardFull(c) };
+            }
+            if (hideIt()) return { ok: true, hidden: true, message: "Turn off Hide memory lists to review" };
+            if (cmd === "brain_review") return reviewOut(args.deck || "");
+            if (cmd === "brain_review_more") { d.limit += 10; return reviewOut(args.deck || ""); }
+            const all = queue("");
+            const card = all.find((c) => c.id === args.card);
+            if (!card) return no("card_not_found");
+            if (cmd === "brain_review_reveal") {
+              d.revealed = card.id;
+              return { ok: true, back: { answer: card.back, passage: card.passage || "" }, key_label: card.keyLabel || null };
+            }
+            if (d.revealed !== card.id) return no("not_revealed");
+            if (!["again", "hard", "good", "easy"].includes(args.rating)) return no("bad_rating");
+            for (const x of d.decks) for (const c of x.cards) if (c.id === card.id) c.due = false;
+            d.done += 1;
+            d.revealed = "";
+            const out = reviewOut("");
+            const { card: next, ...rest } = out;
+            return { ...rest, next, comes_back: "2026-10-03" };
+          }
+          // brain/topics.rs (Topic controls, JARVIS-API section 107).
+          // `window.__topics` is null - a PC without topic controls, which
+          // Rust answers with the "run apply-patches.ps1" sentence - unless
+          // the scenario names `topics: {...}`. It behaves like the PC: the
+          // modes, the preview, a card for a looser choice on a private topic
+          // (`waiting` until the test calls window.__topicsDecide), the
+          // review and hidden lists, and names/keywords/lists taken out while
+          // the private lists are hidden (or App lock has locked), as Rust does.
+          case "brain_topics":
+          case "brain_topics_edit":
+          case "brain_topics_mode":
+          case "brain_topics_file":
+          case "brain_topics_settings":
+          case "brain_topics_preview":
+          case "brain_topics_review":
+          case "brain_topics_hidden": {
+            const z = window.__topics;
+            if (!z) throw new Error("Your PC's Jarvis does not have topic controls yet - run apply-patches.ps1 on the PC.");
+            z.calls.push({ cmd, ...JSON.parse(JSON.stringify(args || {})) });
+            const writes = ["brain_topics_edit", "brain_topics_mode", "brain_topics_file", "brain_topics_settings"].includes(cmd);
+            if (writes && state.stale) throw new Error("the event stream is stale");
+            const MSG = z.errors;
+            const no = (error) => ({ ok: false, error, message: MSG[error] || ("the PC's own words for " + error) });
+            if (z.refuse && z.refuse[cmd]) return no(z.refuse[cmd]);
+            const hideIt = () => (window.__security.hidden && !window.__security.revealed) || window.__appLock;
+            const CAPS = { both: [1, 1], use_only: [0, 1], learn_only: [1, 0], off: [0, 0] };
+            const loosens = (a, b) => (CAPS[b][0] && !CAPS[a][0]) || (CAPS[b][1] && !CAPS[a][1]);
+            const byId = (id) => z.topics.find((t) => t.id === id);
+            const usedIn = (t) => CAPS[t.mode][1];
+            const view = () => {
+              const own = z.topics.filter((t) => !t.system);
+              const list = [z.topics.find((t) => t.system), ...own].filter(Boolean).map((t, i) => ({
+                id: t.id, name: hideIt() && !t.system ? "" : t.name, colour: t.colour, icon: t.icon, mode: t.mode,
+                private: Boolean(t.private), words: hideIt() ? [] : (t.words || []), ord: i, system: Boolean(t.system),
+                created: 1790000000, facts: t.facts, unchecked: t.unchecked || 0, hidden: t.mode === "off",
+                skipped_week: t.skipped_week || 0 }));
+              const unchecked = list.filter((t) => !t.system).reduce((a, t) => a + t.unchecked, 0);
+              const facts = list.reduce((a, t) => a + t.facts, 0);
+              return { ok: true, topics: list, unchecked, facts, sorted: facts - list[0].facts, model_help: Boolean(z.modelHelp),
+                backfill: z.backfill, limits: { max_topics: 16, name_max: 24, words_max: 20, batch: 10, colours: 8, icons: [] },
+                modes: [], waiting: z.waiting, last: z.last, ...(hideIt() ? { lists_hidden: true } : {}) };
+            };
+            const decide = (outcome) => {
+              const w = z.waiting; const p = z.pendingChange;
+              if (!w || !p) return;
+              if (outcome === "applied") p.apply();
+              z.last = { outcome, why: "", at: 1790000001, message: z.lastWords[outcome] };
+              z.waiting = null; z.pendingChange = null;
+            };
+            window.__topicsDecide = decide;
+            window.__topicsView = view;
+            const card = (id, kind, apply) => {
+              z.waiting = { topic: id, kind }; z.pendingChange = { id, kind, apply };
+              return { ok: true, waiting: true, id, kind, message: "Waiting for your approval." };
+            };
+            if (cmd === "brain_topics") return view();
+            if (cmd === "brain_topics_settings") { z.modelHelp = args.modelHelp; return view(); }
+            if (cmd === "brain_topics_preview") {
+              const t = byId(args.id);
+              if (!t) return no("topic_not_found");
+              const stops = CAPS[t.mode][0] && !CAPS[args.mode][0];
+              const affected = usedIn(t) && !CAPS[args.mode][1] ? t.facts : 0;
+              const loose = loosens(t.mode, args.mode);
+              const bits = [];
+              const nm = hideIt() ? "" : t.name;
+              bits.push(affected === 0 ? "Nothing Jarvis knows about " + nm + " will change in answers."
+                : affected === 1 ? "1 thing Jarvis knows about " + nm + " will be left out of answers."
+                : affected + " things Jarvis knows about " + nm + " will be left out of answers.");
+              if (stops) bits.push("Jarvis will stop saving new things about " + nm + ".");
+              const pinned = usedIn(t) && !CAPS[args.mode][1] ? (t.pinned || 0) : 0;
+              if (pinned) bits.push(pinned === 1 ? "1 pinned fact about " + nm + " will pause until you switch it back on."
+                : pinned + " pinned facts about " + nm + " will pause until you switch it back on.");
+              return { ok: true, id: t.id, mode: args.mode, affected, pinned, stops_learning: Boolean(stops), loosens: Boolean(loose),
+                needs_card: Boolean(loose && t.private), private: Boolean(t.private),
+                line: hideIt() ? "" : bits.join(" "), card_line: loose && t.private ? "This will ask for your OK first." : "",
+                ...(hideIt() ? { lists_hidden: true } : {}) };
+            }
+            if (cmd === "brain_topics_mode") {
+              const t = byId(args.id);
+              if (!t) return no("topic_not_found");
+              if (!CAPS[args.mode]) return no("bad_mode");
+              if (loosens(t.mode, args.mode) && (t.private || z.outside)) {
+                return card(t.id, "mode", () => { t.mode = args.mode; });
+              }
+              if (z.waiting && z.waiting.topic === t.id) { z.waiting = null; z.pendingChange = null; }
+              const changed = t.mode !== args.mode;
+              t.mode = args.mode;
+              return { ...view(), id: t.id, changed };
+            }
+            if (cmd === "brain_topics_review" || cmd === "brain_topics_hidden") {
+              if (hideIt()) return { ok: true, lists_hidden: true, facts: [], next: null, total: 0 };
+              if (cmd === "brain_topics_hidden") {
+                const rest = (z.hidden[args.id] || []).filter((f) => !args.after || f.id > args.after);
+                const size = z.hiddenPage || 100;
+                const slice = rest.slice(0, size);
+                return { ok: true, id: args.id, mode: (byId(args.id) || {}).mode, facts: slice.map((f) => ({ ...f })),
+                  next: rest.length > size ? slice[slice.length - 1].id : null };
+              }
+              const batch = z.review.slice(0, args.limit || 10);
+              return { ok: true, facts: batch.map((f) => ({ ...f, checked: false })), next: z.review.length > batch.length ? "n" + batch.length : null,
+                total: z.review.length, batch: 10 };
+            }
+            if (cmd === "brain_topics_file") {
+              if (args.confirm) {
+                z.review = z.review.filter((f) => !args.ids.includes(f.id));
+                return { ...view(), filed: 0, confirmed: args.ids.length };
+              }
+              if (!byId(args.topicId)) return no("topic_not_found");
+              z.review = z.review.filter((f) => !args.ids.includes(f.id));
+              return { ...view(), filed: args.ids.length };
+            }
+            // brain_topics_edit
+            const e = args.edit || {};
+            const t = byId(e.id);
+            if (e.op === "add") {
+              if (z.topics.some((x) => !x.system && x.name.toLowerCase() === e.name.toLowerCase())) return no("name_taken");
+              if (z.topics.filter((x) => !x.system).length >= 16) return no("too_many_topics");
+              const id = Math.max(...z.topics.map((x) => x.id)) + 1;
+              z.topics.push({ id, name: e.name, colour: e.colour ?? 0, icon: e.icon || "folder", mode: "both",
+                private: Boolean(e.private), words: e.words || [], facts: 0 });
+              return { ...view(), id };
+            }
+            if (!t) return no("topic_not_found");
+            if (e.op === "rename") { if (t.system) return no("no_rename_unsorted"); t.name = e.name; return { ...view(), id: t.id }; }
+            if (e.op === "style") { if (e.colour !== undefined) t.colour = e.colour; if (e.icon) t.icon = e.icon; return { ...view(), id: t.id }; }
+            if (e.op === "words") { t.words = e.words; return { ...view(), id: t.id }; }
+            if (e.op === "move") {
+              const own = z.topics.filter((x) => !x.system);
+              const rest = own.filter((x) => x !== t);
+              const at = e.before === null || e.before === undefined ? rest.length : rest.findIndex((x) => x.id === e.before);
+              rest.splice(at < 0 ? rest.length : at, 0, t);
+              z.topics = [z.topics.find((x) => x.system), ...rest];
+              return { ...view(), id: t.id };
+            }
+            if (e.op === "private") {
+              if (e.private === false && t.private) return card(t.id, "private_clear", () => { t.private = false; });
+              t.private = Boolean(e.private);
+              return { ...view(), id: t.id };
+            }
+            if (e.op === "delete") {
+              if (t.system) return no("no_delete_unsorted");
+              const home = byId(e.moveTo);
+              if (!home || home.id === t.id) return no("bad_destination");
+              const apply = () => { home.facts += t.facts; z.topics = z.topics.filter((x) => x !== t); };
+              if (t.private && loosens(t.mode, home.mode)) return card(t.id, "delete", apply);
+              apply();
+              return { ...view(), id: t.id, deleted: t.id };
+            }
+            return no("bad_request");
           }
           case "brain_widgets_draft": {
             window.__widgetCalls.push({ cmd, ...args });
@@ -2090,9 +2607,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               return { available: false, why: "This PC's Jarvis does not keep chat history yet. " +
                 "Update the backend by running apply-patches.ps1, then open this again." };
             }
-            // `kind` narrows the list, as GET /api/history?kind= does.
+            if (args.tag) h.reads[h.reads.length - 1].tag = args.tag;
+            // `kind` narrows the list, as GET /api/history?kind= does; `tag`
+            // (docs/CHAT-TAGS-DESIGN.md) as GET /api/history?tag= does.
             const all = [...h.conversations]
               .filter((c) => !args.kind || (c.kind || "chat") === args.kind)
+              .filter((c) => !args.tag || (args.tag === "none"
+                ? c.tag_id == null : c.tag_id === Number(args.tag)))
               .sort((a, b) => b.updated - a.updated);
             const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
             const page = older.slice(0, args.limit || 30);
@@ -2104,6 +2625,150 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               out.conversations = [];
             }
             return out;
+          }
+          // Chat tags (brain/history.rs brain_history_tags, _tags_edit,
+          // _tag; JARVIS-API.md section 99). `history.tags` is the registry
+          // ([{id, name, colour, icon, order}]); unset is a PC without tags
+          // (Rust answers {available: false}). Every write is kept in
+          // `__history.tagEdits` / `.tagged`; refusals use the contract's codes.
+          case "brain_history_tags": {
+            const h = window.__history;
+            h.tagReads = (h.tagReads || 0) + 1;
+            if (!h.tags) {
+              return { available: false, why: "This PC's Jarvis cannot sort chats under tags yet. " +
+                "Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            const sec = window.__security;
+            const count = (id) => h.conversations.filter((c) => c.tag_id === id).length;
+            const tags = h.tags.map((t) => ({ ...t, count: count(t.id) }))
+              .sort((a, b) => a.order - b.order);
+            const untagged = h.conversations.filter((c) => c.tag_id == null).length;
+            if (sec.hidden && !sec.revealed) {
+              return { ok: true, hidden: true, untagged,
+                tags: tags.map((t) => ({ id: t.id, order: t.order, count: t.count })) };
+            }
+            return JSON.parse(JSON.stringify({ ok: true, tags, untagged }));
+          }
+          case "brain_history_tags_edit": {
+            const h = window.__history;
+            (h.tagEdits = h.tagEdits || []).push({ ...args });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden, and so are your tag names.");
+            const say = { bad_name: "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.", name_taken: "You already have a tag with that name.", too_many_tags: "You can have up to 12 tags. Delete one to make room.", bad_colour: "That colour is not one of the eight.", bad_icon: "That icon is not on the list.", tag_not_found: "That tag is gone. Reload History to see your tags.", not_found: "That chat is gone - it may have been deleted.", bad_request: "That request was not understood." };
+            const fail = (error) => ({ ok: false, error, message: say[error] || error }); // the PC always sends a sentence (H.TAG_MESSAGES)
+            const find = (id) => h.tags.find((t) => t.id === id);
+            const nameTaken = (name, except) => h.tags.some((t) =>
+              t.id !== except && t.name.toLowerCase() === name.toLowerCase());
+            const renumber = () => h.tags.forEach((t, i) => { t.order = i; });
+            const done = (tag) => ({ ok: true, tag, tags: h.tags.map((t) => ({ ...t })) });
+            h.tags.sort((a, b) => a.order - b.order);
+            if (args.op === "add") {
+              const name = String(args.name || "").trim();
+              if (!name || name.length > 24) return fail("bad_name");
+              if (nameTaken(name)) return fail("name_taken");
+              if (h.tags.length >= 12) return fail("too_many_tags");
+              const id = (h.nextTagId = Math.max(h.nextTagId || 0, ...h.tags.map((t) => t.id)) + 1);
+              const tag = { id, name, colour: args.colour ?? 0, icon: args.icon || "folder", order: h.tags.length };
+              h.tags.push(tag);
+              return done(tag);
+            }
+            const t = find(args.id);
+            if (!t) return fail("tag_not_found");
+            if (args.op === "rename") {
+              const name = String(args.name || "").trim();
+              if (!name || name.length > 24) return fail("bad_name");
+              if (nameTaken(name, t.id)) return fail("name_taken");
+              t.name = name;
+            } else if (args.op === "style") {
+              if (args.colour != null) t.colour = args.colour;
+              if (args.icon != null) t.icon = args.icon;
+            } else if (args.op === "move") {
+              h.tags = h.tags.filter((x) => x.id !== t.id);
+              const at = args.before == null ? h.tags.length : h.tags.findIndex((x) => x.id === args.before);
+              h.tags.splice(at < 0 ? h.tags.length : at, 0, t);
+              renumber();
+            } else if (args.op === "delete") {
+              h.tags = h.tags.filter((x) => x.id !== t.id);
+              h.conversations.forEach((c) => { if (c.tag_id === t.id) c.tag_id = null; });
+              renumber();
+            } else return fail("bad_request");
+            return done(t);
+          }
+          case "brain_history_tag": {
+            const h = window.__history;
+            (h.tagged = h.tagged || []).push({ id: args.id, tagId: args.tagId ?? null });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden, and so are your tag names.");
+            const c = h.conversations.find((x) => x.id === args.id);
+            if (!c) return { ok: false, error: "not_found", message: "That chat is gone - it may have been deleted." };
+            if (args.tagId != null && !(h.tags || []).some((t) => t.id === args.tagId)) {
+              return { ok: false, error: "tag_not_found", message: "That tag is gone. Reload History to see your tags." };
+            }
+            c.tag_id = args.tagId ?? null;
+            return { ok: true, id: args.id, tag_id: c.tag_id };
+          }
+          // "Fork from here" (JARVIS-API section 110): the two keys only. The
+          // mock makes a new chat from the first turns; `h.forkRefuse` is an
+          // answer to give instead (a refusal the PC classified).
+          case "brain_history_fork": {
+            const h = window.__history;
+            (h.forked = h.forked || []).push({ id: args.id, upto: args.upto });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden. Press Show on the Brain's History tab and confirm it is you with Windows Hello first.");
+            if (h.forkRefuse) return JSON.parse(JSON.stringify(h.forkRefuse));
+            const src = h.transcripts[args.id];
+            const row = h.conversations.find((x) => x.id === args.id);
+            if (!src || !row) return { ok: false, error: "not_found", message: "That chat is not kept any more, so it was not forked." };
+            const id = `${args.id}-fork`;
+            const turns = src.turns.filter((t) => t.idx <= args.upto).map((t, i) => ({ ...t, idx: i }));
+            const title = `Fork of ${row.title}`;
+            h.transcripts[id] = { ...JSON.parse(JSON.stringify(src)), id, title, kind: "chat", turns: JSON.parse(JSON.stringify(turns)) };
+            // A fork is an ordinary chat (kind 'chat', even from a Live session),
+            // and counts as new: `updated` is the moment of the fork.
+            h.conversations.push({ ...row, id, title, turns: turns.length, kind: "chat",
+              updated: Math.floor(Date.now() / 1000) });
+            return { ok: true, id, title, turns: turns.length, tag_id: row.tag_id ?? null };
+          }
+          // "New section here" (JARVIS-API section 106): the three keys only,
+          // kept in `__history.marked`. The mock holds each chat's list in
+          // `h.marks[id]` and the conversation read below carries it; `h.markRefuse`
+          // is an answer to give instead (a refusal the PC classified).
+          case "brain_history_mark": {
+            const h = window.__history;
+            (h.marked = h.marked || []).push({ id: args.id, idx: args.idx, on: args.on });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden. Press Show on the Brain's History tab and confirm it is you with Windows Hello first.");
+            if (h.markRefuse) return JSON.parse(JSON.stringify(h.markRefuse));
+            h.marks = h.marks || {};
+            const list = new Set(h.marks[args.id] || (h.transcripts[args.id] && h.transcripts[args.id].marks) || []);
+            if (args.on && !list.has(args.idx) && list.size >= 20) {
+              return { ok: false, error: "too_many_marks", message: "You can have at most 20 section breaks in one chat." };
+            }
+            if (args.on) list.add(args.idx); else list.delete(args.idx);
+            h.marks[args.id] = [...list].sort((a, b) => a - b);
+            if (h.transcripts[args.id]) h.transcripts[args.id].marks = h.marks[args.id];
+            return { ok: true, id: args.id, idx: args.idx, on: args.on, marks: h.marks[args.id] };
+          }
+          // "Suggest tags overnight" (JARVIS-API section 104.1): the read
+          // (enabled null) and the write (exactly {enabled}). `h.suggest` is
+          // the PC's state ({enabled, paused, waiting, last_day}); unset is a
+          // PC without the route. ON is a 202 card (the switch stays off);
+          // OFF is at once. `h.suggestRefuse` is an answer to give for a write.
+          case "brain_history_tag_suggest": {
+            const h = window.__history;
+            if (args.enabled === null || args.enabled === undefined) {
+              h.suggestReads = (h.suggestReads || 0) + 1;
+              if (!h.suggest) return { ok: true, available: false };
+              return { ok: true, ...JSON.parse(JSON.stringify(h.suggest)) };
+            }
+            (h.suggestWrites = h.suggestWrites || []).push({ enabled: args.enabled });
+            if (h.suggestRefuse) return JSON.parse(JSON.stringify(h.suggestRefuse));
+            if (args.enabled) {
+              h.suggestCards = (h.suggestCards || 0) + 1;
+              return { ok: true, pending: true };
+            }
+            h.suggest = { ...h.suggest, enabled: false, waiting: 0 };
+            return { ok: true, enabled: false };
           }
           case "brain_history_open": {
             const h = window.__history;
@@ -2268,6 +2933,67 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return JSON.parse(JSON.stringify(window.__emailSending));
           // folders.rs: "Folders Jarvis may look in". The pickers are Rust's;
           // here a scenario's answers stand in for "the owner chose ...".
+          // spending.rs: "Spending summaries". `window.__spending` is null - a
+          // PC without it - unless the scenario names `spending: {...}`:
+          //   tables  {id: table}   what GET /api/chat/table has
+          //   hidden  true          Rust's answer while the lists are hidden / App lock
+          //   view / proposals {file: proposal} / categories / suggestions
+          // Every call is logged in `calls`, so a test can prove "not fetched".
+          case "chat_table":
+          case "get_spending":
+          case "spending_profile_read":
+          case "spending_profile_save":
+          case "spending_profile_delete":
+          case "spending_categories_save":
+          case "spending_categories_reset":
+          case "spending_suggest": {
+            const sp = window.__spending;
+            if (!sp) throw new Error("Your PC's Jarvis cannot add up spending yet - run apply-patches.ps1 on the PC.");
+            sp.calls.push({ cmd, args: JSON.parse(JSON.stringify(args || {})) });
+            if (sp.fails && sp.fails[cmd]) throw new Error(sp.fails[cmd]);
+            const writes = cmd !== "chat_table" && cmd !== "get_spending" && cmd !== "spending_profile_read";
+            if (writes && state.stale) throw new Error("The connection to Jarvis is catching up, so nothing can be sent until it does.");
+            if (cmd === "chat_table") {
+              if (sp.hidden) return { hidden: true, words: "Spending table hidden" };
+              const t = sp.tables[args.id];
+              if (!t) return { gone: true, message: "This table is no longer kept. Ask again to see it." };
+              return { table: JSON.parse(JSON.stringify(t)) };
+            }
+            if (cmd === "get_spending") return JSON.parse(JSON.stringify(sp.view));
+            if (cmd === "spending_profile_read") {
+              // `again` (audit 2026-09-30): the fresh proposal with the saved
+              // choices in it; `againProposals` holds those, by file.
+              const pr = (args.again && sp.againProposals && sp.againProposals[args.file]) || sp.proposals[args.file];
+              if (!pr) throw new Error("That file is not in a folder Jarvis may look in.");
+              return JSON.parse(JSON.stringify(pr));
+            }
+            if (cmd === "spending_profile_save") {
+              if (args.choices && args.choices.preview === true) {
+                // "What would these choices count?" - a read; saves nothing.
+                sp.previews.push(JSON.parse(JSON.stringify(args.choices)));
+                return JSON.parse(JSON.stringify(sp.previewAnswer || { ok: true, ready: true,
+                  counts: { out: 8, in: 2, rows: 10, unread: 0 },
+                  line: "With these choices, 8 rows count as money out and 2 as money in.",
+                  problems: [], warnings: [] }));
+              }
+              if (sp.misfitOnSave && args.choices.accept_warnings !== true) {
+                sp.refused += 1;
+                throw new Error("These choices do not fit this file: the plus and minus signs look the wrong way round. If that is right, save them anyway; if not, change the choices.");
+              }
+              sp.saved.push(JSON.parse(JSON.stringify(args.choices)));
+              return { ok: true, fingerprint: "f1", rows_read: 7, rows_skipped: 1, view: sp.view };
+            }
+            if (cmd === "spending_profile_delete") { sp.deleted.push(args.id); return { ok: true, view: sp.view }; }
+            if (cmd === "spending_categories_save") {
+              sp.categoriesSaved.push(JSON.parse(JSON.stringify(args.categories)));
+              sp.view.categories = JSON.parse(JSON.stringify(args.categories));
+              sp.view.categories_are_starter = false;
+              return { ok: true, view: sp.view };
+            }
+            if (cmd === "spending_categories_reset") { sp.resets += 1; return { ok: true, view: sp.view }; }
+            return { ok: true, suggestions: JSON.parse(JSON.stringify(sp.suggestions || [])),
+                     note: "Nothing is saved until you tap Add these rules." };
+          }
           case "get_folders":
             return window.__folders ? JSON.parse(JSON.stringify(window.__folders.view)) : null;
           case "add_folder":
@@ -2512,6 +3238,51 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__goals = goals ? JSON.parse(JSON.stringify({
     goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
   window.__goalsCalls = [];
+  window.__retirement = retirement ? JSON.parse(JSON.stringify({ calls: [], form: null, script: [], delayMs: 0, ...retirement })) : null;
+  window.__progress = progress ? JSON.parse(JSON.stringify({ calls: [], ...progress })) : null;
+  window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
+  // brain/youtube.rs (Quiz me on a YouTube video). `window.__youtube` is null - a
+  // PC without it, which answers info `{available:false}` and the rest with the
+  // "run apply-patches.ps1" sentence - unless the scenario names `youtube: {...}`.
+  // The scenario's `info`, `start`, `script` (the answers to successive reads;
+  // the last one repeats) and `cancel` are the PC's own bodies (fixtures/
+  // youtube-cases.json samples); this only records the calls and does what
+  // brain/youtube.rs redact_answer does while the private lists are hidden.
+  window.__youtube = youtube ? JSON.parse(JSON.stringify({ calls: [], reads: 0, ...youtube })) : null;
+  window.__spending = spending ? JSON.parse(JSON.stringify({
+    calls: [], tables: {}, hidden: false, proposals: {}, suggestions: [], fails: null,
+    saved: [], deleted: [], categoriesSaved: [], resets: 0, previews: [], againProposals: {},
+    previewAnswer: null, misfitOnSave: false, refused: 0, ...spending })) : null;
+  // Review decks (brain/decks.rs). `null` - a PC without decks. Scenario
+  // `decks: {decks: [{id, name, paused, cards: [{id, front, back, passage,
+  // kind, level, due, new}]}], available, why, newPerDay, refuse: {cmd: code}}`.
+  window.__decks = decks ? JSON.parse(JSON.stringify({
+    calls: [], decks: [], available: true, why: "", newPerDay: 5, limit: 20, revealed: "", done: 0,
+    refuse: {}, ...decks })) : null;
+  // Topic controls (brain/topics.rs). `null` - a PC without them. Scenario
+  // `topics: {topics: [{id, name, colour, icon, mode, private, words, system,
+  // facts, unchecked, skipped_week, pinned}], review: [fact], hidden: {id: [fact]},
+  // modelHelp, backfill, waiting, last, outside, refuse: {cmd: code}}`.
+  window.__topics = topics ? JSON.parse(JSON.stringify({
+    calls: [], topics: [], review: [], hidden: {}, modelHelp: false, backfill: { done: true, remaining: 0 },
+    waiting: null, last: null, pendingChange: null, outside: false, refuse: {},
+    errors: {
+      name_taken: "You already have a topic with that name.",
+      topic_not_found: "That topic is not there any more.",
+      too_many_topics: "You can have up to 16 topics of your own. Delete one first.",
+      bad_destination: "Pick a different topic for its facts to move to.",
+      no_delete_unsorted: "Unsorted cannot be deleted.",
+      no_rename_unsorted: "Unsorted cannot be renamed.",
+      bad_mode: "That is not one of the four choices.",
+      bad_request: "Jarvis could not understand that request.",
+      unavailable: "Topics are not available on this PC yet.",
+    },
+    lastWords: {
+      applied: "You approved the card, so the change was made.",
+      denied: "The card was turned down, so nothing about your topics changed.",
+      timed_out: "Nobody answered the card in time, so nothing about your topics changed.",
+    },
+    ...topics })) : null;
   // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
   // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
   // an id to its GET /api/widgets/show answer; `draft` is the preview the

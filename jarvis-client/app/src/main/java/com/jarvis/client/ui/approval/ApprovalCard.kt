@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.AsksFirst
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.FormReview
@@ -357,9 +358,12 @@ fun ApprovalCard(
         Spacer(Modifier.height(6.dp))
         ReachBadge(item)
 
-        if (item.summary.isNotBlank()) {
+        // A tag-suggestion card shows the version without the chat's title while
+        // "Hide memory lists and chat history" is on (TagSuggest.cardText).
+        val shownSummary = item.shownSummary(JarvisRuntime.privateListsHidden)
+        if (shownSummary.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(item.summary, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            Text(shownSummary, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
         }
 
         // The choices, when the desktop offers more than one plan. Each is a

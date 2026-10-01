@@ -155,7 +155,12 @@ internal fun UsedFactsList(
                     Gap(8)
                     Column(Modifier.fillMaxWidth()) {
                         Text(
-                            if (fact.erasedAt != null) "Erased" else fact.text,
+                            when {
+                                fact.erasedAt != null -> "Erased"
+                                // Its topic was switched off since (docs/JARVIS-API.md section 107).
+                                fact.leftOut -> com.jarvis.client.net.Topics.usedLeftOutLine()
+                                else -> fact.text
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = if (fact.current) chrome.textHi else chrome.textLo,
                         )

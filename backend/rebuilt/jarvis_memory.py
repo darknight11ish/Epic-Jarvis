@@ -1297,6 +1297,79 @@ def until_words(said, now: Optional[float] = None) -> str:
 #   The store
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+#   Topic controls: which facts may not be used (docs/TOPIC-CONTROLS-DESIGN.md)
+# --------------------------------------------------------------------------
+#
+# A topic's MODE is two switches, learn and use (jarvis_topics.MODES):
+#
+#     both        learn yes, use yes      (the default of every topic)
+#     use_only    learn no,  use yes
+#     learn_only  learn yes, use no
+#     off         learn no,  use no
+#
+# search() takes topics="use" BY DEFAULT: facts of a topic whose use switch is
+# no are kept out of the candidate lists themselves, before the cut to k, so
+# the best ALLOWED facts fill the slots. A reader that must see every fact -
+# one that only protects the owner (duplicate checks, the chatbot leak check)
+# and never shows the text to a model or an answer - says topics="all", and
+# is listed in test_topics_leaks.py. "visible" hides only the facts of an OFF
+# topic: the owner's own lists.
+#
+# When no topic has a mode other than "both", nothing is skipped and every
+# result is byte-for-byte what it was before this existed (the fast path in
+# topic_blocked: one query, no rows).
+#
+# A fact with two topics (`alt_topic_id`, the stricter one is `topic_id`) is
+# blocked when EITHER topic blocks it: the effective mode is the AND of both.
+# A fact with no fact_topics row follows the Unsorted topic (id 1).
+
+TOPIC_MODES = ("both", "use_only", "learn_only", "off")
+TOPIC_UNSORTED = 1
+_TOPIC_KINDS = ("use", "visible", "all")
+_TLS = threading.local()
+
+
+def topic_blocked(c, kind: str = "use") -> frozenset:
+    """The ids of the facts the topic modes keep out: kind "use" - the ones
+    whose topic may not be USED in an answer (learn_only and off); kind
+    "visible" - the ones in an OFF topic (hidden from the owner's lists, with
+    a Show button); kind "all" - none. Any mode this file does not know is
+    treated as the stricter one (fail closed). Never raises: a store from
+    before the tables existed, or any failure, blocks nothing - the old
+    behaviour."""
+    if kind == "all":
+        return frozenset()
+    ok = ("both", "use_only") if kind == "use" else ("both", "use_only", "learn_only")
+    try:
+        marks = ",".join("?" * len(ok))
+        ids = [r[0] for r in c.execute(
+            f"SELECT id FROM topics WHERE mode NOT IN ({marks})", ok)]
+        if not ids:
+            return frozenset()
+        m = ",".join("?" * len(ids))
+        out = {r[0] for r in c.execute(
+            f"SELECT fact_id FROM fact_topics WHERE topic_id IN ({m}) OR alt_topic_id IN ({m})",
+            ids + ids)}
+        if TOPIC_UNSORTED in ids:
+            # Unsorted is stricter than "both": every fact nobody has filed
+            # follows it.
+            out |= {r[0] for r in c.execute(
+                "SELECT id FROM facts WHERE id NOT IN (SELECT fact_id FROM fact_topics)")}
+        return frozenset(out)
+    except sqlite3.Error:
+        return frozenset()
+
+
+def take_left_out() -> int:
+    """How many facts this thread's last topic-filtered search kept out of
+    its candidates, and forget the number (so a later turn that never
+    searched cannot report an old one). A count only - never words."""
+    n = int(getattr(_TLS, "left_out", 0) or 0)
+    _TLS.left_out = 0
+    return n
+
+
 class MemoryStore:
 
     #: Did the last add(supersedes=...) actually retire what it was aiming at?
@@ -1548,6 +1621,45 @@ class MemoryStore:
                     said_at REAL NOT NULL,
                     how     TEXT NOT NULL,
                     PRIMARY KEY (fact_id, said_at))""")
+            # Topic controls (jarvis_topics.py, JARVIS-API section 107,
+            # 2026-09-30): three plain tables, ids and counts only. Every
+            # fact sits under ONE topic; a topic has a mode that says whether
+            # Jarvis may LEARN about it and whether it may USE it in an
+            # answer. `topic_blocked()` below is the one place the "may it
+            # be used" rule is worked out. With no rows here (or every topic
+            # on "both") nothing changes anywhere. Plain, like the facts
+            # beside them: memory.db has no cipher, and a topic's NAME is the
+            # owner's own word (docs/TOPIC-CONTROLS-DESIGN.md section 3.1).
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS topics (
+                    id      INTEGER PRIMARY KEY,
+                    name    TEXT NOT NULL,
+                    colour  INTEGER NOT NULL DEFAULT 0,
+                    icon    TEXT NOT NULL DEFAULT 'folder',
+                    mode    TEXT NOT NULL DEFAULT 'both',
+                    private INTEGER NOT NULL DEFAULT 0,
+                    words   TEXT NOT NULL DEFAULT '',
+                    ord     INTEGER NOT NULL DEFAULT 0,
+                    system  INTEGER NOT NULL DEFAULT 0,
+                    created REAL NOT NULL)""")
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS ix_topics_name"
+                      " ON topics(lower(name))")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS fact_topics (
+                    fact_id      INTEGER PRIMARY KEY,
+                    topic_id     INTEGER NOT NULL,
+                    alt_topic_id INTEGER,
+                    how          TEXT NOT NULL DEFAULT 'rule',
+                    checked      INTEGER NOT NULL DEFAULT 0,
+                    assigned     REAL NOT NULL)""")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_ft_topic ON fact_topics(topic_id)")
+            c.execute("CREATE INDEX IF NOT EXISTS ix_ft_alt ON fact_topics(alt_topic_id)")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS topic_skips (
+                    topic_id INTEGER NOT NULL,
+                    day      TEXT NOT NULL,
+                    n        INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (topic_id, day))""")
             c.execute("CREATE INDEX IF NOT EXISTS ix_fe_entity ON fact_entities(entity_id)")
             c.execute("CREATE INDEX IF NOT EXISTS ix_ea_fact ON entity_aliases(fact_id)")
             c.execute("""
@@ -1600,7 +1712,8 @@ class MemoryStore:
 
     def add(self, text: str, source: str = "", meta: Optional[dict] = None,
             valid_from: Optional[float] = None,
-            supersedes: Optional[int] = None) -> int:
+            supersedes: Optional[int] = None,
+            topic=None) -> int:
         """Store one fact. Returns its id.
 
         valid_from   when it became TRUE. Left out, it is the date the
@@ -1617,10 +1730,19 @@ class MemoryStore:
                      EARLIER - then the old fact stays in use, and this one
                      is kept as history, true until the old one began
                      (last_older_news says so).
+        topic        which topic the fact is filed under (topic controls): a
+                     topic id, or {"topic_id", "alt_topic_id", "how",
+                     "checked"}. Left out, jarvis_topics (when it is loaded)
+                     files it by fixed rules in the same transaction; with
+                     it not loaded the fact simply has no row and follows
+                     the Unsorted topic.
         """
         text = " ".join(str(text).split())
         if not text:
             raise ValueError("refusing to store an empty fact")
+        # Kept under its own name: the code below reuses `topic` for the
+        # sensitive-topic label a held-back card carried.
+        file_under = topic
         now = time.time()
         meta = dict(meta or {})
         said = None
@@ -1751,6 +1873,7 @@ class MemoryStore:
             # older news: it is history from the start, like a retired fact.
             if older_than is None:
                 self._link_safely(c, fid, text)
+            self._file_topic_safely(c, fid, text, meta, file_under, supersedes)
             c.commit()
             try:
                 waiting = c.execute("SELECT 1 FROM entity_merge_asks"
@@ -1764,6 +1887,35 @@ class MemoryStore:
     #: The name jarvis_hud reaches for in one place. Same call, kept so a
     #: caller written against either name works.
     add_fact = add
+
+    def _file_topic_safely(self, c, fid: int, text: str, meta: dict, topic,
+                           supersedes) -> None:
+        """File a just-saved fact under a topic, in the same breath as the
+        save. Never raises (like _link_safely): the fact is already stored,
+        and an unfiled fact just follows the Unsorted topic."""
+        try:
+            if topic is None:
+                jt = sys.modules.get("jarvis_topics")
+                fn = getattr(jt, "label_new_fact", None) if jt is not None else None
+                if fn is not None:
+                    fn(c, int(fid), text, meta, supersedes)
+                return
+            row = topic if isinstance(topic, dict) else {"topic_id": topic}
+            tid = row.get("topic_id")
+            if isinstance(tid, bool) or not isinstance(tid, int):
+                return
+            if not c.execute("SELECT 1 FROM topics WHERE id=?", (tid,)).fetchone():
+                return
+            alt = row.get("alt_topic_id")
+            alt = alt if (isinstance(alt, int) and not isinstance(alt, bool)
+                          and c.execute("SELECT 1 FROM topics WHERE id=?", (alt,)).fetchone()
+                          and alt != tid) else None
+            how = row.get("how") if row.get("how") in ("rule", "model", "owner", "new") else "owner"
+            c.execute("INSERT OR REPLACE INTO fact_topics (fact_id, topic_id, alt_topic_id,"
+                      " how, checked, assigned) VALUES (?,?,?,?,?,?)",
+                      (int(fid), tid, alt, how, 1 if row.get("checked") else 0, time.time()))
+        except Exception:
+            pass
 
     def retire(self, fact_id: int, replaced_by: Optional[int] = None,
                valid_to: Optional[float] = None) -> bool:
@@ -2330,7 +2482,7 @@ class MemoryStore:
                known_at: Optional[float] = None,
                word_floor: Optional[float] = None,
                entities: bool = False, rerank: bool = False,
-               said_again: bool = False) -> list[dict]:
+               said_again: bool = False, topics: str = "use") -> list[dict]:
         """Words and meaning, fused with reciprocal rank fusion.
 
         at          VALID time: only facts true at that moment (default now).
@@ -2363,8 +2515,19 @@ class MemoryStore:
                     put in "said again" order, most first. The same facts,
                     the same number; off, or on with no ties, the order is
                     exactly what it would have been.
+        topics      topic controls (docs/TOPIC-CONTROLS-DESIGN.md section 4.2):
+                    "use" (the default) keeps out every fact whose topic may
+                    not be used in an answer, INSIDE the candidate lists, so
+                    the best allowed facts fill the slots; "visible" keeps
+                    out only an OFF topic's facts; "all" is for a reader that
+                    only protects the owner and never shows the text to a
+                    model (duplicate checks, the chatbot leak check) - each
+                    is listed in test_topics_leaks.py. With every topic on
+                    "both" the result is identical to before.
         """
         at_given = at is not None
+        if topics not in _TOPIC_KINDS:
+            topics = "use"                # an unknown word is the safe one
         query = " ".join(str(query).split())
         if not query:
             return []
@@ -2379,6 +2542,11 @@ class MemoryStore:
         with _LOCK, closing(self._connect()) as c:
             ranks: dict[int, float] = {}
             roots: list = []
+            blocked = topic_blocked(c, topics)
+            # Over-fetch by the blocked count (capped: sqlite-vec allows 4096)
+            # so the blocked ones cannot use up the slots.
+            more = min(len(blocked), max(0, 4000 - candidates)) if blocked else 0
+            seen_blocked: set = set()
             if entities and _ENTITY_RECALL:
                 try:
                     roots, names = self._entity_hits(c, query, at)
@@ -2403,7 +2571,10 @@ class MemoryStore:
                 q = " OR ".join(f'"{w}"' for w in terms)
                 rows = c.execute(
                     "SELECT rowid, bm25(facts_fts) AS s FROM facts_fts WHERE facts_fts MATCH ?"
-                    " ORDER BY s LIMIT ?", (q, candidates)).fetchall()
+                    " ORDER BY s LIMIT ?", (q, candidates + more)).fetchall()
+                if blocked:
+                    seen_blocked |= {row["rowid"] for row in rows if row["rowid"] in blocked}
+                    rows = [row for row in rows if row["rowid"] not in blocked][:candidates]
                 # The floor (F3): a hit that matches too little of the
                 # question does not get a rank at all. See _MIN_WORD_SHARE.
                 rows = self._word_floor(
@@ -2425,7 +2596,20 @@ class MemoryStore:
                     if _usable_vector(list(qv), self.embedder.dim):
                         rows = c.execute(
                             "SELECT fact_id, distance FROM facts_vec WHERE embedding MATCH ?"
-                            " ORDER BY distance LIMIT ?", (_pack(qv), candidates)).fetchall()
+                            " ORDER BY distance LIMIT ?",
+                            (_pack(qv), candidates + more)).fetchall()
+                        if blocked:
+                            # Counted only while still within the distance
+                            # floor: a far-off fact is not "left out", it
+                            # simply did not match.
+                            for row in rows:
+                                if (row["distance"] is not None
+                                        and row["distance"] > _MAX_VEC_DISTANCE):
+                                    break
+                                if row["fact_id"] in blocked:
+                                    seen_blocked.add(row["fact_id"])
+                            rows = [row for row in rows
+                                    if row["fact_id"] not in blocked][:candidates]
                         for r, row in enumerate(rows, 1):
                             # Sorted by distance, so the first one that is too
                             # far ends it. Without this floor a k-NN scan
@@ -2444,15 +2628,20 @@ class MemoryStore:
             if roots:
                 try:
                     linked = self._linked_facts(
-                        c, roots, candidates, at=at,
+                        c, roots, candidates + more, at=at,
                         include_retired=include_retired or (known_at is not None
                                                             and not at_given),
                         known_at=known_at)
+                    if blocked:
+                        seen_blocked |= {fid for fid in linked if fid in blocked}
+                        linked = [fid for fid in linked if fid not in blocked][:candidates]
                     for r, fid in enumerate(linked, 1):
                         ranks[fid] = ranks.get(fid, 0) + 1.0 / (60 + r)
                 except Exception:
                     pass
 
+            if topics != "all":
+                _TLS.left_out = len(seen_blocked)
             if not ranks:
                 return []
             ids = sorted(ranks, key=lambda i: -ranks[i])
@@ -2463,7 +2652,7 @@ class MemoryStore:
         out: list[dict] = []
         for fid in ids:
             f = rows.get(fid)
-            if f is None:
+            if f is None or fid in blocked:
                 continue
             score = ranks[fid]
             if known_at is not None:
@@ -2512,7 +2701,7 @@ class MemoryStore:
             # born in?" (don't-know facts 1.47 -> 1.50); asked only for
             # "who", it did not.
             try:
-                out += self._who_facts(out, at)
+                out += self._who_facts(out, at, blocked)
             except Exception:
                 pass
         return out
@@ -2548,7 +2737,7 @@ class MemoryStore:
             i = j
         return res
 
-    def _who_facts(self, top: list, at: float) -> list:
+    def _who_facts(self, top: list, at: float, blocked=frozenset()) -> list:
         """For the people and things the first ENTITY_WHO_FROM of `top`
         name: the facts that say who they are - the ones that taught an
         alias ("Owner's sister is called Priya" for "Priya's wedding is in
@@ -2576,7 +2765,7 @@ class MemoryStore:
                 " ORDER BY f.id DESC", (*group, at, at))]
         out = []
         for f in rows:
-            if f["id"] in have:
+            if f["id"] in have or f["id"] in blocked:
                 continue
             f["score"] = 0.0
             f["current"] = True
@@ -2685,7 +2874,10 @@ class MemoryStore:
         # words and 50% containment), and a correction names facts in its
         # own words - "Mario drives a 2005 Honda" shares only two of four
         # with the fact it replaces, and the recall floor would hide it.
-        for cand in self.search(text, k=5, word_floor=0.0):
+        # topics="all": this only decides which fact a correction is ABOUT
+        # (a protective read, never shown to a model), and a correction of a
+        # fact in a topic the owner turned off must still find it.
+        for cand in self.search(text, k=5, word_floor=0.0, topics="all"):
             have = _words(cand["text"])
             shared = want & have
             if len(shared) < 2:
@@ -2695,10 +2887,11 @@ class MemoryStore:
                 best, best_score = cand, score
         return best if best_score >= min_overlap else None
 
-    def timeline(self, query: str, k: int = 20) -> list[dict]:
+    def timeline(self, query: str, k: int = 20, topics: str = "visible") -> list[dict]:
         """Every version of the matching facts, retired ones included, oldest
-        first - the 'where did I live last year' view."""
-        hits = self.search(query, k=k, include_retired=True)
+        first - the 'where did I live last year' view. The owner's own view,
+        so only an OFF topic's facts are hidden (topics="visible")."""
+        hits = self.search(query, k=k, include_retired=True, topics=topics)
         if not hits:
             return []
         ids = [h["id"] for h in hits]
@@ -2729,12 +2922,50 @@ class MemoryStore:
             h["current"] = h["valid_to"] is None or h["valid_to"] > now
         return hist
 
-    def current_facts(self, limit: int = 400) -> list[dict]:
-        """What is true NOW. A valid_to in the future has not happened yet."""
+    def current_facts(self, limit: int = 400, topics: str = "visible") -> list[dict]:
+        """What is true NOW. A valid_to in the future has not happened yet.
+        The owner's own list, so the facts of an OFF topic are left out
+        (topics="visible"; "all" for a caller that must see every fact)."""
         with _LOCK, closing(self._connect()) as c:
-            return [dict(r) for r in c.execute(
+            hide = topic_blocked(c, topics)
+            rows = [dict(r) for r in c.execute(
                 "SELECT * FROM facts WHERE valid_to IS NULL OR valid_to > ?"
-                " ORDER BY id DESC LIMIT ?", (time.time(), limit))]
+                " ORDER BY id DESC LIMIT ?", (time.time(), limit + len(hide)))]
+        if hide:
+            rows = [r for r in rows if r["id"] not in hide][:limit]
+        return rows
+
+    def topic_blocked(self, kind: str = "use") -> frozenset:
+        """The ids of the facts the topic modes keep out ("use", "visible");
+        see the module-level topic_blocked()."""
+        with _LOCK, closing(self._connect()) as c:
+            return topic_blocked(c, kind)
+
+    def topic_of_facts(self, ids) -> dict:
+        """{fact id: the topic id that keeps it out of answers} for the given
+        facts - the id of the topic (its own or its second choice) whose mode
+        may not be used, else its own topic; a fact nobody has filed is under
+        Unsorted. Never raises: {} on any failure."""
+        ids = [int(i) for i in ids]
+        if not ids:
+            return {}
+        try:
+            with _LOCK, closing(self._connect()) as c:
+                modes = {r[0]: r[1] for r in c.execute("SELECT id, mode FROM topics")}
+                out = {i: TOPIC_UNSORTED for i in ids}
+                m = ",".join("?" * len(ids))
+                for r in c.execute("SELECT fact_id, topic_id, alt_topic_id FROM fact_topics"
+                                   f" WHERE fact_id IN ({m})", ids):
+                    fid, own, alt = r[0], r[1], r[2]
+                    pick = own
+                    for t in (own, alt):
+                        if t is not None and modes.get(t, "off") not in ("both", "use_only"):
+                            pick = t
+                            break
+                    out[fid] = pick
+                return out
+        except sqlite3.Error:
+            return {}
 
     # ---- "Forget a time frame" (jarvis_forget_range.py, 2026-09-28) -------
 
@@ -2788,7 +3019,7 @@ class MemoryStore:
             c.commit()
             return cur.rowcount > 0
 
-    def known_at(self, when: float, limit: int = 400) -> list[dict]:
+    def known_at(self, when: float, limit: int = 400, topics: str = "visible") -> list[dict]:
         """What this machine BELIEVED at a past moment, right or wrong.
 
         The transaction-time query, and the reason retired_at exists. A fact
@@ -2797,10 +3028,14 @@ class MemoryStore:
         year is not in last year's answer at all.
         """
         with _LOCK, closing(self._connect()) as c:
-            return [dict(r) for r in c.execute(
+            hide = topic_blocked(c, topics)
+            rows = [dict(r) for r in c.execute(
                 "SELECT * FROM facts WHERE created <= ?"
                 " AND (retired_at IS NULL OR retired_at > ?)"
-                " ORDER BY id DESC LIMIT ?", (when, when, limit))]
+                " ORDER BY id DESC LIMIT ?", (when, when, limit + len(hide)))]
+        if hide:
+            rows = [r for r in rows if r["id"] not in hide][:limit]
+        return rows
 
     def status(self) -> dict:
         with _LOCK, closing(self._connect()) as c:
@@ -2850,7 +3085,7 @@ class MemoryStore:
         " WHERE (f.valid_to IS NULL OR f.valid_to > ?) AND f.erased_at IS NULL"
         " ORDER BY p.added, p.fact_id")
 
-    def profile(self) -> list[dict]:
+    def profile(self, topics: str = "all") -> list[dict]:
         """The pinned facts Jarvis reads with every question, oldest pin
         first: each fact's own row (id, text, created, valid_from, source)
         plus when it was pinned (`added`) and how (`how`).
@@ -2861,7 +3096,13 @@ class MemoryStore:
         nothing to clean up. Its pin row stays, holding an id and nothing
         else; no fact comes back to life, so it is never read again."""
         with _LOCK, closing(self._connect()) as c:
-            return [dict(r) for r in c.execute(self._PROFILE_SQL, (time.time(),))]
+            rows = [dict(r) for r in c.execute(self._PROFILE_SQL, (time.time(),))]
+            # topics="use" is what a chat turn reads (with_profile): a pin in
+            # a topic that may not be used stays on the list - the owner's
+            # own view, topics="all" - but is not read (owner's answer,
+            # 2026-09-30: the topic wins).
+            hide = topic_blocked(c, topics) if topics != "all" else frozenset()
+        return [r for r in rows if r["id"] not in hide] if hide else rows
 
     def is_pinned(self, fact_id: int) -> bool:
         """Is this fact on the "Always keep in mind" list now?"""
@@ -3458,7 +3699,8 @@ class MemoryStore:
         self.raise_merge_cards()
         return out
 
-    def entities_view(self, limit: int = 500, now: Optional[float] = None) -> dict:
+    def entities_view(self, limit: int = 500, now: Optional[float] = None,
+                      topics: str = "visible") -> dict:
         """GET /api/memory/entities: the people and things Jarvis has linked
         facts to, for the desktop's "About <name>".
 
@@ -3469,9 +3711,15 @@ class MemoryStore:
         One entry per group (merges followed), only groups with at least
         one current, unerased fact, most facts first. Words only as they
         are in the facts; nothing is summarised. The facts' own words are
-        read by id (GET /api/memory/used)."""
+        read by id (GET /api/memory/used).
+
+        topics="visible" (the default, the owner's Galaxy): a person or thing
+        linked only to the facts of an OFF topic is not listed, and one
+        linked to visible facts lists only those. "all" is for a caller that
+        only checks names (jarvis_search.names_for_facts)."""
         now = time.time() if now is None else float(now)
         with _LOCK, closing(self._connect()) as c:
+            hide = topic_blocked(c, topics)
             ents = {int(r[0]): {"name": r[1], "kind": r[2], "into": r[3]}
                     for r in c.execute("SELECT id, name, kind, merged_into FROM entities")}
             root = {eid: self._root(c, eid) for eid in ents}
@@ -3480,9 +3728,14 @@ class MemoryStore:
                 " JOIN facts f ON f.id = fe.fact_id WHERE f.erased_at IS NULL"
                 " AND (f.valid_to IS NULL OR f.valid_to > ?)", (now,)).fetchall()
             aliases = c.execute(
-                "SELECT a.alias, a.entity_id FROM entity_aliases a JOIN facts f ON f.id = a.fact_id"
+                "SELECT a.alias, a.entity_id, a.fact_id FROM entity_aliases a"
+                " JOIN facts f ON f.id = a.fact_id"
                 " WHERE f.erased_at IS NULL AND (f.valid_to IS NULL OR f.valid_to > ?)",
                 (now,)).fetchall()
+        # An alias taught by a hidden fact ("sister") is hidden with it.
+        aliases = [(a, e) for a, e, f in aliases if int(f) not in hide]
+        if hide:
+            links = [(e, f) for e, f in links if int(f) not in hide]
         groups: dict = {}
         for eid, fid in links:
             r = root.get(int(eid))
@@ -3914,8 +4167,29 @@ def profile_view(st: Optional["MemoryStore"] = None) -> dict:
     listed - the pinned facts that are still current - which is what the
     limit is about."""
     st = st or store()
-    facts = [{"id": int(p["id"]), "text": str(p["text"] or ""), "added": p["added"]}
-             for p in st.profile()]
+    try:
+        paused = st.topic_blocked("use")
+    except Exception:
+        paused = frozenset()
+    facts = []
+    pins = st.profile()
+    homes = {}
+    if paused:
+        try:
+            homes = st.topic_of_facts([int(p["id"]) for p in pins if int(p["id"]) in paused])
+        except Exception:
+            homes = {}
+    for p in pins:
+        row = {"id": int(p["id"]), "text": str(p["text"] or ""), "added": p["added"]}
+        if int(p["id"]) in paused:
+            # "paused: Work is off" (topic controls): still pinned, not read
+            # with questions until its topic may be used again. `topic` is
+            # the id of the topic that pauses it, so the apps can name it and
+            # say whether it is Off or "Learn, but don't use".
+            row["paused"] = True
+            if homes.get(int(p["id"])) is not None:
+                row["topic"] = int(homes[int(p["id"])])
+        facts.append(row)
     return {"facts": facts, "chars": sum(len(f["text"]) for f in facts),
             "limit": PROFILE_LIMIT}
 
@@ -4006,7 +4280,10 @@ def with_profile(st, hits, k: int, manner: Optional[str] = None) -> list:
         return []
     hits = without_shared_in_plain(hits, manner)
     try:
-        pins = st.profile()
+        try:
+            pins = st.profile(topics="use")
+        except TypeError:
+            pins = st.profile()          # a stand-in store from before topics
     except Exception:
         return hits
     if not pins:
@@ -4154,6 +4431,12 @@ def used_view(ids, st: Optional["MemoryStore"] = None,
         pinned = {int(p["id"]) for p in st.profile()}
     except Exception:
         pinned = set()
+    try:
+        # A fact an answer used before the owner switched its topic off: its
+        # words are not shown here now (topic controls, section 4.4).
+        left_out = st.topic_blocked("use")
+    except Exception:
+        left_out = frozenset()
     facts, missing = [], []
     for fid in ids:
         row = st.get(fid)
@@ -4163,7 +4446,7 @@ def used_view(ids, st: Optional["MemoryStore"] = None,
         erased = row.get("erased_at")
         vt = row.get("valid_to")
         current = erased is None and (vt is None or float(vt) > now)
-        facts.append({
+        item = {
             "id": int(row["id"]),
             "text": "" if erased is not None else str(row.get("text") or ""),
             "current": bool(current),
@@ -4171,7 +4454,11 @@ def used_view(ids, st: Optional["MemoryStore"] = None,
             "created": row.get("created"),
             "valid_to": vt,
             "erased_at": erased,
-        })
+        }
+        if int(row["id"]) in left_out:
+            item["text"] = ""
+            item["left_out"] = True
+        facts.append(item)
     return {"facts": facts, "missing": missing}
 
 
@@ -4322,9 +4609,15 @@ def conversation_facts_view(conversation_id: str, st: Optional["MemoryStore"] = 
                 " WHERE erased_at IS NULL AND (valid_to IS NULL OR valid_to > ?)"
                 " AND meta LIKE ? ORDER BY created DESC, id DESC",
                 (now, f"%{conversation_id}%")).fetchall()
+            # Facts in an OFF topic are kept but hidden from the owner's lists
+            # (topic controls) - this list too. Never raises; blocks nothing
+            # on a store from before topics.
+            off_topic = topic_blocked(c, "visible")
         for r in rows:
             meta = _meta_dict(r["meta"])
             if meta.get("conversation_id") != conversation_id or meta.get("forgotten_at"):
+                continue
+            if int(r["id"]) in off_topic:
                 continue
             if len(out) >= CONVERSATION_FACTS_MAX:
                 more = True

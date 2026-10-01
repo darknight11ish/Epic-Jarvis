@@ -39,6 +39,7 @@ pub mod auto_learn;
 pub mod briefing;
 pub mod chatbot;
 pub mod conversation_facts;
+pub mod decks;
 pub mod fact_history;
 pub mod focus;
 pub mod forget_range;
@@ -49,14 +50,20 @@ pub mod history_import;
 pub mod inbox_tidy;
 pub mod photo_reminder;
 pub mod profile;
+pub mod progress;
 pub mod projects;
+pub mod quiz;
+pub mod quiz_cloud;
+pub mod retirement;
 mod routes;
 pub mod schedule;
 pub mod shared;
 pub mod sources;
 pub mod support;
+pub mod topics;
 pub mod used;
 pub mod widgets;
+pub mod youtube;
 use routes::{first_line, route_for};
 
 /// Reads are small JSON. The graph (`/api/graph`), which walks several SQLite

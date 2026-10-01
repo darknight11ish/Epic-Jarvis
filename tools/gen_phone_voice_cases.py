@@ -880,7 +880,7 @@ def main(argv) -> int:
         print("phone-voice-cases.json matches the producer.")
         return 0
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
-    FIXTURE.write_text(text, encoding="utf-8", newline="\n")
+    FIXTURE.write_text(text, encoding="utf-8")
     print(f"wrote {FIXTURE.relative_to(ROOT)}")
     return 0
 

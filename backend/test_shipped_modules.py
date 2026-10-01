@@ -83,7 +83,9 @@ THIRD_PARTY = {
     "f5_tts": "f5-tts",
     "soundfile": "soundfile",
     "cryptography": "cryptography",
+    "fsrs": "fsrs",
     "ddgs": "ddgs",
+    "youtube_transcript_api": "youtube-transcript-api",   # jarvis_youtube.py (2026-09-30)
     "winrt": "winrt-Windows.Media.Control",
     "espeakng_loader": "espeakng-loader",
     "onnx": "onnx",
@@ -113,6 +115,9 @@ INDIRECT = {
     "markitdown": "imported only by the separate converter program jarvis_documents.py "
                   "starts (its _CHILD code), never by the backend itself - so a crafted "
                   "PDF is read in a process with no passwords in its environment",
+    "openpyxl": "imported only by the separate reader program jarvis_spending.py starts "
+                "(its _CHILD code, `python -I`, no passwords in its environment) for an Excel "
+                "bank export, never by the backend itself; MarkItDown brings it too",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this
@@ -130,6 +135,8 @@ NOT_SHIPPED = {
     "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py",
     "eval_tidy.py": "the memory self-test's \"where did I put\" and overnight-tidy half, "
                     "run by eval_memory.py",
+    "eval_topics.py": "the memory self-test's topic-controls half (leaks, parity, sorting), "
+                      "run by eval_memory.py",
     "grade-peers.py": "a research tool, not part of the backend",
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
     "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",

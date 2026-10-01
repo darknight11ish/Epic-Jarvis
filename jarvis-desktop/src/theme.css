@@ -258,6 +258,17 @@
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45);
   --shadow-pane: 0 24px 64px rgba(0, 0, 0, 0.55);
   --glow-accent: 0 0 0 1px var(--accent-dim), 0 0 22px rgba(56, 240, 255, 0.18);
+  /* Chat tag colours (docs/CHAT-TAGS-DESIGN.md section 10; history-tags.js
+     COLOURS): light ink for the dark themes, 4.5:1 or better on the tinted header. The header tint is the ink at 16% over the surface. */
+  --tag-0: #93b4ff;
+  --tag-1: #86e0a6;
+  --tag-2: #f5c26b;
+  --tag-3: #c4a8ff;
+  --tag-4: #7adfd3;
+  --tag-5: #ff9ab5;
+  --tag-6: #b6c2d1;
+  --tag-7: #ffb385;
+  --tag-tint: 16%;
 }
 
 /* ==========================================================================
@@ -345,6 +356,17 @@
   --node-h3: #c74605; /* knowledge */
   --node-h4: #030377; /* capability */
   --node-h5: #6b0f22; /* agents */
+  /* Chat tag colours (docs/CHAT-TAGS-DESIGN.md section 10; history-tags.js
+     COLOURS): dark ink for Daylight, 4.5:1 or better on the tinted header. The header tint is the ink at 12% over the surface. */
+  --tag-0: #1d4ed8;
+  --tag-1: #146c36;
+  --tag-2: #8a5300;
+  --tag-3: #6d28d9;
+  --tag-4: #0f766e;
+  --tag-5: #be123c;
+  --tag-6: #475569;
+  --tag-7: #b43a00;
+  --tag-tint: 12%;
 
 }
 

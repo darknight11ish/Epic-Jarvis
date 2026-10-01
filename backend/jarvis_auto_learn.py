@@ -908,10 +908,15 @@ def find_contradiction(fact: str, store) -> Optional[dict]:
         changes = bool(_CHANGE.search(_plain(fact)))
         if mine is None and not changes:
             return None
+        # topics="all": it only decides whether this fact CHANGES a stored one
+        # (and names it on the card for the owner), never shows it to a model.
         try:
-            hits = store.search(fact, k=8, word_floor=0.0)
+            hits = store.search(fact, k=8, word_floor=0.0, topics="all")
         except TypeError:
-            hits = store.search(fact, k=8)
+            try:
+                hits = store.search(fact, k=8, word_floor=0.0)
+            except TypeError:
+                hits = store.search(fact, k=8)
         low = _plain(fact)
         for h in hits:
             if h.get("current") is False:
@@ -1664,20 +1669,29 @@ def _init_notes(c) -> None:
     # was on record" for exactly the sensitive facts that wait for a card.
     if "conversation_id" not in cols:
         c.execute("ALTER TABLE auto_learn_notes ADD COLUMN conversation_id TEXT")
+    # `topic_ask` (topic controls, 2026-09-30): the id of the topic a card
+    # asked about ("This might be about Work, which you set to not learn.").
+    # Accepting that card files the fact under Unsorted, the owner's choice
+    # (jarvis_topics.label_new_fact). An id, never words.
+    if "topic_ask" not in cols:
+        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN topic_ask INTEGER")
 
 
 def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None,
-               sensitive: Optional[str] = None, conversation_id=None) -> None:
+               sensitive: Optional[str] = None, conversation_id=None,
+               topic_ask: Optional[int] = None) -> None:
     _init_notes(c)
     cid = conversation_id if (isinstance(conversation_id, str)
                               and _CID.fullmatch(conversation_id)) else None
     c.execute("INSERT OR REPLACE INTO auto_learn_notes (proposal_id, reason, provenance, at,"
-              " sensitive, conversation_id) VALUES (?,?,?,?,?,?)",
-              (int(pid), reason, provenance, time.time(), sensitive or None, cid))
+              " sensitive, conversation_id, topic_ask) VALUES (?,?,?,?,?,?,?)",
+              (int(pid), reason, provenance, time.time(), sensitive or None, cid,
+               int(topic_ask) if isinstance(topic_ask, int) and not isinstance(topic_ask, bool)
+               else None))
 
 
 def card_notes(ids) -> dict:
-    """{proposal id: {"auto_reason", "provenance"}} for these proposals."""
+    """{proposal id: {"auto_reason", "provenance", "topic_ask"}} for these proposals."""
     ids = [int(i) for i in ids or [] if isinstance(i, int) and not isinstance(i, bool)]
     if not ids:
         return {}
@@ -1689,11 +1703,12 @@ def card_notes(ids) -> dict:
         with closing(st._connect()) as c:
             _init_notes(c)
             rows = c.execute(
-                "SELECT proposal_id, reason, provenance FROM auto_learn_notes WHERE proposal_id IN (%s)"
-                % ",".join("?" * len(ids)), ids).fetchall()
+                "SELECT proposal_id, reason, provenance, topic_ask FROM auto_learn_notes"
+                " WHERE proposal_id IN (%s)" % ",".join("?" * len(ids)), ids).fetchall()
     except Exception:
         return {}
-    return {int(r[0]): {"auto_reason": r[1] or "", "provenance": r[2]} for r in rows}
+    return {int(r[0]): {"auto_reason": r[1] or "", "provenance": r[2],
+                        "topic_ask": r[3] is not None} for r in rows}
 
 
 def annotate(rows: list) -> list:
@@ -1708,6 +1723,10 @@ def annotate(rows: list) -> list:
             continue
         n = notes.get(r.get("id")) or {}
         r["auto_reason"] = n.get("auto_reason") or ""
+        # Topic controls: a card that asks "this might be about Work, which you
+        # set to not learn" - the apps label its two buttons "Save under
+        # Unsorted" (accept) and "Skip it" (decline). A flag, never the topic.
+        r["topic_ask"] = bool(n.get("topic_ask"))
         if r.get("source") == "remember" and n:
             r["verbatim"] = n.get("provenance") in ("typed", "voice")
     return rows
@@ -1771,6 +1790,50 @@ def _meta(source: str, entries: list, conversation_id: str) -> dict:
             "tainted": False, "saved_at": time.time()}
 
 
+def _topic_learn(fact: str, st=None) -> dict:
+    """jarvis_topics.learn_verdict(), or "ok" when topic controls are not on
+    this PC (the module ships beside this one)."""
+    try:
+        import jarvis_topics
+    except Exception:
+        return {"verdict": "ok", "topic_id": None, "name": "", "reason": ""}
+    return jarvis_topics.learn_verdict(fact, store=st)
+
+
+def _topic_remember(fact: str, st=None) -> str:
+    """"" or the card reason for an explicit "Remember: ..." whose words fit a
+    topic set to not learn: it asks first, one fact, one yes."""
+    try:
+        import jarvis_topics
+        return jarvis_topics.remember_verdict(fact, store=st)
+    except Exception:
+        return ""
+
+
+def _topic_skipped(topic_id, st=None) -> None:
+    try:
+        import jarvis_topics
+        jarvis_topics.note_skip(topic_id, st)
+    except Exception:
+        pass
+
+
+def _topic_card_left(st=None) -> bool:
+    try:
+        import jarvis_topics
+        return jarvis_topics.cards_left_today(st)
+    except Exception:
+        return False
+
+
+def _topic_card_noted(st=None) -> None:
+    try:
+        import jarvis_topics
+        jarvis_topics.note_card(st)
+    except Exception:
+        pass
+
+
 def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                learning_on: bool = True, extract=None, publish: Callable = _publish) -> dict:
     """Called by the learner after one pass, with what propose() just queued
@@ -1803,9 +1866,34 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 if row is None or row.get("state") != "pending":
                     continue
                 fact = str(row.get("text") or "")
+                # Topic controls (docs/TOPIC-CONTROLS-DESIGN.md 4.1, 4.3): a fact
+                # sure to belong to a topic set to not learn is not saved, and
+                # not a card either - dropped and counted (the intake hook
+                # already did this before the queue; the queue can hold older
+                # proposals, so this is the second check). A fact that MIGHT
+                # belong to one is a card with the reason, five a day at most.
+                # This runs before every other check and can only ADD a no.
+                tv = _topic_learn(fact, st)
+                topic_why, topic_ask = "", None
+                if tv["verdict"] == "skip":
+                    _topic_skipped(tv.get("topic_id"), st)
+                    _drop(c, pid, "topic")
+                    result.setdefault("dropped", []).append(pid)
+                    continue
+                if tv["verdict"] == "ask":
+                    if _topic_card_left(st):
+                        topic_why, topic_ask = tv["reason"], tv.get("topic_id")
+                        _topic_card_noted(st)
+                    else:
+                        _topic_skipped(tv.get("topic_id"), st)
+                        _drop(c, pid, "topic")
+                        result.setdefault("dropped", []).append(pid)
+                        continue
                 why = batch or check_source(row.get("source"))
                 if not why and row.get("source") != "conversation":
                     why = "not from something you said"
+                if not why and topic_why:
+                    why = topic_why
                 src = source_turns(fact, texts) if not why else []
                 # Forgotten stays forgotten, layer 1 - whatever else the
                 # checks say, and also while automatic learning is off, so a
@@ -1861,7 +1949,8 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                     # then every proposal is a card, as it always was - but
                     # the chat it came from is noted either way (finding 3).
                     _note_card(c, pid, "" if off else why, sensitive=sens,
-                               conversation_id=conversation_id)
+                               conversation_id=conversation_id,
+                               topic_ask=topic_ask if (topic_why and why == topic_why) else None)
         for pid, why in decisions.items():
             if why:
                 result["cards"][pid] = why
@@ -2004,7 +2093,8 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
                 why = (check_source(row.get("source"))
                        or ("" if row.get("source") == "remember" else "not from something you said")
                        or check_not_correction(row) or check_instruction(fact)
-                       or check_sensitive(fact, [content], settings()["auto_sensitive"]))
+                       or check_sensitive(fact, [content], settings()["auto_sensitive"])
+                       or _topic_remember(fact, st))
             # The provenance goes with the card either way: annotate() shows
             # "in your own words" only for words typed or said to this PC
             # (GUARDS L3). No reason is noted while automatic learning is off.
@@ -2040,10 +2130,16 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
 #   GET /api/memory/auto - the "Saved automatically" list
 # --------------------------------------------------------------------------
 
-def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
+def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None,
+              topics: str = "visible") -> dict:
     """Auto-saved facts still current, newest first. Paged by whole seconds
     like the chat history list: a page never splits a second, so `before`
-    means strictly older seconds and nothing is skipped or repeated."""
+    means strictly older seconds and nothing is skipped or repeated.
+
+    topics="visible" (the owner's own list): the facts of an OFF topic are
+    left out. The morning briefing asks for topics="use" - a fact it would
+    read out must be one the owner allows Jarvis to USE - and its count is
+    the count of what it lists (jarvis_briefing._auto_facts_section)."""
     st = settings()
     out = {"facts": [], "auto": st["auto"], "auto_sensitive": st["auto_sensitive"]}
     try:
@@ -2070,6 +2166,14 @@ def list_auto(limit=LIST_DEFAULT, before=None, *, store=None, now=None) -> dict:
                              " ORDER BY created DESC, id DESC",
                              [now, float(sec), float(sec + 1)]).fetchall()
             rows += [tuple(r) for r in rest if r[0] not in have]
+    # Topic controls: the facts of a topic the owner switched off (or, for the
+    # briefing, off from answers) are not listed.
+    try:
+        hide = store.topic_blocked(topics) if topics != "all" else frozenset()
+    except Exception:
+        hide = frozenset()
+    if hide:
+        rows = [r for r in rows if int(r[0]) not in hide]
     # "Said again" (memory idea 3): how often the owner has said a fact
     # again since it was saved, and when last. Only for those said again.
     try:

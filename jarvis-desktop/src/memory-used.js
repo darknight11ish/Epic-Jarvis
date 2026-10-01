@@ -157,11 +157,16 @@ export function readUsed(answer) {
       const erasedAt = num(f.erased_at);
       return {
         id: f.id,
-        text: erasedAt ? "" : text(f.text),
+        text: erasedAt || f.left_out === true ? "" : text(f.text),
         current: f.current === true && !erasedAt,
         pinned: f.pinned === true && f.current === true && !erasedAt,
         validTo: num(f.valid_to),
+        // When it was saved (unix seconds), for the Galaxy panel's date.
+        created: num(f.created),
         erasedAt,
+        // Topic controls: the fact's topic was switched off since the answer;
+        // the PC sends no words for it (`left_out`).
+        leftOut: f.left_out === true && !erasedAt,
       };
     });
   const missing = (available && Array.isArray(a.missing) ? a.missing : [])

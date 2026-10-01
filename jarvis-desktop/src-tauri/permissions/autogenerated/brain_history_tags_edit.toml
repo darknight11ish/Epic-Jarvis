@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-history-tags-edit"
+description = "Enables the brain_history_tags_edit command without any pre-configured scope."
+commands.allow = ["brain_history_tags_edit"]
+
+[[permission]]
+identifier = "deny-brain-history-tags-edit"
+description = "Denies the brain_history_tags_edit command without any pre-configured scope."
+commands.deny = ["brain_history_tags_edit"]

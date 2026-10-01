@@ -1,0 +1,2045 @@
+{
+ "words": {
+  "TITLE": "Spending",
+  "DETAIL": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "PC_ONLY": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "NEEDS_SETUP_ON_PC": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "EMPTY_PROFILES": "No bank layouts saved yet.",
+  "STARTER_NOTE": "These are starter categories. Change the words to suit the shops you use.",
+  "HIDDEN_COLUMNS_NOTE": "A column that looks like an account or card number is not shown, and cannot be used.",
+  "TABLE_HIDDEN": "Spending table hidden",
+  "TABLE_GONE": "This table is no longer kept. Ask again to see it.",
+  "SPOKEN_LINE": "I have put it on your screen.",
+  "NO_SENTENCE_LINE": "Here is the table.",
+  "DROPPED_LINE": "Here is the table. (Jarvis's own summary sentence used a figure that is not in the table, so it was left out.)",
+  "ROW_TOTAL": "Total spent",
+  "ROW_UNCATEGORISED": "Uncategorised",
+  "ROW_REFUNDS": "Refunds (already taken off above)",
+  "ROW_INCOME": "Income and other money in",
+  "ROW_TRANSFERS_OUT": "Transfers out (not counted)",
+  "ROW_TRANSFERS_IN": "Transfers in (not counted)",
+  "CAV_ONCE": "{n} rows were in more than one file and were counted once.",
+  "CAV_ONCE_ONE": "1 row was in more than one file and was counted once.",
+  "CAV_SKIPPED": "{n} rows were left out: totals, closing balances and rows without a date or an amount Jarvis could read.",
+  "CAV_SKIPPED_ONE": "1 row was left out: a total, a closing balance or a row without a date or an amount Jarvis could read.",
+  "CAV_UNCAT": "Uncategorised: {n} rows, {amount}. Add words for them in Settings, Spending.",
+  "CAV_UNCAT_ONE": "Uncategorised: 1 row, {amount}. Add a word for it in Settings, Spending.",
+  "CAV_CURRENCIES": "This file has more than one currency. Each is added up on its own and nothing is converted.",
+  "CAV_HIDDEN": "Account and card numbers in the descriptions are hidden.",
+  "CAV_PENDING": "A bank that changes a shop's name between a pending and a posted export can make one row count twice.",
+  "CAV_REFUNDS": "Refunds are already taken off the categories above.",
+  "CAV_TRANSFERS": "Transfers between your own accounts are left out of spending.",
+  "CAV_FILES": "Added up from {n} files.",
+  "CAV_DATES": "{n} rows had a date that did not fit the saved date order and were left out. If that looks wrong, check the columns again on the PC.",
+  "STREAM_MARK": ": jarvis-table ",
+  "CAV_SHEETS": "This Excel file has {n} visible sheets. Only the first one, \"{name}\", was read.",
+  "CAV_ACCOUNTS": "These files use different saved layouts, so they are treated as different accounts and their rows are never matched with each other.",
+  "COUNTS_LINE": "With these choices, {out} rows count as money out and {inn} as money in.",
+  "COUNTS_UNREAD": "{n} rows could not be read.",
+  "EMPTY_SKIPPED": " {n} rows in the file were left out because they had no date or amount Jarvis could read. If that looks wrong, check the columns again on the PC (Settings, Spending).",
+  "EMPTY_SKIPPED_ONE": " 1 row in the file was left out because it had no date or amount Jarvis could read. If that looks wrong, check the columns again on the PC (Settings, Spending).",
+  "EMPTY_RANGE": " The rows in this file run from {first} to {last}.",
+  "SAVED_LAYOUT": "Saved layout",
+  "NO_TABLE_LINE": "Jarvis could not add up your spending this time, so it has no figures to give. Ask again once the bank file is set up.",
+  "SLOW_FIRST_TIME": "A big bank file can take up to a minute the first time, while account and card numbers are hidden."
+ },
+ "sign_sentences": {
+  "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+  "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+  "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+  "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+ },
+ "errors": {
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "no_header": "Jarvis could not find the row with the column names. Open Jarvis on the PC and choose it there (Settings, Spending).",
+  "unchecked": "Jarvis could not check this file for account and card numbers, so it showed nothing.",
+  "too_big": "This file is too big. Export a shorter period (at most 5 MB or 50,000 rows).",
+  "empty_period": "No spending was found in that period.",
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "misfit": "Jarvis tried the saved layout \"{layout}\" on this file, but it does not fit it: {why}. Nothing was added up. Open Jarvis on the PC and check the columns again (Settings, Spending).",
+  "misfit_save": "These choices do not fit this file: {why}. If that is right, save them anyway; if not, change the choices.",
+  "unanswered": "Choose an answer for every question the box asks before saving."
+ },
+ "tables": {
+  "by_category": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Spending by category, March 2026",
+   "period": "March 2026",
+   "sources": [
+    "a_signed.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "category",
+     "label": "Category",
+     "align": "left"
+    },
+    {
+     "key": "spent",
+     "label": "Spent",
+     "align": "right"
+    },
+    {
+     "key": "rows",
+     "label": "Rows",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "",
+     "currency": "",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "40.00",
+        "1"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Transport",
+        "12.25",
+        "1"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Subscriptions",
+        "9.99",
+        "1"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Eating out",
+        "7.00",
+        "2"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "20.00",
+        "1"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "89.24",
+        "6"
+       ]
+      }
+     ],
+     "also": [
+      {
+       "kind": "refunds",
+       "cells": [
+        "Refunds (already taken off above)",
+        "5.10",
+        "1"
+       ]
+      },
+      {
+       "kind": "income",
+       "cells": [
+        "Income and other money in",
+        "2,000.00",
+        "1"
+       ]
+      }
+     ]
+    }
+   ],
+   "caveats": [
+    "Uncategorised: 1 row, 20.00. Add a word for it in Settings, Spending.",
+    "Refunds are already taken off the categories above."
+   ],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
+  },
+  "by_month": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Spending by month",
+   "period": "2026-03-01 to 2026-04-02",
+   "sources": [
+    "a_signed.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "month",
+     "label": "Month",
+     "align": "left"
+    },
+    {
+     "key": "spent",
+     "label": "Spent",
+     "align": "right"
+    },
+    {
+     "key": "rows",
+     "label": "Rows",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "",
+     "currency": "",
+     "rows": [
+      {
+       "kind": "month",
+       "cells": [
+        "March 2026",
+        "89.24",
+        "6"
+       ]
+      },
+      {
+       "kind": "month",
+       "cells": [
+        "April 2026",
+        "30.40",
+        "1"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "119.64",
+        "7"
+       ]
+      }
+     ],
+     "also": [
+      {
+       "kind": "refunds",
+       "cells": [
+        "Refunds (already taken off above)",
+        "5.10",
+        "1"
+       ]
+      },
+      {
+       "kind": "income",
+       "cells": [
+        "Income and other money in",
+        "2,000.00",
+        "1"
+       ]
+      },
+      {
+       "kind": "transfers",
+       "cells": [
+        "Transfers out (not counted)",
+        "500.00",
+        "1"
+       ]
+      }
+     ]
+    }
+   ],
+   "caveats": [
+    "Uncategorised: 1 row, 20.00. Add a word for it in Settings, Spending.",
+    "Refunds are already taken off the categories above.",
+    "Transfers between your own accounts are left out of spending."
+   ],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
+  },
+  "by_category_and_month": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Spending by category and month",
+   "period": "2026-03-01 to 2026-04-02",
+   "sources": [
+    "a_signed.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "category",
+     "label": "Category",
+     "align": "left"
+    },
+    {
+     "key": "2026-03",
+     "label": "March 2026",
+     "align": "right"
+    },
+    {
+     "key": "2026-04",
+     "label": "April 2026",
+     "align": "right"
+    },
+    {
+     "key": "total",
+     "label": "Total",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "",
+     "currency": "",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "40.00",
+        "30.40",
+        "70.40"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Transport",
+        "12.25",
+        "0.00",
+        "12.25"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Subscriptions",
+        "9.99",
+        "0.00",
+        "9.99"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Eating out",
+        "7.00",
+        "0.00",
+        "7.00"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "20.00",
+        "0.00",
+        "20.00"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "89.24",
+        "30.40",
+        "119.64"
+       ]
+      }
+     ],
+     "also": [
+      {
+       "kind": "refunds",
+       "cells": [
+        "Refunds (already taken off above)",
+        "",
+        "",
+        "5.10"
+       ]
+      },
+      {
+       "kind": "income",
+       "cells": [
+        "Income and other money in",
+        "",
+        "",
+        "2,000.00"
+       ]
+      },
+      {
+       "kind": "transfers",
+       "cells": [
+        "Transfers out (not counted)",
+        "",
+        "",
+        "500.00"
+       ]
+      }
+     ]
+    }
+   ],
+   "caveats": [
+    "Uncategorised: 1 row, 20.00. Add a word for it in Settings, Spending.",
+    "Refunds are already taken off the categories above.",
+    "Transfers between your own accounts are left out of spending."
+   ],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
+  },
+  "two_files_overlapping": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Spending by category",
+   "period": "2026-01-05 to 2026-04-02",
+   "sources": [
+    "a_signed.csv (layout: Saved layout)",
+    "g_overlap_1.csv (layout: Saved layout)",
+    "g_overlap_2.csv (layout: Saved layout)",
+    "multi.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "category",
+     "label": "Category",
+     "align": "left"
+    },
+    {
+     "key": "spent",
+     "label": "Spent",
+     "align": "right"
+    },
+    {
+     "key": "rows",
+     "label": "Rows",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "",
+     "currency": "",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "120.40",
+        "5"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Transport",
+        "32.25",
+        "2"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Subscriptions",
+        "22.99",
+        "3"
+       ]
+      },
+      {
+       "kind": "category",
+       "cells": [
+        "Eating out",
+        "13.00",
+        "4"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "20.00",
+        "1"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "208.64",
+        "15"
+       ]
+      }
+     ],
+     "also": [
+      {
+       "kind": "refunds",
+       "cells": [
+        "Refunds (already taken off above)",
+        "5.10",
+        "1"
+       ]
+      },
+      {
+       "kind": "income",
+       "cells": [
+        "Income and other money in",
+        "3,000.00",
+        "2"
+       ]
+      },
+      {
+       "kind": "transfers",
+       "cells": [
+        "Transfers out (not counted)",
+        "500.00",
+        "1"
+       ]
+      }
+     ]
+    },
+    {
+     "heading": "GBP",
+     "currency": "GBP",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "15.00",
+        "2"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "0.00",
+        "0"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "15.00",
+        "2"
+       ]
+      }
+     ],
+     "also": [
+      {
+       "kind": "income",
+       "cells": [
+        "Income and other money in",
+        "100.00",
+        "1"
+       ]
+      }
+     ]
+    },
+    {
+     "heading": "EUR",
+     "currency": "EUR",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "20.00",
+        "1"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "0.00",
+        "0"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "20.00",
+        "1"
+       ]
+      }
+     ],
+     "also": []
+    }
+   ],
+   "caveats": [
+    "2 rows were in more than one file and were counted once.",
+    "Added up from 4 files.",
+    "A bank that changes a shop's name between a pending and a posted export can make one row count twice.",
+    "These files use different saved layouts, so they are treated as different accounts and their rows are never matched with each other.",
+    "This file has more than one currency. Each is added up on its own and nothing is converted.",
+    "Uncategorised: 1 row, 20.00. Add a word for it in Settings, Spending.",
+    "Refunds are already taken off the categories above.",
+    "Transfers between your own accounts are left out of spending."
+   ],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
+  },
+  "two_currencies": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Spending by category",
+   "period": "2026-02-01 to 2026-02-04",
+   "sources": [
+    "multi.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "category",
+     "label": "Category",
+     "align": "left"
+    },
+    {
+     "key": "spent",
+     "label": "Spent",
+     "align": "right"
+    },
+    {
+     "key": "rows",
+     "label": "Rows",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "GBP",
+     "currency": "GBP",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "15.00",
+        "2"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "0.00",
+        "0"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "15.00",
+        "2"
+       ]
+      }
+     ],
+     "also": [
+      {
+       "kind": "income",
+       "cells": [
+        "Income and other money in",
+        "100.00",
+        "1"
+       ]
+      }
+     ]
+    },
+    {
+     "heading": "EUR",
+     "currency": "EUR",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "20.00",
+        "1"
+       ]
+      },
+      {
+       "kind": "uncategorised",
+       "cells": [
+        "Uncategorised",
+        "0.00",
+        "0"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "20.00",
+        "1"
+       ]
+      }
+     ],
+     "also": []
+    }
+   ],
+   "caveats": [
+    "This file has more than one currency. Each is added up on its own and nothing is converted."
+   ],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
+  },
+  "one_category": {
+   "kind": "spending",
+   "version": 1,
+   "title": "Spending on Food and groceries",
+   "period": "2026-03-01 to 2026-04-02",
+   "sources": [
+    "a_signed.csv (layout: Saved layout)"
+   ],
+   "columns": [
+    {
+     "key": "category",
+     "label": "Category",
+     "align": "left"
+    },
+    {
+     "key": "spent",
+     "label": "Spent",
+     "align": "right"
+    },
+    {
+     "key": "rows",
+     "label": "Rows",
+     "align": "right"
+    }
+   ],
+   "sections": [
+    {
+     "heading": "",
+     "currency": "",
+     "rows": [
+      {
+       "kind": "category",
+       "cells": [
+        "Food and groceries",
+        "70.40",
+        "2"
+       ]
+      }
+     ],
+     "totals": [
+      {
+       "kind": "total",
+       "cells": [
+        "Total spent",
+        "70.40",
+        "2"
+       ]
+      }
+     ],
+     "also": []
+    }
+   ],
+   "caveats": [],
+   "private": true,
+   "read_aloud": false,
+   "remember": false,
+   "words": {
+    "hidden": "Spending table hidden"
+   }
+  }
+ },
+ "view_pc_nothing_saved": {
+  "available": true,
+  "title": "Spending",
+  "detail": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "can_edit": true,
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "profiles": [],
+  "empty_profiles": "No bank layouts saved yet.",
+  "categories": [
+   {
+    "category": "Food and groceries",
+    "words": [
+     "tesco",
+     "sainsbury",
+     "sainsburys",
+     "lidl",
+     "aldi",
+     "asda",
+     "waitrose",
+     "morrisons",
+     "kroger",
+     "safeway",
+     "whole foods"
+    ]
+   },
+   {
+    "category": "Eating out",
+    "words": [
+     "restaurant",
+     "cafe",
+     "coffee",
+     "starbucks",
+     "costa",
+     "mcdonalds",
+     "pizza"
+    ]
+   },
+   {
+    "category": "Transport",
+    "words": [
+     "uber",
+     "tfl",
+     "trainline",
+     "petrol",
+     "fuel",
+     "shell",
+     "parking"
+    ]
+   },
+   {
+    "category": "Home and bills",
+    "words": [
+     "rent",
+     "mortgage",
+     "electric",
+     "water",
+     "council tax",
+     "broadband"
+    ]
+   },
+   {
+    "category": "Health",
+    "words": [
+     "pharmacy",
+     "boots",
+     "dentist",
+     "optician"
+    ]
+   },
+   {
+    "category": "Shopping",
+    "words": [
+     "amazon",
+     "ebay",
+     "argos",
+     "ikea"
+    ]
+   },
+   {
+    "category": "Fun and travel",
+    "words": [
+     "cinema",
+     "airline",
+     "hotel",
+     "airbnb",
+     "theatre"
+    ]
+   },
+   {
+    "category": "Subscriptions",
+    "words": [
+     "netflix",
+     "spotify",
+     "subscription"
+    ]
+   },
+   {
+    "category": "Cash",
+    "words": [
+     "atm",
+     "cash withdrawal"
+    ]
+   },
+   {
+    "category": "Transfers",
+    "words": [
+     "transfer",
+     "credit card payment",
+     "internal transfer",
+     "payment thank you"
+    ]
+   },
+   {
+    "category": "Income",
+    "words": [
+     "salary",
+     "payroll",
+     "wages"
+    ]
+   },
+   {
+    "category": "Other",
+    "words": []
+   }
+  ],
+  "categories_are_starter": true,
+  "starter_note": "These are starter categories. Change the words to suit the shops you use.",
+  "waiting": [],
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "table_hidden": "Spending table hidden",
+  "bank_files": [
+   {
+    "name": "a_signed.csv",
+    "path": "C:\\Users\\owner\\Bank\\a_signed.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "h_ambiguous.csv",
+    "path": "C:\\Users\\owner\\Bank\\h_ambiguous.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   }
+  ]
+ },
+ "view_phone_nothing_saved": {
+  "available": true,
+  "title": "Spending",
+  "detail": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "can_edit": false,
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "profiles": [],
+  "empty_profiles": "No bank layouts saved yet.",
+  "categories": [
+   {
+    "category": "Food and groceries",
+    "words": [
+     "tesco",
+     "sainsbury",
+     "sainsburys",
+     "lidl",
+     "aldi",
+     "asda",
+     "waitrose",
+     "morrisons",
+     "kroger",
+     "safeway",
+     "whole foods"
+    ]
+   },
+   {
+    "category": "Eating out",
+    "words": [
+     "restaurant",
+     "cafe",
+     "coffee",
+     "starbucks",
+     "costa",
+     "mcdonalds",
+     "pizza"
+    ]
+   },
+   {
+    "category": "Transport",
+    "words": [
+     "uber",
+     "tfl",
+     "trainline",
+     "petrol",
+     "fuel",
+     "shell",
+     "parking"
+    ]
+   },
+   {
+    "category": "Home and bills",
+    "words": [
+     "rent",
+     "mortgage",
+     "electric",
+     "water",
+     "council tax",
+     "broadband"
+    ]
+   },
+   {
+    "category": "Health",
+    "words": [
+     "pharmacy",
+     "boots",
+     "dentist",
+     "optician"
+    ]
+   },
+   {
+    "category": "Shopping",
+    "words": [
+     "amazon",
+     "ebay",
+     "argos",
+     "ikea"
+    ]
+   },
+   {
+    "category": "Fun and travel",
+    "words": [
+     "cinema",
+     "airline",
+     "hotel",
+     "airbnb",
+     "theatre"
+    ]
+   },
+   {
+    "category": "Subscriptions",
+    "words": [
+     "netflix",
+     "spotify",
+     "subscription"
+    ]
+   },
+   {
+    "category": "Cash",
+    "words": [
+     "atm",
+     "cash withdrawal"
+    ]
+   },
+   {
+    "category": "Transfers",
+    "words": [
+     "transfer",
+     "credit card payment",
+     "internal transfer",
+     "payment thank you"
+    ]
+   },
+   {
+    "category": "Income",
+    "words": [
+     "salary",
+     "payroll",
+     "wages"
+    ]
+   },
+   {
+    "category": "Other",
+    "words": []
+   }
+  ],
+  "categories_are_starter": true,
+  "starter_note": "These are starter categories. Change the words to suit the shops you use.",
+  "waiting": [],
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "table_hidden": "Spending table hidden"
+ },
+ "proposal_date_order_unsettled": {
+  "ok": true,
+  "known": false,
+  "fingerprint": "99a99abee47ef83d",
+  "header_row": 0,
+  "header": [
+   "Date",
+   "Description",
+   "Amount"
+  ],
+  "header_index": [
+   0,
+   1,
+   2
+  ],
+  "hidden_columns": 0,
+  "hidden_note": "",
+  "preview": [
+   [
+    "01/02/2026",
+    "ALDI",
+    "-5.00"
+   ],
+   [
+    "03/04/2026",
+    "LIDL",
+    "-6.00"
+   ],
+   [
+    "05/06/2026",
+    "TESCO",
+    "-7.00"
+   ]
+  ],
+  "guess": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": null,
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  },
+  "questions": [
+   "date_order"
+  ],
+  "warnings": [
+   "A bank that changes a shop's name between a pending and a posted export can make one row count twice."
+  ],
+  "sentences": {
+   "sign": "Rows like 'SHOP -45.10' will be counted as money spent."
+  },
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  }
+ },
+ "view_pc_file_waiting": {
+  "available": true,
+  "title": "Spending",
+  "detail": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "can_edit": true,
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "profiles": [],
+  "empty_profiles": "No bank layouts saved yet.",
+  "categories": [
+   {
+    "category": "Food and groceries",
+    "words": [
+     "tesco",
+     "sainsbury",
+     "sainsburys",
+     "lidl",
+     "aldi",
+     "asda",
+     "waitrose",
+     "morrisons",
+     "kroger",
+     "safeway",
+     "whole foods"
+    ]
+   },
+   {
+    "category": "Eating out",
+    "words": [
+     "restaurant",
+     "cafe",
+     "coffee",
+     "starbucks",
+     "costa",
+     "mcdonalds",
+     "pizza"
+    ]
+   },
+   {
+    "category": "Transport",
+    "words": [
+     "uber",
+     "tfl",
+     "trainline",
+     "petrol",
+     "fuel",
+     "shell",
+     "parking"
+    ]
+   },
+   {
+    "category": "Home and bills",
+    "words": [
+     "rent",
+     "mortgage",
+     "electric",
+     "water",
+     "council tax",
+     "broadband"
+    ]
+   },
+   {
+    "category": "Health",
+    "words": [
+     "pharmacy",
+     "boots",
+     "dentist",
+     "optician"
+    ]
+   },
+   {
+    "category": "Shopping",
+    "words": [
+     "amazon",
+     "ebay",
+     "argos",
+     "ikea"
+    ]
+   },
+   {
+    "category": "Fun and travel",
+    "words": [
+     "cinema",
+     "airline",
+     "hotel",
+     "airbnb",
+     "theatre"
+    ]
+   },
+   {
+    "category": "Subscriptions",
+    "words": [
+     "netflix",
+     "spotify",
+     "subscription"
+    ]
+   },
+   {
+    "category": "Cash",
+    "words": [
+     "atm",
+     "cash withdrawal"
+    ]
+   },
+   {
+    "category": "Transfers",
+    "words": [
+     "transfer",
+     "credit card payment",
+     "internal transfer",
+     "payment thank you"
+    ]
+   },
+   {
+    "category": "Income",
+    "words": [
+     "salary",
+     "payroll",
+     "wages"
+    ]
+   },
+   {
+    "category": "Other",
+    "words": []
+   }
+  ],
+  "categories_are_starter": true,
+  "starter_note": "These are starter categories. Change the words to suit the shops you use.",
+  "waiting": [
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv"
+   }
+  ],
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "table_hidden": "Spending table hidden",
+  "bank_files": [
+   {
+    "name": "a_signed.csv",
+    "path": "C:\\Users\\owner\\Bank\\a_signed.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": true
+   },
+   {
+    "name": "h_ambiguous.csv",
+    "path": "C:\\Users\\owner\\Bank\\h_ambiguous.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   }
+  ]
+ },
+ "view_phone_file_waiting": {
+  "available": true,
+  "title": "Spending",
+  "detail": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "can_edit": false,
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "profiles": [],
+  "empty_profiles": "No bank layouts saved yet.",
+  "categories": [
+   {
+    "category": "Food and groceries",
+    "words": [
+     "tesco",
+     "sainsbury",
+     "sainsburys",
+     "lidl",
+     "aldi",
+     "asda",
+     "waitrose",
+     "morrisons",
+     "kroger",
+     "safeway",
+     "whole foods"
+    ]
+   },
+   {
+    "category": "Eating out",
+    "words": [
+     "restaurant",
+     "cafe",
+     "coffee",
+     "starbucks",
+     "costa",
+     "mcdonalds",
+     "pizza"
+    ]
+   },
+   {
+    "category": "Transport",
+    "words": [
+     "uber",
+     "tfl",
+     "trainline",
+     "petrol",
+     "fuel",
+     "shell",
+     "parking"
+    ]
+   },
+   {
+    "category": "Home and bills",
+    "words": [
+     "rent",
+     "mortgage",
+     "electric",
+     "water",
+     "council tax",
+     "broadband"
+    ]
+   },
+   {
+    "category": "Health",
+    "words": [
+     "pharmacy",
+     "boots",
+     "dentist",
+     "optician"
+    ]
+   },
+   {
+    "category": "Shopping",
+    "words": [
+     "amazon",
+     "ebay",
+     "argos",
+     "ikea"
+    ]
+   },
+   {
+    "category": "Fun and travel",
+    "words": [
+     "cinema",
+     "airline",
+     "hotel",
+     "airbnb",
+     "theatre"
+    ]
+   },
+   {
+    "category": "Subscriptions",
+    "words": [
+     "netflix",
+     "spotify",
+     "subscription"
+    ]
+   },
+   {
+    "category": "Cash",
+    "words": [
+     "atm",
+     "cash withdrawal"
+    ]
+   },
+   {
+    "category": "Transfers",
+    "words": [
+     "transfer",
+     "credit card payment",
+     "internal transfer",
+     "payment thank you"
+    ]
+   },
+   {
+    "category": "Income",
+    "words": [
+     "salary",
+     "payroll",
+     "wages"
+    ]
+   },
+   {
+    "category": "Other",
+    "words": []
+   }
+  ],
+  "categories_are_starter": true,
+  "starter_note": "These are starter categories. Change the words to suit the shops you use.",
+  "waiting": [
+   {
+    "name": "b_debit_credit.csv"
+   }
+  ],
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "table_hidden": "Spending table hidden"
+ },
+ "proposal_signed_amount": {
+  "ok": true,
+  "known": false,
+  "fingerprint": "c26d88dbb7e6cfb3",
+  "header_row": 0,
+  "header": [
+   "Date",
+   "Description",
+   "Amount",
+   "Balance"
+  ],
+  "header_index": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "hidden_columns": 0,
+  "hidden_note": "",
+  "preview": [
+   [
+    "2026-03-01",
+    "TESCO STORES 4411",
+    "-45.10",
+    "954.90"
+   ],
+   [
+    "2026-03-02",
+    "STARBUCKS COFFEE",
+    "-3.50",
+    "951.40"
+   ],
+   [
+    "2026-03-02",
+    "STARBUCKS COFFEE",
+    "-3.50",
+    "947.90"
+   ],
+   [
+    "2026-03-03",
+    "UBER TRIP",
+    "-12.25",
+    "935.65"
+   ],
+   [
+    "2026-03-05",
+    "SALARY ACME LTD",
+    "2000.00",
+    "2935.65"
+   ]
+  ],
+  "guess": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  },
+  "questions": [],
+  "warnings": [],
+  "sentences": {
+   "sign": "Rows like 'SHOP -45.10' will be counted as money spent."
+  },
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "ready": true,
+  "counts": {
+   "out": 8,
+   "in": 2,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 8 rows count as money out and 2 as money in.",
+  "problems": []
+ },
+ "view_pc_one_layout": {
+  "available": true,
+  "title": "Spending",
+  "detail": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "can_edit": true,
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "profiles": [
+   {
+    "id": "c26d88dbb7e6cfb3",
+    "label": "Saved layout",
+    "columns": [
+     "Date",
+     "Description",
+     "Amount",
+     "Balance"
+    ],
+    "sign": "negative_out",
+    "sign_sentence": "Rows like 'SHOP -45.10' will be counted as money spent.",
+    "saved": "2026-09-30"
+   }
+  ],
+  "empty_profiles": "No bank layouts saved yet.",
+  "categories": [
+   {
+    "category": "Food and groceries",
+    "words": [
+     "tesco",
+     "sainsbury",
+     "sainsburys",
+     "lidl",
+     "aldi",
+     "asda",
+     "waitrose",
+     "morrisons",
+     "kroger",
+     "safeway",
+     "whole foods"
+    ]
+   },
+   {
+    "category": "Eating out",
+    "words": [
+     "restaurant",
+     "cafe",
+     "coffee",
+     "starbucks",
+     "costa",
+     "mcdonalds",
+     "pizza"
+    ]
+   },
+   {
+    "category": "Transport",
+    "words": [
+     "uber",
+     "tfl",
+     "trainline",
+     "petrol",
+     "fuel",
+     "shell",
+     "parking"
+    ]
+   },
+   {
+    "category": "Home and bills",
+    "words": [
+     "rent",
+     "mortgage",
+     "electric",
+     "water",
+     "council tax",
+     "broadband"
+    ]
+   },
+   {
+    "category": "Health",
+    "words": [
+     "pharmacy",
+     "boots",
+     "dentist",
+     "optician"
+    ]
+   },
+   {
+    "category": "Shopping",
+    "words": [
+     "amazon",
+     "ebay",
+     "argos",
+     "ikea"
+    ]
+   },
+   {
+    "category": "Fun and travel",
+    "words": [
+     "cinema",
+     "airline",
+     "hotel",
+     "airbnb",
+     "theatre"
+    ]
+   },
+   {
+    "category": "Subscriptions",
+    "words": [
+     "netflix",
+     "spotify",
+     "subscription"
+    ]
+   },
+   {
+    "category": "Cash",
+    "words": [
+     "atm",
+     "cash withdrawal"
+    ]
+   },
+   {
+    "category": "Transfers",
+    "words": [
+     "transfer",
+     "credit card payment",
+     "internal transfer",
+     "payment thank you"
+    ]
+   },
+   {
+    "category": "Income",
+    "words": [
+     "salary",
+     "payroll",
+     "wages"
+    ]
+   },
+   {
+    "category": "Other",
+    "words": []
+   }
+  ],
+  "categories_are_starter": true,
+  "starter_note": "These are starter categories. Change the words to suit the shops you use.",
+  "waiting": [
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv"
+   }
+  ],
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "table_hidden": "Spending table hidden",
+  "bank_files": [
+   {
+    "name": "a_signed.csv",
+    "path": "C:\\Users\\owner\\Bank\\a_signed.csv",
+    "kind": "csv",
+    "layout_id": "c26d88dbb7e6cfb3",
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": true
+   },
+   {
+    "name": "h_ambiguous.csv",
+    "path": "C:\\Users\\owner\\Bank\\h_ambiguous.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   }
+  ]
+ },
+ "view_phone_one_layout": {
+  "available": true,
+  "title": "Spending",
+  "detail": "Drop a bank export (CSV or Excel) into a folder Jarvis may look in, then ask in chat, for example \"how much did I spend on food last month?\". Jarvis adds the numbers up with plain code and shows a small table on screen. The table is never read aloud, never remembered and never sent anywhere. Account and card numbers in the file are hidden.",
+  "can_edit": false,
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "profiles": [
+   {
+    "id": "c26d88dbb7e6cfb3",
+    "label": "Saved layout",
+    "columns": [
+     "Date",
+     "Description",
+     "Amount",
+     "Balance"
+    ],
+    "sign": "negative_out",
+    "sign_sentence": "Rows like 'SHOP -45.10' will be counted as money spent.",
+    "saved": "2026-09-30"
+   }
+  ],
+  "empty_profiles": "No bank layouts saved yet.",
+  "categories": [
+   {
+    "category": "Food and groceries",
+    "words": [
+     "tesco",
+     "sainsbury",
+     "sainsburys",
+     "lidl",
+     "aldi",
+     "asda",
+     "waitrose",
+     "morrisons",
+     "kroger",
+     "safeway",
+     "whole foods"
+    ]
+   },
+   {
+    "category": "Eating out",
+    "words": [
+     "restaurant",
+     "cafe",
+     "coffee",
+     "starbucks",
+     "costa",
+     "mcdonalds",
+     "pizza"
+    ]
+   },
+   {
+    "category": "Transport",
+    "words": [
+     "uber",
+     "tfl",
+     "trainline",
+     "petrol",
+     "fuel",
+     "shell",
+     "parking"
+    ]
+   },
+   {
+    "category": "Home and bills",
+    "words": [
+     "rent",
+     "mortgage",
+     "electric",
+     "water",
+     "council tax",
+     "broadband"
+    ]
+   },
+   {
+    "category": "Health",
+    "words": [
+     "pharmacy",
+     "boots",
+     "dentist",
+     "optician"
+    ]
+   },
+   {
+    "category": "Shopping",
+    "words": [
+     "amazon",
+     "ebay",
+     "argos",
+     "ikea"
+    ]
+   },
+   {
+    "category": "Fun and travel",
+    "words": [
+     "cinema",
+     "airline",
+     "hotel",
+     "airbnb",
+     "theatre"
+    ]
+   },
+   {
+    "category": "Subscriptions",
+    "words": [
+     "netflix",
+     "spotify",
+     "subscription"
+    ]
+   },
+   {
+    "category": "Cash",
+    "words": [
+     "atm",
+     "cash withdrawal"
+    ]
+   },
+   {
+    "category": "Transfers",
+    "words": [
+     "transfer",
+     "credit card payment",
+     "internal transfer",
+     "payment thank you"
+    ]
+   },
+   {
+    "category": "Income",
+    "words": [
+     "salary",
+     "payroll",
+     "wages"
+    ]
+   },
+   {
+    "category": "Other",
+    "words": []
+   }
+  ],
+  "categories_are_starter": true,
+  "starter_note": "These are starter categories. Change the words to suit the shops you use.",
+  "waiting": [
+   {
+    "name": "b_debit_credit.csv"
+   }
+  ],
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
+  "table_hidden": "Spending table hidden"
+ },
+ "proposal_again": {
+  "ok": true,
+  "known": false,
+  "fingerprint": "c26d88dbb7e6cfb3",
+  "header_row": 0,
+  "header": [
+   "Date",
+   "Description",
+   "Amount",
+   "Balance"
+  ],
+  "header_index": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "hidden_columns": 0,
+  "hidden_note": "",
+  "preview": [
+   [
+    "2026-03-01",
+    "TESCO STORES 4411",
+    "-45.10",
+    "954.90"
+   ],
+   [
+    "2026-03-02",
+    "STARBUCKS COFFEE",
+    "-3.50",
+    "951.40"
+   ],
+   [
+    "2026-03-02",
+    "STARBUCKS COFFEE",
+    "-3.50",
+    "947.90"
+   ],
+   [
+    "2026-03-03",
+    "UBER TRIP",
+    "-12.25",
+    "935.65"
+   ],
+   [
+    "2026-03-05",
+    "SALARY ACME LTD",
+    "2000.00",
+    "2935.65"
+   ]
+  ],
+  "guess": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  },
+  "questions": [],
+  "warnings": [],
+  "sentences": {
+   "sign": "Rows like 'SHOP -45.10' will be counted as money spent."
+  },
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "ready": true,
+  "counts": {
+   "out": 8,
+   "in": 2,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 8 rows count as money out and 2 as money in.",
+  "problems": [],
+  "again": true,
+  "saved_choices": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  },
+  "fresh_guess": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  }
+ },
+ "preview_counts": {
+  "ok": true,
+  "ready": true,
+  "counts": {
+   "out": 8,
+   "in": 2,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 8 rows count as money out and 2 as money in.",
+  "problems": [],
+  "warnings": []
+ },
+ "save_misfit_refused": {
+  "ok": false,
+  "error": "misfit_confirm",
+  "message": "These choices do not fit this file: the plus and minus signs look the wrong way round - 2 rows would count as money spent and 8 as money coming in. If that is right, save them anyway; if not, change the choices.",
+  "problems": [
+   "sign"
+  ],
+  "counts": {
+   "out": 2,
+   "in": 8,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 2 rows count as money out and 8 as money in.",
+  "status": 400
+ }
+}

@@ -46,6 +46,16 @@ The made-up conversations in backend/eval/learner_cases.jsonl, one per line:
              real live-turn registry and the real jarvis_extract functions
              the patch stack writes (backend/_stack.py), on a scratch store.
 
+  topic      TOPIC CONTROLS (2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md): with a
+             topic set to "don't learn", a fact that is sure to belong to it is
+             dropped BEFORE the review queue (jarvis_topics.gate_proposals) and
+             again at save time (jarvis_auto_learn.after_pass); a fact that only
+             MIGHT belong to it is a card with the reason line; "Remember: ..."
+             on it asks first; a topic set to "learn, but don't use" still
+             learns; the sensitive gate still applies in every mode; and with
+             every topic on "Learn and use" nothing is different at all. Scored
+             on skip / card / saved, and - for a card - the reason.
+
   The one stand-in: the sensitive-topic check's SECOND layer asks the local
   model, and there is no model here. Its answer is replaced by "not
   sensitive", so the pattern layer and every other check are what is
@@ -307,6 +317,67 @@ def _gate(w, I, A, case) -> dict:
         got["shown"] = shown
         ok = ok and case["candidate"] in shown
     return {"ok": ok, "got": got}
+
+
+def _set_modes(w, modes: dict) -> None:
+    """Set topic modes straight in the scratch store - a test fixture, not the
+    owner's route (no card is wanted for a private topic here)."""
+    import jarvis_topics as T
+    with T._db(w.store) as c:
+        T.ensure(c)
+        for name, mode in (modes or {}).items():
+            c.execute("UPDATE topics SET mode=? WHERE lower(name)=lower(?)", (mode, name))
+
+
+def _topic(w, I, A, case) -> dict:
+    """Topic controls on the learn side: see the "topic" paragraph above."""
+    import jarvis_topics as T
+    w.fresh()
+    _set_modes(w, case.get("modes"))
+    cid = w.conversation()
+    if case.get("remember"):
+        msgs = w.say(cid, [], {"text": case["remember"], "prov": "typed"})[:-1]
+        res = I.remember_from_turn(msgs, extract=w.x)
+        auto = A.after_remember(res, msgs, conversation_id=cid, learning_on=True,
+                                extract=w.x, publish=lambda ids: None)
+        how = "auto" if auto.get("saved") else "card"
+        why = next(iter((auto.get("cards") or {}).values()), "")
+        ok = how == case["want"] and (how == "auto" or case.get("why", "") in why)
+        return {"ok": ok, "got": {"decision": how, "why": why}}
+    history = []
+    for turn in case["turns"]:
+        history = w.say(cid, history, turn)
+    turns = [t["text"] for t in case["turns"]]
+    # Before the queue: the learner's model answer, with what is sure to belong
+    # to a topic set to not learn taken out (jarvis_intake's hook).
+    answer = json.dumps({"facts": [{"text": case["fact"]}]})
+    kept = json.loads(T.gate_proposals(answer, store=w.store)).get("facts") or []
+    if not kept:
+        how, why = "skip", ""
+    else:
+        import jarvis_sensitive as S
+        keep = S.ASK_MODEL
+        said = _model_says(case)
+        if said is not None:
+            S.ASK_MODEL = said
+        try:
+            q = w.queue(case["fact"])
+            res = A.after_pass([q], [{"role": "user", "content": t} for t in turns],
+                               conversation_id=cid, model="qwen3:8b", ollama=LOCAL,
+                               learning_on=True, extract=w.x, publish=lambda ids: None)
+        finally:
+            S.ASK_MODEL = keep
+        if res.get("dropped"):
+            how, why = "skip", ""
+        else:
+            how = "auto" if res.get("saved") else "card"
+            why = next(iter((res.get("cards") or {}).values()), "")
+    with closing(w.store._connect()) as c:
+        n = c.execute("SELECT COUNT(*) FROM facts WHERE source != 'eval'").fetchone()[0]
+    ok = how == case["want"] and (how != "card" or case.get("why", "") in why)
+    if how == "skip":
+        ok = ok and n == 0                    # nothing was saved either
+    return {"ok": ok, "got": {"decision": how, "why": why, "saved": n}}
 
 
 def _moves(w, I, A, case) -> dict:
@@ -582,6 +653,8 @@ def run(M, scratch: Path, *, model: Optional[str] = None, ollama: str = LOCAL) -
                     r = _true_from(w, case)
                 elif kind == "moves":
                     r = _moves(w, I, A, case)
+                elif kind == "topic":
+                    r = _topic(w, I, A, case)
                 elif kind == "true_until":
                     r = _true_until(w, case)
                 else:
@@ -628,7 +701,10 @@ def markdown(res: dict) -> list:
              "moves": "\"Where did I put ...\": a newer place replaces the older one "
                       "(older news never does), and anything else stays a card",
              "true_until": "\"True until\" dates taken from the owner's words - a label, "
-                           "never a hide"}
+                           "never a hide",
+             "topic": "Topic controls: a fact for a topic set to not learn is not saved "
+                      "(sure: dropped; unsure: a card with the reason), and the sensitive "
+                      "gate still applies"}
     lines += ["", "| What | Right |", "|---|---|"]
     for k, v in res["kinds"].items():
         lines.append(f"| {names.get(k, k)} | {v['right']}/{v['total']} |")

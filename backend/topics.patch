@@ -1,0 +1,62 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -172,6 +172,7 @@
+     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+     "browser_form_submit",  # jarvis_form_review.py / jarvis_agent.py acts only on tier "ask": ONE card, before the click that sends a filled-in form, showing the site, every word typed and a picture of the page (form-review.patch)
+     "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
++    "topic_loosen",  # jarvis_topics.py acts only on tier "ask": ONE card to turn a private topic back on (topics.patch)
+ })
+ 
+ 
+@@ -852,6 +853,13 @@
+     # a search still follows every rule it had (its own card when private things
+     # could slip in, never a password or key), so this is a setting on this PC.
+     "web_search_enable": ("yes", "local", "lets Jarvis search the web again, with the search you chose; the change itself sends nothing, every search keeps the rules it already had, and you can turn web search off again at any time, at once"),
++    # topics.patch (jarvis_topics.py, JARVIS-API section 107; the owner's decision of
++    # 2026-09-30). ONE card when a private topic (Health, Money, or one the owner marked
++    # private) is turned back on for learning or for answers, when its private mark is
++    # cleared, when a batch of its facts is moved out to a looser topic, or when any
++    # loosening is asked from outside text. It only changes which saved facts Jarvis may
++    # learn about or use; nothing is sent anywhere. Turning a topic OFF is instant.
++    "topic_loosen": ("yes", "local", "lets Jarvis learn about or use a private topic again (health, money, or one you marked private), or move its facts to a more open topic; the facts stay on this PC, sensitive ones are still kept on screen and never read aloud, and new sensitive ones still wait for your yes; switching a topic off again is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3665,6 +3665,21 @@
+     except Exception as exc:
+         print(f"  progress   NOT ON ({type(exc).__name__}) - the Activity heatmap and balance chart are off")
+         print("             until jarvis_progress.py is back: run apply-patches.ps1 again")
++    # topics.patch ("Topic controls", the owner's decision of 2026-09-30;
++    # docs/TOPIC-CONTROLS-DESIGN.md, JARVIS-API section 107): GET and POST
++    # /api/topics, POST /api/topics/mode|file|settings, GET /api/topics/preview|review|hidden,
++    # and the owner's memory lists (/api/memory/facts, /api/memory/export) with the topic
++    # filter applied. A mode per topic: learn and use, use but don't learn, learn but don't
++    # use, off. Turning a private topic back on is one approval card (topic_loosen); anything
++    # stricter is at once. The filter itself is in jarvis_memory.py. Wrapped round Handler
++    # here, before anything listens, like progress above.
++    try:
++        import jarvis_topics
++        print(jarvis_topics.install(Handler, origin_ok=_origin_ok,
++                                    token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  topics     NOT ON ({type(exc).__name__}) - Topic controls are off")
++        print("             until jarvis_topics.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+@@ -4171,6 +4186,13 @@
+             except Exception:            # _al_plain unset: nothing here was checked
+                 _al_ok = 0
+             route_header["injected_sensitive"] = max(0, _al_n - _al_ok)
++            # topics.patch: how many facts the owner's topic settings kept out of this
++            # answer's candidates - a count only, never words (X-Jarvis-Route).
++            try:
++                import jarvis_topics
++                route_header["topics_left_out"] = jarvis_topics.take_left_out()
++            except Exception:
++                route_header["topics_left_out"] = 0
+             if use_tools:
+                 # No `upstream` exists in this branch - jarvis_agent makes
+                 # its own request(s) to Ollama entirely on its own, so there

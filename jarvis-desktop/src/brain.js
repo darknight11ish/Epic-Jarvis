@@ -40,6 +40,8 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
+import { createMenuManager, WORDS } from "./menu-visibility.js";
+const menuManager = createMenuManager();
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
 import { validToFromText } from "./valid-to.js";
@@ -50,7 +52,7 @@ import { CANNOT_CHAT, canChat } from "./model-chat.js";
 import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 import { tellChatsGone } from "./chat-history.js";
 // Brain -> History -> "Forget a time frame": its own module too.
-import { openForgetRange, showForgetRange, takeAnyPlace } from "./forget-range-panel.js";
+import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
 import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
 import {
   actionsOf as focusActionsOf,
@@ -139,15 +141,105 @@ import {
   checkinJobFor,
   checkinLines,
   EMPTY_GOALS,
+  FOLLOWS_LABEL,
+  GOAL_WORDS,
   GOALS_MISSING,
+  benchProjectIds,
+  MEASURE_LABEL,
+  MEASURE_EMPTY,
+  MEASURE_NONE,
+  MEASURE_UNDER,
+  measureChoices,
+  NEEDS_CLEANED,
+  NEEDS_FULL,
+  NEEDS_LABEL,
+  NEEDS_NONE,
+  NEEDS_UNDER,
+  needChoices,
+  newStep,
   openCount,
+  planBody,
   planIsValid,
   readGoals,
+  REACHED_TAG,
   REMOVE_STEP_LABEL,
+  removeStepAt,
+  setNeed,
   statusLabel,
   STEP_PLACEHOLDER,
+  stepRow,
   STOP_LABEL,
+  UNDO_LABEL,
+  UNDO_TICKED,
+  UNTICKED,
 } from "./goals.js";
+import { fill as goalFill } from "./projects.js";
+import {
+  AGAIN_EMPTY as QUIZ_AGAIN_EMPTY,
+  AGAIN_HEADING as QUIZ_AGAIN_HEADING,
+  ANSWER_LABEL as QUIZ_ANSWER_LABEL,
+  againLine as quizAgainLine,
+  ANSWER_PLACEHOLDER as QUIZ_ANSWER_PLACEHOLDER,
+  CLOSE_LABEL as QUIZ_CLOSE,
+  answerCount as quizAnswerCount,
+  CHECKING as QUIZ_CHECKING,
+  countsLine as quizCountsLine,
+  crisisParagraphs as quizCrisisParagraphs,
+  errorWords as quizErrorWords,
+  FINISH_LABEL as QUIZ_FINISH,
+  GUESS_LABEL as QUIZ_GUESS,
+  isCrisis as quizIsCrisis,
+  isRefusal,
+  KIND_LABELS as QUIZ_KIND_LABELS,
+  LIMITS as QUIZ_LIMITS,
+  levelLabel as quizLevelLabel,
+  nextQuestion as quizNextQuestion,
+  NEXT_LABEL as QUIZ_NEXT,
+  progressLine as quizProgressLine,
+  readCrisis as quizReadCrisis,
+  readQuiz,
+  readSummary,
+  SOURCE_LABEL as QUIZ_SOURCE,
+  STOP_LABEL as QUIZ_STOP,
+  textCount as quizTextCount,
+  WRITING as QUIZ_WRITING,
+  QUIZ_INTRO as QUIZ_INTRO_TEXT,
+  ACCENT_ROW_LABEL as QUIZ_ACCENT_ROW,
+  ACCENTS as QUIZ_ACCENTS,
+  DEFAULT_EXERCISE as QUIZ_DEFAULT_EXERCISE,
+  DEFAULT_LEVEL as QUIZ_DEFAULT_LEVEL,
+  EXERCISES as QUIZ_EXERCISES,
+  insertAtCursor as quizInsertAtCursor,
+  LEVEL_IDS as QUIZ_LEVEL_IDS,
+  levelLine as quizLevelLine,
+  markLines as quizMarkLines,
+  OLD_PC_SPANISH as QUIZ_OLD_PC_SPANISH,
+  SPANISH_INTRO as QUIZ_SPANISH_INTRO,
+  SPANISH_TEXT_PLACEHOLDER as QUIZ_SPANISH_PLACEHOLDER,
+  SPANISH_WRITING as QUIZ_SPANISH_WRITING,
+  spanishStartArgs as quizSpanishStartArgs,
+  topicCount as quizTopicCount,
+  OUTSIDE_LINE as QUIZ_OUTSIDE_LINE,
+  YT_LABEL,
+  YT_OUTSIDE,
+  ytFromCaptions,
+  QC_BUTTON,
+  QC_CANCEL,
+  QC_INTRO,
+  QC_LEAVES,
+  QC_POLL_SECONDS,
+  QC_SENDING,
+  QC_CANCELLING,
+  qcGiveUpOnUnknown,
+  qcIsKnown,
+  qcKeepPolling,
+  qcOutcome,
+  qcReadInfo,
+} from "./quiz.js";
+import { createYoutubeBlock } from "./youtube.js";
+import * as Decks from "./decks.js";
+import * as Topics from "./topics.js";
+import { createRetirementCard } from "./retirement.js";
 import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
@@ -205,6 +297,7 @@ import {
   renderFactHistory,
   REPLACED_MARK,
 } from "./fact-history.js";
+import { createGalaxyPanel } from "./galaxy-panel.js";
 import {
   buildEntityGraph,
   findNames,
@@ -266,11 +359,68 @@ import {
   SEARCHING,
   searchMoreWords,
   SWITCH_DETAIL,
+  forkDoneWords,
+  forkedRow,
+  forkErrorWords,
+  MARK_BUSY,
+  markDoneWords,
+  markErrorWords,
+  readMarks,
+  withForkedRow,
   SWITCH_LABEL,
   TAINT_TITLE,
   whenLine,
   whenWords,
 } from "./history-view.js";
+import {
+  ADD_TAG,
+  ALL as TAG_ALL,
+  bannerText as tagBannerText,
+  BANNER_CANCEL,
+  clipTagName,
+  COLOURS as TAG_COLOURS,
+  deleteConfirm as tagDeleteConfirm,
+  DELETE_TAG,
+  errorWords as tagErrorWords,
+  filedWords,
+  fileUnderWords,
+  groupRows,
+  headerText as tagHeaderText,
+  iconNode,
+  ICONS as TAG_ICONS,
+  isOpen as sectionIsOpen,
+  MAX_TAGS,
+  MOVE_DOWN,
+  MOVE_PLACEHOLDER,
+  MOVE_TO,
+  MOVE_UP,
+  NAME_LABEL,
+  NO_TAG,
+  NO_TAG_CHATS,
+  NOT_LOADED_LINE,
+  readFilePlace,
+  readOpenFlags,
+  readTags,
+  RENAME as TAG_RENAME,
+  saveOpenFlag,
+  sectionLabel,
+  SUGGEST_ASKING,
+  SUGGEST_LABEL,
+  SUGGEST_OLD_PC,
+  SUGGEST_READING,
+  readSuggest,
+  suggestErrorWords,
+  suggestStateLine,
+  suggestWaitingLine,
+  suggestWriteResult,
+  tagById,
+  TAG_CHIPS_LABEL,
+  TAGS_EDITOR_NOTE,
+  TAGS_TITLE,
+  UNFILED_WORDS,
+  UNTAGGED,
+  validTagName,
+} from "./history-tags.js";
 import {
   addPage as addAutoPage,
   AUTO_MISSING,
@@ -462,6 +612,13 @@ const dom = {
   graphFind: $("graph-find"),
   graphEmptyActions: $("graph-empty-actions"),
   nodeActions: $("node-actions"),
+  galaxyFacts: $("galaxy-facts"),
+  galaxyFactsTitle: $("galaxy-facts-title"),
+  galaxyFactsNote: $("galaxy-facts-note"),
+  galaxyFactsList: $("galaxy-facts-list"),
+  galaxyFactsCount: $("galaxy-facts-count"),
+  galaxyFactsLive: $("galaxy-facts-live"),
+  galaxyFactsFoot: $("galaxy-facts-foot"),
   graphRefit: $("graph-refit"),
   legend: $("legend"),
   inspector: $("inspector"),
@@ -566,6 +723,22 @@ const dom = {
   goalsNewForm: $("goals-new-form"),
   goalsNewText: $("goals-new-text"),
   goalsNewAdd: $("goals-new-add"),
+  quizStartForm: $("quiz-start-form"),
+  quizText: $("quiz-text"),
+  quizTextCount: $("quiz-text-count"),
+  quizStart: $("quiz-start"),
+  quizRun: $("quiz-run"),
+  quizMode: $("quiz-mode"),
+  quizSpanish: $("quiz-spanish"),
+  quizNotice: $("quiz-notice"),
+  quizLevel: $("quiz-level"),
+  quizExercise: $("quiz-exercise"),
+  quizTopic: $("quiz-topic"),
+  quizTopicCount: $("quiz-topic-count"),
+  quizIntro: $("quiz-intro"),
+  quizOutside: $("quiz-outside"),
+  decksIntro: $("decks-intro"),
+  decksBody: $("decks-body"),
   today: $("today"),
   widgets: $("widgets"),
   widgetsForm: $("widgets-form"),
@@ -740,6 +913,25 @@ function row({ tag, state: tagState, title, meta, actions }) {
 const liveButtons = new Set();
 
 const STALE_TITLE = "Waiting for the link to catch up. Nothing can be sent until it does.";
+
+/** The retirement what-if (brain.work.retirement, retirement.js): the numbers
+ *  typed there live in its boxes only and go when the tab, the window or the
+ *  private lists go. */
+const retirementCard = createRetirementCard({
+  root: document.getElementById("retirement-body"),
+  titleEl: document.getElementById("retirement-title"),
+  invoke,
+  isTauri: IS_TAURI,
+  canAct: () => linkWords(currentLink()).canAct,
+  live: {
+    add: (b) => { liveButtons.add(b); syncLiveButton(b); },
+    sync: (b) => syncLiveButton(b),
+  },
+  announce,
+  listen: IS_TAURI && TAURI.event && TAURI.event.listen
+    ? (name, fn) => TAURI.event.listen(name, fn) : null,
+  view: () => state.view,
+});
 
 /** Greys a `live` button while the link cannot be confirmed (rule 4). */
 function syncLiveButton(b) {
@@ -953,14 +1145,16 @@ async function showView(name, { reload = true } = {}) {
   dom.title.textContent = VIEWS[name].title;
   dom.sub.textContent = VIEWS[name].sub;
 
+  const visible = visibleTabOrder();
+  const focusedTab = visible.includes(name) ? name : (visible[0] || name);
   for (const key of Object.keys(VIEWS)) {
     const tab = $(`tab-${key}`);
     const view = $(`view-${key}`);
     if (tab) {
       tab.setAttribute("aria-selected", String(key === name));
       // Roving tabindex: exactly one tab is in the document's tab order, and
-      // it is the selected one. Without this the six buttons are six stops.
-      tab.tabIndex = key === name ? 0 : -1;
+      // it is the selected one (or first visible if current is not in visible order).
+      tab.tabIndex = key === focusedTab ? 0 : -1;
     }
     if (view) view.hidden = key !== name;
   }
@@ -972,6 +1166,7 @@ async function showView(name, { reload = true } = {}) {
 
 /** Paints whichever view is showing from `state.data`. */
 function render(name) {
+  if (name !== "work") retirementCard.leave();
   switch (name) {
     case "galaxy":
       renderGraph();
@@ -987,6 +1182,7 @@ function render(name) {
       break;
     case "memory":
       renderLearning();
+      renderTopics();
       renderHistoryImport();
       renderProfile();
       renderShared();
@@ -1006,6 +1202,9 @@ function render(name) {
       renderSupport();
       renderComingUp();
       renderGoals();
+      renderQuiz();
+      renderDecks();
+      retirementCard.enter();
       renderBriefing();
       renderJobs();
       renderUndo();
@@ -1935,8 +2134,9 @@ async function refreshMemory() {
   // (brain/auto_learn.rs), next to the pane's sections: a Forget or a
   // decision changes it too.
   await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto(), loadProfile(),
-    loadShared(), loadSavedFacts()]);
+    loadShared(), loadSavedFacts(), loadTopics()]);
   render("memory");
+  reloadShown();
 }
 
 /** Turn a write into a toast, so no handler swallows a failure silently. */
@@ -2288,6 +2488,10 @@ function proposalRow(p) {
   if (p.source === MERGE_SOURCE) return mergeRow(p, id);
   const flags = Array.isArray(p.flags) ? p.flags.filter((f) => f && typeof f === "object") : [];
   const retire = p.source === "feedback_retire";
+  // Topic controls: a card that asks about a topic set to not learn keeps
+  // its two decisions, worded for what they do ("Save under Unsorted" /
+  // "Skip it"); nothing else about the card changes.
+  const ask = retire ? null : Topics.askLabels(p);
   const meta = retire
     ? [
         p.replaces_text || p.replaces ? `The fact: “${p.replaces_text || p.replaces}”` : "",
@@ -2332,19 +2536,20 @@ function proposalRow(p) {
         }, { title: "Leave the fact exactly as it is.", live: true }),
       ]
     : [
-        button("Keep", async () => {
+        button(ask ? ask.accept : "Keep", async () => {
           await memoryWrite("brain_memory_decide", { id, accept: true },
-            "Kept. Jarvis can recall it now.");
-        }, { title: "Add it to memory. It can be reworded or forgotten later.", live: true }),
+            ask ? "Saved under Unsorted. Jarvis can recall it now." : "Kept. Jarvis can recall it now.");
+        }, { title: ask ? "Save it under Unsorted. It can be reworded or forgotten later."
+          : "Add it to memory. It can be reworded or forgotten later.", live: true }),
         ...(p.keep_both_ok === true
           ? [button("Both are true", async () => {
               await memoryWrite("brain_memory_keep_both", { id },
                 "Kept both. The older fact stays current too.");
             }, { title: "Keep this AND the fact it would replace. Nothing is retired.", live: true })]
           : []),
-        button("Discard", async () => {
+        button(ask ? ask.decline : "Discard", async () => {
           await memoryWrite("brain_memory_decide", { id, accept: false },
-            "Discarded. It was never in memory.");
+            ask ? "Skipped. Nothing was saved." : "Discarded. It was never in memory.");
         }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there.", live: true }),
       ];
   const item = row({
@@ -2491,7 +2696,8 @@ function paintAbout() {
       const item = row({
         tag: "fact",
         state: f.current ? "ok" : "idle",
-        title: f.erasedAt ? erasedLine(f.erasedAt) : (f.text || "(no text)"),
+        title: f.erasedAt ? erasedLine(f.erasedAt)
+          : f.leftOut ? Topics.WORDS.used_left_out : (f.text || "(no text)"),
         meta: marks,
         actions: [],
       });
@@ -2712,6 +2918,8 @@ function renderFacts() {
           // from the JSON export.
           whenLearned(f),
           whenNoticed(f),
+          // Topic controls: this fact's topic may not be used in answers.
+          topicMark(f),
         ],
         actions,
       });
@@ -2741,8 +2949,1023 @@ function renderFacts() {
       list
     );
   } else {
-    dom.memoryFacts.replaceChildren(list);
+    // Topic controls: facts of a topic switched Off are left out of this
+    // list; how many is said, with a way to the Topics.
+    const kept = topicsHiddenNode(body.topics_hidden);
+    dom.memoryFacts.replaceChildren(...(kept ? [kept, list] : [list]));
   }
+}
+
+/* ==========================================================================
+   Topics (the owner's request of 2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md,
+   Slice contract C1-C10; JARVIS-API.md section 107; topics.js).
+
+   Every saved fact sits under one topic, and each topic has one of four
+   modes: learn and use, use but don't learn, learn but don't use, or off. The
+   PC enforces the modes and decides which changes need an approval card; this
+   window carries the owner's taps to it through brain/topics.rs (its own
+   commands, not brain_read). A change that raises a card comes back "waiting":
+   the row says so, and this window reads the topics again every two seconds
+   until the card has ended, then shows the PC's own sentence about how it
+   ended. Undo is just another change, sent the same way.
+
+   Topic names are the owner's words: only ever set as text, never stored in
+   this window (not in localStorage, not as a draft), and taken out by Rust
+   while "Hide memory lists and chat history" is on or App lock has locked -
+   the rows then read "Topic N, X facts, mode", and "Check these", "Show them"
+   and the row menus are not drawn at all. The picker still works then.
+   ========================================================================== */
+
+const tp = {
+  view: null, missing: false, error: "", loading: false, again: false, at: 0,
+  // {text, undo: {id, mode} | null}: the quiet line above the rows.
+  notice: null,
+  // The card being waited on: polled until it ends (topics.js LIMITS.pollMs).
+  timer: null, sawWaiting: false, pollUntil: 0,
+  // The topic whose "More" is open (an id, 0 for none).
+  menu: 0,
+  // "Check these": {facts, next, total, loading, error} or null.
+  review: null,
+  // "Show them": topic id -> {facts, next, loading, error}.
+  shown: {},
+  // The one dialog open (an element) and the control that had the keyboard.
+  dlg: null, dlgReturn: "",
+  focusNext: "", lastFocus: "",
+};
+const TOPICS_READ_MS = 15000;
+const TOPICS_POLL_MAX_MS = 10 * 60 * 1000;
+
+function takeTopics(view) {
+  if (view.listsHidden) {
+    // Nothing the owner wrote stays drawn: the check list, "Show them" and
+    // every open form go with the names.
+    tp.review = null;
+    tp.shown = {};
+    tp.menu = 0;
+    closeTopicDialog();
+  }
+  tp.view = view;
+  if (view.waiting) {
+    tp.sawWaiting = true;
+  } else if (tp.sawWaiting) {
+    // The card that was up has ended: say how, in the PC's own sentence, and
+    // read the lists again (a mode may have changed under them).
+    tp.sawWaiting = false;
+    const words = Topics.endedWords(view);
+    if (words) setTopicsNotice(words, null);
+    refreshMemory();
+  }
+  ensureTopicsPoll();
+  if (state.view === "memory") paintTopics();
+}
+
+function ensureTopicsPoll() {
+  const need = Boolean(tp.view && tp.view.waiting) || tp.sawWaiting;
+  if (need && !tp.timer) {
+    tp.pollUntil = Date.now() + TOPICS_POLL_MAX_MS;
+    tp.timer = setInterval(() => {
+      if (Date.now() > tp.pollUntil) {
+        tp.sawWaiting = false;
+        ensureTopicsPoll();
+        return;
+      }
+      if (!tp.loading) loadTopics();
+    }, Topics.LIMITS.pollMs);
+  } else if (!need && tp.timer) {
+    clearInterval(tp.timer);
+    tp.timer = null;
+  }
+}
+
+async function loadTopics() {
+  if (!IS_TAURI) return;
+  if (tp.loading) {
+    tp.again = true;
+    return;
+  }
+  tp.loading = true;
+  try {
+    const out = await invoke("brain_topics");
+    const view = Topics.readTopics(out);
+    if (view) {
+      tp.missing = false;
+      tp.error = "";
+      takeTopics(view);
+    } else if (Topics.isRefusal(out) && out.error === "unavailable") {
+      tp.missing = true;
+      tp.view = null;
+      tp.error = "";
+    } else {
+      tp.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
+    }
+  } catch (error) {
+    const words = errorText(error);
+    if (words === Topics.WORDS.missing) {
+      tp.missing = true;
+      tp.view = null;
+      tp.error = "";
+    } else {
+      tp.error = words;
+    }
+  } finally {
+    tp.loading = false;
+    tp.at = Date.now();
+  }
+  if (tp.again) {
+    tp.again = false;
+    await loadTopics();
+    return;
+  }
+  if (state.view === "memory") paintTopics();
+}
+
+function renderTopics() {
+  paintTopics();
+  if (IS_TAURI && !tp.loading && Date.now() - tp.at > TOPICS_READ_MS) loadTopics();
+}
+
+function setTopicsNotice(text, undo) {
+  tp.notice = text ? { text, undo: undo || null } : null;
+  if (text) announce(text, "polite");
+  if (state.view === "memory") paintTopics();
+}
+
+/** One write. Refused on a stale link, the PC's own words for a refusal.
+ *  Returns {out} or {error, code}. */
+async function topicsCall(cmd, args) {
+  if (!linkWords(currentLink()).canAct) return { error: STALE_TITLE, code: "stale" };
+  try {
+    const out = await invoke(cmd, args);
+    if (Topics.isRefusal(out)) return { error: Topics.refusalWords(out), code: out.error };
+    return { out };
+  } catch (error) {
+    return { error: errorText(error), code: "failed" };
+  }
+}
+
+/** A write's answer: 202 (a card is up: nothing changed yet) or the new view.
+ *  Returns "waiting" or "done". */
+async function takeTopicsWrite(out) {
+  if (Topics.isWaitingAnswer(out)) {
+    tp.sawWaiting = true;
+    tp.notice = null;
+    ensureTopicsPoll();
+    await loadTopics();
+    return "waiting";
+  }
+  const view = Topics.readTopics(out);
+  if (view) takeTopics(view);
+  else await loadTopics();
+  return "done";
+}
+
+/** Changes one topic's mode. `undo` false for an Undo itself. */
+async function topicSetMode(id, mode, { undo = true } = {}) {
+  const before = Topics.topicById(tp.view, id);
+  const r = await topicsCall("brain_topics_mode", { id, mode });
+  if (r.error) return r;
+  const kind = await takeTopicsWrite(r.out);
+  if (kind === "waiting") return { waiting: true };
+  const now = Topics.topicById(tp.view, id);
+  if (r.out.changed !== false && now) {
+    const name = Topics.displayName(tp.view, now);
+    const said = undo
+      ? `${name} is now: ${Topics.modeName(now.mode)}.`
+      : `${name} is back to: ${Topics.modeName(now.mode)}.`;
+    setTopicsNotice(said, undo && before ? { id, mode: before.mode } : null);
+  }
+  await refreshMemory();
+  return { done: true };
+}
+
+/** One change to the list (add, rename, style, move, words, private, delete). */
+async function topicEdit(edit) {
+  const r = await topicsCall("brain_topics_edit", { edit });
+  if (r.error) return r;
+  const kind = await takeTopicsWrite(r.out);
+  if (kind === "waiting") return { waiting: true, out: r.out };
+  if (edit.op === "delete") await refreshMemory();
+  return { done: true, out: r.out };
+}
+
+/* ---- The dialog every form uses ----------------------------------------- */
+
+let topicDialogSeq = 0;
+
+function closeTopicDialog() {
+  const dlg = tp.dlg;
+  if (!dlg) return;
+  tp.dlg = null;
+  if (typeof dlg.close === "function" && dlg.open) dlg.close();
+  else dlg.remove();
+}
+
+/** Opens a modal dialog with a title, a body and footer buttons. `build`
+ *  gets the body element and returns the footer's buttons. The dialog sits on
+ *  the page, outside the section, so a repaint of the rows never destroys it.
+ *  Escape and Cancel close it and the keyboard goes back to where it was. */
+function openTopicDialog(title, build) {
+  closeTopicDialog();
+  const dlg = document.createElement("dialog");
+  dlg.className = "topics-dialog";
+  const titleId = `topics-dialog-title-${++topicDialogSeq}`;
+  const h = el("h3", "topics-dialog-title", title);
+  h.id = titleId;
+  dlg.setAttribute("aria-labelledby", titleId);
+  const body = el("div", "topics-dialog-body");
+  const error = el("p", "topics-dialog-error failed");
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+  const foot = el("div", "row-actions topics-dialog-foot");
+  const api = {
+    dlg,
+    body,
+    say(words) {
+      error.textContent = words || "";
+      error.hidden = !words;
+    },
+    close: () => closeTopicDialog(),
+  };
+  const buttons = build(body, api) || [];
+  for (const b of buttons) foot.append(b);
+  dlg.append(h, body, error, foot);
+  tp.dlgReturn = tp.lastFocus || "";
+  dlg.addEventListener("close", () => {
+    if (tp.dlg === dlg) tp.dlg = null;
+    dlg.remove();
+    tp.focusNext = tp.focusNext || tp.dlgReturn;
+    paintTopics();
+  });
+  document.body.append(dlg);
+  tp.dlg = dlg;
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else dlg.setAttribute("open", "");
+  const first = dlg.querySelector("input:checked, input, select, textarea") || dlg.querySelector("button");
+  if (first) first.focus({ preventScroll: true });
+  return api;
+}
+
+/** A dialog's main button: off while nothing is chosen yet, while it works, and
+ *  while the link cannot be confirmed (rule 4) - a choice never re-enables it. */
+function topicGoState(go, nothingChosen) {
+  go.disabled = nothingChosen || go.dataset.busy === "true" || !linkWords(currentLink()).canAct;
+}
+
+function cancelButton() {
+  return button(Topics.APP_WORDS.cancel, () => closeTopicDialog());
+}
+
+/* ---- The four-choice picker (contract C4) ------------------------------- */
+
+function openModePicker(id) {
+  const v = tp.view;
+  const t = Topics.topicById(v, id);
+  if (!t || Topics.isWaitingOn(v, id)) return;
+  const name = Topics.displayName(v, t);
+  let token = 0;
+  let chosen = t.mode;
+  const preview = { line: "", card: "" };
+  openTopicDialog(name, (body, api) => {
+    body.append(el("p", "note", Topics.fill(Topics.WORDS.pick_line, { name })));
+    const set = el("fieldset", "topics-choices");
+    set.append(el("legend", "sr-only", name));
+    const lines = el("p", "topics-preview");
+    lines.setAttribute("aria-live", "polite");
+    const card = el("p", "topics-card-line");
+    card.setAttribute("aria-live", "polite");
+    let go = null;
+    const paintLines = () => {
+      lines.textContent = preview.line;
+      card.textContent = preview.card;
+      lines.hidden = !preview.line;
+      card.hidden = !preview.card;
+    };
+    Topics.MODES.forEach((m) => {
+      const label = el("label", "topics-choice");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "topics-mode";
+      input.value = m.id;
+      input.checked = m.id === t.mode;
+      const said = el("span", "topics-choice-name", m.name);
+      const sentence = el("span", "topics-choice-sentence", m.sentence);
+      sentence.id = `topics-choice-${topicDialogSeq}-${m.id}`;
+      input.setAttribute("aria-describedby", sentence.id);
+      label.append(input, said, sentence);
+      input.addEventListener("change", async () => {
+        chosen = m.id;
+        api.say("");
+        preview.line = "";
+        preview.card = "";
+        paintLines();
+        if (go) topicGoState(go, m.id === t.mode);
+        if (m.id === t.mode) return;
+        const mine = ++token;
+        try {
+          const out = await invoke("brain_topics_preview", { id, mode: m.id });
+          if (mine !== token) return;
+          if (Topics.isRefusal(out)) {
+            api.say(Topics.refusalWords(out));
+            return;
+          }
+          const got = Topics.previewLines(out, name);
+          preview.line = got.line;
+          preview.card = got.cardLine;
+          paintLines();
+        } catch (error) {
+          if (mine === token) api.say(errorText(error));
+        }
+      });
+      set.append(label);
+    });
+    body.append(set, lines, card);
+    paintLines();
+    go = button(Topics.APP_WORDS.change, async () => {
+      if (chosen === t.mode) return;
+      api.say("");
+      const r = await topicSetMode(id, chosen);
+      if (r.error) {
+        api.say(r.error);
+        return;
+      }
+      closeTopicDialog();
+    }, { live: true });
+    topicGoState(go, true);
+    go.dataset.fkey = "topics-change";
+    return [go, cancelButton()];
+  });
+}
+
+/* ---- Add, rename, colour and icon, keywords ----------------------------- */
+
+function colourPicker(current) {
+  const set = el("fieldset", "topics-palette");
+  set.append(el("legend", "", Topics.APP_WORDS.colour_label));
+  Topics.COLOURS.forEach((c) => {
+    const label = el("label", "topics-swatch-choice");
+    label.dataset.colour = String(c.slot);
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "topics-colour";
+    input.value = String(c.slot);
+    input.checked = c.slot === current;
+    const dot = el("span", "topics-swatch");
+    dot.setAttribute("aria-hidden", "true");
+    label.append(input, dot, el("span", "topics-swatch-name", c.name));
+    set.append(label);
+  });
+  return set;
+}
+
+function iconPicker(current) {
+  const set = el("fieldset", "topics-icons");
+  set.append(el("legend", "", Topics.APP_WORDS.icon_label));
+  Topics.ICONS.forEach((name) => {
+    const label = el("label", "topics-icon-choice");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "topics-icon";
+    input.value = name;
+    input.checked = name === current;
+    label.append(input, Topics.topicIconNode(name), el("span", "topics-icon-name", name));
+    set.append(label);
+  });
+  return set;
+}
+
+const pickedValue = (root, name) => {
+  const on = root.querySelector(`input[name="${name}"]:checked`);
+  return on ? on.value : null;
+};
+
+/** add | rename | style | words. Names and keywords are typed here and go to
+ *  the PC; nothing is kept in this window. */
+function openTopicForm(kind, id) {
+  const v = tp.view;
+  const t = kind === "add" ? null : Topics.topicById(v, id);
+  if (kind !== "add" && !t) return;
+  if (v && v.listsHidden) return;
+  const title = kind === "add" ? Topics.WORDS.add_title
+    : kind === "rename" ? Topics.APP_WORDS.rename
+      : kind === "style" ? Topics.APP_WORDS.colour_icon : Topics.APP_WORDS.keywords;
+  openTopicDialog(title, (body, api) => {
+    let nameBox = null;
+    let wordsBox = null;
+    if (kind === "add" || kind === "rename") {
+      const label = el("label", "lbl", Topics.WORDS.name_label);
+      nameBox = document.createElement("input");
+      nameBox.type = "text";
+      nameBox.className = "field";
+      nameBox.maxLength = Topics.LIMITS.nameMax;
+      nameBox.autocomplete = "off";
+      nameBox.spellcheck = false;
+      nameBox.value = t ? t.name : "";
+      label.append(nameBox);
+      body.append(label);
+    }
+    if (kind === "add" || kind === "style") {
+      body.append(colourPicker(t ? t.colour : Topics.nextColour(v)));
+      body.append(iconPicker(t ? t.icon : "folder"));
+    }
+    if (kind === "add" || kind === "words") {
+      const label = el("label", "lbl", Topics.WORDS.words_label);
+      wordsBox = document.createElement("textarea");
+      wordsBox.className = "field";
+      wordsBox.rows = 3;
+      wordsBox.spellcheck = false;
+      wordsBox.value = t ? t.words.join(", ") : "";
+      label.append(wordsBox);
+      body.append(label);
+    }
+    const save = button(Topics.APP_WORDS.save, async () => {
+      api.say("");
+      const edit = { op: kind, id: t ? t.id : undefined };
+      if (nameBox) {
+        const clean = Topics.cleanName(nameBox.value);
+        if (!clean) {
+          api.say(Topics.ERRORS.bad_name);
+          return;
+        }
+        edit.name = clean;
+      }
+      if (wordsBox) {
+        const words = Topics.cleanWords(wordsBox.value);
+        if (words === null) {
+          api.say(Topics.ERRORS.bad_words);
+          return;
+        }
+        edit.words = words;
+      }
+      if (kind === "add" || kind === "style") {
+        edit.colour = Number(pickedValue(body, "topics-colour"));
+        edit.icon = pickedValue(body, "topics-icon");
+      }
+      const r = await topicEdit(edit);
+      if (r.error) {
+        api.say(r.error);
+        return;
+      }
+      if (kind === "add" && r.out && Number.isInteger(r.out.id)) tp.focusNext = `mode-${r.out.id}`;
+      closeTopicDialog();
+    }, { live: true });
+    save.dataset.fkey = "topics-save";
+    if (nameBox) {
+      nameBox.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          save.click();
+        }
+      });
+    }
+    return [save, cancelButton()];
+  });
+}
+
+/* ---- Delete: its facts are kept, and go to a topic the owner picks ------- */
+
+function openDeleteDialog(id) {
+  const v = tp.view;
+  const t = Topics.topicById(v, id);
+  if (!t || t.system || (v && v.listsHidden)) return;
+  const homes = Topics.deleteDestinations(v, id);
+  openTopicDialog(Topics.displayName(v, t), (body, api) => {
+    body.append(el("p", "note", Topics.WORDS.confirm_delete));
+    const set = el("fieldset", "topics-choices");
+    set.append(el("legend", "", Topics.WORDS.delete_where));
+    const warn = el("p", "topics-card-line");
+    warn.setAttribute("aria-live", "polite");
+    warn.hidden = true;
+    let chosen = 0;
+    let go = null;
+    homes.forEach((home) => {
+      const label = el("label", "topics-choice");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "topics-home";
+      input.value = String(home.id);
+      const said = el("span", "topics-choice-name", Topics.displayName(v, home));
+      label.append(input, said, el("span", "topics-choice-sentence", Topics.modeName(home.mode)));
+      input.addEventListener("change", () => {
+        chosen = home.id;
+        const words = Topics.deleteWarning(v, t, home);
+        warn.textContent = words;
+        warn.hidden = !words;
+        if (go) topicGoState(go, false);
+      });
+      set.append(label);
+    });
+    body.append(set, warn);
+    go = button(Topics.APP_WORDS.delete, async () => {
+      if (!chosen) {
+        api.say(Topics.ERRORS.needs_destination);
+        return;
+      }
+      api.say("");
+      const r = await topicEdit({ op: "delete", id, moveTo: chosen });
+      if (r.error) {
+        api.say(r.error);
+        return;
+      }
+      tp.menu = 0;
+      closeTopicDialog();
+    }, { live: true, danger: true });
+    topicGoState(go, true);
+    return [go, cancelButton()];
+  });
+}
+
+/* ---- "Check these": the facts Jarvis sorted by guessing ----------------- */
+
+async function loadReview(after) {
+  const r = tp.review;
+  if (!r) return;
+  r.loading = true;
+  r.error = "";
+  paintTopics();
+  try {
+    const args = { limit: Topics.LIMITS.batch };
+    if (after) args.after = after;
+    const out = await invoke("brain_topics_review", args);
+    const got = Topics.readFacts(out);
+    if (!tp.review) return;
+    if (got && got.listsHidden) {
+      tp.review = null;
+    } else if (got) {
+      r.facts = got.facts;
+      r.next = got.next;
+      r.total = got.total;
+    } else {
+      r.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
+    }
+  } catch (error) {
+    r.error = errorText(error);
+  } finally {
+    r.loading = false;
+  }
+  paintTopics();
+}
+
+function openReview() {
+  tp.review = { facts: [], next: null, total: 0, loading: true, error: "", from: "" };
+  tp.focusNext = "review-close";
+  loadReview(null);
+}
+
+function closeReview() {
+  tp.review = null;
+  tp.focusNext = "check";
+  paintTopics();
+}
+
+async function confirmBatch() {
+  const r = tp.review;
+  if (!r || !r.facts.length) return;
+  const ids = r.facts.map((f) => f.id);
+  const res = await topicsCall("brain_topics_file", { ids, confirm: true });
+  if (res.error) {
+    r.error = res.error;
+    paintTopics();
+    return;
+  }
+  const view = Topics.readTopics(res.out);
+  if (view) takeTopics(view);
+  // The confirmed facts are off the list now: read it again from the top.
+  await loadReview(null);
+}
+
+async function fileFact(fact, topicId) {
+  const r = tp.review;
+  if (!r) return;
+  const res = await topicsCall("brain_topics_file", { ids: [fact.id], topicId });
+  if (res.error) {
+    r.error = res.error;
+    paintTopics();
+    return;
+  }
+  const view = Topics.readTopics(res.out);
+  if (view) takeTopics(view);
+  r.facts = r.facts.filter((f) => f.id !== fact.id);
+  r.error = "";
+  if (!r.facts.length) await loadReview(null);
+  else paintTopics();
+  await refreshMemory();
+}
+
+function reviewNode(v) {
+  const r = tp.review;
+  const box = el("section", "topics-review");
+  box.setAttribute("aria-label", Topics.checkButtonLabel(v.unchecked));
+  const head = el("div", "topics-review-head");
+  head.append(el("h3", "topics-review-title", Topics.checkButtonLabel(v.unchecked)));
+  box.append(head);
+  if (r.error) box.append(el("p", "empty failed", r.error));
+  if (r.loading && !r.facts.length) {
+    box.append(el("p", "empty", Topics.APP_WORDS.reading));
+  } else if (!r.facts.length && !r.error) {
+    box.append(el("p", "empty", Topics.APP_WORDS.nothing_to_check));
+  }
+  for (const group of Topics.groupByTopic(r.facts)) {
+    const topic = Topics.topicById(v, group.topic) || Topics.topicById(v, Topics.LIMITS.unsortedId);
+    const name = topic ? Topics.displayName(v, topic) : Topics.WORDS.unsorted_name;
+    const gh = el("h4", "topics-review-group");
+    if (topic) gh.dataset.colour = String(topic.colour);
+    gh.append(Topics.topicIconNode(topic ? topic.icon : "flag"), el("span", "", name));
+    box.append(gh);
+    const list = el("ul", "topics-review-list");
+    for (const f of group.facts) {
+      const li = el("li", "topics-review-fact");
+      li.dataset.id = String(f.id);
+      li.append(el("span", "topics-review-text", f.text || "(no text)"));
+      const tags = el("span", "topics-tags");
+      if (f.how === "model") tags.append(el("span", "topics-tag", Topics.WORDS.check_guessed));
+      if (f.heldBack) tags.append(el("span", "topics-tag topics-tag-held", Topics.heldWords(name)));
+      if (tags.childNodes.length) li.append(tags);
+      const pick = document.createElement("select");
+      pick.className = "field topics-file-under";
+      pick.setAttribute("aria-label", `${Topics.APP_WORDS.file_under_label} (${(f.text || "").slice(0, 40)})`);
+      pick.append(new Option(Topics.APP_WORDS.file_under, ""));
+      for (const other of v.topics) {
+        if (other.id === f.topic) continue;
+        pick.append(new Option(Topics.displayName(v, other), String(other.id)));
+      }
+      liveButtons.add(pick);
+      syncLiveButton(pick);
+      pick.addEventListener("change", async () => {
+        const to = Number(pick.value);
+        if (!to) return;
+        pick.disabled = true;
+        await fileFact(f, to);
+      });
+      li.append(pick);
+      list.append(li);
+    }
+    box.append(list);
+  }
+  const foot = el("div", "row-actions");
+  if (r.facts.length) {
+    const right = button(Topics.WORDS.check_right, confirmBatch, { live: true });
+    right.dataset.fkey = "review-right";
+    foot.append(right);
+    if (r.next) {
+      foot.append(button(Topics.APP_WORDS.next_ten, () => loadReview(r.next)));
+    }
+  }
+  const close = button("Close", closeReview);
+  close.dataset.fkey = "review-close";
+  foot.append(close);
+  box.append(foot);
+  return box;
+}
+
+/* ---- "Show them": an Off topic's facts, read-only ------------------------ */
+
+async function loadShown(id, more = false) {
+  const s = tp.shown[id];
+  if (!s) return;
+  s.loading = true;
+  s.error = "";
+  paintTopics();
+  try {
+    // "Show more" asks for the page after the last one shown (`next`).
+    const after = more && s.next !== null && Number.isInteger(Number(s.next)) ? Number(s.next) : null;
+    const out = await invoke("brain_topics_hidden", after ? { id, after } : { id });
+    const got = Topics.readFacts(out);
+    if (!tp.shown[id]) return;
+    if (got && got.listsHidden) {
+      delete tp.shown[id];
+    } else if (got) {
+      s.facts = after ? s.facts.concat(got.facts.filter((f) => !s.facts.some((o) => o.id === f.id))) : got.facts;
+      s.next = got.next;
+    } else {
+      s.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
+    }
+  } catch (error) {
+    s.error = errorText(error);
+  } finally {
+    s.loading = false;
+  }
+  paintTopics();
+}
+
+function toggleShown(id) {
+  if (tp.shown[id]) {
+    delete tp.shown[id];
+    tp.focusNext = `show-${id}`;
+    paintTopics();
+    return;
+  }
+  tp.shown[id] = { facts: [], next: null, loading: true, error: "" };
+  tp.focusNext = `show-${id}`;
+  loadShown(id);
+}
+
+/** After a Forget or an Erase anywhere: the open "Show them" lists are read
+ *  again, so a fact just forgotten is not left on them. */
+function reloadShown() {
+  for (const id of Object.keys(tp.shown)) loadShown(Number(id));
+}
+
+function shownNode(id) {
+  const s = tp.shown[id];
+  const box = el("div", "topics-shown");
+  if (s.error) box.append(el("p", "empty failed", s.error));
+  if (s.loading && !s.facts.length) {
+    box.append(el("p", "empty", Topics.APP_WORDS.reading));
+    return box;
+  }
+  if (!s.facts.length && !s.error) {
+    box.append(el("p", "empty", Topics.APP_WORDS.no_facts));
+    return box;
+  }
+  const list = el("div", "rows");
+  for (const f of s.facts) {
+    const item = row({
+      tag: "hidden",
+      state: "idle",
+      title: f.text || "(no text)",
+      meta: [Topics.APP_WORDS.hidden_from_answers],
+      actions: [
+        button("Forget", async () => {
+          if (!window.confirm(forgetQuestion(f))) return;
+          await memoryWrite("brain_memory_forget", { id: f.id }, FORGOTTEN);
+        }, { danger: true, live: true, title: "Stop this being recalled. There is no undo." }),
+        button(ERASE_LABEL, () => eraseFact(f), { danger: true, live: true, title: ERASE_TITLE }),
+      ],
+    });
+    item.classList.add("topics-hidden-fact");
+    item.dataset.id = String(f.id);
+    list.append(item);
+  }
+  box.append(list);
+  if (s.next !== null && s.next !== undefined) {
+    const more = button(Topics.APP_WORDS.show_more, () => loadShown(id, true), { live: true });
+    more.dataset.fkey = `show-more-${id}`;
+    if (s.loading) more.disabled = true;
+    box.append(more);
+  }
+  return box;
+}
+
+/* ---- The section ---------------------------------------------------------- */
+
+function topicRow(v, t) {
+  const item = el("div", "topics-row");
+  item.setAttribute("role", "listitem");
+  item.dataset.colour = String(t.colour);
+  item.dataset.topic = String(t.id);
+  item.dataset.mode = t.mode;
+  const name = Topics.displayName(v, t);
+
+  const head = el("div", "topics-row-head");
+  const mark = el("span", "topics-mark");
+  mark.append(Topics.topicIconNode(t.icon));
+  head.append(mark, el("span", "topics-name", name), el("span", "topics-count", Topics.factCount(t.facts)));
+  item.append(head);
+
+  const tags = el("div", "topics-tags");
+  for (const tag of Topics.rowTags(t)) tags.append(el("span", `topics-tag topics-tag-${tag.kind}`, tag.text));
+  if (tags.childNodes.length) item.append(tags);
+
+  const acts = el("div", "topics-row-actions");
+  if (Topics.isWaitingOn(v, t.id)) {
+    const waiting = el("span", "topics-waiting", Topics.WORDS.waiting);
+    waiting.setAttribute("role", "status");
+    acts.append(waiting);
+  } else {
+    const modeBtn = button(Topics.modeName(t.mode), () => openModePicker(t.id));
+    modeBtn.classList.add("topics-mode");
+    modeBtn.setAttribute("aria-label", Topics.rowSpeech(v, t));
+    modeBtn.dataset.fkey = `mode-${t.id}`;
+    acts.append(modeBtn);
+  }
+  if (!v.listsHidden && t.mode === "off") {
+    const open = Boolean(tp.shown[t.id]);
+    const show = button(Topics.WORDS.show_them, () => toggleShown(t.id));
+    show.dataset.fkey = `show-${t.id}`;
+    show.setAttribute("aria-expanded", String(open));
+    acts.append(show);
+  }
+  if (!v.listsHidden && !t.system) {
+    const open = tp.menu === t.id;
+    const more = button(Topics.APP_WORDS.edit, () => {
+      tp.menu = open ? 0 : t.id;
+      tp.focusNext = `more-${t.id}`;
+      paintTopics();
+    });
+    more.dataset.fkey = `more-${t.id}`;
+    more.setAttribute("aria-expanded", String(open));
+    more.setAttribute("aria-label", `${Topics.APP_WORDS.edit}: ${name}`);
+    acts.append(more);
+  }
+  item.append(acts);
+
+  if (!v.listsHidden && !t.system && tp.menu === t.id) item.append(topicMenu(v, t));
+  if (!v.listsHidden && t.mode === "off" && tp.shown[t.id]) item.append(shownNode(t.id));
+  return item;
+}
+
+function topicMenu(v, t) {
+  const menu = el("div", "topics-menu");
+  menu.setAttribute("role", "group");
+  menu.setAttribute("aria-label", `${Topics.APP_WORDS.edit}: ${t.name}`);
+  const add = (label, fn, { title = "", danger = false, key = "" } = {}) => {
+    const b = button(label, fn, { live: true, title, danger });
+    if (key) b.dataset.fkey = `${key}-${t.id}`;
+    menu.append(b);
+    return b;
+  };
+  add(Topics.APP_WORDS.rename, () => openTopicForm("rename", t.id));
+  add(Topics.APP_WORDS.colour_icon, () => openTopicForm("style", t.id));
+  const up = Topics.moveTarget(v, t.id, -1);
+  const down = Topics.moveTarget(v, t.id, 1);
+  const mover = (label, before, key) => add(label, async () => {
+    const r = await topicEdit({ op: "move", id: t.id, before });
+    if (r.error) setTopicsNotice(r.error, null);
+  }, { key });
+  if (up !== undefined) mover(Topics.APP_WORDS.move_up, up, "up");
+  if (down !== undefined) mover(Topics.APP_WORDS.move_down, down, "down");
+  add(t.private ? Topics.APP_WORDS.not_private : Topics.APP_WORDS.mark_private, async () => {
+    const r = await topicEdit({ op: "private", id: t.id, private: !t.private });
+    if (r.error) setTopicsNotice(r.error, null);
+  }, { title: t.private ? Topics.WORDS.private_asks : "", key: "private" });
+  add(Topics.APP_WORDS.keywords, () => openTopicForm("words", t.id));
+  add(Topics.APP_WORDS.delete, () => openDeleteDialog(t.id), { danger: true, key: "delete" });
+  return menu;
+}
+
+function paintTopics() {
+  const root = $("topics-body");
+  if (!root) return;
+  const intro = $("topics-intro");
+  if (intro) intro.textContent = Topics.WORDS.intro;
+  const key = fkeyBefore(root, tp);
+  root.replaceChildren();
+  const done = () => {
+    fkeyAfter(root, tp.focusNext || key);
+    tp.focusNext = "";
+  };
+  if (tp.notice) {
+    const line = el("div", "topics-notice");
+    line.setAttribute("role", "status");
+    line.append(el("span", "", tp.notice.text));
+    if (tp.notice.undo) {
+      const undo = tp.notice.undo;
+      const b = button(Topics.APP_WORDS.undo, async () => {
+        tp.notice = null;
+        const r = await topicSetMode(undo.id, undo.mode, { undo: false });
+        if (r.error) setTopicsNotice(r.error, null);
+      }, { live: true });
+      b.dataset.fkey = "undo";
+      line.append(b);
+    }
+    root.append(line);
+  }
+  if (tp.missing) {
+    root.append(el("p", "empty", Topics.WORDS.missing));
+    return done();
+  }
+  const v = tp.view;
+  if (!v) {
+    const line = el("p", `empty${tp.error ? " failed" : ""}`,
+      tp.error ? `Could not read your topics: ${tp.error}` : Topics.APP_WORDS.reading);
+    if (tp.error) line.append(" ", button("Retry", loadTopics));
+    root.append(line);
+    return done();
+  }
+  if (tp.error) root.append(el("p", "empty failed", tp.error));
+  if (v.listsHidden) {
+    const hid = el("div", "private-hidden");
+    hid.append(el("p", "hint", Topics.APP_WORDS.hidden_note));
+    hid.append(button("Show", revealPrivate,
+      { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this list." }));
+    root.append(hid);
+  }
+  const sorting = Topics.sortingLine(v);
+  if (sorting) root.append(el("p", "note topics-sorting", sorting));
+  const guess = Topics.sortedGuessLine(v);
+  if (guess && !v.listsHidden) {
+    const line = el("div", "topics-guess");
+    line.append(el("p", "note", guess));
+    const check = button(Topics.checkButtonLabel(v.unchecked), openReview);
+    check.dataset.fkey = "check";
+    line.append(check);
+    root.append(line);
+  }
+  if (tp.review && !v.listsHidden) root.append(reviewNode(v));
+
+  const list = el("div", "topics-rows");
+  list.setAttribute("role", "list");
+  for (const t of v.topics) list.append(topicRow(v, t));
+  root.append(list);
+
+  const foot = el("div", "topics-foot");
+  if (!v.listsHidden) {
+    const atLimit = !Topics.canAdd(v);
+    const add = button(Topics.WORDS.add_button, () => openTopicForm("add"),
+      { live: true, title: atLimit ? Topics.APP_WORDS.at_limit : "" });
+    add.dataset.fkey = "add";
+    if (atLimit) {
+      add.disabled = true;
+      add.dataset.busy = "true";
+      add.title = Topics.APP_WORDS.at_limit;
+    }
+    foot.append(add);
+  }
+  const help = el("label", "lbl check topics-model-help");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = v.modelHelp;
+  box.dataset.fkey = "model-help";
+  liveButtons.add(box);
+  syncLiveButton(box);
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    box.disabled = true;
+    const r = await topicsCall("brain_topics_settings", { modelHelp: want });
+    if (r.error) {
+      box.checked = !want;
+      setTopicsNotice(r.error, null);
+      return;
+    }
+    const view = Topics.readTopics(r.out);
+    if (view) takeTopics(view);
+    else await loadTopics();
+    paintTopics();
+  });
+  help.append(box, el("span", "", Topics.WORDS.model_help));
+  foot.append(help);
+  root.append(foot);
+  root.append(el("p", "hint topics-model-note", Topics.WORDS.model_help_note));
+  root.append(el("p", "hint topics-help", Topics.WORDS.help_plain));
+  done();
+}
+
+if (IS_TAURI) trackFkeys($("topics-body"), tp);
+
+// Private answers turned on or off, or a Show ran out: read the topics again.
+// Rust decides whether the names come back.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadTopics = () => {
+    tp.at = 0;
+    if (state.view === "memory") loadTopics();
+  };
+  TAURI.event.listen("security-changed", rereadTopics);
+  TAURI.event.listen("private-hidden", rereadTopics);
+}
+
+// The approvals list changed (a card was decided on this PC or the phone, or
+// timed out): while one of ours waits, read the topics now rather than at the
+// next tick, so the row does not say "waiting" longer than it has to.
+onQueue(() => {
+  if (tp.view && tp.view.waiting && !tp.loading) loadTopics();
+});
+
+/** The Jarvis bar sent the owner here (`open_brain: "topics"`), maybe with a
+ *  topic to open the picker for. Changes nothing until Change is tapped. */
+async function goToTopics(topicId) {
+  await showView("memory");
+  tp.at = 0;
+  await loadTopics();
+  const card = $("topics-card");
+  if (card) {
+    card.scrollIntoView({ block: "start" });
+    const h = $("topics-title");
+    if (h) h.focus({ preventScroll: true });
+  }
+  if (topicId && Topics.topicById(tp.view, topicId)) openModePicker(topicId);
+}
+
+/** The small tag on a fact whose topic is "Learn, but don't use". */
+function topicMark(f) {
+  return Topics.factTag(tp.view, f && f.topic);
+}
+
+/** "3 facts kept, hidden" over the facts list, with a way to the Topics. */
+function topicsHiddenNode(n) {
+  const words = Topics.keptHiddenLine(n);
+  if (!words) return null;
+  const line = el("p", "hint topics-hidden-line", `${words} `);
+  line.append(button(Topics.WORDS.title, () => {
+    const card = $("topics-card");
+    if (card) card.scrollIntoView({ block: "start" });
+    const h = $("topics-title");
+    if (h) h.focus({ preventScroll: true });
+  }));
+  return line;
+}
+
+/** The line on a pinned fact whose topic may not be used: names the topic the
+ *  PC said (`f.topic`) and says whether it is Off or "Learn, but don't use". */
+function pinPausedFor(f) {
+  let t = f && Number.isInteger(f.topic) ? Topics.topicById(tp.view, f.topic) : null;
+  if (!t && f) {
+    // An older PC sends no topic id: fall back to the fact in a list.
+    const rows = (state.data.memory_facts && state.data.memory_facts.facts) || [];
+    const found = rows.find((r) => r && Number(r.id) === Number(f.id))
+      || autoL.rows.find((r) => r && Number(r.id) === Number(f.id));
+    t = found ? Topics.topicById(tp.view, found.topic) : null;
+  }
+  return Topics.pinPausedLine(t ? Topics.displayName(tp.view, t) : "this topic", t ? t.mode : "off");
 }
 
 /* ==========================================================================
@@ -2971,10 +4194,39 @@ const chats = {
   /** "Show": one kind of conversation, or "" for every kind (the chat
    *  audit, 2026-09-28 - "History can be filtered to Live sessions only"). */
   kind: "",
+  /** Chat tags (docs/CHAT-TAGS-DESIGN.md): the tag chip chosen ("" is All,
+   *  "none" is Untagged, else a tag id as digits), the PC's tags
+   *  (readTags), which sections are open on this device, the Tags editor,
+   *  and an older chat being found to file (`filing`, from "label my chat
+   *  about the boiler as Home"; `filingPending` waits for the names). */
+  tag: "",
+  tags: null,
+  sectionFlags: readOpenFlags(),
+  editor: { open: false, error: "", drafts: { add: { name: "", colour: 0, icon: "folder" }, names: {} } },
+  filing: null,
+  filingPending: null,
+  /** Which tag control had the keyboard (`data-fkey` names, first choice
+   *  first), so a repaint can give it back; and whether a repaint was held
+   *  back because a menu or the editor was in use. */
+  focus: null,
+  paintPending: false,
+  /** True while paintHistory paints everything: focus is given back once, at the end. */
+  batch: false,
   /** The conversation open below its row, and its transcript. */
   openId: null,
   open: null,
   openError: "",
+  /** "Fork from here" in flight: `{ id, idx }`, one at a time. */
+  forking: null,
+  /** "New section here" in flight: `{ id, idx }`, one at a time. */
+  marking: null,
+  /** "Suggest tags overnight" (JARVIS-API.md section 104): what the PC last
+   *  said (readSuggest), whether a read or a change is running, and the one
+   *  plain sentence the last change left. Nothing of it is kept on this device. */
+  suggest: { state: null, loaded: false, reading: false, busy: false, said: "", isError: false },
+  /** The chat a fork just made, `{ id, row }`: kept open (and drawn above the
+   *  list if its row is not in it) until the owner opens or closes something. */
+  forked: null,
   /** What the open chat taught (readChatFacts), or null while it is read or
    *  when this PC cannot say (the second chat audit, 2026-09-28, finding 9). */
   openFacts: null,
@@ -3008,14 +4260,34 @@ const HISTORY_SEARCH_WAIT_MS = 350;
 
 const errorText = (error) => String((error && error.message) || error);
 
-async function loadHistory() {
+async function loadHistory({ background = false } = {}) {
   if (chats.loading) return;
   chats.loading = true;
+  let hold = false;
   try {
     const kind = chats.kind;
-    const v = readHistory(await invoke("brain_history_list",
-      { before: null, limit: HISTORY_PAGE, kind: kind || null }));
-    if (kind !== chats.kind) return;       // the filter changed while this read ran
+    const tag = chats.tag;
+    // The chats and the tags are two reads; an older PC (or app build) with
+    // no tags leaves the list flat, exactly as before.
+    const [listRead, tagsRead] = await Promise.allSettled([
+      invoke("brain_history_list",
+        { before: null, limit: HISTORY_PAGE, kind: kind || null, tag: tag || null }),
+      invoke("brain_history_tags"),
+    ]);
+    if (listRead.status === "rejected") throw listRead.reason;
+    const v = readHistory(listRead.value);
+    if (kind !== chats.kind || tag !== chats.tag) return;   // the filter changed while this read ran
+    chats.tags = readTags(tagsRead.status === "fulfilled" ? tagsRead.value : { available: false });
+    if (chats.tag && chats.tag !== "none" && chats.tags.available && !chats.tags.hidden
+        && !tagById(chats.tags, Number(chats.tag))) {
+      // The tag was deleted elsewhere: back to every chat, read again.
+      chats.tag = "";
+      chats.rows = [];
+      chats.more = false;
+      chats.tags = null;
+      setTimeout(loadHistory, 0);
+      return;
+    }
     chats.view = v;
     chats.readOkAt = Date.now();
     paintFreshness();
@@ -3031,18 +4303,30 @@ async function loadHistory() {
     // A conversation opened from the search results may be older than
     // every page loaded; it stays open while it is still a result.
     const inSearch = (chats.search.view?.conversations || []).some((c) => c.id === chats.openId);
-    if (chats.openId && (v.hidden || (!chats.rows.some((c) => c.id === chats.openId) && !inSearch))) {
+    if (chats.forked && chats.rows.some((c) => c.id === chats.forked.id)) chats.forked = null;
+    const justForked = !v.hidden && chats.forked && chats.forked.id === chats.openId;
+    if (chats.openId && !justForked
+        && (v.hidden || (!chats.rows.some((c) => c.id === chats.openId) && !inSearch))) {
       chats.openId = null;
       chats.open = null;
     }
-    if (v.hidden) chats.search.view = null;
+    if (v.hidden) { chats.search.view = null; chats.forked = null; }
+    // The 15-second re-read must not close a menu or the editor the owner
+    // is using: the data is in, the repaint waits until they let go.
+    hold = background && tagControlBusy();
   } catch (error) {
     chats.error = errorText(error);
   } finally {
     chats.loading = false;
     chats.at = Date.now();
   }
+  if (hold) {
+    chats.paintPending = true;
+    return;
+  }
   paintHistory();
+  // The waiting-suggestions count follows the same re-read (no push).
+  if (chats.suggest.loaded) refreshSuggest();
 }
 
 async function loadOlderHistory() {
@@ -3051,7 +4335,7 @@ async function loadOlderHistory() {
   chats.older = true;
   try {
     const v = readHistory(await invoke("brain_history_list",
-      { before, limit: HISTORY_PAGE, kind: chats.kind || null }));
+      { before, limit: HISTORY_PAGE, kind: chats.kind || null, tag: chats.tag || null }));
     chats.rows = addPage(chats.rows, v.conversations);
     chats.more = v.conversations.length >= HISTORY_PAGE;
   } catch (error) {
@@ -3068,6 +4352,7 @@ async function loadOlderHistory() {
  * result; nothing when it was opened from the list.
  */
 async function toggleConversation(id, needle = "") {
+  if (!(chats.forked && chats.forked.id === id)) chats.forked = null;
   if (chats.openId === id) {
     chats.openId = null;
     chats.open = null;
@@ -3299,6 +4584,8 @@ async function revealHistory() {
   await loadHistory();
   // A search typed before the list was hidden runs again, now it may.
   if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
+  // An older chat to file was waiting for the tag names to be shown.
+  if (chats.filingPending) await resolveFilingPending();
 }
 
 /* ---- "Search what was said" and "Find in this chat" (section 71) -------- */
@@ -3362,7 +4649,8 @@ function paintFound() {
   const matches = f.needle.trim() ? findMatches(chats.open, f.needle) : [];
   f.total = matches.length;
   if (f.current >= matches.length) f.current = 0;
-  renderTranscript(box, chats.open, { el, onCopy: copyOldAnswer },
+  renderTranscript(box, chats.open,
+    { el, onCopy: copyOldAnswer, fork: forkHelpers(chats.open), mark: markHelpers(chats.open) },
     { matches, current: f.current, needle: f.needle.trim() });
   const count = $("history-find-count");
   if (count) count.textContent = f.needle.trim() ? findCountWords(f.current, matches.length) : "";
@@ -3430,6 +4718,9 @@ function transcriptNode() {
   else if (!chats.open) t.append(el("p", "empty", "Reading…"));
   else {
     t.append(continueNode(chats.open));
+    if (chats.open.forkWhy && !(chats.view && chats.view.hidden)) {
+      t.append(el("p", "hint history-fork-why", chats.open.forkWhy));
+    }
     if (chats.openFacts) t.append(factsTaughtNode(chats.openFacts));
     t.append(findBar());
     const turns = el("div", "history-transcript-turns");
@@ -3461,6 +4752,123 @@ function continueNode(conv) {
   go.classList.add("history-continue-go");
   box.append(go);
   return box;
+}
+
+/**
+ * "Fork from here" (JARVIS-API.md section 110): what renderTranscript needs to
+ * draw the button on each message of the opened chat. Nothing while the
+ * private lists are hidden or when the PC did not say the chat is forkable.
+ * The buttons are held (greyed, with the usual stale-link reason) while the
+ * link is stale, and all wait while one fork runs.
+ */
+function forkHelpers(conv) {
+  if (!conv || !conv.forkable || (chats.view && chats.view.hidden)) return null;
+  const busy = chats.forking && chats.forking.id === conv.id ? chats.forking : null;
+  return {
+    forkable: true,
+    busy: busy || (chats.forking ? { idx: -1 } : null),
+    decorate: (b) => { liveButtons.add(b); syncLiveButton(b); },
+    onFork: (idx) => forkFrom(conv.id, idx),
+  };
+}
+
+/** Sends the fork, then opens the new chat (the same open as its row) and
+ *  refreshes the list. A refusal leaves the original chat open, with the
+ *  PC's sentence. No card: nothing leaves the PC. */
+async function forkFrom(id, idx) {
+  if (chats.forking || !IS_TAURI) return;
+  chats.forking = { id, idx };
+  chats.focus = { keys: [`fork:${id}:${idx}`, `open:${id}`], at: Date.now() };
+  paintHistory();
+  let made = null;
+  try {
+    const out = await invoke("brain_history_fork", { id, upto: idx });
+    if (out && out.ok === true && typeof out.id === "string" && out.id) made = out;
+    else toast(forkErrorWords(out), "bad");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.forking = null;
+  if (!made) {
+    paintHistory();
+    return;
+  }
+  // The new chat must be visible whatever was narrowing the list: the kind
+  // ("Live only"), the tag chip and the search words are cleared, and its row
+  // is put in from the answer (the list read that follows replaces it).
+  const clearing = !!(chats.kind || chats.tag || chats.search.query);
+  const sourceRow = chats.rows.find((c) => c.id === id) || null;
+  const row = forkedRow(made, sourceRow, Date.now() / 1000);
+  clearHistoryNarrowing();
+  chats.rows = withForkedRow(clearing ? [] : chats.rows, row);
+  chats.forked = { id: made.id, row };
+  chats.focus = { keys: [`open:${made.id}`], at: Date.now() };
+  chats.at = 0;
+  if (chats.openId !== made.id) await toggleConversation(made.id);
+  await loadHistory();
+  toast(forkDoneWords(made.title), "ok");
+}
+
+/**
+ * "New section here" (JARVIS-API.md section 106): what renderTranscript needs
+ * to draw the buttons and dividers of the opened chat. Nothing while the
+ * private lists are hidden. Dividers stay drawn when the PC says the chat is
+ * no longer markable (they can still be removed); the button only shows when
+ * it is. Held (greyed, the usual stale-link reason) while the link is stale,
+ * and all wait while one request runs.
+ */
+function markHelpers(conv) {
+  if (!conv || (chats.view && chats.view.hidden)) return null;
+  if (!conv.markable && !conv.marks.length) return null;
+  const busy = chats.marking && chats.marking.id === conv.id ? chats.marking : null;
+  return {
+    markable: conv.markable,
+    marks: conv.marks,
+    busy: busy || (chats.marking ? { idx: -1 } : null),
+    decorate: (b) => { liveButtons.add(b); syncLiveButton(b); },
+    onMark: (idx, on) => markSection(conv.id, idx, on),
+  };
+}
+
+/** Sends one section break (or takes it off), then draws the PC's whole list.
+ *  No card: it is the owner's own layout of a chat already kept. */
+async function markSection(id, idx, on) {
+  if (chats.marking || !IS_TAURI) return;
+  chats.marking = { id, idx };
+  chats.focus = { keys: [`${on ? "unmark" : "mark"}:${id}:${idx}`, `${on ? "mark" : "unmark"}:${id}:${idx}`, `open:${id}`], at: Date.now() };
+  paintHistory();
+  try {
+    const out = await invoke("brain_history_mark", { id, idx, on });
+    if (out && out.ok === true) {
+      if (chats.open && chats.open.id === id) chats.open.marks = readMarks(out.marks);
+      toast(markDoneWords(typeof out.on === "boolean" ? out.on : on), "ok");
+    } else {
+      toast(markErrorWords(out), "bad");
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.marking = null;
+  paintHistory();
+}
+
+/** Back to every chat: no kind, no tag chip, no search words (a fork's new
+ *  chat is shown whatever the owner had narrowed the list to). */
+function clearHistoryNarrowing() {
+  const s = chats.search;
+  clearTimeout(s.timer);
+  s.query = "";
+  s.view = null;
+  s.loading = false;
+  s.error = "";
+  s.seq += 1;
+  chats.kind = "";
+  chats.tag = "";
+  chats.more = false;
+  const box = $("history-filter");
+  if (box) box.value = "";
+  const kind = $("history-kind");
+  if (kind) kind.value = "";
 }
 
 /** Copy on an opened old answer: the bar's own private copy (kept out of
@@ -3497,14 +4905,47 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     ],
   });
   item.dataset.id = c.id;
+  // Chat tags: the tag pill under the title, a "Move to" menu, and - while
+  // an older chat is being found to file - a button (and a tap on the row)
+  // that files this one.
+  const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
+  const tagOf = tagView ? tagById(tagView, c.tagId) : null;
+
   if (device.words) item.querySelector(".row-tag").title = device.words;
   // Every row's buttons say WHICH chat they are for (the second chat audit,
   // 2026-09-28, desktop A1): "Open" ten times over names nothing.
   const named = c.title || NO_TITLE;
   const buttons = item.querySelectorAll(".row-actions button");
-  if (buttons[0]) buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
-  if (buttons[1]) buttons[1].setAttribute("aria-label", `Delete ${named}`);
+  if (buttons[0]) {
+    buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
+    buttons[0].dataset.fkey = `open:${c.id}`;
+  }
+  if (buttons[1]) {
+    buttons[1].setAttribute("aria-label", `Delete ${named}`);
+    buttons[1].dataset.fkey = `delete:${c.id}`;
+  }
   const main = item.querySelector(".row-main");
+  if (tagOf) main.append(tagPillNode(tagOf));
+  const actionsBox = item.querySelector(".row-actions");
+  if (chats.filing && tagView) {
+    const go = button(fileUnderWords(chats.filing.name), () => {
+      chats.focus = { keys: [`move:${c.id}`, `open:${c.id}`, "editor-toggle"], at: Date.now() };
+      return fileChat(c.id, chats.filing.tagId);
+    },
+      { live: true, title: tagBannerText(chats.filing.name) });
+    go.classList.add("history-file-here");
+    // The label starts with the words on the button, so Voice Access can say them.
+    go.setAttribute("aria-label", `${fileUnderWords(chats.filing.name)}: ${named}`);
+    go.dataset.fkey = `file:${c.id}`;
+    actionsBox.prepend(go);
+    item.dataset.filing = "true";
+    item.addEventListener("click", (e) => {
+      if (e.target.closest("button, select, input, a, textarea")) return;
+      go.click();
+    });
+  }
+  const move = moveControl(c, tagView);
+  if (move) actionsBox.insertBefore(move, actionsBox.lastElementChild);
   if (snippet) {
     const p = el("p", "search-snippet");
     renderSnippet(p, snippet, { el });
@@ -3564,7 +5005,7 @@ function paintSearchResults(box) {
     status.textContent = `${n} ${n === 1 ? "conversation matches" : "conversations match"}.`;
   }
   const list = el("div", "rows history-rows history-search-rows");
-  for (const c of v.conversations) {
+  for (const c of v.conversations.filter(matchesTagChip)) {
     list.append(conversationRow(c, { needle: s.query, snippet: c.snippet }));
     if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
@@ -3699,6 +5140,7 @@ function paintHistoryList() {
   const active = document.activeElement;
   const refocus = active && active.id === "history-find"
     ? [active.selectionStart, active.selectionEnd] : null;
+  rememberTagFocus();
   paintHistoryListNow(box);
   if (chats.open && $("history-transcript-turns")) paintFound();
   if (refocus) {
@@ -3708,6 +5150,7 @@ function paintHistoryList() {
       try { input.setSelectionRange(refocus[0], refocus[1]); } catch { /* type=search may refuse */ }
     }
   }
+  if (!chats.batch) giveBackTagFocus();
 }
 
 function paintHistoryListNow(box) {
@@ -3743,8 +5186,18 @@ function paintHistoryListNow(box) {
     paintSearchResults(box);
     return;
   }
+  // A chat just forked whose row is in no list yet (the list read is still
+  // on its way): its row and transcript are drawn above, as the phone does.
+  const fk = chats.forked;
+  if (fk && chats.openId === fk.id && !chats.rows.some((c) => c.id === fk.id)
+      && !(s.view?.conversations || []).some((c) => c.id === fk.id)) {
+    const top = el("div", "rows history-rows history-forked");
+    top.append(conversationRow(fk.row));
+    top.append(transcriptNode());
+    box.append(top);
+  }
   if (!chats.rows.length) {
-    box.append(el("p", "empty", chats.kind ? HISTORY_FILTER_NONE : v.enabled
+    box.append(el("p", "empty", chats.tag ? NO_TAG_CHATS : chats.kind ? HISTORY_FILTER_NONE : v.enabled
       ? "No conversations kept yet."
       : "No conversations kept. Chat history is off."));
     return;
@@ -3762,19 +5215,695 @@ function paintHistoryListNow(box) {
       ? "No loaded conversations match that search. \"Load older\" may bring in more to search."
       : "No conversations match that search."));
   }
-  const list = el("div", "rows history-rows");
-  for (const c of shown) {
+  const appendRow = (list, c) => {
     list.append(conversationRow(c));
     if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
+  };
+  const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
+  if (tagView && tagView.tags.length && !chats.tag) {
+    // Sections, one per tag in the owner's order, "Untagged" last
+    // (docs/CHAT-TAGS-DESIGN.md sections 1 and 6). Each header is a button.
+    // With no tags at all the list stays flat, as on the phone.
+    const exact = !chats.kind && !needle;
+    for (const sec of groupRows(shown, tagView, { exact })) {
+      box.append(sectionNode(sec, appendRow));
+    }
+  } else {
+    const list = el("div", "rows history-rows");
+    for (const c of shown.filter(matchesTagChip)) appendRow(list, c);
+    box.append(list);
   }
-  box.append(list);
   if (chats.more) {
     const more = el("div", "row-actions history-more");
     more.append(button(chats.older ? "Loading…" : "Load older", loadOlderHistory,
       { title: "Show the next page of older conversations." }));
     box.append(more);
   }
+}
+
+/* ---- Chat tags and sections (history-tags.js; docs/CHAT-TAGS-DESIGN.md) --- */
+
+/** Whether a row belongs under the chip chosen ("" is every chat). */
+function matchesTagChip(c) {
+  if (!chats.tag) return true;
+  if (chats.tag === "none") return c.tagId === null || c.tagId === undefined;
+  return c.tagId === Number(chats.tag);
+}
+
+/** A tag's small pill: its icon and its name, in its colour. */
+function tagPillNode(tag) {
+  const pill = el("span", "history-tagpill");
+  pill.dataset.colour = String(tag.colour);
+  pill.append(iconNode(tag.icon), el("span", "", tag.name));
+  pill.title = `Tag: ${tag.name}`;
+  return pill;
+}
+
+/** One collapsible section: a header button (icon, name, count, chevron)
+ *  and the rows below it. Open or closed is remembered on this device. */
+function sectionNode(sec, appendRow) {
+  const wrap = el("div", "history-section");
+  wrap.dataset.key = sec.key;
+  if (sec.tag) wrap.dataset.colour = String(sec.tag.colour);
+  const name = sec.tag ? sec.tag.name : UNTAGGED;
+  let open = sectionIsOpen(chats.sectionFlags, sec.key);
+  const head = el("button", "history-section-head");
+  head.type = "button";
+  const bodyId = `history-section-${sec.key}`;
+  head.setAttribute("aria-controls", bodyId);
+  head.dataset.fkey = `sec:${sec.key}`;
+  head.append(
+    iconNode(sec.tag ? sec.tag.icon : "folder"),
+    el("span", "history-section-name", tagHeaderText(name, sec.count)),
+    el("span", "history-section-chevron"),
+  );
+  head.querySelector(".history-section-chevron").setAttribute("aria-hidden", "true");
+  const body = el("div", "history-section-body");
+  body.id = bodyId;
+  if (sec.rows.length) {
+    const list = el("div", "rows history-rows");
+    for (const c of sec.rows) appendRow(list, c);
+    body.append(list);
+  } else {
+    body.append(el("p", "empty", NOT_LOADED_LINE));
+  }
+  const apply = () => {
+    head.setAttribute("aria-expanded", String(open));
+    // The state is aria-expanded's to say; the label is the name and count.
+    head.setAttribute("aria-label", sectionLabel(name, sec.count));
+    body.hidden = !open;
+  };
+  apply();
+  head.addEventListener("click", () => {
+    open = !open;
+    chats.sectionFlags = saveOpenFlag(sec.key, open);
+    apply();
+  });
+  wrap.append(head, body);
+  return wrap;
+}
+
+/** "Move to": a menu of the tags and "No tag", on a row. Null when there
+ *  are no tags to move to (an older PC, or the list is hidden). */
+function moveControl(c, tagView) {
+  if (!tagView || !tagView.tags.length) return null;
+  const select = document.createElement("select");
+  select.className = "field history-move";
+  select.dataset.fkey = `move:${c.id}`;
+  select.setAttribute("aria-label", `${MOVE_TO}: ${c.title || NO_TITLE}`);
+  const first = document.createElement("option");
+  first.value = "";
+  first.textContent = MOVE_PLACEHOLDER;
+  select.append(first);
+  for (const t of tagView.tags) {
+    const o = document.createElement("option");
+    o.value = String(t.id);
+    o.textContent = t.name;
+    o.disabled = t.id === c.tagId;
+    select.append(o);
+  }
+  const none = document.createElement("option");
+  none.value = "none";
+  none.textContent = NO_TAG;
+  none.disabled = c.tagId === null || c.tagId === undefined;
+  select.append(none);
+  select.value = "";
+  select.dataset.title = `${MOVE_TO}… Files this chat under a tag, or takes its tag off. Nothing else changes.`;
+  liveButtons.add(select);
+  syncLiveButton(select);
+  select.addEventListener("change", async () => {
+    const value = select.value;
+    select.value = "";
+    if (!value) return;
+    select.disabled = true;
+    // The row moves to another section: keep the keyboard on it if it is
+    // still on screen, else on the header of the section it landed under.
+    chats.focus = {
+      keys: [`move:${c.id}`, `sec:${value === "none" ? "none" : value}`, `open:${c.id}`,
+        `chip:${chats.tag}`, "editor-toggle"],
+      at: Date.now(),
+    };
+    await fileChat(c.id, value === "none" ? null : Number(value));
+  });
+  return select;
+}
+
+/** Files ONE chat under a tag (tagId a number) or takes its tag off (null).
+ *  No card; Rust holds it on a stale link. Returns whether it worked. */
+async function fileChat(id, tagId) {
+  let ok = false;
+  try {
+    const out = await invoke("brain_history_tag", { id, tagId });
+    if (out && out.ok === false) {
+      toast(tagErrorWords(out), "bad");
+    } else {
+      ok = true;
+      const t = tagById(chats.tags, tagId);
+      toast(tagId === null ? UNFILED_WORDS : filedWords(t ? t.name : "that tag"), "ok");
+      const setTag = (r) => { if (r.id === id) r.tagId = tagId; };
+      chats.rows.forEach(setTag);
+      if (chats.search.view) chats.search.view.conversations.forEach(setTag);
+      // Filing from the banner is done: the banner goes, the search stays.
+      if (chats.filing && chats.filing.tagId === tagId) chats.filing = null;
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.at = 0;
+  await loadHistory();
+  return ok;
+}
+
+/** The chip row, the Tags editor and the banner, above the search box. */
+function paintHistoryTagBar() {
+  paintTagBarNow();
+  if (!chats.batch) giveBackTagFocus();
+}
+
+function paintTagBarNow() {
+  const box = $("history-tagbar");
+  if (!box) return;
+  const v = chats.view;
+  const tv = chats.tags;
+  const show = Boolean(v && v.available && !v.hidden && tv && tv.available && !tv.hidden);
+  // "Suggest tags overnight" holds no chat words, so its row still shows while
+  // the private lists are hidden (JARVIS-API.md section 104.4); nothing else does.
+  const sg = chats.suggest;
+  const rowOnly = !show && Boolean(v && v.available && tv && tv.available && tv.hidden
+    && !(sg.loaded && !(sg.state && sg.state.available)));
+  box.hidden = !show && !rowOnly;
+  // Typing in the editor survives a repaint: the control that had the
+  // keyboard is found again by its `data-fkey` (giveBackTagFocus, after paint).
+  rememberTagFocus();
+  box.replaceChildren();
+  if (rowOnly) {
+    box.append(suggestRowNode());
+    if (!chats.suggest.loaded && !chats.suggest.reading) refreshSuggest();
+    return;
+  }
+  if (!show) return;
+
+  if (chats.filing) {
+    const t = tagById(tv, chats.filing.tagId);
+    const banner = el("div", "history-file-banner");
+    banner.setAttribute("role", "status");
+    if (t) banner.dataset.colour = String(t.colour);
+    banner.append(el("p", "", tagBannerText(chats.filing.name)));
+    const cancel = button(BANNER_CANCEL, () => { chats.filing = null; paintHistory(); });
+    cancel.dataset.fkey = "banner-cancel";
+    banner.append(cancel);
+    box.append(banner);
+  }
+
+  const chips = el("div", "tag-chips");
+  chips.setAttribute("role", "group");
+  chips.setAttribute("aria-label", TAG_CHIPS_LABEL);
+  const chip = (value, label, count, tag) => {
+    const b = el("button", "tag-chip");
+    b.type = "button";
+    if (tag) {
+      b.dataset.colour = String(tag.colour);
+      b.append(iconNode(tag.icon));
+    }
+    b.append(el("span", "", label));
+    if (count !== null) b.append(el("span", "tag-chip-count", String(count)));
+    b.setAttribute("aria-pressed", String(chats.tag === value));
+    b.dataset.fkey = `chip:${value}`;
+    b.addEventListener("click", () => setTagChip(value));
+    return b;
+  };
+  chips.append(chip("", TAG_ALL, null, null));
+  for (const t of tv.tags) chips.append(chip(String(t.id), t.name, t.count, t));
+  chips.append(chip("none", UNTAGGED, tv.untagged, null));
+  const edit = el("button", "btn small tag-editor-toggle", TAGS_TITLE);
+  edit.type = "button";
+  edit.id = "tag-editor-toggle";
+  edit.dataset.fkey = "editor-toggle";
+  edit.setAttribute("aria-expanded", String(chats.editor.open));
+  edit.setAttribute("aria-controls", "tag-editor");
+  edit.addEventListener("click", () => {
+    chats.editor.open = !chats.editor.open;
+    chats.editor.error = "";
+    paintHistoryTagBar();
+    // The switch's state is read when the editor opens (no push).
+    if (chats.editor.open) refreshSuggest();
+  });
+  chips.append(edit);
+  box.append(chips);
+  if (chats.editor.open) box.append(tagEditorNode(tv));
+}
+
+/* ---- Keeping the keyboard where it was (docs/CHAT-TAGS-DESIGN.md section 10) ----
+ *
+ * Every interactive tag control carries a stable `data-fkey` (chip:3, sec:none,
+ * move:<chat id>, up:<tag id>...). The list and the tag bar are drawn afresh
+ * on each repaint, so the control that had the keyboard is remembered by that
+ * key and found again afterwards - even when pressing it disabled it for a
+ * moment (which drops focus). A control that is gone hands the keyboard to a
+ * named neighbour (a moved row to the header it landed under). */
+
+const FOCUS_KEEP_MS = 30_000;
+
+/** The keys to try after `key`, in order, when the control itself is gone. */
+function focusFallbacks(key) {
+  const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  switch (kind) {
+    case "up": return [`down:${id}`, `name:${id}`];
+    case "down": return [`up:${id}`, `name:${id}`];
+    case "del": return ["add-name", "editor-toggle"];
+    case "rename": return [`name:${id}`];
+    case "move": return [`open:${id}`];
+    case "file": return [`move:${id}`, `open:${id}`];
+    case "fork": return [`open:${id.slice(0, id.lastIndexOf(":"))}`];
+    case "chip": return ["chip:"];
+    default: return key === "add-btn" ? ["add-name"] : [];
+  }
+}
+
+function inTagBoxes(node) {
+  return Boolean(node && node.closest && node.closest("#history-tagbar, #history-list"));
+}
+
+/** Notes which tag control has the keyboard (and its caret). */
+function noteTagFocus(node) {
+  const key = node && node.dataset ? node.dataset.fkey : "";
+  if (!key) return;
+  const caret = typeof node.selectionStart === "number" && node.type !== "search";
+  chats.focus = {
+    keys: [key, ...focusFallbacks(key)],
+    start: caret ? node.selectionStart : null,
+    end: caret ? node.selectionEnd : null,
+    at: Date.now(),
+  };
+}
+
+/** Called just before a repaint: the caret has moved since the last focus event. */
+function rememberTagFocus() {
+  const a = document.activeElement;
+  if (a && a.dataset && a.dataset.fkey && inTagBoxes(a)) noteTagFocus(a);
+}
+
+let givingBackFocus = false;
+
+/** Called after a repaint: puts the keyboard back on the control it was on. */
+function giveBackTagFocus() {
+  const f = chats.focus;
+  if (!f || Date.now() - f.at > FOCUS_KEEP_MS) return;
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;   // the keyboard is somewhere real
+  const boxes = ["history-tagbar", "history-list"].map((id) => $(id)).filter(Boolean);
+  for (const [i, key] of f.keys.entries()) {
+    let found = null;
+    for (const box of boxes) {
+      for (const n of box.querySelectorAll("[data-fkey]")) {
+        if (n.dataset.fkey === key) { found = n; break; }
+      }
+      if (found) break;
+    }
+    if (!found || found.disabled || found.closest("[hidden]")) continue;
+    givingBackFocus = true;
+    try {
+      found.focus({ preventScroll: true });
+      if (i === 0 && f.start !== null && f.start !== undefined) {
+        try { found.setSelectionRange(f.start, f.end); } catch { /* a select has no caret */ }
+      }
+    } finally {
+      givingBackFocus = false;
+    }
+    return;
+  }
+}
+
+/** A tag menu, the editor or a text box in it is in use: no repaint under the hand. */
+function tagControlBusy() {
+  const a = document.activeElement;
+  if (!a || !a.closest) return false;
+  if (a.closest("#tag-editor")) return true;
+  return a.tagName === "SELECT" && inTagBoxes(a);
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("focusin", (e) => {
+    if (givingBackFocus) return;
+    if (inTagBoxes(e.target) && e.target.dataset && e.target.dataset.fkey) noteTagFocus(e.target);
+    else chats.focus = null;
+  });
+  // A click on empty space (or anything that is not a tag control) lets go.
+  document.addEventListener("pointerdown", (e) => {
+    if (!(e.target && e.target.closest && e.target.closest("[data-fkey]"))) chats.focus = null;
+  }, true);
+  // A repaint held back while a menu was open happens once it is closed.
+  document.addEventListener("focusout", () => {
+    if (!chats.paintPending) return;
+    setTimeout(() => {
+      if (chats.paintPending && !tagControlBusy() && state.view === "history") paintHistory();
+    }, 0);
+  });
+}
+
+/** A chip was pressed: show one tag's chats (the PC filters), or all. */
+function setTagChip(value) {
+  chats.tag = chats.tag === value ? "" : value;
+  chats.rows = [];
+  chats.more = false;
+  chats.openId = null;
+  chats.open = null;
+  chats.openFacts = null;
+  chats.view = chats.view ? { ...chats.view, conversations: [] } : null;
+  paintHistory();
+  loadHistory();
+  if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
+}
+
+/** One edit to the tags (add, rename, style, move, delete). Says the PC's
+ *  refusal as one plain sentence, in the editor. */
+async function editTags(args) {
+  const editor = chats.editor;
+  editor.error = "";
+  try {
+    const out = await invoke("brain_history_tags_edit", {
+      op: args.op, id: args.id ?? null, name: args.name ?? null, colour: args.colour ?? null,
+      icon: args.icon ?? null, before: args.before ?? null,
+    });
+    if (out && out.ok === false) {
+      editor.error = tagErrorWords(out);
+      paintHistoryTagBar();
+      return false;
+    }
+  } catch (error) {
+    editor.error = errorText(error);
+    paintHistoryTagBar();
+    return false;
+  }
+  chats.at = 0;
+  await loadHistory();
+  return true;
+}
+
+function optionsFor(select, items, current) {
+  for (const [value, label] of items) {
+    const o = document.createElement("option");
+    o.value = String(value);
+    o.textContent = label;
+    select.append(o);
+  }
+  select.value = String(current);
+}
+
+/** A name box's value cut to NAME_MAX code points (never inside a surrogate
+ *  pair), the caret kept. The browser's own maxLength counts UTF-16 units. */
+function limitNameField(input) {
+  const clipped = clipTagName(input.value);
+  if (clipped !== input.value) {
+    const caret = Math.min(input.selectionStart ?? clipped.length, clipped.length);
+    queueMicrotask(() => { try { input.setSelectionRange(caret, caret); } catch { /* no caret */ } });
+  }
+  return clipped;
+}
+
+const COLOUR_ITEMS = TAG_COLOURS.map((c) => [c.slot, c.name[0].toUpperCase() + c.name.slice(1)]);
+const ICON_ITEMS = TAG_ICONS.map((n) => [n, n[0].toUpperCase() + n.slice(1)]);
+
+/** The Tags editor: add, rename, recolour, pick an icon, reorder, delete. */
+function tagEditorNode(tv) {
+  const editor = chats.editor;
+  const box = el("div", "tag-editor");
+  box.id = "tag-editor";
+  box.append(el("h3", "", TAGS_TITLE), el("p", "note", TAGS_EDITOR_NOTE));
+  tv.tags.forEach((t, i) => {
+    const line = el("div", "tag-editor-row");
+    line.dataset.colour = String(t.colour);
+    line.dataset.tag = String(t.id);
+    line.append(tagPillNode(t));
+    const input = document.createElement("input");
+    input.className = "field";
+    input.id = `tag-name-${t.id}`;
+    input.dataset.fkey = `name:${t.id}`;
+    input.type = "text";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("aria-label", `${NAME_LABEL}: ${t.name}`);
+    input.value = editor.drafts.names[t.id] ?? t.name;
+    input.addEventListener("input", () => {
+      input.value = limitNameField(input);
+      editor.drafts.names[t.id] = input.value;
+    });
+    const rename = async () => {
+      const name = validTagName(input.value);
+      if (name === t.name) { delete editor.drafts.names[t.id]; return; }
+      if (name === null) {
+        editor.error = tagErrorWords({ error: "bad_name" });
+        paintHistoryTagBar();
+        return;
+      }
+      if (await editTags({ op: "rename", id: t.id, name })) delete editor.drafts.names[t.id];
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); rename(); } });
+    const colour = document.createElement("select");
+    colour.className = "field";
+    colour.setAttribute("aria-label", `Colour for ${t.name}`);
+    colour.dataset.fkey = `colour:${t.id}`;
+    optionsFor(colour, COLOUR_ITEMS, t.colour);
+    colour.addEventListener("change", () => editTags({ op: "style", id: t.id, colour: Number(colour.value) }));
+    const icon = document.createElement("select");
+    icon.className = "field";
+    icon.setAttribute("aria-label", `Icon for ${t.name}`);
+    icon.dataset.fkey = `icon:${t.id}`;
+    optionsFor(icon, ICON_ITEMS, t.icon);
+    icon.addEventListener("change", () => editTags({ op: "style", id: t.id, icon: icon.value }));
+    for (const s of [colour, icon]) { liveButtons.add(s); syncLiveButton(s); }
+    const up = button(MOVE_UP,
+      () => (i === 0 ? null : editTags({ op: "move", id: t.id, before: tv.tags[i - 1].id })),
+      { live: true, title: `${MOVE_UP}: ${t.name}` });
+    up.disabled = i === 0;
+    up.setAttribute("aria-label", `${MOVE_UP}: ${t.name}`);
+    up.dataset.fkey = `up:${t.id}`;
+    const down = button(MOVE_DOWN,
+      () => editTags({ op: "move", id: t.id, before: tv.tags[i + 2] ? tv.tags[i + 2].id : null }),
+      { live: true, title: `${MOVE_DOWN}: ${t.name}` });
+    down.setAttribute("aria-label", `${MOVE_DOWN}: ${t.name}`);
+    down.dataset.fkey = `down:${t.id}`;
+    down.disabled = i === tv.tags.length - 1;
+    const del = button(DELETE_TAG, async () => {
+      if (!window.confirm(tagDeleteConfirm(t.name, t.count))) return;
+      // If its chip was chosen, the re-read finds the tag gone and shows All.
+      await editTags({ op: "delete", id: t.id });
+    }, { danger: true, live: true, title: `${DELETE_TAG}: ${t.name}` });
+    del.setAttribute("aria-label", `${DELETE_TAG}: ${t.name}`);
+    del.dataset.fkey = `del:${t.id}`;
+    const renameBtn = button(TAG_RENAME, rename, { live: true, title: `${TAG_RENAME}: ${t.name}` });
+    renameBtn.setAttribute("aria-label", `${TAG_RENAME}: ${t.name}`);
+    renameBtn.dataset.fkey = `rename:${t.id}`;
+    line.append(input, renameBtn, colour, icon, up, down, del);
+    box.append(line);
+  });
+
+  // Add a tag.
+  const add = el("div", "tag-editor-row tag-editor-add");
+  const draft = editor.drafts.add;
+  const name = document.createElement("input");
+  name.className = "field";
+  name.id = "tag-add-name";
+  name.dataset.fkey = "add-name";
+  name.type = "text";
+  name.autocomplete = "off";
+  name.spellcheck = false;
+  name.placeholder = ADD_TAG;
+  name.setAttribute("aria-label", `${ADD_TAG}: ${NAME_LABEL}`);
+  name.value = draft.name;
+  name.addEventListener("input", () => {
+    name.value = limitNameField(name);
+    draft.name = name.value;
+  });
+  const colour = document.createElement("select");
+  colour.className = "field";
+  colour.id = "tag-add-colour";
+  colour.dataset.fkey = "add-colour";
+  colour.setAttribute("aria-label", `${ADD_TAG}: colour`);
+  optionsFor(colour, COLOUR_ITEMS, draft.colour);
+  colour.addEventListener("change", () => { draft.colour = Number(colour.value); });
+  const icon = document.createElement("select");
+  icon.className = "field";
+  icon.id = "tag-add-icon";
+  icon.dataset.fkey = "add-icon";
+  icon.setAttribute("aria-label", `${ADD_TAG}: icon`);
+  optionsFor(icon, ICON_ITEMS, draft.icon);
+  icon.addEventListener("change", () => { draft.icon = icon.value; });
+  const addNow = async () => {
+    const wanted = validTagName(draft.name);
+    if (!wanted) { editor.error = tagErrorWords({ error: "bad_name" }); paintHistoryTagBar(); return; }
+    if (await editTags({ op: "add", name: wanted, colour: draft.colour, icon: draft.icon })) {
+      draft.name = "";
+      paintHistoryTagBar();
+    }
+  };
+  name.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNow(); } });
+  const addBtn = button(ADD_TAG, addNow, { live: true, title: `${ADD_TAG}. Up to ${MAX_TAGS} tags.` });
+  addBtn.disabled = tv.tags.length >= MAX_TAGS;
+  addBtn.dataset.fkey = "add-btn";
+  add.append(name, colour, icon, addBtn);
+  liveButtons.add(colour); liveButtons.add(icon); syncLiveButton(colour); syncLiveButton(icon);
+  box.append(add);
+  if (tv.tags.length >= MAX_TAGS) {
+    box.append(el("p", "hint", tagErrorWords({ error: "too_many_tags" })));
+  }
+  const err = el("p", "tag-editor-error failed", editor.error);
+  err.setAttribute("role", "alert");
+  err.hidden = !editor.error;
+  box.append(err);
+  box.append(suggestRowNode());
+  if (!chats.suggest.loaded && !chats.suggest.reading) refreshSuggest();
+  return box;
+}
+
+/* ---- Suggest tags overnight (JARVIS-API.md section 104; the owner, 2026-09-30) ----
+ *
+ * A switch, a one-line state and how many suggestion cards wait. NOTHING is
+ * filed without a tap on Approve: each suggestion is an ordinary approval
+ * card (action chat_tag_suggest), shown by the same approvals flow as every
+ * other card, with the chat's title taken out while the private lists are
+ * hidden (stream.rs hide_private_cards). Turning it ON raises ONE card on the
+ * PC, so the switch stays OFF here - and says it is waiting - until a later
+ * read says it is enabled; OFF is at once. Read when the editor opens and
+ * after every change; there is no push. Nothing about it is kept on this
+ * device. Writes wait for a live link (rule 4). */
+
+/** Reads the switch's state from the PC and redraws the row if it moved. */
+async function refreshSuggest() {
+  const sg = chats.suggest;
+  if (sg.reading || !IS_TAURI) return;
+  sg.reading = true;
+  let next = null;
+  try {
+    next = readSuggest(await invoke("brain_history_tag_suggest", { enabled: null }));
+  } catch {
+    next = readSuggest({ available: false });
+  }
+  sg.reading = false;
+  sg.loaded = true;
+  const moved = JSON.stringify(next) !== JSON.stringify(sg.state);
+  sg.state = next;
+  // A read that says it is on ends the "waiting for your approval" line.
+  const cleared = Boolean(next.enabled && !sg.isError && sg.said);
+  if (cleared) sg.said = "";
+  if (moved || cleared) paintHistoryTagBar();
+}
+
+/** Turns it on (a card) or off (at once), then reads what the PC now says. */
+async function setSuggest(want) {
+  const sg = chats.suggest;
+  if (sg.busy || !IS_TAURI) return;
+  sg.busy = true;
+  sg.said = "";
+  sg.isError = false;
+  paintHistoryTagBar();
+  try {
+    const w = suggestWriteResult(await invoke("brain_history_tag_suggest", { enabled: want }));
+    if (!w.ok) sg.isError = true;
+    sg.said = w.said;
+  } catch (error) {
+    sg.isError = true;
+    sg.said = errorText(error);
+  }
+  sg.busy = false;
+  sg.reading = false;
+  await refreshSuggest();
+  paintHistoryTagBar();
+}
+
+function suggestRowNode() {
+  const sg = chats.suggest;
+  const box = el("div", "tag-suggest");
+  box.id = "tag-suggest";
+  const s = sg.state;
+  if (!sg.loaded) {
+    box.append(el("p", "note", SUGGEST_READING));
+    return box;
+  }
+  if (!s || !s.available) {
+    box.append(el("p", "note", SUGGEST_OLD_PC));
+    return box;
+  }
+  const label = el("label", "history-switch");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = "tag-suggest-enabled";
+  input.dataset.fkey = "suggest-switch";
+  input.setAttribute("role", "switch");
+  input.setAttribute("aria-describedby", "tag-suggest-state");
+  // What the PC says, never what was clicked: ON is only a card.
+  input.checked = s.enabled;
+  label.append(input, el("span", "history-switch-label", SUGGEST_LABEL));
+  const state = el("p", "note tag-suggest-state", sg.busy ? SUGGEST_ASKING : suggestStateLine(s));
+  state.id = "tag-suggest-state";
+  box.append(label, state);
+  // A write, so a live link is needed either way (rule 4).
+  input.dataset.title = s.enabled ? "" : "Asks you first, with an approval card.";
+  liveButtons.add(input);
+  syncLiveButton(input);
+  if (sg.busy) input.disabled = true;
+  input.addEventListener("change", () => {
+    const want = input.checked;
+    input.checked = s.enabled;
+    setSuggest(want);
+  });
+  const waiting = suggestWaitingLine(s.waiting);
+  if (waiting) box.append(el("p", "hint learning-waiting tag-suggest-waiting", waiting));
+  if (sg.said) {
+    const said = el("p", `hint tag-suggest-said${sg.isError ? " failed" : ""}`, sg.said);
+    said.setAttribute("role", sg.isError ? "alert" : "status");
+    box.append(said);
+  }
+  return box;
+}
+
+/* ---- Filing an older chat: "label my chat about the boiler as Home" ------- */
+
+/**
+ * The Jarvis bar left `open_brain: "history"` with `file_under` (a tag id)
+ * and `history_q` (search words). Open History with the words in the search
+ * box and the banner "Tap the chat to file it under {name}."; nothing is
+ * filed until the owner taps a chat.
+ */
+async function applyHistoryFilePlace(extras) {
+  const place = readFilePlace(extras);
+  if (!place) return;
+  chats.filingPending = place;
+  await resolveFilingPending();
+}
+
+async function resolveFilingPending() {
+  const pending = chats.filingPending;
+  if (!pending || !IS_TAURI) return;
+  let tv = null;
+  try {
+    tv = readTags(await invoke("brain_history_tags"));
+  } catch (error) {
+    toast(errorText(error), "bad");
+    chats.filingPending = null;
+    return;
+  }
+  // The tag names are hidden with the list: wait for Show, then come back.
+  if (tv.hidden) return;
+  chats.filingPending = null;
+  const t = tagById(tv, pending.tagId);
+  if (!t) {
+    toast(tagErrorWords({ error: "tag_not_found" }), "bad");
+    return;
+  }
+  chats.tags = tv;
+  chats.filing = { tagId: t.id, name: t.name };
+  const box = $("history-filter");
+  if (box) box.value = pending.q;
+  if (chats.tag) {
+    chats.tag = "";
+    chats.rows = [];
+    chats.more = false;
+    loadHistory();
+  }
+  onHistorySearch();
+  paintHistory();
 }
 
 /**
@@ -3835,14 +5964,26 @@ function historyChanged() {
 window.addEventListener(HISTORY_CHANGED, historyChanged);
 
 function paintHistory() {
-  paintHistoryTools();
-  paintHistorySettings();
-  paintHistoryList();
+  chats.paintPending = false;
+  chats.batch = true;
+  try {
+    paintHistoryTools();
+    paintHistoryTagBar();
+    paintHistorySettings();
+    paintHistoryList();
+  } finally {
+    chats.batch = false;
+  }
+  giveBackTagFocus();
 }
 
 function renderHistory() {
-  paintHistory();
-  if (IS_TAURI && !chats.loading && Date.now() - chats.at > HISTORY_READ_MS) loadHistory();
+  // A tag menu or the editor in use is not repainted under the owner's hand.
+  if (tagControlBusy()) chats.paintPending = true;
+  else paintHistory();
+  if (IS_TAURI && !chats.loading && Date.now() - chats.at > HISTORY_READ_MS) {
+    loadHistory({ background: true });
+  }
 }
 
 /* ==========================================================================
@@ -4121,7 +6262,8 @@ function savedFactsNode() {
       const item = row({
         tag: "auto",
         state: f.current ? "ok" : "idle",
-        title: f.erasedAt ? erasedLine(f.erasedAt) : (f.text || "(no text)"),
+        title: f.erasedAt ? erasedLine(f.erasedAt)
+          : f.leftOut ? Topics.WORDS.used_left_out : (f.text || "(no text)"),
         meta: marks,
         actions: past ? [] : [
           ...(acts.forget ? [button("Forget", () => forgetSaved(f),
@@ -4375,7 +6517,7 @@ function paintAutoList() {
       tag: "auto",
       state: "ok",
       title: f.text || "(no text)",
-      meta: [factMeta(f)],
+      meta: [factMeta(f), topicMark(f)],
       // Nothing is changed while the pane shows a past moment (memoryWrite).
       actions: past ? [] : [
         ...[pinButton(f)].filter(Boolean),
@@ -4527,7 +6669,11 @@ function paintProfile() {
       tag: "pinned",
       state: "ok",
       title: f.text || "(no text)",
-      meta: [f.added ? `pinned ${ago(f.added)}` : ""],
+      meta: [
+        f.added ? `pinned ${ago(f.added)}` : "",
+        // Topic controls: a pin in a topic that may not be used is not read.
+        f.paused ? pinPausedFor(f) : "",
+      ],
       actions: past ? [] : [
         button(UNPIN_LABEL, () => setPinned(f, false), { live: true, title: UNPIN_TITLE }),
       ],
@@ -6550,7 +8696,10 @@ if (dom.standbyAdd) {
    source of truth.
    ========================================================================== */
 
-const gl = { view: null, error: "", loading: false, again: false, at: 0 };
+const gl = { view: null, error: "", loading: false, again: false, at: 0,
+  // The life benchmarks a step can follow (goals.js measureChoices), read
+  // from Projects only while a draft is open; `undo` is the last tick.
+  measures: [], measuresAt: 0, undo: null };
 const GOALS_READ_MS = 20000;
 
 /** goal id -> its working plan while it is still a draft, edited but not yet
@@ -6630,7 +8779,7 @@ async function acceptGoal(goal) {
     return;
   }
   try {
-    const out = await invoke("brain_goals_accept", { id: goal.id, plan });
+    const out = await invoke("brain_goals_accept", { id: goal.id, plan: planBody(plan) });
     if (out && out.ok === false) {
       toast(String(out.error || "Refused."), "bad");
     } else {
@@ -6649,11 +8798,39 @@ async function acceptGoal(goal) {
   await loadComingUp();
 }
 
-async function goalStep(goal, index, done) {
+/** The number benchmarks with a target (life and coding), for "Follows a number" (a read of
+ *  Projects; nothing is written). Once a minute at most, and only when a
+ *  draft is on screen. */
+async function loadMeasures() {
+  if (!IS_TAURI) return;
+  gl.measuresAt = Date.now();
   try {
-    const out = await invoke("brain_goals_step", { id: goal.id, index, done });
+    const list = await invoke("projects_read", {});
+    const answers = await Promise.all(benchProjectIds(list).map((project) =>
+      invoke("projects_read", { project }).catch(() => null)));
+    gl.measures = measureChoices(list, answers);
+  } catch {
+    gl.measures = [];
+  }
+  if (state.view === "work") paintGoals();
+}
+
+async function goalStep(goal, step, index, done, undoing = false) {
+  try {
+    // By the step's id when the PC gave one (it stays put when steps move),
+    // else by position, as before.
+    const args = step && step.id
+      ? { id: goal.id, stepId: step.id, done }
+      : { id: goal.id, index, done };
+    const out = await invoke("brain_goals_step", args);
     if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else if (done && !undoing) {
+      gl.undo = { goalId: goal.id, stepId: step && step.id ? step.id : "", index,
+        name: goal.hidden ? "" : String((step && step.step) || "") };
+    } else gl.undo = null;
   } catch (error) {
+    // A locked step ticked from a stale screen: the PC answers 409 with its
+    // own sentence, which is shown as it is. Nothing changed.
     toast(errorText(error), "bad");
   }
   await loadGoals();
@@ -6673,6 +8850,7 @@ async function stopGoal(goal) {
 }
 
 function goalStepEditorRow(plan, index) {
+  const wrap = el("div", "goal-editor-step");
   const line = el("div", "goal-editor-row");
   const step = el("input", "field goal-step-field");
   step.type = "text";
@@ -6693,10 +8871,91 @@ function goalStepEditorRow(plan, index) {
     plan[index].by = by.value;
   });
   line.append(step, by, button(REMOVE_STEP_LABEL, () => {
-    plan.splice(index, 1);
+    const name = String(plan[index].step || "").trim();
+    const { touched } = removeStepAt(plan, index);
+    // The PC does not clean other steps' "Do these first" for the app: it
+    // was done above, and the owner is told before anything is saved.
+    if (touched) toast(goalFill(NEEDS_CLEANED, { step: name || "the step" }), "ok");
     paintGoals();
   }, { danger: true }));
-  return line;
+  wrap.append(line);
+  if (gl.view && gl.view.locks) wrap.append(goalLockEditor(plan, index));
+  return wrap;
+}
+
+/** "Do these first" (up to 3 other steps) and "Follows a number", for one
+ *  step of a draft. Plain checkboxes and a list, so a keyboard and a screen
+ *  reader reach them; the PC checks circles and the rest when Accept is
+ *  pressed and its sentence is shown as sent. */
+function goalLockEditor(plan, index) {
+  const s = plan[index];
+  const max = (gl.view && gl.view.limits.needs) || 3;
+  const box = el("div", "goal-lock-editor");
+  const group = el("fieldset", "goal-needs");
+  group.append(el("legend", "goal-lock-legend", NEEDS_LABEL));
+  const choices = needChoices(plan, index);
+  if (!choices.length) group.append(el("span", "goal-note", NEEDS_NONE));
+  else group.append(el("span", "goal-note", NEEDS_UNDER));
+  const boxes = [];
+  const sync = () => {
+    const full = (s.needs || []).length >= max;
+    for (const [cb, id] of boxes) cb.disabled = full && !cb.checked && !(s.needs || []).includes(id);
+    note.hidden = !full;
+  };
+  const note = el("span", "goal-note", goalFill(NEEDS_FULL, { max }));
+  for (const c of choices) {
+    const label = el("label", "goal-need");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = (s.needs || []).includes(c.id);
+    cb.addEventListener("change", () => {
+      if (!setNeed(s, c.id, cb.checked, max)) cb.checked = (s.needs || []).includes(c.id);
+      sync();
+    });
+    boxes.push([cb, c.id]);
+    label.append(cb, el("span", "", c.label));
+    group.append(label);
+  }
+  group.append(note);
+  sync();
+  box.append(group);
+
+  const pick = el("label", "goal-measure");
+  pick.append(el("span", "goal-lock-legend", MEASURE_LABEL));
+  const sel = el("select", "field goal-measure-select");
+  const none = el("option", "", MEASURE_NONE);
+  none.value = "";
+  sel.append(none);
+  const key = (m) => `${m.project}:${m.bench}`;
+  const current = s.measure ? key(s.measure) : "";
+  const known = gl.measures.map((m) => key(m));
+  const list = [...gl.measures];
+  if (current && !known.includes(current)) {
+    // The number is not in the list read just now (still reading, or the
+    // Projects tab is hidden): keep the choice, name it as the PC did.
+    list.unshift({ project: s.measure.project, bench: s.measure.bench,
+      label: s.measureName || FOLLOWS_LABEL.replace(/:\s*$/, "") });
+  }
+  for (const m of list) {
+    const o = el("option", "", m.label);
+    o.value = key(m);
+    sel.append(o);
+  }
+  sel.value = current;
+  sel.addEventListener("change", () => {
+    if (!sel.value) {
+      s.measure = null;
+      return;
+    }
+    const [project, bench] = sel.value.split(":");
+    s.measure = { project, bench };
+    const m = list.find((x) => key(x) === sel.value);
+    s.measureName = m ? m.label : s.measureName;
+  });
+  pick.append(sel);
+  box.append(pick);
+  box.append(el("p", "goal-note", list.length ? MEASURE_UNDER : MEASURE_EMPTY));
+  return box;
 }
 
 function draftGoalBlock(goal) {
@@ -6716,7 +8975,7 @@ function draftGoalBlock(goal) {
       toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
       return;
     }
-    plan.push({ step: "", by: "", done: false });
+    plan.push(newStep(plan, Boolean(gl.view && gl.view.locks)));
     paintGoals();
   }));
   actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
@@ -6725,25 +8984,51 @@ function draftGoalBlock(goal) {
 }
 
 function goalStepRow(goal, step, index) {
+  const row = stepRow(step, { hideWords: goal.hidden });
   const line = el("div", "goal-step");
+  if (row.locked) line.dataset.state = "locked";
   const label = el("label", "goal-step-label");
   const box = document.createElement("input");
   box.type = "checkbox";
   box.checked = step.done;
   const active = goal.status === "active";
-  box.disabled = !active;
-  if (active) {
+  // A locked step's tick is shown but disabled, with the reason beside it
+  // (a stale screen that ticks it anyway gets the PC's 409 sentence).
+  box.disabled = !active || row.locked;
+  if (active && !row.locked) {
     liveButtons.add(box);
     syncLiveButton(box);
   }
+  const why = el("p", "goal-note goal-lock-line");
+  why.id = `goal-why-${goal.id}-${index}`;
+  const lines = [];
+  if (row.reachedLine) lines.push(row.reachedLine);
+  if (row.lockLine) lines.push(row.lockLine);
+  if (row.goneLine) lines.push(row.goneLine);
+  if (row.follows) lines.push(row.follows);
+  if (row.label && row.label !== step.step) box.setAttribute("aria-label", row.label);
+  if (row.locked) box.setAttribute("aria-describedby", why.id);
   box.addEventListener("change", async () => {
     const want = box.checked;
     box.disabled = true;
-    await goalStep(goal, index, want);
+    await goalStep(goal, step, index, want);
   });
   label.append(box, el("span", "goal-step-text", step.step));
   line.append(label);
+  if (row.locked) {
+    // A padlock glyph plus the word - the word is what is said and read.
+    const tag = el("span", "row-tag goal-locked-tag");
+    const glyph = el("span", "", "\u{1F512} ");
+    glyph.setAttribute("aria-hidden", "true");
+    tag.append(glyph, GOAL_WORDS.locked);
+    line.append(tag);
+  }
+  if (row.reached) line.append(el("span", "row-tag goal-reached-tag", REACHED_TAG));
   if (step.by) line.append(el("span", "goal-step-by", step.by));
+  if (lines.length) {
+    why.textContent = lines.join(" ");
+    line.append(why);
+  }
   return line;
 }
 
@@ -6758,6 +9043,25 @@ function activeGoalBlock(goal, jobs) {
   const steps = el("div", "goal-steps");
   goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
   block.append(steps);
+  if (gl.undo && gl.undo.goalId === goal.id) {
+    // Undo of the last tick: one tap, no card. Unticking clears only that
+    // step; a later step stays done and then reads "(open again)".
+    const u = gl.undo;
+    const said = u.name ? goalFill(UNDO_TICKED, { step: u.name }) : "Ticked a step.";
+    const row = el("p", "goal-note goal-undo");
+    row.append(said, " ", button(UNDO_LABEL, async () => {
+      const target = goal.plan.find((x) => u.stepId && x.id === u.stepId) || goal.plan[u.index];
+      if (!target) {
+        gl.undo = null;
+        paintGoals();
+        return;
+      }
+      const idx = goal.plan.indexOf(target);
+      await goalStep(goal, target, idx, false, true);
+      if (!goal.hidden) announce(goalFill(UNTICKED, { step: target.step }), "polite");
+    }, { live: true }));
+    block.append(row);
+  }
   if (goal.status === "active") {
     const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
     if (job) checkinJobIds.set(goal.id, job.id);
@@ -6787,6 +9091,10 @@ function paintGoals() {
   }
   const full = openCount(v) >= v.limits.goals;
   if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
+  // "Follows a number" needs Projects' benchmarks, read only while a draft
+  // is showing and at most once a minute.
+  if (v.locks && v.goals.some((g) => g.status === "draft") && IS_TAURI
+    && Date.now() - gl.measuresAt > 60000) loadMeasures();
   if (!v.goals.length) {
     box.replaceChildren(el("p", "empty", EMPTY_GOALS));
   } else {
@@ -6819,6 +9127,1738 @@ if (dom.goalsNewAdd) {
   syncLiveButton(dom.goalsNewAdd);
 }
 
+/* ==========================================================================
+   Quiz me on a text (the owner's "go ahead", 2026-09-30; docs/STUDY-FROM-
+   TEXT-DESIGN.md section 11; JARVIS-API.md section 98; quiz.js).
+
+   The pasted text, the questions, the answers and the marks live in this
+   window's memory and on the PC's - NEVER in localStorage or anywhere else
+   this app writes (not even a draft). No card: the text is the owner's own
+   and only the PC's local model sees it. Every change is held on a stale
+   link. While the private lists are hidden Rust takes the questions, the
+   comments and the source passages out (brain/quiz.rs), and this section
+   shows the "Show" prompt instead.
+   ========================================================================== */
+
+const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: null, crisis: "",
+  // Spanish practice (JARVIS-API 102.4): the chosen mode, the PC's own Spanish
+  // notice once it has been seen, and whether the PC is too old for Spanish.
+  mode: "text", notice: "", textOnly: false, refusal: "",
+  // What the owner typed for each answered question, in this window's memory
+  // only, until the quiz ends - it fills the Keep sheet's backs for a "Got it"
+  // mark. Never a crisis answer, never stored anywhere.
+  answers: new Map(),
+  // The PC's sentence above a captions quiz that covers only the first part
+  // ({id, note}); the YouTube block hands it over (youtube.js).
+  ytNote: null,
+  // The Keep sheet (decks.js keepRows) while it is open, and the count kept.
+  keep: null, kept: null,
+  // Cloud grading (QC_*, JARVIS-API 113)
+  cloudInfo: null, cloudRequest: null, cloudUnknownSince: null, cloudTimer: null,
+  cloudGen: 0, cloudSaid: "",
+  // The control that should have the keyboard after the next paint, and the
+  // last one that had it (trackFkeys).
+  focusNext: "", lastFocus: "" };
+
+function quizReset() {
+  qz.quiz = null;
+  qz.summary = null;
+  qz.shown = null;
+  qz.busy = "";
+  qz.error = "";
+  qz.last = null;
+  qz.crisis = "";
+  qz.answers = new Map();
+  qz.keep = null;
+  qz.kept = null;
+  qz.ytNote = null;
+  if (qz.cloudTimer) clearTimeout(qz.cloudTimer);
+  qz.cloudTimer = null;
+  qz.cloudRequest = null;
+  qz.cloudUnknownSince = null;
+  qz.cloudSaid = "";
+}
+
+/** "Quiz me on a YouTube video" under the paste box (youtube.js, JARVIS-API 112). */
+const youtubeBlock = createYoutubeBlock({
+  root: document.getElementById("youtube-block"),
+  invoke,
+  canAct: () => linkWords(currentLink()).canAct,
+  staleLine: STALE_TITLE,
+  live: { add: (b) => { liveButtons.add(b); syncLiveButton(b); }, sync: (b) => syncLiveButton(b) },
+  listen: IS_TAURI && TAURI.event && TAURI.event.listen ? (name, fn) => TAURI.event.listen(name, fn) : null,
+  view: () => state.view,
+  covered: () => Boolean(qz.quiz || qz.summary),
+  spanish: () => qz.mode === "spanish",
+  errorText: (error) => errorText(error),
+  hiddenNode: () => hiddenNode(0, "words"),
+  announce: (words, mode) => announce(words, mode),
+  adopt: (quiz, note) => {
+    takeQuiz(quiz);
+    qz.summary = null;
+    qz.shown = null;
+    qz.answers = new Map();
+    qz.keep = null;
+    qz.kept = null;
+    qz.error = "";
+    qz.crisis = "";
+    qz.ytNote = note ? { id: quiz.id, note } : null;
+    paintQuiz();
+  },
+});
+
+/** The keyboard's place (a `data-fkey`) inside `root`, noted just before a repaint.
+ *  A button that greys itself while it works drops the keyboard, so the last
+ *  place noted by `trackFkeys` counts when nothing has it. */
+function fkeyBefore(root, holder) {
+  const a = document.activeElement;
+  if (a && root && root.contains(a) && a.dataset && a.dataset.fkey) return a.dataset.fkey;
+  return holder && (!a || a === document.body) ? holder.lastFocus || "" : "";
+}
+
+/** Remembers which `data-fkey` control inside `root` had the keyboard last, until
+ *  the keyboard or a click goes somewhere else. */
+function trackFkeys(root, holder) {
+  if (!root) return;
+  root.addEventListener("focusin", (event) => {
+    const key = event.target && event.target.dataset && event.target.dataset.fkey;
+    if (key) holder.lastFocus = key;
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!root.contains(event.target)) holder.lastFocus = "";
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!root.contains(event.target)) holder.lastFocus = "";
+  }, true);
+}
+
+/** Puts the keyboard back on the control with that `data-fkey` after a repaint. */
+function fkeyAfter(root, key) {
+  if (!key || !root) return;
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;
+  for (const n of root.querySelectorAll("[data-fkey]")) {
+    if (n.dataset.fkey === key && !n.disabled) {
+      n.focus({ preventScroll: true });
+      return;
+    }
+  }
+}
+
+/** Takes the PC's quiz as the open one, and remembers its Spanish notice. */
+function takeQuiz(quiz) {
+  qz.quiz = quiz;
+  if (quiz.mode === "spanish" && quiz.notice) qz.notice = quiz.notice;
+}
+
+/** Puts words to a refusal or a thrown error; a quiz the PC no longer holds
+ *  ends the session here. Returns true when it was a problem. */
+function quizProblem(out) {
+  if (isRefusal(out)) {
+    qz.error = quizErrorWords(out);
+    qz.refusal = out.error || "";
+    if (out.error === "not_found") {
+      qz.quiz = null;
+      qz.summary = null;
+      qz.shown = null;
+      qz.keep = null;
+    }
+    return true;
+  }
+  return false;
+}
+
+async function quizCall(cmd, args, busyWords) {
+  if (!linkWords(currentLink()).canAct) {
+    qz.error = STALE_TITLE;
+    paintQuiz();
+    return null;
+  }
+  qz.busy = busyWords;
+  qz.error = "";
+  qz.crisis = "";
+  paintQuiz();
+  try {
+    const out = await invoke(cmd, args);
+    qz.busy = "";
+    if (quizProblem(out)) {
+      paintQuiz();
+      return null;
+    }
+    return out;
+  } catch (error) {
+    qz.busy = "";
+    qz.error = errorText(error);
+    paintQuiz();
+    return null;
+  }
+}
+
+/** Switches between Text and Spanish practice: the choices, the box's words
+ *  and the count line. Nothing is sent. */
+function setQuizMode(mode) {
+  qz.mode = mode === "spanish" && !qz.textOnly ? "spanish" : "text";
+  const spanish = qz.mode === "spanish";
+  if (dom.quizMode) {
+    for (const r of dom.quizMode.querySelectorAll("input[type=radio]")) {
+      r.checked = r.value === qz.mode;
+      if (r.value === "spanish") {
+        r.disabled = qz.textOnly;
+        r.title = qz.textOnly ? QUIZ_OLD_PC_SPANISH : "";
+      }
+    }
+  }
+  if (dom.quizSpanish) dom.quizSpanish.hidden = !spanish;
+  if (dom.quizText) {
+    dom.quizText.placeholder = spanish ? QUIZ_SPANISH_PLACEHOLDER : "Paste the text here";
+    dom.quizText.setAttribute("aria-label", spanish ? QUIZ_SPANISH_PLACEHOLDER : "The text to be quizzed on");
+  }
+  if (dom.quizIntro) dom.quizIntro.textContent = spanish ? QUIZ_SPANISH_INTRO : QUIZ_INTRO_TEXT;
+  paintQuizNotice();
+  paintQuizCount();
+  youtubeBlock.sync();
+}
+
+/** The PC's own Spanish notice under the mode chooser, once it has been seen. */
+function paintQuizNotice() {
+  if (!dom.quizNotice) return;
+  const words = qz.mode === "spanish" ? qz.notice : "";
+  dom.quizNotice.textContent = words;
+  dom.quizNotice.hidden = !words;
+}
+
+async function startQuiz() {
+  const box = dom.quizText;
+  const value = box ? box.value : "";
+  const spanish = qz.mode === "spanish";
+  let args;
+  if (spanish) {
+    const made = quizSpanishStartArgs({
+      text: value,
+      level: dom.quizLevel ? dom.quizLevel.value : "",
+      exercise: dom.quizExercise ? dom.quizExercise.value : "",
+      topic: dom.quizTopic ? dom.quizTopic.value : "",
+    });
+    if (made.error) {
+      qz.error = made.error;
+      paintQuiz();
+      return;
+    }
+    args = made.args;
+  } else {
+    const c = quizTextCount(value);
+    if (!c.ok) {
+      qz.error = quizErrorWords({ error: c.n < QUIZ_LIMITS.textMin ? "text_too_short" : "text_too_long" });
+      paintQuiz();
+      return;
+    }
+    args = { text: value };
+  }
+  qz.refusal = "";
+  const out = await quizCall("brain_quiz_start", args, spanish ? QUIZ_SPANISH_WRITING : QUIZ_WRITING);
+  if (!out) {
+    // A PC with Spanish practice never says "too short" to a Spanish start with
+    // no text at all (the model writes the sentences): this one is an older PC.
+    if (spanish && !args.text && qz.refusal === "text_too_short") {
+      qz.textOnly = true;
+      qz.error = QUIZ_OLD_PC_SPANISH;
+      setQuizMode("text");
+      paintQuiz();
+    }
+    return;
+  }
+  const quiz = readQuiz(out.quiz);
+  if (!quiz) {
+    qz.error = "Jarvis answered, but not with a quiz this app can read.";
+    paintQuiz();
+    return;
+  }
+  if (!quiz.mode) {
+    // No `mode` in the reply: an older PC (JARVIS-API 102.4). Text mode only.
+    qz.textOnly = true;
+    if (spanish) {
+      // It ignored the Spanish choices; let go of the quiz it made.
+      try { await invoke("brain_quiz_stop", { id: quiz.id }); } catch { /* it times out on the PC */ }
+      qz.error = QUIZ_OLD_PC_SPANISH;
+      setQuizMode("text");
+      paintQuiz();
+      return;
+    }
+    setQuizMode("text");
+  }
+  takeQuiz(quiz);
+  qz.summary = null;
+  qz.shown = null;
+  qz.answers = new Map();
+  qz.keep = null;
+  qz.kept = null;
+  // The pasted text is not kept here once the questions exist.
+  box.value = "";
+  if (dom.quizTopic) dom.quizTopic.value = "";
+  paintTopicCount();
+  paintQuizCount();
+  paintQuizNotice();
+  paintQuiz();
+}
+
+async function checkAnswer(question, box) {
+  const c = quizAnswerCount(box.value);
+  if (!c.ok) {
+    qz.error = quizErrorWords({ error: c.n < 1 || !box.value.trim() ? "answer_empty" : "answer_too_long" });
+    paintQuiz();
+    return;
+  }
+  const value = box.value;
+  const out = await quizCall("brain_quiz_answer", { id: qz.quiz.id, n: question.n, answer: value }, QUIZ_CHECKING);
+  if (!out) return;
+  if (quizIsCrisis(out)) {
+    // A crisis answer is not marked (JARVIS-API 98.4): show the PC's own help
+    // words calmly, keep the question open, and let go of what was typed.
+    // (The busy repaint made a new box that carries the typed words over, so
+    // that one is emptied too.)
+    box.value = "";
+    const liveBox = dom.quizRun ? dom.quizRun.querySelector(".quiz-answer") : null;
+    if (liveBox) liveBox.value = "";
+    qz.answers.delete(question.n);
+    qz.crisis = quizReadCrisis(out);
+    if (!qz.crisis) qz.error = "Jarvis answered, but not with words this app can read.";
+    const open = readQuiz(out.quiz);
+    if (open) takeQuiz(open);
+    qz.shown = null;
+    paintQuiz();
+    return;
+  }
+  const quiz = readQuiz(out.quiz);
+  if (quiz) {
+    takeQuiz(quiz);
+    qz.shown = question.n;
+    qz.focusNext = "next";
+    // Held in memory only, until the quiz ends, for the Keep sheet.
+    qz.answers.set(question.n, value);
+  }
+  paintQuiz();
+}
+
+async function finishQuiz() {
+  const questions = qz.quiz;
+  const out = await quizCall("brain_quiz_finish", { id: qz.quiz.id }, "");
+  if (!out) return;
+  qz.summary = readSummary(out.summary);
+  // The PC has forgotten the quiz by now; the words shown in the summary are
+  // the ones this window already held (empty while the lists are hidden).
+  qz.last = questions;
+  qz.quiz = null;
+  qz.shown = null;
+  qz.keep = null;
+  qz.answers = new Map();
+  paintQuiz();
+}
+
+async function stopQuiz() {
+  const id = qz.quiz && qz.quiz.id;
+  if (!id) return;
+  const out = await quizCall("brain_quiz_stop", { id }, "");
+  if (!out) return;
+  quizReset();
+  toast("Quiz forgotten.", "ok");
+  paintQuiz();
+}
+
+/* ── Grade this better (docs/STUDY-FROM-TEXT-DESIGN.md §15, JARVIS-API 113) ── */
+
+async function loadQuizCloudInfo() {
+  try {
+    const res = await invoke("brain_quiz_cloud_info");
+    qz.cloudInfo = qcReadInfo(res);
+    paintQuiz();
+  } catch (_) {
+    qz.cloudInfo = null;
+  }
+}
+
+async function startQuizCloud() {
+  const q = qz.quiz;
+  if (!q || qz.busy || q.mode === "spanish") return;
+  if (!qz.cloudInfo || !qz.cloudInfo.ready) return;
+  qz.busy = QC_SENDING;
+  qz.cloudSaid = "";
+  qz.error = "";
+  paintQuiz();
+  try {
+    const res = await invoke("brain_quiz_cloud_start", { quizId: q.id });
+    if (res && res.ok === false) {
+      qz.error = qcOutcome(res, "Refused.").said;
+      qz.busy = "";
+      paintQuiz();
+      return;
+    }
+    const out = qcOutcome(res, "Not started.");
+    if (!out.ok || !out.request) {
+      qz.error = out.said;
+      qz.busy = "";
+      paintQuiz();
+      return;
+    }
+    qz.cloudRequest = out.request;
+    qz.busy = "";
+    qz.cloudSaid = out.said;
+    qz.cloudGen++;
+    paintQuiz();
+    pollQuizCloud();
+  } catch (e) {
+    qz.error = errorText(e);
+    qz.busy = "";
+    paintQuiz();
+  }
+}
+
+async function cancelQuizCloud() {
+  const r = qz.cloudRequest;
+  if (!r) return;
+  qz.busy = QC_CANCELLING;
+  paintQuiz();
+  try {
+    const res = await invoke("brain_quiz_cloud_cancel", { id: r.id });
+    const out = qcOutcome(res, "Not cancelled.");
+    if (out.request) {
+      qz.cloudRequest = out.request;
+      qz.cloudSaid = out.said;
+    }
+  } catch (e) {
+    qz.cloudSaid = errorText(e);
+  } finally {
+    qz.busy = "";
+    paintQuiz();
+  }
+}
+
+async function pollQuizCloud() {
+  if (qz.cloudTimer) {
+    clearTimeout(qz.cloudTimer);
+    qz.cloudTimer = null;
+  }
+  const cur = qz.cloudRequest;
+  if (!cur || !qcKeepPolling(cur.phase)) return;
+  const gen = qz.cloudGen;
+  let answer;
+  try {
+    answer = await invoke("brain_quiz_cloud_get", { id: cur.id });
+  } catch (e) {
+    if (gen !== qz.cloudGen) return;
+    qz.cloudSaid = errorText(e);
+    paintQuiz();
+    scheduleQuizCloudPoll();
+    return;
+  }
+  if (gen !== qz.cloudGen) return;
+  const out = qcOutcome(answer, "Not read.");
+  if (!out.ok || !out.request) {
+    qz.cloudRequest = null;
+    qz.cloudSaid = out.said;
+    paintQuiz();
+    return;
+  }
+  const req = out.request;
+  qz.cloudRequest = req;
+  qz.cloudSaid = out.said;
+  if (req.phase === "ready") {
+    if (req.quiz) {
+      takeQuiz(req.quiz);
+    } else {
+      try {
+        const q = await invoke("brain_quiz_get", { id: cur.quizId });
+        if (q && q.quiz) takeQuiz(q.quiz);
+      } catch (_) {}
+    }
+    qz.cloudRequest = null;
+    paintQuiz();
+    return;
+  }
+  if (req.phase === "ended") {
+    qz.cloudRequest = null;
+    paintQuiz();
+    return;
+  }
+  if (qcIsKnown(req.state)) {
+    qz.cloudUnknownSince = null;
+  } else {
+    const now = Date.now();
+    qz.cloudUnknownSince = qz.cloudUnknownSince == null ? now : qz.cloudUnknownSince;
+    if (qcGiveUpOnUnknown(qz.cloudUnknownSince, now)) {
+      qz.cloudRequest = null;
+      paintQuiz();
+      return;
+    }
+  }
+  paintQuiz();
+  scheduleQuizCloudPoll();
+}
+
+function scheduleQuizCloudPoll() {
+  if (qz.cloudTimer) clearTimeout(qz.cloudTimer);
+  qz.cloudTimer = setTimeout(pollQuizCloud, QC_POLL_SECONDS * 1000);
+}
+
+/* The Keep sheet (docs/QUIZ-DECKS-DESIGN.md C3): every answered question with
+   a tick, its passage and a box for the back. Nothing is sent until "Keep and
+   finish"; the PC takes each question's own words and passage from its open
+   quiz - this app sends only the number and the back. */
+
+async function openKeep() {
+  const q = qz.quiz;
+  if (!q || q.hidden || q.provenance === "outside") return;
+  qz.error = "";
+  qz.crisis = "";
+  qz.keep = {
+    rows: Decks.keepRows(q, qz.answers),
+    choice: "",
+    newName: Decks.defaultDeckName(q.title),
+    decks: null,
+    why: "",
+    error: "",
+    nameProblem: false,
+    loading: true,
+    busy: false,
+  };
+  qz.focusNext = qz.keep.rows[0] ? `tick:${qz.keep.rows[0].n}` : "keep-cancel";
+  paintQuiz();
+  await loadKeepDecks();
+}
+
+/** Reads the decks the sheet can keep into. */
+async function loadKeepDecks() {
+  const k = qz.keep;
+  if (!k) return;
+  k.loading = true;
+  k.why = "";
+  try {
+    const out = await invoke("brain_decks");
+    const view = Decks.readDecks(out);
+    if (!view) {
+      k.decks = null;
+      k.why = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
+    } else {
+      k.decks = view;
+      k.why = view.available ? "" : (view.why || Decks.MISSING);
+      if (!view.decks.some((d) => d.id === k.choice)) k.choice = "";
+    }
+  } catch (error) {
+    k.decks = null;
+    k.why = errorText(error);
+  }
+  k.loading = false;
+  if (qz.keep === k) paintQuiz();
+}
+
+async function keepAndFinish() {
+  const k = qz.keep;
+  const questions = qz.quiz;
+  if (!k || !questions) return;
+  const made = Decks.keepPayload(k.rows, k.choice, k.newName);
+  if (made.error) {
+    k.error = made.error;
+    k.nameProblem = Boolean(made.nameProblem);
+    paintQuiz();
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    k.error = STALE_TITLE;
+    paintQuiz();
+    return;
+  }
+  k.error = "";
+  k.nameProblem = false;
+  k.busy = true;
+  qz.error = "";
+  qz.crisis = "";
+  paintQuiz();
+  let out;
+  try {
+    out = await invoke("brain_quiz_finish", { id: questions.id, keep: made.keep });
+  } catch (error) {
+    k.busy = false;
+    k.error = errorText(error);
+    paintQuiz();
+    return;
+  }
+  k.busy = false;
+  if (quizIsCrisis(out)) {
+    // Nothing was kept and the quiz is still open (JARVIS-API 102.1): the PC's
+    // own words, shown calmly, and the sheet stays as it was.
+    qz.crisis = quizReadCrisis(out);
+    const open = readQuiz(out.quiz);
+    if (open) takeQuiz(open);
+    paintQuiz();
+    return;
+  }
+  if (isRefusal(out)) {
+    if (out.error === "not_found") {
+      qz.error = quizErrorWords(out);
+      qz.quiz = null;
+      qz.keep = null;
+      qz.shown = null;
+      paintQuiz();
+      return;
+    }
+    k.error = Decks.refusalWords(out);
+    k.nameProblem = out.error === "bad_deck_name";
+    if (out.error === "deck_not_found") {
+      k.choice = "";
+      paintQuiz();
+      await loadKeepDecks();
+      return;
+    }
+    paintQuiz();
+    return;
+  }
+  qz.summary = readSummary(out.summary);
+  qz.kept = Number.isInteger(out.kept) && out.kept >= 0 ? out.kept : 0;
+  qz.last = questions;
+  qz.quiz = null;
+  qz.shown = null;
+  qz.keep = null;
+  qz.answers = new Map();
+  qz.focusNext = "close";
+  paintQuiz();
+  // The deck list has new cards in it.
+  dk.at = 0;
+  if (state.view === "work") loadDecks();
+}
+
+function keepSheet(q) {
+  const k = qz.keep;
+  const box = el("div", "goal-block");
+  box.append(el("h3", "subhead", Decks.KEEP_BUTTON));
+  box.append(el("p", "note", Decks.KEEP_INTRO));
+  // The backend's check for a crisis phrase reads English only: say so where the
+  // owner types the words that will be kept (the quiz's own notice, word for word).
+  if (q.mode === "spanish" && q.notice) box.append(el("p", "note", q.notice));
+  if (k.loading) box.append(el("p", "note", Decks.LOADING));
+  if (k.why) box.append(el("p", "empty failed", k.why));
+  k.rows.forEach((r, i) => {
+    const row = el("div", "keep-row");
+    const label = el("label", "keep-tick");
+    const tick = document.createElement("input");
+    tick.type = "checkbox";
+    tick.checked = r.tick;
+    tick.dataset.fkey = `tick:${r.n}`;
+    tick.addEventListener("change", () => { k.rows[i].tick = tick.checked; });
+    label.append(tick, el("span", "", r.prompt));
+    row.append(label);
+    if (r.passage) {
+      row.append(el("p", "goal-note", quizMarkLines(null, q).passageHeading));
+      row.append(el("p", "quiz-passage", r.passage));
+    }
+    const back = document.createElement("textarea");
+    back.className = "field keep-back";
+    back.rows = 3;
+    back.maxLength = Decks.LIMITS.back;
+    back.spellcheck = true;
+    back.placeholder = Decks.KEEP_BACK_PLACEHOLDER;
+    back.setAttribute("aria-label", `${Decks.KEEP_BACK_PLACEHOLDER}: question ${r.n}`);
+    back.dataset.fkey = `back:${r.n}`;
+    back.value = r.back;
+    const count = el("p", "note", Decks.backCount(r.back).note);
+    back.addEventListener("input", () => {
+      k.rows[i].back = back.value;
+      count.textContent = Decks.backCount(back.value).note;
+    });
+    row.append(back, count);
+    box.append(row);
+  });
+  // Where the questions go: an existing deck, or a new one.
+  const where = el("div", "quiz-spanish-row");
+  const choose = document.createElement("select");
+  choose.className = "field";
+  choose.id = "keep-deck";
+  choose.dataset.fkey = "deck";
+  choose.append(new Option(Decks.NEW_DECK, ""));
+  for (const d of (k.decks && k.decks.decks) || []) choose.append(new Option(d.name || Decks.HIDDEN_NAME, d.id));
+  choose.value = k.choice;
+  choose.addEventListener("change", () => {
+    k.choice = choose.value;
+    paintQuiz();
+  });
+  const chooseLabel = el("label", "quiz-lab", Decks.CHOOSE_DECK);
+  chooseLabel.htmlFor = "keep-deck";
+  where.append(chooseLabel, choose);
+  if (!k.choice) {
+    const name = document.createElement("input");
+    name.type = "text";
+    name.className = "field";
+    name.maxLength = Decks.LIMITS.name;
+    name.id = "keep-name";
+    name.dataset.fkey = "name";
+    name.setAttribute("aria-label", Decks.DECK_NAME);
+    name.placeholder = Decks.DECK_NAME;
+    name.value = k.newName;
+    if (k.nameProblem) name.setAttribute("aria-invalid", "true");
+    name.addEventListener("input", () => { k.newName = name.value; });
+    where.append(name);
+  }
+  box.append(where);
+  if (k.error) {
+    const err = el("p", "empty failed", k.error);
+    err.setAttribute("role", "alert");
+    box.append(err);
+  }
+  const actions = el("div", "goal-actions");
+  const go = button(Decks.KEEP_FINISH, keepAndFinish, { live: true });
+  go.dataset.fkey = "keep-go";
+  if (k.busy || k.loading || Boolean(k.why) || !k.rows.length) {
+    go.dataset.busy = "true";
+    go.disabled = true;
+  }
+  const cancel = button(Decks.KEEP_CANCEL, () => {
+    qz.keep = null;
+    qz.focusNext = "keep";
+    paintQuiz();
+  });
+  cancel.dataset.fkey = "keep-cancel";
+  actions.append(go, cancel);
+  box.append(actions);
+  return box;
+}
+
+function markBlock(mark, quiz) {
+  const lines = quizMarkLines(mark, quiz);
+  const box = el("div", "quiz-mark");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", quizLevelLabel(mark.level)));
+  if (lines.cloudLabel) head.append(el("span", "row-tag", lines.cloudLabel));
+  if (lines.showGuess) head.append(el("span", "row-tag", QUIZ_GUESS));
+  box.append(head);
+  if (mark.comment) box.append(el("p", "", mark.comment));
+  if (lines.answerLine) box.append(el("p", "quiz-prompt", lines.answerLine));
+  if (lines.answerLine && lines.keyLabel) box.append(el("p", "goal-note", lines.keyLabel));
+  if (mark.passage) {
+    box.append(el("p", "goal-note", lines.passageHeading));
+    box.append(el("p", "quiz-passage", mark.passage));
+  }
+  return box;
+}
+
+function paintQuizCount() {
+  if (!dom.quizTextCount || !dom.quizText) return;
+  const value = dom.quizText.value;
+  // Spanish practice takes no text at all: the model writes the sentences.
+  dom.quizTextCount.textContent = qz.mode === "spanish" && !value.trim()
+    ? `0 / ${QUIZ_LIMITS.textMax.toLocaleString("en-US")} characters`
+    : quizTextCount(value).note;
+}
+
+function paintTopicCount() {
+  if (dom.quizTopicCount && dom.quizTopic) dom.quizTopicCount.textContent = quizTopicCount(dom.quizTopic.value).note;
+}
+
+/** The row of Spanish letters under an answer box: each inserts at the cursor. */
+function accentRow(answer, count) {
+  const row = el("div", "quiz-accents");
+  row.setAttribute("role", "group");
+  row.setAttribute("aria-label", QUIZ_ACCENT_ROW);
+  for (const ch of QUIZ_ACCENTS) {
+    const b = el("button", "btn small", ch);
+    b.type = "button";
+    b.setAttribute("aria-label", `Insert ${ch}`);
+    b.dataset.fkey = `accent:${ch}`;
+    // A mouse press must not take the cursor out of the answer box.
+    b.addEventListener("mousedown", (event) => event.preventDefault());
+    b.addEventListener("click", () => {
+      const at = quizInsertAtCursor(answer.value, answer.selectionStart, answer.selectionEnd, ch, QUIZ_LIMITS.answerMax);
+      answer.value = at.value;
+      answer.focus();
+      answer.setSelectionRange(at.caret, at.caret);
+      count.textContent = quizAnswerCount(answer.value).note;
+    });
+    row.append(b);
+  }
+  return row;
+}
+
+function paintQuiz() {
+  const run = dom.quizRun;
+  if (!run) return;
+  const focusKey = qz.focusNext || fkeyBefore(run, qz);
+  qz.focusNext = "";
+  // A repaint from elsewhere (the tab shown again, a link change) must not
+  // wipe an answer being typed: carry it over to the same question. It stays
+  // in this window's memory only.
+  const typing = run.querySelector(".quiz-answer");
+  const typed = typing ? { n: typing.dataset.n, value: typing.value } : null;
+  if (dom.quizStartForm) dom.quizStartForm.hidden = Boolean(qz.quiz || qz.summary);
+  // A quiz made from a video's captions has its own outside-text line.
+  if (dom.quizOutside) dom.quizOutside.textContent = ytFromCaptions(qz.quiz) ? YT_OUTSIDE : QUIZ_OUTSIDE_LINE;
+  const parts = [];
+  if (qz.busy) parts.push(el("p", "note", qz.busy));
+  if (qz.error) parts.push(el("p", "empty failed", qz.error));
+  if (qz.crisis) {
+    // The PC's help words, shown calmly in place of a mark: no colour, no
+    // mark label, no "Jarvis's guess". Text only; kept until the next action.
+    const calm = el("div", "quiz-crisis");
+    calm.setAttribute("role", "status");
+    for (const para of quizCrisisParagraphs(qz.crisis)) {
+      const p = el("p", "");
+      for (const run of para) {
+        if (run.bold) p.append(el("strong", "", run.text));
+        else p.append(document.createTextNode(run.text));
+      }
+      calm.append(p);
+    }
+    parts.push(calm);
+  }
+  const q = qz.quiz;
+  if (qz.summary) {
+    const s = qz.summary;
+    const block = el("div", "goal-block");
+    block.append(el("h3", "subhead", QUIZ_AGAIN_HEADING));
+    block.append(el("p", "note", quizCountsLine(s)));
+    if (qz.kept !== null) block.append(el("p", "note", Decks.keptLine(qz.kept)));
+    if (s.again.length) {
+      const list = el("div", "quiz-again");
+      for (const n of s.again) list.append(el("p", "", quizAgainLine(n, qz.last)));
+      block.append(list);
+    } else {
+      block.append(el("p", "empty", QUIZ_AGAIN_EMPTY));
+    }
+    const close = button(QUIZ_CLOSE, () => {
+      quizReset();
+      paintQuiz();
+    });
+    close.dataset.fkey = "close";
+    block.append(close);
+    parts.push(block);
+  } else if (q && qz.keep && !q.hidden) {
+    parts.push(keepSheet(q));
+  } else if (q) {
+    const block = el("div", "goal-block");
+    if (ytFromCaptions(q)) {
+      block.append(el("p", "goal-note", YT_LABEL));
+      if (qz.ytNote && qz.ytNote.id === q.id) block.append(el("p", "goal-note", qz.ytNote.note));
+    }
+    if (!q.hidden) block.append(el("p", "goal-note", quizProgressLine(q)));
+    if (q.mode === "spanish" && q.level) block.append(el("p", "goal-note", quizLevelLine(q.level)));
+    if (q.hidden) {
+      block.append(hiddenNode(0, "words"));
+    } else {
+      const shown = qz.shown != null ? q.questions.find((x) => x.n === qz.shown) : null;
+      const next = quizNextQuestion(q);
+      if (shown && shown.mark) {
+        block.append(el("p", "quiz-prompt", shown.prompt));
+        block.append(markBlock(shown.mark, q));
+        const more = quizNextQuestion(q);
+        const actions = el("div", "goal-actions");
+        if (more) {
+          const nextButton = button(QUIZ_NEXT, () => {
+            qz.shown = null;
+            qz.focusNext = "answer";
+            paintQuiz();
+          });
+          nextButton.dataset.fkey = "next";
+          actions.append(nextButton);
+        }
+        block.append(actions);
+      } else if (next) {
+        block.append(el("span", "row-tag", QUIZ_KIND_LABELS[next.kind]));
+        block.append(el("p", "quiz-prompt", next.prompt));
+        // Under the answer box too: the PC's own words about Spanish crisis phrases.
+        if (q.mode === "spanish" && q.notice) block.append(el("p", "note", q.notice));
+        const answer = document.createElement("textarea");
+        answer.className = "field quiz-answer";
+        answer.rows = 4;
+        answer.maxLength = QUIZ_LIMITS.answerMax;
+        answer.spellcheck = q.mode !== "spanish";
+        if (q.mode === "spanish") answer.lang = "es";
+        answer.placeholder = QUIZ_ANSWER_PLACEHOLDER;
+        answer.setAttribute("aria-label", `Your answer to question ${next.n}`);
+        answer.dataset.n = String(next.n);
+        answer.dataset.fkey = "answer";
+        if (typed && typed.n === answer.dataset.n) answer.value = typed.value;
+        const count = el("p", "note", quizAnswerCount(answer.value).note);
+        answer.addEventListener("input", () => {
+          count.textContent = quizAnswerCount(answer.value).note;
+        });
+        block.append(answer, count);
+        if (q.mode === "spanish") block.append(accentRow(answer, count));
+        const actions = el("div", "goal-actions");
+        actions.append(button(QUIZ_ANSWER_LABEL, () => checkAnswer(next, answer), { live: true }));
+        block.append(actions);
+      } else {
+        block.append(el("p", "note", quizProgressLine(q)));
+      }
+    }
+    const foot = el("div", "goal-actions");
+    // Finish and Stop reveal nothing (numbers only), so both stay while hidden.
+    foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
+    // Cloud "Grade this better" button (docs/STUDY-FROM-TEXT-DESIGN.md §15)
+    // Shown once at least one question is answered and the quiz is a text quiz. Beside Finish.
+    if (q.mode !== "spanish" && q.questions.some((x) => x.mark) && qz.cloudInfo && qz.cloudInfo.available) {
+      const isWaiting = qz.cloudRequest && qz.cloudRequest.phase === "waiting";
+      const isWorking = qz.cloudRequest && qz.cloudRequest.phase === "working";
+      if (isWaiting) {
+        const cancelBtn = button(QC_CANCEL, cancelQuizCloud, { danger: true });
+        cancelBtn.dataset.fkey = "qc-cancel";
+        foot.append(cancelBtn);
+      } else if (!isWorking) {
+        const canGrade = qz.cloudInfo.ready;
+        const gradeBtn = button(QC_BUTTON, startQuizCloud, { live: true });
+        gradeBtn.dataset.fkey = "qc-grade";
+        if (!canGrade) {
+          gradeBtn.disabled = true;
+          gradeBtn.title = QC_INTRO;
+        }
+        foot.append(gradeBtn);
+      }
+    }
+    // Keep lists the owner's words, so it is never offered while they are hidden,
+    // and quizzes made from outside text (like YouTube) cannot be saved to review decks.
+    if (q.provenance !== "outside") {
+      const keep = button(Decks.KEEP_BUTTON, openKeep);
+      keep.dataset.fkey = "keep";
+      if (q.hidden || !q.questions.some((x) => x.mark)) keep.disabled = true;
+      if (q.hidden) keep.title = Decks.KEEP_HIDDEN;
+      foot.append(keep);
+    }
+    foot.append(button(QUIZ_STOP, stopQuiz, { live: true, danger: true }));
+    block.append(foot);
+    if (qz.cloudSaid) {
+      block.append(el("p", "note", qz.cloudSaid));
+    }
+    if (q.mode !== "spanish" && q.questions.some((x) => x.mark) && qz.cloudInfo && qz.cloudInfo.available) {
+      block.append(el("p", "note", QC_LEAVES));
+    }
+    if (q.hidden && q.provenance !== "outside") block.append(el("p", "note", Decks.KEEP_HIDDEN));
+    parts.push(block);
+  }
+  run.replaceChildren(...parts);
+  fkeyAfter(run, focusKey);
+  youtubeBlock.sync();
+}
+
+/** A hidden quiz read again after Show (or a setting change): Rust decides
+ *  whether the words come back. Nothing is asked of the PC when no quiz is
+ *  open. */
+async function rereadQuiz() {
+  if (!IS_TAURI || !qz.quiz) return;
+  try {
+    const out = await invoke("brain_quiz_get", { id: qz.quiz.id });
+    if (quizProblem(out)) {
+      paintQuiz();
+      return;
+    }
+    const quiz = readQuiz(out.quiz);
+    if (quiz) {
+      takeQuiz(quiz);
+      // The Keep sheet lists the owner's words: closed while they are hidden.
+      if (quiz.hidden) qz.keep = null;
+    }
+  } catch (error) {
+    qz.error = errorText(error);
+  }
+  paintQuiz();
+}
+
+let quizFormReady = false;
+
+/** The Spanish choices' options, filled once, from the shared lists. */
+function readyQuizForm() {
+  if (quizFormReady) return;
+  quizFormReady = true;
+  if (dom.quizLevel) {
+    for (const id of QUIZ_LEVEL_IDS) dom.quizLevel.append(new Option(id, id));
+    dom.quizLevel.value = QUIZ_DEFAULT_LEVEL;
+  }
+  if (dom.quizExercise) {
+    for (const e of QUIZ_EXERCISES) dom.quizExercise.append(new Option(e.label, e.id));
+    dom.quizExercise.value = QUIZ_DEFAULT_EXERCISE;
+  }
+}
+
+function renderQuiz() {
+  readyQuizForm();
+  setQuizMode(qz.mode);
+  paintTopicCount();
+  paintQuiz();
+  youtubeBlock.enter();
+  loadQuizCloudInfo();
+}
+
+if (dom.quizMode) {
+  dom.quizMode.addEventListener("change", (event) => {
+    const t = event.target;
+    if (t && t.name === "quiz-mode") setQuizMode(t.value);
+  });
+}
+if (dom.quizTopic) dom.quizTopic.addEventListener("input", paintTopicCount);
+if (dom.quizStartForm) {
+  dom.quizStartForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    startQuiz();
+  });
+}
+if (dom.quizText) dom.quizText.addEventListener("input", paintQuizCount);
+if (dom.quizStart) {
+  liveButtons.add(dom.quizStart);
+  syncLiveButton(dom.quizStart);
+}
+
+/* ==========================================================================
+   My study decks (the owner's decision of 2026-09-30; docs/QUIZ-DECKS-DESIGN.md,
+   Slice contract C3-C6; JARVIS-API.md section 102; decks.js).
+
+   Questions kept from a quiz, asked again on a schedule the PC works out.
+   Read and changed through their own commands (brain/decks.rs), not
+   brain_read. No card anywhere: the owner's own tap saves the owner's own
+   words, sealed on the PC. Every change is held on a stale link. While the
+   private lists are hidden Rust takes the names and every card's words out
+   and does not fetch a review card at all; this section shows the counts and
+   the line, and the "Show" prompt.
+
+   Nothing is stored in this window: no name, no card, no typed answer - not
+   in localStorage, not as a draft.
+   ========================================================================== */
+
+const dk = {
+  view: null, error: "", loading: false, again: false, at: 0,
+  // The deck whose cards are open, and the cards read for it.
+  opening: "", cards: null, cardsError: "", cardsLoading: false,
+  // What is being renamed / edited / confirmed / added (ids only, no words).
+  renaming: "", editing: "", confirm: "", adding: false,
+  // The review session: null when not reviewing.
+  review: null,
+  // The control that should have the keyboard after the next paint, and the
+  // last one that had it (trackFkeys).
+  focusNext: "", lastFocus: "",
+};
+const DECKS_READ_MS = 20000;
+
+async function loadDecks() {
+  if (!IS_TAURI) return;
+  if (dk.loading) {
+    dk.again = true;
+    return;
+  }
+  dk.loading = true;
+  try {
+    const out = await invoke("brain_decks");
+    const view = Decks.readDecks(out);
+    if (view) {
+      dk.view = view;
+      dk.error = "";
+    } else {
+      dk.error = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
+    }
+  } catch (error) {
+    dk.error = errorText(error);
+  } finally {
+    dk.loading = false;
+    dk.at = Date.now();
+  }
+  if (dk.again) {
+    dk.again = false;
+    await loadDecks();
+    return;
+  }
+  // Hidden lists end a review and close the cards: nothing of them stays drawn.
+  if (dk.view && dk.view.hidden) {
+    dk.review = null;
+    dk.cards = null;
+    dk.opening = "";
+    dk.renaming = "";
+    dk.editing = "";
+  }
+  if (dk.opening && !dk.cardsLoading) await loadDeckCards(dk.opening, false);
+  if (state.view === "work") paintDecks();
+}
+
+async function loadDeckCards(id, repaint = true) {
+  dk.cardsLoading = true;
+  dk.cardsError = "";
+  try {
+    const out = await invoke("brain_decks_cards", { id });
+    const cards = Decks.readCards(out);
+    if (cards) {
+      dk.cards = cards;
+    } else {
+      dk.cards = null;
+      dk.cardsError = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
+      if (isRefusal(out) && out.error === "deck_not_found") dk.opening = "";
+    }
+  } catch (error) {
+    dk.cards = null;
+    dk.cardsError = errorText(error);
+  }
+  dk.cardsLoading = false;
+  if (repaint && state.view === "work") paintDecks();
+}
+
+/** One change to a deck or card. Refused on a stale link; the PC's own words
+ *  for a refusal. Returns the answer, or null. */
+async function decksCall(cmd, args) {
+  if (!linkWords(currentLink()).canAct) {
+    dk.error = STALE_TITLE;
+    paintDecks();
+    return null;
+  }
+  try {
+    const out = await invoke(cmd, args);
+    if (isRefusal(out)) {
+      dk.error = Decks.refusalWords(out);
+      if (out.error === "deck_not_found" || out.error === "card_not_found") {
+        dk.opening = out.error === "deck_not_found" ? "" : dk.opening;
+        dk.at = 0;
+        loadDecks();
+      }
+      paintDecks();
+      return null;
+    }
+    dk.error = "";
+    return out;
+  } catch (error) {
+    dk.error = errorText(error);
+    paintDecks();
+    return null;
+  }
+}
+
+async function deckAct(id, action, name) {
+  const out = await decksCall("brain_decks_act", name === undefined ? { id, action } : { id, action, name });
+  if (!out) return false;
+  if (action === "delete" && dk.opening === id) {
+    dk.opening = "";
+    dk.cards = null;
+  }
+  dk.renaming = "";
+  dk.confirm = "";
+  await loadDecks();
+  return true;
+}
+
+async function cardAct(id, cid, action, front, back) {
+  const args = { id, cid, action };
+  if (action === "edit") {
+    args.front = front;
+    args.back = back;
+  }
+  const out = await decksCall("brain_decks_card_act", args);
+  if (!out) return false;
+  dk.editing = "";
+  dk.confirm = "";
+  await loadDeckCards(id, false);
+  dk.at = 0;
+  await loadDecks();
+  return true;
+}
+
+async function addDeck(name) {
+  const out = await decksCall("brain_decks_create", { name });
+  if (!out) return false;
+  dk.adding = false;
+  dk.at = 0;
+  await loadDecks();
+  return true;
+}
+
+async function setNewPerDay(value, input) {
+  const n = Number(value);
+  const max = (dk.view && dk.view.limits.newPerDay) || Decks.LIMITS.newPerDay;
+  if (!Number.isInteger(n) || n < 0 || n > max) {
+    dk.error = `New cards a day is a whole number from 0 to ${max}.`;
+    if (dk.view) input.value = String(dk.view.newPerDay);
+    paintDecks();
+    return;
+  }
+  const out = await decksCall("brain_decks_settings", { newPerDay: n });
+  if (!out) {
+    if (dk.view) input.value = String(dk.view.newPerDay);
+    return;
+  }
+  dk.at = 0;
+  await loadDecks();
+}
+
+/* ── The review session ────────────────────────────────────────────────── */
+
+async function startReview(deck) {
+  dk.review = { deck: deck || "", data: null, reveal: null, typed: "", error: "", busy: false, comes: "" };
+  paintDecks();
+  await fetchReview();
+}
+
+/** Ends the session and goes back to the deck list, read again. */
+function leaveReview() {
+  dk.review = null;
+  dk.at = 0;
+  paintDecks();
+  loadDecks();
+}
+
+/** Takes the PC's review answer into the session. */
+function takeReview(out, comes) {
+  const r = dk.review;
+  if (!r) return;
+  if (Decks.isHiddenReview(out)) {
+    r.error = Decks.REVIEW_HIDDEN;
+    r.data = null;
+    r.reveal = null;
+    return;
+  }
+  if (isRefusal(out)) {
+    r.error = Decks.refusalWords(out);
+    return;
+  }
+  const data = Decks.readReview(out);
+  if (!data) {
+    r.error = Decks.MISSING;
+    return;
+  }
+  r.error = "";
+  r.data = data;
+  r.reveal = null;
+  r.typed = "";
+  r.comes = comes || "";
+  dk.focusNext = data.state === "card" ? "typed" : "screen-title";
+}
+
+async function fetchReview() {
+  const r = dk.review;
+  if (!r) return;
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review", { deck: r.deck || null });
+    takeReview(out);
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  if (r.data && r.data.state === "no_decks") {
+    leaveReview();
+    return;
+  }
+  paintDecks();
+  if (r.data && r.data.state !== "card") {
+    // Empty / enough / paused: the next-ready day comes from the deck list.
+    dk.at = 0;
+    loadDecks();
+  }
+}
+
+async function revealCard() {
+  const r = dk.review;
+  if (!r || !r.data || !r.data.card || r.busy) return;
+  if (!linkWords(currentLink()).canAct) {
+    r.error = STALE_TITLE;
+    paintDecks();
+    return;
+  }
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review_reveal", { card: r.data.card.id });
+    if (Decks.isHiddenReview(out)) {
+      r.error = Decks.REVIEW_HIDDEN;
+    } else if (isRefusal(out)) {
+      r.error = Decks.refusalWords(out);
+      if (out.error === "card_not_found") {
+        r.busy = false;
+        await fetchReview();
+        return;
+      }
+    } else {
+      const back = Decks.readReveal(out);
+      if (back) {
+        r.reveal = back;
+        dk.focusNext = "answer-heading";
+        r.error = "";
+        // What was typed was only for the owner: dropped, never sent.
+        r.typed = "";
+      } else {
+        r.error = Decks.MISSING;
+      }
+    }
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  paintDecks();
+}
+
+async function rateCard(rating) {
+  const r = dk.review;
+  if (!r || !r.data || !r.data.card || !r.reveal) return;
+  // One rating at a time: a second tap while the first is on its way would
+  // rate the next card from the first card's answer.
+  if (r.busy) return;
+  if (!linkWords(currentLink()).canAct) {
+    r.error = STALE_TITLE;
+    paintDecks();
+    return;
+  }
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review_rate", { card: r.data.card.id, rating, deck: r.deck || "" });
+    if (isRefusal(out) && (out.error === "card_not_found" || out.error === "not_revealed")) {
+      // The card is gone or no longer up, or the PC no longer remembers that its
+      // back was shown (it restarted): drop the reveal and ask for the card
+      // again, so the owner can show the answer and rate it.
+      r.busy = false;
+      r.reveal = null;
+      await fetchReview();
+      return;
+    }
+    const before = r.error;
+    const read = Decks.readReview(out);
+    takeReview(out, read && read.comesBack ? `Comes back on ${Decks.formatDay(read.comesBack)}` : "");
+    if (!r.error && before) r.error = "";
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  if (r.data && r.data.state === "no_decks") {
+    leaveReview();
+    return;
+  }
+  paintDecks();
+  if (r.data && r.data.state !== "card") {
+    dk.at = 0;
+    loadDecks();
+  }
+}
+
+async function moreCards() {
+  const r = dk.review;
+  if (!r || r.busy) return;
+  if (!linkWords(currentLink()).canAct) {
+    r.error = STALE_TITLE;
+    paintDecks();
+    return;
+  }
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review_more", { deck: r.deck || null });
+    takeReview(out);
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  if (r.data && r.data.state === "no_decks") {
+    leaveReview();
+    return;
+  }
+  paintDecks();
+}
+
+function paintReview(box) {
+  const r = dk.review;
+  const view = dk.view;
+  const top = el("div", "goal-block");
+  if (r.error) {
+    const err = el("p", "empty failed", r.error);
+    err.setAttribute("role", "alert");
+    top.append(err);
+  }
+  if (r.comes) top.append(el("p", "note", r.comes));
+  const data = r.data;
+  if (!data) {
+    if (r.busy) top.append(el("p", "note", Decks.LOADING));
+    const stop = button(Decks.STOP, leaveReview);
+    stop.dataset.fkey = "review-stop";
+    top.append(stop);
+    box.append(top);
+    return;
+  }
+  const screen = Decks.reviewScreen(data, view ? view.nextReadyDay : null);
+  if (screen.kind === "card" && data.card) {
+    const card = data.card;
+    const head = el("div", "goal-head");
+    if (QUIZ_KIND_LABELS[card.kind]) head.append(el("span", "row-tag", QUIZ_KIND_LABELS[card.kind]));
+    const level = Decks.cardLevelLine(card.level);
+    if (level) head.append(el("span", "goal-note", level));
+    top.append(head);
+    top.append(el("p", "review-front", card.front));
+    if (!r.reveal) {
+      const typed = document.createElement("textarea");
+      typed.className = "field review-typed";
+      typed.rows = 3;
+      typed.maxLength = Decks.LIMITS.back;
+      typed.placeholder = Decks.TYPED_PLACEHOLDER;
+      typed.setAttribute("aria-label", Decks.TYPED_PLACEHOLDER);
+      typed.dataset.fkey = "typed";
+      // Kept only so a repaint does not wipe it; never sent, dropped on Show answer.
+      typed.value = r.typed;
+      typed.addEventListener("input", () => { r.typed = typed.value; });
+      top.append(typed);
+      const actions = el("div", "goal-actions");
+      const show = button(Decks.SHOW_ANSWER, revealCard, { live: true });
+      show.dataset.fkey = "show";
+      actions.append(show);
+      top.append(actions);
+    } else {
+      const back = el("div", "review-back");
+      const heading = el("h3", "subhead", Decks.BACK_HEADING);
+      heading.tabIndex = -1;
+      heading.dataset.fkey = "answer-heading";
+      back.append(heading);
+      back.append(el("p", "", r.reveal.answer || Decks.NO_CARD_ANSWER));
+      if (r.reveal.passage) {
+        back.append(el("p", "goal-note", Decks.backPassageHeading(r.reveal)));
+        back.append(el("p", "quiz-passage", r.reveal.passage));
+      }
+      if (r.reveal.keyLabel) back.append(el("p", "goal-note", r.reveal.keyLabel));
+      top.append(back);
+      const ratings = el("div", "review-ratings");
+      ratings.setAttribute("role", "group");
+      ratings.setAttribute("aria-label", Decks.RATING_GROUP);
+      for (const rating of Decks.RATINGS) {
+        const b = button(rating.label, () => rateCard(rating.id), { live: true });
+        b.dataset.fkey = `rate:${rating.id}`;
+        b.dataset.rating = rating.id;
+        ratings.append(b);
+      }
+      top.append(ratings);
+    }
+    const stop = button(Decks.STOP, leaveReview);
+    stop.dataset.fkey = "review-stop";
+    const foot = el("div", "goal-actions");
+    foot.append(stop);
+    top.append(foot);
+  } else {
+    if (screen.title) {
+      const title = el("h3", "subhead", screen.title);
+      title.tabIndex = -1;
+      title.dataset.fkey = "screen-title";
+      top.append(title);
+    }
+    if (screen.note) top.append(el("p", "note", screen.note));
+    const actions = el("div", "goal-actions");
+    if (screen.actions.includes("more")) {
+      const more = button(Decks.MORE, moreCards, { live: true });
+      more.dataset.fkey = "more";
+      actions.append(more);
+    }
+    const stop = button(Decks.STOP, leaveReview);
+    stop.dataset.fkey = "review-stop";
+    actions.append(stop);
+    top.append(actions);
+  }
+  box.append(top);
+}
+
+/* ── The deck list ─────────────────────────────────────────────────────── */
+
+function labelled(b, words, name) {
+  // The visible words stay in the name; the deck is added for a screen reader.
+  b.setAttribute("aria-label", name ? `${words}: ${name}` : words);
+  return b;
+}
+
+function deckRow(deck, view) {
+  const hidden = view.hidden;
+  const item = el("div", "deck-row");
+  const head = el("div", "goal-head");
+  head.append(el("span", "deck-name", hidden ? Decks.HIDDEN_NAME : deck.name));
+  if (deck.paused) head.append(el("span", "row-tag", Decks.PAUSED_TAG));
+  item.append(head);
+  item.append(el("p", "note", Decks.deckMeta(deck)));
+  const name = hidden ? "" : deck.name;
+  if (dk.renaming === deck.id && !hidden) {
+    item.append(nameForm(deck.name, (value) => deckAct(deck.id, "rename", value), () => {
+      dk.renaming = "";
+      paintDecks();
+    }, `rename:${deck.id}`));
+    return item;
+  }
+  const actions = el("div", "goal-actions");
+  if (!hidden) {
+    const review = labelled(button(Decks.REVIEW, () => startReview(deck.id)), Decks.REVIEW, name);
+    review.dataset.fkey = `review:${deck.id}`;
+    if (!Decks.canReview(view, deck)) review.disabled = true;
+    actions.append(review);
+  }
+  const pause = labelled(
+    button(deck.paused ? Decks.RESUME : Decks.PAUSE, () => deckAct(deck.id, deck.paused ? "resume" : "pause"), { live: true }),
+    deck.paused ? Decks.RESUME : Decks.PAUSE, name);
+  pause.dataset.fkey = `pause:${deck.id}`;
+  actions.append(pause);
+  if (!hidden) {
+    const cards = labelled(button(Decks.CARDS_LINK, async () => {
+      if (dk.opening === deck.id) {
+        dk.opening = "";
+        dk.cards = null;
+        paintDecks();
+        return;
+      }
+      dk.opening = deck.id;
+      dk.cards = null;
+      dk.editing = "";
+      dk.confirm = "";
+      paintDecks();
+      await loadDeckCards(deck.id);
+    }), Decks.CARDS_LINK, name);
+    cards.dataset.fkey = `cards:${deck.id}`;
+    cards.setAttribute("aria-expanded", String(dk.opening === deck.id));
+    actions.append(cards);
+    const edit = labelled(button(Decks.EDIT, () => {
+      dk.renaming = deck.id;
+      dk.focusNext = `rename:${deck.id}`;
+      paintDecks();
+    }, { live: true }), Decks.EDIT, name);
+    edit.dataset.fkey = `edit:${deck.id}`;
+    actions.append(edit);
+    const del = labelled(button(Decks.DELETE_DECK, () => {
+      dk.confirm = `deck:${deck.id}`;
+      dk.focusNext = `confirm-delete:${deck.id}:cancel`;
+      paintDecks();
+    }, { live: true, danger: true }), Decks.DELETE_DECK, name);
+    del.dataset.fkey = `delete:${deck.id}`;
+    actions.append(del);
+  }
+  item.append(actions);
+  if (dk.confirm === `deck:${deck.id}` && !hidden) {
+    item.append(confirmBox(() => deckAct(deck.id, "delete"), `confirm-delete:${deck.id}`));
+  }
+  if (dk.opening === deck.id && !hidden) item.append(cardsBox(deck));
+  return item;
+}
+
+/** "Are you sure? ..." with Delete and Cancel. */
+function confirmBox(onDelete, fkey) {
+  const box = el("div", "deck-confirm");
+  box.setAttribute("role", "group");
+  box.append(el("p", "", Decks.DELETE_CONFIRM));
+  const actions = el("div", "goal-actions");
+  const yes = button(Decks.DELETE, onDelete, { live: true, danger: true });
+  yes.dataset.fkey = fkey;
+  const no = button(Decks.CANCEL, () => {
+    dk.confirm = "";
+    paintDecks();
+  });
+  no.dataset.fkey = `${fkey}:cancel`;
+  actions.append(yes, no);
+  box.append(actions);
+  return box;
+}
+
+/** A name box with Save and Cancel (a new deck, or a rename). */
+function nameForm(value, onSave, onCancel, fkey) {
+  const form = el("form", "todo-form");
+  form.autocomplete = "off";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "field todo-text";
+  input.maxLength = Decks.LIMITS.name;
+  input.placeholder = Decks.DECK_NAME;
+  input.setAttribute("aria-label", Decks.DECK_NAME);
+  input.value = value;
+  input.dataset.fkey = fkey;
+  const save = el("button", "btn small", Decks.SAVE);
+  save.type = "submit";
+  liveButtons.add(save);
+  syncLiveButton(save);
+  const cancel = button(Decks.CANCEL, onCancel);
+  cancel.dataset.fkey = `${fkey}:cancel`;
+  form.append(input, save, cancel);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!Decks.deckNameOk(input.value)) {
+      dk.error = "A deck name is 1 to 60 characters.";
+      paintDecks();
+      return;
+    }
+    onSave(input.value.trim());
+  });
+  return form;
+}
+
+function cardsBox(deck) {
+  const box = el("div", "deck-cards");
+  if (dk.cardsLoading && !dk.cards) box.append(el("p", "note", Decks.LOADING));
+  if (dk.cardsError) box.append(el("p", "empty failed", dk.cardsError));
+  const list = dk.cards && dk.cards.deckId === deck.id ? dk.cards : null;
+  if (!list) return box;
+  if (list.hidden) {
+    box.append(hiddenNode(0, "words"));
+    return box;
+  }
+  if (!list.cards.length) box.append(el("p", "empty", Decks.NO_CARDS));
+  for (const card of list.cards) {
+    const item = el("div", "deck-card");
+    if (dk.editing === card.id) {
+      const front = document.createElement("input");
+      front.type = "text";
+      front.className = "field";
+      front.maxLength = Decks.LIMITS.front;
+      front.setAttribute("aria-label", Decks.FRONT_LABEL);
+      front.dataset.fkey = `front:${card.id}`;
+      front.value = card.front;
+      const back = document.createElement("textarea");
+      back.className = "field keep-back";
+      back.rows = 3;
+      back.maxLength = Decks.LIMITS.back;
+      back.setAttribute("aria-label", Decks.BACK_LABEL);
+      back.dataset.fkey = `back:${card.id}`;
+      back.value = card.back;
+      const actions = el("div", "goal-actions");
+      const save = button(Decks.SAVE, () => {
+        if (!front.value.trim()) {
+          dk.error = "The front of a card is 1 to 500 characters.";
+          paintDecks();
+          return;
+        }
+        return cardAct(deck.id, card.id, "edit", front.value, back.value);
+      }, { live: true });
+      save.dataset.fkey = `save:${card.id}`;
+      const cancel = button(Decks.CANCEL, () => {
+        dk.editing = "";
+        paintDecks();
+      });
+      cancel.dataset.fkey = `cancel:${card.id}`;
+      actions.append(save, cancel);
+      item.append(front, back, actions);
+    } else {
+      item.append(el("p", "deck-front", card.front));
+      item.append(el("p", "deck-back", card.back || Decks.NO_CARD_ANSWER));
+      if (card.passage) {
+        const heading = card.keySource === "model" ? Decks.EXAMPLE_SENTENCE : Decks.FROM_TEXT;
+        item.append(el("p", "goal-note", heading));
+        item.append(el("p", "quiz-passage", card.passage));
+      }
+      if (card.keyLabel) item.append(el("p", "goal-note", card.keyLabel));
+      const actions = el("div", "goal-actions");
+      const edit = labelled(button(Decks.EDIT, () => {
+        dk.editing = card.id;
+        dk.confirm = "";
+        dk.focusNext = `front:${card.id}`;
+        paintDecks();
+      }, { live: true }), Decks.EDIT, card.front);
+      edit.dataset.fkey = `edit-card:${card.id}`;
+      const del = labelled(button(Decks.DELETE_CARD, () => {
+        dk.confirm = `card:${card.id}`;
+        dk.focusNext = `confirm-delete-card:${card.id}:cancel`;
+        paintDecks();
+      }, { live: true, danger: true }), Decks.DELETE_CARD, card.front);
+      del.dataset.fkey = `delete-card:${card.id}`;
+      actions.append(edit, del);
+      item.append(actions);
+      if (dk.confirm === `card:${card.id}`) {
+        item.append(confirmBox(() => cardAct(deck.id, card.id, "delete"), `confirm-delete-card:${card.id}`));
+      }
+    }
+    box.append(item);
+  }
+  return box;
+}
+
+function paintDecks() {
+  const box = dom.decksBody;
+  if (!box) return;
+  const focusKey = dk.focusNext || fkeyBefore(box, dk);
+  dk.focusNext = "";
+  const parts = [];
+  const view = dk.view;
+  if (dk.error) {
+    const err = el("p", "empty failed", dk.error);
+    err.setAttribute("role", "alert");
+    parts.push(err);
+  }
+  if (dk.review && view && !view.hidden) {
+    const wrap = el("div", "");
+    paintReview(wrap);
+    parts.push(wrap);
+    box.replaceChildren(...parts);
+    fkeyAfter(box, focusKey);
+    return;
+  }
+  if (!view) {
+    if (!dk.error) parts.push(el("p", "note", Decks.LOADING));
+    box.replaceChildren(...parts);
+    return;
+  }
+  const top = Decks.sectionTop(view);
+  if (!view.available) parts.push(el("p", "empty failed", view.why || Decks.MISSING));
+  const ready = el("div", "goal-block");
+  ready.append(el("h3", "subhead", Decks.CARDS_READY_HEADING));
+  if (top.line) ready.append(el("p", "", top.line));
+  const nextLine = Decks.nextReadyLine(view.nextReadyDay);
+  if (nextLine && view.ready === 0) ready.append(el("p", "note", nextLine));
+  if (top.empty) ready.append(el("p", "empty", Decks.EMPTY_STATE));
+  // One review over every deck (the phone has the same button).
+  if (view.available && !view.hidden && view.ready > 0) {
+    const all = labelled(button(Decks.REVIEW, () => startReview("")), Decks.REVIEW_ALL, "");
+    all.dataset.fkey = "review-all";
+    if (!Decks.canReviewAll(view)) all.disabled = true;
+    const allRow = el("div", "goal-actions");
+    allRow.append(all);
+    ready.append(allRow);
+  }
+  parts.push(ready);
+  // New cards a day: a number from 0 to the PC's limit.
+  const perDay = el("div", "goal-block");
+  const perLabel = el("label", "quiz-lab", Decks.NEW_PER_DAY_LABEL);
+  perLabel.htmlFor = "decks-per-day";
+  const per = document.createElement("input");
+  per.type = "number";
+  per.id = "decks-per-day";
+  per.className = "field deck-per-day";
+  per.min = "0";
+  per.max = String(view.limits.newPerDay);
+  per.step = "1";
+  per.value = String(view.newPerDay);
+  per.dataset.fkey = "per-day";
+  liveButtons.add(per);
+  syncLiveButton(per);
+  per.addEventListener("change", () => setNewPerDay(per.value, per));
+  perDay.append(perLabel, per);
+  parts.push(perDay);
+  if (view.available && view.decks.length) {
+    const list = el("div", "");
+    for (const deck of view.decks) list.append(deckRow(deck, view));
+    parts.push(list);
+    // Each row counts what that deck alone would offer today; the day's new
+    // cards are shared, so the rows can add up to more than the total above.
+    if (Decks.perDeckNoteShown(view)) parts.push(el("p", "note", Decks.PER_DECK_NOTE));
+  }
+  if (view.hidden) {
+    parts.push(el("p", "note", Decks.REVIEW_HIDDEN));
+    parts.push(hiddenNode(0, "words"));
+  }
+  // A new deck: an empty one, named here.
+  if (view.available) {
+    const add = el("div", "goal-actions");
+    if (dk.adding) {
+      parts.push(nameForm("", (value) => addDeck(value), () => {
+        dk.adding = false;
+        paintDecks();
+      }, "new-deck"));
+    } else {
+      const b = button(Decks.NEW_DECK, () => {
+        dk.adding = true;
+        dk.focusNext = "new-deck";
+        paintDecks();
+      }, { live: true });
+      b.dataset.fkey = "new-deck-open";
+      if (view.decks.length >= view.limits.decks) b.disabled = true;
+      add.append(b);
+      parts.push(add);
+    }
+  }
+  box.replaceChildren(...parts);
+  fkeyAfter(box, focusKey);
+}
+
+function renderDecks() {
+  if (dom.decksIntro) dom.decksIntro.textContent = Decks.DECKS_INTRO;
+  paintDecks();
+  if (IS_TAURI && !dk.loading && Date.now() - dk.at > DECKS_READ_MS) loadDecks();
+}
+
+/** The private lists were turned on or off, or a Show ran out: read again. */
+function rereadDecks() {
+  dk.at = 0;
+  if (state.view === "work") loadDecks();
+}
+
+trackFkeys(dom.decksBody, dk);
+trackFkeys(dom.quizRun, qz);
+
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
@@ -6834,11 +10874,18 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadSchedule);
   // Goals hides its words the same way (brain/goals.rs redact_goals).
   const rereadGoals = () => {
+    gl.measuresAt = 0;
     gl.at = 0;
     if (state.view === "work") loadGoals();
   };
   TAURI.event.listen("security-changed", rereadGoals);
   TAURI.event.listen("private-hidden", rereadGoals);
+  // A quiz's questions and marks are hidden the same way (brain/quiz.rs).
+  TAURI.event.listen("security-changed", rereadQuiz);
+  TAURI.event.listen("private-hidden", rereadQuiz);
+  // Deck names and card words are hidden the same way (brain/decks.rs).
+  TAURI.event.listen("security-changed", rereadDecks);
+  TAURI.event.listen("private-hidden", rereadDecks);
   // The deep questions are hidden with the lists too (commands.rs get_deep).
   const rereadDeep = () => {
     deep.at = 0;
@@ -7854,6 +11901,7 @@ function graphEmptyWith(words, action = null) {
   dom.graphStat.textContent = "—";
   dom.legend.replaceChildren();
   dom.inspector.hidden = true;
+  galaxyPanel.clear();
   selected = null;
   state.graph = null;
   draw();
@@ -7904,6 +11952,8 @@ function renderGraph() {
       // Dot size: how many saved facts name it (radiusOf).
       weight: Math.max(1, n.weight),
       facts: n.weight,
+      // Newest first: "Facts behind this dot" reads their words by id.
+      factIds: n.factIds,
       aliases: n.aliases,
       also: n.also,
       // Most facts first: the names worth labelling at a glance.
@@ -7946,6 +11996,7 @@ function renderGraph() {
   state.graph = { nodes: N, links: L, byId, signature };
   selected = null;
   dom.inspector.hidden = true;
+  galaxyPanel.clear();
   buildLegend();
   dom.graphStat.textContent =
     `${N.length} ${N.length === 1 ? "name" : "names"} · ${L.length} ${L.length === 1 ? "link" : "links"}`;
@@ -8382,10 +12433,27 @@ function nodeAt(clientX, clientY) {
   return best;
 }
 
+// The panel under a picked dot (galaxy-panel.js). Read-only; "Open in Memory"
+// is the same "About <name>" page the button above it opens.
+const galaxyPanel = createGalaxyPanel({
+  invoke: IS_TAURI ? invoke : null,
+  dom: {
+    root: dom.galaxyFacts,
+    title: dom.galaxyFactsTitle,
+    note: dom.galaxyFactsNote,
+    list: dom.galaxyFactsList,
+    count: dom.galaxyFactsCount,
+    live: dom.galaxyFactsLive,
+    foot: dom.galaxyFactsFoot,
+  },
+  onOpen: (entityId) => openAboutFromGalaxy(entityId),
+});
+
 function select(node) {
   selected = node;
   if (!node) {
     dom.inspector.hidden = true;
+    galaxyPanel.clear();
     draw();
     return;
   }
@@ -8408,6 +12476,9 @@ function select(node) {
   dom.nodeActions?.replaceChildren(
     button(aboutTitle(node.label), () => openAboutFromGalaxy(node.entityId),
       { title: "Opens the Memory tab at this name: its facts, word for word." }));
+
+  // "Facts behind this dot": their words, read by id, newest 20 first.
+  galaxyPanel.show(node);
 
   const g = state.graph;
   const neighbours = [];
@@ -8622,7 +12693,54 @@ for (const key of TAB_ORDER) {
  * would let arrowing past Work land nowhere.
  */
 function visibleTabOrder() {
-  return TAB_ORDER.filter((key) => advancedOpen || !ADVANCED_VIEWS.includes(key));
+  return TAB_ORDER.filter((key) => {
+    if (!advancedOpen && ADVANCED_VIEWS.includes(key)) return false;
+    if (menuManager.isHidden(`brain.tab.${key}`)) return false;
+    return true;
+  });
+}
+
+function updateMenuVisibility() {
+  const visible = visibleTabOrder();
+  for (const key of TAB_ORDER) {
+    const tab = $(`tab-${key}`);
+    const item = tab?.closest("li");
+    if (item) {
+      const isAdv = ADVANCED_VIEWS.includes(key);
+      const advHidden = isAdv && !advancedOpen;
+      const menuHidden = menuManager.isHidden(`brain.tab.${key}`);
+      item.hidden = advHidden || menuHidden;
+    }
+  }
+
+  if (!visible.includes(state.view) && visible.length > 0) {
+    showView(visible[0]);
+  }
+
+  const cards = document.querySelectorAll("[data-menu-id]");
+  for (const card of cards) {
+    const mid = card.dataset.menuId;
+    if (!mid) continue;
+    card.hidden = menuManager.isHidden(mid);
+    if (menuManager.isCollapsed(mid)) {
+      card.classList.add("card-collapsed");
+    } else {
+      card.classList.remove("card-collapsed");
+    }
+  }
+
+  const count = menuManager.hiddenCount("desktop");
+  const railHidden = $("rail-hidden-menus");
+  const railCount = $("rail-hidden-count");
+  if (railHidden && railCount) {
+    if (count > 0) {
+      railHidden.hidden = false;
+      railCount.textContent =
+        count === 1 ? WORDS.hidden_line_one : WORDS.hidden_line_many.replace("{n}", count);
+    } else {
+      railHidden.hidden = true;
+    }
+  }
 }
 
 dom.rail?.addEventListener("keydown", (event) => {
@@ -8654,16 +12772,20 @@ dom.advancedToggle?.addEventListener("click", () => {
   dom.advancedToggle.setAttribute("aria-expanded", String(advancedOpen));
   for (const key of ADVANCED_VIEWS) {
     const item = $(`tab-${key}`)?.closest("li");
-    if (item) item.hidden = !advancedOpen;
+    if (item) {
+      const menuHidden = menuManager.isHidden(`brain.tab.${key}`);
+      item.hidden = !advancedOpen || menuHidden;
+    }
   }
   // Roving tabindex needs exactly one reachable stop at all times. showView()
   // already keeps that true whenever the active view is on the visible rail;
   // the one gap is collapsing Advanced while one of ITS views is the active
   // one, which would otherwise leave every tab at -1 and the rail untabbable.
   if (!advancedOpen && ADVANCED_VIEWS.includes(state.view)) {
+    const first = visibleTabOrder()[0] || "memory";
     for (const key of TAB_ORDER) {
       const tab = $(`tab-${key}`);
-      if (tab) tab.tabIndex = key === "memory" ? 0 : -1;
+      if (tab) tab.tabIndex = key === first ? 0 : -1;
     }
   }
   renderCounts();
@@ -8791,6 +12913,8 @@ onLink((link) => {
   dom.linkPill.title = link.error || `${link.base} · last event ${link.lastId}`;
   dom.reconnectLink.hidden = link.connected;
   syncLiveButtons();
+  youtubeBlock.linkChanged();
+  retirementCard.sync();
   if (historyImport) historyImport.sync();
   paintFreshness();
   if (state.view === "now") renderLive();
@@ -8903,14 +13027,22 @@ onEvent((frame) => {
   // frame" with the list filled in (forget-range-panel.js). "Earlier chats"
   // in the bar, and "Chat history…" in the tray (`#history`), open History
   // itself (the chat audit, 2026-09-28). Navigation only.
+  updateMenuVisibility();
+  const visible = visibleTabOrder();
+  const landing = visible.includes("memory") ? "memory" : (visible[0] || "memory");
   const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
   if (place === FORGET_RANGE_PLACE) {
     await showView("history");
     await openForgetRange();
   } else if (place === HISTORY_PLACE) {
     await showView("history");
+    await applyHistoryFilePlace(takePlaceExtras());
+  } else if (place === Topics.TOPICS_PLACE) {
+    // "Switch off my work topic", said or typed: the picker opens for that
+    // topic (topic controls). Nothing changes until Change is tapped.
+    await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
   } else {
-    await showView("memory");
+    await showView(landing);
   }
 })();
 
@@ -8921,11 +13053,29 @@ async function goToPlace(place = takeAnyPlace()) {
     await openForgetRange();
   } else if (place === HISTORY_PLACE) {
     await showView("history");
+    await applyHistoryFilePlace(takePlaceExtras());
+  } else if (place === Topics.TOPICS_PLACE) {
+    await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
   }
 }
 window.addEventListener("focus", () => goToPlace());
 window.addEventListener("storage", (e) => {
   if (e.key === BRAIN_PLACE_KEY && e.newValue) goToPlace();
+  if (e.key && e.key.startsWith("jarvis.menus.")) {
+    menuManager.reload();
+    updateMenuVisibility();
+  }
+});
+
+$("btn-rail-hidden-menus")?.addEventListener("click", () => {
+  if (IS_TAURI) {
+    TAURI.core.invoke("open_fix_place", { place: "menu-visibility" });
+  } else {
+    try {
+      localStorage.setItem("jarvis.settings.place", JSON.stringify({ place: "menu-visibility", at: Date.now() }));
+    } catch {}
+    window.location.href = "settings.html#menu-visibility";
+  }
 });
 // "Chat history…" in the tray, with the Brain already open (windows.rs
 // show_brain_at): the place's name only.

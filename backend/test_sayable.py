@@ -71,7 +71,7 @@ class _Sched:
 
 
 def t_the_list_shape():
-    check("5 to 8 sentences", 5 <= len(S.SENTENCES) <= 8, len(S.SENTENCES))
+    check("5 to 10 sentences", 5 <= len(S.SENTENCES) <= 10, len(S.SENTENCES))
     check("no duplicate", len(set(S.SENTENCES)) == len(S.SENTENCES))
     for s in S.SENTENCES:
         check(f"a real sentence, not empty: {s!r}", isinstance(s, str) and s.strip() == s and s)

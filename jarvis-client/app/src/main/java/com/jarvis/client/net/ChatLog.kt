@@ -109,9 +109,12 @@ object ChatLog {
      * already shown; [kind], one of [KINDS] ("Live only" and the other
      * filters, the chat audit 2026-09-28) - anything else is not sent.
      */
-    fun listPath(before: Long? = null, limit: Int = PAGE, kind: String? = null): String =
+    fun listPath(before: Long? = null, limit: Int = PAGE, kind: String? = null, tag: String? = null): String =
         "$LIST_PATH?limit=${limit.coerceIn(1, 100)}" + (before?.let { "&before=$it" } ?: "") +
-            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "")
+            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "") +
+            // `tag=<id>` or `tag=none` (section 10); anything else is not sent.
+            (tag?.takeIf { it == "none" || (it.isNotEmpty() && it.length <= 9 && it.all { c -> c in '0'..'9' } && it.toInt() > 0) }
+                ?.let { "&tag=$it" } ?: "")
 
     fun conversationPath(id: String): String = "$CONVERSATION_PATH?id=${URLEncoder.encode(id, "UTF-8")}"
 
@@ -164,6 +167,8 @@ object ChatLog {
         val tainted: Boolean,
         /** What kind of conversation it is ([KINDS]); an older PC's rows are "chat". */
         val kind: String = "chat",
+        /** The tag it is filed under (docs/CHAT-TAGS-DESIGN.md section 10), or null: untagged, or an older PC. */
+        val tagId: Int? = null,
     )
 
     /** One page: the settings, its rows, and whether there may be older ones. */
@@ -178,6 +183,13 @@ object ChatLog {
         val readOutside: Boolean,
         /** False on a user turn whose answer the PC did not keep (a cloud answer, or one that did not finish). */
         val answerKept: Boolean = true,
+        /**
+         * The turn's number in its chat, as the PC counts it (`idx`, JARVIS-API
+         * section 110): what "Fork from here" sends as `upto`. Null from an
+         * older PC, or a value that is not a whole number 0 or more - such a
+         * turn gets no fork button.
+         */
+        val idx: Int? = null,
     )
 
     data class Transcript(
@@ -197,6 +209,32 @@ object ChatLog {
          * from it ([ChatHistory.continuedHistoryLine], the owner, 2026-09-29).
          */
         val keeping: Keeping? = null,
+        /** The tag it is filed under, or null (section 10 of docs/CHAT-TAGS-DESIGN.md). */
+        val tagId: Int? = null,
+        /**
+         * Whether "Fork from here" is offered (`forkable`, JARVIS-API section
+         * 110). False from an older PC that says nothing: no fork buttons.
+         */
+        val forkable: Boolean = false,
+        /**
+         * Why it cannot be forked, shown where the button would be: the PC's
+         * `fork_why`, else [ChatFork.NO]. Null when it can be forked, and
+         * null from an older PC that sends no `forkable` at all (it says
+         * nothing rather than a reason it does not have).
+         */
+        val forkWhy: String? = null,
+        /**
+         * "New section here" (JARVIS-API section 106): the turn numbers (`idx`)
+         * a divider sits ABOVE. Empty from an older PC.
+         */
+        val marks: Set<Int> = emptySet(),
+        /**
+         * Whether the owner's messages get the "New section here" button
+         * (`markable`). False from an older PC that says nothing: no buttons.
+         */
+        val markable: Boolean = false,
+        /** Why not, when the PC says (`mark_why`); shown only as an error's sentence, never drawn. */
+        val markWhy: String? = null,
     )
 
     /** `history.enabled` / `history.recording` on a conversation; each null when not clearly a yes or a no. */
@@ -239,6 +277,7 @@ object ChatLog {
                 hasVoice = o.flag("has_voice") == true,
                 tainted = o.flag("tainted") == true,
                 kind = kindOf(o.str("kind")),
+                tagId = o.whole("tag_id")?.toInt(),
             )
         }
         val raw = (body["conversations"] as? JsonArray)?.size ?: 0
@@ -268,6 +307,7 @@ object ChatLog {
                 readOutside = o.flag("read_outside") == true,
                 // Only "false" from the PC says so; an older PC sends nothing.
                 answerKept = o.flag("answer_kept") != false,
+                idx = o.whole("idx")?.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt(),
             )
         }
         val kind = kindOf(body.str("kind"))
@@ -275,6 +315,8 @@ object ChatLog {
         // row says it is a support or chatbot record.
         val others = turns.any { it.role == "support" || it.role == "chatbot" }
         val continuable = body.flag("continuable") ?: (kind in CONTINUABLE && !others)
+        // An older PC sends no `forkable`: no fork buttons and no reason line.
+        val forkFlag = body.flag("forkable")
         return Transcript(
             id, body.str("title") ?: UNTITLED, body.flag("tainted") == true, turns,
             kind = kind,
@@ -282,6 +324,12 @@ object ChatLog {
             continueWhy = if (continuable) null else body.str("continue_why") ?: CONTINUE_WHY[kind]
                 ?: CONTINUE_WHY.getValue("support"),
             keeping = (body["history"] as? JsonObject)?.let { Keeping(it.flag("enabled"), it.flag("recording")) },
+            tagId = body.whole("tag_id")?.toInt(),
+            forkable = forkFlag == true,
+            forkWhy = if (forkFlag == false) body.str("fork_why") ?: ChatFork.NO else null,
+            marks = ChatMark.marksOf(body["marks"]),
+            markable = body.flag("markable") == true,
+            markWhy = body.str("mark_why"),
         )
     }
 
@@ -363,6 +411,7 @@ object ChatLog {
                     hasVoice = o.flag("has_voice") == true,
                     tainted = o.flag("tainted") == true,
                     kind = kindOf(o.str("kind")),
+                    tagId = o.whole("tag_id")?.toInt(),
                 ),
                 hits = o.whole("hits")?.toInt() ?: 0,
                 snippet = Snippet(

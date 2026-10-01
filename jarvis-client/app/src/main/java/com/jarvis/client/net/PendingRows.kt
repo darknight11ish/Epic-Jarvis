@@ -125,6 +125,13 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     val detailRepeats = preview != null && preview == summary &&
         (detailObj == null || detailObj.keys == setOf(previewKey))
     if (detailText == null || detailRepeats) out.remove("detail") else out["detail"] = JsonPrimitive(detailText)
+    // A tag-suggestion card (TagSuggest): keep the PC's hidden version beside
+    // the whole one, and never show the raw detail (it holds both texts, and the
+    // whole one has the chat's title). Which text shows is decided at draw time.
+    if (action == TagSuggest.CARD_ACTION) {
+        out["summary_hidden"] = JsonPrimitive(detailObj?.let { textOf(it["text_hidden"]) } ?: "")
+        out.remove("detail")
+    }
 
     // --- the shapes that must be objects or arrays, or not be there at all
     if (obj["risk"] !is JsonObject) out.remove("risk")

@@ -218,7 +218,7 @@ await check("CONTROL: the Rust reads the list, asks for merge cards, and hides t
   assert.match(read("src/brain.js"), /memory: \["memory_facts", "memory_pending", "memory_entities"\]/);
 });
 
-await check("CONTROL: the phone calls neither (the memory graph stays off the phone)", async () => {
+await check("CONTROL: the phone asks for no merge cards and draws no graph (its plain People and things list, owner 2026-09-30, a list, no picture)", async () => {
   const root = join(HERE, "..", "..", "jarvis-client", "app", "src", "main", "java");
   const all = [];
   const walk = (d) => {
@@ -230,7 +230,9 @@ await check("CONTROL: the phone calls neither (the memory graph stays off the ph
   };
   walk(root);
   const kt = all.join("\n");
-  assert.ok(!kt.includes("/api/memory/entities"), "the phone reads the entity list");
+  // Owner 2026-09-30 (docs/GALAXY-PANEL-DESIGN.md option B): the phone reads the
+  // list for a plain "People and things" list - and no picture.
+  assert.ok(!kt.includes("buildEntityGraph") && !kt.includes("RuntimeShader(\"galaxy"), "the phone draws a graph");
   assert.ok(!kt.includes("merge_cards"), "the phone asks for merge cards");
   assert.match(readRepo("docs/ARCHITECTURE.md"), /About <name>/);
 });

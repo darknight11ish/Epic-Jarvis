@@ -312,9 +312,9 @@ def diff_of(before: str, after: str, work: Path, out: Path):
     g.mkdir()
     git(["init", "-q"], g)
     git(["config", "core.autocrlf", "false"], g)
-    (g / "jarvis_hud.py").write_text(before, encoding="utf-8", newline="\n")
+    (g / "jarvis_hud.py").write_text(before, encoding="utf-8")
     git(["add", "jarvis_hud.py"], g)
-    (g / "jarvis_hud.py").write_text(after, encoding="utf-8", newline="\n")
+    (g / "jarvis_hud.py").write_text(after, encoding="utf-8")
     r = git(["diff", f"--output={out}"], g)
     assert r.returncode == 0 and out.stat().st_size > 0, r.stderr
 
@@ -350,7 +350,7 @@ def t_the_upgrade_rule_on_a_made_up_backend():
         def backend(state):
             b = w / f"be-{len(list(w.glob('be-*')))}"
             b.mkdir()
-            (b / "jarvis_hud.py").write_text(text(state), encoding="utf-8", newline="\n")
+            (b / "jarvis_hud.py").write_text(text(state), encoding="utf-8")
             return b
 
         b = backend(two_old)

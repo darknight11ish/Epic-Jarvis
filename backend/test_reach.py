@@ -116,7 +116,8 @@ def ctx(enabled=(), tiers=None, **kw):
                 search={"provider": "searxng", "searxng_url": "http://127.0.0.1:8888",
                         "ask_every_time": False, "why": ""},
                 key_saved=lambda p: None, second_card={"master": False, "features": {}},
-                big_model={"master": False}, gate_action=lambda lookup: None)
+                big_model={"master": False}, gate_action=lambda lookup: None,
+                youtube={"ready": None})
     base.update(kw)
     return R.Ctx(**base)
 
@@ -126,6 +127,23 @@ ALL = set(R.TOOL_NAMES)
 
 def row(v, id_):
     return next(r for r in v["rows"] if r["id"] == id_)
+
+
+def t_youtube_row():
+    r = row(R.view(ctx(youtube={"ready": True})), "youtube")
+    check("YouTube captions: on, youtube.com, asks every time, says it breaks the terms",
+          r["state"] == "on" and r["where"] == "youtube.com" and r["asks"] == R.ASK_EVERY
+          and "breaks YouTube's terms" in r["line"] and "outside text" in r["line"], repr(r))
+    r = row(R.view(ctx(youtube={"ready": None})), "youtube")
+    check("YouTube captions: not set up when the module is not on this PC",
+          r["state"] == "not_set_up" and "apply-patches.ps1" in r["line"], repr(r))
+    r = row(R.view(ctx(youtube={"ready": False})), "youtube")
+    check("YouTube captions: not set up when the caption reader is not installed",
+          r["state"] == "not_set_up" and "youtube-transcript-api" in r["line"], repr(r))
+    r = row(R.view(ctx(youtube={"ready": True}, tiers={"youtube_captions_read": "never"})),
+            "youtube")
+    check("YouTube captions: blocked when the settings say never",
+          r["state"] == "blocked" and r["asks"] == R.ASK_NEVER, repr(r))
 
 
 def t_rows_and_order():
@@ -661,7 +679,7 @@ def t_both_apps_read_the_current_contract():
 
 
 if __name__ == "__main__":
-    for fn in (t_rows_and_order, t_chatbot_row, t_chatbot_api_row, t_no_secret_anywhere,
+    for fn in (t_rows_and_order, t_youtube_row, t_chatbot_row, t_chatbot_api_row, t_no_secret_anywhere,
                t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,

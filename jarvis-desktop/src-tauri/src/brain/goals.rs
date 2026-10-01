@@ -73,6 +73,14 @@ pub(crate) fn valid_id(id: &str) -> bool {
             .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
 }
 
+/// The step is not one of this goal's (a bad id or no way to say which).
+pub(crate) const NO_SUCH_STEP: &str = "That is not one of this goal's steps.";
+
+/// A step id as the PC makes them: `s1` to `s9` (jarvis_goals.STEP_IDS).
+pub(crate) fn valid_step_id(id: &str) -> bool {
+    matches!(id.as_bytes(), [b's', b'1'..=b'9'])
+}
+
 fn parsed(body: &str) -> Option<serde_json::Value> {
     serde_json::from_str::<serde_json::Value>(body)
         .ok()
@@ -138,6 +146,14 @@ pub(crate) fn redact_goals(mut list: serde_json::Value) -> serde_json::Value {
                             if let Some(s) = step.as_object_mut() {
                                 s.insert("step".into(), serde_json::json!(""));
                                 s.insert("by".into(), serde_json::json!(""));
+                                // The lock sentences name other steps, and a
+                                // number's name and value are the owner's
+                                // own words: out too. State and ids stay.
+                                for key in ["lock_words", "reached_words", "measure_name"] {
+                                    if s.contains_key(key) {
+                                        s.insert(key.into(), serde_json::json!(""));
+                                    }
+                                }
                             }
                         }
                     }
@@ -209,25 +225,44 @@ pub async fn brain_goals_accept(
     post(&app, &format!("/api/goals/{id}/accept"), body).await
 }
 
+/// The body of a tick: the step by its stable id (`"s1"` to `"s9"`, what a
+/// plan with locks uses) or, from an older PC's plan, by position. Never
+/// both, never anything else - the PC decides whether the step is locked
+/// (a `409` with its own sentence) and sets `done_at` itself.
+pub(crate) fn step_body(
+    index: Option<i64>,
+    step_id: Option<&str>,
+    done: bool,
+) -> Result<serde_json::Value, String> {
+    match (step_id, index) {
+        (Some(sid), _) => {
+            if !valid_step_id(sid) {
+                return Err(NO_SUCH_STEP.to_string());
+            }
+            Ok(serde_json::json!({ "id": sid, "done": done }))
+        }
+        (None, Some(i)) => Ok(serde_json::json!({ "index": i, "done": done })),
+        (None, None) => Err(NO_SUCH_STEP.to_string()),
+    }
+}
+
 /// One step, marked done or not - no card, the same shape as ticking off a
-/// to-do item. Held on a stale link.
+/// to-do item. Held on a stale link. A locked step answers `409` with the
+/// PC's sentence, passed on as an error and changing nothing.
 #[tauri::command]
 pub async fn brain_goals_step(
     app: AppHandle,
     id: String,
-    index: i64,
+    index: Option<i64>,
+    step_id: Option<String>,
     done: bool,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     if !valid_id(&id) {
         return Err(NO_SUCH_GOAL.to_string());
     }
-    post(
-        &app,
-        &format!("/api/goals/{id}/step"),
-        serde_json::json!({ "index": index, "done": done }),
-    )
-    .await
+    let body = step_body(index, step_id.as_deref(), done)?;
+    post(&app, &format!("/api/goals/{id}/step"), body).await
 }
 
 /// Stops tracking the goal and deletes its check-in job on the PC. No card,
@@ -315,6 +350,106 @@ mod tests {
         assert_eq!(hidden["goals"][0]["hidden"], true);
         assert_eq!(hidden["goals"][0]["status"], "active");
         assert_eq!(hidden["goals"][0]["plan"][0]["done"], false);
+    }
+
+    /// The real answers of the real backend (tools/gen_projects_cases.py).
+    const CASES: &str = include_str!("../../../tests/fixtures/projects-cases.json");
+
+    fn cases() -> serde_json::Value {
+        serde_json::from_str(CASES).expect("projects-cases.json is JSON")
+    }
+
+    #[test]
+    fn a_step_id_is_s1_to_s9_and_a_tick_names_the_step_one_way() {
+        for good in ["s1", "s5", "s9"] {
+            assert!(valid_step_id(good), "{good}");
+        }
+        for bad in ["", "s0", "s10", "S1", "g1", "s", "1", "../s1"] {
+            assert!(!valid_step_id(bad), "{bad}");
+        }
+        assert_eq!(
+            step_body(None, Some("s2"), true).unwrap(),
+            serde_json::json!({"id": "s2", "done": true})
+        );
+        assert_eq!(
+            step_body(Some(1), None, false).unwrap(),
+            serde_json::json!({"index": 1, "done": false})
+        );
+        // An id wins and only the id is sent.
+        assert_eq!(
+            step_body(Some(1), Some("s3"), true).unwrap(),
+            serde_json::json!({"id": "s3", "done": true})
+        );
+        assert_eq!(
+            step_body(None, Some("s10"), true).unwrap_err(),
+            NO_SUCH_STEP
+        );
+        assert_eq!(step_body(None, None, true).unwrap_err(), NO_SUCH_STEP);
+    }
+
+    #[test]
+    fn every_real_goal_answer_is_passed_on_with_the_new_step_fields_untouched() {
+        let doc = cases();
+        let all = doc["goal_cases"].as_object().expect("goal_cases");
+        for name in [
+            "created",
+            "first_undone",
+            "ticked_by_hand",
+            "second_ticked",
+            "number_reached",
+        ] {
+            let post = &all[name];
+            let (status, body) = match post.get("body") {
+                Some(b) => (post["status"].as_u64().unwrap() as u16, b),
+                None => (200, post),
+            };
+            let got =
+                change_answer(status, &body.to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(&got, body, "{name}: a field was dropped or changed");
+        }
+        let list = &all["list"];
+        let got = list_answer(200, &list.to_string()).unwrap();
+        assert_eq!(&got, list, "the list lost a field");
+    }
+
+    #[test]
+    fn every_refusal_is_the_pcs_own_sentence_including_a_locked_tick() {
+        let doc = cases();
+        let all = doc["goal_cases"].as_object().expect("goal_cases");
+        for name in [
+            "refuse_cycle",
+            "refuse_self",
+            "refuse_unknown",
+            "refuse_too_many",
+            "refuse_tick_locked",
+        ] {
+            let post = &all[name];
+            let status = post["status"].as_u64().unwrap() as u16;
+            let said = post["body"]["error"].as_str().unwrap();
+            assert_eq!(
+                change_answer(status, &post["body"].to_string()).unwrap_err(),
+                said,
+                "{name}"
+            );
+        }
+        assert_eq!(all["refuse_tick_locked"]["status"], 409);
+    }
+
+    #[test]
+    fn hidden_goals_also_lose_the_lock_sentences_and_a_numbers_name() {
+        let doc = cases();
+        let hidden = redact_goals(doc["goal_cases"]["list"].clone());
+        let s = hidden.to_string();
+        for leaked in ["Get the 5k under 30", "Enter the race", "5k time", "29 min"] {
+            assert!(!s.contains(leaked), "{leaked} leaked while hidden");
+        }
+        let step = &hidden["goals"][0]["plan"][1];
+        assert_eq!(step["lock_words"], "");
+        assert_eq!(step["reached_words"], "");
+        assert_eq!(step["measure_name"], "");
+        // Ids, state and the tick stay, as before.
+        assert_eq!(step["id"], "s2");
+        assert!(step["state"].is_string());
     }
 
     #[test]

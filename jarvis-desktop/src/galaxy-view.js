@@ -73,6 +73,9 @@ export function buildEntityGraph(view) {
     label: e.name,
     group: groupFor(e.kind),
     weight: Array.isArray(e.factIds) ? e.factIds.length : 0,
+    // Newest first, as the PC sends them: the "facts behind this dot" panel
+    // reads their words by id, a page at a time.
+    factIds: Array.isArray(e.factIds) ? e.factIds : [],
     aliases: Array.isArray(e.aliases) ? e.aliases : [],
     also: Array.isArray(e.also) ? e.also : [],
   }));
@@ -130,4 +133,82 @@ export function findStatus(at, total) {
   if (!total) return "No name matches that.";
   if (total === 1) return "1 match.";
   return `${at + 1} of ${total}. Press Enter for the next.`;
+}
+
+/* ==========================================================================
+ * "Facts behind this dot" - the pure half of the panel
+ * (docs/GALAXY-PANEL-DESIGN.md sections 2, 3 and 7; JARVIS-API.md section 106).
+ *
+ * The words are the shared `galaxy_panel*` keys, word for word, in
+ * tests/fixtures/galaxy-cases.json (written by tools/gen_galaxy_cases.py).
+ * Facts are read by id from `GET /api/memory/used` only - nothing else.
+ * ========================================================================== */
+
+/** The shared words. `{count}`, `{n}` and `{total}` are filled by code. */
+export const PANEL_WORDS = Object.freeze({
+  galaxy_panel: "Facts behind this dot ({count})",
+  galaxy_panel_more: "Show 20 more",
+  galaxy_panel_showing: "Showing {n} of {total}",
+  galaxy_panel_reading: "Reading the facts...",
+  galaxy_panel_erased: "Erased. Only the dates are kept.",
+  galaxy_panel_forgotten: "Forgotten",
+  galaxy_panel_pinned: "Pinned",
+  galaxy_panel_hidden: "Hidden. Show memory lists to see these facts.",
+  galaxy_panel_empty: "No facts to show.",
+  galaxy_panel_failed: "Your PC could not read these facts.",
+  galaxy_panel_retry: "Try again",
+  galaxy_panel_open: "Open in Memory",
+  galaxy_panel_topics_hidden: "{n} hidden by topic settings",
+});
+
+/** How many facts one page shows, and the most ids one read may carry. */
+export const PANEL_PAGE = 20;
+export const PANEL_MAX_IDS = 100;
+
+/** Fills `{count}`, `{n}` and `{total}` in one of the words. */
+export function panelWords(key, vars = {}) {
+  const t = PANEL_WORDS[key] || "";
+  return t.replace(/\{(count|n|total)\}/g, (_, k) => String(vars[k] ?? 0));
+}
+
+/**
+ * The fact ids of one page of a dot (page 0 is the newest `size`). Never more
+ * than 100, and page N+1 starts exactly where page N stopped.
+ */
+export function factPage(node, page, size = PANEL_PAGE) {
+  const ids = node && Array.isArray(node.factIds) ? node.factIds : [];
+  const n = Math.max(1, Math.min(PANEL_MAX_IDS, Math.floor(Number(size)) || PANEL_PAGE));
+  const p = Math.max(0, Math.floor(Number(page)) || 0);
+  return ids.slice(p * n, p * n + n);
+}
+
+/**
+ * One fact (memory-used.js readUsed's shape) -> how its row reads:
+ * `{id, skip, text, erased, forgotten, pinned, created, erasedAt, leftOut}`.
+ * An erased fact has no words: its row says the erased line. A fact hidden by
+ * a topic setting is `skip` (counted, never shown). A retired fact is marked
+ * Forgotten; a pinned one Pinned (only a current fact can be pinned).
+ */
+export function factRow(fact) {
+  const f = fact && typeof fact === "object" ? fact : {};
+  const erased = Boolean(f.erasedAt);
+  const leftOut = f.leftOut === true && !erased;
+  return {
+    id: f.id,
+    skip: leftOut,
+    leftOut,
+    erased,
+    text: erased ? PANEL_WORDS.galaxy_panel_erased : (leftOut ? "" : String(f.text || "")),
+    forgotten: !erased && f.current !== true,
+    pinned: !erased && f.pinned === true,
+    created: typeof f.created === "number" ? f.created : null,
+    erasedAt: erased ? f.erasedAt : null,
+  };
+}
+
+/** Current facts before forgotten ones, otherwise in the order read (newest first). */
+export function sortRows(rows) {
+  return rows.map((r, i) => [r, i])
+    .sort((a, b) => Number(a[0].forgotten) - Number(b[0].forgotten) || a[1] - b[1])
+    .map((x) => x[0]);
 }

@@ -799,6 +799,13 @@ class JarvisApi(
     suspend fun memoryShared(): ApiResult<JsonObject> = probe(MemoryShared.PATH)
 
     /**
+     * `GET /api/memory/entities`: "People and things" - the names saved facts
+     * are linked to, with the fact ids behind each and no words
+     * ([Entities.parse]). The words come from [memoryUsed]. A read.
+     */
+    suspend fun memoryEntities(): ApiResult<JsonObject> = probe(Entities.PATH)
+
+    /**
      * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
      * the to-do list ([Schedule.parse]). A 404 or 501 is a PC without the
      * scheduler ([Schedule.missing]). A read.
@@ -1011,6 +1018,81 @@ class JarvisApi(
         }
 
     /**
+     * The quiz calls wait for the PC's local model (writing questions,
+     * marking an answer), so they get the long client's time. Lazy, like the
+     * other longer clients here.
+     */
+    private val quizCallClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(130, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * Every "Quiz me on a text" call (`/api/quiz`, docs/STUDY-FROM-TEXT-DESIGN.md
+     * section 11): [json] null makes it a GET, otherwise a POST. The status and
+     * body come back whole ([Quiz.Reply]) because the PC's error CODE (not the
+     * status alone) says what went wrong. The pasted text and the answers are
+     * in the request body only - never in a URL, never logged.
+     */
+    suspend fun quizCall(path: String, json: String?): ApiResult<Quiz.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                quizCallClient.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Quiz.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * Every "My study decks" call (`/api/decks...`, `/api/review...`;
+     * docs/QUIZ-DECKS-DESIGN.md, contract C4): [json] null makes it a GET,
+     * otherwise a POST. The status and body come back whole ([Decks.Reply])
+     * because the PC's error code and its own `message` are what the screen
+     * shows. Card words travel in the request body only - never in a URL,
+     * never logged. Reviewing calls no model, so the short client is enough.
+     */
+    suspend fun decksCall(path: String, json: String?): ApiResult<Decks.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Decks.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/used?ids=`: the words of the few facts an answer used
      * (its `X-Jarvis-Route` names them by id only), or that automatic
      * learning just saved (the `memory_saved` event's ids) - the owner's
@@ -1034,6 +1116,67 @@ class JarvisApi(
             ?: return ApiResult.Failed(ApiError.Malformed("no answer id to read"))
         return probe(path)
     }
+
+    /**
+     * `GET /api/chat/table?id=` - the spending table a chat answer announced
+     * with `: jarvis-table <id>` in its stream (docs/JARVIS-API.md section
+     * 100.2). `X-Jarvis-Token` and `X-Jarvis-Client: hud` ride along like on
+     * every request ([authed]); the token is never logged. The id is checked
+     * to be exactly 32 lowercase hex characters before it goes into the URL
+     * ([Spending.tablePath]). A read. A 404 is "gone"
+     * ([Spending.gone]): the PC keeps a table two hours, in memory only.
+     */
+    suspend fun chatTable(id: String?): ApiResult<JsonObject> {
+        val path = Spending.tablePath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed("no table id to read"))
+        return probe(path)
+    }
+
+    /**
+     * `GET /api/spending` - the bank layouts, categories and waiting files,
+     * read-only on the phone ([Spending.parseView]). Any device may read it. A read.
+     */
+    suspend fun spending(): ApiResult<JsonObject> = probe(Spending.VIEW_PATH)
+
+    /**
+     * `GET /api/retirement/defaults` - the Retirement what-if form: fields,
+     * limits, units, the made-up default figures and the PC's words
+     * ([Retirement.parseDefaults]). Any device may read it. A read.
+     */
+    suspend fun retirementDefaults(): ApiResult<JsonObject> = probe("/api/retirement/defaults")
+
+    /** A run can take up to 30 seconds on the PC (its own cap), so this waits a little longer. */
+    private val retirementClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(40, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * `POST /api/retirement/run` - the typed boxes ([Retirement.requestBody])
+     * in, the status and JSON body back whole ([Retirement.Reply]) because the
+     * PC's error code and its own message say what to show. `X-Jarvis-Client:
+     * hud` and the token ride along like on every request ([authed]); the
+     * body is the owner's money and is never logged or kept.
+     */
+    suspend fun retirementRun(json: String): ApiResult<Retirement.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/retirement/run") ?: return@withContext ApiResult.Failed(noAddress())
+            val req = Request.Builder().url(target)
+                .post(json.toRequestBody("application/json".toMediaType())).authed().build()
+            runCatching {
+                retirementClient.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Retirement.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     /**
      * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
@@ -1096,6 +1239,44 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(ForgetRange.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * Topic controls (docs/JARVIS-API.md section 107): a read (`json` null,
+     * a GET - the list, a preview, a review batch, "Show them") or ONE change
+     * (a POST of `json`). The path comes from [Topics] and nothing outside
+     * `/api/topics` is sent. The status and body come back whole
+     * ([Topics.Reply]): a 202 (a card was raised), a 404 the PC sent itself
+     * ("that topic is not there any more") and a 404 from a PC without the
+     * routes all read differently. Carries the pairing token and
+     * `X-Jarvis-Client: hud` like every call ([authed]); neither is logged.
+     */
+    suspend fun topicsCall(path: String, json: String?): ApiResult<Topics.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Topics.TOPICS_PATH && !path.startsWith(Topics.TOPICS_PATH + "/") &&
+                !path.startsWith(Topics.TOPICS_PATH + "?")
+            ) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a topics route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Topics.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
@@ -1170,6 +1351,50 @@ class JarvisApi(
                         ApiResult.Failed(ApiError.BadToken)
                     } else {
                         ApiResult.Ok(Projects.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * The activity heatmap (docs/JARVIS-API.md section 105.1): a GET of
+     * `/api/progress/activity`, [weeks] kept to 4..26. The status and body come
+     * back whole ([Progress.Reply]) - a 404 from a PC without the route means
+     * "draw nothing". A read; nothing is kept.
+     */
+    suspend fun progressActivity(weeks: Int): ApiResult<Progress.Reply> =
+        progressCall("/api/progress/activity?weeks=" + weeks.coerceIn(4, 26), null)
+
+    /** The balance chart and its picker (section 105.2): a GET of `/api/progress/balance`. */
+    suspend fun progressBalance(): ApiResult<Progress.Reply> =
+        progressCall("/api/progress/balance", null)
+
+    /**
+     * Replaces the balance chart's areas (section 105.3): a POST of
+     * `/api/progress/balance` with [Progress.saveBody]. No card. A refusal comes
+     * back as a 400 whose sentence is shown as sent.
+     */
+    suspend fun progressBalanceSave(json: String): ApiResult<Progress.Reply> =
+        progressCall("/api/progress/balance", json)
+
+    private suspend fun progressCall(path: String, json: String?): ApiResult<Progress.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Progress.Reply(resp.code, obj))
                     }
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
@@ -1256,8 +1481,119 @@ class JarvisApi(
     // shapes, the words and the rules; these only carry them.
 
     /** `GET /api/history`: the switch and one page of conversations, newest first. */
-    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
-        probe(ChatLog.listPath(before, kind = kind))
+    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
+        probe(ChatLog.listPath(before, kind = kind, tag = tag))
+
+    /**
+     * `GET /api/history/tags` (docs/CHAT-TAGS-DESIGN.md section 10): the
+     * owner's tags with a count each. A read; a PC without tags answers 404,
+     * which comes back as [ApiError.NotFound].
+     */
+    suspend fun historyTags(): ApiResult<JsonObject> = probe("/api/history/tags")
+
+    /**
+     * `POST /api/history/tags` (add, rename, style, move, delete) or
+     * `POST /api/history/tag` (file one chat): the status and body come back
+     * whole, so a refusal ({"ok": false, "error", "message"}) reaches the
+     * owner as the PC wrote it. [path] is one of the two, nothing else is
+     * sent. A 404 without `ok` in the body is a PC without the routes.
+     */
+    suspend fun tagsPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path != ChatTags.TAGS_PATH && path != ChatTags.TAG_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a tags route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `POST /api/history/fork` (docs/JARVIS-API.md section 110): [json] is
+     * [ChatFork.body], exactly `{"id", "upto"}`. The status and body come back
+     * whole, so a refusal ({"ok": false, "error", "message"}) reaches the owner
+     * as the PC wrote it. Sent with the pairing token and `X-Jarvis-Client:
+     * hud` like every call ([authed]); the token is never logged. A 404
+     * without `ok` in the body is a PC without the route.
+     */
+    suspend fun forkPost(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/history/fork") ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `POST /api/history/mark` ("New section here", docs/JARVIS-API.md section
+     * 106): [json] is [ChatMark.body], exactly `{"id", "idx", "on"}`. The
+     * status and body come back whole so a refusal reaches the owner as the PC
+     * wrote it. Same shape and rules as [forkPost]; the token is never logged.
+     */
+    suspend fun markPost(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(ChatMark.MARK_PATH, json)
+
+    /**
+     * `GET /api/history/tags/suggest` (section 104): a read of the "Suggest
+     * tags overnight" switch. Never held on a stale link. A 404 is a PC
+     * without the route.
+     */
+    suspend fun tagSuggestState(): ApiResult<JsonObject> = probe(TagSuggest.PATH)
+
+    /** `POST /api/history/tags/suggest`: [json] is [TagSuggest.body], exactly `{"enabled": bool}`. */
+    suspend fun tagSuggestPost(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(TagSuggest.PATH, json)
+
+    /** One JSON POST to a History route, the answer whole (status and body), like [forkPost]. */
+    private suspend fun historyWrite(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     /**
      * `GET /api/memory/fact-chat?id=` (the chat audit, 2026-09-28): which chat

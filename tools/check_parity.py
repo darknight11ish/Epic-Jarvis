@@ -187,7 +187,7 @@ CLASSIFICATION = {
     "/api/ledger": ("ported", "Brain screen, read-only."),
     "/api/memory/decide": ("ported", "The review queue: one card, one decision."),
     "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
-    "/api/memory/entities": ("deliberate", "\"Who is my sister?\" (memory wave 3, 2026-09-25; backend/memory-entities.patch, rebuilt/jarvis_memory.py entities_view()): the people and things saved facts are linked to, for the desktop's names under each fact and \"About <name>\", and the \"are these the same?\" card (/api/memory/pending?merge_cards=1). That is the memory graph, which stays off the phone (CLAUDE.md; ARCHITECTURE.md section 8). The phone's recall improves all the same: recall happens on the PC."),
+    "/api/memory/entities": ("ported", "\"People and things\" (owner, 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): the phone gets a plain grouped LIST of the names saved facts are linked to and the facts behind each (Brain, read-only, net/Entities.kt and ui/screens/EntitiesPlate.kt), hidden under Hide memory lists and chat history. Not the Galaxy or any map or links: the picture, the names under each fact, About <name> and the \"are these the same?\" merge card stay the desktop's. Backend: memory-entities.patch."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
     "/api/memory/forget": ("ported", "Forget ONE fact (retired, not deleted; no undo). Desktop: Brain, Memory, every fact (brain_memory_forget, with an optional date). Phone, since automatic learning (owner, 2026-09-24: every auto-saved fact is listed in both apps with a one-tap Forget): Brain, Saved automatically, auto-saved facts only (AutoLearnPlate.kt, JarvisApi.forgetFact). Both ask first and hold it on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
@@ -196,6 +196,25 @@ CLASSIFICATION = {
     "/api/memory/fact-history": ("deliberate", "\"History of this fact\" (the owner's choice of 2026-09-28; docs/JARVIS-API.md section 71; backend/brain-reads.patch, rebuilt/jarvis_memory.py fact_history_view()): every earlier and later wording of one fact, with the changed words marked - an erased version never with its words. Desktop: Brain -> Memory, on each fact in \"What Jarvis knows about you\" that has more than one version (brain/fact_history.rs, fact-history.js), hidden like every memory list. Kept off the phone (ARCHITECTURE.md section 8): the phone lists only facts saved automatically that are still in use, which are never corrections, and a view that brings back retired wordings of any fact is the deep memory editing that stays on the desktop."),
     "/api/memory/used": ("ported", "\"Used in this answer\" and \"Jarvis remembered N things\" (owner, 2026-09-25; backend/temporary-chat.patch, rebuilt/jarvis_memory.py used_view()): the words of the few facts an answer used (X-Jarvis-Route's injected_ids) or automatic learning just saved (the memory_saved event's ids), read by id only when the owner opens the line. A read, hidden like every memory list. Desktop: the quickbar under an answer, and the Brain's \"Jarvis remembered N things\" (brain/used.rs memory_used, answer-memory.js, brain.js), with Forget and Erase on each. Phone: Home under an answer, and the Brain's \"Jarvis remembered N things\" (UsedMemoriesPlate.kt, net/MemoryUsed.kt), with Forget on each; Erase stays in Saved automatically on the phone (ARCHITECTURE.md section 8)."),
     "/api/chat/sources": ("ported", "\"Where this came from\" (feasibility I42/I132, 2026-09-27; backend/answer-sources.patch, jarvis_sources.py): the notes, wiki pages, web results and files a reading tool actually returned this turn, by reference only, plus the quote check, read by the SAME turn_id \"Used in this answer\" and the right/wrong mark already use, once the answer finishes. A read, hidden under the exact same gate as \"Used in this answer\", not a second one. Desktop: the quickbar under an answer (brain/sources.rs chat_sources, answer-memory.js/memory-used.js extended). Phone: Home under an answer (net/ChatSources.kt, UsedMemoriesPlate.kt's ChatSourcesList), reusing ChatSession.turnId already tracked for the right/wrong mark."),
+    # "Spending summaries" (2026-09-30; backend jarvis_spending.py, spending.patch;
+    # JARVIS-API section 100, docs/FINANCE-DESIGN.md "Slice contract (frozen)").
+    # Built on the backend first; each app builds against the frozen contract.
+    "/api/chat/table": ("ported", "The spending table a chat answer announced with `: jarvis-table <id>` in its stream (or `jarvis_table` on a stream:false body): title, columns, sections, caveats, kept two hours in memory only, never in chat history. Both apps draw it natively in the chat; hidden under \"Hide memory lists and chat history\" and, on the desktop, while App lock is on; phone screenshots blocked in those two states. A read, not held on a stale link."),
+    "/api/spending": ("ported", "Spending settings: the saved bank-file layouts (names and choices only), the categories, the files waiting for their columns to be checked, and whether this request may edit (only the PC). A read. Desktop: Settings, Spending. Phone: the categories read-only, and \"set up on the PC\" (ARCHITECTURE section 8, one-sided on purpose)."),
+    "/api/spending/profile": ("deliberate", "GET: the proposal for a bank file's columns (the first five rows, hidden; PC only); with &again=1 a fresh proposal with the saved choices filled in - nothing is deleted. POST: save the columns the owner confirmed, or with preview:true count what the choices would do before saving (PC only, no card: the owner's own tap on their own file). Desktop only, on purpose: bank files live on the PC, adding a folder is PC-only, and a phone screen is a poor place to map columns (ARCHITECTURE section 8)."),
+    "/api/spending/profile/delete": ("deliberate", "Forget a saved layout (PC only). Desktop only, like the layout box (ARCHITECTURE section 8)."),
+    "/api/spending/categories": ("deliberate", "Save or reset the category words (PC only; editing re-runs the totals at once; no card). Desktop only: the phone shows the list read-only (no deep config editing on the phone)."),
+    "/api/spending/suggest": ("deliberate", "Category proposals for shop names no rule catches, from the local model (PC only). Nothing is saved until the owner taps Add these rules. Desktop only, like the categories editor."),
+    # "Retirement what-if" (2026-09-30; backend jarvis_retirement.py, retirement.patch;
+    # JARVIS-API section 103, docs/FINANCE-DESIGN.md "Retirement contract (frozen)").
+    "/api/retirement/defaults": ("ported", "The Retirement what-if form: its fields, limits, units, the made-up default figures marked as placeholders, the fixed disclaimer and the words. A read, any paired device. Both apps draw the same form from it (desktop: Brain -> Work, Retirement; phone: Brain, Retirement)."),
+    "/api/retirement/run": ("ported", "Play out the what-if from the numbers typed in the form: the answer only as ranges, with the sentence \"This is a simplified what-if, not financial advice.\" added by the backend. Nothing is computed or stored on the phone, and the backend stores nothing either; screen only, never read aloud, hidden under \"Hide memory lists and chat history\". Both apps."),
+    # "Activity heatmap and balance chart" (2026-09-30; backend jarvis_progress.py, progress.patch;
+    # JARVIS-API section 105, docs/GOALS-PROGRESS-DESIGN.md "Progress contract (frozen)").
+    # Both apps build in Brain -> Projects (desktop brain/progress.rs + projects-panel.js; phone
+    # net/Progress.kt + ProjectsPlate.kt). Flip these to "ported" when each app calls them.
+    "/api/progress/activity": ("ported", "The activity heatmap: the last 4 to 26 weeks (12 by default) of days, each with a count and a shade level, Monday first, none in the future, and the one line \"Last 12 weeks: 23 things on 14 days.\" A count is steps ticked plus numbers logged; a health or money number shades its day and is never named (`keep_on_screen`). No streak, no percentage, no red. Screen only; hidden under \"Hide memory lists and chat history\". A read. Both apps, in Brain -> Projects."),
+    "/api/progress/balance": ("ported", "The balance chart: GET the 3 to 8 areas the owner picked (each a number or goal against its own target, with the value printed and no overall score) and what can be picked; POST replaces the whole pick (or clears it) - no card, the owner's own display choice. Screen only; a private area is flagged and hidden under \"Hide memory lists and chat history\". Both apps, in Brain -> Projects."),
     "/api/memory/profile": ("ported", "\"Always keep in mind\" (owner, 2026-09-24; backend/memory-profile.patch, rebuilt/jarvis_memory.py pin()): the facts Jarvis reads with every question, word for word, at most 1,200 characters. GET lists them, POST pins or unpins ONE fact - no card, held on a stale link. Desktop: Brain, Memory - its own section, and Pin / Unpin on every current fact in Saved automatically and What Jarvis knows about you (brain/profile.rs). Phone: Brain - its own section with Unpin, and Pin / Unpin in Saved automatically, the one list of current facts the phone shows (ProfilePlate.kt, AutoLearnPlate.kt, net/MemoryProfile.kt); pinning a fact that was not saved automatically is desktop-only, like Forget of one (ARCHITECTURE.md section 8)."),
     "/api/memory/shared": ("ported", "\"Between us\" (owner, 2026-09-27; backend/memory-shared.patch, rebuilt/jarvis_memory.py shared()): facts tagged as a shared joke or nickname (meta.kind = \"shared\"), a label, never a new way to save a fact. GET lists them, POST tags or untags ONE fact - no card, held on a stale link. Desktop: Brain, Memory - its own section with \"Not between us\" and Forget, and a \"Between us\" toggle on every current fact in Saved automatically and What Jarvis knows about you (brain/shared.rs). Phone: Brain - its own section with \"Not between us\" and Forget, and the same toggle in Saved automatically, the one list of current facts the phone shows (SharedPlate.kt, AutoLearnPlate.kt, net/MemoryShared.kt); tagging a fact that was not saved automatically is desktop-only, like Pin of one (ARCHITECTURE.md section 8)."),
     # Automatic learning (docs/JARVIS-API.md section 19, 2026-09-24): built
@@ -290,6 +309,11 @@ CLASSIFICATION = {
     "/api/photo/scan": ("ported", "\"Photo to reminder\" (the owner's choice of 2026-09-28; docs/JARVIS-API.md section 83; backend/photo-reminder.patch, jarvis_photo_remind.py): the PC reads the words in one picture with Windows' own text recognition, finds a date, time and title with plain code, and PROPOSES a reminder - it sets nothing up. The words are outside text. Desktop: \"Find a date in it\" on the Jarvis bar's screen capture, and \"Choose a picture...\" in the Brain's Coming up (brain/photo_reminder.rs photo_scan). Phone: \"Find a date in it\" under a picture shared to Jarvis (JarvisRuntime.scanPhotoForDate, PhotoReminderDialog). The owner's tap adds ONE reminder through /api/schedule/add (no card); the phone also offers \"Also on my phone\" (its own calendar)."),
     "/api/history/search": ("ported", "\"Search what was said\" in the kept chats, not just their titles (the owner's choice of 2026-09-28; docs/JARVIS-API.md section 71; backend/brain-reads.patch, jarvis_chat_log.ChatLog.search): each kept turn opened IN MEMORY for that one search - no index, nothing written, nothing handed to the AI model - with a short snippet per conversation. Desktop: the Brain's History search box (brain/history.rs brain_history_search, refused while the private lists are hidden). Phone: the History screen's search box (HistoryScreen.kt, net/ChatLog.kt), hidden with the list under \"Hide memory lists and chat history\". \"Find in this chat\" is client-side in both, over the conversation already open."),
     "/api/history/delete": ("ported", "Delete ONE conversation, after a confirm. There is no delete-all route, on purpose. Both apps hold it on a stale link (it cannot be undone), like Forget on the desktop."),
+    "/api/history/tags": ("ported", "Chat tags (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 99; jarvis_chat_log.py, chat-history.patch): GET reads the tag list with counts; POST adds, renames, restyles, reorders and deletes tags. No card; every write is held on a stale link. Tag names are sealed on the PC and hidden with the titles under \"Hide memory lists and chat history\"."),
+    "/api/history/tag": ("ported", "File one chat under a tag, or unfile it (section 99). No card; held on a stale link. Also what tapping a row does after \"label my chat about the boiler as Home\" (X-Jarvis-Route file_under)."),
+    "/api/history/fork": ("ported", "\"Fork from here\" (the owner's choice of 2026-09-30; docs/JARVIS-API.md section 110, docs/CHAT-TAGS-DESIGN.md \"Fork contract\"): copies the first turns of a kept chat, up to the message the owner picked, into a NEW chat titled \"Fork of ...\" (same tag, outside-text marks copied, never a crisis, support, chatbot or comparison chat). No card; held on a stale link; hidden with the memory lists. Desktop: brain/history.rs (brain_history_fork), brain.js History. Phone: net/ChatLog.kt, HistoryScreen.kt, JarvisRuntime.forkChat."),
+    "/api/history/tags/suggest": ("ported", "\"Suggest tags overnight\" (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 104, docs/OVERNIGHT-TAGS-DESIGN.md; jarvis_tag_suggest.py, tag-suggest.patch, chat-history.patch): GET reads {enabled, paused, waiting, last_day}; POST {\"enabled\": bool} turns it on with ONE approval card (chat_tags_suggest_on) or off at once. Each suggestion is its own card (chat_tag_suggest) in the ordinary approvals flow; nothing is filed without a tap. Both apps show the switch row in History -> Tags (desktop: brain/history.rs brain_history_tag_suggest, brain.js, history-tags.js; phone: net/TagSuggest.kt, HistoryTags.kt SuggestTagsRow). The suggestion card shows text_hidden while the private lists are hidden (desktop: stream.rs hide_private_cards; phone: PendingRows.kt). Held on a stale link."),
+    "/api/history/mark": ("ported", "\"New section here\" (the owner's decision of 2026-09-30; docs/JARVIS-API.md section 106, docs/OVERNIGHT-TAGS-DESIGN.md section 5; jarvis_chat_log.py, chat-history.patch): a view-only divider above one of the owner's messages in a long chat (10+ turns, up to 20 per chat); the conversation read gains marks, markable and mark_why. No card. Both apps draw the button and the divider (desktop: brain/history.rs brain_history_mark, history-view.js, brain.js; phone: net/ChatMark.kt, HistoryScreen.kt). Held on a stale link."),
     "/api/history/settings": ("ported", "\"Keep chat history on this PC\": ON is one approval card (history_enable), OFF is immediate; and \"Delete conversations older than\" (keep_days). Both apps hold ON and every keep change on a stale link; OFF is never held."),
     "/api/wiki": ("ported", "The wiki builder's documents and their state (backend/wiki.patch, 2026-09-24). Both apps list them; neither browses files or reads pages - the vault reaches the phone through Syncthing."),
     "/api/wiki/ingest": ("ported", "\"Add to wiki\" for one document, then its job. Raises one approval card (wiki_update); nothing is written before it is answered."),
@@ -305,7 +329,7 @@ CLASSIFICATION = {
     "/api/backup/now": ("deliberate", "\"Back up now\" writes one file into a folder already on this PC; no card, but still refused from any device but the PC. A phone backing up the PC's own files makes no sense. ARCHITECTURE.md section 8."),
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
     "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
-    "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
+    "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, review decks, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
     # Goals: a plan the owner edits, one card per acting step (the owner's
     # "build it now", 2026-09-27; JARVIS-API.md section 59; backend
     # jarvis_goals.py). Both apps: the desktop's Brain -> Work -> Goals
@@ -314,6 +338,53 @@ CLASSIFICATION = {
     "/api/goals/{id}/accept": ("ported", "The owner's edited plan (or the draft as it stood) is kept, and the goal becomes active. The ONE place this feature can raise a card - the backend's own weekly-check-in `schedule_repeat` card (the same one a repeating reminder or the morning briefing already raises), approving nothing that acts. Held on a stale link (brain_goals_accept)."),
     "/api/goals/{id}/step": ("ported", "Marks one step done or not - no card, the same shape as ticking off a to-do item. Held on a stale link (brain_goals_step)."),
     "/api/goals/{id}/stop": ("ported", "Stops tracking the goal and deletes its check-in job on the PC - no card, immediate, the same rule every \"stop tracking this\" control in this project follows. Held on a stale link (brain_goals_stop)."),
+    # Quiz me on a text (the owner's decision of 2026-09-30; JARVIS-API.md
+    # section 98; backend jarvis_quiz.py, quiz.patch). Both apps: the desktop's
+    # Brain -> Quiz (brain/quiz.rs) and the phone's Brain -> Quiz (net/Quiz.kt).
+    "/api/quiz": ("ported", "Start a quiz: the owner's pasted text (200-20000 characters) and a question count go to the local model, which writes the questions; kept in memory only, no card, never learned from. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}": ("ported", "Read one open quiz (the questions, the marks so far; a question's source passage only once it is answered). Held on a stale link (not_found). Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}/answer": ("ported", "Mark one typed answer against that question's passage only (Got it / Partly / Not yet plus one sentence); no card. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}/finish": ("ported", "End the quiz with the short \"look at these again\" summary; the quiz is forgotten. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}/stop": ("ported", "Stop and forget the quiz at once, no summary. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/youtube": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). GET: whether the PC has the feature, its fixed words and limits, and the newest request (or null). A read; also how an app finds out the PC does not have it yet (a 404). Desktop: brain/youtube.rs (brain_youtube_info). Phone: net/Youtube.kt."),
+    "/api/youtube/quiz": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). POST {url, count?, title?, language?}: checks the link's shape, raises ONE approval card for that link (gate action youtube_captions_read, tier ask, a risky approval; it breaks YouTube's terms and may be blocked), and answers 202 with a request. Nothing is fetched before a yes. Held on a stale link in both apps. Desktop: brain/youtube.rs (brain_youtube_start). Phone: net/Youtube.kt."),
+    "/api/youtube/{id}": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). GET one request: waiting / fetching / writing / ready (with the ordinary quiz, marked provenance outside) / denied / timed_out / withdrawn / refused / failed (with a plain message). Polled about every 2 seconds while the card is open. A read, not held on a stale link. Desktop: brain/youtube.rs (brain_youtube_get). Phone: net/Youtube.kt."),
+    "/api/youtube/{id}/cancel": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). POST: withdraw a request whose card has not been answered; a yes that arrives later fetches nothing. Refused once the captions are being read. Not held on a stale link (it only ever makes things safer). Desktop: brain/youtube.rs (brain_youtube_cancel). Phone: net/Youtube.kt."),
+    '/api/quiz-cloud': ("ported", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). GET: whether the PC has the feature, its fixed words, which cloud services are set up (no key), and the newest request (or null). A read; a 404 means the PC does not have it yet. Desktop: brain/quiz_cloud.rs (brain_quiz_cloud_info). Phone: net/QuizCloud.kt.'),
+    '/api/quiz-cloud/grade': ("ported", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). POST {quiz_id, service?}: checks the quiz (text quiz, answered, no crisis answer, nothing private), picks the cheapest set-up cloud service and raises ONE approval card (gate action quiz_cloud_grade, tier ask, a risky approval) listing exactly what would leave the PC; answers 202 with a request. Nothing is sent before a yes. Held on a stale link in both apps. Desktop: brain/quiz_cloud.rs (brain_quiz_cloud_start). Phone: net/QuizCloud.kt.'),
+    '/api/quiz-cloud/{id}': ("ported", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). GET one request: waiting / sending / ready (with the new marks and the quiz) / denied / timed_out / withdrawn / refused / failed (with a plain message). Polled about every 2 seconds while the card is open. A read, not held on a stale link. Desktop: brain/quiz_cloud.rs (brain_quiz_cloud_get). Phone: net/QuizCloud.kt.'),
+    '/api/quiz-cloud/{id}/cancel': ("ported", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). POST: withdraw a request whose card has not been answered; a yes that arrives later sends nothing. Refused once it is being sent. Not held on a stale link. Desktop: brain/quiz_cloud.rs (brain_quiz_cloud_cancel). Phone: net/QuizCloud.kt.'),
+    # Review decks and typed Spanish practice (the owner's decision of
+    # 2026-09-30; JARVIS-API.md section 102; backend jarvis_decks.py,
+    # decks.patch; docs/QUIZ-DECKS-DESIGN.md). Both apps: "My study decks"
+    # beside the quiz in Brain (desktop brain/decks.rs, phone net/Decks.kt and
+    # ui/screens/DecksPlate.kt). The optional `keep` body of
+    # /api/quiz/{id}/finish is a field, not a route. The one desktop-only
+    # item, the later unencrypted export (a file dialog), is not built.
+    "/api/decks": ("ported", "The deck list (name, cards, ready, paused), the day's counts and the plain \"N cards ready\" line (GET); a new empty deck (POST). No card: the owner's own tap saves the owner's own words, sealed on the PC. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/settings": ("ported", "New cards a day, 0 to 20 (default 5). A setting the owner changes; no card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/act": ("ported", "Rename, pause, resume or delete one deck; delete asks \"are you sure?\" in the app and is immediate. No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/cards": ("ported", "One deck's cards (front, back, passage) for managing them; hidden by both apps under Hide memory lists and chat history. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/cards/{id}/act": ("ported", "Edit a card's front or back, or delete the card (\"are you sure?\" in the app). No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review": ("ported", "The next card to review, the ready count and the run's progress (at most 20 at a time). Reviewing calls no model. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review/reveal": ("ported", "Show a card's back (the answer and its source passage, with the label for a model-written key). A card can be rated only after this. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review/rate": ("ported", "The owner's own rating (Didn't remember / Remembered, with effort / Remembered / Easy); py-fsrs works out when the card comes back. Held on a stale link. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review/more": ("ported", "\"Do 10 more\": raises the current run's limit of 20 by 10. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    # Topic controls (the owner's decision of 2026-09-30; JARVIS-API.md section
+    # 107; backend jarvis_topics.py, topics.patch, rebuilt/jarvis_memory.py;
+    # docs/TOPIC-CONTROLS-DESIGN.md, "Slice contract (frozen)"). Built on the
+    # backend first; both apps get Brain -> Memory -> Topics. `planned` until
+    # each app calls it. Deliberately one-sided when built (ARCHITECTURE.md
+    # section 8): the phone does not edit a topic's keywords (typing long lists
+    # is deep configuration) and has no Galaxy; every route below is still
+    # called by both apps.
+    "/api/topics": ("ported", "GET: the topics with counts, modes, unchecked labels and the week's skip counts. POST {op: add|rename|style|move|words|private|delete}: the owner's own topic list. Turning off / marking private is at once; clearing the private mark or deleting a private topic into a looser home is ONE card (topic_loosen). Held on a stale link. Hidden names under Hide memory lists."),
+    "/api/topics/mode": ("ported", "POST {id, mode}: Learn and use / Use but don't learn / Learn but don't use / Off. Stricter is at once; a private topic turned back on is 202 waiting with ONE card (topic_loosen). Held on a stale link."),
+    "/api/topics/preview": ("ported", "GET ?id=&mode=: what the change would do, in numbers and a plain line (the picker shows it); never any fact words."),
+    "/api/topics/review": ("ported", "GET ?after=&limit=: the facts Jarvis sorted by guessing and the owner has not checked, in batches of 10 grouped by topic. A memory list: hidden under Hide memory lists."),
+    "/api/topics/file": ("ported", "POST {ids, topic_id} files facts by the owner's tap; POST {ids, confirm: true} is \"These are right\". A batch out of a private topic into a looser one is ONE card."),
+    "/api/topics/hidden": ("ported", "GET ?id=: the facts of an Off topic (\"Show them\"). A memory list: hidden under Hide memory lists."),
+    "/api/topics/settings": ("ported", "POST {model_help}: let the local model suggest a topic for a few Unsorted facts a night (off to start; no card - it reads the owner's own facts with the local model, as the learner already does)."),
     # Projects (the owner's decision of 2026-09-28; backend/jarvis_projects.py,
     # projects.patch; JARVIS-API section 88). Both apps since build step 3:
     # desktop Brain -> Projects (brain/projects.rs projects_read /
@@ -481,11 +552,86 @@ def apply_allowlists(found, allow):
     return unused
 
 
+# X-Jarvis-Route FIELDS the apps read (not HTTP routes: the scan above cannot see
+# them). name -> (desktop status, phone status, why). "ported": the app's source must
+# mention the field. "planned": built on the backend, not in that app yet; a warning
+# says to reclassify it once the app reads it.
+ROUTE_FIELDS = {
+    "menu_visibility": (
+        "ported", "ported",
+        "\"Show or hide menus\" by asking Jarvis (2026-09-30; JARVIS-API section 109; "
+        "backend jarvis_menus.py + jarvis_quick.py; docs/MENU-VISIBILITY-DESIGN.md). "
+        "{\"action\", \"target\"}: each app applies it to its OWN per-device list - there is "
+        "no HTTP route and no card. Phone: net/MenuVisibility.kt, ChatSession. Desktop: "
+        "menu-visibility.js, settings.js, brain.js, main.js."),
+}
+
+
+def _mentions(dirs, word):
+    for rel, exts in dirs:
+        base = os.path.join(ROOT, rel)
+        for dirpath, _, names in os.walk(base):
+            if "node_modules" in dirpath:
+                continue
+            for n in names:
+                if os.path.splitext(n)[1] not in exts:
+                    continue
+                with open(os.path.join(dirpath, n), encoding="utf-8", errors="replace") as fh:
+                    if word in strip_comments(fh.read(), os.path.splitext(n)[1]):
+                        return True
+    return False
+
+
+# Routes the phone builds from a constant (`"${Youtube.PATH}/${cur.id}"`), so no
+# full `/api/...` literal exists for `scan` to find. Each is counted as called by
+# the phone ONLY while the named file still contains the named text; delete the
+# entry if the call goes.
+PHONE_BUILT_ROUTES = {
+    "/api/youtube/{id}": ("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+                          '"${com.jarvis.client.net.Youtube.PATH}/${cur.id}"'),
+    "/api/youtube/{id}/cancel": ("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+                                 '"${com.jarvis.client.net.Youtube.PATH}/${cur.id}/cancel"'),
+    "/api/quiz-cloud/{id}": ("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+                             '"${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}"'),
+    "/api/quiz-cloud/{id}/cancel": ("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+                                    '"${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}/cancel"'),
+}
+
+
+def phone_built_routes():
+    found = {}
+    for route, (rel, needle) in PHONE_BUILT_ROUTES.items():
+        try:
+            with open(os.path.join(ROOT, rel), encoding="utf-8", errors="replace") as fh:
+                if needle in strip_comments(fh.read(), os.path.splitext(rel)[1]):
+                    found[route] = {rel}
+        except OSError:
+            pass
+    return found
+
+
+def check_route_fields(problems, warnings):
+    for name, (d_status, p_status, _) in ROUTE_FIELDS.items():
+        in_desk = _mentions(DESKTOP_DIRS, name)
+        in_phone = _mentions(PHONE_DIRS, name)
+        if p_status == "ported" and not in_phone:
+            problems.append(f"route field {name} is classified 'ported' on the phone but no "
+                            "phone source mentions it.")
+        if d_status == "ported" and not in_desk:
+            problems.append(f"route field {name} is classified 'ported' on the desktop but no "
+                            "desktop source mentions it.")
+        if d_status == "planned" and in_desk:
+            warnings.append(f"route field {name} is 'planned' for the desktop but its sources "
+                            "now mention it - reclassify it as 'ported'.")
+
+
 def main():
     allow = {}
     desk_at = scan(DESKTOP_DIRS, allow)
     unused_allow = apply_allowlists(desk_at, allow)
     phone_at = scan(PHONE_DIRS)
+    for route, files in phone_built_routes().items():
+        phone_at.setdefault(route, set()).update(files)
     desk, phone = set(desk_at), set(phone_at)
     problems, warnings = [], []
 
@@ -538,6 +684,8 @@ def main():
         problems.append(
             f"{r} is in PHONE_ONLY but the desktop calls it now "
             f"({', '.join(sorted(desk_at[r]))}). Move it to CLASSIFICATION.")
+
+    check_route_fields(problems, warnings)
 
     todo, no = sorted(by("todo")), sorted(by("deliberate"))
     print(f"desktop: {len(desk)} routes   phone: {len(phone)}   "

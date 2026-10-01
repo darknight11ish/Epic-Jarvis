@@ -466,6 +466,104 @@
  {
   "type": "function",
   "function": {
+   "name": "my_spending",
+   "description": "Add up spending from a bank CSV or Excel file in the owner's listed folders. summary shows a table on their screen; then reply in ONE short sentence, only figures from the result. files: list bank files. suggest: shop names no category fits. To read what a file says, use my_files.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "summary",
+       "files",
+       "suggest"
+      ]
+     },
+     "path": {
+      "type": "string",
+      "description": "the full path files gave"
+     },
+     "all": {
+      "type": "boolean",
+      "description": "combine every file with a saved layout"
+     },
+     "period": {
+      "type": "string",
+      "description": "last_month, this_year, 2026, 2026-03, 2026-01-01..2026-03-31"
+     },
+     "by": {
+      "type": "string",
+      "enum": [
+       "category",
+       "month",
+       "both"
+      ]
+     },
+     "category": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "retirement_whatif",
+   "description": "Retirement what-if from numbers the owner typed, in today's money; ages in years, returns in percent. Ask for any missing one; never guess. Code writes the answer; add nothing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "current_age": {
+      "type": "string"
+     },
+     "retirement_age": {
+      "type": "string"
+     },
+     "plan_to_age": {
+      "type": "string"
+     },
+     "savings": {
+      "type": "string"
+     },
+     "yearly_saving": {
+      "type": "string"
+     },
+     "yearly_spending": {
+      "type": "string"
+     },
+     "other_income": {
+      "type": "string"
+     },
+     "other_income_start_age": {
+      "type": "string"
+     },
+     "expected_return_percent": {
+      "type": "string"
+     },
+     "volatility_percent": {
+      "type": "string"
+     },
+     "inflation_percent": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "current_age",
+     "retirement_age",
+     "savings",
+     "yearly_saving",
+     "yearly_spending"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "home_read",
    "description": "Read the state of named Home Assistant entities. Read-only. To change something, use home_control.",
    "parameters": {

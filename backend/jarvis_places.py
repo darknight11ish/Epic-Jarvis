@@ -264,10 +264,20 @@ def lookup(store, thing: str, now: Optional[float] = None,
             ).fetchall()
     except Exception:
         return []
+    # Topic controls (docs/TOPIC-CONTROLS-DESIGN.md 4.4): this reader has its
+    # own SQL, so it asks for the facts of topics that may not be USED and
+    # leaves them out - "where is my passport?" is not answered from a topic
+    # the owner switched off.
+    try:
+        hide = store.topic_blocked("use")
+    except Exception:
+        hide = frozenset()
     exact, wider = [], []
     for r in rows:
         r = dict(r)
         if int(r["id"]) in exclude or _meta(r.get("meta")).get("forgotten_at"):
+            continue
+        if int(r["id"]) in hide:
             continue
         p = place_of(r.get("text"))
         if p is None:

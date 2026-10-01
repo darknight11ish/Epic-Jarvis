@@ -145,7 +145,8 @@ await check("every real answer reads: list, project, benchmark, private marks", 
   const run = readBench(C.bench_run.benchmark);
   assert.equal(run.points.length, 3);
   assert.equal(run.target, 21.1);
-  assert.equal(chartSummary(run), "3 numbers. Latest: 12 km.");
+  assert.equal(chartSummary(run), "3 numbers. Latest: 12 km. Not enough numbers yet - 2 more needed.");
+  assert.equal(chartSummary({ ...run, forecast: null }), "3 numbers. Latest: 12 km.");
   assert.equal(chartSummary(readBench(C.bench_empty.benchmark)), WORDS.chart_empty);
   const waiting = readProject(C.life_waiting.project);
   assert.equal(waiting.shareableWaiting, true);
@@ -207,7 +208,7 @@ const SIZE = { width: 1180, height: 1000 };
  * contract file, each change is written down in `window.__pj.calls` and
  * answered with the real backend's answer (an error as Rust hands it on).
  */
-async function projectsTab({ list = C.list_two, projects = null, link = {}, answers = {}, tasks = {} } = {}) {
+async function projectsTab({ list = C.list_two, projects = null, link = {}, answers = {}, tasks = {}, benchOverrides = {} } = {}) {
   const page = await K.open(browser, base, "brain.html", { link }, SIZE);
   page.on("dialog", (d) => (page.__confirm === false ? d.dismiss() : d.accept()));
   await page.evaluate(({ list, projects, answers, POSTS, benches, tasks }) => {
@@ -253,7 +254,7 @@ async function projectsTab({ list = C.list_two, projects = null, link = {}, answ
     };
   }, { list, projects: projects || { [LIFE.id]: C.life, [CODING.id]: C.coding }, answers, POSTS, tasks,
        benches: { [benchNamed(LIFE, "Long run").id]: C.bench_run,
-                  [benchNamed(LIFE, "Weight").id]: C.bench_weight } });
+                  [benchNamed(LIFE, "Weight").id]: C.bench_weight, ...benchOverrides } });
   await page.locator("#tab-projects").click();
   await page.waitForTimeout(400);
   return page;
@@ -314,7 +315,8 @@ await check("a life project: instructions, notes, the work list, charts and priv
   assert.equal(by["Long run"].private, false);
   assert.equal(by["Long run"].dots, 3);
   assert.equal(by["Long run"].target, true);
-  assert.equal(by["Long run"].chart, "Long run: 3 numbers. Latest: 12 km.");
+  // The PC's forecast sentence follows the summary (here: not enough numbers yet).
+  assert.equal(by["Long run"].chart, "Long run: 3 numbers. Latest: 12 km. Not enough numbers yet - 2 more needed.");
   for (const name of ["Weight", "5k time", "Stretching"]) assert.equal(by[name].private, true, name);
   assert.equal(by.Weight.dots, 2);
   assert.match(text, new RegExp(WORDS.private_label));
@@ -545,6 +547,161 @@ await check("themes: the chart, its target and the private label read in all thr
     assert.notDeepEqual(parseColor(v.line), parseColor(v.target), `${theme}: the target looks like the line`);
   }
   assert.notDeepEqual(out["deep-space"].chartBg, out.paper.chartBg, "the chart did not follow the theme");
+});
+
+
+/* ── The finish-time range on the chart ───────────────────────────────── */
+
+const FCASE = (name) => CASES.forecast_cases.find((c) => c.name === name);
+/** Long run's benchmark read, with a worked forecast in place of its own. */
+const withForecast = (name) => {
+  const b = JSON.parse(JSON.stringify(C.bench_run));
+  b.benchmark.forecast = FCASE(name).forecast;
+  return { [benchNamed(LIFE, "Long run").id]: b };
+};
+const longRun = (page) => page.locator(".pj-bench").filter({ hasText: "Long run" }).first();
+
+await check("a range: dashed trend line, translucent band, bracket, and the PC's words as sent", async () => {
+  const page = await projectsTab({ benchOverrides: withForecast("steady_fall") });
+  await openLife(page);
+  const b = longRun(page);
+  const out = {
+    forecastGroup: await b.locator("svg.pj-chart g.pj-forecast").count(),
+    hidden: await b.locator("g.pj-forecast").getAttribute("aria-hidden"),
+    band: await b.locator("polygon.pj-band").count(),
+    bandPoints: (await b.locator("polygon.pj-band").getAttribute("points")).split(" ").length,
+    trend: await b.locator("line.pj-trend").count(),
+    bracket: await b.locator("line.pj-bracket").count(),
+    words: await b.locator(".pj-forecast-words").innerText(),
+    wordsHidden: await b.locator(".pj-forecast-words").getAttribute("aria-hidden"),
+    basis: await b.locator(".pj-forecast-basis").innerText(),
+    label: await b.locator("svg.pj-chart").getAttribute("aria-label"),
+    role: await b.locator("svg.pj-chart").getAttribute("role"),
+    dots: await b.locator(".pj-dot").count(),
+  };
+  await page.close();
+  const f = FCASE("steady_fall").forecast;
+  assert.equal(out.forecastGroup, 1);
+  assert.equal(out.hidden, "true", "the dashed picture is aria-hidden");
+  assert.equal(out.band, 1);
+  assert.equal(out.bandPoints, 3);
+  assert.equal(out.trend, 1);
+  assert.equal(out.bracket, 3, "the bracket: a bar and its two ends");
+  assert.equal(out.words, f.words);
+  assert.equal(out.basis, f.basis);
+  assert.equal(out.wordsHidden, "true", "not read twice: the label carries it");
+  assert.equal(out.label, `Long run: 3 numbers. Latest: 12 km. ${f.words}`);
+  assert.equal(out.role, "img");
+  assert.equal(out.dots, 3, "the numbers are still drawn");
+});
+
+await check("a clipped end gets an arrow and no bracket; an open end too", async () => {
+  for (const name of ["scattered_fall", "very_scattered", "clipped_at_the_edge"]) {
+    const page = await projectsTab({ benchOverrides: withForecast(name) });
+    await openLife(page);
+    const b = longRun(page);
+    const got = {
+      arrows: await b.locator("polyline.pj-arrow").count(),
+      bracket: await b.locator("line.pj-bracket").count(),
+      words: await b.locator(".pj-forecast-words").innerText(),
+      band: await b.locator("polygon.pj-band").count(),
+    };
+    await page.close();
+    assert.ok(got.arrows >= 1, `${name}: an arrow`);
+    assert.equal(got.bracket, 0, `${name}: no bracket`);
+    assert.equal(got.band, 1, name);
+    assert.equal(got.words, FCASE(name).forecast.words, name);
+  }
+});
+
+await check("no_target, reached, not_enough and never draw nothing, only the words", async () => {
+  for (const name of ["no_target", "reached", "not_enough_x", "flat", "wrong_way", "two_more_needed", "one_day_only"]) {
+    const src = name === "not_enough_x" ? "one_day_only" : name;
+    const page = await projectsTab({ benchOverrides: withForecast(src) });
+    await openLife(page);
+    const b = longRun(page);
+    const got = {
+      group: await b.locator("g.pj-forecast").count(),
+      band: await b.locator("polygon.pj-band").count(),
+      trend: await b.locator("line.pj-trend").count(),
+      words: await b.locator(".pj-forecast-words").innerText(),
+      basis: await b.locator(".pj-forecast-basis").count(),
+    };
+    await page.close();
+    assert.equal(got.group + got.band + got.trend, 0, `${src}: something was drawn`);
+    assert.equal(got.words, FCASE(src).forecast.words, src);
+    assert.equal(got.basis, 0, `${src}: a basis line for a state without a guess`);
+    assert.ok(!/\b0 weeks?\b/.test(got.words), `${src}: says 0 weeks`);
+  }
+});
+
+await check("no forecast (an older PC, or a read without points): the chart is what it was", async () => {
+  const b = JSON.parse(JSON.stringify(C.bench_run));
+  delete b.benchmark.forecast;
+  const page = await projectsTab({ benchOverrides: { [benchNamed(LIFE, "Long run").id]: b } });
+  await openLife(page);
+  const box = longRun(page);
+  const got = { group: await box.locator("g.pj-forecast").count(),
+    words: await box.locator(".pj-forecast-words").count(),
+    label: await box.locator("svg.pj-chart").getAttribute("aria-label") };
+  await page.close();
+  assert.equal(got.group, 0);
+  assert.equal(got.words, 0);
+  assert.equal(got.label, "Long run: 3 numbers. Latest: 12 km.");
+});
+
+await check("a private benchmark's range shows on its own screen, with its private label", async () => {
+  const w = JSON.parse(JSON.stringify(C.bench_weight));
+  w.benchmark.forecast = FCASE("steady_fall").forecast;
+  const page = await projectsTab({ benchOverrides: { [benchNamed(LIFE, "Weight").id]: w } });
+  await openLife(page);
+  const b = page.locator(".pj-bench").filter({ hasText: "Weight" }).first();
+  const got = { tag: await b.locator(".pj-private").count(), band: await b.locator("polygon.pj-band").count(),
+    words: await b.locator(".pj-forecast-words").innerText() };
+  await page.close();
+  assert.equal(got.tag, 1);
+  assert.equal(got.band, 1);
+  assert.equal(got.words, FCASE("steady_fall").forecast.words);
+});
+
+await check("themes: the trend, bracket and arrow read against the chart in all three; nothing moves", async () => {
+  const page = await projectsTab({ benchOverrides: withForecast("scattered_fall") });
+  await openLife(page);
+  const out = {};
+  for (const theme of ["deep-space", "paper", "high-contrast"]) {
+    out[theme] = await page.evaluate((t) => {
+      document.documentElement.setAttribute("data-theme", t);
+      const cs = (sel, prop) => getComputedStyle(document.querySelector(sel))[prop];
+      return {
+        chartBg: cs(".pj-chart", "backgroundColor"),
+        trend: cs(".pj-trend", "stroke"),
+        arrow: cs(".pj-arrow", "stroke"),
+        band: cs(".pj-band", "fill"),
+        words: cs(".pj-forecast-words", "color"),
+        card: (() => {
+          const probe = document.createElement("span");
+          document.body.append(probe);
+          probe.style.color = "var(--surface-1)";
+          const c = getComputedStyle(probe).color;
+          probe.remove();
+          return c;
+        })(),
+        animation: cs(".pj-trend", "animationName"),
+        transition: cs(".pj-band", "transitionDuration"),
+      };
+    }, theme);
+  }
+  await page.close();
+  for (const [theme, v] of Object.entries(out)) {
+    for (const [name, ink] of [["trend", v.trend], ["arrow", v.arrow]]) {
+      const got = contrast(ink, v.chartBg, 3);
+      assert.ok(got.ok, `${theme}: the ${name} is ${got.worst}:1 (needs 3)`);
+    }
+    const words = contrast(v.words, v.card, 4.5);
+    assert.ok(words.ok, `${theme}: the range sentence is ${words.worst}:1`);
+    assert.equal(v.animation, "none", `${theme}: the guess is animated`);
+    assert.ok(/^0s(, 0s)*$/.test(v.transition), `${theme}: the guess eases in (${v.transition})`);
+  }
 });
 
 await check("a11y: on the rail's arrow keys, every control named, the chart is an image with words", async () => {

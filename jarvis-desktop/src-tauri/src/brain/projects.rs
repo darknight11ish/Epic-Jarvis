@@ -511,6 +511,42 @@ mod tests {
     }
 
     #[test]
+    fn a_finish_time_range_is_passed_on_whole_and_hidden_with_the_rest() {
+        let doc = cases();
+        let all = doc["forecast_cases"].as_array().expect("forecast_cases");
+        assert!(all.len() >= 12);
+        let mut drawn = 0;
+        for case in all {
+            let name = case["name"].as_str().unwrap();
+            let read = serde_json::json!({
+                "ok": true,
+                "benchmark": { "name": "5k time", "unit": "min", "forecast": case["forecast"] },
+            });
+            let got = read_answer(200, &read.to_string()).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(
+                got, read,
+                "{name}: the forecast was changed on the way through"
+            );
+            if !case["forecast"]["line"].is_null() {
+                drawn += 1;
+                assert!(
+                    got["benchmark"]["forecast"]["band"]["slow"]["at"].is_number(),
+                    "{name}"
+                );
+            }
+            // While the private lists are hidden nothing of it is left.
+            let hidden = redact(read);
+            assert_eq!(hidden["hidden"], true, "{name}");
+            let s = hidden.to_string();
+            assert!(
+                !s.contains("forecast") && !s.contains("weeks"),
+                "{name}: {s}"
+            );
+        }
+        assert!(drawn >= 5, "the fixture has too few drawn ranges");
+    }
+
+    #[test]
     fn every_real_change_answer_reads_the_way_the_page_expects() {
         let doc = cases();
         for (name, post) in doc["posts"].as_object().expect("posts") {

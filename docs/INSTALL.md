@@ -1116,6 +1116,7 @@ there; remove each one that is listed (select it, then **Remove**):
 | `Jarvis Backend/pairing token` | the pairing key Jarvis made |
 | `Jarvis Desktop/pairing token` | a pairing key you typed into the desktop app's Settings |
 | `Jarvis Backend/chat history key` | the key your kept chats are encrypted with. **Remove it only if you are also deleting your chats** (the `.openjarvis` folder below): without it they can never be read again |
+| `Jarvis Backend/study decks key` | the key your review decks (`study.db`) are sealed with. **Remove it only if you are also deleting the decks**: without it they can never be read again. It is kept in your locked backup too |
 | `Jarvis Backend/Exa key` | your Exa web search key, if you added one |
 | `Jarvis Backend/Tavily key` | your Tavily web search key, if you added one |
 | `Jarvis Backend/Brave Search key` | your Brave Search key, if you added one |

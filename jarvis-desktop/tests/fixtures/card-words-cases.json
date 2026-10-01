@@ -59,6 +59,14 @@
       "title": "Jarvis wants to change one of its settings"
     },
     {
+      "action": "chat_tag_suggest",
+      "title": "Jarvis wants to file one chat under a tag it suggests"
+    },
+    {
+      "action": "chat_tags_suggest_on",
+      "title": "Jarvis wants to let it read a few of your old chats at night to suggest tags"
+    },
+    {
       "action": "chatbot_session",
       "title": "Jarvis wants to hold a conversation with an AI chatbot for you"
     },
@@ -223,6 +231,10 @@
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
     },
     {
+      "action": "quiz_cloud_grade",
+      "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better"
+    },
+    {
       "action": "read_calendar",
       "title": "Jarvis wants to read your calendar"
     },
@@ -237,6 +249,10 @@
     {
       "action": "read_logseq_page",
       "title": "Jarvis wants to read a page in Logseq"
+    },
+    {
+      "action": "referee_tick",
+      "title": "Jarvis wants to tick a goal step whose number reached its target"
     },
     {
       "action": "register_approval_key",
@@ -319,6 +335,10 @@
       "title": "Jarvis wants to tidy your inbox (archive, star, mark read or trash)"
     },
     {
+      "action": "topic_loosen",
+      "title": "Jarvis wants to turn a private topic back on, or let it learn or be used again"
+    },
+    {
       "action": "unclassified_tool",
       "title": "Jarvis wants to use a tool it has no plain name for"
     },
@@ -349,6 +369,10 @@
     {
       "action": "write_notes_after_outside_text",
       "title": "Jarvis wants to write to your notes after reading outside text"
+    },
+    {
+      "action": "youtube_captions_read",
+      "title": "Jarvis wants to fetch the caption text of a YouTube video for a quiz"
     }
   ],
   "fallback": [

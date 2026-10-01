@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-quiz-stop"
+description = "Enables the brain_quiz_stop command without any pre-configured scope."
+commands.allow = ["brain_quiz_stop"]
+
+[[permission]]
+identifier = "deny-brain-quiz-stop"
+description = "Denies the brain_quiz_stop command without any pre-configured scope."
+commands.deny = ["brain_quiz_stop"]

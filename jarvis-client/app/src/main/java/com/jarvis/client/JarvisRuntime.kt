@@ -263,6 +263,13 @@ object JarvisRuntime {
         private set
 
     /**
+     * Which menus are hidden or folded on THIS phone ("Show or hide menus",
+     * docs/JARVIS-API.md section 109). Per device; never sent anywhere; hiding only tidies.
+     */
+    lateinit var menus: com.jarvis.client.data.MenuPrefs
+        private set
+
+    /**
      * "A newer version is available": one GET to GitHub's public release
      * page for this app, never to the PC. See [UpdateChecker].
      */
@@ -745,6 +752,7 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        menus = com.jarvis.client.data.MenuPrefs(app)
         modelsCacheStore = modelsStore
         // Read once, at startup - so a cold start with Jarvis off has
         // something to paint at once instead of a blank screen while the
@@ -4239,6 +4247,15 @@ object JarvisRuntime {
             }
         }
 
+    // -------------------------------- "People and things" (2026-09-30) ----
+    // See [com.jarvis.client.net.Entities] and docs/GALAXY-PANEL-DESIGN.md: a
+    // plain list of the names saved facts are linked to, read when Brain shows
+    // it. The words behind a name come from [memoryUsed], 20 ids at a time.
+    // Nothing is kept on the phone; a read, so never held on a stale link.
+
+    /** `GET /api/memory/entities`. */
+    suspend fun memoryEntities(): ApiResult<JsonObject> = api.memoryEntities()
+
     // ----------------------------- "Where this came from" (I42/I132, 2026-09-27) ----
     // See [com.jarvis.client.net.ChatSources]: this answer's own reading-tool
     // receipts and its quote check, read by turn_id when the owner opens the
@@ -4259,6 +4276,60 @@ object JarvisRuntime {
                 com.jarvis.client.net.ChatSources.Read.Failed(describe(r.error))
             }
         }
+
+    /**
+     * `GET /api/chat/table?id=` - the spending table under an answer
+     * ([com.jarvis.client.net.Spending]). A read: never held. The result is
+     * handed to the screen that draws it and kept nowhere else.
+     */
+    suspend fun spendingTable(id: String?): com.jarvis.client.net.Spending.Read =
+        when (val r = api.chatTable(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Spending.parseTable(r.value)
+                ?.let { com.jarvis.client.net.Spending.Read.Shown(it) }
+                ?: com.jarvis.client.net.Spending.Read.Failed(com.jarvis.client.net.Spending.UNREADABLE)
+            is ApiResult.Failed -> if (com.jarvis.client.net.Spending.gone(r.error)) {
+                com.jarvis.client.net.Spending.Read.Gone(com.jarvis.client.net.Spending.TABLE_GONE)
+            } else {
+                com.jarvis.client.net.Spending.Read.Failed(describe(r.error))
+            }
+        }
+
+    /** `GET /api/spending` - the Brain plate's read-only view. A read: never held. */
+    suspend fun spendingView(): ApiResult<JsonObject> = api.spending()
+
+    /** `GET /api/retirement/defaults` - the what-if form. A read: never held. */
+    suspend fun retirementDefaults(): ApiResult<JsonObject> = api.retirementDefaults()
+
+    /**
+     * `POST /api/retirement/run` - works the what-if out on the PC from the
+     * typed boxes ([com.jarvis.client.net.Retirement.requestBody]). No card:
+     * a calculation on numbers the owner typed. Held on a stale link
+     * ([actionBlocker], rule 4) and refused while "Hide memory lists and chat
+     * history" is on ([listsHidden]). A busy PC is asked once more after a
+     * second. The numbers and the answer are never logged or kept here: the
+     * result goes back to the screen and nowhere else.
+     */
+    suspend fun retirementRun(
+        values: Map<String, String>,
+        listsHidden: Boolean,
+        words: com.jarvis.client.net.Retirement.Words = com.jarvis.client.net.Retirement.Words(),
+    ): com.jarvis.client.net.Retirement.Outcome {
+        if (com.jarvis.client.net.Retirement.hiddenNow(listsHidden, false)) {
+            return com.jarvis.client.net.Retirement.Outcome.Problem(words.hidden)
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.Retirement.Outcome.Problem(it) }
+        val body = com.jarvis.client.net.Retirement.requestBody(values)
+        suspend fun once(): com.jarvis.client.net.Retirement.Outcome = when (val r = api.retirementRun(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Retirement.classify(r.value, words)
+            is ApiResult.Failed -> com.jarvis.client.net.Retirement.Outcome.Problem(noticeFor(r.error))
+        }
+        val first = once()
+        if (first is com.jarvis.client.net.Retirement.Outcome.Problem && first.busy) {
+            delay(1_000)
+            return once()
+        }
+        return first
+    }
 
     /**
      * Turns a temporary chat on or off on the chat both Home and the voice
@@ -4383,6 +4454,70 @@ object JarvisRuntime {
                     }
                 }
             is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
+        }
+    }
+
+    // ---------------------------------------------------- Topic controls ----
+    // docs/JARVIS-API.md section 107 (the owner's request of 2026-09-30) - see
+    // [com.jarvis.client.net.Topics] and ui/screens/TopicsPlate.kt. The PC keeps
+    // the topics and enforces the modes; the phone keeps nothing of them.
+
+    private val _topicsTick = MutableStateFlow(0)
+
+    /** Goes up by one after a topic change made from this phone, so the plate reads itself again. */
+    val topicsTick: StateFlow<Int> = _topicsTick.asStateFlow()
+
+    private val _topicPick = MutableStateFlow<com.jarvis.client.net.Topics.Open?>(null)
+
+    /**
+     * "Switch off my work topic" by voice or chat: the answer's route said
+     * `open_brain: "topics"`, with the topic id when it named one. Brain's
+     * Topics plate opens that topic's four-choice picker (changing nothing)
+     * and calls [consumeTopicPick]. Pure navigation.
+     */
+    val topicPick: StateFlow<com.jarvis.client.net.Topics.Open?> = _topicPick.asStateFlow()
+
+    fun requestTopicPick(open: com.jarvis.client.net.Topics.Open) {
+        _topicPick.value = open
+    }
+
+    fun consumeTopicPick() {
+        _topicPick.value = null
+    }
+
+    /**
+     * A topic read: the list, a preview, a review batch or "Show them". A
+     * read is never held on a stale link (rule 4 holds writes). The status
+     * and body come back whole, so a 404 from a PC without the routes reads
+     * differently from "that topic is not there any more".
+     */
+    suspend fun topicsRead(path: String): ApiResult<com.jarvis.client.net.Topics.Reply> = api.topicsCall(path, null)
+
+    /**
+     * ONE topic change: `POST` [json] to [path] (a `/api/topics` route).
+     * Held on a stale link ([actionBlocker], rule 4), and - while "Hide memory
+     * lists and chat history" hides the names ([listsHidden]) - refused for
+     * everything but a mode change and the local-model switch
+     * ([com.jarvis.client.net.Topics.refusedWhileHidden]), since nothing else
+     * can be done without the names or the fact words on screen. A 202 means
+     * the PC raised ONE approval card (`topic_loosen`): nothing has changed
+     * yet, and the plate reads the list every 2 seconds until it is decided.
+     * The topic names in the body are never logged.
+     */
+    suspend fun topicsWrite(
+        path: String,
+        json: String,
+        listsHidden: Boolean,
+    ): com.jarvis.client.net.Topics.Outcome {
+        if (listsHidden && com.jarvis.client.net.Topics.refusedWhileHidden(path)) {
+            return com.jarvis.client.net.Topics.Outcome.Failed(com.jarvis.client.net.Topics.LISTS_HIDDEN_REFUSAL)
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.Topics.Outcome.Failed(it) }
+        return when (val r = api.topicsCall(path, json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Topics.outcome(r.value.code, r.value.body).also {
+                if (it !is com.jarvis.client.net.Topics.Outcome.Failed) _topicsTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.Topics.Outcome.Failed("Not changed. " + describe(r.error))
         }
     }
 
@@ -4711,19 +4846,21 @@ object JarvisRuntime {
 
     /**
      * Marks one step of an active goal done or not - no card, the same
-     * shape as ticking off a to-do item. Held on a stale link. @return
+     * shape as ticking off a to-do item. Sent by the step's [stepId] when
+     * the PC gave it one, else by [index]. Held on a stale link. @return
      * whether it changed, the updated goal if so, and the sentence to show.
      */
     suspend fun setGoalStep(
         id: String,
+        stepId: String,
         index: Int,
         done: Boolean,
     ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
         actionBlocker()?.let { return Triple(false, null, it) }
         if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
         val result = when (val r = api.goalsWrite("/api/goals/$id/step",
-            com.jarvis.client.net.Goals.stepBody(index, done))) {
-            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value)
+            com.jarvis.client.net.Goals.stepBody(stepId, index, done))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = if (done) "Done." else "Unticked.")
             is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
         }
         if (result.first) _goalsTick.update { n -> n + 1 }
@@ -4749,6 +4886,685 @@ object JarvisRuntime {
         if (result.first) _goalsTick.update { n -> n + 1 }
         return result
     }
+
+    // --------------------------------------------------------------- Quiz ----
+    // "Quiz me on a text" (docs/STUDY-FROM-TEXT-DESIGN.md sections 3 and 11) -
+    // see [com.jarvis.client.net.Quiz] and ui/screens/QuizPlate.kt. The open
+    // quiz is held HERE, in memory only, so leaving Brain and coming back
+    // does not orphan it on the PC. Nothing is written to disk: not the
+    // pasted text (it is never kept at all), not the questions, not an
+    // answer or a mark.
+
+    private val _quiz = MutableStateFlow<com.jarvis.client.net.Quiz.Session?>(null)
+
+    /** The quiz that is open on the PC, if this phone started one. Process memory only. */
+    val quiz: StateFlow<com.jarvis.client.net.Quiz.Session?> = _quiz.asStateFlow()
+
+    /** Drops the open quiz from this phone's memory (it is already gone on the PC, or being stopped). */
+    fun forgetQuiz() {
+        _quiz.value = null
+        _youtubeNote.value = null
+    }
+
+    private val _spanishSupported = MutableStateFlow<Boolean?>(null)
+
+    /**
+     * Whether the PC's quiz knows Spanish practice: null until a quiz reply has
+     * been seen, false when a reply had no "mode" (an older PC, contract C2).
+     */
+    val spanishSupported: StateFlow<Boolean?> = _spanishSupported.asStateFlow()
+
+    private val _spanishNotice = MutableStateFlow<String?>(null)
+
+    /**
+     * The PC's own Spanish crisis-words notice, as it last sent it (never a
+     * copy written on this phone). Process memory only.
+     */
+    val spanishNotice: StateFlow<String?> = _spanishNotice.asStateFlow()
+
+    /** Holds [q] as the open quiz and notes what its reply said about Spanish practice. */
+    private fun adoptQuiz(q: com.jarvis.client.net.Quiz.Session) {
+        _quiz.value = q
+        _spanishSupported.value = q.modeKnown
+        q.notice?.let { _spanishNotice.value = it }
+    }
+
+    /**
+     * Finishes the quiz AND keeps the ticked questions in a deck (contract C2/C3).
+     * Nothing is sent until the owner taps "Keep and finish". No card: the owner's
+     * own tap is the yes, and the Keep sheet listed every word first. Held on a
+     * stale link. On success the quiz is gone here; on a crisis phrase in a back
+     * nothing is kept and the quiz stays open (its new state is held); on any
+     * failure the quiz stays open. @return the outcome, whose `code` is the PC's
+     * error code (a `deck_not_found` makes the caller read the decks again).
+     */
+    suspend fun keepQuiz(
+        deck: String?,
+        newDeck: String?,
+        cards: List<com.jarvis.client.net.Quiz.KeepCard>,
+    ): com.jarvis.client.net.Quiz.Outcome<com.jarvis.client.net.Quiz.Finished> {
+        actionBlocker()?.let { return com.jarvis.client.net.Quiz.Outcome(false, null, it) }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            return com.jarvis.client.net.Quiz.Outcome(
+                false, null, com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_NOT_FOUND).orEmpty(),
+                gone = true,
+            )
+        }
+        val body = com.jarvis.client.net.Quiz.keepBody(deck, newDeck, cards)
+            ?: return com.jarvis.client.net.Quiz.Outcome(
+                false, null, com.jarvis.client.net.Quiz.keepMessageFor("nothing_to_keep").orEmpty(),
+            )
+        val out = when (val r = api.quizCall("/api/quiz/$id/finish", body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.finishedKeepSaid(r.value)
+            is ApiResult.Failed -> return com.jarvis.client.net.Quiz.Outcome(false, null, "Not kept. " + describe(r.error))
+        }
+        val result = out.value
+        if (out.ok && result != null) {
+            val open = result.quiz
+            if (result.crisis != null && open != null) {
+                adoptQuiz(open)
+            } else {
+                _quiz.value = null
+                _decksTick.update { n -> n + 1 }
+            }
+        } else if (out.gone) {
+            _quiz.value = null
+        }
+        return out
+    }
+
+    /**
+     * Sends the pasted text to the PC and takes the questions it writes. No
+     * card: the owner's own words, the local model only. Held on a stale
+     * link (rule 4). @return whether it started, and the sentence to show.
+     */
+    suspend fun startQuiz(
+        text: String,
+        count: Int = com.jarvis.client.net.Quiz.DEFAULT_COUNT,
+        mode: String = com.jarvis.client.net.Quiz.MODE_TEXT,
+        level: String = com.jarvis.client.net.Quiz.DEFAULT_LEVEL,
+        exercise: String = com.jarvis.client.net.Quiz.DEFAULT_EXERCISE,
+        topic: String = "",
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val spanish = mode == com.jarvis.client.net.Quiz.MODE_SPANISH
+        // Spanish practice's text is optional: blank means the model writes the sentences.
+        val textOk = if (spanish) com.jarvis.client.net.Quiz.validSpanishText(text)
+        else com.jarvis.client.net.Quiz.validText(text)
+        if (!textOk) {
+            return false to (com.jarvis.client.net.Quiz.messageFor(
+                if (text.trim().length < com.jarvis.client.net.Quiz.MIN_TEXT) com.jarvis.client.net.Quiz.E_TEXT_SHORT
+                else com.jarvis.client.net.Quiz.E_TEXT_LONG,
+            ) ?: "That text does not fit.")
+        }
+        if (!com.jarvis.client.net.Quiz.validCount(count)) {
+            return false to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_BAD_COUNT) ?: "")
+        }
+        val body = if (spanish) com.jarvis.client.net.Quiz.startSpanishBody(text, level, exercise, topic, count)
+        else com.jarvis.client.net.Quiz.startBody(text, count)
+        val out = when (val r = api.quizCall("/api/quiz", body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.startedSaid(r.value)
+            is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
+        }
+        val q = out.value
+        if (out.ok && q != null) {
+            _spanishSupported.value = q.modeKnown
+            if (spanish && !q.modeKnown) {
+                // An older PC ignored "mode" and opened an ordinary quiz: close it
+                // again (best effort) and say so; only Text mode is offered from now on.
+                if (com.jarvis.client.net.Quiz.validId(q.id)) {
+                    api.quizCall("/api/quiz/${q.id}/stop", com.jarvis.client.net.Quiz.EMPTY_BODY)
+                }
+                return false to com.jarvis.client.net.Quiz.OLD_PC
+            }
+            adoptQuiz(q)
+            return true to ""
+        }
+        return false to out.said
+    }
+
+    /**
+     * Reads the open quiz again from the PC (a read: never held). If the PC
+     * no longer has it (60 minutes unused, a restart), it is forgotten here
+     * too. @return the sentence to show, or null when all is well.
+     */
+    suspend fun refreshQuiz(): String? {
+        val id = _quiz.value?.id ?: return null
+        if (!com.jarvis.client.net.Quiz.validId(id)) return null
+        return when (val r = api.quizCall("/api/quiz/$id", null)) {
+            is ApiResult.Ok -> {
+                val out = com.jarvis.client.net.Quiz.readSaid(r.value)
+                val q = out.value
+                when {
+                    out.ok && q != null -> {
+                        adoptQuiz(q)
+                        null
+                    }
+                    out.gone -> {
+                        _quiz.value = null
+                        out.said
+                    }
+                    else -> out.said
+                }
+            }
+            is ApiResult.Failed -> noticeFor(r.error)
+        }
+    }
+
+    /**
+     * Sends one typed answer to be marked against the passage. No card. Held
+     * on a stale link. @return the answer if it was checked (a mark, or for a crisis
+     * answer the PC's own help words and no mark - JARVIS-API 98.4), and the
+     * sentence to show when it was not. The quiz held here moves on with it.
+     */
+    suspend fun answerQuiz(n: Int, answer: String): Pair<com.jarvis.client.net.Quiz.Answer?, String> {
+        actionBlocker()?.let { return null to it }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            return null to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_NOT_FOUND) ?: "")
+        }
+        if (!com.jarvis.client.net.Quiz.validAnswer(answer)) {
+            return null to (com.jarvis.client.net.Quiz.messageFor(
+                if (answer.trim().isEmpty()) com.jarvis.client.net.Quiz.E_ANSWER_EMPTY
+                else com.jarvis.client.net.Quiz.E_ANSWER_LONG,
+            ) ?: "")
+        }
+        val out = when (val r = api.quizCall("/api/quiz/$id/answer",
+            com.jarvis.client.net.Quiz.answerBody(n, answer))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.answeredSaid(r.value)
+            is ApiResult.Failed -> return null to ("Not checked. " + describe(r.error))
+        }
+        val result = out.value
+        if (out.ok && result != null) {
+            adoptQuiz(result.quiz)
+            return result to ""
+        }
+        if (out.gone) _quiz.value = null
+        return null to out.said
+    }
+
+    /**
+     * Ends the quiz and takes the short "look at these again" summary. The PC
+     * deletes the session. Held on a stale link. @return the summary if it
+     * finished, and the sentence to show when it did not.
+     */
+    suspend fun finishQuiz(): Pair<com.jarvis.client.net.Quiz.Summary?, String> {
+        actionBlocker()?.let { return null to it }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            return null to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_NOT_FOUND) ?: "")
+        }
+        val out = when (val r = api.quizCall("/api/quiz/$id/finish",
+            com.jarvis.client.net.Quiz.EMPTY_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.finishedSaid(r.value)
+            is ApiResult.Failed -> return null to ("Not finished. " + describe(r.error))
+        }
+        val s = out.value
+        if (out.ok && s != null) {
+            _quiz.value = null
+            return s to ""
+        }
+        if (out.gone) _quiz.value = null
+        return null to out.said
+    }
+
+    /**
+     * Stops the quiz and forgets it: the PC deletes the session. Held on a
+     * stale link. @return whether it stopped, and the sentence to show.
+     */
+    suspend fun stopQuiz(): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            _quiz.value = null
+            return true to "Stopped. Nothing was kept."
+        }
+        val out = when (val r = api.quizCall("/api/quiz/$id/stop",
+            com.jarvis.client.net.Quiz.EMPTY_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.stoppedSaid(r.value)
+            is ApiResult.Failed -> return false to ("Not stopped. " + describe(r.error))
+        }
+        // "Not found" means it is already gone on the PC: that is what stopping wanted.
+        if (out.ok || out.gone) {
+            _quiz.value = null
+            return true to "Stopped. Nothing was kept."
+        }
+        return false to out.said
+    }
+
+    // ------------------------------------------------- Quiz on a video ----
+    // "Quiz me on a YouTube video" (docs/STUDY-FROM-TEXT-DESIGN.md section 14,
+    // JARVIS-API section 112) - see [com.jarvis.client.net.Youtube] and the block
+    // at the foot of ui/screens/QuizPlate.kt. The link is sent ONCE, in the body
+    // of the start call, and is not kept here: only the PC's request (whose `link`
+    // is the canonical address its card shows) is held, in process memory, while
+    // it is open. Nothing is written to disk, logged or put in a notification.
+
+    private val _youtube = MutableStateFlow<com.jarvis.client.net.Youtube.Request?>(null)
+
+    /** The YouTube request that is open on the PC (waiting, fetching or writing). Process memory only. */
+    val youtube: StateFlow<com.jarvis.client.net.Youtube.Request?> = _youtube.asStateFlow()
+
+    private val _youtubeAvailable = MutableStateFlow<Boolean?>(null)
+
+    /** Whether the PC has YouTube quizzes: null until a read answered, false on a 404 or 503. */
+    val youtubeAvailable: StateFlow<Boolean?> = _youtubeAvailable.asStateFlow()
+
+    private val _youtubeNote = MutableStateFlow<Pair<String, String>?>(null)
+
+    /**
+     * For a quiz that covers only the first part of a long video: (the quiz's id,
+     * the PC's own sentence). Shown above the questions of that quiz only.
+     */
+    val youtubeNote: StateFlow<Pair<String, String>?> = _youtubeNote.asStateFlow()
+
+    /** When a state this phone does not know was first seen (uptime ms), else null. */
+    private var youtubeUnknownSince: Long? = null
+
+    /** What one poll came to: [done] ends the polling, [said] is the sentence to show (or null). */
+    data class YoutubePoll(val done: Boolean, val said: String?)
+
+    /**
+     * Reads `GET /api/youtube` (a read: never held on a stale link): whether the
+     * PC has the feature, and picks up a request already in flight (for example
+     * after the app restarted). It never starts anything.
+     */
+    suspend fun youtubeCheck() {
+        when (val r = api.quizCall(com.jarvis.client.net.Youtube.PATH, null)) {
+            is ApiResult.Ok -> {
+                val reply = r.value
+                if (com.jarvis.client.net.Youtube.missing(reply)) {
+                    _youtubeAvailable.value = false
+                    return
+                }
+                val info = reply.body?.let(com.jarvis.client.net.Youtube::parseInfo) ?: return
+                _youtubeAvailable.value = info.available
+                val latest = info.latest
+                if (info.available && _youtube.value == null && latest != null &&
+                    com.jarvis.client.net.Youtube.keepPolling(latest.phase)
+                ) {
+                    _youtube.value = latest
+                }
+            }
+            is ApiResult.Failed -> Unit
+        }
+    }
+
+    /** Forgets the open request here (it is over, or the PC no longer has it). */
+    private fun endYoutube() {
+        _youtube.value = null
+        youtubeUnknownSince = null
+    }
+
+    /**
+     * Sends the pasted link to the PC, which raises ONE approval card. Held on a
+     * stale link (rule 4). The link goes in the body only and is not kept.
+     * @return whether a card is now waiting, and the sentence to show.
+     */
+    suspend fun startYoutube(link: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.Youtube.canStart(link)) return false to "Paste a video link first."
+        val body = com.jarvis.client.net.Youtube.startBody(link)
+        val out = when (val r = api.quizCall(com.jarvis.client.net.Youtube.QUIZ_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Youtube.startedSaid(r.value)
+            is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
+        }
+        val req = out.request
+        if (out.ok && req != null) {
+            youtubeUnknownSince = null
+            _youtubeNote.value = null
+            _youtube.value = req
+            return true to out.said
+        }
+        return false to out.said
+    }
+
+    /**
+     * One poll of the open request (a read: never held). On `ready` the quiz
+     * opens as the ordinary quiz; on any end the PC's own sentence comes back
+     * and the request is forgotten, so the link field is offered again. An
+     * unknown state keeps polling, for at most 3 minutes.
+     */
+    suspend fun pollYoutube(): YoutubePoll {
+        val cur = _youtube.value ?: return YoutubePoll(true, null)
+        if (!com.jarvis.client.net.Youtube.validId(cur.id)) {
+            endYoutube()
+            return YoutubePoll(true, null)
+        }
+        val r = api.quizCall("${com.jarvis.client.net.Youtube.PATH}/${cur.id}", null)
+        if (r is ApiResult.Failed) return YoutubePoll(false, noticeFor(r.error))
+        val out = com.jarvis.client.net.Youtube.readSaid((r as ApiResult.Ok).value)
+        val req = out.request
+        if (!out.ok || req == null) {
+            // The PC no longer has it, or a ready request had nothing readable in it: over.
+            if (out.gone || req != null) {
+                endYoutube()
+                return YoutubePoll(true, out.said)
+            }
+            return YoutubePoll(false, out.said)
+        }
+        when (req.phase) {
+            com.jarvis.client.net.Youtube.Phase.READY -> {
+                val quiz = req.quiz
+                endYoutube()
+                if (quiz != null) {
+                    adoptQuiz(quiz)
+                    val note = com.jarvis.client.net.Youtube.truncatedNote(req)
+                    _youtubeNote.value = if (note != null) quiz.id to note else null
+                }
+                return YoutubePoll(true, null)
+            }
+            com.jarvis.client.net.Youtube.Phase.ENDED -> {
+                endYoutube()
+                return YoutubePoll(true, out.said)
+            }
+            else -> {
+                _youtube.value = req
+                if (com.jarvis.client.net.Youtube.isKnown(req.state)) {
+                    youtubeUnknownSince = null
+                } else {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val since = youtubeUnknownSince ?: now
+                    youtubeUnknownSince = since
+                    if (com.jarvis.client.net.Youtube.giveUpOnUnknown(since, now)) {
+                        endYoutube()
+                        return YoutubePoll(true, out.said)
+                    }
+                }
+                return YoutubePoll(false, null)
+            }
+        }
+    }
+
+    /**
+     * Withdraws the card while it is still waiting. Never held on a stale link
+     * (it only ever makes things safer). @return the sentence to show.
+     */
+    suspend fun cancelYoutube(): String {
+        val cur = _youtube.value ?: return ""
+        if (!com.jarvis.client.net.Youtube.validId(cur.id)) {
+            endYoutube()
+            return ""
+        }
+        return when (val r = api.quizCall("${com.jarvis.client.net.Youtube.PATH}/${cur.id}/cancel", com.jarvis.client.net.Youtube.EMPTY_BODY)) {
+            is ApiResult.Ok -> {
+                val out = com.jarvis.client.net.Youtube.cancelledSaid(r.value)
+                val req = out.request
+                when {
+                    out.gone -> endYoutube()
+                    out.ok && req != null && req.phase == com.jarvis.client.net.Youtube.Phase.ENDED -> endYoutube()
+                    out.ok && req != null -> _youtube.value = req
+                }
+                out.said
+            }
+            is ApiResult.Failed -> "Not cancelled. " + describe(r.error)
+        }
+    }
+
+    // ---------------------------------------------------- Cloud quiz grading ----
+    // "Grade this better" (docs/STUDY-FROM-TEXT-DESIGN.md section 15, JARVIS-API 113)
+    // see [com.jarvis.client.net.QuizCloud].
+
+    private val _quizCloudInfo = MutableStateFlow<com.jarvis.client.net.QuizCloud.Info?>(null)
+    val quizCloudInfo: StateFlow<com.jarvis.client.net.QuizCloud.Info?> = _quizCloudInfo.asStateFlow()
+
+    private val _quizCloud = MutableStateFlow<com.jarvis.client.net.QuizCloud.Request?>(null)
+    val quizCloud: StateFlow<com.jarvis.client.net.QuizCloud.Request?> = _quizCloud.asStateFlow()
+
+    private var quizCloudUnknownSince: Long? = null
+
+    data class QuizCloudPoll(val done: Boolean, val said: String?)
+
+    suspend fun refreshQuizCloud() {
+        when (val r = api.quizCall(com.jarvis.client.net.QuizCloud.PATH, null)) {
+            is ApiResult.Ok -> {
+                if (!com.jarvis.client.net.QuizCloud.missing(r.value)) {
+                    val info = r.value.body?.let(com.jarvis.client.net.QuizCloud::parseInfo)
+                    _quizCloudInfo.value = info
+                    info?.latest?.let { l ->
+                        if (com.jarvis.client.net.QuizCloud.keepPolling(l.phase)) {
+                            _quizCloud.value = l
+                        }
+                    }
+                }
+            }
+            is ApiResult.Failed -> Unit
+        }
+    }
+
+    private fun endQuizCloud() {
+        _quizCloud.value = null
+        quizCloudUnknownSince = null
+    }
+
+    suspend fun startQuizCloud(quizId: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.QuizCloud.gradeBody(quizId)
+        val out = when (val r = api.quizCall(com.jarvis.client.net.QuizCloud.GRADE_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.QuizCloud.requestSaid(r.value, "Not started.")
+            is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
+        }
+        val req = out.request
+        if (out.ok && req != null) {
+            quizCloudUnknownSince = null
+            _quizCloud.value = req
+            return true to out.said
+        }
+        return false to out.said
+    }
+
+    suspend fun pollQuizCloud(): QuizCloudPoll {
+        val cur = _quizCloud.value ?: return QuizCloudPoll(true, null)
+        if (!com.jarvis.client.net.QuizCloud.validId(cur.id)) {
+            endQuizCloud()
+            return QuizCloudPoll(true, null)
+        }
+        val r = api.quizCall("${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}", null)
+        if (r is ApiResult.Failed) return QuizCloudPoll(false, noticeFor(r.error))
+        val out = com.jarvis.client.net.QuizCloud.requestSaid((r as ApiResult.Ok).value, "Not read.")
+        val req = out.request
+        if (!out.ok || req == null) {
+            if (out.gone || req != null) {
+                endQuizCloud()
+                return QuizCloudPoll(true, out.said)
+            }
+            return QuizCloudPoll(false, out.said)
+        }
+        when (req.phase) {
+            com.jarvis.client.net.QuizCloud.Phase.READY -> {
+                val quiz = req.quiz
+                endQuizCloud()
+                if (quiz != null) {
+                    adoptQuiz(quiz)
+                } else {
+                    refreshQuiz()
+                }
+                return QuizCloudPoll(true, out.said)
+            }
+            com.jarvis.client.net.QuizCloud.Phase.ENDED -> {
+                endQuizCloud()
+                return QuizCloudPoll(true, out.said)
+            }
+            else -> {
+                _quizCloud.value = req
+                if (com.jarvis.client.net.QuizCloud.isKnown(req.state)) {
+                    quizCloudUnknownSince = null
+                } else {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val since = quizCloudUnknownSince ?: now
+                    quizCloudUnknownSince = since
+                    if (com.jarvis.client.net.QuizCloud.giveUpOnUnknown(since, now)) {
+                        endQuizCloud()
+                        return QuizCloudPoll(true, out.said)
+                    }
+                }
+                return QuizCloudPoll(false, null)
+            }
+        }
+    }
+
+    suspend fun cancelQuizCloud(): String {
+        val cur = _quizCloud.value ?: return ""
+        if (!com.jarvis.client.net.QuizCloud.validId(cur.id)) {
+            endQuizCloud()
+            return ""
+        }
+        val r = api.quizCall("${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}/cancel", com.jarvis.client.net.QuizCloud.EMPTY_BODY)
+        if (r is ApiResult.Failed) return noticeFor(r.error)
+        val out = com.jarvis.client.net.QuizCloud.requestSaid((r as ApiResult.Ok).value, "Not cancelled.")
+        if (out.request != null) {
+            if (out.request.phase == com.jarvis.client.net.QuizCloud.Phase.ENDED) endQuizCloud()
+            else _quizCloud.value = out.request
+        }
+        return out.said
+    }
+
+    // ------------------------------------------------------- Study decks ----
+    // "My study decks" (docs/QUIZ-DECKS-DESIGN.md, contract C1-C6) - see
+    // [com.jarvis.client.net.Decks] and ui/screens/DecksPlate.kt. The PC keeps
+    // every deck, sealed; this phone keeps NOTHING: no card text in a file,
+    // a preference or a database. Every write is held on a stale link (rule 4);
+    // reads are not. No approval card: the owner's own tap is the yes.
+
+    private val _decksTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one after every change made from this phone (and after a
+     * quiz's Keep), so "My study decks" reads itself again - the same shape as
+     * [goalsTick].
+     */
+    val decksTick: StateFlow<Int> = _decksTick.asStateFlow()
+
+    private suspend fun <T> decksRead(
+        path: String?,
+        lead: String,
+        said: (com.jarvis.client.net.Decks.Reply) -> com.jarvis.client.net.Decks.Outcome<T>,
+    ): com.jarvis.client.net.Decks.Outcome<T> {
+        if (path == null) return com.jarvis.client.net.Decks.blocked("$lead That is not one of your decks.")
+        return when (val r = api.decksCall(path, null)) {
+            is ApiResult.Ok -> said(r.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Decks.blocked("$lead " + describe(r.error))
+        }
+    }
+
+    private suspend fun <T> decksWrite(
+        path: String?,
+        body: String?,
+        lead: String,
+        said: (com.jarvis.client.net.Decks.Reply) -> com.jarvis.client.net.Decks.Outcome<T>,
+    ): com.jarvis.client.net.Decks.Outcome<T> {
+        actionBlocker()?.let { return com.jarvis.client.net.Decks.blocked(it) }
+        if (path == null || body == null) {
+            return com.jarvis.client.net.Decks.blocked("$lead That does not look right.")
+        }
+        val out = when (val r = api.decksCall(path, body)) {
+            is ApiResult.Ok -> said(r.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Decks.blocked("$lead " + describe(r.error))
+        }
+        if (out.ok) _decksTick.update { n -> n + 1 }
+        return out
+    }
+
+    /** `GET /api/decks`: the deck list, the day's counts and the `line`. A read: never held. */
+    suspend fun decksList(): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.DeckList> =
+        decksRead("/api/decks", "Not read.", com.jarvis.client.net.Decks::listSaid)
+
+    /** `POST /api/decks`: a new, empty deck. */
+    suspend fun decksCreate(name: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Deck> {
+        val ok = com.jarvis.client.net.Decks.validName(name)
+        return decksWrite("/api/decks", if (ok) com.jarvis.client.net.Decks.createBody(name) else null, "Not made.") {
+            com.jarvis.client.net.Decks.deckSaid(it, "Not made.")
+        }
+    }
+
+    /** `POST /api/decks/settings`: "New cards a day", 0 to 20. */
+    suspend fun decksSetPerDay(n: Int): com.jarvis.client.net.Decks.Outcome<Int> =
+        decksWrite(
+            "/api/decks/settings",
+            if (com.jarvis.client.net.Decks.validPerDay(n)) com.jarvis.client.net.Decks.settingsBody(n) else null,
+            "Not changed.",
+            com.jarvis.client.net.Decks::perDaySaid,
+        )
+
+    /** `POST /api/decks/{id}/act`: `pause`, `resume` or `delete` (delete after the owner's "are you sure?"). */
+    suspend fun decksAct(id: String, op: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Acted> =
+        decksWrite(
+            com.jarvis.client.net.Decks.deckActPath(id), com.jarvis.client.net.Decks.deckActBody(op), "Not changed.",
+        ) { com.jarvis.client.net.Decks.actedSaid(it, "Not changed.") }
+
+    /** `POST /api/decks/{id}/act`, `rename`. The desktop's Edit on a deck row does the same. */
+    suspend fun decksRename(id: String, name: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Acted> =
+        decksWrite(
+            com.jarvis.client.net.Decks.deckActPath(id),
+            if (com.jarvis.client.net.Decks.validName(name)) com.jarvis.client.net.Decks.renameBody(name) else null,
+            "Not changed.",
+        ) { com.jarvis.client.net.Decks.actedSaid(it, "Not changed.") }
+
+    /** `GET /api/decks/{id}/cards`. A read. */
+    suspend fun decksCards(id: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.DeckCards> =
+        decksRead(com.jarvis.client.net.Decks.cardsPath(id), "Not read.", com.jarvis.client.net.Decks::cardsSaid)
+
+    /** `POST /api/decks/{id}/cards/{cid}/act`, `edit`. */
+    suspend fun decksCardEdit(
+        id: String,
+        cid: String,
+        front: String,
+        back: String,
+    ): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.CardFull> {
+        val ok = com.jarvis.client.net.Decks.validFront(front) && com.jarvis.client.net.Decks.validBack(back)
+        return decksWrite(
+            com.jarvis.client.net.Decks.cardActPath(id, cid),
+            if (ok) com.jarvis.client.net.Decks.cardEditBody(front, back) else null,
+            "Not saved.",
+        ) { com.jarvis.client.net.Decks.cardSaid(it, "Not saved.") }
+    }
+
+    /** `POST /api/decks/{id}/cards/{cid}/act`, `delete` (after the owner's "are you sure?"). */
+    suspend fun decksCardDelete(id: String, cid: String): com.jarvis.client.net.Decks.Outcome<Unit> =
+        decksWrite(
+            com.jarvis.client.net.Decks.cardActPath(id, cid), com.jarvis.client.net.Decks.CARD_DELETE_BODY, "Not deleted.",
+        ) { com.jarvis.client.net.Decks.deletedSaid(it, "Not deleted.") }
+
+    /** `GET /api/review[?deck=]`: the next card and the state. A read: never held. */
+    suspend fun reviewStart(deck: String?): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Review> =
+        decksRead(com.jarvis.client.net.Decks.reviewPath(deck), "Not read.", com.jarvis.client.net.Decks::reviewSaid)
+
+    /** `POST /api/review/reveal`: show the back. Required before a rating. */
+    suspend fun reviewReveal(card: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Reveal> =
+        decksWrite(
+            "/api/review/reveal",
+            if (com.jarvis.client.net.Decks.validId(card)) com.jarvis.client.net.Decks.revealBody(card) else null,
+            "Not shown.",
+            com.jarvis.client.net.Decks::revealSaid,
+        )
+
+    /** `POST /api/review/rate`: the owner's own rating; the reply carries the next card. */
+    suspend fun reviewRate(
+        card: String,
+        rating: String,
+        deck: String?,
+    ): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Review> =
+        decksWrite(
+            "/api/review/rate",
+            // [deck]: the scope this screen reviews ("" = every deck), so the PC counts it in that run only.
+            if (com.jarvis.client.net.Decks.validId(card)) {
+                com.jarvis.client.net.Decks.rateBody(card, rating, deck ?: "")
+            } else {
+                null
+            },
+            "Not saved.",
+            com.jarvis.client.net.Decks::ratedSaid,
+        )
+
+    /** `POST /api/review/more`: "Do 10 more". */
+    suspend fun reviewMore(deck: String?): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Review> =
+        decksWrite(
+            "/api/review/more",
+            if (deck == null || com.jarvis.client.net.Decks.validId(deck)) com.jarvis.client.net.Decks.moreBody(deck) else null,
+            "Not changed.",
+            com.jarvis.client.net.Decks::reviewSaid,
+        )
 
     /**
      * One Today card (backend jarvis_today.py, 2026-09-28): the owner's own
@@ -6343,6 +7159,39 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------------------------- activity heatmap and balance ----
+    // docs/JARVIS-API.md section 105 (the owner's tick of 2026-09-30) - see
+    // [com.jarvis.client.net.Progress] and ui/screens/ProgressPlate.kt. Read
+    // when Brain opens and after this phone's own save; nothing is kept, spoken
+    // or put in a notification.
+
+    /** The activity heatmap for [weeks] weeks (4..26). A read; never held. */
+    suspend fun progressActivity(weeks: Int): ApiResult<com.jarvis.client.net.Progress.Reply> =
+        api.progressActivity(weeks)
+
+    /** The balance chart and what can be picked for it. A read; never held. */
+    suspend fun progressBalance(): ApiResult<com.jarvis.client.net.Progress.Reply> =
+        api.progressBalance()
+
+    /**
+     * Saves the balance chart's areas (3 to 8, or none to clear). No card, but
+     * held on a stale link (rule 4) and refused while "Hide memory lists and
+     * chat history" is on, since the picker's names are hidden then. The PC's
+     * own refusal sentence comes back as sent.
+     */
+    suspend fun progressBalanceSave(json: String): com.jarvis.client.net.Progress.Outcome {
+        if (privateListsHidden) {
+            return com.jarvis.client.net.Progress.Outcome(false, com.jarvis.client.net.Progress.w("hidden"), null)
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.Progress.Outcome(false, it, null) }
+        return when (val r = api.progressBalanceSave(json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Progress.saved(r.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Progress.Outcome(
+                false, "Not changed. " + describe(r.error), null,
+            )
+        }
+    }
+
     // ----------------------------------------------- forget a time frame ----
     // docs/JARVIS-API.md section 64 (the owner's decision of 2026-09-28) -
     // see [com.jarvis.client.net.ForgetRange] and ui/screens/ForgetRangePlate.kt.
@@ -6509,8 +7358,140 @@ object JarvisRuntime {
 
     /** `GET /api/history`, one page, newest first. A read: never held. [kind]:
      *  one kind of conversation ("Live only" and the other filters), or all. */
-    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
-        api.history(before, kind)
+    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
+        api.history(before, kind, tag)
+
+    // ------------------------------------------------ chat tags ----
+    // docs/CHAT-TAGS-DESIGN.md section 10. The tag list and each chat's tag
+    // live on the PC; the phone keeps none of it. No approval card.
+
+    /**
+     * `GET /api/history/tags`: a read, never held on a stale link. Nothing is
+     * asked while the private lists are hidden (tag names are the owner's
+     * words, hidden along with titles) - null then, and the screen shows no
+     * names. A PC without tags comes back as a NotFound failure.
+     */
+    suspend fun historyTags(): ApiResult<JsonObject>? {
+        if (privateListsHidden) return null
+        return api.historyTags()
+    }
+
+    /**
+     * One change to the tag list (add, rename, style, move, delete): [json] is
+     * a body from [com.jarvis.client.net.ChatTags]. Held on a stale link
+     * (rule 4), and refused while the lists are hidden.
+     */
+    suspend fun tagsWrite(json: String): com.jarvis.client.net.ChatTags.Write {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatTags.Write(false, it) }
+        if (privateListsHidden) return com.jarvis.client.net.ChatTags.Write(false, com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        return tagsPost(com.jarvis.client.net.ChatTags.TAGS_PATH, json)
+    }
+
+    /**
+     * File ONE chat under a tag, or unfile it with null tag (`POST
+     * /api/history/tag`). Held on a stale link; refused while the lists are
+     * hidden. Nothing about the chat's words is sent - only its id.
+     */
+    suspend fun fileChat(chatId: String, tagId: Int?): com.jarvis.client.net.ChatTags.Write {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatTags.Write(false, it) }
+        if (privateListsHidden) return com.jarvis.client.net.ChatTags.Write(false, com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId)) {
+            return com.jarvis.client.net.ChatTags.Write(false, com.jarvis.client.net.ChatTags.errorSentence("not_found"))
+        }
+        return tagsPost(com.jarvis.client.net.ChatTags.TAG_PATH, com.jarvis.client.net.ChatTags.fileBody(chatId, tagId))
+    }
+
+    private suspend fun tagsPost(path: String, json: String): com.jarvis.client.net.ChatTags.Write =
+        when (val r = api.tagsPost(path, json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatTags.write(r.value.first, r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.ChatTags.Write(
+                false,
+                if (r.error == ApiError.NotFound) com.jarvis.client.net.ChatTags.OLD_PC else "Not changed. " + describe(r.error),
+            )
+        }
+
+    /**
+     * "Fork from here" (`POST /api/history/fork`, docs/JARVIS-API.md section
+     * 110): a new chat holding turns 0..[upto] of [chatId]. Writes a new chat,
+     * so it is held on a stale link (rule 4) and refused while the private
+     * lists are hidden. No card. Only the chat's id and the turn's number are
+     * sent - none of its words. On success the caller opens the new chat and
+     * reads the list again.
+     */
+    suspend fun forkChat(chatId: String, upto: Int): com.jarvis.client.net.ChatFork.Result {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatFork.Result(false, it) }
+        if (privateListsHidden) {
+            return com.jarvis.client.net.ChatFork.Result(false, com.jarvis.client.net.ChatFork.HIDDEN)
+        }
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId) || upto < 0) {
+            return com.jarvis.client.net.ChatFork.Result(false, com.jarvis.client.net.ChatFork.errorSentence("bad_request"))
+        }
+        return when (val r = api.forkPost(com.jarvis.client.net.ChatFork.body(chatId, upto))) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatFork.result(r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.ChatFork.Result(
+                false,
+                if (r.error == ApiError.NotFound) {
+                    com.jarvis.client.net.ChatFork.ERROR_FALLBACK
+                } else {
+                    "The chat was not forked. " + describe(r.error)
+                },
+            )
+        }
+    }
+
+    /**
+     * "New section here" (`POST /api/history/mark`, docs/JARVIS-API.md section
+     * 106): put a divider above the turn numbered [idx] of [chatId], or take
+     * it off. Held on a stale link (rule 4) and refused while the private
+     * lists are hidden. No card. Only the chat's id, the turn's number and
+     * on/off are sent - none of its words - and nothing here reaches a model.
+     */
+    suspend fun markSection(chatId: String, idx: Int, on: Boolean): com.jarvis.client.net.ChatMark.Result {
+        val words = com.jarvis.client.net.ChatMark
+        actionBlocker()?.let { return com.jarvis.client.net.ChatMark.Result(false, it) }
+        if (privateListsHidden) return com.jarvis.client.net.ChatMark.Result(false, words.HIDDEN)
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId) || idx < 0) {
+            return com.jarvis.client.net.ChatMark.Result(false, words.errorSentence("bad_request"))
+        }
+        return when (val r = api.markPost(words.body(chatId, idx, on))) {
+            is ApiResult.Ok -> words.result(r.value.second, on)
+            is ApiResult.Failed -> com.jarvis.client.net.ChatMark.Result(
+                false,
+                if (r.error == ApiError.NotFound) words.ERROR_FALLBACK else "The section break was not saved. " + describe(r.error),
+            )
+        }
+    }
+
+    /**
+     * `GET /api/history/tags/suggest` (section 104): the "Suggest tags
+     * overnight" switch. A read, never held on a stale link, and it shows
+     * under hidden lists (it holds no chat words). Null for a PC without it
+     * (an older PC answers 404) or an answer that is not one.
+     */
+    suspend fun tagSuggestState(): com.jarvis.client.net.TagSuggest.State? =
+        when (val r = api.tagSuggestState()) {
+            is ApiResult.Ok -> com.jarvis.client.net.TagSuggest.state(r.value)
+            is ApiResult.Failed -> null
+        }
+
+    /**
+     * Turn "Suggest tags overnight" on or off (`POST /api/history/tags/suggest`
+     * with exactly `{"enabled": bool}`). ON raises ONE approval card on the PC
+     * and comes back `pending`: the caller keeps the switch OFF until a later
+     * [tagSuggestState] says enabled. OFF is instant. Every write is held on
+     * a stale link (rule 4), so both wait for a fresh one.
+     */
+    suspend fun setTagSuggest(on: Boolean): com.jarvis.client.net.TagSuggest.Write {
+        val words = com.jarvis.client.net.TagSuggest
+        actionBlocker()?.let { return com.jarvis.client.net.TagSuggest.Write(false, it) }
+        return when (val r = api.tagSuggestPost(words.body(on))) {
+            is ApiResult.Ok -> words.write(r.value.first, r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.TagSuggest.Write(
+                false,
+                if (r.error == ApiError.NotFound) words.OLD_PC else "Not changed. " + describe(r.error),
+            )
+        }
+    }
 
     /** The chat Home is in, when it was kept on the PC (so History can say "this is the one you are in"). */
     fun homeKeptChatId(): String? = if (chat.hasKeptChat()) chat.conversationIdNow() else null

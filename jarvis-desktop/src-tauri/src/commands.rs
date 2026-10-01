@@ -1926,6 +1926,14 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         // Brain place main.js opens (openBrainFromRoute) after "forget what
         // you learned last week" filled in its list. Navigation only.
         "open_brain",
+        // "Label my chat about the boiler as Home" (jarvis_quick.py,
+        // docs/CHAT-TAGS-DESIGN.md section 10): with `open_brain: "history"`
+        // the Brain opens History with the search words filled in
+        // (`history_q`) and a banner to file the tapped chat under the tag
+        // whose id is `file_under` (below: a whole number or a string of
+        // one). The page checks both again, and nothing is filed until the
+        // owner taps a chat.
+        "history_q",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
@@ -1933,6 +1941,35 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
                 serde_json::Value::String(value.to_string()),
             );
         }
+    }
+    // `file_under`: a tag's id, sent by the PC as a whole number (the frozen
+    // contract) - passed on as the digits alone, and a string of digits is
+    // accepted too. Anything else is left out.
+    let file_under = route.get("file_under").and_then(|v| {
+        v.as_u64()
+            .map(|n| n.to_string())
+            .or_else(|| v.as_str().map(str::to_string))
+    });
+    if let Some(id) = file_under
+        .filter(|s| !s.is_empty() && s.len() <= 6 && s.bytes().all(|b| b.is_ascii_digit()))
+    {
+        out.insert("file_under".to_string(), serde_json::Value::String(id));
+    }
+    // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md C1, JARVIS-API.md section
+    // 107): `topics_left_out` is how many facts the owner's topic settings
+    // kept out of this answer (a count, so it is not hidden by the lock
+    // settings), and `topic_id` is the topic a spoken "switch off my work
+    // topic" opens the picker for (`open_brain: "topics"`; an id, no name).
+    // Whole numbers only; anything else is left out.
+    if let Some(n) = route.get("topics_left_out").and_then(|v| v.as_u64()) {
+        out.insert("topics_left_out".to_string(), serde_json::json!(n));
+    }
+    if let Some(n) = route
+        .get("topic_id")
+        .and_then(|v| v.as_u64())
+        .filter(|n| (1..=999_999).contains(n))
+    {
+        out.insert("topic_id".to_string(), serde_json::json!(n));
     }
     // How many remembered facts went into the question - a count, never
     // which ones. With `gate: "private"` it is how the quickbar knows not to
@@ -3652,7 +3689,7 @@ pub async fn set_second_card(
 /// A feature id `assign` may name for the third card - never "master" or
 /// "combined" (those have no third-card lane): reuses [`second_card_feature`]'s
 /// shape check (lower-case letters and underscores) - the backend refuses
-/// anything that is not one of its five feature ids with its own sentence.
+/// anything that is not one of its seven feature ids with its own sentence.
 pub(crate) fn second_card_third_feature(assign: &str) -> Result<&str, String> {
     second_card_feature(assign)
 }
@@ -6034,6 +6071,68 @@ mod turn_tests {
         assert_eq!(got["quick"], "forget_range");
         let odd = super::route_line_from_header(r#"{"lane": "x", "open_brain": 3}"#).unwrap();
         assert!(!odd.contains("open_brain"), "{odd}");
+    }
+
+    /// Topic controls (2026-09-30): `open_brain: "topics"` opens the picker for
+    /// `topic_id`, and `topics_left_out` is the "Left out N facts" count. Both
+    /// pass on as whole numbers (the id and the count carry no name); anything
+    /// else is left out.
+    #[test]
+    fn the_route_line_carries_the_topic_fields_as_numbers_only() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "quick": "topic_picker", "open_brain": "topics", "topic_id": 3, "topics_left_out": 2}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["open_brain"], "topics");
+        assert_eq!(got["topic_id"], 3);
+        assert_eq!(got["topics_left_out"], 2);
+        for odd in [r#""3""#, "-3", "1.5", "true", "null"] {
+            let header = format!(
+                r#"{{"lane": "x", "open_brain": "topics", "topic_id": {odd}, "topics_left_out": {odd}}}"#
+            );
+            let line = super::route_line_from_header(&header).unwrap();
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert!(got.get("topic_id").is_none(), "{odd}: {line}");
+            assert!(got.get("topics_left_out").is_none(), "{odd}: {line}");
+        }
+        // An id is a small whole number from 1; a count may be 0.
+        for odd in ["0", "1000000"] {
+            let header = format!(r#"{{"lane": "x", "open_brain": "topics", "topic_id": {odd}}}"#);
+            let line = super::route_line_from_header(&header).unwrap();
+            assert!(!line.contains("topic_id"), "{odd}: {line}");
+        }
+    }
+
+    /// "Label my chat about the boiler as Home" (2026-09-30): `file_under` and
+    /// `history_q` reach the page as strings beside `open_brain: "history"`.
+    #[test]
+    fn the_route_line_carries_the_older_chat_tag_fields_as_strings() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "quick": "chat_tag", "open_brain": "history", "file_under": "3", "history_q": "boiler"}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["open_brain"], "history");
+        assert_eq!(got["file_under"], "3");
+        assert_eq!(got["history_q"], "boiler");
+        // The contract sends the tag id as a whole number; it arrives as digits.
+        let num = super::route_line_from_header(
+            r#"{"lane": "x", "open_brain": "history", "file_under": 3, "history_q": "boiler"}"#,
+        )
+        .unwrap();
+        let num: serde_json::Value = serde_json::from_str(&num).unwrap();
+        assert_eq!(num["file_under"], "3");
+        for odd in [r#""a&b""#, "-3", "1.5", "true", "null", r#""""#, "1234567"] {
+            let header = format!(
+                r#"{{"lane": "x", "open_brain": "history", "file_under": {odd}, "history_q": null}}"#
+            );
+            let line = super::route_line_from_header(&header).unwrap();
+            assert!(
+                !line.contains("file_under") && !line.contains("history_q"),
+                "{odd}: {line}"
+            );
+        }
     }
 
     /// Temporary chat and "Used in this answer" (2026-09-25): the two marks

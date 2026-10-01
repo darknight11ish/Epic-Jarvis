@@ -8,7 +8,9 @@
 # 2026-09-19 (made again on 2026-09-28 with the same cut-off, to add
 # espeakng-loader and onnx for jarvis_mouth.py - nothing else moved; and again
 # on 2026-09-29, the same cut-off, to add six pywinrt packages for jarvis_ocr.py -
-# nothing else moved).
+# nothing else moved; and again on 2026-09-30, the same cut-off, to add fsrs for
+# jarvis_decks.py - nothing else moved; and again on 2026-09-30, the same cut-off, to add
+# youtube-transcript-api for jarvis_youtube.py - nothing else moved).
 # To make it again (a package changed, or once a month):
 #
 #   uv pip compile backend/requirements.txt --universal --generate-hashes --python-version 3.10 --exclude-newer <7 days ago, e.g. 2026-09-19T00:00:00Z> --exclude-newer-package markitdown=2026-09-26T00:00:00Z --no-header -o backend/requirements.lock
@@ -399,7 +401,9 @@ ddgs==9.16.0 \
 defusedxml==0.7.1 \
     --hash=sha256:1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69 \
     --hash=sha256:a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61
-    # via markitdown
+    # via
+    #   markitdown
+    #   youtube-transcript-api
 espeakng-loader==0.2.4 \
     --hash=sha256:08721baf27d13d461f6be6eed9a65277e70d68234ff484fd8b9897b222cdcb6d \
     --hash=sha256:41f1e08ac9deda2efd1ea9de0b81dab9f5ae3c4b24284f76533d0a7b1dd7abd7 \
@@ -427,6 +431,10 @@ filelock==4.0.0 \
 flatbuffers==25.12.19 \
     --hash=sha256:7634f50c427838bb021c2d66a3d1168e9d199b0607e6329399f04846d42e20b4
     # via onnxruntime
+fsrs==6.3.2 \
+    --hash=sha256:7fe79947ceb92ca35fdca3dfa511a239be15b317cde63d6643a2da6110844d91 \
+    --hash=sha256:bc55066c821164b1cff6d75b17a3ed8e86cfd45789e3d775cfcb895319ce9ba4
+    # via -r backend/requirements.txt
 fsspec==2026.9.0 \
     --hash=sha256:0f08147951c8cb31d844c3547d631053b127863b60be04cf06e121333ee0e2fe \
     --hash=sha256:8dd6e646e99ea382bd85f97a45e6b526a442d79423a7dc673f1e2756d05fcb5f
@@ -1647,6 +1655,7 @@ requests==2.34.2 \
     #   fastembed
     #   huggingface-hub
     #   markitdown
+    #   youtube-transcript-api
 sherpa-onnx==1.13.8 \
     --hash=sha256:04b9268c348e9f4bd61315754ad06b02a3c185d3d7770acd8e2dcee9c2e039f9 \
     --hash=sha256:05b1b61e9c1a29d29c33ce296d28602b6c7796cba4f44f787281711ff5c8e3bf \
@@ -1944,6 +1953,7 @@ typing-extensions==4.16.0 \
     #   anyio
     #   beautifulsoup4
     #   cryptography
+    #   fsrs
     #   huggingface-hub
     #   onnx
     #   python-pptx
@@ -2145,3 +2155,7 @@ xlsxwriter==3.2.9 \
     --hash=sha256:254b1c37a368c444eac6e2f867405cc9e461b0ed97a3233b2ac1e574efb4140c \
     --hash=sha256:9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3
     # via python-pptx
+youtube-transcript-api==1.2.4 \
+    --hash=sha256:03878759356da5caf5edac77431780b91448fb3d8c21d4496015bdc8a7bc43ff \
+    --hash=sha256:b72d0e96a335df599d67cee51d49e143cff4f45b84bcafc202ff51291603ddcd
+    # via -r backend/requirements.txt

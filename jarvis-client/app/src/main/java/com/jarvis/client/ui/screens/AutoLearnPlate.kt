@@ -205,6 +205,8 @@ internal fun SavedAutomaticallySection(
     privateHidden: Boolean,
     showPrivateBusy: Boolean,
     onShowPrivate: () -> Unit,
+    /** Brings Brain's Topics into view (the link on "N facts kept, hidden"); null draws no link. */
+    onOpenTopics: (() -> Unit)? = null,
 ) {
     if (privateHidden) {
         HiddenSection(AutoLearn.TITLE, busy = showPrivateBusy, onShow = onShowPrivate)
@@ -262,6 +264,17 @@ internal fun SavedAutomaticallySection(
     // "Learn automatically", as the list's own answer says it: the empty
     // list says so when it is off.
     var autoOn by remember { mutableStateOf<Boolean?>(null) }
+    // Topic controls (docs/JARVIS-API.md section 107): facts of an Off topic the PC
+    // left out of this list, and the topic list to tag "Learn, but don't use" facts.
+    var topicsHidden by remember { mutableIntStateOf(0) }
+    var topicView by remember { mutableStateOf<com.jarvis.client.net.Topics.View?>(null) }
+    val anyTopic = facts?.any { it.topic != null } == true
+    LaunchedEffect(anyTopic, reads, tick) {
+        topicView = if (!anyTopic) null else {
+            (JarvisRuntime.topicsRead(com.jarvis.client.net.Topics.TOPICS_PATH) as? ApiResult.Ok)
+                ?.let { com.jarvis.client.net.Topics.view(it.value.body) }
+        }
+    }
 
     // Read here as well as in its own section: that one may be off screen
     // (not composed), and these rows still need to say Pin or Unpin.
@@ -283,6 +296,7 @@ internal fun SavedAutomaticallySection(
                 facts = rows
                 mayHaveOlder = more
                 autoOn = page.status.auto
+                topicsHidden = page.topicsHidden
                 readError = null
             }
             is ApiResult.Failed -> readError = AutoLearn.listFailure(r.error) ?: JarvisRuntime.noticeFor(r.error)
@@ -295,6 +309,17 @@ internal fun SavedAutomaticallySection(
             val err = readError
             Text(AutoLearn.HISTORY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
             Gap(6)
+            if (topicsHidden > 0) {
+                Text(
+                    com.jarvis.client.net.Topics.keptHiddenLine(topicsHidden),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+                if (onOpenTopics != null) {
+                    Quiet(com.jarvis.client.net.Topics.w("title"), onClick = onOpenTopics)
+                }
+                Gap(6)
+            }
             when {
                 shown == null -> Text(
                     if (err != null) "Couldn't read what was saved: $err" else "Reading…",
@@ -330,6 +355,8 @@ internal fun SavedAutomaticallySection(
                         Text(AutoLearn.rowLine(fact, zone, today), style = MaterialTheme.typography.labelSmall,
                             color = chrome.textLo)
                         if (fact.aloud) Pill(AutoLearn.VOICE_MARK)
+                        // "not used in answers": its topic is "Learn, but don't use".
+                        com.jarvis.client.net.Topics.notUsedTag(fact.topic, topicView)?.let { Pill(it) }
                     }
                     if (confirmId == fact.id) {
                         Text(AutoLearn.FORGET_CONFIRM, style = MaterialTheme.typography.bodySmall,

@@ -107,6 +107,19 @@ class ChatSession(
      */
     val turnId: StateFlow<String?> = _turnId.asStateFlow()
 
+    private val _tableId = MutableStateFlow<String?>(null)
+
+    /**
+     * The id of the spending table that goes with the answer on screen, or
+     * null (docs/JARVIS-API.md section 100.2): read from the stream's
+     * `: jarvis-table <32 hex>` comment ([Spending.tableIdFromLine]), which
+     * comes right before the answer's sentence. An id and nothing else - the
+     * table itself is fetched by the screen that draws it, kept in that
+     * screen's memory only, and never written anywhere. Cleared with the
+     * answer, like [usedIds]: a newer question drops the old table for good.
+     */
+    val tableId: StateFlow<String?> = _tableId.asStateFlow()
+
     private val _waiting = MutableStateFlow<String?>(null)
 
     /**
@@ -272,6 +285,66 @@ class ChatSession(
     val cloudOffer: StateFlow<String?> = _cloudOffer.asStateFlow()
 
     private val _openSettings = MutableStateFlow<String?>(null)
+
+    private val _fileUnder = MutableStateFlow<ChatTags.FileUnder?>(null)
+
+    /**
+     * "Label my chat about the boiler as Home" (docs/CHAT-TAGS-DESIGN.md
+     * section 10): the tag to file under and the words to search for, read off
+     * the answer's `X-Jarvis-Route` (`open_brain: "history"`, `file_under`,
+     * `history_q` - [ChatTags.fileUnderFromRoute]), or null. Pure navigation:
+     * MainActivity opens History with the search filled in and a banner, and
+     * nothing is filed until the owner taps a chat. Cleared with the answer,
+     * like [openSettings]; consumed once by [consumeFileUnder].
+     */
+    val fileUnder: StateFlow<ChatTags.FileUnder?> = _fileUnder.asStateFlow()
+
+    fun consumeFileUnder() {
+        _fileUnder.value = null
+    }
+
+    private val _topicPick = MutableStateFlow<Topics.Open?>(null)
+
+    /**
+     * "Switch off my work topic" (docs/TOPIC-CONTROLS-DESIGN.md, the frozen
+     * contract C4): the answer's `X-Jarvis-Route` said `open_brain: "topics"`,
+     * with the topic's id when it named one ([Topics.openFromRoute]), or null.
+     * Pure navigation: MainActivity opens Brain at Topics and hands the id on
+     * to the plate, which shows the four-choice picker - nothing has changed,
+     * and nothing changes until the owner taps Change. Cleared with the
+     * answer; consumed once by [consumeTopicPick].
+     */
+    val topicPick: StateFlow<Topics.Open?> = _topicPick.asStateFlow()
+
+    fun consumeTopicPick() {
+        _topicPick.value = null
+    }
+
+    private val _topicsLeftOut = MutableStateFlow(0)
+
+    /**
+     * How many facts the owner's topic settings kept out of the answer on
+     * screen (`topics_left_out` in its `X-Jarvis-Route`,
+     * [Topics.leftOutFromRoute]) - a count, never words. "Left out 2 facts
+     * because of your topic settings" sits beside "Used 2 memories". Cleared
+     * with the answer, like [usedIds]; 0 for a temporary chat (it recalls
+     * nothing).
+     */
+    val topicsLeftOut: StateFlow<Int> = _topicsLeftOut.asStateFlow()
+
+    private val _menuChange = MutableStateFlow<MenuRoute?>(null)
+
+    /**
+     * "Hide the finance menu" by voice or chat (docs/JARVIS-API.md section 109.2): the change
+     * the answer's `X-Jarvis-Route` named ([MenuRoute.fromRoute]), or null. The PC cannot know
+     * which app asked, so `MainActivity` applies it to this phone's own list once, then calls
+     * [consumeMenuChange]. Hiding only tidies: no card, nothing asked, nothing turned off.
+     */
+    val menuChange: StateFlow<MenuRoute?> = _menuChange.asStateFlow()
+
+    fun consumeMenuChange() {
+        _menuChange.value = null
+    }
 
     private val _faceTuningChange = MutableStateFlow<String?>(null)
 
@@ -473,11 +546,16 @@ class ChatSession(
         // The previous answer's id goes with the previous answer: a mark
         // tapped now must never land on the answer that is being replaced.
         _turnId.value = null
+        _tableId.value = null
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _menuChange.value = null
+        _fileUnder.value = null
+        _topicPick.value = null
+        _topicsLeftOut.value = 0
         _cloudOffer.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
@@ -669,10 +747,22 @@ class ChatSession(
                         // `open_brain` names Brain's "Forget a time frame",
                         // the list already filled in - the same navigation,
                         // through OpenPlace. Nothing is removed by it.
+                        // "Switch off my work topic" (2026-09-30): `open_brain:
+                        // "topics"` opens Brain's Topics; its `topic_id` opens
+                        // that topic's picker, changing nothing.
+                        val topicOpen = Topics.openFromRoute(routeHeader)
+                        _topicPick.value = topicOpen
+                        _topicsLeftOut.value = if (asTemporary) 0 else Topics.leftOutFromRoute(routeHeader)
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                             ?: ForgetRange.openFromRoute(routeHeader)
+                            ?: topicOpen?.let { Topics.PLACE }
+                        // "Label my chat about the boiler as Home": History,
+                        // the search filled in, a banner (ChatTags).
+                        _fileUnder.value = ChatTags.fileUnderFromRoute(routeHeader)
                         // Sharpness or frame rate, for this phone only.
                         _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
+                        // "Hide the finance menu": this phone's own list (MenuRoute).
+                        _menuChange.value = MenuRoute.fromRoute(routeHeader)
                         // "A cloud model could give this one a second
                         // look." (jarvis_router.choose(), gate "offer"):
                         // read the same way as [crisis] and [usedIds]
@@ -784,6 +874,12 @@ class ChatSession(
                                 )
                                 failed = true
                                 true
+                            }
+                            is ChatChunkParser.Result.Table -> {
+                                // Only the id, and only for the call that is
+                                // still current (same guard as `failWith`).
+                                if (call === c) _tableId.value = result.id
+                                false
                             }
                             ChatChunkParser.Result.Ignored -> false
                         }
@@ -943,6 +1039,7 @@ class ChatSession(
         _reply.value = ""
         _question.value = null
         _turnId.value = null
+        _tableId.value = null
         _error.value = null
         _problem.value = null
         lastAsked = null
@@ -951,6 +1048,10 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _menuChange.value = null
+        _fileUnder.value = null
+        _topicPick.value = null
+        _topicsLeftOut.value = 0
         _cloudOffer.value = null
     }
 

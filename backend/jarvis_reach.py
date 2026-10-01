@@ -106,6 +106,8 @@ TOOL_NAMES = {
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
     "my_files": "Finding and reading files in the folders you listed",
+    "my_spending": "Adding up spending from your bank files (shown on screen only)",
+    "retirement_whatif": "A retirement what-if from numbers you type (shown on screen only)",
     "home_read": "Reading Home Assistant",
     "home_control": "Changing things in Home Assistant",
     "append_logseq_journal": "Adding to your Logseq journal",
@@ -271,6 +273,15 @@ class Ctx:
     # The headless browser (jarvis_browser_engine.py): {"enabled": bool,
     # "ready": bool, "mode": str}; None: read it.
     browser_engine: Optional[dict] = None
+    # YouTube captions for a quiz (jarvis_youtube.py): {"ready": True | False |
+    # None} - the module is here and its caption reader installed / the module
+    # is here but the reader is not / the module is not here; None: look.
+    youtube: Optional[dict] = None
+    # "Grade this better" on a quiz (jarvis_quiz_cloud.py): {"ready": True | False |
+    # None} - the module is here and a cloud service is set up (a saved key AND a
+    # monthly limit) / the module is here but no service is set up / the module
+    # is not here; None: look.
+    quiz_cloud: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -710,6 +721,49 @@ def _github(ctx: Ctx) -> dict:
                                   " No GitHub token is set, so it searches without one."))
 
 
+def _youtube_ready() -> Optional[bool]:
+    """Is jarvis_youtube here, and is its caption reader installed? None = the
+    module itself is not on this PC. Opens no connection."""
+    try:
+        import importlib.util
+        import jarvis_youtube  # noqa: F401
+    except Exception:
+        return None
+    try:
+        return importlib.util.find_spec("youtube_transcript_api") is not None
+    except Exception:
+        return False
+
+
+def _youtube(ctx: Ctx) -> dict:
+    """"Quiz me on a YouTube video" (jarvis_youtube.py, the owner's decision of
+    2026-09-30): ONE approval card per link, then the video's CAPTION TEXT
+    only is fetched from YouTube. It breaks YouTube's terms and may be blocked."""
+    name = "YouTube captions (for a quiz)"
+    ready = ctx.youtube.get("ready") if ctx.youtube is not None else _youtube_ready()
+    if ready is None:
+        return _row("youtube", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have the YouTube quiz yet - run "
+                    "apply-patches.ps1.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("youtube_captions_read"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("youtube", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never reads a video's captions.")
+    if not ready:
+        return _row("youtube", name, "not_set_up", "", ASK_NA,
+                    "Not set up: the caption reader (youtube-transcript-api) is not installed "
+                    "on this PC yet - run apply-patches.ps1.")
+    return _row("youtube", name, "on", "youtube.com", ASK_EVERY,
+                "Reads the caption text (never the video or its sound) of a YouTube link you "
+                "paste in the Quiz page, then quizzes you on it. One approval card per link "
+                "shows the exact link. This breaks YouTube's terms and may be blocked. The "
+                "captions are outside text.")
+
+
 def _phone_push(ctx: Ctx) -> dict:
     name = "Phone notifications (ntfy)"
     topic = ctx.env("JARVIS_NTFY_TOPIC")
@@ -1126,6 +1180,51 @@ def _sky_weather(ctx: Ctx) -> dict:
                 "online - they are worked out on your own devices.")
 
 
+def _quiz_cloud_ready() -> Optional[bool]:
+    """Is jarvis_quiz_cloud here, and is a cloud service set up for it (a key
+    saved on this PC AND a monthly limit)? None = the module itself is not on
+    this PC. Opens no connection."""
+    try:
+        import jarvis_quiz_cloud as QC
+    except Exception:
+        return None
+    try:
+        return bool(QC.status()[1].get("ready"))
+    except Exception:
+        return False
+
+
+def _quiz_cloud(ctx: Ctx) -> dict:
+    """"Grade this better" on a quiz (jarvis_quiz_cloud.py, the owner's decision of
+    2026-09-30): ONE approval card per request lists exactly what would leave
+    this PC; the quiz is then sent to the cheapest cloud service the chatbot
+    driver has set up. Never for a private quiz or after a crisis answer."""
+    name = "Quiz grading in the cloud"
+    ready = ctx.quiz_cloud.get("ready") if ctx.quiz_cloud is not None else _quiz_cloud_ready()
+    if ready is None:
+        return _row("quiz_cloud", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have \"Grade this better\" yet - "
+                    "run apply-patches.ps1.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("quiz_cloud_grade"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("quiz_cloud", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so a quiz is never sent to a cloud service.")
+    if not ready:
+        return _row("quiz_cloud", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no cloud service has a saved key AND a monthly money limit on "
+                    "this PC yet. See the chatbot API lines on the AI chatbots row.")
+    return _row("quiz_cloud", name, "on", "your chosen AI service", ASK_EVERY,
+                "Sends one quiz you have answered - the questions, your answers and the "
+                "passages, shown word for word on the card - to the cheapest AI service you "
+                "have set up, to be marked better. One card per request. Never for a quiz "
+                "about money, health or anything private, and never after a crisis message. "
+                "It costs a little, within your monthly limit.")
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
@@ -1140,6 +1239,8 @@ KINDS = (
     ("notes_read", _notes_read),
     ("notes_write", _notes_write),
     ("github", _github),
+    ("youtube", _youtube),
+    ("quiz_cloud", _quiz_cloud),
     ("phone_push", _phone_push),
     ("computer", _computer),
     ("browser", _browser),

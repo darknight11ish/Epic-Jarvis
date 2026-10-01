@@ -364,6 +364,16 @@ def conflict_card_text(newer: str) -> str:
 # --------------------------------------------------------------------------
 
 
+def _topic_hidden(c) -> frozenset:
+    """The facts the overnight tidy must not read: a local model compares
+    numbered facts, so the facts of a topic that may not be USED are left out
+    (topic controls, docs/TOPIC-CONTROLS-DESIGN.md 4.4). Never raises."""
+    try:
+        return _memory().topic_blocked(c, "use")
+    except Exception:
+        return frozenset()
+
+
 def ended_facts(c, now: float) -> list:
     """Facts in use whose words gave an end date that has passed, and was
     still ahead when they were saved ("lived in Leeds until 2024" was
@@ -371,10 +381,13 @@ def ended_facts(c, now: float) -> list:
     that date - oldest end first."""
     M = _memory()
     out = []
+    hide = _topic_hidden(c)
     for r in c.execute(
             "SELECT id, text, created, meta FROM facts WHERE erased_at IS NULL"
             " AND (valid_to IS NULL OR valid_to > ?) AND meta LIKE ?",
             (now, f'%"{M.TRUE_UNTIL}"%')).fetchall():
+        if int(r["id"]) in hide:
+            continue
         meta = M._meta_dict(r["meta"])
         end, said = meta.get(M.TRUE_UNTIL), meta.get(M.TRUE_UNTIL_SAID)
         if (not isinstance(end, (int, float)) or isinstance(end, bool) or not isinstance(said, str)
@@ -425,11 +438,14 @@ def current_facts(c, now: float) -> list:
     first: {"id", "text", "created", "valid_from", "meta"}."""
     M = _memory()
     out = []
+    hide = _topic_hidden(c)
     for r in c.execute(
             "SELECT id, text, created, valid_from, meta FROM facts WHERE erased_at IS NULL"
             " AND (valid_to IS NULL OR valid_to > ?) ORDER BY created DESC, id DESC LIMIT ?",
             (now, SCAN_MAX)).fetchall():
         if M._meta_dict(r["meta"]).get("forgotten_at"):
+            continue
+        if int(r["id"]) in hide:
             continue
         out.append(dict(r))
     return out

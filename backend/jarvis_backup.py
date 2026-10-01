@@ -41,9 +41,10 @@ THE FOLDER - reused exactly, "Folders Jarvis may look in"'s own picker
 WHAT IS BACKED UP - verified against this repository's real file names,
 2026-09-27 (the design doc's names had drifted: it said "history.db"; the
 real file, made by jarvis_chat_log.py, is "chat-history.db")
-  * Four SQLite databases, snapshotted with the online backup API
+  * The SQLite databases in SOURCE_DBS, snapshotted with the online backup API
     (`sqlite3.Connection.backup`, safe while Jarvis keeps them open):
-    memory.db, chat-history.db, schedule.db, feedback.db.
+    memory.db, chat-history.db, schedule.db, feedback.db, projects.db, goals.db,
+    and (2026-09-30) study.db, the review decks.
   * Every `*.json` file directly in the Jarvis settings folder (folders.
     json, asks_first.json, manner.json, and so on) - never a subfolder, so
     this glob can never reach into "voice" or "notes" by accident.
@@ -57,13 +58,20 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     (jarvis_chat_log.CredentialKey, KEY_TARGET) and kept, base64, as ONE
     small file INSIDE the archive - which is encrypted before it ever
     touches a disk, so the key is never written out in the clear.
+  * The review decks' own key (jarvis_decks.KEY_TARGET, "Jarvis Backend/study
+    decks key"), carried the same way as secrets/study-decks-key.b64, and only
+    when study.db exists AND the key can be read: the deck words are sealed
+    under it, so a study.db without it is left out rather than carried
+    unopenable. A restore writes the file and the key back together and makes
+    the running store reopen (jarvis_decks.forget_key). Same recovery code, same
+    lock; the deck words are never in the archive in the clear.
 
 EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
   * The pairing token and every API key (Exa, Tavily, Brave, GitHub, ...):
     all of them live in Windows Credential Manager under their OWN target
     names (jarvis_token_store.py, jarvis_search.py) - never in a `*.json`
     settings file - and this module reads exactly one Credential Manager
-    entry, the chat-history key, and no other. A key that is re-entered
+    entry, the chat-history key, and the review decks' key, and no other. A key that is re-entered
     once, on the PC that needs it, is safer than one that can be dug out of
     a backup file years later.
   * Model files (large, and Ollama already keeps its own copy) and logs
@@ -219,8 +227,15 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: audit: schedule.db WAS backed up, and it holds each goal's weekly check-in
 #: job, so a restore brought back check-ins whose goals were gone - and Stop
 #: tracking (the only way to remove one) needs the goal.
+#: study.db (jarvis_decks.py, review decks) joined on 2026-09-30, the owner's
+#: decision after the decks audit: same recovery code, same lock. Its words are
+#: sealed under a Credential Manager key of their own, so that key travels the
+#: way the chat-history key does (secrets/study-decks-key.b64) - and a study.db
+#: is only written into an archive together with its key, never without.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
-              "goals.db")
+              "goals.db", "study.db")
+
+STUDY_DB = "study.db"
 
 MISSING = "backup.py could not be reached - run apply-patches.ps1 on this PC"
 NO_CRYPTO = ("Backing up needs the `cryptography` package, which is not installed on this "
@@ -234,8 +249,8 @@ LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not sh
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
                "erased, until that backup ages out of the last {keep} kept. A chat you "
-               "delete is the same: it can still be in an older backup until that backup "
-               "ages out.").format(keep=KEEP)
+               "delete is the same, and so is a review deck or card: it can still be in an "
+               "older backup until that backup ages out.").format(keep=KEEP)
 
 
 class WrongCode(Exception):
@@ -486,6 +501,20 @@ def _chat_history_key_b64() -> Optional[str]:
         return None
 
 
+def _study_decks_key_b64() -> Optional[str]:
+    """The review decks' own encryption key, base64, or None when it cannot
+    be read. Read the SAME way jarvis_decks.py reads it (its own Credential
+    Manager entry, "Jarvis Backend/study decks key"), and only called when
+    study.db exists, so a backup never makes a key for decks nobody has."""
+    try:
+        import jarvis_chat_log
+        import jarvis_decks
+        key = jarvis_chat_log.CredentialKey(jarvis_decks.KEY_TARGET)()
+        return base64.b64encode(key).decode("ascii")
+    except Exception:
+        return None
+
+
 def _toml_source() -> Optional[Path]:
     try:
         if fw is not None:
@@ -511,17 +540,29 @@ def build_archive() -> tuple:
     conf = _config_dir()
     manifest = {"created_at": time.time(), "databases": {}, "settings_files": 0,
                 "notes_files": 0, "voice_files": 0, "chat_history_key": False,
-                "framework_toml": False}
+                "study_decks_key": False, "framework_toml": False}
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory(prefix="jarvis-backup-") as tmp:
         tmp_path = Path(tmp)
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            study_key_b64 = None
             for name in SOURCE_DBS:
                 src = conf / name
                 dest = tmp_path / name
+                if name == STUDY_DB:
+                    # Sealed words are useless (and a restore of them would
+                    # replace a working file) without their key: no key, no file.
+                    if not src.is_file():
+                        continue
+                    study_key_b64 = _study_decks_key_b64()
+                    if not study_key_b64:
+                        continue
                 if _snapshot_db(src, dest):
                     manifest["databases"][name] = _table_counts(dest)
                     zf.write(dest, arcname=f"db/{name}")
+                    if name == STUDY_DB:
+                        zf.writestr("secrets/study-decks-key.b64", study_key_b64)
+                        manifest["study_decks_key"] = True
             for jf in sorted(conf.glob("*.json")):
                 if jf.name == settings_path().name:
                     continue  # backup.json names only a folder - never useful inside itself
@@ -1140,7 +1181,7 @@ def restore_card(name: str, manifest: dict) -> str:
         f"Backup: {name}",
         f"Made: {when_text}",
         "",
-        "This REPLACES your memory and chat files, settings and notes with that day's "
+        "This REPLACES your memory and chat files, review decks, settings and notes with that day's "
         "copies. Anything you added or changed in them since is lost - unless it is in the "
         "safety backup Jarvis makes first. Only files the backup does not have at all are "
         "left as they are.",
@@ -1239,10 +1280,11 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     conf = _config_dir()
     conf.mkdir(parents=True, exist_ok=True)
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
-               "framework_toml": False, "chat_history_key": False, "skipped": 0,
-               "chat_history_key_failed": False}
+               "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
+               "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False}
     plan: list = []              # (dest, data, is_database)
     key_data = None
+    study_key_data = None
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         for info in zf.infolist():
             name = info.filename
@@ -1270,6 +1312,8 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 applied["framework_toml"] = True
             elif name == "secrets/chat-history-key.b64":
                 key_data = data
+            elif name == "secrets/study-decks-key.b64":
+                study_key_data = data
     tag = uuid.uuid4().hex[:8]
     staged: list = []            # (dest, temp, is_database)
     swapped: list = []           # (dest, copy of the old file or None)
@@ -1315,6 +1359,15 @@ def _apply_restore(zip_bytes: bytes) -> dict:
             # Not swallowed: the files ARE restored, but chats written with the
             # backup's key will not open without it. The outcome says so.
             applied["chat_history_key_failed"] = True
+    if study_key_data is not None:
+        try:
+            import jarvis_token_store as ts
+            import jarvis_decks
+            ts.WindowsStore(target=jarvis_decks.KEY_TARGET).write(study_key_data.decode("ascii"))
+            applied["study_decks_key"] = True
+            jarvis_decks.forget_key()   # the running store must reopen with this key
+        except Exception:
+            applied["study_decks_key_failed"] = True
     return applied
 
 
@@ -1349,7 +1402,7 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
                     gate: Callable, tier_of: Callable, apply_fn: Callable,
                     safety_fn: Callable) -> None:
     text = restore_card(name, manifest)
-    detail = {"text": text, "what": "replace memory, chat history, settings and notes with "
+    detail = {"text": text, "what": "replace memory, chat history, review decks, settings and notes with "
                                     f"the backup {name}", "setting": "restore from backup",
               "to": name, "leaves_this_pc": False}
     try:

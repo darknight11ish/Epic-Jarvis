@@ -85,6 +85,140 @@ export const CONTINUE_WHY = Object.freeze({
   compare: "A comparison can't be continued here: its replies are outside text, not a " +
     "conversation with Jarvis.",
 });
+/* "Fork from here" (JARVIS-API.md section 110; docs/CHAT-TAGS-DESIGN.md "Fork
+ * contract"). The words are the phone's, word for word (history-cases.json
+ * `words.fork*`); the new title is made by the PC, never here. */
+export const FORK = "Fork from here";
+export const FORK_TITLE = "Start a new chat that begins with everything up to this message.";
+export const FORK_BUSY = "Forking\u2026";
+export const FORK_NO = "This chat cannot be forked.";
+export const FORK_ERROR_FALLBACK = "Your PC did not fork that chat.";
+const FORK_LABELS = Object.freeze({
+  user: "Fork from here, after your message",
+  assistant: "Fork from here, after Jarvis's answer",
+});
+const FORK_ERRORS = Object.freeze({
+  bad_request: "Choose a message in this chat to fork from.",
+  bad_upto: "That message is not in this chat, so it was not forked.",
+  not_found: "That chat is not kept any more, so it was not forked.",
+});
+
+/** The screen-reader name of a fork button; it starts with the visible text. */
+export function forkLabel(role) {
+  return role === "assistant" ? FORK_LABELS.assistant : FORK_LABELS.user;
+}
+
+/** `Forked into "{title}".`; a PC that sent no title (or a hidden one) gets a plain line. */
+export function forkDoneWords(title) {
+  const t = typeof title === "string" ? title.trim() : "";
+  return t ? `Forked into "${t}".` : "Forked into a new chat.";
+}
+
+/**
+ * The History row for a chat just made by "Fork from here", built from the
+ * PC's answer (`{ id, title, turns, tag_id }`) so the new chat can be shown
+ * and opened at once, before the list is read again. `sourceRow` (the chat
+ * forked from, if its row is loaded) gives the device and the `started` time
+ * the fork keeps; `nowSeconds` is the fork's own `updated` (a fork counts as
+ * new - the PC stamps it with the moment of the fork). Kind is always "chat".
+ */
+export function forkedRow(made, sourceRow, nowSeconds) {
+  const m = made && typeof made === "object" ? made : {};
+  const src = sourceRow && typeof sourceRow === "object" ? sourceRow : {};
+  const now = Number.isFinite(nowSeconds) ? nowSeconds : null;
+  return {
+    id: text(m.id),
+    title: text(m.title).trim(),
+    started: num(src.started) ?? now,
+    updated: now,
+    turns: num(m.turns) ?? 0,
+    device: text(src.device),
+    hasVoice: false,
+    tainted: src.tainted === true,
+    kind: "chat",
+    project: text(src.project) || null,
+    tagId: Number.isInteger(m.tag_id) && m.tag_id > 0 ? m.tag_id : null,
+  };
+}
+
+/** The loaded rows with the forked chat's row first (no second copy). */
+export function withForkedRow(rows, row) {
+  const rest = (Array.isArray(rows) ? rows : []).filter((c) => c && c.id !== row.id);
+  return [row, ...rest];
+}
+
+/**
+ * The one sentence for a refused fork. A known code (except `bad_request`,
+ * whose PC sentence can say more, like "Chat history is off") has its fixed
+ * sentence; then the PC's own message; then `bad_request`'s sentence; a
+ * `not_forkable` with no message is FORK_NO; else the fallback.
+ */
+export function forkErrorWords(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  const code = typeof a.error === "string" ? a.error : "";
+  const message = typeof a.message === "string" ? a.message.trim() : "";
+  if (message) return message;
+  if (code === "not_forkable") return FORK_NO;
+  return Object.hasOwn(FORK_ERRORS, code) ? FORK_ERRORS[code] : FORK_ERROR_FALLBACK;
+}
+
+/* "New section here" (JARVIS-API.md section 106; docs/OVERNIGHT-TAGS-DESIGN.md
+ * section 9.B; fixture `words.mark*`). A divider above one of the owner's own
+ * messages in an opened chat of 10 or more messages. View-only: it reaches no
+ * model and changes nothing "Continue this chat" carries on. No card. */
+export const MARK = "New section here";
+export const MARK_LABEL = "New section here, before your message";
+export const MARK_DIVIDER = "New section";
+export const MARK_REMOVE = "Remove section break";
+export const MARK_DONE = "Section break added.";
+export const MARK_REMOVED = "Section break removed.";
+export const MARK_LIMIT = "You can have at most 20 section breaks in one chat.";
+export const MARK_NO = "This chat cannot have section breaks.";
+export const MARK_ERROR_FALLBACK = "Your PC did not save that section break.";
+export const MARK_BUSY = "Saving\u2026";
+export const MARK_MAX = 20;
+export const MARK_ERRORS = Object.freeze({
+  bad_request: "Choose one of your messages in this chat.",
+  not_found: "That chat is not kept any more, so no section break was saved.",
+  too_many_marks: MARK_LIMIT,
+});
+
+/** The turn numbers of a `marks` array: whole numbers 0 or more, each once, sorted. */
+export function readMarks(value) {
+  const out = new Set();
+  for (const n of Array.isArray(value) ? value : []) {
+    if (Number.isInteger(n) && n >= 0) out.add(n);
+  }
+  return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * The one sentence for a refused section break (fixture `mark_error_cases`):
+ * the PC's non-empty `message` wins; else, for `not_markable`, its `mark_why`
+ * then MARK_NO; else the code's sentence; else the fallback.
+ */
+export function markErrorWords(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  const code = typeof a.error === "string" ? a.error : "";
+  const message = typeof a.message === "string" ? a.message.trim() : "";
+  if (message) return message;
+  if (code === "not_markable") {
+    const why = typeof a.mark_why === "string" ? a.mark_why.trim() : "";
+    return why || MARK_NO;
+  }
+  return Object.hasOwn(MARK_ERRORS, code) ? MARK_ERRORS[code] : MARK_ERROR_FALLBACK;
+}
+
+/** The announcement for a successful answer: added or removed. */
+export const markDoneWords = (on) => (on ? MARK_DONE : MARK_REMOVED);
+
+/** Whether an owner's message gets the button: the chat is markable, it is
+ *  the owner's own message, the PC numbered it and it has no divider yet. */
+export function markOffered(markable, role, idx, marks) {
+  return markable === true && role === "user" && Number.isInteger(idx) && idx >= 0
+    && !marks.includes(idx);
+}
+
 export const COPY = "Copy";
 export const COPY_TITLE = "Copy this answer.";
 export const COPIED = "Copied.";
@@ -409,6 +543,9 @@ export function readHistory(answer) {
         tainted: c.tainted === true,
         kind: readKind(c.kind),
         project: text(c.project) || null,
+        // Chat tags (docs/CHAT-TAGS-DESIGN.md): the tag's id, or null when
+        // untagged - and from a PC that has no tags yet.
+        tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
       })),
   };
 }
@@ -437,6 +574,15 @@ export function readConversation(answer) {
     updated: num(a.updated),
     continuable,
     continueWhy: continuable ? "" : text(a.continue_why).trim() || CONTINUE_WHY[kind] || CONTINUE_WHY.support,
+    // "Fork from here": only the PC's explicit `true` offers the button; an
+    // older PC sends neither field, so nothing is offered and nothing said.
+    forkable: a.forkable === true,
+    forkWhy: a.forkable === true ? "" : typeof a.forkable === "boolean" ? text(a.fork_why).trim() || FORK_NO : "",
+    // "New section here": only the PC's explicit `true` offers the button; an
+    // older PC sends none of the three, so nothing is drawn.
+    marks: readMarks(a.marks),
+    markable: a.markable === true,
+    markWhy: typeof a.mark_why === "string" ? a.mark_why.trim() : "",
     turns: turns
       .filter((t) => t && (t.role === "user" || t.role === "assistant" || t.role === "support"
         || t.role === "chatbot"))
@@ -452,6 +598,8 @@ export function readConversation(answer) {
           : t.role === "support" ? text(t.provenance) || "support_note"
             : t.role === "chatbot" ? text(t.provenance) || "chatbot_note" : "",
         readOutside: t.read_outside === true,
+        // The turn's number, what "Fork from here" sends as `upto`.
+        idx: Number.isInteger(t.idx) && t.idx >= 0 ? t.idx : null,
         // Only the PC's "false" says so; an older PC sends nothing.
         answerKept: t.answer_kept !== false,
       })),
@@ -638,6 +786,7 @@ export function readSearch(answer) {
           // (the second chat audit, 2026-09-28, desktop worst-three #2).
           kind: readKind(c.kind),
           project: text(c.project) || null,
+          tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
           hits: num(c.hits) ?? 0,
           snippet: {
             role: ["user", "assistant", "title"].includes(s.role) ? s.role : "user",
@@ -730,7 +879,7 @@ function markedText(el, s, matches, current) {
  * what the bar showed, not "**" and "#". While "Find in this chat" has
  * words in it, the words are shown plain, with the matches marked.
  */
-export function renderTranscript(box, conv, { el, onCopy = null }, find = null) {
+export function renderTranscript(box, conv, { el, onCopy = null, fork = null, mark = null }, find = null) {
   box.replaceChildren();
   if (conv.tainted) {
     box.append(el("p", "history-taint-note",
@@ -756,6 +905,24 @@ export function renderTranscript(box, conv, { el, onCopy = null }, find = null) 
   conv.turns.forEach((t, index) => {
     const item = el("li", "history-turn");
     item.dataset.role = t.role;
+    // A section break sits ABOVE its turn: a heading landmark with its own
+    // Remove (the same tap, both directions).
+    if (mark && Number.isInteger(t.idx) && mark.marks.includes(t.idx)) {
+      const brk = el("div", "history-section-break");
+      brk.setAttribute("role", "heading");
+      brk.setAttribute("aria-level", "3");
+      brk.dataset.idx = String(t.idx);
+      brk.append(el("span", "history-section-break-text", MARK_DIVIDER));
+      const rm = el("button", "btn ghost small history-newsection-remove", mark.busy ? MARK_BUSY : MARK_REMOVE);
+      rm.type = "button";
+      rm.dataset.fkey = `unmark:${conv.id}:${t.idx}`;
+      rm.setAttribute("aria-label", MARK_REMOVE);
+      if (typeof mark.decorate === "function") mark.decorate(rm);
+      if (mark.busy) rm.disabled = true;
+      rm.addEventListener("click", () => mark.onMark(t.idx, false));
+      brk.append(rm);
+      item.append(brk);
+    }
     const head = el("div", "history-turn-head");
     const support = t.role === "support";
     const chatbot = t.role === "chatbot";
@@ -785,6 +952,35 @@ export function renderTranscript(box, conv, { el, onCopy = null }, find = null) 
       copy.title = COPY_TITLE;
       copy.addEventListener("click", () => onCopy(text(t.text), copy));
       head.append(copy);
+    }
+    // "Fork from here" on the owner's messages and on Jarvis's kept answers.
+    if (fork && fork.forkable && (t.role === "user" || t.role === "assistant") && t.idx !== null
+      && t.idx !== undefined) {
+      const busyHere = fork.busy && fork.busy.idx === t.idx;
+      const fb = el("button", "btn ghost small history-fork", busyHere ? FORK_BUSY : FORK);
+      fb.type = "button";
+      fb.dataset.fkey = `fork:${conv.id}:${t.idx}`;
+      fb.dataset.title = FORK_TITLE;
+      fb.title = FORK_TITLE;
+      fb.setAttribute("aria-label", busyHere ? FORK_BUSY : forkLabel(t.role));
+      if (fork.busy) fb.dataset.busy = "true";
+      if (typeof fork.decorate === "function") fork.decorate(fb);
+      if (fork.busy) fb.disabled = true;
+      fb.addEventListener("click", () => fork.onFork(t.idx, fb));
+      head.append(fb);
+    }
+    // "New section here" on the owner's own messages, when the PC says the
+    // chat is markable (10 or more messages, a chat or Live session).
+    if (mark && mark.markable && markOffered(true, t.role, t.idx, mark.marks)) {
+      const busyHere = mark.busy && mark.busy.idx === t.idx;
+      const mb = el("button", "btn ghost small history-newsection", busyHere ? MARK_BUSY : MARK);
+      mb.type = "button";
+      mb.dataset.fkey = `mark:${conv.id}:${t.idx}`;
+      mb.setAttribute("aria-label", busyHere ? MARK_BUSY : MARK_LABEL);
+      if (typeof mark.decorate === "function") mark.decorate(mb);
+      if (mark.busy) mb.disabled = true;
+      mb.addEventListener("click", () => mark.onMark(t.idx, true));
+      head.append(mb);
     }
     item.append(head);
     const mine = matches.filter((m) => m.turn === index);

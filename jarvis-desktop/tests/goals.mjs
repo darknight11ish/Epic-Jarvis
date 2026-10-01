@@ -41,6 +41,7 @@ import {
   EMPTY_GOALS,
   GOALS_DETAIL,
   GOALS_MISSING,
+  GOAL_WORDS,
   GOALS_TITLE,
   NEW_GOAL_LABEL,
   NEW_GOAL_PLACEHOLDER,
@@ -55,6 +56,10 @@ import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
+
+const CASES = JSON.parse(read("tests/fixtures/projects-cases.json"));
+const GC = CASES.goal_cases;
+const goalOf = (post, status = "active", id = "g0000000010") => ({ ...(post.body || post).goal, status, id });
 
 const fails = [];
 const check = async (name, fn) => {
@@ -91,7 +96,8 @@ await check("reading GET /api/goals: ids, plans, limits, and an older PC", async
   assert.equal(v.available, true);
   assert.equal(v.goals.length, 2);
   assert.equal(v.goals[1].plan[0].done, true);
-  assert.deepEqual(v.limits, { text: 300, steps: 7, goals: 20, by: 40 });
+  assert.deepEqual(v.limits, { text: 300, steps: 7, goals: 20, by: 40, needs: 3 });
+  assert.equal(v.locks, false, "a PC that sends no needs limit has no locks");
   assert.equal(openCount(v), 2, "a stopped goal does not count as open");
   const withStopped = readGoals({ ok: true, goals: [DRAFT, ACTIVE, STOPPED] });
   assert.equal(openCount(withStopped), 2);
@@ -135,6 +141,7 @@ await check("statusLabel and the check-in lines", async () => {
   assert.equal(checkinJobFor(DRAFT, [CHECKIN_JOB], null), null, "a different goal's words never match");
 });
 
+
 /* ── The Brain window ─────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
@@ -177,8 +184,8 @@ await check("a draft: editable step text, Add a step, and Accept sends the edite
   assert.equal(sent[0].cmd, "brain_goals_accept");
   assert.equal(sent[0].id, "g0000000001");
   assert.deepEqual(sent[0].plan, [
-    { step: "contact 3 installers", by: "", done: false },
-    { step: "pick one and book it", by: "", done: false },
+    { step: "contact 3 installers", by: "", done: false, needs: [], measure: null },
+    { id: "s1", step: "pick one and book it", by: "", done: false, needs: [], measure: null },
   ]);
 });
 
@@ -194,7 +201,7 @@ await check("Remove takes a step out of the draft before it is ever sent anywher
   const sent = await page.evaluate(() => window.__goalsCalls);
   await page.close();
   assert.equal(left, 1);
-  assert.deepEqual(sent[0].plan, [{ step: "two", by: "", done: false }]);
+  assert.deepEqual(sent[0].plan, [{ step: "two", by: "", done: false, needs: [], measure: null }]);
 });
 
 await check("accepting shows \"waiting for your yes\", the same words a reminder card uses", async () => {
@@ -347,6 +354,260 @@ await check("a `schedule` event carrying a goal_checkin reads Coming up again, w
   await page.close();
   assert.match(before, new RegExp(WAITING.replace(/[.]/g, "\\.")));
   assert.doesNotMatch(after, new RegExp(WAITING.replace(/[.]/g, "\\.")));
+});
+
+/* ── Step locks: rows, the pickers, the 409, Undo ────────────────────── */
+
+await check("a locked step: tick disabled, 'locked' and why in words, a screen reader hears both", async () => {
+  const page = await workTab({ goals: { goals: [goalOf(GC.created)] } });
+  const rows = page.locator("#goals-list .goal-step");
+  const s1 = rows.nth(0).locator('input[type="checkbox"]');
+  const s2 = rows.nth(1).locator('input[type="checkbox"]');
+  const out = {
+    s1Disabled: await s1.isDisabled(),
+    s2Disabled: await s2.isDisabled(),
+    s2Text: await rows.nth(1).innerText(),
+    s2Label: await s2.getAttribute("aria-label"),
+    s2Why: await s2.evaluate((e) => document.getElementById(e.getAttribute("aria-describedby")).textContent),
+    s1Text: await rows.nth(0).innerText(),
+    s2State: await rows.nth(1).getAttribute("data-state"),
+  };
+  await page.close();
+  assert.equal(out.s1Disabled, false, "the open first step can be ticked");
+  assert.equal(out.s2Disabled, true, "a locked step's tick is disabled");
+  assert.match(out.s2Text, /locked/i);
+  assert.match(out.s2Text, /after: "Get the 5k under 30"/);
+  assert.equal(out.s2Label, 'Enter the race, locked, after: "Get the 5k under 30"');
+  assert.equal(out.s2Why, 'after: "Get the 5k under 30"');
+  assert.equal(out.s2State, "locked", "greyed by data-state, and not only by colour: it says locked in words");
+  assert.match(out.s1Text, /Follows: 5k time/);
+});
+
+await check("a number that reached its target is 'number reached', not a tick, and the tick stays", async () => {
+  const page = await workTab({ goals: { goals: [goalOf(GC.number_reached)] } });
+  const row = page.locator("#goals-list .goal-step").first();
+  const box = row.locator('input[type="checkbox"]');
+  const text = await row.innerText();
+  const checked = await box.isChecked();
+  const disabled = await box.isDisabled();
+  await page.close();
+  assert.match(text, /number reached/);
+  assert.match(text, /The number reached its target: 29\.5 min \(target 30 min\)\./);
+  assert.equal(checked, false, "reaching the target does not tick the step");
+  assert.equal(disabled, false, "the owner still ticks it");
+});
+
+await check("ticking sends the step's id; Undo unticks it and asks nothing", async () => {
+  const page = await workTab({ goals: { goals: [goalOf(GC.created)] } });
+  await page.locator("#goals-list .goal-step").first().locator('input[type="checkbox"]').check();
+  await page.waitForTimeout(500);
+  const hasUndo = await page.locator("#goals-list .goal-undo").count();
+  const said = hasUndo ? await page.locator("#goals-list .goal-undo").innerText() : "";
+  await page.locator("#goals-list .goal-undo").getByRole("button", { name: "Undo" }).click();
+  await page.waitForTimeout(500);
+  const sent = await page.evaluate(() => window.__goalsCalls);
+  const undoLeft = await page.locator("#goals-list .goal-undo").count();
+  const checked = await page.locator("#goals-list .goal-step").first().locator('input[type="checkbox"]').isChecked();
+  await page.close();
+  assert.equal(hasUndo, 1);
+  assert.match(said, /Ticked "Get the 5k under 30"\./);
+  assert.deepEqual(sent, [
+    { cmd: "brain_goals_step", id: "g0000000010", stepId: "s1", done: true },
+    { cmd: "brain_goals_step", id: "g0000000010", stepId: "s1", done: false },
+  ]);
+  assert.equal(undoLeft, 0);
+  assert.equal(checked, false);
+});
+
+await check("a locked step ticked from a stale screen: the PC's 409 sentence is shown, nothing changes", async () => {
+  const locked = GC.refuse_tick_locked.body.error;
+  const page = await workTab({ goals: { goals: [goalOf(GC.created)], lockedError: locked } });
+  const box = page.locator("#goals-list .goal-step").nth(1).locator('input[type="checkbox"]');
+  await box.evaluate((e) => { e.disabled = false; e.click(); });
+  await page.waitForTimeout(600);
+  const toast = await page.locator("#toast").innerText();
+  const stillLocked = await page.locator("#goals-list .goal-step").nth(1).getAttribute("data-state");
+  const checked = await page.locator("#goals-list .goal-step").nth(1).locator('input[type="checkbox"]').isChecked();
+  const undo = await page.locator("#goals-list .goal-undo").count();
+  await page.close();
+  assert.equal(toast, locked);
+  assert.equal(stillLocked, "locked");
+  assert.equal(checked, false);
+  assert.equal(undo, 0, "a refused tick offers no Undo");
+});
+
+await check("a step ticked after an unticked earlier one reads '(open again)'", async () => {
+  const g = goalOf(GC.first_undone);
+  g.plan[0] = { ...g.plan[0], done: false, done_at: null, state: "open", reached: false, reached_words: "" };
+  g.plan[1] = { ...g.plan[1], lock_words: 'after: "Get the 5k under 30" (open again)', waiting_on: ["s1"] };
+  const page = await workTab({ goals: { goals: [g] } });
+  const row = page.locator("#goals-list .goal-step").nth(1);
+  const text = await row.innerText();
+  const disabled = await row.locator('input[type="checkbox"]').isDisabled();
+  const checked = await row.locator('input[type="checkbox"]').isChecked();
+  await page.close();
+  assert.match(text, /\(open again\)/);
+  assert.equal(disabled, false, "a done step can be unticked");
+  assert.equal(checked, true);
+});
+
+await check("the followed number is gone: the PC's sentence is shown", async () => {
+  const g = goalOf(GC.created);
+  g.plan[0] = { ...g.plan[0], measure_gone: true, measure_name: "" };
+  const page = await workTab({ goals: { goals: [g] } });
+  const text = await page.locator("#goals-list .goal-step").first().innerText();
+  await page.close();
+  assert.match(text, /The number this step follows is gone - tick it by hand\./);
+});
+
+await check("hidden with the private lists: no step words, no lock sentence, no number name", async () => {
+  const page = await workTab({ goals: { goals: [goalOf(GC.number_reached)] }, security: { hidden: true } });
+  const text = await page.locator("#goals-card").innerText();
+  await page.close();
+  for (const leaked of ["Get the 5k", "Enter the race", "5k time", "29.5", "after:"]) {
+    assert.ok(!text.includes(leaked), `${leaked} shown while hidden`);
+  }
+});
+
+/** A draft with lock support, and a stand-in for Projects (the benchmark list). */
+async function draftTab(goal, extra = {}) {
+  const page = await workTab({ goals: { goals: [goal], ...extra } });
+  return page;
+}
+const sentPlan = async (page) => (await page.evaluate(() => window.__goalsCalls))
+  .find((c) => c.cmd === "brain_goals_accept");
+
+await check("the draft editor: 'Do these first' over the OTHER steps, saved as ids, nothing computed", async () => {
+  const page = await draftTab(goalOf(GC.created, "draft"));
+  const groups = page.locator("#goals-list .goal-needs");
+  const first = await groups.nth(0).locator("label").allInnerTexts();
+  const second = await groups.nth(1).locator("label").allInnerTexts();
+  const secondChecked = await groups.nth(1).locator('input[type="checkbox"]').evaluateAll((els) => els.map((e) => e.checked));
+  await groups.nth(2).locator("label").nth(0).locator("input").check();
+  await page.getByRole("button", { name: "Accept" }).click();
+  await page.waitForTimeout(500);
+  const call = await sentPlan(page);
+  await page.close();
+  assert.deepEqual(first, ["2. Enter the race", "3. Book the train"]);
+  assert.deepEqual(second, ["1. Get the 5k under 30", "3. Book the train"]);
+  assert.deepEqual(secondChecked, [true, false], "s2 already waits on s1");
+  for (const st of call.plan) {
+    assert.deepEqual(Object.keys(st).sort(), ["by", "done", "id", "measure", "needs", "step"]);
+  }
+  assert.deepEqual(call.plan.map((s) => s.needs), [[], ["s1"], ["s2", "s1"]]);
+});
+
+await check("'Do these first' stops at three: the fourth box is disabled", async () => {
+  const plan = ["a", "b", "c", "d", "e"].map((step, i) => ({ id: `s${i + 1}`, step, by: "", done: false,
+    needs: i === 4 ? ["s1", "s2", "s3"] : [], measure: null }));
+  const page = await draftTab({ ...goalOf(GC.created, "draft"), plan });
+  const boxes = page.locator("#goals-list .goal-needs").nth(4).locator('input[type="checkbox"]');
+  const state = await boxes.evaluateAll((els) => els.map((e) => [e.checked, e.disabled]));
+  await page.close();
+  assert.deepEqual(state, [[true, false], [true, false], [true, false], [false, true]]);
+});
+
+await check("Remove takes the step out of the others' lists and says so before saving", async () => {
+  const page = await draftTab(goalOf(GC.created, "draft"));
+  await page.locator("#goals-list .goal-editor-row").first().getByRole("button", { name: "Remove" }).click();
+  await page.waitForTimeout(300);
+  const toast = await page.locator("#toast").innerText();
+  await page.getByRole("button", { name: "Accept" }).click();
+  await page.waitForTimeout(500);
+  const call = await sentPlan(page);
+  await page.close();
+  assert.match(toast, /Removed "Get the 5k under 30"/);
+  assert.deepEqual(call.plan.map((s) => [s.id, s.needs]), [["s2", []], ["s3", ["s2"]]]);
+});
+
+await check("'Follows a number' lists life AND coding number benchmarks with a target, and the pick is saved", async () => {
+  const page = await draftTab(goalOf(GC.created, "draft"));
+  await page.evaluate(({ list, life, coding }) => {
+    const core = window.__TAURI__.core;
+    const inner = core.invoke;
+    core.invoke = async (cmd, args) => {
+      if (cmd === "projects_read" && !args.project) return list;
+      if (cmd === "projects_read" && args.project === life.project.id) return life;
+      if (cmd === "projects_read" && args.project === coding.project.id) return coding;
+      return inner(cmd, args);
+    };
+    window.__emit("security-changed", {});
+  }, { list: CASES.cases.list_two, life: CASES.cases.life, coding: CASES.cases.coding });
+  await page.waitForTimeout(1200);
+  const codingName = CASES.cases.coding.project.name;
+  const select = page.locator("#goals-list .goal-measure-select").nth(2);
+  const options = await select.locator("option").allInnerTexts();
+  const target = options.find((o) => /Long run/.test(o));
+  const startup = options.find((o) => o === `${codingName} - Startup`);
+  const hint = await page.locator("#goals-list .goal-lock-editor").nth(2).innerText();
+  await select.selectOption({ label: target });
+  await page.getByRole("button", { name: "Accept" }).click();
+  await page.waitForTimeout(500);
+  const call = await sentPlan(page);
+  await page.close();
+  assert.equal(options[0], GOAL_WORDS.follows_none);
+  assert.equal(options[0], "No number");
+  assert.ok(target, `no Long run in ${options}`);
+  assert.ok(startup, `no coding number benchmark in ${options}`);
+  assert.equal(options.some((o) => /tests$/.test(o)), false, "a command benchmark is not offered");
+  assert.ok(options.every((o) => o === "No number" || o.startsWith("Half marathon - ")
+    || o.startsWith(`${codingName} - `)));
+  assert.ok(hint.includes(GOAL_WORDS.follows_under), "the 'You still tick it yourself' line shows");
+  assert.equal(call.plan[2].measure.project, CASES.cases.life.project.id);
+  assert.match(call.plan[2].measure.bench, /^[0-9a-f]{32}$/);
+});
+
+await check("the editor says what 'Do these first' does, and 'Follows a number' says when there is nothing", async () => {
+  const page = await draftTab(goalOf(GC.created, "draft"));
+  const needs = await page.locator("#goals-list .goal-needs").nth(0).innerText();
+  const editor = await page.locator("#goals-list .goal-lock-editor").nth(1).innerText();   // s2 follows nothing
+  await page.close();
+  assert.ok(needs.includes(GOAL_WORDS.needs_under));
+  assert.ok(editor.includes(GOAL_WORDS.follows_empty), "no benchmark with a target: the empty line shows");
+  const single = { ...goalOf(GC.created, "draft"), plan: [goalOf(GC.created, "draft").plan[0]] };
+  const p2 = await draftTab(single);
+  const lone = await p2.locator("#goals-list .goal-needs").nth(0).innerText();
+  await p2.close();
+  assert.ok(lone.includes(GOAL_WORDS.needs_none));
+});
+
+await check("a refused save shows the PC's sentence as sent and the draft stays a draft", async () => {
+  const sentence = GC.refuse_cycle.body.error;
+  const page = await draftTab(goalOf(GC.created, "draft"), { refuseAccept: sentence });
+  await page.getByRole("button", { name: "Accept" }).click();
+  await page.waitForTimeout(500);
+  const toast = await page.locator("#toast").innerText();
+  const stillDraft = await page.locator("#goals-list .goal-editor-row").count();
+  await page.close();
+  assert.equal(toast, sentence);
+  assert.equal(stillDraft, 3);
+});
+
+await check("an older PC (no needs limit) gets no pickers and the plain steps", async () => {
+  const page = await workTab({ goals: { goals: [DRAFT] } });
+  await page.evaluate(() => {
+    const core = window.__TAURI__.core;
+    const inner = core.invoke;
+    core.invoke = async (cmd, args) => {
+      const out = await inner(cmd, args);
+      if (cmd === "brain_goals" && out && out.limits) delete out.limits.needs;
+      return out;
+    };
+    window.__emit("security-changed", {});
+  });
+  await page.waitForTimeout(800);
+  const pickers = await page.locator("#goals-list .goal-lock-editor").count();
+  await page.close();
+  assert.equal(pickers, 0);
+});
+
+await check("CONTROL: brain_goals_step takes a step id or a position, and nothing else", async () => {
+  const rs = read("src-tauri/src/brain/goals.rs");
+  const f = rs.slice(rs.indexOf("pub async fn brain_goals_step("));
+  const body = f.slice(0, f.indexOf("\n}\n"));
+  assert.match(body, /step_id: Option<String>/);
+  assert.match(body, /step_body\(/);
+  assert.match(rs, /"lock_words", "reached_words", "measure_name"/);
 });
 
 await check("CONTROL: every write is held on a stale link, the read is redacted, and the wiring agrees", async () => {

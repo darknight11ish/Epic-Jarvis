@@ -34,6 +34,8 @@ break, but is still reported: it is either a stale entry or a sign
 build.rs and lib.rs were edited by two different pieces of work that never
 saw each other.
 """
+from __future__ import annotations
+
 import re
 import sys
 from pathlib import Path

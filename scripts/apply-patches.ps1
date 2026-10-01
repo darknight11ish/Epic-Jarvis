@@ -932,6 +932,97 @@ $PATCHES = @(
     # route: POST /api/search/settings already exists (web-search.patch) and
     # jarvis_search.py answers the new {"enabled": ...} body.
     'web-search-switch.patch'
+    # "Quiz me on a text" (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md,
+    # JARVIS-API section 98): POST /api/quiz and GET /api/quiz/<id>, .../answer, .../finish,
+    # .../stop. ONE hunk in jarvis_hud.py, an install block right after form-review.patch's
+    # own (the last one before `_loopback_companion`), so it goes last, like every new patch.
+    # No card: the owner's own pasted words, the local model only, kept in memory only. Needs
+    # jarvis_quiz.py copied in; without it, or on any error, the banner says so and the routes
+    # are simply not there.
+    'quiz.patch'
+    # "Review decks" (the owner's decision of 2026-09-30; docs/QUIZ-DECKS-DESIGN.md, JARVIS-API section
+    # 102): GET/POST /api/decks, /api/decks/<id>/act|cards, /api/decks/settings, GET /api/review and
+    # POST /api/review/reveal|rate|more, and the function the quiz calls to keep chosen questions in a
+    # deck. ONE hunk in jarvis_hud.py, an install block right after quiz.patch's own, so it goes after
+    # it. No card: the owner's own tap saves the owner's own words, sealed in study.db under a key of
+    # their own. Needs jarvis_decks.py copied in (and the py-fsrs package from requirements.txt);
+    # without it, or on any error, the banner says so and the routes are simply not there.
+    'decks.patch'
+    # "Spending summaries" (the owner's decision of 2026-09-30; docs/FINANCE-DESIGN.md part A, JARVIS-API
+    # section 100): GET /api/spending, GET/POST /api/spending/profile, POST /api/spending/profile/delete,
+    # /categories and /suggest (this PC only) and GET /api/chat/table?id=<id>. ONE hunk in jarvis_hud.py,
+    # an install block right after decks.patch's own (the last one before `_loopback_companion`), so it goes
+    # last, like every new patch. No card and no gate line: the my_spending tool is decided under file_read's
+    # action, and it reads a file in a folder the owner already listed. Needs jarvis_spending.py and
+    # jarvis_money_parse.py copied in; without them, or on any error, the banner says so and the routes are
+    # simply not there.
+    'spending.patch'
+    # "Retirement what-if" (the owner's decision of 2026-09-30; docs/FINANCE-DESIGN.md part B, JARVIS-API
+    # section 103): GET /api/retirement/defaults and POST /api/retirement/run. ONE hunk in jarvis_hud.py, an
+    # install block right after spending.patch's own, so it goes after it. A pure calculation on numbers the
+    # owner typed: no file, no network, nothing stored, no card and no gate line. Needs jarvis_retirement.py
+    # (and jarvis_money_parse.py) copied in; without them, or on any error, the banner says so and the routes
+    # are simply not there.
+    'retirement.patch'
+    # "Activity heatmap and balance chart" (the owner's decision of 2026-09-30; docs/GOALS-PROGRESS-DESIGN.md
+    # part C, JARVIS-API section 105): GET /api/progress/activity and GET/POST /api/progress/balance. ONE hunk
+    # in jarvis_hud.py, an install block right after retirement.patch's own, so it goes after it. It only reads
+    # the owner's ticked steps and logged numbers; the owner's choice of chart areas is a display setting (no
+    # card, no gate line). Not a model tool. Needs jarvis_progress.py (and jarvis_projects.py, jarvis_goals.py)
+    # copied in; without them, or on any error, the banner says so and the routes are simply not there.
+    'progress.patch'
+    # "Topic controls" (the owner's decision of 2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md, JARVIS-API section
+    # 107): GET/POST /api/topics, /api/topics/mode|file|settings, GET /api/topics/preview|review|hidden, the
+    # owner's memory lists with the topic filter applied, and the count `topics_left_out` in the chat route's
+    # header. THREE hunks: in jarvis_gate.py the new action `topic_loosen` joins the "acts only on tier ask"
+    # set and gets its _RISK line (both right after browser-engine.patch's own last lines, so it goes after it);
+    # in jarvis_hud.py ONE install block right after progress.patch's own (the last one before
+    # `_loopback_companion`) and ONE line after auto-learn.patch's `injected_sensitive` line. Needs
+    # jarvis_topics.py copied in, and the rebuilt jarvis_memory.py (its tables and the search filter); without
+    # them, or on any error, the banner says so and the routes are simply not there - and with every topic on
+    # "Learn and use" nothing about learning or answers changes at all.
+    'topics.patch'
+    # "Referee suggestions" and "Study helper" (the owner's decisions of 2026-09-30; JARVIS-API section 108;
+    # two more switches on the second graphics card, both built OFF until the card is installed and
+    # measured). THREE hunks: in jarvis_gate.py the new action `referee_tick` joins the "acts only on tier ask"
+    # set and gets its _RISK line (both right after topics.patch's own last lines, so it goes after it); in
+    # jarvis_hud.py ONE block right after topics.patch's own (the last one before `_loopback_companion`) that
+    # installs the quiet hourly "This looks done - tick it?" look and hands the quiz its model call, so the
+    # quiz uses the second card while "Study helper" is on. It adds no route and no tool. Needs jarvis_referee.py
+    # copied in (and the rebuilt jarvis-framework.toml's `referee_tick = "ask"` line); without it, or on any
+    # error, the banner says so and both switches simply do nothing.
+    'referee.patch'
+    # "Suggest tags overnight" (the owner's decision of 2026-09-30; docs/OVERNIGHT-TAGS-DESIGN.md, JARVIS-API
+    # section 104): once a night the LOCAL model may suggest a tag for a few untagged chats, each one a card,
+    # filed only on a tap. THREE hunks: in jarvis_gate.py the two actions `chat_tags_suggest_on` and
+    # `chat_tag_suggest` join the "acts only on tier ask" set and get their _RISK lines (both right after
+    # referee.patch's own, so it goes after it); in jarvis_hud.py ONE block right after referee.patch's
+    # own (the last one before `_loopback_companion`) that keeps the quiet hourly look in step with the
+    # switch. It adds no tool; the two routes are in chat-history.patch. Needs jarvis_tag_suggest.py copied
+    # in (and the rebuilt jarvis-framework.toml's two `ask` lines); without it, or on any error, the banner
+    # says so and the switch simply does nothing.
+    'tag-suggest.patch'
+    # "Quiz me on a YouTube video" (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md
+    # section 5 and 14, JARVIS-API section 112): ONE card per YouTube link, then the video's CAPTION TEXT
+    # only is fetched and quizzed on as outside text. It breaks YouTube's terms and may be blocked; the card
+    # says so. TWO files: in jarvis_gate.py the new action `youtube_captions_read` joins the "acts only on
+    # tier ask" set and gets its _RISK line (both right after tag-suggest.patch's own, so it goes after it);
+    # in jarvis_hud.py ONE install block after tag-suggest.patch's own (the last one before
+    # `_loopback_companion`). Needs jarvis_youtube.py copied in, the youtube-transcript-api package from
+    # requirements.txt, and the rebuilt jarvis-framework.toml's `youtube_captions_read = "ask"` line; without
+    # them, or on any error, the banner says so and the routes are simply not there.
+    'youtube.patch'
+    # "Grade this better" on a quiz (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md
+    # section 7 and 15, JARVIS-API section 113): ONE card per request that lists exactly what would leave the
+    # PC (the quiz's questions, the owner's answers and the passages), then that one message goes to the
+    # cheapest cloud service the chatbot driver has set up (a saved key AND a monthly limit). Never for a
+    # quiz that looks private or had a crisis answer. TWO files: in jarvis_gate.py the new action
+    # `quiz_cloud_grade` joins the "acts only on tier ask" set and gets its _RISK line (both right after
+    # youtube.patch's own, so it goes after it); in jarvis_hud.py ONE install block after youtube.patch's
+    # own (the last one before `_loopback_companion`). Needs jarvis_quiz_cloud.py copied in, chatbot.patch's
+    # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
+    # them, or on any error, the banner says so and the routes are simply not there.
+    'quiz-cloud.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1108,6 +1199,7 @@ $SHIPPED = @(
     'jarvis_chatbot.py'          # the driver, the last check before every message, one card per conversation
     # --- Projects, build steps 1 and 2 (projects.patch, 2026-09-28) ---
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
+    'jarvis_forecast.py'         # the pure finish-time range ("about 6 to 9 weeks") jarvis_projects.py and jarvis_goals.py read; no patch (JARVIS-API section 101)
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
     'jarvis_chatbot_routes.py'   # chatbot-routes.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)
     # --- more chatbot websites, in a visible window the same way (2026-09-28, "the chatbot driver becomes versatile"); reached through chatbot-routes.patch ---
@@ -1148,6 +1240,28 @@ $SHIPPED = @(
     'jarvis_animal.py'           # animal.patch: GET/POST /api/animal - "Keep the animal still" and the behaviour switches, shared by both apps, no card
     # --- pairing a phone by QR code, a key per device (2026-09-28, devices.patch) ---
     'jarvis_devices.py'          # devices.patch: every request's key checked (a device key never falls back to the shared one), the registry of key hashes, ONE pairing at a time, the pair_device card (PC only, Windows Hello), Remove and Retire
+    # --- "Quiz me on a text" (2026-09-30, quiz.patch) ---
+    'jarvis_quiz.py'             # quiz.patch: questions written from a pasted text and answers marked against the passage, by the local model only; in memory only, no card, never learned from
+    'eval_quiz_grader.py'        # run by hand on the PC: checks the quiz's marking against the real local model and writes quiz_grader_results.json beside jarvis_quiz.py (quiz_grader_cases.json is copied in step 3b)
+    # --- "Review decks" (2026-09-30, decks.patch) ---
+    'jarvis_decks.py'            # decks.patch: kept quiz questions studied again on a spaced schedule (py-fsrs), sealed in study.db under their own key; the owner rates each card, no model is called; the one quiet `review` scheduler kind
+    # --- "Spending summaries" (2026-09-30, spending.patch) ---
+    'jarvis_spending.py'         # spending.patch: totals from a bank CSV/Excel export the owner dropped in a listed folder (the my_spending tool), a table shown on screen only, the layout box (PC only) and the categories; every number from code, the model's one sentence checked against the table
+    'jarvis_money_parse.py'      # money, dates and bank-file headers read exactly (Decimal, whole cents); shared by jarvis_spending.py and the retirement what-if to come
+    # --- "Retirement what-if" (2026-09-30, retirement.patch) ---
+    'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
+    # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
+    'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Topic controls" (2026-09-30, topics.patch) ---
+    'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
+    'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)
+    'jarvis_tag_suggest.py'      # tag-suggest.patch: "Suggest tags overnight" - the local model may suggest a tag for a few untagged chats a night, each a card (chat_tag_suggest), filed only on a tap; off by default, turning it on is one card (chat_tags_suggest_on)
+    # --- "Quiz me on a YouTube video" (2026-09-30, youtube.patch) ---
+    'jarvis_youtube.py'          # youtube.patch: ONE card per YouTube link (youtube_captions_read), then the caption text only is fetched (youtube-transcript-api) and quizzed on as outside text; breaks YouTube's terms, may be blocked; never video or audio
+    # --- "Grade this better" (2026-09-30, quiz-cloud.patch) ---
+    'jarvis_quiz_cloud.py'       # quiz-cloud.patch: ONE card per request (quiz_cloud_grade) listing exactly what leaves the PC, then one message to the cheapest set-up cloud service (jarvis_chatbot_api.py); never for a private quiz or after a crisis answer
+    # --- "Show or hide menus" (2026-09-30, no patch) ---
+    'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -2383,7 +2497,7 @@ try {
 # folder is not this checkout. Copied by content, every run, the same
 # "already matches: leave it; an older one: back it up first" rule step 3
 # uses for the modules themselves - NOT part of $SHIPPED, because neither
-# file is Python (test_shipped_modules.py parses every $SHIPPED entry as a
+# file is Python (quiz_grader_cases.json, for eval_quiz_grader.py, rides here too; test_shipped_modules.py parses every $SHIPPED entry as a
 # module's source). Cargo.lock lands under a different name (rust-crates.lock)
 # so it is never mistaken for an active Rust project sitting in a Python
 # backend folder.
@@ -2391,6 +2505,7 @@ Say ""
 $toolManifests = @(
     @{ Src = (Join-Path $PatchDir 'requirements.lock'); Dst = 'requirements.lock' }
     @{ Src = (Join-Path $RepoRoot 'jarvis-desktop\src-tauri\Cargo.lock'); Dst = 'rust-crates.lock' }
+    @{ Src = (Join-Path $PatchDir 'quiz_grader_cases.json'); Dst = 'quiz_grader_cases.json' }
 )
 $manifestsCopied = 0
 $manifestsAbsent = @()

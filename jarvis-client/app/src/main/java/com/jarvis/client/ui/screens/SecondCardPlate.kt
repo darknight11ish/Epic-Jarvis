@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -66,6 +68,10 @@ internal fun SecondCardPlate(
     onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
     val chrome = LocalChrome.current
+    // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide the Study helper
+    // and Referee rows and the Third graphics card section. Hiding only tidies - a switch that
+    // is on stays on and the PC keeps working; the whole plate is hidden from Brain.
+    val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     val status = (read as? SecondCard.Read.Loaded)?.status
     if (status == null) {
         Plate {
@@ -107,6 +113,9 @@ internal fun SecondCardPlate(
         Rule()
         ApprovalSwitchRow(SecondCard.master(status), busy, canAct, onSet)
         for (view in SecondCard.switches(status)) {
+            // A switch the owner hid from the list (Study helper, Referee suggestions).
+            if (view.id == "study" && !menus.shows("settings.second-card.study-helper")) continue
+            if (view.id == "referee" && !menus.shows("settings.second-card.referee")) continue
             Rule()
             ApprovalSwitchRow(view, busy, canAct, onSet)
         }
@@ -129,7 +138,9 @@ internal fun SecondCardPlate(
         // Shown only once one is capable, or a choice is still kept for
         // one that is not here right now.
         val third = status.third
-        if (third != null && (third.capable || third.assigned != null)) {
+        if (third != null && (third.capable || third.assigned != null) &&
+            menus.shows("settings.second-card.third-card")
+        ) {
             Gap(8)
             Kicker("Third graphics card", Modifier.semantics { heading() })
             ThirdCardRow(status, third, busy, canAct, onSetThird)

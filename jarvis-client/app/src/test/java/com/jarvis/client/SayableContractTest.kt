@@ -37,7 +37,7 @@ class SayableContractTest {
     @Test
     fun `SENTENCES is the backend's list, in the same order`() {
         assertEquals(list("sentences"), Sayable.SENTENCES)
-        assertTrue("${Sayable.SENTENCES.size} sentences", Sayable.SENTENCES.size in 5..8)
+        assertTrue("${Sayable.SENTENCES.size} sentences", Sayable.SENTENCES.size in 5..10)
     }
 
     @Test

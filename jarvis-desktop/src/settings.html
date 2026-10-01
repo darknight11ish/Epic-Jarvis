@@ -60,6 +60,7 @@
           <a href="#voice">Voice</a>
           <a href="#manner">How Jarvis talks</a>
           <a href="#briefing-settings">Morning briefing</a>
+          <a href="#menu-visibility">Show or hide menus</a>
         </div>
         <div class="settings-jump-group">
           <span class="settings-jump-label">Rare</span>
@@ -72,6 +73,7 @@
           <a href="#second-card">Second graphics card</a>
           <a href="#big-model">Big model (slow)</a>
           <a href="#folders">Folders Jarvis may look in</a>
+          <a href="#spending">Spending</a>
           <a href="#screen-look">Look at this and Watch with me</a>
           <a href="#browser-engine">Browser without a window</a>
           <a href="#backup">Backups</a>
@@ -93,6 +95,10 @@
         Those live in the <strong>Brain</strong>, not here — open it from
         the tray icon, "Open the Brain".
       </p>
+
+      <div id="menus-hidden-bar" class="menus-hidden-bar" hidden>
+        <button type="button" class="btn-link" id="btn-show-hidden-menus"></button>
+      </div>
 
       <h2 class="settings-group-heading">Everyday</h2>
 
@@ -370,7 +376,9 @@
               asleep. A few real ones: "Set a timer for 10 minutes." "What
               did I miss?" "Tell me when an email from Alex arrives." "Focus
               for 30 minutes." "Remind me to call Mom at 6pm." "Add milk to
-              the shopping list." "Brief me now." Type "what can you do?"
+              the shopping list." "Brief me now." "Label this chat
+              Work." "Open my topics." "Stop using my Money topic."
+              Type "what can you do?"
               any time to see this list again. Anything else goes to the AI
               model as before.
             </p>
@@ -998,6 +1006,27 @@
           <span class="status" id="br-senders-status" role="status"></span>
           <p class="note" id="br-spoken"></p>
           <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
+        </div>
+      </section>
+
+      <section class="card" id="menu-visibility">
+        <h2>Show or hide menus</h2>
+        <p class="note">
+          Hiding a menu only tidies it away. Nothing is turned off, and Jarvis
+          can still do it when you ask. Asking Jarvis to hide or show a menu
+          changes every device that hears it.
+        </p>
+        <p class="sub">This hides menus on this device only.</p>
+
+        <div id="menu-visibility-list" class="menu-visibility-list"></div>
+
+        <p class="note" style="margin-top: 16px;">
+          Some things always stay visible: approvals, security, What asks first,
+          and the connection status. The system-tray menu is not affected.
+        </p>
+
+        <div class="row" style="margin-top: 16px;">
+          <button type="button" class="btn ghost" id="menu-visibility-reset">Show everything</button>
         </div>
       </section>
 
@@ -1677,6 +1706,89 @@
         </div>
       </section>
 
+      <!-- ── Spending ──────────────────────────────────────────────────────
+           "Spending summaries" (the owner's decision of 2026-09-30;
+           spending-settings.js, spending.js; spending.rs get_spending,
+           spending_profile_read/save/delete, spending_categories_save/reset,
+           spending_suggest; backend jarvis_spending.py; JARVIS-API section
+           100). The columns of a new bank file are checked here once
+           ("Check these columns"), saved layouts can be forgotten, and the
+           category words are edited. PC only on the backend (the phone shows
+           the categories read-only). No approval card. This card is one
+           member of the Finance menu group (docs/MENU-VISIBILITY-DESIGN.md
+           section 4): its id, `spending`, is the stable menu id. -->
+      <section class="card" id="spending">
+        <h2 id="spd-title">Spending</h2>
+        <p class="note" id="spd-detail"></p>
+        <p class="state" id="spd-state" role="status">Asking Jarvis…</p>
+        <div id="spd-body" hidden>
+          <p class="note" id="spd-pc-only" hidden></p>
+          <h3 class="subhead" id="spd-waiting-title">Bank files waiting for their columns</h3>
+          <ul class="sc-cards" id="spd-waiting"></ul>
+          <h3 class="subhead" id="spd-layouts-title">Saved layouts</h3>
+          <ul class="sc-cards" id="spd-layouts"></ul>
+          <p class="note" id="spd-layouts-empty" hidden></p>
+          <div class="row">
+            <label for="spd-file">Bank file</label>
+            <select id="spd-file"></select>
+          </div>
+          <p class="note" id="spd-file-note"></p>
+
+          <!-- "Check these columns": opened from a waiting file or a saved
+               layout. Save stays off until every question the file could not
+               settle has an answer. -->
+          <div class="spd-check" id="spd-check" role="group" aria-labelledby="spd-check-title" hidden>
+            <h3 class="subhead" id="spd-check-title" tabindex="-1">Check these columns</h3>
+            <p class="note" id="spd-check-hidden" hidden></p>
+            <div class="spd-scroll" id="spd-preview-wrap" tabindex="0" role="region"
+                 aria-label="The first rows of the file"></div>
+            <div id="spd-form"></div>
+            <p class="note" id="spd-sign-sentence" role="status"></p>
+            <!-- What these choices would count, before Save (the PC counts the
+                 file's rows). A choice that does not fit the file shows why and
+                 keeps Save off until the owner ticks the box. -->
+            <p class="note" id="spd-counts" role="status"></p>
+            <p class="note" id="spd-warnings" role="status" hidden></p>
+            <label class="toggle" id="spd-accept-wrap" hidden>
+              <input type="checkbox" id="spd-accept" />
+              <span id="spd-accept-text"></span>
+            </label>
+            <div class="row">
+              <button class="btn small" id="spd-save" type="button" disabled>Save these columns</button>
+              <button class="btn small" id="spd-cancel" type="button">Cancel</button>
+            </div>
+            <span class="status" id="spd-check-status" role="status"></span>
+          </div>
+
+          <h3 class="subhead" id="spd-cat-title">Categories</h3>
+          <p class="note" id="spd-cat-note"></p>
+          <p class="note" id="spd-cat-order"></p>
+          <ul class="sc-cards" id="spd-cats"></ul>
+          <div class="row">
+            <button class="btn small" id="spd-cat-add" type="button">Add a category</button>
+            <button class="btn small" id="spd-cat-save" type="button">Save categories</button>
+            <button class="btn small" id="spd-cat-reset" type="button">Reset to the starter list</button>
+          </div>
+          <div class="row" id="spd-reset-sure" role="group" aria-label="Reset to the starter list" hidden>
+            <span id="spd-reset-line"></span>
+            <button class="btn small" id="spd-reset-yes" type="button"></button>
+            <button class="btn small" id="spd-reset-no" type="button"></button>
+          </div>
+          <span class="status" id="spd-cat-status" role="status"></span>
+
+          <h3 class="subhead" id="spd-suggest-title">Suggest categories</h3>
+          <p class="note" id="spd-suggest-note"></p>
+          <div class="row">
+            <button class="btn small" id="spd-suggest" type="button" disabled>Suggest categories</button>
+          </div>
+          <ul class="sc-cards" id="spd-suggestions"></ul>
+          <div class="row">
+            <button class="btn small" id="spd-suggest-add" type="button" hidden>Add these rules</button>
+          </div>
+          <span class="status" id="spd-suggest-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Look at this and Watch with me ────────────────────────────────
            The owner's decision of 2026-09-28 (look-settings.js, look-rules.js;
            look.rs screen_status, screen_never; backend jarvis_screen.py;
@@ -2195,11 +2307,13 @@
     <script type="module" src="animal-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
+    <script type="module" src="spending-settings.js"></script>
     <script type="module" src="look-settings.js"></script>
     <script type="module" src="browser-engine.js"></script>
     <script type="module" src="backup-settings.js"></script>
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="menu-visibility-settings.js"></script>
   </body>
 </html>

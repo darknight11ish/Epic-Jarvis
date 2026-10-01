@@ -509,6 +509,12 @@ data class HomeState(
      */
     val usedIds: List<Long> = emptyList(),
     /**
+     * How many facts the owner's topic settings kept out of the answer on
+     * screen ([com.jarvis.client.net.Topics.leftOutLine]) - a count, so the
+     * lock settings do not hide it.
+     */
+    val topicsLeftOut: Int = 0,
+    /**
      * The answer on screen's own id ([com.jarvis.client.net.Feedback];
      * already read for the right/wrong mark) - also what "Where this came
      * from" fetches by, feasibility I42/I132
@@ -516,6 +522,13 @@ data class HomeState(
      * before recording failed.
      */
     val answerTurnId: String? = null,
+    /**
+     * The id of the spending table that goes with the answer on screen
+     * (`: jarvis-table <id>` in the chat stream, docs/JARVIS-API.md section
+     * 100.2), or null. An id only: the table is fetched by [SpendingAnswerBlock]
+     * and held in memory there, never written anywhere.
+     */
+    val answerTableId: String? = null,
     /**
      * Security's "Hide memory lists and chat history" is hiding the memory
      * lists now - the facts under "Used 2 memories" are one of them, and so
@@ -731,6 +744,9 @@ data class HomeActions(
      */
     val onLoadSources: suspend (String?) -> com.jarvis.client.net.ChatSources.Read =
         { com.jarvis.client.net.ChatSources.Read.Missing },
+    /** The spending table under an answer ([com.jarvis.client.JarvisRuntime.spendingTable]). A read. */
+    val onLoadSpendingTable: suspend (String?) -> com.jarvis.client.net.Spending.Read =
+        { com.jarvis.client.net.Spending.Read.Gone(com.jarvis.client.net.Spending.TABLE_GONE) },
     /** Show a hidden memory list, after the phone's lock says it is the owner. */
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
@@ -1346,11 +1362,17 @@ private fun ConversationList(
                     onShow = actions.onShowPrivate,
                     load = actions.onLoadUsed,
                     forget = actions.onForgetUsed,
+                    leftOut = state.topicsLeftOut,
                 ),
                 sources = SourcesAnswer(
                     turnId = state.answerTurnId,
                     hidden = state.memoryHidden,
                     load = actions.onLoadSources,
+                ),
+                spending = SpendingAnswer(
+                    tableId = state.answerTableId,
+                    hidden = state.memoryHidden,
+                    load = actions.onLoadSpendingTable,
                 ),
             )
         }
@@ -1581,6 +1603,7 @@ private fun NavToggle(shown: Boolean, onToggle: (Boolean) -> Unit) {
 @Composable
 private fun NavRow(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
+    val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
     // from navigation by a rule, Brain gets a real button, "Look"
     // becomes "Appearance". Four destinations, evenly weighted so the
@@ -1607,12 +1630,16 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 onClick = actions.onOpenLive,
                 modifier = Modifier.weight(1f),
             )
-            NavItem(
-                icon = { AppearanceIcon(chrome.textMid) },
-                label = "Appearance",
-                onClick = actions.onOpenAppearance,
-                modifier = Modifier.weight(1f),
-            )
+            // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide this button;
+            // Appearance itself is still in Settings and "open appearance" still works.
+            if (menus.shows("entry.appearance")) {
+                NavItem(
+                    icon = { AppearanceIcon(chrome.textMid) },
+                    label = "Appearance",
+                    onClick = actions.onOpenAppearance,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             NavItem(
                 icon = { HelpIcon(chrome.textMid) },
                 label = "Help",
@@ -2602,6 +2629,9 @@ private fun Reply(
     // gave no turn_id at all - the same "nothing to show" the line below
     // already treats an empty `used.ids` as.
     sources: SourcesAnswer? = null,
+    // The spending table under this answer (docs/JARVIS-API.md section 100):
+    // drawn as sent, memory only, never copied, shared or read aloud.
+    spending: SpendingAnswer? = null,
     // The crisis help line (jarvis_wellbeing.py, 2026-09-27): draws this
     // answer as a calm, plain panel instead of an ordinary bubble. Wording,
     // the word check and never learning from it all happen on the PC;
@@ -2712,6 +2742,9 @@ private fun Reply(
             // sharing a reply mid-stream would grab a sentence Jarvis has not
             // finished writing yet.
             if (!streaming && text.isNotBlank()) {
+                // The spending table, right under the checked sentence. It is
+                // not part of `text`, so Copy and Share below never carry it.
+                if (spending != null) SpendingAnswerBlock(spending)
                 if (note != null) {
                     Gap(6)
                     Text(
@@ -2769,6 +2802,18 @@ private fun Reply(
                             forget = used.forget,
                         )
                     }
+                }
+                // "Left out 2 facts because of your topic settings" (docs/
+                // TOPIC-CONTROLS-DESIGN.md C4): beside "Used 2 memories". A count,
+                // never words, so the lock settings do not hide it.
+                com.jarvis.client.net.Topics.leftOutLine(used?.leftOut ?: 0)?.let { line ->
+                    Gap(4)
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                        modifier = Modifier.liveStatus(),
+                    )
                 }
                 // "Where this came from" (feasibility I42/I132): fetched
                 // once, quietly, as soon as this answer's turn_id is known
@@ -2937,6 +2982,8 @@ internal data class UsedAnswer(
     val onShow: () -> Unit,
     val load: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read,
     val forget: suspend (Long) -> Pair<Boolean, String>,
+    /** Facts the topic settings kept out of this answer - a count ([com.jarvis.client.net.Topics.leftOutLine]). */
+    val leftOut: Int = 0,
 )
 
 /** What "Where this came from" under the answer needs (feasibility

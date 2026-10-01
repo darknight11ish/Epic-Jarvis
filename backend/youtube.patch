@@ -1,0 +1,49 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -174,6 +174,7 @@
+     "referee_tick",  # jarvis_referee.py acts only on tier "ask": ONE card per goal step whose number reached its target; only the owner's tap ticks it (referee.patch)
+     "chat_tags_suggest_on",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card to let the local model read a few old chats at night to suggest tags (tag-suggest.patch)
+     "chat_tag_suggest",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card per suggested tag for one chat; only the owner's tap files it (tag-suggest.patch)
++    "youtube_captions_read",  # jarvis_youtube.py acts only on tier "ask": ONE card per YouTube link; caption text only, and it breaks YouTube's terms (youtube.patch)
+ })
+ 
+ 
+@@ -859,6 +860,15 @@
+     # or removed at once, and no chat words are kept or logged.
+     "chat_tags_suggest_on": ("yes", "local", "lets Jarvis's model on this PC read the first few messages you wrote in a few old chats each night to suggest a tag; it never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records, it can only pick a tag you already made, nothing is filed without your Approve, and turning it off is instant"),
+     "chat_tag_suggest": ("yes", "local", "files one chat under a tag you already made, exactly as if you had filed it yourself; you can move or remove the tag at once, and nothing else about the chat changes"),
++    # youtube.patch (jarvis_youtube.py, JARVIS-API section 112; the owner's
++    # decision of 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 5). ONE
++    # card per YouTube link: the exact link is on the card, which says this
++    # breaks YouTube's terms and may be blocked. Your PC contacts YouTube and
++    # the link tells it which video you are studying - a named way out of the
++    # PC (ARCHITECTURE section 4) that cannot be taken back, so "no" and
++    # "outbound": a risky approval (Windows Hello on the PC, a screen lock on
++    # the phone). Only the caption text comes back, never video or sound.
++    "youtube_captions_read": ("no", "outbound", "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3707,6 +3707,20 @@
+     except Exception as exc:
+         print(f"  tag-suggest NOT ON ({type(exc).__name__}) - Suggest tags overnight is off")
+         print("             until jarvis_tag_suggest.py is back: run apply-patches.ps1 again")
++    # youtube.patch ("Quiz me on a YouTube video", the owner's decision of 2026-09-30;
++    # JARVIS-API section 112): POST /api/youtube/quiz raises ONE approval card per link
++    # (youtube_captions_read, tier ask; it breaks YouTube's terms and may be blocked), then
++    # fetches the video's CAPTION TEXT only and makes an ordinary quiz on it (outside text);
++    # GET /api/youtube and /api/youtube/<id> say how the request is going, POST
++    # /api/youtube/<id>/cancel withdraws a card not yet answered. Wrapped round Handler here,
++    # before anything listens, like quiz above; every rule is in jarvis_youtube.py.
++    try:
++        import jarvis_youtube
++        print(jarvis_youtube.install(Handler, origin_ok=_origin_ok,
++                                     token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  youtube    NOT ON ({type(exc).__name__}) - Quiz on a YouTube video is off")
++        print("             until jarvis_youtube.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

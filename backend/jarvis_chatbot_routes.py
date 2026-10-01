@@ -376,7 +376,23 @@ def _live_session() -> Optional[dict]:
     return got if isinstance(got, dict) and got.get("state") in LIVE else None
 
 
+#: A conversation that added up the owner's bank spending (my_spending) is
+#: money-sensitive: nothing is started from it (docs/ARCHITECTURE.md section 5).
+MONEY_CHAT_REFUSED = ("That conversation looked at your bank spending, and money details are "
+                      "never sent to a chatbot. Start it from a new conversation.")
+
+
+def _money_conversation(cid) -> bool:
+    try:
+        import jarvis_chat_log
+        return bool(jarvis_chat_log.conversation_money(cid))
+    except Exception:
+        return False
+
+
 def _start(body: dict, deps, wait: bool) -> tuple:
+    if body.get("conversation_id") and _money_conversation(body.get("conversation_id")):
+        return 409, {"ok": False, "error": MONEY_CHAT_REFUSED}
     why = CB.tier_problem(deps)
     if why:
         return 409, {"ok": False, "error": _sentence(why)}

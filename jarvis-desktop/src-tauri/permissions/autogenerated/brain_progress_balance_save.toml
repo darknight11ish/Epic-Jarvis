@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-progress-balance-save"
+description = "Enables the brain_progress_balance_save command without any pre-configured scope."
+commands.allow = ["brain_progress_balance_save"]
+
+[[permission]]
+identifier = "deny-brain-progress-balance-save"
+description = "Denies the brain_progress_balance_save command without any pre-configured scope."
+commands.deny = ["brain_progress_balance_save"]

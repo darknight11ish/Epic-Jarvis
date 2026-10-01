@@ -1156,6 +1156,75 @@ def t_the_patch():
     check("jarvis_projects.py is shipped by apply-patches.ps1", "'jarvis_projects.py'" in ps1)
 
 
+def t_a_benchmark_read_carries_the_finish_time_range():
+    """JARVIS-API section 101: GET .../benchmarks/<id>?points=N gains
+    `forecast` (jarvis_forecast.py; its own edge cases are test_forecast.py)."""
+    DAY = 86400.0
+    NOW = 1_790_000_000.0
+    s = fresh(clock=lambda: NOW)
+    pid = s.create({"name": "Race", "kind": "life"}, here=False)["id"]
+    five = s.add_benchmark(pid, {"name": "5k time", "unit": "min", "better": "lower",
+                                 "target": 25}, here=True)["id"]
+    plain = s.add_benchmark(pid, {"name": "Score", "unit": "pts"}, here=True)["id"]
+    weight = s.add_benchmark(pid, {"name": "Weight", "unit": "kg", "better": "lower",
+                                   "target": 70}, here=True)["id"]
+    with s._lock, s._db() as c:
+        check("...the plain benchmark view (no points asked) carries none",
+              "forecast" not in s._bench_view(c, s._bench_row(c, pid, five)))
+    r = s.results(pid, five, 365)
+    check("no numbers yet: 'not enough', 5 more needed",
+          r["forecast"]["state"] == "not_enough" and r["forecast"]["needed"] == 5
+          and r["forecast"]["words"] == "Not enough numbers yet - 5 more needed.", r["forecast"])
+    # 31, 30, 29, 28, 27 min a week apart, the last an hour ago: 2 min to go = 2 weeks.
+    for i, v in enumerate((31, 30, 29, 28, 27)):
+        s.log(pid, five, v, at=NOW - 3600 - (4 - i) * 7 * DAY)
+    f = s.results(pid, five, 365)["forecast"]
+    check("five weekly numbers falling 1 a week to 27, target 25: 'About 2 weeks'",
+          f["state"] == "range" and (f["low_weeks"], f["high_weeks"]) == (2, 2)
+          and f["words"] == "About 2 weeks at this pace." and f["used"] == 5, f)
+    check("the forecast does not depend on how many chart points were asked for",
+          s.results(pid, five, 2)["forecast"] == f and s.results(pid, five, 1)["forecast"] == f)
+    s.log(pid, five, 24.5, at=NOW - 60)
+    check("a number at the target: 'reached', nothing drawn",
+          s.results(pid, five, 365)["forecast"]["state"] == "reached"
+          and s.results(pid, five, 365)["forecast"]["line"] is None)
+    check("no target: 'Set a target to see a pace.'",
+          s.results(pid, plain, 365)["forecast"]["state"] == "no_target")
+    for i, v in enumerate((80, 79, 78, 77, 76)):
+        s.log(pid, weight, v, at=NOW - 3600 - (4 - i) * 7 * DAY)
+    w = s.results(pid, weight, 365)
+    check("a health number gets the range too, and the benchmark stays keep_on_screen",
+          w["forecast"]["state"] == "range" and w["keep_on_screen"] is True
+          and w["sensitive"] is True, w["forecast"]["state"])
+    check("the answer is plain data (no NaN, no infinity)",
+          "NaN" not in json.dumps(w) and "Infinity" not in json.dumps(w))
+    code, body = P.handle_get(f"/api/projects/{pid}/benchmarks/{weight}", "points=365", store=s)
+    check("GET .../benchmarks/<id> sends `forecast` with state, words and the week numbers",
+          code == 200 and {"state", "words", "low_weeks", "high_weeks"} <= set(body["benchmark"]["forecast"]),
+          body["benchmark"].get("forecast"))
+    # a forecast that blows up must not break the benchmark read
+    real = P.Projects._forecast
+
+    def boom(self, c, b):
+        raise RuntimeError("the forecast broke")
+    P.Projects._forecast = boom
+    try:
+        broken = s.results(pid, five, 365)
+    except Exception as exc:
+        broken = None
+        check("a forecast that raises does not break the benchmark read", False, repr(exc))
+    finally:
+        P.Projects._forecast = real
+    if broken is not None:
+        check("a forecast that raises does not break the benchmark read: the read is whole, "
+              "with no forecast", "forecast" not in broken and broken.get("points")
+              and broken.get("name") == "5k time", sorted(broken))
+    src = (HERE / "jarvis_forecast.py").read_text(encoding="utf-8")
+    check("jarvis_forecast.py is shipped beside it (apply-patches.ps1 and _where.SHIPPED)",
+          "'jarvis_forecast.py'" in (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
+          and "jarvis_forecast.py" in __import__("_where").SHIPPED and "import numpy" not in src)
+
+
 def t_both_apps_read_the_current_contract():
     if shutil.which("git") is None:
         print("SKIP  git is not installed here - the contract file's app answers come from "

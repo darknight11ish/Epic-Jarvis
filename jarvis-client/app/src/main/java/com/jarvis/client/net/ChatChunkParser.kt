@@ -66,6 +66,16 @@ object ChatChunkParser {
         data class Status(val word: String) : Result
 
         /**
+         * `: jarvis-table <32 hex>` - an SSE comment (`backend/spending.patch`,
+         * docs/JARVIS-API.md section 100.2) right BEFORE an answer's sentence
+         * that has a table to go with it. Only the id is kept, already checked
+         * to be exactly 32 lowercase hex characters ([Spending.tableIdFromLine]);
+         * the table itself is fetched later, from `/api/chat/table`. Any other
+         * reader skips it as a comment.
+         */
+        data class Table(val id: String) : Result
+
+        /**
          * The stream ended at the length limit with no text of its own - the
          * shape Ollama sends: a finish chunk with an empty delta and
          * `finish_reason: "length"`. Stop, like [Terminal], and say the
@@ -133,7 +143,10 @@ object ChatChunkParser {
         // turn is waiting on.
         if (line.startsWith(":")) {
             val word = STATUS.find(line)?.groupValues?.get(1)
-            return if (word != null) Result.Status(word) else Result.Ignored
+            if (word != null) return Result.Status(word)
+            // A spending table's id (never text, never shown, never logged).
+            val table = Spending.tableIdFromLine(line)
+            return if (table != null) Result.Table(table) else Result.Ignored
         }
         // SSE fields other than `data:` carry nothing this route renders.
         if (FIELD_ONLY.containsMatchIn(line)) return Result.Ignored

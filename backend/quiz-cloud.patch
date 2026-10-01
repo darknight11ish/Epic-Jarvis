@@ -1,0 +1,49 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -175,6 +175,7 @@ _NO_RULE_FROM_DENIAL = frozenset({
+     "chat_tags_suggest_on",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card to let the local model read a few old chats at night to suggest tags (tag-suggest.patch)
+     "chat_tag_suggest",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card per suggested tag for one chat; only the owner's tap files it (tag-suggest.patch)
+     "youtube_captions_read",  # jarvis_youtube.py acts only on tier "ask": ONE card per YouTube link; caption text only, and it breaks YouTube's terms (youtube.patch)
++    "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
+ })
+ 
+ 
+@@ -869,6 +870,14 @@ _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
+     # "outbound": a risky approval (Windows Hello on the PC, a screen lock on
+     # the phone). Only the caption text comes back, never video or sound.
+     "youtube_captions_read": ("no", "outbound", "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back"),
++    # quiz-cloud.patch (jarvis_quiz_cloud.py, JARVIS-API section 113; the owner's
++    # decision of 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7). ONE card per
++    # "grade this better" request: it shows the whole message word for word (the
++    # quiz's questions, your answers and the passages) and the service that would
++    # get it. Your study words leave this PC for that one quiz - a named way out
++    # (ARCHITECTURE section 4) that cannot be taken back, so "no" and "outbound": a
++    # risky approval (Windows Hello on the PC, a screen lock on the phone).
++    "quiz_cloud_grade": ("no", "outbound", "sends the questions, your answers and the passages of one quiz, word for word as the card shows them, to the cloud AI service named on the card to be marked; it bends the rule that your study words stay on this PC for that one quiz only, it costs a little on your account, and it cannot be taken back"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3721,6 +3721,21 @@ def _read_body(handler) -> bytes:
+     except Exception as exc:
+         print(f"  youtube    NOT ON ({type(exc).__name__}) - Quiz on a YouTube video is off")
+         print("             until jarvis_youtube.py is back: run apply-patches.ps1 again")
++    # quiz-cloud.patch ("Grade this better", the owner's decision of 2026-09-30; JARVIS-API
++    # section 113): POST /api/quiz-cloud/grade raises ONE approval card per request
++    # (quiz_cloud_grade, tier ask) that shows exactly what would leave this PC, then sends that
++    # one message to the cheapest cloud service the chatbot driver has set up (a saved key AND a
++    # monthly limit) and puts its marks on the quiz; GET /api/quiz-cloud and
++    # /api/quiz-cloud/<id> say how it is going, POST /api/quiz-cloud/<id>/cancel withdraws a
++    # card not yet answered. Wrapped round Handler here, before anything listens, like youtube
++    # above; every rule is in jarvis_quiz_cloud.py.
++    try:
++        import jarvis_quiz_cloud
++        print(jarvis_quiz_cloud.install(Handler, origin_ok=_origin_ok,
++                                        token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")
++        print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

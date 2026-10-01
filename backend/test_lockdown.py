@@ -254,6 +254,7 @@ def t_the_ways_out_the_table_cannot_reach():
 
     class Watch:
         read, tainted, memory, facts, provenance, app_context = {}, False, False, [], None, False
+        money, spending_asked = False, False
         owner_words = ""
     lines = AG.web_search_card_lines(Watch(), False, "kokoro voices")
     check("every web search asks", AG.WEB_SEARCH_LOCKDOWN in lines, str(lines))

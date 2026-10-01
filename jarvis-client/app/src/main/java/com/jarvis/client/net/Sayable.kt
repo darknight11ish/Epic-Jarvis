@@ -51,6 +51,9 @@ object Sayable {
         "Remind me to call Mom at 6pm.",
         "Add milk to the shopping list.",
         "Brief me now.",
+        "Label this chat Work.",
+        "Open my topics.",
+        "Stop using my Money topic.",
     )
 
     /** Three of the list, for a walkthrough screen 2 - jarvis_sayable.WALKTHROUGH_EXAMPLES.

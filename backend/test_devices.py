@@ -418,16 +418,15 @@ def t_the_hunk_comes_before_every_token_ok():
     # browser-engine.patch goes after those (2026-09-29): its gate hunks sit on
     # screen-picture.patch's own last lines and leave devices.patch's alone; its
     # startup block is anchored on screen.patch's own.
-    # form-review.patch goes after browser-engine.patch (2026-09-30): its gate
-    # hunks sit on browser-engine.patch's own last lines and leave devices.patch's alone.
     check("devices.patch is in apply-patches.ps1's list, and only "
-          "apps-in-projects.patch (which builds on its lines), inbox-tidy.patch, "
-          "screen.patch, screen-picture.patch, browser-engine.patch and form-review.patch "
-          "(which leave them alone) come after it",
+          "patches that leave its lines alone come after it",
           after_it is not None
           and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch",
                                 "screen-picture.patch", "browser-engine.patch",
-                                "form-review.patch", "web-search-switch.patch"}
+                                "form-review.patch", "web-search-switch.patch", "quiz.patch",
+                                "decks.patch", "spending.patch", "retirement.patch",
+                                "progress.patch", "topics.patch", "referee.patch",
+                                "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

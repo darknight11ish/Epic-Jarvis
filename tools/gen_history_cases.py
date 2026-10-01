@@ -36,6 +36,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 import jarvis_chat_log as H  # noqa: E402
+import jarvis_tag_suggest as TS  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "history-cases.json"
 PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
@@ -157,7 +158,252 @@ WORDS = {
     "project_chats_later": "Saved for later: Jarvis does not read this in chats yet.",
     "erase_chat_named": "Also delete the chat it came from: \"{title}\" ({when})?",
     "erased_no_chat": "Erased. No chat was on record for this fact, so no chat was deleted.",
+    # -- chat tags and sections (the owner, 2026-09-30; JARVIS-API section 99) --
+    "tag_untagged": "Untagged",
+    "tag_all": "All",
+    "tag_editor_title": "Tags",
+    "tag_add": "Add a tag",
+    "tag_rename": "Rename",
+    "tag_delete": "Delete this tag",
+    "tag_move_to": "Move to",
+    "tag_none": "No tag",
+    "tag_section": "{name} ({count})",
+    "tag_section_sr": "{name}, {count} chats, {state}",
+    "tag_delete_confirm": "Delete the tag {name}? Its {count} chats become untagged.",
+    "tag_banner": "Tap the chat to file it under {name}.",
+    "tag_filed": "Filed under {name}.",
+    "tag_unfiled": "Tag taken off.",
+    "tag_move_placeholder": "Move to\u2026",
+    "tag_file_under": "File under {name}",
+    "tag_errors": dict(H.TAG_MESSAGES),
+    # Said when the PC named no code the app knows and sent no sentence.
+    "tag_error_fallback": "Your PC did not make that change.",
+    # The desktop's accessible name for a section header: the open/closed state
+    # rides on aria-expanded, so the label does not repeat it (the phone's
+    # merged description uses "tag_section_sr", which does).
+    "tag_section_label": "{name}, {count} chats",
+    # -- Fork from here (section 110) ---------------------------------------
+    "fork": "Fork from here",
+    "fork_title": "Start a new chat that begins with everything up to this message.",
+    # The screen-reader name of the button on one message: it contains the
+    # visible text, then says which message.
+    "fork_label_user": "Fork from here, after your message",
+    "fork_label_assistant": "Fork from here, after Jarvis's answer",
+    "fork_busy": "Forking\u2026",
+    "fork_title_of": "Fork of {title}",
+    "fork_done": "Forked into \"{title}\".",
+    "fork_no": "This chat cannot be forked.",
+    "fork_why_kind": H.FORK_WHY_KIND,
+    "fork_why_crisis": H.FORK_WHY_CRISIS,
+    "fork_errors": dict(H.FORK_MESSAGES),
+    # Said when the PC named no code the app knows and sent no sentence.
+    "fork_error_fallback": "Your PC did not fork that chat.",
+    # -- New section here (section 106) --------------------------------------
+    "mark": "New section here",
+    # The screen-reader name of the button on one message: it contains the
+    # visible text, then says which message.
+    "mark_label": "New section here, before your message",
+    "mark_divider": "New section",
+    "mark_remove": "Remove section break",
+    "mark_done": "Section break added.",
+    "mark_removed": "Section break removed.",
+    "mark_limit": H.MARK_MESSAGES["too_many_marks"],
+    # Used when the PC said not_markable and sent no sentence of its own.
+    "mark_no": "This chat cannot have section breaks.",
+    "mark_why_short": H.MARK_WHY_SHORT,
+    "mark_why_kind": H.MARK_WHY_KIND,
+    "mark_why_crisis": H.MARK_WHY_CRISIS,
+    "mark_errors": dict(H.MARK_MESSAGES),
+    "mark_error_fallback": "Your PC did not save that section break.",
+    # -- Suggest tags overnight (section 104) --------------------------------
+    **TS.WORDS,
+    "tag_suggest_errors": dict(TS.ERRORS),
 }
+
+# The eight colour slots (contrast 4.5:1 or better against both themes, checked
+# by backend/test_chat_tags.py) and the icon names each app draws with its own
+# icon set. The header tint is the ink at 12% (light) or 16% (dark).
+TAG_PALETTE = [
+    {"slot": 0, "name": "blue", "light": "#1d4ed8", "dark": "#93b4ff"},
+    {"slot": 1, "name": "green", "light": "#146c36", "dark": "#86e0a6"},
+    {"slot": 2, "name": "amber", "light": "#8a5300", "dark": "#f5c26b"},
+    {"slot": 3, "name": "violet", "light": "#6d28d9", "dark": "#c4a8ff"},
+    {"slot": 4, "name": "teal", "light": "#0f766e", "dark": "#7adfd3"},
+    {"slot": 5, "name": "rose", "light": "#be123c", "dark": "#ff9ab5"},
+    {"slot": 6, "name": "slate", "light": "#475569", "dark": "#b6c2d1"},
+    {"slot": 7, "name": "orange", "light": "#b43a00", "dark": "#ffb385"},
+]
+TAG_TINT = {"light": 0.12, "dark": 0.16}
+
+
+def tag_section_line(name: str, count: int) -> str:
+    return WORDS["tag_section"].format(name=name, count=count)
+
+
+def tag_section_sr(name: str, count: int, expanded: bool) -> str:
+    return WORDS["tag_section_sr"].format(name=name, count=count,
+                                          state="expanded" if expanded else "collapsed")
+
+
+TAG_CASES = [("Work", 12, False), ("Learning", 1, True), ("Untagged", 0, False)]
+
+
+def tag_section_label(name: str, count: int) -> str:
+    return WORDS["tag_section_label"].format(name=name, count=count)
+
+
+def fork_label(role: str) -> str:
+    return WORDS["fork_label_assistant" if role == "assistant" else "fork_label_user"]
+
+
+FORK_ERROR_CASES = [
+    {"ok": False, "error": "not_forkable", "message": H.FORK_WHY_CRISIS},
+    {"ok": False, "error": "not_forkable"},
+    {"ok": False, "error": "not_found"},
+    {"ok": False, "error": "not_found", "message": "A different sentence from the PC."},
+    {"ok": False, "error": "bad_upto", "message": "  "},
+    {"ok": False, "error": "not_forkable", "message": "  "},
+    {"ok": False, "error": "bad_request", "message": "Chat history is off. The chat was not forked."},
+    {"ok": False, "error": "bad_request"},
+    {},
+]
+
+
+def fork_error_words(answer: dict) -> str:
+    """The one sentence a refused fork shows, identical in both apps: the PC's
+    own `message` wins; else the sentence for the code; else the fallback."""
+    code = answer.get("error") if isinstance(answer.get("error"), str) else ""
+    msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
+    if msg:
+        return msg
+    if code == "not_forkable":
+        return WORDS["fork_no"]
+    if code in H.FORK_MESSAGES:
+        return H.FORK_MESSAGES[code]
+    return WORDS["fork_error_fallback"]
+
+
+MARK_ERROR_CASES = [
+    {"ok": False, "error": "not_markable", "mark_why": H.MARK_WHY_SHORT,
+     "message": H.MARK_WHY_SHORT},
+    {"ok": False, "error": "not_markable", "message": "  "},
+    {"ok": False, "error": "not_markable"},
+    {"ok": False, "error": "too_many_marks", "message": H.MARK_MESSAGES["too_many_marks"]},
+    {"ok": False, "error": "too_many_marks"},
+    {"ok": False, "error": "not_found"},
+    {"ok": False, "error": "not_found", "message": "A different sentence from the PC."},
+    {"ok": False, "error": "bad_request", "message": "Chat history is off. The section "
+                                                     "break was not saved."},
+    {"ok": False, "error": "bad_request"},
+    {},
+]
+
+
+def mark_error_words(answer: dict) -> str:
+    """The one sentence a refused section break shows, identical in both apps:
+    the PC's own `message` wins; else the sentence for the code; else the
+    fallback."""
+    code = answer.get("error") if isinstance(answer.get("error"), str) else ""
+    msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
+    if msg:
+        return msg
+    if code == "not_markable":
+        return WORDS["mark_no"]
+    if code in H.MARK_MESSAGES:
+        return H.MARK_MESSAGES[code]
+    return WORDS["mark_error_fallback"]
+
+
+#: (enabled, paused, waiting) -> the state line and the waiting line.
+SUGGEST_STATE_CASES = [(False, False, 0), (True, False, 0), (True, False, 1), (True, False, 3),
+                       (False, True, 0), (False, True, 2)]
+
+
+def suggest_state_words(enabled: bool, paused: bool, waiting: int) -> dict:
+    """The row under History -> Tags: one state line, and how many cards wait."""
+    line = WORDS["tag_suggest_paused"] if paused else \
+        WORDS["tag_suggest_on"] if enabled else WORDS["tag_suggest_off"]
+    wait = "" if waiting <= 0 else WORDS["tag_suggest_waiting_one"] if waiting == 1 \
+        else WORDS["tag_suggest_waiting_other"].format(n=waiting)
+    return {"state": line, "waiting": wait}
+
+
+#: (title, hidden) worked cards; 28 Sep 2026, 14:05 local is the card's date.
+SUGGEST_CARD_CASES = [("Roof repair budget", False), ("Roof repair budget", True)]
+_SUGGEST_WHEN = datetime(2026, 9, 28, 14, 5).timestamp()
+
+
+def tag_error_words(answer: dict) -> str:
+    """The one sentence a refusal shows, identical in both apps and for both
+    tags and fork: the PC's own `message` wins when it is not empty; else the
+    fixed sentence for the code; else the fallback."""
+    code = answer.get("error") if isinstance(answer.get("error"), str) else ""
+    msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
+    if msg:
+        return msg
+    if code in H.TAG_MESSAGES:
+        return H.TAG_MESSAGES[code]
+    return WORDS["tag_error_fallback"]
+
+
+TAG_ERROR_CASES = [
+    {"error": "name_taken"},
+    {"error": "name_taken", "message": "Something else."},
+    {"error": "name_taken", "message": "  "},
+    {"error": "tag_not_found", "message": "That tag went away."},
+    {"error": "bad_request", "message": "Chat history is off. Tags are not changed."},
+    {"error": "bad_request", "message": "  "},
+    {"error": "bad_request"},
+    {"error": "weird", "message": "Try later."},
+    {"error": "weird"},
+    {},
+]
+
+# Names as typed, and whether the PC would take them (1-24 CODE POINTS once
+# trimmed, at least one character it can show). Each app checks before it sends.
+_FAMILY = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
+TAG_NAME_CASES = ["Work", "  Work ", "", "   ", "\u3164", "\u200d\u200d", "  \u3164 ",
+                  "\U0001F600" * 24, "\U0001F600" * 25, "a" * 24, "a" * 25,
+                  _FAMILY, "Cafe\u0301", "\u2800"]
+
+# Grouping worked cases: rows are newest first (`updated` falls), `tag` is a tag
+# id or None. `exact` is true when nothing narrows the list (no Show kind, no
+# title words); then a header's count is the PC's own, else the rows shown.
+_GT = [{"id": 1, "name": "Work", "count": 12}, {"id": 2, "name": "Learning", "count": 1},
+       {"id": 3, "name": "Personal", "count": 0}]
+_GROWS = [{"id": "u1", "tag": None, "updated": 90}, {"id": "w1", "tag": 1, "updated": 80},
+          {"id": "l1", "tag": 2, "updated": 70}, {"id": "gone", "tag": 99, "updated": 60}]
+
+
+def group_reference(tags, untagged, rows, exact):
+    """The sections an app draws: one per tag in order, then Untagged; a row
+    whose tag is unknown is untagged; a section with no rows shown and no
+    count is left out. With no tags at all the list is flat."""
+    if not tags:
+        return {"flat": True, "sections": []}
+    known = {t["id"] for t in tags}
+    out = []
+    for t in tags:
+        mine = [r["id"] for r in rows if r["tag"] == t["id"]]
+        count = max(t["count"], len(mine)) if exact else len(mine)
+        if mine or count:
+            out.append({"key": str(t["id"]), "count": count, "rows": mine})
+    loose = [r["id"] for r in rows if r["tag"] is None or r["tag"] not in known]
+    count = max(untagged, len(loose)) if exact else len(loose)
+    if loose or count:
+        out.append({"key": "none", "count": count, "rows": loose})
+    return {"flat": False, "sections": out}
+
+
+GROUP_CASES = [
+    ("nothing narrows: the PC's counts, an unloaded tag still listed", _GT, 2, _GROWS, True),
+    ("a Show or title filter narrows: counts are the rows shown, empty sections go", _GT, 2, _GROWS, False),
+    ("a tag with chats the page has not loaded shows its count", _GT + [{"id": 4, "name": "Ideas", "count": 4}], 0,
+     _GROWS[:2], True),
+    ("...but not when narrowed", _GT + [{"id": 4, "name": "Ideas", "count": 4}], 0, _GROWS[:2], False),
+    ("no Untagged section when none are loaded or counted", _GT, 0, _GROWS[1:3], True),
+    ("no tags at all: a flat list, no sections", [], 5, _GROWS, True),
+]
 
 # ----------------------------------------------------------------- rules --
 
@@ -392,6 +638,45 @@ def build() -> dict:
         "thread_keeps_cases": [{"crisis": c, "expect": keeps_in_thread(c)} for c in (False, True)],
         "plain_cases": [{"in": s, "out": plain_answer(s)} for s in PLAIN_CASES],
         "messages_cases": [{"n": n, "expect": messages_words(n)} for n in (1, 2, 12)],
+        "tag_limits": {"max_tags": H.TAG_MAX, "name_max": H.TAG_NAME_MAX,
+                       "colours": H.TAG_COLOURS},
+        "tag_icons": list(H.TAG_ICONS),
+        "tag_palette": TAG_PALETTE,
+        "tag_tint": TAG_TINT,
+        "tag_starters": [{"id": i + 1, "name": n, "colour": c, "icon": ic, "order": i}
+                         for i, (n, c, ic) in enumerate(H.TAG_STARTERS)],
+        "tag_error_codes": list(H.TAG_MESSAGES),
+        "tag_section_cases": [{"name": n, "count": c, "expanded": e,
+                               "header": tag_section_line(n, c),
+                               "sr": tag_section_sr(n, c, e),
+                               "label": tag_section_label(n, c)} for n, c, e in TAG_CASES],
+        "tag_error_cases": [{"answer": a, "expect": tag_error_words(a)} for a in TAG_ERROR_CASES],
+        "tag_name_cases": [{"name": n, "valid": H._clean_tag_name(n) is not None}
+                           for n in TAG_NAME_CASES],
+        "tag_group_cases": [{"name": n, "tags": t, "untagged": u, "rows": r, "exact": e,
+                             "expect": group_reference(t, u, r, e)}
+                            for n, t, u, r, e in GROUP_CASES],
+        "fork_prefix": H.FORK_PREFIX,
+        "fork_title_max": H.TITLE_CHARS,
+        "fork_error_codes": ["bad_request", "not_found", "not_forkable"],
+        "fork_labels": {"user": fork_label("user"), "assistant": fork_label("assistant")},
+        "fork_error_cases": [{"answer": a, "expect": fork_error_words(a)}
+                             for a in FORK_ERROR_CASES],
+        "mark_max": H.MARK_MAX,
+        "mark_min_turns": H.MARK_MIN_TURNS,
+        "mark_error_codes": ["bad_request", "not_found", "not_markable", "too_many_marks"],
+        "mark_error_cases": [{"answer": a, "expect": mark_error_words(a)}
+                             for a in MARK_ERROR_CASES],
+        "tag_suggest_error_codes": ["bad_request", "no_local_model", "no_tags"],
+        "tag_suggest_state_cases": [{"enabled": e, "paused": p, "waiting": w,
+                                     **suggest_state_words(e, p, w)}
+                                    for e, p, w in SUGGEST_STATE_CASES],
+        "tag_suggest_card_cases": [
+            {"title": t, "when": "28 Sep, 14:05", "tag": "Projects", "hidden": h,
+             "expect": TS.card_text(t, _SUGGEST_WHEN, "Projects", hidden=h)}
+            for t, h in SUGGEST_CARD_CASES],
+        "tag_delete_cases": [{"name": "Work", "count": 3,
+                              "expect": WORDS["tag_delete_confirm"].format(name="Work", count=3)}],
     }
 
 

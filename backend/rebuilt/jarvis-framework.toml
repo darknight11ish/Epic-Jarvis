@@ -122,6 +122,22 @@ chatbot_session           = "ask"
 # (unknown_action_tier).
 support_chat              = "ask"
 support_offer             = "ask"
+# Reading a YouTube video's captions for a quiz (jarvis_youtube.py; the
+# owner's decision of 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 5):
+# ONE card per link, showing the exact address. It breaks YouTube's terms and
+# may be blocked - the card says so. Caption text only, never video or audio.
+# Must stay "ask": anything else and no captions are fetched; "never"
+# switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+youtube_captions_read     = "ask"
+# "Grade this better" on a quiz (jarvis_quiz_cloud.py; the owner's decision of
+# 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7): ONE card per request,
+# listing EXACTLY what leaves this PC (the quiz's questions, your answers and
+# the passages as shown) and which service gets it. Bends rule 1 for that one
+# quiz only. Must stay "ask": anything else and nothing is sent; "never"
+# switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+quiz_cloud_grade          = "ask"
 # GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
 # owner's choice of 2026-09-28): one read-only GET to api.github.com per look
 # - a workflow run list or one pull request - for a watch the owner already
@@ -307,6 +323,30 @@ second_card_combined_enable = "ask"
 # never folded into second_card_enable's own tier. Must stay "ask", the
 # same reason as above.
 second_card_third_assign = "ask"
+
+# Topic controls (2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md): turning a PRIVATE
+# topic (Health, Money, or one the owner marked private) back on, clearing its
+# private mark, moving a batch of its facts out to a looser topic, or any
+# loosening asked from outside text is ONE card. Nothing leaves this PC. Must
+# stay "ask": a person saying yes is what makes it safe (jarvis_topics.py
+# refuses to apply a change if this is anything else).
+topic_loosen = "ask"
+
+# Referee suggestions (2026-09-30; a second-card switch, JARVIS-API section 108):
+# "This looks done - tick it?" is ONE card per goal step whose number reached its
+# target, at most three a day. Yes ticks that one step, exactly as the owner's own
+# tick would; the model never writes a tick. Nothing leaves this PC. Must stay
+# "ask": a person's tap is the only thing that ticks (jarvis_referee.py raises no
+# card at any other tier).
+referee_tick = "ask"
+
+# Overnight suggested tags (2026-09-30; JARVIS-API section 104): turning "Suggest
+# tags overnight" ON is ONE card (it lets the LOCAL model read a few kept chats);
+# each suggested tag for a chat is ONE more card, at most three a night. The chat
+# is filed only when a person taps Approve. Nothing leaves this PC. Both must stay
+# "ask": jarvis_tag_suggest.py files nothing and switches nothing on at any other tier.
+chat_tags_suggest_on = "ask"
+chat_tag_suggest = "ask"
 
 # --- Picture mode for "Look at this" and "Watch with me" (2026-09-29) -----
 # Lets a small picture model, running on the PROCESSOR (never the graphics

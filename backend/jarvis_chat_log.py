@@ -122,6 +122,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import unicodedata
 import uuid as _uuid
 from collections import OrderedDict
 from contextlib import closing
@@ -402,13 +403,224 @@ CRISIS_CONTINUE_WHY = ("This chat is kept as your own record. It is not carried 
                        "new chat any time, and nothing from that moment is read again.")
 
 
-def _row(cid, title, started, updated, turns, device, voice, outside, kind, project) -> dict:
-    """One History list row, as GET /api/history and the search send it."""
+# ------------------------------------------------------------ Fork from here
+#
+# "Fork from here" (owner, 2026-09-30; docs/CHAT-TAGS-DESIGN.md section 8 and
+# its frozen "Fork contract"; docs/JARVIS-API.md section 110): copies the first
+# turns of a kept chat, up to and including the message the owner chose, into a
+# NEW conversation titled "Fork of <title>". No tree, no table, no card (the
+# owner's own kept words never leave the PC).
+#: What the fork's title starts with (shared word, both apps).
+FORK_PREFIX = "Fork of "
+#: Said in place of the button under a chat of a kind that is not the owner's
+#: own conversation with Jarvis (a support record, a chat with another AI, a
+#: comparison), and in the not_forkable answer.
+FORK_WHY_KIND = ("A customer-support record, a chat with another AI and a comparison can't "
+                 "be forked: they hold another side's words, kept as your record.")
+#: Said for a chat titled "A difficult moment". It is never carried on or
+#: copied: nothing from that moment is read again.
+FORK_WHY_CRISIS = ("This chat is kept as your own record. It can't be forked - start a new "
+                   "chat any time, and nothing from that moment is read again.")
+FORK_MESSAGES = {
+    "bad_request": "Choose a message in this chat to fork from.",
+    "bad_upto": "That message is not in this chat, so it was not forked.",
+    "not_found": "That chat is not kept any more, so it was not forked.",
+}
+
+
+# ------------------------------------------------------------ New section here
+#
+# "New section here" (owner, 2026-09-30; docs/OVERNIGHT-TAGS-DESIGN.md
+# section 5, JARVIS-API section 106): a divider the owner puts above one of
+# their messages in a long chat. VIEW-ONLY (owner, 2026-09-30: "only a
+# divider"): Jarvis still reads the whole chat the same way, nothing here
+# reaches a model, the learner, memory or a search index. The marker is a turn
+# number kept in the `marks` table, sealed with the turns' own key
+# (AAD = id|"marks"), so a copy of the file shows how many chats have markers
+# but not which turns. No card: the owner's own layout of a chat already kept.
+MARK_MAX = 20                # markers in one chat
+MARK_MIN_TURNS = 10          # offered once a chat has this many turns
+MARK_WHY_KIND = ("A customer-support record, a chat with another AI and a comparison can't "
+                 "have section breaks: they hold another side's words, kept as your record.")
+MARK_WHY_CRISIS = ("This chat is kept as your own record. It can't have section breaks - "
+                   "start a new chat any time, and nothing from that moment is read again.")
+MARK_WHY_SHORT = "Section breaks are offered once a chat has 10 or more messages."
+MARK_MESSAGES = {
+    "bad_request": "Choose one of your messages in this chat.",
+    "not_found": "That chat is not kept any more, so no section break was saved.",
+    "too_many_marks": "You can have at most 20 section breaks in one chat.",
+}
+
+
+# ------------------------------------------------------------ chat tags
+#
+# "Chat tags and sections in History" (owner, 2026-09-30; docs/CHAT-TAGS-DESIGN.md,
+# JARVIS-API section 99). Tag NAMES are the owner's words, so the whole registry
+# is one sealed value in `meta` (key "tags"); a chat carries only an opaque
+# `tag_id` number in a plain column. Nothing here is ever an index, a fact, or
+# read by the learner or a model.
+
+TAG_MAX = 12
+TAG_NAME_MAX = 24
+TAG_COLOURS = 8
+TAG_ICONS = ("briefcase", "book", "home", "folder", "lightbulb", "star", "flag",
+             "wrench", "leaf", "music")
+#: The starter tags, written the first time the registry is read (ids 1-5).
+TAG_STARTERS = (("Work", 0, "briefcase"), ("Learning", 1, "book"), ("Personal", 2, "home"),
+                ("Projects", 3, "folder"), ("Ideas", 4, "lightbulb"))
+_TAGS_KEY = "tags"
+_TAGS_AAD = b"meta|tags"
+
+
+def _tag_filter(tag):
+    """GET /api/history's `tag=` value: an int id, "none", or None (no filter;
+    anything else is ignored, like `kind`)."""
+    if isinstance(tag, bool):
+        return None
+    if isinstance(tag, int):
+        return tag if tag > 0 else None
+    if isinstance(tag, str):
+        t = tag.strip()
+        if t.lower() == "none":
+            return "none"
+        if t.isascii() and t.isdigit() and len(t) <= 9 and int(t) > 0:
+            return int(t)
+    return None
+
+
+def _tag_where(tag):
+    """(sql or "", args) for an already-checked tag filter."""
+    if tag == "none":
+        return "c.tag_id IS NULL", []
+    if isinstance(tag, int):
+        return "c.tag_id = ?", [tag]
+    return "", []
+
+
+def _tag_err(code: str, message: str) -> dict:
+    return {"ok": False, "error": code, "message": message}
+
+
+TAG_MESSAGES = {
+    "bad_name": "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.",
+    "name_taken": "You already have a tag with that name.",
+    "too_many_tags": "You can have up to 12 tags. Delete one to make room.",
+    "bad_colour": "That colour is not one of the eight.",
+    "bad_icon": "That icon is not on the list.",
+    "tag_not_found": "That tag is gone. Reload History to see your tags.",
+    "not_found": "That chat is gone - it may have been deleted.",
+    "bad_request": "That request was not understood.",
+}
+
+
+def _tag_fail(code: str, message: str = "") -> dict:
+    return _tag_err(code, message or TAG_MESSAGES.get(code, ""))
+
+
+def _mark_fail(code: str, message: str = "") -> dict:
+    """{"ok": false, "error", "message"} for POST /api/history/mark."""
+    return {"ok": False, "error": code,
+            "message": message or MARK_MESSAGES.get(code) or MARK_MESSAGES["bad_request"]}
+
+
+def _fork_fail(code: str, message: str = "") -> dict:
+    """{"ok": false, "error", "message"} for POST /api/history/fork."""
+    return {"ok": False, "error": code,
+            "message": message or FORK_MESSAGES.get(code) or FORK_WHY_KIND}
+
+
+def _has_visible_char(n: str) -> bool:
+    """True when the name has at least one character a person can see: a
+    letter, number, mark, punctuation or symbol. Spaces, control and format
+    characters (zero-width joiner...), and blank fillers such as U+3164
+    (Hangul filler, category Lo but drawn empty) do not count."""
+    for ch in n:
+        if ch in "\u3164\u115f\u1160\uffa0\u2800":
+            continue
+        if unicodedata.category(ch)[0] in "LNMPS":
+            return True
+    return False
+
+
+def _clean_tag_name(v):
+    """The trimmed, NFC-normalised name, or None if it is not 1-24 code
+    points of printable characters with at least one visible one."""
+    if not isinstance(v, str):
+        return None
+    n = unicodedata.normalize("NFC", v).strip()
+    if not (1 <= len(n) <= TAG_NAME_MAX):
+        return None
+    # Printable only - but the joiners that build one emoji out of several
+    # (a family, a flag with a skin tone) are allowed inside a name.
+    if any(not (ch.isprintable() or ch in "\u200d\u200c") for ch in n):
+        return None
+    if not _has_visible_char(n):
+        return None
+    return n
+
+
+def _tag_key(n: str) -> str:
+    """What "the same name" means: NFC, then casefold, then NFC again."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", n).casefold())
+
+
+def _off_message(why: str, tail: str) -> str:
+    """Why history cannot take a change right now, in one plain sentence pair."""
+    why = (why or "Chat history is off.").strip()
+    return why[:1].upper() + why[1:].rstrip(".") + ". " + tail
+
+
+_INT64_MAX = 2 ** 63 - 1
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+
+def _tag_id(v):
+    """A stored tag_id column value as an int, or None (no tag)."""
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+#: The `conversations` columns, in ONE place and in one order. Every path that
+#: copies a conversation row (get, brief, list, overlapping, take_out, and
+#: put_back's _put_one) reads or writes this list, so a new column is one edit
+#: here (plus the CREATE TABLE and _migrate) - it can no longer be dropped by
+#: one hand-written positional tuple that was missed (the chat tags audit,
+#: 2026-09-30; a test pins the list against the real table).
+#: A conversation's newest message time, else its `updated` (a fork's
+#: `updated` is the moment of the fork, not a message time: "Forget a time
+#: frame" lists by the messages themselves).
+_LAST_AT = ("COALESCE((SELECT MAX(at) FROM turns t2 WHERE t2.conversation_id=c.id),"
+            " c.updated)")
+
+CONV_COLS = ("id", "title", "started", "updated", "device", "kind", "project", "tag_id")
+
+
+def _conv_cols(alias: str = "", *, raw: bool = False) -> str:
+    """CONV_COLS as SQL. `kind` reads as 'chat' when empty, unless `raw`
+    (take_out holds a row exactly as it was)."""
+    a = alias + "." if alias else ""
+    return ", ".join(("COALESCE(%skind, 'chat')" % a) if (c == "kind" and not raw)
+                     else a + c for c in CONV_COLS)
+
+
+def _conv_named(row) -> dict:
+    """The first len(CONV_COLS) values of a row read with _conv_cols, by name."""
+    return dict(zip(CONV_COLS, row))
+
+
+def _row(cid, title, started, updated, turns, device, voice, outside, kind, project,
+         tag_id=None) -> dict:
+    """One History list row, as GET /api/history and the search send it.
+    `tag_id`: the chat's one tag (chat tags, 2026-09-30), or None."""
     return {"id": cid, "title": title,
             "started": int(started or 0), "updated": int(updated or 0),
             "turns": int(turns), "device": device or "unknown",
             "has_voice": bool(voice), "tainted": bool(outside),
-            "kind": kind if kind in KINDS else "chat", "project": project or None}
+            "kind": kind if kind in KINDS else "chat", "project": project or None,
+            "tag_id": _tag_id(tag_id)}
 
 
 def _title_from(rows) -> str:
@@ -595,6 +807,12 @@ class ChatLog:
         # before the owner Forgot or Erased a fact of the chat, so the
         # learner must never learn from them again (jarvis_auto_learn.hushed).
         self._hush_floor: dict = {}
+        # Conversations in which the owner's bank spending was added up
+        # (my_spending; docs/ARCHITECTURE.md section 5, "money-sensitive
+        # conversation"): cid -> True (marked) / False (looked up, not marked).
+        # The mark is also kept in `meta` ("money:<cid>", no words), so it
+        # survives a restart, "Continue this chat" and a fork.
+        self._money: "OrderedDict" = OrderedDict()
         self._schema_ok = False       # _migrate has run on this file (kind, project)
 
     # -- settings ---------------------------------------------------------
@@ -646,12 +864,16 @@ class ChatLog:
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("
                   " id TEXT PRIMARY KEY, title BLOB, started REAL, updated REAL,"
-                  " device TEXT, kind TEXT, project TEXT)")
+                  " device TEXT, kind TEXT, project TEXT, tag_id INTEGER)")
         c.execute("CREATE TABLE IF NOT EXISTS turns ("
                   " conversation_id TEXT NOT NULL, idx INTEGER NOT NULL, at REAL,"
                   " role TEXT, provenance TEXT, device TEXT, lane TEXT,"
                   " read_outside INTEGER, answer_kept INTEGER, voice_check TEXT,"
                   " text BLOB, PRIMARY KEY (conversation_id, idx))")
+        # "New section here" (2026-09-30): the list of marked turn numbers,
+        # sealed (AAD id|"marks"). One row per chat that has any.
+        c.execute("CREATE TABLE IF NOT EXISTS marks ("
+                  " conversation_id TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE INDEX IF NOT EXISTS conversations_updated"
                   " ON conversations (updated)")
         if not self._schema_ok:
@@ -673,6 +895,10 @@ class ChatLog:
                 c.execute("ALTER TABLE conversations ADD COLUMN kind TEXT")
             if "project" not in cols:
                 c.execute("ALTER TABLE conversations ADD COLUMN project TEXT")
+            # Chat tags (2026-09-30): the chat's one tag, an opaque number.
+            # The names live sealed in `meta` (key "tags"), never here.
+            if "tag_id" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN tag_id INTEGER")
             c.execute("UPDATE conversations SET kind='support' WHERE kind IS NULL AND id IN"
                       " (SELECT DISTINCT conversation_id FROM turns WHERE role='support')")
             c.execute("UPDATE conversations SET kind='chat' WHERE kind IS NULL")
@@ -776,9 +1002,12 @@ class ChatLog:
     def _drop(self, c, ids) -> None:
         for cid in ids:
             c.execute("DELETE FROM turns WHERE conversation_id=?", (cid,))
+            c.execute("DELETE FROM marks WHERE conversation_id=?", (cid,))
             c.execute("DELETE FROM conversations WHERE id=?", (cid,))
             c.execute("DELETE FROM meta WHERE k=?", (self._hush_key(cid),))
+            c.execute("DELETE FROM meta WHERE k=?", (self._money_key(cid),))
             self._hush_floor.pop(cid, None)
+            self._money.pop(cid, None)
 
     def sweep(self) -> int:
         """Delete conversations whose last turn is older than keep_days.
@@ -1032,6 +1261,58 @@ class ChatLog:
     def _hush_key(cid: str) -> str:
         return "hush:" + cid
 
+    @staticmethod
+    def _money_key(cid: str) -> str:
+        return "money:" + cid
+
+    # -- the money-sensitive mark -------------------------------------------
+    def note_money(self, cid, *, keep: bool = False) -> None:
+        """This conversation added up the owner's bank spending: from now on a
+        web search asks first and a chatbot is not started from it. Marked in
+        memory at once (a temporary chat, history off). With `keep`, also in
+        `meta`, so a restart, Continue and a fork keep it (record_turn passes
+        it once the turn is written)."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return
+        with self._lock:
+            self._money.pop(cid, None)
+            self._money[cid] = True
+            while len(self._money) > 2000:
+                self._money.popitem(last=False)
+        if not keep:
+            return
+        try:
+            with self._lock, closing(self._connect()) as c:
+                with c:
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._money_key(cid), b"1"))
+        except Exception:
+            pass            # the in-memory mark still holds for this run
+
+    def conversation_money(self, conversation_id, messages=None) -> bool:
+        """Did any turn of this conversation add up the owner's bank spending?
+        Read from memory, else from the history file's `meta` (plain, no key
+        needed). False when there is no usable id or nothing says so."""
+        cid = conversation_id
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return False
+        with self._lock:
+            if cid in self._money:
+                return bool(self._money[cid])
+        marked = False
+        try:
+            if self.db_path.exists():
+                with closing(self._connect()) as c:
+                    marked = c.execute("SELECT 1 FROM meta WHERE k=?",
+                                       (self._money_key(cid),)).fetchone() is not None
+        except Exception:
+            marked = False
+        with self._lock:
+            self._money[cid] = marked
+            while len(self._money) > 2000:
+                self._money.popitem(last=False)
+        return marked
+
     def _hush_read(self, c, cid: str):
         """{"upto": last turn number, "erased": bool} or None."""
         row = c.execute("SELECT v FROM meta WHERE k=?", (self._hush_key(cid),)).fetchone()
@@ -1105,19 +1386,30 @@ class ChatLog:
             out["tainted"] = since is not None and since <= out["seq"]
             return out
 
-    def live_turn_any(self, text) -> Optional[dict]:
+    def live_turn_any(self, text, skip_hushed: bool = False) -> Optional[dict]:
         """live_turn() for a message in ANY conversation: the newest entry
         with exactly these words, or None. For "said again" (jarvis_intake.
         note_said_again), whose caller - the learner - does not know which
-        conversation it is reading."""
+        conversation it is reading.
+
+        `skip_hushed`: leave out entries at or below their chat's hush floor
+        (messages put back from the record that a Forget/Erase, or a fork
+        point, says were already read - so a copy of a message in a fork
+        cannot make the same words count a second time). The newest entry
+        above every floor wins; the caller gets None if there is none."""
         if not isinstance(text, str) or not _norm(text):
             return None
         h = _hash(text)
         with self._lock:
             best = None
             for (cid, hh), entry in self._live.items():      # oldest first
-                if hh == h:
-                    best = (cid, entry)
+                if hh != h:
+                    continue
+                if skip_hushed:
+                    floor = self._hush_floor.get(cid)
+                    if floor and entry["seq"] <= floor["seq"]:
+                        continue
+                best = (cid, entry)
             if best is None:
                 return None
             cid, got = best
@@ -1188,6 +1480,8 @@ class ChatLog:
         with self._lock:
             self._seed(cid, body.get("messages"))
         self._note_live(cid, rows, device, read_outside, now)
+        if turn and turn.get("money") is True:
+            self.note_money(cid)
         if side_talk:
             return {"recorded": False, "why": SIDE_TALK_WHY}
         if temporary:
@@ -1211,8 +1505,11 @@ class ChatLog:
         # is a Live session in History.
         kind = "live" if any(isinstance(m, dict) and m.get("live") is True for m in live) \
             else "chat"
-        return self._write_turn(aead, cid, rows, device, lane, read_outside, answer_kept,
-                                answer, at, now, kind=kind, crisis=crisis)
+        written = self._write_turn(aead, cid, rows, device, lane, read_outside, answer_kept,
+                                   answer, at, now, kind=kind, crisis=crisis)
+        if turn and turn.get("money") is True:
+            self.note_money(cid, keep=True)
+        return written
 
     def _live_rows(self, live) -> list:
         """[(words, provenance, voice check facts or None)] for the live
@@ -1411,9 +1708,11 @@ class ChatLog:
             return {"enabled": False, "recording": False,
                     "why_not": f"the chat history could not be checked ({type(exc).__name__})"}
 
-    def list(self, limit=LIST_DEFAULT, before=None, kind=None) -> dict:
+    def list(self, limit=LIST_DEFAULT, before=None, kind=None, tag=None) -> dict:
         """One page of the History list, newest first. `kind`: only that
-        kind (KINDS) - "Live only" in both apps; anything else is ignored."""
+        kind (KINDS) - "Live only" in both apps; anything else is ignored.
+        `tag`: an int (only that tag's chats) or "none" (untagged); anything
+        else is ignored."""
         self._housekeeping()
         out = self.status()
         out["conversations"] = []
@@ -1429,13 +1728,12 @@ class ChatLog:
             # Titles cannot be opened; say why rather than show blanks.
             out["why_not"] = out["why_not"] or str(exc)
             return out
-        sql = ("SELECT c.id, c.title, c.started, c.updated, c.device,"
+        sql = ("SELECT " + _conv_cols("c") + ","
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
                "   t.provenance IN ('voice','voice_unverified')),"
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
-               "   t.read_outside=1),"
-               " COALESCE(c.kind, 'chat'), c.project"
+               "   t.read_outside=1)"
                " FROM conversations c")
         # Paging by whole seconds (`updated` goes out as one, and comes back
         # as `before`). A page never splits a second: when its last row shares
@@ -1453,23 +1751,35 @@ class ChatLog:
             where.append("COALESCE(c.kind, 'chat') = ?")
             args.append(kind)
         out["kind"] = kind
+        tag = _tag_filter(tag)
+        tag_sql, tag_args = _tag_where(tag)
+        if tag_sql:
+            where.append(tag_sql)
+            args += tag_args
         clause = (" WHERE " + " AND ".join(where)) if where else ""
         with self._lock, closing(self._connect()) as c:
             rows = c.execute(sql + clause + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                              args + [limit]).fetchall()
             if len(rows) == limit:
-                sec = math.floor(rows[-1][3] or 0)
+                sec = math.floor(rows[-1][CONV_COLS.index("updated")] or 0)
                 have = {r[0] for r in rows}
                 extra = " AND COALESCE(c.kind, 'chat') = ?" if kind is not None else ""
+                if tag_sql:
+                    extra += " AND " + tag_sql
                 rest = c.execute(sql + " WHERE c.updated >= ? AND c.updated < ?" + extra
                                  + " ORDER BY c.updated DESC, c.id DESC",
                                  [float(sec), float(sec + 1)]
-                                 + ([kind] if kind is not None else [])).fetchall()
+                                 + ([kind] if kind is not None else [])
+                                 + tag_args).fetchall()
                 rows += [r for r in rest if r[0] not in have]
-        for cid, title, started, updated, device, n, voice, outside, rkind, project in rows:
+        nc = len(CONV_COLS)
+        for r in rows:
+            cv = _conv_named(r)
+            n, voice, outside = r[nc:nc + 3]
             out["conversations"].append(_row(
-                cid, self._title(aead, cid, title), started, updated, n, device,
-                bool(voice), bool(outside), rkind, project))
+                cv["id"], self._title(aead, cv["id"], cv["title"]), cv["started"],
+                cv["updated"], n, cv["device"], bool(voice), bool(outside),
+                cv["kind"], cv["project"], cv["tag_id"]))
         return out
 
     def _title(self, aead, cid, blob) -> str:
@@ -1490,10 +1800,11 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            conv = c.execute("SELECT title, COALESCE(kind, 'chat'), project, started, updated"
-                             " FROM conversations WHERE id=?", (cid,)).fetchone()
-            if conv is None:
+            got = c.execute(f"SELECT {_conv_cols()} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
                 return None
+            conv = _conv_named(got)
             rows = c.execute("SELECT idx, at, role, provenance, read_outside, answer_kept,"
                              " text FROM turns WHERE conversation_id=? ORDER BY idx",
                              (cid,)).fetchall()
@@ -1504,7 +1815,7 @@ class ChatLog:
                 text = self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
             except Exception:
                 text = "(this line could not be opened)"
-            t = {"role": role, "text": text, "at": int(at or 0)}
+            t = {"idx": int(idx), "role": role, "text": text, "at": int(at or 0)}
             if role == "support":
                 # A customer-support chat (record_support): who wrote it.
                 t.update(provenance=prov or "support_note", read_outside=True)
@@ -1516,16 +1827,26 @@ class ChatLog:
                 t.update(provenance=prov or "unknown", read_outside=bool(outside),
                          answer_kept=bool(kept))
             turns.append(t)
-        kind = conv[1] if conv[1] in KINDS else "chat"
-        title = self._title(aead, cid, conv[0])
+        kind = conv["kind"] if conv["kind"] in KINDS else "chat"
+        title = self._title(aead, cid, conv["title"])
         crisis = kind in CONTINUABLE and title == CRISIS_TITLE
+        marks, markable, mark_why = self._marks_view(cid, aead, kind, crisis, len(rows))
         return {"id": cid, "title": title, "history": self._keeping(),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
-                "kind": kind, "project": conv[2] or None,
-                "started": int(conv[3] or 0), "updated": int(conv[4] or 0),
+                "kind": kind, "project": conv["project"] or None,
+                "tag_id": _tag_id(conv["tag_id"]),
+                "started": int(conv["started"] or 0), "updated": int(conv["updated"] or 0),
                 "continuable": kind in CONTINUABLE and not crisis,
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
-                                 else "" if kind in CONTINUABLE else CONTINUE_WHY[kind])}
+                                 else "" if kind in CONTINUABLE else CONTINUE_WHY[kind]),
+                # "Fork from here" (section 110): the same chats Continue
+                # works on, and `fork_why` in words when it does not.
+                "forkable": kind in CONTINUABLE and not crisis,
+                "fork_why": (FORK_WHY_CRISIS if crisis
+                             else "" if kind in CONTINUABLE else FORK_WHY_KIND),
+                # "New section here" (section 106): the marked turn numbers,
+                # whether the apps may offer the button, and why not in words.
+                "marks": marks, "markable": markable, "mark_why": mark_why}
 
     def search(self, query, limit=SEARCH_DEFAULT, kind=None) -> dict:
         """Search what was said in the kept conversations (GET
@@ -1586,8 +1907,7 @@ class ChatLog:
             return out
         with self._lock, closing(self._connect()) as c:
             convs = c.execute(
-                "SELECT c.id, c.title, c.started, c.updated, c.device,"
-                " COALESCE(c.kind, 'chat'), c.project FROM conversations c"
+                "SELECT " + _conv_cols("c") + " FROM conversations c"
                 + (" WHERE COALESCE(c.kind, 'chat') = ?" if kind is not None else "")
                 + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                 ([kind] if kind is not None else []) + [SEARCH_SCAN_MAX + 1]).fetchall()
@@ -1598,8 +1918,10 @@ class ChatLog:
         deadline = time.monotonic() + SEARCH_SECONDS
         found = []
         with closing(self._connect()) as c:
-            for n, (cid, title_blob, started, updated, device, rkind, project) \
-                    in enumerate(convs):
+            for n, conv_row in enumerate(convs):
+                cv = _conv_named(conv_row)
+                cid, title_blob, started, updated = cv["id"], cv["title"], cv["started"], cv["updated"]
+                device, rkind, project, tid = cv["device"], cv["kind"], cv["project"], cv["tag_id"]
                 if time.monotonic() > deadline:
                     out["partial"] = True
                     break
@@ -1627,7 +1949,7 @@ class ChatLog:
                     break
                 snippet, hits = hit
                 row = _row(cid, title, started, updated, len(rows), device, voice, outside,
-                           rkind, project)
+                           rkind, project, tid)
                 row.update(snippet=snippet, hits=hits)
                 found.append(row)
         out["conversations"] = found
@@ -1642,13 +1964,603 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            row = c.execute("SELECT title, updated, COALESCE(kind, 'chat') FROM conversations"
-                            " WHERE id=?", (cid,)).fetchone()
+            row = c.execute(f"SELECT {_conv_cols()} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
         if row is None:
             return None
+        cv = _conv_named(row)
         aead = self._cipher()
-        return {"id": cid, "title": self._title(aead, cid, row[0]),
-                "updated": int(row[1] or 0), "kind": row[2] if row[2] in KINDS else "chat"}
+        return {"id": cid, "title": self._title(aead, cid, cv["title"]),
+                "updated": int(cv["updated"] or 0),
+                "kind": cv["kind"] if cv["kind"] in KINDS else "chat",
+                "tag_id": _tag_id(cv["tag_id"])}
+
+    # -- "New section here" (docs/OVERNIGHT-TAGS-DESIGN.md section 5, section 106) --
+    @staticmethod
+    def _marks_clean(v) -> list:
+        """A stored/decoded marker list as sorted unique whole numbers >= 0,
+        at most MARK_MAX. Anything else is dropped."""
+        if not isinstance(v, list):
+            return []
+        return sorted({int(x) for x in v if _is_int(x) and 0 <= x <= _INT64_MAX})[:MARK_MAX]
+
+    def _marks_read(self, c, aead, cid: str) -> list:
+        """The chat's marker numbers, opened. [] when it has none. Raises when
+        a stored value will not open - never guesses."""
+        row = c.execute("SELECT v FROM marks WHERE conversation_id=?", (cid,)).fetchone()
+        if row is None:
+            return []
+        return self._marks_clean(json.loads(
+            self._open(aead, row[0], self._aad(cid, "marks")).decode("utf-8")))
+
+    def _marks_write(self, c, aead, cid: str, marks: list) -> None:
+        """Seal and store the list; an empty list removes the row."""
+        marks = self._marks_clean(marks)
+        if not marks:
+            c.execute("DELETE FROM marks WHERE conversation_id=?", (cid,))
+            return
+        c.execute("INSERT OR REPLACE INTO marks (conversation_id, v) VALUES (?, ?)",
+                  (cid, self._seal(aead, json.dumps(marks).encode("utf-8"),
+                                   self._aad(cid, "marks"))))
+
+    def _marks_raw(self, c, cid: str):
+        """The sealed row exactly as stored (take_out holds it so), or None."""
+        row = c.execute("SELECT v FROM marks WHERE conversation_id=?", (cid,)).fetchone()
+        return None if row is None else bytes(row[0])
+
+    @staticmethod
+    def _mark_block(kind: str, crisis: bool, turns: int) -> str:
+        """"" when a chat of this kind and length may have section breaks,
+        else the plain sentence saying why not (the same test as `forkable`,
+        plus the 10-turn floor)."""
+        if crisis:
+            return MARK_WHY_CRISIS
+        if kind not in CONTINUABLE:
+            return MARK_WHY_KIND
+        if turns < MARK_MIN_TURNS:
+            return MARK_WHY_SHORT
+        return ""
+
+    def _marks_view(self, cid, aead, kind, crisis, turns) -> tuple:
+        """(marks, markable, mark_why) for GET /api/history/conversation."""
+        why = self._mark_block(kind, crisis, turns)
+        try:
+            with closing(self._connect()) as c:
+                marks = self._marks_read(c, aead, cid)
+        except Exception:
+            marks = []
+        return marks, not why, why
+
+    def set_mark(self, cid, idx, on) -> tuple:
+        """POST /api/history/mark: put a "New section" divider above turn
+        `idx` of chat `cid` (on=True), or take it away (on=False). (http code,
+        answer). Idempotent both ways. View-only: no turn is touched and no
+        model, learner or memory hears of it. No card; works while recording is
+        switched off (it marks an already-kept chat); needs the key."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not _is_int(idx) \
+                or idx < 0 or idx > _INT64_MAX or not isinstance(on, bool):
+            return 400, _mark_fail("bad_request")
+        aead, why = self._tag_cipher()
+        if aead is None:
+            return 503, _mark_fail("bad_request",
+                                   _off_message(why, "The section break was not saved."))
+        if not self.db_path.exists():
+            return 404, _mark_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            got = c.execute(f"SELECT {_conv_cols()} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
+                return 404, _mark_fail("not_found")
+            conv = _conv_named(got)
+            kind = conv["kind"] if conv["kind"] in KINDS else "chat"
+            crisis = kind in CONTINUABLE and self._title(aead, cid, conv["title"]) == CRISIS_TITLE
+            n = c.execute("SELECT COUNT(*) FROM turns WHERE conversation_id=?",
+                          (cid,)).fetchone()[0]
+            block = self._mark_block(kind, crisis, int(n))
+            if block:
+                return 409, dict(_mark_fail("not_markable", block), mark_why=block)
+            try:
+                marks = self._marks_read(c, aead, cid)
+            except Exception:
+                return 503, _mark_fail("bad_request", "The section breaks could not be "
+                                       "opened, so nothing was changed.")
+            exists = c.execute("SELECT 1 FROM turns WHERE conversation_id=? AND idx=?",
+                               (cid, idx)).fetchone() is not None
+            if not exists and not (not on and idx in marks):
+                return 400, _mark_fail("bad_request")
+            if on:
+                if idx not in marks:
+                    if len(marks) >= MARK_MAX:
+                        return 409, _mark_fail("too_many_marks")
+                    marks = sorted(marks + [idx])
+            else:
+                marks = [m for m in marks if m != idx]
+            with c:
+                self._marks_write(c, aead, cid, marks)
+        return 200, {"ok": True, "id": cid, "idx": idx, "on": on, "marks": marks}
+
+    # -- what jarvis_tag_suggest.py needs (docs/OVERNIGHT-TAGS-DESIGN.md, section 104) --
+    #
+    # The ONE place chat words are opened for the overnight tag suggestion, so
+    # the rules about which chats may be read live beside the key, not in the
+    # module that talks to the model. Nothing here writes a word anywhere.
+    SUGGEST_META = ("tag_suggest_on", "tag_suggest_day", "tag_suggest_denied_streak",
+                    "tag_suggest_paused", "tag_suggest_declined", "tag_suggest_offered",
+                    "tag_suggest_looked")
+    SUGGEST_MIN_TURNS = 2
+    SUGGEST_MIN_AGE = 30 * 60
+    SUGGEST_USER_MSGS = 6
+    SUGGEST_SCAN = 500
+
+    def meta_get(self, key: str) -> str:
+        """One of SUGGEST_META, as text ("" when unset). Opaque values only:
+        a switch, a date, a count, chat ids. Any other key is refused."""
+        if key not in self.SUGGEST_META:
+            raise KeyError(key)
+        if not self.db_path.exists():
+            return ""
+        with self._lock, closing(self._connect()) as c:
+            row = c.execute("SELECT v FROM meta WHERE k=?", (key,)).fetchone()
+        return "" if row is None else bytes(row[0]).decode("utf-8", "replace")
+
+    def meta_put(self, key: str, value: str) -> None:
+        if key not in self.SUGGEST_META:
+            raise KeyError(key)
+        with self._lock, closing(self._connect()) as c:
+            with c:
+                c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                          (key, str(value).encode("utf-8")))
+
+    def tag_names(self) -> list:
+        """[(id, name)] of the owner's tags, or [] when they cannot be read
+        (no key, nothing to open). Names are the owner's words; the caller
+        keeps them in memory for one pass only."""
+        aead, _why = self._tag_cipher()
+        if aead is None or not self.db_path.exists():
+            return []
+        try:
+            with self._lock, closing(self._connect()) as c:
+                reg = self._load_tags(c, aead)
+        except Exception:
+            return []
+        return [(t["id"], t["name"]) for t in reg["tags"]]
+
+    def chat_state(self, cid) -> Optional[dict]:
+        """{"tag_id": int | None} for a kept chat, or None when it is gone."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
+            return None
+        with self._lock, closing(self._connect()) as c:
+            row = c.execute("SELECT tag_id FROM conversations WHERE id=?", (cid,)).fetchone()
+        return None if row is None else {"tag_id": _tag_id(row[0])}
+
+    def suggest_candidates(self, *, exclude=(), limit: int = 5,
+                           now: Optional[float] = None) -> dict:
+        """Up to `limit` kept chats the overnight tagger may read, newest
+        first: {"ok", "why", "chats": [{"id", "title", "updated", "texts"}]}.
+        `texts`: the owner's first SUGGEST_USER_MSGS own typed or spoken
+        messages, opened - never an answer, never another chat.
+
+        A chat qualifies only if ALL of these hold: it has no tag; it is an
+        ordinary chat (not live, support, chatbot or comparison); it is not
+        titled "A difficult moment" and none of its first messages trips the
+        crisis check (the same _crisis_turn that titles a chat that way); no
+        turn read outside text (read_outside) and every message of the owner's
+        was typed or spoken (never shared, pasted, clipboard or a picture
+        caption); it has at least 2 turns and was last updated over 30 minutes
+        ago; it is not under a Forget/Erase hush and is not marked as having
+        added up bank spending; and its id is not in `exclude`. Needs history
+        to be ON and the key (this READS chat words): otherwise ok is False and
+        nothing is opened."""
+        out = {"ok": False, "why": "", "chats": []}
+        aead, why = self._recording()
+        if aead is None:
+            out["why"] = why
+            return out
+        out["ok"] = True
+        if not self.db_path.exists():
+            return out
+        now = float(now) if isinstance(now, (int, float)) and not isinstance(now, bool) \
+            else self._clock()
+        skip = set(exclude or ())
+        with self._lock, closing(self._connect()) as c:
+            rows = c.execute(
+                "SELECT id, title, updated FROM conversations WHERE tag_id IS NULL"
+                " AND COALESCE(kind, 'chat') = 'chat' AND updated < ?"
+                " ORDER BY updated DESC, id DESC LIMIT ?",
+                (now - self.SUGGEST_MIN_AGE, self.SUGGEST_SCAN)).fetchall()
+            for cid, title_blob, updated in rows:
+                if len(out["chats"]) >= max(0, int(limit)):
+                    break
+                if cid in skip or not _CID.fullmatch(cid):
+                    continue
+                if self._hush_read(c, cid) is not None:
+                    continue
+                if c.execute("SELECT 1 FROM meta WHERE k=?",
+                             (self._money_key(cid),)).fetchone() is not None:
+                    continue
+                n = c.execute("SELECT COUNT(*) FROM turns WHERE conversation_id=?",
+                              (cid,)).fetchone()[0]
+                if n < self.SUGGEST_MIN_TURNS:
+                    continue
+                if c.execute(
+                        "SELECT 1 FROM turns WHERE conversation_id=? AND (read_outside=1"
+                        " OR role NOT IN ('user','assistant')"
+                        " OR (role='user' AND COALESCE(provenance,'') NOT IN ('typed','voice')))"
+                        " LIMIT 1", (cid,)).fetchone() is not None:
+                    continue
+                title = self._title(aead, cid, title_blob)
+                if title == CRISIS_TITLE:
+                    continue
+                trows = c.execute("SELECT idx, provenance, text FROM turns WHERE"
+                                  " conversation_id=? AND role='user' ORDER BY idx LIMIT ?",
+                                  (cid, self.SUGGEST_USER_MSGS)).fetchall()
+                try:
+                    texts = [self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
+                             for idx, _prov, blob in trows]
+                except Exception:
+                    continue
+                texts = [t for t in texts if t.strip()]
+                if not texts:
+                    continue
+                if _crisis_turn([(t, "typed", None) for t in texts], None):
+                    continue
+                out["chats"].append({"id": cid, "title": title, "updated": float(updated or 0),
+                                     "texts": texts})
+        return out
+
+    # -- chat tags (docs/CHAT-TAGS-DESIGN.md, JARVIS-API section 99) --------
+    def _tag_cipher(self):
+        """(aead or None, why). Tags are the owner's own labels on chats that
+        are already saved, so they work while chat history is switched OFF
+        (owner, 2026-09-30: filing an old chat records nothing new). Only a
+        missing or wrong key stops them - fail closed, nothing read or
+        written."""
+        try:
+            return self._cipher(), ""
+        except KeyUnavailable as exc:
+            return None, str(exc)
+        except Exception as exc:
+            return None, f"the chat history could not be opened ({type(exc).__name__})"
+
+    def _load_tags(self, c, aead) -> dict:
+        """The registry {"next_id", "tags": [{"id","name","colour","icon"}]}
+        from `meta` (or the starter tags, not yet written). Raises on a value
+        that will not open - never guesses."""
+        row = c.execute("SELECT v FROM meta WHERE k=?", (_TAGS_KEY,)).fetchone()
+        if row is None:
+            return {"next_id": len(TAG_STARTERS) + 1, "fresh": True,
+                    "tags": [{"id": i + 1, "name": n, "colour": col, "icon": ic}
+                             for i, (n, col, ic) in enumerate(TAG_STARTERS)]}
+        d = json.loads(self._open(aead, row[0], _TAGS_AAD).decode("utf-8"))
+        tags = [{"id": int(t["id"]), "name": str(t["name"]), "colour": int(t["colour"]),
+                 "icon": str(t["icon"])} for t in d["tags"]]
+        return {"next_id": max(int(d["next_id"]), max((t["id"] for t in tags), default=0) + 1),
+                "fresh": False, "tags": tags}
+
+    def _save_tags(self, c, aead, reg: dict) -> None:
+        plain = json.dumps({"next_id": reg["next_id"], "tags": reg["tags"]},
+                           ensure_ascii=False).encode("utf-8")
+        c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                  (_TAGS_KEY, self._seal(aead, plain, _TAGS_AAD)))
+        reg["fresh"] = False
+
+    def _tags_answer(self, c, reg: dict) -> dict:
+        counts = {int(r[0]): int(r[1]) for r in c.execute(
+            "SELECT tag_id, COUNT(*) FROM conversations WHERE tag_id IS NOT NULL"
+            " GROUP BY tag_id")}
+        ids = {t["id"] for t in reg["tags"]}
+        total = int(c.execute("SELECT COUNT(*) FROM conversations").fetchone()[0])
+        tagged = sum(n for i, n in counts.items() if i in ids)
+        return {"ok": True,
+                "tags": [dict(t, order=i, count=counts.get(t["id"], 0))
+                         for i, t in enumerate(reg["tags"])],
+                "untagged": total - tagged}
+
+    def tags(self) -> dict:
+        """GET /api/history/tags: {"ok", "tags": [Tag + count], "untagged"}.
+        The starter tags are written the first time this is read with the
+        key. Without the key: the tags cannot be opened, so none are listed
+        and `why_not` says why (the chats still list, untagged)."""
+        self._housekeeping()
+        try:
+            aead = self._cipher()
+        except KeyUnavailable as exc:
+            return {"ok": True, "tags": [], "untagged": 0, "why_not": str(exc)}
+        except Exception as exc:
+            return {"ok": True, "tags": [], "untagged": 0,
+                    "why_not": f"the chat history could not be opened ({type(exc).__name__})"}
+        try:
+            with self._lock, closing(self._connect()) as c:
+                reg = self._load_tags(c, aead)
+                if reg["fresh"]:
+                    with c:
+                        self._save_tags(c, aead, reg)
+                return self._tags_answer(c, reg)
+        except Exception as exc:
+            return {"ok": True, "tags": [], "untagged": 0,
+                    "why_not": f"the tags could not be opened ({type(exc).__name__})"}
+
+    def tag_op(self, body) -> tuple:
+        """POST /api/history/tags: add / rename / style / move / delete.
+        (http code, answer). Nothing is written without the key or while
+        history is off; nothing is guessed."""
+        if not isinstance(body, dict) or not isinstance(body.get("op"), str):
+            return 400, _tag_fail("bad_request")
+        op = body["op"]
+        if op not in ("add", "rename", "style", "move", "delete"):
+            return 400, _tag_fail("bad_request")
+        aead, why = self._tag_cipher()
+        if aead is None:
+            return 503, _tag_fail("bad_request", _off_message(why, "Tags are not changed."))
+        with self._lock, closing(self._connect()) as c:
+            try:
+                reg = self._load_tags(c, aead)
+            except Exception:
+                return 503, _tag_fail("bad_request", "The tags could not be opened, so "
+                                      "they are not changed.")
+            tags = reg["tags"]
+
+            def find(v):
+                if not _is_int(v):
+                    return None
+                return next((t for t in tags if t["id"] == v), None)
+
+            def taken(name, skip=None):
+                return any(_tag_key(t["name"]) == _tag_key(name) and t is not skip
+                           for t in tags)
+
+            with c:
+                if op == "add":
+                    if len(tags) >= TAG_MAX:
+                        return 409, _tag_fail("too_many_tags")
+                    name = _clean_tag_name(body.get("name"))
+                    if name is None:
+                        return 400, _tag_fail("bad_name")
+                    colour = body.get("colour", len(tags) % TAG_COLOURS)
+                    if not _is_int(colour) or not 0 <= colour < TAG_COLOURS:
+                        return 400, _tag_fail("bad_colour")
+                    icon = body.get("icon", "star")
+                    if icon not in TAG_ICONS:
+                        return 400, _tag_fail("bad_icon")
+                    if taken(name):
+                        return 409, _tag_fail("name_taken")
+                    tag = {"id": reg["next_id"], "name": name, "colour": colour, "icon": icon}
+                    reg["next_id"] += 1
+                    tags.append(tag)
+                elif op == "rename":
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    name = _clean_tag_name(body.get("name"))
+                    if name is None:
+                        return 400, _tag_fail("bad_name")
+                    if taken(name, skip=tag):
+                        return 409, _tag_fail("name_taken")
+                    tag["name"] = name
+                elif op == "style":
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    if "colour" not in body and "icon" not in body:
+                        return 400, _tag_fail("bad_request")
+                    if "colour" in body:
+                        col = body["colour"]
+                        if not _is_int(col) or not 0 <= col < TAG_COLOURS:
+                            return 400, _tag_fail("bad_colour")
+                    if "icon" in body and body["icon"] not in TAG_ICONS:
+                        return 400, _tag_fail("bad_icon")
+                    if "colour" in body:
+                        tag["colour"] = body["colour"]
+                    if "icon" in body:
+                        tag["icon"] = body["icon"]
+                elif op == "move":
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    before = body.get("before")
+                    if before is not None:
+                        anchor = find(before)
+                        if anchor is None:
+                            return 404, _tag_fail("tag_not_found")
+                    if before is None:
+                        tags.remove(tag)
+                        tags.append(tag)
+                    elif anchor is not tag:
+                        tags.remove(tag)
+                        tags.insert(tags.index(anchor), tag)
+                else:   # delete
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    tags.remove(tag)
+                    c.execute("UPDATE conversations SET tag_id=NULL WHERE tag_id=?",
+                              (tag["id"],))
+                self._save_tags(c, aead, reg)
+            out = self._tags_answer(c, reg)
+            out["tag"] = next((dict(t, order=i, count=0) for i, t in enumerate(tags)
+                               if t["id"] == tag["id"]), None) if op != "delete" else None
+            if out["tag"] is not None:
+                out["tag"]["count"] = next(t["count"] for t in out["tags"]
+                                           if t["id"] == tag["id"])
+            return 200, out
+
+    def set_tag(self, cid, tag_id) -> tuple:
+        """POST /api/history/tag: file one chat under a tag, or (None) unfile
+        it. (http code, answer). One tag per chat; moving is just setting."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) \
+                or not (tag_id is None or _is_int(tag_id)):
+            return 400, _tag_fail("bad_request")
+        aead, why = self._tag_cipher()
+        if aead is None:
+            return 503, _tag_fail("bad_request", _off_message(why, "The chat is not filed."))
+        if not self.db_path.exists():
+            return 404, _tag_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            if c.execute("SELECT 1 FROM conversations WHERE id=?", (cid,)).fetchone() is None:
+                return 404, _tag_fail("not_found")
+            if tag_id is not None:
+                try:
+                    reg = self._load_tags(c, aead)
+                except Exception:
+                    return 503, _tag_fail("bad_request", "The tags could not be opened, so "
+                                          "the chat is not filed.")
+                if not any(t["id"] == tag_id for t in reg["tags"]):
+                    return 404, _tag_fail("tag_not_found")
+                if reg["fresh"]:
+                    with c:
+                        self._save_tags(c, aead, reg)
+            with c:
+                c.execute("UPDATE conversations SET tag_id=? WHERE id=?", (tag_id, cid))
+        return 200, {"ok": True, "id": cid, "tag_id": tag_id}
+
+    def fork(self, cid, upto) -> tuple:
+        """POST /api/history/fork: (http code, answer). Copies turns 0..`upto`
+        (an `idx` from GET /api/history/conversation, inclusive) of the kept
+        chat `cid` into a NEW conversation, "Fork of <title>".
+
+        * A fork point is a message: `upto` may be any kept turn (the apps
+          offer it on the owner's messages and on Jarvis's answers). Stopping
+          at a user message copies that message without its answer; its
+          `answer_kept` mark is then cleared, because no answer is kept here.
+        * Each turn is opened with its old seal and sealed again under the new
+          id and its new place (AAD = id|idx); the title is sealed too. The
+          copy keeps each turn's own time, provenance, device, lane, voice
+          check, read_outside and answer_kept marks, and the chat keeps its
+          device, started time, project and tag. Its `updated` is the moment
+          of the fork (it counts as new: top of History, a full retention
+          window); the source's `started` stays. The fork is kind
+          "chat" even when copied from a Live session (it is not a Live
+          session, and a Live label would tell the History length line a lie).
+        * Only chats the apps may Continue (CONTINUABLE) and that are not
+          titled "A difficult moment"; anything else is `not_forkable`.
+        * The source's hush is not copied as it stands: the fork gets its own,
+          set at the fork point, and it keeps the source's `erased` flag (a
+          fact the owner Erased in the source is secure-deleted, not kept as
+          a rejected proposal, if a copied message would teach it again). Every
+          user message copied was already read by the learner in the source
+          chat, so when "Continue this chat" puts them back in the registry
+          (_rehydrate) automatic learning drops what they alone would teach
+          again instead of proposing every fact a second time. "Said again"
+          counts skip them too (live_turn_any(skip_hushed=True)), so a copy
+          never counts the same words twice, whatever time the record and
+          the live registry each hold. Messages said after the fork are
+          learned as usual. A message the source's learner never got to
+          (learning off, a fact waiting as a card there) is not learned in
+          the fork either; the source's card is still the place to decide it.
+        * No card, and it works while recording is switched off: filing away
+          words that are already kept records nothing new. Only the key
+          matters - without it nothing is read or written (fail closed).
+        Never touches the source chat."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return 400, _fork_fail("bad_request")
+        if not _is_int(upto) or upto < 0 or upto > _INT64_MAX:
+            return 400, _fork_fail("bad_request")
+        aead, why = self._tag_cipher()
+        if aead is None:
+            return 503, _fork_fail("bad_request", _off_message(why, "The chat was not forked."))
+        if not self.db_path.exists():
+            return 404, _fork_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            got = c.execute(f"SELECT {_conv_cols(raw=True)} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
+                return 404, _fork_fail("not_found")
+            src = _conv_named(got)
+            kind = src["kind"] if src["kind"] in KINDS else "chat"
+            title = self._title(aead, cid, src["title"])
+            if kind not in CONTINUABLE:
+                return 409, _fork_fail("not_forkable", FORK_WHY_KIND)
+            if title == CRISIS_TITLE:
+                return 409, _fork_fail("not_forkable", FORK_WHY_CRISIS)
+            rows = c.execute(f"SELECT {self._TURN_COLS} FROM turns WHERE conversation_id=?"
+                             " AND idx <= ? ORDER BY idx", (cid, int(upto))).fetchall()
+            if not rows or int(rows[-1][1]) != int(upto):
+                return 400, _fork_fail("bad_request", FORK_MESSAGES["bad_upto"])
+            cols = [x.strip() for x in self._TURN_COLS.split(",")]
+            ix = {name: i for i, name in enumerate(cols)}
+            # Open every copied line first: one that cannot be opened stops
+            # the fork before anything is written.
+            plain = []
+            try:
+                for r in rows:
+                    plain.append(self._open(aead, r[ix["text"]],
+                                            self._aad(cid, r[ix["idx"]])))
+            except Exception:
+                return 503, _fork_fail("bad_request", "Some of this chat could not be opened, "
+                                       "so it was not forked.")
+            for _ in range(8):
+                new = "fork-" + secrets.token_urlsafe(12)
+                if c.execute("SELECT 1 FROM conversations WHERE id=?", (new,)).fetchone() is None:
+                    break
+            else:
+                return 503, _fork_fail("bad_request", "A new chat could not be made, so it "
+                                       "was not forked.")
+            room = TITLE_CHARS - len(FORK_PREFIX)
+            base = title if len(title) <= room else title[:max(0, room - 1)].rstrip() + "\u2026"
+            new_title = FORK_PREFIX + base
+            # The user messages at the tail whose answer is not copied.
+            last_assistant = max((i for i, r in enumerate(rows)
+                                  if r[ix["role"]] == "assistant"), default=-1)
+            fork_time = self._clock()
+            src_hush = self._hush_read(c, cid)
+            with c:
+                c.execute(f"INSERT INTO conversations ({', '.join(CONV_COLS)}) VALUES "
+                          f"({','.join('?' * len(CONV_COLS))})",
+                          tuple(new if col == "id"
+                                else self._seal(aead, new_title.encode("utf-8"),
+                                                self._aad(new, "title")) if col == "title"
+                                else "chat" if col == "kind"
+                                else fork_time if col == "updated" else src[col]
+                                for col in CONV_COLS))
+                marks = ",".join("?" * len(cols))
+                last_user = -1
+                old_marks = []
+                try:
+                    old_marks = self._marks_read(c, aead, cid)
+                except Exception:
+                    old_marks = []          # unreadable: the fork simply has none
+                renumber = {int(r[ix["idx"]]): n for n, r in enumerate(rows)}
+                self._marks_write(c, aead, new, [renumber[m] for m in old_marks
+                                                 if m in renumber])
+                for n, (r, text) in enumerate(zip(rows, plain)):
+                    row = list(r)
+                    row[ix["conversation_id"]] = new
+                    row[ix["idx"]] = n
+                    if row[ix["role"]] == "user" and n > last_assistant:
+                        row[ix["answer_kept"]] = 0
+                    row[ix["text"]] = self._seal(aead, text, self._aad(new, n))
+                    c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", row)
+                    if row[ix["role"]] == "user":
+                        last_user = n
+                if c.execute("SELECT 1 FROM meta WHERE k=?",
+                             (self._money_key(cid),)).fetchone() is not None:
+                    # The fork of a chat that added up bank spending is money-
+                    # sensitive too (a web search asks, a chatbot is refused).
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._money_key(new), b"1"))
+                    self._money[new] = True
+                if last_user >= 0:
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._hush_key(new),
+                               json.dumps({"upto": last_user,
+                                          "erased": bool(src_hush and src_hush["erased"])}
+                                         ).encode("utf-8")))
+        return 200, {"ok": True, "id": new, "title": new_title, "turns": len(rows),
+                     "tag_id": _tag_id(src["tag_id"])}
+
+    def _drop_unknown_tag(self, c, cid: str) -> None:
+        """After a chat was put back: a tag deleted while it was held is
+        gone, so the chat comes back untagged rather than under a number
+        nothing explains. Leaves it alone if the registry cannot be read."""
+        try:
+            row = c.execute("SELECT tag_id FROM conversations WHERE id=?", (cid,)).fetchone()
+            if row is None or row[0] is None:
+                return
+            ids = {t["id"] for t in self._load_tags(c, self._cipher())["tags"]}
+        except Exception:
+            return
+        if row[0] not in ids:
+            c.execute("UPDATE conversations SET tag_id=NULL WHERE id=?", (cid,))
 
     def tainted_from(self, cid):
         """The number of the first turn that read outside text, or None. Every
@@ -1719,16 +2631,16 @@ class ChatLog:
         with self._lock, closing(self._connect()) as c:
             # A conversation's own first and last message, from its turns
             # (`started`/`updated` are the same moments, kept on the row).
-            sql = ("SELECT c.id, c.title, c.started, c.updated, COALESCE(c.kind, 'chat'),"
+            sql = ("SELECT " + _conv_cols("c") + ","
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id"
                    "   AND t.at >= ? AND t.at < ?),"
                    " (SELECT MIN(at) FROM turns t WHERE t.conversation_id=c.id),"
                    " (SELECT MAX(at) FROM turns t WHERE t.conversation_id=c.id)"
                    " FROM conversations c"
-                   " WHERE COALESCE(c.started, c.updated) < ? AND c.updated >= ?")
+                   " WHERE COALESCE(c.started, c.updated) < ? AND " + _LAST_AT + " >= ?")
             where = ("SELECT COUNT(*) FROM conversations c"
-                     " WHERE COALESCE(c.started, c.updated) < ? AND c.updated >= ?")
+                     " WHERE COALESCE(c.started, c.updated) < ? AND " + _LAST_AT + " >= ?")
             args = [float(start), float(end), float(end), float(start)]
             count_args = [float(end), float(start)]
             if ids is not None:
@@ -1750,14 +2662,19 @@ class ChatLog:
         except Exception as exc:
             out["why_not"] = f"the chat history could not be opened ({type(exc).__name__})"
             return out
-        for cid, title, started, updated, kind, n, inside, first, last in rows:
+        nc = len(CONV_COLS)
+        for r in rows:
+            cv = _conv_named(r)
+            cid, title, started, updated = cv["id"], cv["title"], cv["started"], cv["updated"]
+            kind, tid = cv["kind"], cv["tag_id"]
+            n, inside, first, last = r[nc:nc + 4]
             first = first if first is not None else started
             last = last if last is not None else updated
             out["items"].append({
                 "id": cid, "title": self._title(aead, cid, title),
                 "started": float(started or first or 0), "updated": float(updated or last or 0),
                 "turns": int(n), "in_frame": int(inside),
-                "kind": kind if kind in KINDS else "chat",
+                "kind": kind if kind in KINDS else "chat", "tag_id": _tag_id(tid),
                 "spills": bool((first is not None and first < start)
                                or (last is not None and last >= end))})
         return out
@@ -1776,9 +2693,8 @@ class ChatLog:
                 for cid in cids:
                     if not (isinstance(cid, str) and _CID.fullmatch(cid)):
                         continue
-                    conv = c.execute("SELECT id, title, started, updated, device, kind,"
-                                     " project FROM conversations WHERE id=?",
-                                     (cid,)).fetchone()
+                    conv = c.execute(f"SELECT {_conv_cols(raw=True)} FROM conversations"
+                                     " WHERE id=?", (cid,)).fetchone()
                     if conv is None:
                         continue
                     turns = c.execute(f"SELECT {self._TURN_COLS} FROM turns"
@@ -1788,6 +2704,14 @@ class ChatLog:
                                      (self._hush_key(cid),)).fetchone()
                     if hush is not None:
                         held[cid]["hush"] = bytes(hush[0])
+                    sealed_marks = self._marks_raw(c, cid)
+                    if sealed_marks is not None:
+                        # Still sealed as on disk (AAD id|"marks" needs no key
+                        # to hold, only to open when the chat is joined back).
+                        held[cid]["marks"] = sealed_marks
+                    if c.execute("SELECT 1 FROM meta WHERE k=?",
+                                 (self._money_key(cid),)).fetchone() is not None:
+                        held[cid]["money"] = True
                     self._drop(c, [cid])
         if held:
             self._deleted()
@@ -1809,6 +2733,7 @@ class ChatLog:
                 try:
                     with c:
                         self._put_one(c, cid, h)
+                        self._drop_unknown_tag(c, cid)
                     out["restored"].append(cid)
                 except KeyUnavailable as exc:
                     out["failed"][cid] = str(exc)
@@ -1819,6 +2744,10 @@ class ChatLog:
     def _put_one(self, c, cid: str, h: dict) -> None:
         conv = h["conversation"]
         turns = h["turns"]
+        if h.get("money") is True:
+            c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                      (self._money_key(cid), b"1"))
+            self._money[cid] = True
         if isinstance(h.get("hush"), (bytes, bytearray)):
             # "Already learned from before a Forget" goes back with the chat.
             c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
@@ -1826,11 +2755,15 @@ class ChatLog:
         marks = ",".join("?" * 11)
         now_conv = c.execute("SELECT updated FROM conversations WHERE id=?", (cid,)).fetchone()
         if now_conv is None:
-            conv = tuple(conv) + (None,) * (7 - len(conv))    # held before kind existed
-            c.execute("INSERT INTO conversations (id, title, started, updated, device, kind,"
-                      " project) VALUES (?,?,?,?,?,?,?)", conv[:7])
+            n = len(CONV_COLS)
+            conv = tuple(conv) + (None,) * (n - len(conv))    # held before kind/tag existed
+            c.execute("INSERT INTO conversations (%s) VALUES (%s)"
+                      % (", ".join(CONV_COLS), ",".join("?" * n)), conv[:n])
             for t in turns:
                 c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
+            if isinstance(h.get("marks"), (bytes, bytearray)):
+                c.execute("INSERT OR REPLACE INTO marks (conversation_id, v) VALUES (?, ?)",
+                          (cid, bytes(h["marks"])))
             return
         aead = self._cipher()
         newer = c.execute(f"SELECT {self._TURN_COLS} FROM turns WHERE conversation_id=?"
@@ -1845,16 +2778,36 @@ class ChatLog:
         # otherwise appear twice.
         last_held = max((float(t[2] or 0) for t in turns), default=0.0)
         newer = [t for t in newer if float(t[2] or 0) > last_held]
+        moved = {}                      # a newer message's old number -> its new one
         for t in newer:
             plain = self._open(aead, t[10], self._aad(cid, t[1]))
             row = list(t)
+            moved[int(t[1])] = nxt
             row[1] = nxt
             row[10] = self._seal(aead, plain, self._aad(cid, nxt))
             c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", row)
             nxt += 1
+        # Section breaks: the held ones come back as they were; ones made since
+        # follow their messages to the new numbers (a break above a message
+        # that was already among the held ones is dropped with the duplicate).
+        held_marks, now_marks = [], []
+        try:
+            if isinstance(h.get("marks"), (bytes, bytearray)):
+                held_marks = self._marks_clean(json.loads(self._open(
+                    aead, bytes(h["marks"]), self._aad(cid, "marks")).decode("utf-8")))
+            now_marks = [moved[m] for m in self._marks_read(c, aead, cid) if m in moved]
+            self._marks_write(c, aead, cid, held_marks + now_marks)
+        except Exception:
+            pass        # a section break that will not open never blocks Undo
         # The old title and first moment; the newer last moment stays.
         c.execute("UPDATE conversations SET title=?, started=? WHERE id=?",
-                  (conv[1], conv[2], cid))
+                  (conv[CONV_COLS.index("title")], conv[CONV_COLS.index("started")], cid))
+        # The tag it had, unless the owner filed it somewhere since.
+        held_tag = conv[CONV_COLS.index("tag_id")] if len(conv) > CONV_COLS.index("tag_id") \
+            else None
+        if held_tag is not None:
+            c.execute("UPDATE conversations SET tag_id=? WHERE id=? AND tag_id IS NULL",
+                      (held_tag, cid))
 
 
 # ------------------------------------------------------ the module's own log
@@ -1909,9 +2862,9 @@ def live_upto(conversation_id) -> Optional[int]:
     return _log().live_upto(conversation_id)
 
 
-def live_turn_any(text) -> Optional[dict]:
+def live_turn_any(text, skip_hushed: bool = False) -> Optional[dict]:
     """live_turn() in any conversation: the newest entry for these words."""
-    return _log().live_turn_any(text)
+    return _log().live_turn_any(text, skip_hushed)
 
 
 def conversation_tainted(conversation_id, messages=None) -> bool:
@@ -1919,6 +2872,17 @@ def conversation_tainted(conversation_id, messages=None) -> bool:
     outside text? `messages`: the request's, as they arrived. Fails closed
     for a conversation this process has not met (G1)."""
     return _log().conversation_tainted(conversation_id, messages)
+
+
+def conversation_money(conversation_id, messages=None) -> bool:
+    """For jarvis_agent: did an earlier turn of this conversation add up the
+    owner's bank spending (my_spending)? A web search then asks first and a
+    chatbot is not started from it. Not a taint: nothing else changes."""
+    return _log().conversation_money(conversation_id, messages)
+
+
+def note_money(conversation_id) -> None:
+    _log().note_money(conversation_id)
 
 
 def delete(conversation_id) -> bool:
@@ -1969,6 +2933,27 @@ def take_out(cids) -> dict:
 def put_back(held: dict) -> dict:
     """The Undo of take_out(). See ChatLog.put_back."""
     return _log().put_back(held)
+
+
+def tags() -> dict:
+    """GET /api/history/tags's answer (ChatLog.tags)."""
+    return _log().tags()
+
+
+def tag_chat(cid, tag_id) -> tuple:
+    """POST /api/history/tag: (http code, answer). See ChatLog.set_tag. The
+    same call "label this chat Work" makes (jarvis_quick.py)."""
+    return _log().set_tag(cid, tag_id)
+
+
+def fork_chat(cid, upto) -> tuple:
+    """POST /api/history/fork: (http code, answer). See ChatLog.fork."""
+    return _log().fork(cid, upto)
+
+
+def mark_chat(cid, idx, on) -> tuple:
+    """POST /api/history/mark: (http code, answer). See ChatLog.set_mark."""
+    return _log().set_mark(cid, idx, on)
 
 
 def search(query, limit=SEARCH_DEFAULT, kind=None) -> dict:
@@ -2206,8 +3191,8 @@ SEARCH_PATH = "/api/history/search"
 
 
 def handle_get(path: str, query: str = "") -> tuple:
-    """GET /api/history, /api/history/conversation and /api/history/search.
-    (code, body)."""
+    """GET /api/history, /api/history/conversation, /api/history/search and
+    /api/history/tags. (code, body)."""
     q = _query(query)
     log = _log()
     if path == "/api/history":
@@ -2223,7 +3208,17 @@ def handle_get(path: str, query: str = "") -> tuple:
                 before = b
         except (TypeError, ValueError):
             before = None
-        return 200, log.list(limit=limit, before=before, kind=q.get("kind") or None)
+        return 200, log.list(limit=limit, before=before, kind=q.get("kind") or None,
+                             tag=q.get("tag") or None)
+    if path == "/api/history/tags":
+        return 200, log.tags()
+    if path == "/api/history/tags/suggest":
+        # Overnight suggested tags (section 104): the switch's state only.
+        try:
+            import jarvis_tag_suggest
+        except Exception:
+            return 404, {"error": "no such route"}
+        return jarvis_tag_suggest.handle_get()
     if path == SEARCH_PATH:
         # "Search what was said" (section 71). The words arrive in ?q=, are
         # used for this one scan and dropped: never logged, never audited,
@@ -2249,7 +3244,7 @@ def handle_get(path: str, query: str = "") -> tuple:
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/history/delete and /api/history/settings. (code, body)."""
+    """POST /api/history/delete, /settings, /tags, /tag, /fork, /mark and /tags/suggest. (code, body)."""
     if route == "/api/history/delete":
         if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
             return 400, {"error": 'need {"id": "<conversation id>"} - one conversation '
@@ -2260,4 +3255,36 @@ def handle_post(route: str, body) -> tuple:
         return 200, {"ok": True}
     if route == "/api/history/settings":
         return request_settings(body)
+    if route == "/api/history/tags":
+        # Chat tags (section 99): the owner's own organisation, no card.
+        return _log().tag_op(body)
+    if route == "/api/history/tag":
+        if not isinstance(body, dict) or set(body) != {"id", "tag_id"}:
+            return 400, _tag_fail("bad_request")
+        return _log().set_tag(body["id"], body["tag_id"])
+    if route == "/api/history/tags/suggest":
+        # Overnight suggested tags (section 104): on = ONE card, off = at once.
+        try:
+            import jarvis_tag_suggest
+        except Exception:
+            return 404, {"error": "no such route"}
+        return jarvis_tag_suggest.handle_post(body)
+    if route == "/api/history/mark":
+        # New section here (section 106): a divider, view-only, no card. The
+        # audit line holds no words and no turn number.
+        if not isinstance(body, dict) or set(body) != {"id", "idx", "on"}:
+            return 400, _mark_fail("bad_request")
+        code, out = _log().set_mark(body["id"], body["idx"], body["on"])
+        if code == 200:
+            _audit("history.mark", {"on": out["on"]})
+        return code, out
+    if route == "/api/history/fork":
+        # Fork from here (section 110): the owner's own kept words, copied
+        # on this PC; no card. The audit line holds counts, never words.
+        if not isinstance(body, dict) or set(body) != {"id", "upto"}:
+            return 400, _fork_fail("bad_request")
+        code, out = _log().fork(body["id"], body["upto"])
+        if code == 200:
+            _audit("history.fork", {"turns": out["turns"]})
+        return code, out
     return 404, {"error": "no such route"}
