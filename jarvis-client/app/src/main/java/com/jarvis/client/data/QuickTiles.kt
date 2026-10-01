@@ -45,6 +45,9 @@ enum class TileAction(
     BRIEF_ME("brief_me", "Brief me", "Brief me", heldWhenStale = false),
     STOP_EVERYTHING("stop_everything", "Stop everything", "Stop everything", heldWhenStale = false),
     PC_PLAY_PAUSE("pc_play_pause", "Play/pause PC", "Play/pause PC", heldWhenStale = true),
+    COMING_UP("coming_up", "Coming up", "Coming up", heldWhenStale = false),
+    LOOK("look", "Look", "Look at this", heldWhenStale = false),
+    LIVE("live", "Live", "Live", heldWhenStale = false),
     ;
 
     companion object {
@@ -102,6 +105,15 @@ object QuickTiles {
         /** Open Jarvis on the briefing: App lock, if on, asks first. */
         data object OpenBriefing : Decision
 
+        /** Open Coming up: App lock, if on, asks first. */
+        data object OpenComingUp : Decision
+
+        /** Open Look: App lock, if on, asks first. */
+        data object OpenLook : Decision
+
+        /** Open Live: App lock, if on, asks first. */
+        data object OpenLive : Decision
+
         /** No action chosen for this slot: open Settings at this section. */
         data object OpenChooser : Decision
 
@@ -133,6 +145,9 @@ object QuickTiles {
     ): Decision = when {
         action == null -> Decision.OpenChooser
         action == TileAction.BRIEF_ME -> Decision.OpenBriefing
+        action == TileAction.COMING_UP -> Decision.OpenComingUp
+        action == TileAction.LOOK -> Decision.OpenLook
+        action == TileAction.LIVE -> Decision.OpenLive
         !paired -> Decision.Reconnect
         action == TileAction.STOP_EVERYTHING -> Decision.Run
         !connected -> Decision.Reconnect
@@ -154,7 +169,7 @@ object QuickTiles {
      */
     fun widgetOpensApp(action: TileAction, appLock: Boolean?): Boolean = when (action) {
         TileAction.STOP_EVERYTHING -> false
-        TileAction.BRIEF_ME -> true
+        TileAction.BRIEF_ME, TileAction.COMING_UP, TileAction.LOOK, TileAction.LIVE -> true
         else -> appLock != false
     }
 
@@ -174,6 +189,7 @@ object QuickTiles {
         action == null -> false
         action == TileAction.BRIEF_ME -> paired
         action == TileAction.STOP_EVERYTHING -> paired
+        action == TileAction.COMING_UP || action == TileAction.LOOK || action == TileAction.LIVE -> paired
         else -> paired && connected && !(stale && action.heldWhenStale)
     }
 

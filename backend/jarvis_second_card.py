@@ -3196,10 +3196,9 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     sw = sw if sw is not None else _read_switches()
     s = det["second"]
     p = det.get("primary") or {}
-    card = f"the {s['name']} ({_gb(s['total_mb'])}, id {s['uuid']})"
-    lane = (f"Jarvis starts a second copy of Ollama that uses only that card and "
-            f"listens on {HOST}:{_port()} - this PC only, not your network or the "
-            f"internet.")
+    card = f"the {s['name']} ({_gb(s['total_mb'])})"
+    lane = (f"Jarvis uses only that card and listens on {HOST}:{_port()} — "
+            f"this PC only, not your network or the internet.")
     if det.get("_main"):
         # A chosen preset with one card: the lanes are more models in the
         # everyday Ollama. No second copy starts.

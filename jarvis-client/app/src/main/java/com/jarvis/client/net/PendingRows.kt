@@ -144,6 +144,9 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     val title = notice?.let { textOf(it["title"]) } ?: titleForAction(action)
     out["title"] = JsonPrimitive(title)
 
+    val task = textOf(obj["task"]) ?: textOf(obj["task_id"]) ?: textOf(obj["source"]) ?: notice?.let { textOf(it["task"]) }
+    if (task != null) out["task"] = JsonPrimitive(task) else out.remove("task")
+
     // --- raised: fail toward caution
     val raised = raisedOf(obj["raised"])
     if (raised == null) out.remove("raised") else out["raised"] = raised
