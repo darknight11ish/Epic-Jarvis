@@ -67,6 +67,8 @@ object OpenPlace {
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").
         "quick-tiles" to Where.Go(Screen.SETTINGS, "quick-tiles"),
+        // Hidden navigation menus section (SettingsScreen.kt, item "menu-visibility").
+        "menu-visibility" to Where.Go(Screen.SETTINGS, "menu-visibility"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).
@@ -108,6 +110,7 @@ object OpenPlace {
         "more-options",
         "crash-notes",
         "start-jarvis",
+        "spending",
     )
 
     /** Every id this file has made a decision about - for the test. */

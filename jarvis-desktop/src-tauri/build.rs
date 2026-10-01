@@ -500,6 +500,10 @@ fn main() {
             "brain_quiz_answer",
             "brain_quiz_finish",
             "brain_quiz_stop",
+            "brain_quiz_cloud_info",
+            "brain_quiz_cloud_start",
+            "brain_quiz_cloud_get",
+            "brain_quiz_cloud_cancel",
             // Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md
             // section 14, JARVIS-API.md section 112): ask whether the PC has it,
             // send the pasted link (ONE approval card on the PC), poll the
