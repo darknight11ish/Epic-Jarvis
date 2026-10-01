@@ -5,6 +5,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 
 /**
  * "Backups": read-only on the phone, on purpose (the owner's decision of
@@ -33,7 +34,14 @@ object Backup {
     const val NEVER_MADE = "No backup has been made yet."
     const val MISSING = "Your PC's Jarvis cannot make backups yet - run apply-patches.ps1 on the PC."
 
-    data class Status(val lastBackupAt: Double?)
+    data class DeleteOlder(val outcome: String, val message: String?, val deleted: Int)
+
+    data class Status(
+        val lastBackupAt: Double?,
+        val pendingDeleteOlder: Boolean = false,
+        val lastDeleteOlder: DeleteOlder? = null,
+        val eraseLimit: String? = null,
+    )
 
     private fun JsonObject.text(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { it.isNotBlank() }
@@ -42,7 +50,21 @@ object Backup {
     fun parse(body: JsonObject): Status? {
         if ((body["available"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == false) return null
         val at = (body["last_backup_at"] as? JsonPrimitive)?.doubleOrNull
-        return Status(lastBackupAt = at)
+        val pendingDelete = body["pending_delete_older_card"] is JsonObject
+        val deleteObj = body["last_delete_older"] as? JsonObject
+        val lastDelete = deleteObj?.let {
+            val outcome = it.text("outcome") ?: ""
+            val message = it.text("message")
+            val deleted = (it["deleted"] as? JsonPrimitive)?.intOrNull ?: 0
+            DeleteOlder(outcome = outcome, message = message, deleted = deleted)
+        }
+        val eraseLimit = body.text("erase_limit")
+        return Status(
+            lastBackupAt = at,
+            pendingDeleteOlder = pendingDelete,
+            lastDeleteOlder = lastDelete,
+            eraseLimit = eraseLimit,
+        )
     }
 
     /** A read that failed because this PC has no backups feature. */

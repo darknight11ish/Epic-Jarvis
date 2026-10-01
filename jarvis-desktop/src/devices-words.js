@@ -126,9 +126,13 @@ export function signedLine(d, enabled) {
 export const SHARED_UNSIGNED = "Risky approvals from this device are not yet signed - " +
   "pair it and turn on signed approvals.";
 
-export function sharedSignedLine(shared, enabled) {
+export const SHARED_PROMPT_RETIRE = "Your phone now signs risky approvals. Retire the old shared key now so unverified devices cannot approve risky actions.";
+
+export function sharedSignedLine(shared, enabled, anySigned = false) {
   const s = shared && typeof shared === "object" ? shared : {};
-  if (!enabled || s.retired || typeof s.last_other_seen !== "number") return "";
+  if (!enabled || s.retired) return "";
+  if (anySigned) return SHARED_PROMPT_RETIRE;
+  if (typeof s.last_other_seen !== "number") return "";
   return SHARED_UNSIGNED;
 }
 

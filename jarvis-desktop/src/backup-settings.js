@@ -84,6 +84,7 @@ const el = {
   empty: $("bk-empty"),
   list: $("bk-list"),
   eraseLimit: $("bk-erase-limit"),
+  deleteOlder: $("bk-delete-older"),
   status: $("bk-status"),
 };
 
@@ -201,10 +202,16 @@ function paint() {
     : "No backup has been made yet.";
   const pendingRestore = view.pending_restore_card;
   const lastRestore = view.last_restore;
+  const pendingDelete = view.pending_delete_older_card;
+  const lastDelete = view.last_delete_older;
   if (pendingRestore) {
     say("Waiting for your approval, with Windows Hello.");
+  } else if (pendingDelete) {
+    say("Waiting for your approval on the PC.");
   } else if (lastRestore && lastRestore.message && !el.status.textContent) {
     say(lastRestore.message, lastRestore.outcome === "restored" ? "ok" : "");
+  } else if (lastDelete && lastDelete.message && !el.status.textContent) {
+    say(lastDelete.message, lastDelete.outcome === "deleted" ? "ok" : "");
   }
   if (lastRestore && lastRestore.safety_backup && lastRestore.safety_backup.recovery_code) {
     showCode(
@@ -213,9 +220,19 @@ function paint() {
       lastRestore.safety_backup.at,
     );
   }
+  if (lastDelete && lastDelete.fresh_backup && lastDelete.fresh_backup.recovery_code) {
+    showCode(
+      "Your new backup's recovery code",
+      lastDelete.fresh_backup.recovery_code,
+      lastDelete.fresh_backup.at,
+    );
+  }
   el.empty.hidden = backups.length > 0;
   el.list.replaceChildren(...backups.map(restoreRow));
   el.eraseLimit.textContent = view.erase_limit || "";
+  if (el.deleteOlder) {
+    el.deleteOlder.disabled = busy || !view.folder || backups.length <= 1;
+  }
 }
 
 async function load() {
@@ -343,9 +360,37 @@ async function doRestore(name, code, out) {
   await load();
 }
 
+async function deleteOlder() {
+  if (!live()) {
+    say(STALE, "bad");
+    return;
+  }
+  if (backups.length <= 1) {
+    say("There are no older backups in the folder to delete.");
+    return;
+  }
+  busy = true;
+  say("Asking Jarvis to delete older backups…");
+  paint();
+  try {
+    const out = await TAURI.core.invoke("delete_older_backups");
+    if (out && out.waiting) {
+      say("Waiting for your approval on the PC.");
+    } else if (out && out.message) {
+      say(out.message, out.outcome === "deleted" ? "ok" : "");
+    }
+  } catch (error) {
+    say(problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await load();
+}
+
 if (el.section) {
   el.chooseFolder.addEventListener("click", chooseFolder);
   el.now.addEventListener("click", backupNow);
+  if (el.deleteOlder) el.deleteOlder.addEventListener("click", deleteOlder);
   el.codeCopy.addEventListener("click", async () => {
     try {
       await navigator.clipboard.writeText(el.code.textContent || "");

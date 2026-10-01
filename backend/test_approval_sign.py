@@ -185,6 +185,9 @@ def t_a_good_key_is_stored_only_after_the_card_is_approved():
     check("exactly the register_approval_key card, with the phone's name and no key",
           action == "register_approval_key" and "Pixel 9" in prompt
           and spki_of(priv) not in json.dumps(detail) + prompt and detail["leaves_this_pc"] is False)
+    check("the card shows four verification words",
+          "Check that the phone shows these same four words:" in prompt
+          and isinstance(detail.get("words"), list) and len(detail["words"]) == 4)
     check("nothing is stored while the card waits, and the list says waiting",
           seen["stored_while_waiting"] is None and seen["state_while_waiting"] == "waiting")
     check("approved: the SPKI is in that device's row", D.approval_key_of(dev) == spki_of(priv))

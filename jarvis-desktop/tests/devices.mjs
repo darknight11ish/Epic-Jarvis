@@ -31,6 +31,7 @@ import {
   countdown,
   removeQuestion,
   sessionLine,
+  SHARED_PROMPT_RETIRE,
   sharedSignedLine,
   sharedView,
   signedLine,
@@ -123,8 +124,10 @@ await check("signed approvals: the words for on, waiting, off and absent; nothin
   const seen = { retired: false, last_other_seen: NOW - 60 };
   assert.equal(sharedSignedLine(seen, true),
     "Risky approvals from this device are not yet signed - pair it and turn on signed approvals.");
+  assert.equal(sharedSignedLine(seen, true, true), SHARED_PROMPT_RETIRE);
   assert.equal(sharedSignedLine(seen, false), "");
   assert.equal(sharedSignedLine({ retired: true, last_other_seen: NOW }, true), "");
+  assert.equal(sharedSignedLine({ retired: true, last_other_seen: NOW }, true, true), "");
   assert.equal(sharedSignedLine({ retired: false, last_other_seen: null }, true), "");
 });
 

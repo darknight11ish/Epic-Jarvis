@@ -498,6 +498,7 @@ permissions = [
   "allow-backup-now",
   "allow-preview-restore",
   "allow-restore-backup",
+  "allow-delete-older-backups",
   # "Devices" (docs/PAIRING-DESIGN.md, phase 1, 2026-09-28): pairing a phone
   # by QR code, with a key per device. Starting a pairing is PC only on the
   # backend too; the QR code is drawn in Rust and only the picture reaches

@@ -3316,7 +3316,7 @@ private fun VoiceStrips(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
     when (state.voicePhase) {
         VoiceSession.Phase.CAPTURING ->
-            VoiceStrip("Listening — release to send, slide up to cancel")
+            VoiceStrip("Listening — tap or release to send, slide up to cancel")
         VoiceSession.Phase.VERIFYING ->
             // Named for what it is. The desktop checks whose voice this is
             // BEFORE transcribing, so that a voice that is not his is never

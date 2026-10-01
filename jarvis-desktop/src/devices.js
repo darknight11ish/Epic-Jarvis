@@ -216,7 +216,8 @@ function paint() {
 
   const shared = sharedView(view.shared);
   el.sharedLine.textContent = shared.line;
-  const sharedSigned = sharedSignedLine(view.shared, signedOn());
+  const anySigned = devices.some((d) => d.approval_key === true);
+  const sharedSigned = sharedSignedLine(view.shared, signedOn(), anySigned);
   el.sharedSigned.textContent = sharedSigned;
   el.sharedSigned.hidden = !sharedSigned;
   el.retire.hidden = !shared.retire;

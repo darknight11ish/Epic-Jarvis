@@ -26,6 +26,8 @@ object Devices {
     const val PATH = "/api/devices"
     const val REMOVE_PATH = "/api/devices/remove"
     const val SHARED_PATH = "/api/devices/shared"
+    const val SHARED_PROMPT_RETIRE =
+        "Your phone now signs risky approvals. Retire the old shared key now so unverified devices cannot approve risky actions."
 
     data class Device(
         val id: String,

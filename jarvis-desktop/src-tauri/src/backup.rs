@@ -50,6 +50,7 @@ const NOW_PATH: &str = "/api/backup/now";
 const LIST_PATH: &str = "/api/backup/list";
 const PREVIEW_PATH: &str = "/api/backup/restore/preview";
 const RESTORE_PATH: &str = "/api/backup/restore";
+const DELETE_OLDER_PATH: &str = "/api/backup/delete-older";
 
 /// What a backend without `jarvis_backup.py` / `backup.patch` is told. The
 /// phone says the same about its read-only status line.
@@ -241,11 +242,25 @@ pub async fn restore_backup(
     .await
 }
 
+/// "Delete older backups now": makes one fresh locked backup first, then
+/// deletes older backup files from the folder. Raises ONE approval card.
+/// Held on a stale link.
+#[tauri::command]
+pub async fn delete_older_backups(app: AppHandle) -> Result<serde_json::Value, String> {
+    post(
+        &app,
+        DELETE_OLDER_PATH,
+        serde_json::json!({}),
+        RESTORE_TIMEOUT,
+    )
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        change_answer, held_on_stale, read_answer, BACKUP_MISSING, FOLDER_PATH, NOW_PATH,
-        RESTORE_PATH,
+        change_answer, held_on_stale, read_answer, BACKUP_MISSING, DELETE_OLDER_PATH, FOLDER_PATH,
+        NOW_PATH, RESTORE_PATH,
     };
 
     #[test]
@@ -287,9 +302,10 @@ mod tests {
     }
 
     #[test]
-    fn setting_the_folder_and_restoring_wait_for_a_live_link_everything_else_does_not() {
+    fn setting_the_folder_restoring_and_deleting_older_wait_for_a_live_link() {
         assert!(held_on_stale(FOLDER_PATH));
         assert!(held_on_stale(RESTORE_PATH));
+        assert!(held_on_stale(DELETE_OLDER_PATH));
         assert!(!held_on_stale(NOW_PATH));
         assert!(!held_on_stale(super::LIST_PATH));
         assert!(!held_on_stale(super::PREVIEW_PATH));
