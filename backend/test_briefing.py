@@ -1481,7 +1481,7 @@ def t_the_patch():
     saved_bo, saved_deps = BO._ONE, B.Deps
     BO._ONE = bo
     B.Deps = lambda: deps(w, cal=lambda q: calendar_xml(
-        ("Dentist", "", time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(time.time() + 600)))),
+        ("Dentist", "", time.strftime("%Y%m%dT120000Z", time.localtime()))),
         tools=("calendar_read",))
     import jarvis_agent
     saved_turn = jarvis_agent.run_local_turn
