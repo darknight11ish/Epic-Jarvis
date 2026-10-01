@@ -191,7 +191,10 @@ internal fun SecondCardPlate(
 
         // 3. The second copy of Ollama, and keeping the everyday one apart.
         Gap(12)
-        Kicker("The second card's Ollama", Modifier.semantics { heading() })
+        Kicker(
+            if (status.main) "Extra features lane" else "The second card's Ollama",
+            Modifier.semantics { heading() }
+        )
         Gap(4)
         Text(
             SecondCard.laneLine(status),

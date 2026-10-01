@@ -122,7 +122,7 @@ CLOUD = ("\"{model}\" is one of Ollama's cloud models - it is answered on ollama
          "that runs here.")
 NEEDS_SECOND = ("\"{model}\" needs your second graphics card. On one card, the only model "
                 "Jarvis can talk to without pushing its own chat model off the card is that "
-                "same model ({main}); your 8 GB card has no room for a second one. The second "
+                "same model ({main}); your graphics card has no room for a second one. The second "
                 "card is used once it is installed and measured ([chatbot] full_version).")
 NOT_HERE = ("The model Jarvis would talk to is not on this PC (its address is not 127.0.0.1), "
             "so Jarvis will not use it.")

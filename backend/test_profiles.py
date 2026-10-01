@@ -504,6 +504,24 @@ def t_words():
           not re.search(r"(?i)token['\"]?\s*[:=]|X-Jarvis-Token", json.dumps(d)))
 
 
+def t_one_32gb():
+    c = nv("a", "32 GB card", 32, monitor=True)
+    fast = P.plan([c], "fast")
+    check("32 GB fast: 4B at 32K", fast.chat.model.ref == "qwen3:4b" and fast.chat.ctx == 32768)
+    check("32 GB fast: chat is long", fast.long_is_chat is True and fast.pictures is None)
+    smart = P.plan([c], "smart")
+    check("32 GB smart: 14B at 32K", smart.chat.model.ref == "qwen3:14b" and smart.chat.ctx == 32768)
+    check("32 GB smart: chat is long", smart.long_is_chat is True and smart.pictures is None)
+    features = P.plan([c], "features")
+    check("32 GB features: 8B at 32K", features.chat.model.ref == "qwen3:8b" and features.chat.ctx == 32768)
+    check("32 GB features: 7B pictures beside chat",
+          features.pictures is not None and features.pictures.model.ref == "qwen2.5vl:7b"
+          and features.pictures.mode == "beside")
+    lays = {p: P.plan([c], p) for p in P.PRESET_IDS}
+    rec, why = P.recommended(lays)
+    check("32 GB recommended: Most features", rec == "features" and "32 GB card" in why)
+
+
 def main():
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

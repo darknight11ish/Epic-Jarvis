@@ -1677,6 +1677,7 @@ U_10 = "GPU-10101010-3333-4333-8333-ccccccccccc3"
 U_12 = "GPU-12121212-4444-4444-8444-ddddddddddd4"
 U_16 = "GPU-16161616-5555-4555-8555-eeeeeeeeeee5"
 U_24 = "GPU-24242424-6666-4666-8666-fffffffffff6"
+U_32 = "GPU-32323232-7777-4777-8777-777777777777"
 
 
 def smi(*cards):
@@ -1836,6 +1837,7 @@ def t_8gb_card_with_a_monitor():
 def t_bigger_cards_by_band():
     for name, mib, uid, gb in (("RTX 4060 Ti 16GB", 16376, U_16, "16 GB"),
                                ("RTX 3090", 24564, U_24, "24 GB"),
+                               ("RTX 5000 Ada 32GB", 32768, U_32, "32 GB"),
                                ("RTX 2060 12GB", 12288, U_12, "12 GB"),
                                ("RTX 2080 Ti", 11264, U_10, "11 GB")):
         with G.World(smi(PRIM, (name, mib, uid))) as w:
@@ -1853,7 +1855,7 @@ def t_bigger_cards_by_band():
     check("qwen3:14b @ 32K needs 11.71 GiB (fits both, NOT switched on: owner decision)",
           round(8.42 + 2 * 40 * 8 * 128 * 1.0625 * 32768 / 2 ** 30 + 0.30 + 0.33, 2) == 11.71)
     # "One bigger model on both cards" with these sizes.
-    for mib, uid, note in ((16376, U_16, True), (24564, U_24, True), (12288, U_12, False)):
+    for mib, uid, note in ((32768, U_32, True), (16376, U_16, True), (24564, U_24, True), (12288, U_12, False)):
         with G.World(smi(PRIM, ("Card", mib, uid))) as w:
             det = SC.detect(fresh=True)
             ok, why = SC._combined_capable(det)
@@ -2366,6 +2368,89 @@ def t_wire_study_into_the_quiz():
     check("... and never the second-card module", "jarvis_second_card" not in re.sub(
         r'(?s)""".*?"""', "", src.replace("second_card.study_call", "")).replace(
         "# jarvis_second_card", ""), "the quiz names the second card")
+
+
+def t_single_big_card():
+    # Single 16, 24, and 32 GB cards without a second card
+    for name, mib, uid, gb in (("RTX 4060 Ti 16GB", 16376, U_16, "16 GB"),
+                               ("RTX 3090", 24564, U_24, "24 GB"),
+                               ("RTX 5000 Ada 32GB", 32768, U_32, "32 GB")):
+        with G.World(smi((name, mib, uid))) as w:
+            det = SC.detect(fresh=True)
+            check(f"single {gb} card: capable without a second card", det["capable"] is True)
+            check(f"single {gb} card: _main is True and _second is None",
+                  det.get("_main") is True and det.get("_second") is None)
+            check(f"single {gb} card: long_context refused in words",
+                  "chat itself holds long conversations" in (SC._unsupported("long_context", det) or ""))
+            check(f"single {gb} card: vision supported", SC._unsupported("vision", det) is None)
+            check(f"single {gb} card: browser_control supported", SC._unsupported("browser_control", det) is None)
+            check(f"single {gb} card: wiki supported", SC._unsupported("wiki", det) is None)
+            check(f"single {gb} card: learning supported", SC._unsupported("learning", det) is None)
+
+    # Behavior with a single 16 GB card: approval wording, switch activation, no long_context needed for browser_control
+    with G.World(smi(("RTX 4060 Ti 16GB", 16376, U_16)), installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        desc = SC.describe_on("master", det)
+        check("single big card: master approval asks to run extra models beside chat",
+              "Let Jarvis run extra models beside chat on the RTX 4060 Ti 16GB?" in desc
+              and "as the setup you chose says" not in desc)
+        # Turn master on
+        w.switches(master=True, master_card=U_16, vision=True)
+        st = SC.status()
+        check("single big card: status active is True", st["active"] is True)
+        check("single big card: detected has main=True", st["detected"].get("main") is True)
+        # Turn on browser_control: does not fail for missing long_context
+        held = []
+        code, out = SC.request_change("browser_control", True,
+                                      gate=lambda a, d, p: Verdict(True, "ask", "approved"),
+                                      spawn=held.append)
+        held[0]()
+        check("single big card: browser_control turns on without long_context",
+              code == 200 and SC._read_switches()["features"]["browser_control"] is True)
+        # lane_for routes vision to main Ollama URL
+        lane = SC.lane_for("vision")
+        check("single big card: vision routes to main Ollama URL",
+              lane is not None and lane.url == SC._main_ollama_url())
+
+    # Single 8 GB card: not capable
+    with G.World(smi(PRIM)) as w:
+        det = SC.detect(fresh=True)
+        check("single 8 GB card: not capable",
+              det["capable"] is False and "only one graphics card found" in det["why"])
+
+
+def t_master_card_identity():
+    E8 = ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A)
+    E8b = ("NVIDIA GeForce RTX 2070", 8192, U_8B)
+    with G.World(smi(PRIM, E8), installed=("qwen3:8b",)) as w:
+        w.switches(master=True, master_card=U_8A, learning=True)
+        st = SC.status()
+        check("master active when card matches", st["active"] is True)
+
+        # The card in the second slot changes
+        w.smi = smi(PRIM, E8b)
+        w.started.clear()
+        SC._reset_for_tests()
+        CP._cache.update(at=-1e9, cards=None, fields="")
+        st = SC.status()
+        check("master inactive when card differs", st["active"] is False)
+        check("master still enabled in sw", st["enabled"] is True)
+        check("idle why reports different card",
+              "different graphics card" in SC._idle_why(SC._read_switches(), SC.detect(fresh=True)))
+
+        # Requesting master change raises approval card rather than returning "already on"
+        held = []
+        code, out = SC.request_change("master", True,
+                                      gate=lambda a, d, p: Verdict(True, "ask", "approved"),
+                                      spawn=held.append)
+        check("requesting master on card mismatch raises approval card",
+              code == 200 and out["pending"] is True, out)
+
+        # Approved: the new card's id is stored
+        held[0]()
+        check("after approval, master_card is updated",
+              SC._read_switches()["master_card"] == U_8B)
+        check("master active again", SC.status()["active"] is True)
 
 
 if __name__ == "__main__":

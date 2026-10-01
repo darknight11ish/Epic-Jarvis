@@ -145,7 +145,10 @@ FIELDS_OLDEST = "index,name,memory.total,memory.free"
 #: every member shares one capability are listed; anything else is None,
 #: which jarvis_second_card treats as "unknown, so not capable".
 COMPUTE_BY_NAME = (
-    ("RTX 50", 12.0), ("RTX 40", 8.9), ("RTX 30", 8.6), ("A100", 8.0),
+    ("ADA", 8.9),
+    ("RTX 5000 ADA", 8.9), ("RTX 4000 ADA", 8.9), ("RTX 4500 ADA", 8.9), ("RTX 6000 ADA", 8.9),
+    ("RTX A6000", 8.6), ("RTX A5000", 8.6), ("RTX A4500", 8.6), ("RTX A4000", 8.6), ("RTX A2000", 8.6),
+    ("RTX 50", 12.0), ("RTX 40", 8.9), ("RTX 30", 8.6), ("A100", 8.0), ("H100", 9.0), ("A10", 8.6),
     ("RTX 20", 7.5), ("GTX 16", 7.5), ("TITAN RTX", 7.5), ("QUADRO RTX", 7.5),
     ("TESLA T4", 7.5), ("TITAN V", 7.0), ("V100", 7.0),
     ("P100", 6.0), ("P40", 6.1), ("GTX 10", 6.1), ("TITAN X", 6.1),

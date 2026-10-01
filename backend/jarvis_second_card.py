@@ -1080,7 +1080,7 @@ def _read_switches() -> dict:
     defaults are opposite on purpose."""
     out = {"master": False, "combined": False, "features": {f: False for f in FEATURE_IDS},
            "suggest": {s: SUGGEST_DEFAULT for s in SUGGEST_SIGNALS}, "third_feature": None,
-           "third_card": None}
+           "third_card": None, "master_card": None}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -1104,6 +1104,9 @@ def _read_switches() -> dict:
     tc = raw.get("third_card")
     if out["third_feature"] and isinstance(tc, str) and tc.strip():
         out["third_card"] = tc.strip()
+    mc = raw.get("master_card")
+    if out["master"] and isinstance(mc, str) and mc.strip():
+        out["master_card"] = mc.strip()
     return out
 
 
@@ -1121,6 +1124,7 @@ def _write_state(cur: dict) -> Optional[str]:
                                    "features": cur["features"], "suggest": cur["suggest"],
                                    "third_feature": cur.get("third_feature"),
                                    "third_card": cur.get("third_card"),
+                                   "master_card": cur.get("master_card"),
                                    "set_at": int(time.time())}, indent=1),
                        encoding="utf-8")
         tmp.replace(p)
@@ -1129,12 +1133,15 @@ def _write_state(cur: dict) -> Optional[str]:
     return None
 
 
-def _write_switch(feature: str, enabled: bool) -> Optional[str]:
+def _write_switch(feature: str, enabled: bool, card_uuid: Optional[str] = None) -> Optional[str]:
     """Sets one switch. None on success, else the error in words."""
     with _STATE_LOCK:
         cur = _read_switches()
-        if feature in ("master", "combined"):
-            cur[feature] = bool(enabled)
+        if feature == "master":
+            cur["master"] = bool(enabled)
+            cur["master_card"] = str(card_uuid).strip() if (enabled and card_uuid) else None
+        elif feature == "combined":
+            cur["combined"] = bool(enabled)
         else:
             cur["features"][feature] = bool(enabled)
         return _write_state(cur)
@@ -1326,6 +1333,21 @@ def _detect(fresh: bool) -> dict:
                    f"features; everyday chat stays on the {prim.name}")
         return {"capable": True, "why": why, "primary": p, "second": s, "cards": rows,
                 "_second": second, "_lanes": lanes, "_third": third}
+    if prim is not None and prim.total_mb >= 15360:
+        s = _card_summary(prim)
+        if len(cards) == 1:
+            why = (f"the {prim.name} ({_gb(prim.total_mb)}) can run extra models beside chat "
+                   f"in your everyday copy of Ollama")
+        else:
+            why = (f"the {prim.name} ({_gb(prim.total_mb)}) can run extra models beside chat "
+                   f"in your everyday copy of Ollama; no second capable card found")
+        unsupported = {"long_context": "chat itself holds long conversations"}
+        for r in rows:
+            if r.get("uuid") == prim.uuid:
+                r["why"] += "; the extra features run beside it, in the same copy of Ollama"
+        return {"capable": True, "why": why, "primary": p, "second": s, "cards": rows,
+                "_second": None, "_lanes": [], "_third": None, "_main": True,
+                "_prim_card": prim, "unsupported": unsupported}
     if len(cards) == 1:
         why = f"only one graphics card found (the {prim.name})"
     else:
@@ -1388,7 +1410,7 @@ def _detect_preset(plan: dict, fresh: bool) -> dict:
         elif lane_dev is not None and c is lane_dev:
             role, why_c = "second", f"the extra features run here (the preset \"{preset}\")"
         else:
-            role, why_c = "unused", f"the preset \"{preset}\" does not use it"
+            role, why_c = "unused", f"the preset \"{preset}\" uses at most two card slots; this card is not used"
         rows.append({"index": c.index, "uuid": c.uuid or None, "name": c.name,
                      "total_mb": c.total_mb, "free_mb": c.free_mb,
                      "compute_cap": c.compute_cap, "display_active": c.display_active,
@@ -1500,9 +1522,13 @@ def _unsupported(feature: str, det: dict, card=None) -> Optional[str]:
     """Why `feature` cannot run on the second card (or on `card`, the third),
     in words, or None. A chosen preset carries its own list (det["unsupported"],
     set by _detect_preset); without one, the card's own size decides."""
+    if det.get("unsupported") is not None and feature in det["unsupported"]:
+        return det["unsupported"][feature]
     if det.get("_plan") is not None:
         return (det.get("unsupported") or {}).get(feature)
-    target = card if card is not None else det.get("_second")
+    target = card if card is not None else (det.get("_prim_card") if det.get("_main") else det.get("_second"))
+    if target is None or det.get("_main"):
+        return None
     return _small_card_refusal(feature, target)
 
 
@@ -1549,6 +1575,11 @@ def _feature_model(feature: str, det: dict, card=None) -> tuple:
         return tuple(lane) if lane else (None, None, None)
     target = card if card is not None else det.get("_second")
     if target is None:
+        if det.get("_main") and det.get("_prim_card") is not None:
+            target = det["_prim_card"]
+        else:
+            return None, None, None
+    if det.get("_main") and feature == "long_context":
         return None, None, None
     monitor = _shows_monitor(target)
     if _is_small(target.total_mb):
@@ -2113,12 +2144,37 @@ def _on_third(feature: str, sw: dict, det: dict) -> bool:
     return _third_feature_now(sw, det) == feature
 
 
+def _master_active_now(sw: dict, det: dict) -> bool:
+    """The master switch is genuinely active right now: the switch is on,
+    the setup is capable, and if master_card was saved, it matches the
+    current target card UUID."""
+    if not sw.get("master") or not det.get("capable"):
+        return False
+    saved = str(sw.get("master_card") or "").strip().lower()
+    if not saved:
+        return True
+    target = det.get("second") or {}
+    target_uuid = str(target.get("uuid") or "").strip().lower()
+    return bool(target_uuid and saved == target_uuid)
+
+
+def _master_stale_why(sw: dict, det: dict) -> str:
+    """In words, why the master switch is not being acted on when saved on,
+    or "" when active or off."""
+    if not sw.get("master") or not det.get("capable") or _master_active_now(sw, det):
+        return ""
+    target = (det.get("second") or {}).get("name") or "this graphics card"
+    return (f"The main switch was turned on for a different graphics card. "
+            f"Your choice is kept, but nothing runs on the {target} until you approve "
+            f"turning it on for this card.")
+
+
 def _wanted(sw: dict, det: dict) -> bool:
     # A feature moved onto the third card does not need the SECOND card's
     # own lane - if every active feature has been moved there, starting
     # the second lane too would hold the second card open for nothing
     # (2026-09-28).
-    return bool(not sw.get("combined") and sw["master"] and det.get("capable")
+    return bool(not sw.get("combined") and _master_active_now(sw, det) and det.get("capable")
                 and any(_feature_active(f, sw, det) and not _on_third(f, sw, det)
                         and not _model_free(f) for f in FEATURE_IDS))
 
@@ -2126,9 +2182,12 @@ def _wanted(sw: dict, det: dict) -> bool:
 def _feature_active(feature: str, sw: dict, det: dict, card=None) -> bool:
     """`card`: the third card, when asking whether the feature can run THERE
     (its own size decides for an 8 GB card); None means the second card."""
-    return bool(det.get("capable") and sw["master"] and sw["features"].get(feature)
+    needs = _BY_ID[feature]["needs"]
+    if det.get("_main"):
+        needs = [d for d in needs if d != "long_context"]
+    return bool(det.get("capable") and _master_active_now(sw, det) and sw["features"].get(feature)
                 and _unsupported(feature, det, card) is None
-                and all(sw["features"].get(d) for d in _BY_ID[feature]["needs"]))
+                and all(sw["features"].get(d) for d in needs))
 
 
 def _idle_why(sw: dict, det: dict) -> str:
@@ -2140,6 +2199,11 @@ def _idle_why(sw: dict, det: dict) -> str:
         return f"no capable second card: {det.get('why')}"
     if not sw["master"]:
         return "the second-card switch is off"
+    if not _master_active_now(sw, det):
+        stale = _master_stale_why(sw, det)
+        if stale:
+            return stale
+        return "the second-card switch is not approved for this graphics card"
     moved = [f for f in FEATURE_IDS if _feature_active(f, sw, det) and _on_third(f, sw, det)]
     # (A model-free feature, "Referee suggestions", is on without a lane: the
     # second Ollama has nothing to start for it.)
@@ -2445,13 +2509,16 @@ def lane_for(feature: str) -> Optional[Lane]:
         # reads one small file and returns, on every chat turn.
         if not sw["master"] or not sw["features"].get(feature):
             return None
-        if not all(sw["features"].get(d) for d in _BY_ID[feature]["needs"]):
+        det = detect()
+        if not _master_active_now(sw, det):
+            return None
+        needs = [d for d in _BY_ID[feature]["needs"] if not (det.get("_main") and d == "long_context")]
+        if not all(sw["features"].get(d) for d in needs):
             return None
         if _ASLEEP["on"]:
             if feature in _BACKGROUND:
                 return None     # Jarvis's own background work does not wake the card
             wake()              # the owner is using it: wake on demand
-        det = detect()
         _reconcile(sw, det)
         _reconcile_third(sw, det)
         third = det.get("_third")
@@ -2859,7 +2926,8 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     if free:
         # No model, no lane: nothing else has to be running for it to work.
         available = active
-    missing = [d for d in f["needs"] if not sw["features"].get(d)]
+    missing = [d for d in f["needs"]
+               if not sw["features"].get(d) and not (det.get("_main") and d == "long_context")]
     names = ", ".join(_BY_ID[d]["name"] for d in missing)
     unsupported = _unsupported(fid, det)
     if unsupported and det.get("capable"):
@@ -2881,6 +2949,8 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
             why += f" Needs {names} on first."
     elif not sw["master"]:
         why = "On, but the main second-card switch is off."
+    elif not _master_active_now(sw, det):
+        why = "On, but the main second-card switch was approved for a different graphics card."
     elif missing:
         why = f"On, but it needs {names} to be on as well."
     elif free:
@@ -2926,10 +2996,12 @@ def status() -> dict:
     prim = det.get("primary") or {}
     cmd = pin_command(prim.get("uuid")) if len(det.get("cards") or []) >= 2 else None
     detected = {k: det[k] for k in ("capable", "why", "primary", "second", "cards")}
+    if det.get("_main"):
+        detected["main"] = True
     return {
         "detected": detected,
         "enabled": sw["master"],
-        "active": bool(sw["master"] and det.get("capable")),
+        "active": bool(_master_active_now(sw, det)),
         "pending": pending,
         "lane": {"state": lane_state, "why": lane_why},
         "main_ollama_pinned": pinned,
@@ -3025,7 +3097,10 @@ def _third_status(sw: dict, det: dict, pending: list) -> dict:
     running = lane.state == "running"
     model = ctx = gib = installed = None
     if not capable:
-        why = "No capable third graphics card is plugged in right now."
+        if det.get("_plan") is not None:
+            why = "A chosen preset uses at most two card slots, so a third graphics card is not used while a preset is active."
+        else:
+            why = "No capable third graphics card is plugged in right now."
         if saved:
             why = (f"\"{_BY_ID[saved]['name']}\" was moved here, but there is no capable "
                    f"third card right now: {det.get('why') or 'no capable third card.'} Your "
@@ -3194,7 +3269,7 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     """The approval card. Every word from here; what refusing costs is on it.
     It says exactly what starts if the owner says yes (AP-4)."""
     sw = sw if sw is not None else _read_switches()
-    s = det["second"]
+    s = det.get("second") or det.get("primary") or {}
     p = det.get("primary") or {}
     card = f"the {s['name']} ({_gb(s['total_mb'])})"
     lane = (f"Jarvis uses only that card and listens on {HOST}:{_port()} — "
@@ -3221,8 +3296,11 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
     lane += _shares_with_big_model()
     head = "Let Jarvis use the second graphics card?"
     if det.get("_main"):
-        head = (f"Let Jarvis run extra models beside chat on the {s['name']}, as the setup you "
-                f"chose says?")
+        if det.get("_plan"):
+            head = (f"Let Jarvis run extra models beside chat on the {s['name']}, as the setup you "
+                    f"chose says?")
+        else:
+            head = f"Let Jarvis run extra models beside chat on the {s['name']}?"
     if feature == "master":
         back = _would_work("master", sw, det)
         if back:
@@ -3612,14 +3690,17 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
             return _finish(feature, pid, "refused",
                            "\"One bigger model on both cards\" was turned on while this "
                            "card waited, and the two cannot share both cards", rid)
-        gone = [d for d in _BY_ID[feature]["needs"] if not cur["features"].get(d)]
+        gone = [d for d in _BY_ID[feature]["needs"]
+                if not cur["features"].get(d) and not (det.get("_main") and d == "long_context")]
         if gone:
             return _finish(feature, pid, "refused",
                            f"it needs {_names(gone)}, which was turned off while the card "
                            f"waited", rid)
-    if not detect(fresh=True).get("capable"):
+    det_fresh = detect(fresh=True)
+    if not det_fresh.get("capable"):
         return _finish(feature, pid, "refused", "the second card is not there any more", rid)
-    err = _write_switch(feature, True)
+    card_uuid = (det_fresh.get("second") or {}).get("uuid") if feature == "master" else None
+    err = _write_switch(feature, True, card_uuid=card_uuid)
     if err:
         return _finish(feature, pid, "failed", err, rid)
     _finish(feature, pid, "enabled", "", rid)
@@ -4056,26 +4137,33 @@ def request_change(feature: str, enabled: bool = False, *, assign: Optional[str]
                      "message": f"{label} is off."}
 
     sw = _read_switches()
+    det = detect(fresh=True)
+    if not det.get("capable"):
+        return 503, {"error": f"{label} cannot be turned on: {det.get('why')}."}
     already = sw["master"] if feature == "master" else sw["features"].get(feature)
     if already:
-        return 200, {"ok": True, "enabled": True, "pending": False,
-                     "message": f"{label} is already on."}
+        if feature == "master" and not _master_active_now(sw, det):
+            pass  # Needs approval for new card
+        else:
+            return 200, {"ok": True, "enabled": True, "pending": False,
+                         "message": f"{label} is already on."}
     with _PENDING_LOCK:
         p = _PENDING.get(feature)
         if p is not None and not p.get("withdrawn"):
             return 409, {"error": (f"a card to turn on {label} is already waiting - "
                                    f"approve or deny that one")}
-    det = detect(fresh=True)
-    if not det.get("capable"):
-        return 503, {"error": f"{label} cannot be turned on: {det.get('why')}."}
     refused = _unsupported(feature, det)
     if refused:
         return 503, {"error": f"{label} cannot be turned on: {refused}."}
     if feature != "master":
-        if not sw["master"]:
+        if not _master_active_now(sw, det):
+            if sw.get("master"):
+                return 400, {"error": "Turn on the second graphics card for this card first "
+                                      "(approve the main switch), then this one."}
             return 400, {"error": "Turn on the second graphics card itself first "
                                   "(the main switch), then this one."}
-        missing = [d for d in _BY_ID[feature]["needs"] if not sw["features"].get(d)]
+        missing = [d for d in _BY_ID[feature]["needs"]
+                   if not sw["features"].get(d) and not (det.get("_main") and d == "long_context")]
         if missing:
             names = ", ".join(f"\"{_BY_ID[d]['name']}\"" for d in missing)
             return 400, {"error": f"{label} needs {names} on first."}

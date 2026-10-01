@@ -156,6 +156,8 @@ object SecondCard {
          * an already-on feature's switch runs on.
          */
         val third: ThirdCard? = null,
+        /** True when extra features run in everyday Ollama on one big card. */
+        val main: Boolean = false,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
@@ -352,6 +354,7 @@ object SecondCard {
                     modelFree = f.bool("model_free") ?: false,
                 )
             },
+            main = detected.bool("main") ?: false,
         )
     }
 

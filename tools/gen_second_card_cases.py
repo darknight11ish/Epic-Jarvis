@@ -219,7 +219,7 @@ class World:
             CP._cache.update(at=-1e9, cards=None, fields="")
 
     def switches(self, master=False, combined=False, third_feature=None, third_card=None,
-                 **features):
+                 master_card=None, **features):
         data = {"master": master, "combined": combined,
                 "features": {f: bool(features.get(f)) for f in SC.FEATURE_IDS},
                 "third_feature": third_feature}
@@ -228,6 +228,8 @@ class World:
             # Left out on purpose when not given: that is a file from before
             # the id was kept, which reads as "ask again".
             data["third_card"] = third_card
+        if master_card is not None:
+            data["master_card"] = master_card
         (self.dir / "second-card.json").write_text(json.dumps(data), encoding="utf-8")
 
     def __enter__(self):
