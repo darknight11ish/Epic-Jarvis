@@ -15,6 +15,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -117,6 +121,7 @@ fun InboxScreen(
         reads.all { it == SectionRead.Read || it == SectionRead.Absent } &&
             reads.any { it == SectionRead.Read }
         )
+    var activityFilter by rememberSaveable { mutableStateOf("all") }
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         TopBar("Inbox", onBack, subtitle = budgetLine(attention))
 
@@ -370,24 +375,61 @@ fun InboxScreen(
 
             if (showActivity) {
                 item(key = "activity-label") {
-                    Text(
-                        "ACTIVITY",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = chrome.textMid,
-                        modifier = Modifier.semantics { heading() },
-                    )
+                    Column {
+                        Text(
+                            "ACTIVITY",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        Gap(6)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Quiet(
+                                text = "All",
+                                color = if (activityFilter == "all") chrome.warnInk else chrome.textMid,
+                                onClick = { activityFilter = "all" },
+                            )
+                            Quiet(
+                                text = "Approved",
+                                color = if (activityFilter == "approved") chrome.okInk else chrome.textMid,
+                                onClick = { activityFilter = "approved" },
+                            )
+                            Quiet(
+                                text = "Denied",
+                                color = if (activityFilter == "denied") chrome.badInk else chrome.textMid,
+                                onClick = { activityFilter = "denied" },
+                            )
+                            Quiet(
+                                text = "Timed out",
+                                color = if (activityFilter == "timed_out") chrome.warnInk else chrome.textMid,
+                                onClick = { activityFilter = "timed_out" },
+                            )
+                        }
+                    }
                 }
-                // Newest decision first - the same order the chat history list
-                // uses. Read-only: there is nothing to tap here, on purpose -
-                // this answers "did I turn that on?", it does not undo it.
-                val sorted = pastApprovals.sortedByDescending { it.whenAt }
-                items(sorted, key = { "a-" + it.id }) { entry ->
+                val filtered = pastApprovals.filter { entry ->
+                    when (activityFilter) {
+                        "approved" -> entry.outcomeLabel == "Approved"
+                        "denied" -> entry.outcomeLabel == "Denied"
+                        "timed_out" -> entry.outcomeLabel == "Timed out"
+                        else -> true
+                    }
+                }.sortedByDescending { it.whenAt }
+                items(filtered, key = { "a-" + it.id }) { entry ->
                     Plate {
                         Text(
                             entry.title,
                             style = MaterialTheme.typography.titleSmall,
                             color = chrome.textHi,
                         )
+                        entry.summary?.takeIf { it.isNotBlank() }?.let { summary ->
+                            Gap(4)
+                            Text(
+                                summary,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                        }
                         Gap(4)
                         Text(
                             buildString {

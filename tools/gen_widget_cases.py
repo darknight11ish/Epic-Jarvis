@@ -256,7 +256,7 @@ def main() -> int:
         return 0
     for p in (DESKTOP, PHONE):
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(want, encoding="utf-8", newline="\n")
+        p.write_bytes(want.encode("utf-8"))
         print(f"wrote {p.relative_to(ROOT)}")
     return 0
 

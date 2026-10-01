@@ -53,7 +53,7 @@ export const LOCKED_OPENS_BAR =
   "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
 /** Buttons that still work on a stale link: they only stop, or only open. */
 export const NEVER_HELD = ["stop_everything", "brief_me"];
-export const PRIVATE_SOURCES = ["now_playing", "reminders", "timers", "today", "todo"];
+export const PRIVATE_SOURCES = ["current_task", "now_playing", "reminders", "timers", "today", "todo"];
 const KNOWN_SOURCES = [...PRIVATE_SOURCES, "disk_free", "email_count", "events_count", "focus",
   "reminders_count", "todo_count"];
 export const LIMITS = { blocks: 8, items: 5, name: 40, text: 60, label: 40 };

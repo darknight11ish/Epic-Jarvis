@@ -734,7 +734,7 @@ def _run_in_background(run: Callable[[], dict]) -> None:
 
 def _decide(pid: str, gate: Callable, tier_of: Callable, write: Callable[[], None],
            run: Callable[[], dict]) -> None:
-    detail = {"text": CARD, "what": "check PyPI, crates.io and GitHub for newer versions of "
+    detail = {"text": CARD, "what": "check online for newer versions of "
                                     "the tools Jarvis is built from",
               # True: approving it is what lets Jarvis ask PyPI, crates.io and
               # GitHub over the internet.

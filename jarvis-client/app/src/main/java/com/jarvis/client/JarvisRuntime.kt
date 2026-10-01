@@ -3421,6 +3421,9 @@ object JarvisRuntime {
                     refreshPending()
                     // An inbox tidy approved here: its Undo strip shows at once.
                     if (approve && item.action == "tidy_inbox") watchInboxTidyQuickly()
+                    if (approve) {
+                        undoNoticeFor(item)?.let { _notice.value = it }
+                    }
                 }
                 is ApiResult.Failed -> {
                     if (result.error == ApiError.AlreadyHandled) {
@@ -3443,6 +3446,19 @@ object JarvisRuntime {
             return result
         } finally {
             _deciding.update { it - item.id }
+        }
+    }
+
+    private fun undoNoticeFor(item: PendingItem): String? {
+        if (item.risk.reversible == "no") return "This cannot be undone."
+        return when (item.action) {
+            "tidy_inbox" -> "Inbox tidy: 10 minutes to undo."
+            "forget_time_frame", "forget_fact" -> "Memory: 10 minutes to undo."
+            "reminder_create", "reminder_delete" -> "Reminders: say “cancel that” to undo."
+            "model_switch", "model_install" -> "Model: roll back anytime in settings."
+            "setting_change", "toggle_feature" -> "Settings: turn back off anytime."
+            "write_note", "smart_home_light" -> null
+            else -> if (item.risk.reversible == "yes") "Undo is available for this action." else null
         }
     }
 

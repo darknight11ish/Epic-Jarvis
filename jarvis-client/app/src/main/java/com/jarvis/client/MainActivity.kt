@@ -2976,20 +2976,18 @@ class MainActivity : FragmentActivity() {
                                 // "whoever is holding it" and "the owner" need to
                                 // be different answers.
                                 onApprove = { item ->
-                                    // The fingerprint prompt belongs to this
-                                    // activity, so it stays on this scope; the
-                                    // decision itself does not, and is handed to
-                                    // the runtime the moment the prompt clears.
-                                    // A rotation mid-request used to cancel the
-                                    // coroutine after the POST had landed, drop
-                                    // the result, and leave the card on screen
-                                    // for a second tap to send again.
                                     scope.launch { approveItem(item) }
                                 },
-                                // Denying is the safe direction and is never gated:
-                                // a gate on refusing would make the cautious answer
-                                // the slow one.
                                 onDeny = { item -> JarvisRuntime.decideDetached(item, approve = false) },
+                                onApproveWithReset = { item, onReset ->
+                                    scope.launch {
+                                        val sent = approveItem(item)
+                                        if (!sent) onReset()
+                                    }
+                                },
+                                onDenyWithReset = { item, onReset ->
+                                    JarvisRuntime.decideDetached(item, approve = false)
+                                },
                                 onReconnect = {
                                     // `force = true`, and only because a person
                                     // asked. startStream() returns early whenever
@@ -3223,18 +3221,27 @@ class MainActivity : FragmentActivity() {
      * not know signed approvals, or a PC that could not be read - takes
      * today's way, and the PC says `no_approval_key` if it needed one.
      */
-    private suspend fun approveItem(item: PendingItem) {
+    private suspend fun approveItem(item: PendingItem): Boolean {
         val risky = SecurityRules.riskyByToday(item)
         // pcOnly and needsChoice cards are refused in decide() with their own words.
         val read = if (risky && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
-        when (val path = SignedApproval.pathFor(risky, read?.state)) {
-            SignedApproval.Path.PLAIN ->
-                if (confirmed(item)) JarvisRuntime.decideDetached(item, approve = true)
+        return when (val path = SignedApproval.pathFor(risky, read?.state)) {
+            SignedApproval.Path.PLAIN -> {
+                if (confirmed(item)) {
+                    JarvisRuntime.decideDetached(item, approve = true)
+                    true
+                } else {
+                    false
+                }
+            }
             SignedApproval.Path.SIGNED -> signedApprove(item, read?.device)
             SignedApproval.Path.OFFER,
             SignedApproval.Path.OFFER_AGAIN,
             SignedApproval.Path.WAITING,
-            -> SignedApproval.noticeFor(path)?.let { JarvisRuntime.setNotice(it) }
+            -> {
+                SignedApproval.noticeFor(path)?.let { JarvisRuntime.setNotice(it) }
+                false
+            }
         }
     }
 
@@ -3243,20 +3250,20 @@ class MainActivity : FragmentActivity() {
      * phone showed, the fingerprint prompt with the approval key, the signature.
      * Nothing here is logged.
      */
-    private suspend fun signedApprove(item: PendingItem, device: String?) {
+    private suspend fun signedApprove(item: PendingItem, device: String?): Boolean {
         if (device == null) {
             JarvisRuntime.setNotice(SignedApproval.OFFER_WORDS)
-            return
+            return false
         }
-        val challenge = JarvisRuntime.beginSignedApproval(item) ?: return
+        val challenge = JarvisRuntime.beginSignedApproval(item) ?: return false
         val key = try {
             ApprovalKey.newSignature()
         } catch (e: KeyPermanentlyInvalidatedException) {
             JarvisRuntime.setNotice(SignedApproval.OFFER_AGAIN_WORDS)
-            return
+            return false
         } catch (e: Exception) {
             JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
-            return
+            return false
         }
         val s = currentSecurity()
         var result: BiometricGate.Signed? = null
@@ -3269,13 +3276,13 @@ class MainActivity : FragmentActivity() {
             SecurityRules.Verdict.Go -> Unit
             is SecurityRules.Verdict.Stop -> {
                 verdict.say?.let { JarvisRuntime.setNotice(it) }
-                return
+                return false
             }
         }
         val unlocked = result?.signature
         if (unlocked == null) {
             JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
-            return
+            return false
         }
         val der = try {
             unlocked.update(
@@ -3289,13 +3296,14 @@ class MainActivity : FragmentActivity() {
             unlocked.sign()
         } catch (e: java.security.GeneralSecurityException) {
             JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
-            return
+            return false
         }
         JarvisRuntime.decideDetached(
             item,
             approve = true,
             signature = SignedApproval.Signature(device, challenge.nonce, SignedApproval.b64url(der)),
         )
+        return true
     }
 
     private fun currentSecurity(): Security = JarvisRuntime.settings.security.value

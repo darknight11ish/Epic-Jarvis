@@ -180,6 +180,14 @@ SOURCES = {
                            "how many calendar events today's briefing found (never their titles)"),
     "disk_free": Source("progress", "Disk free", False, "the free space on your PC's main drive"),
     "focus": Source("progress", "Focus session", False, "the time left in a focus session"),
+    "current_task": Source("list", "Current task", True, "the task Jarvis is working on right now",
+                           "No task running."),
+    "approvals_count": Source("number", "Approvals waiting", False,
+                              "how many approval cards are waiting for your decision"),
+    "gpu_memory": Source("progress", "Graphics memory", False,
+                         "the graphics memory used on your PC"),
+    "tokens_per_second": Source("number", "Tokens per second", False,
+                                "tokens per second from the local model (not measured yet)"),
 }
 
 #: The buttons: the phone's Quick Settings tile actions (data/QuickTiles.kt
@@ -731,12 +739,16 @@ class Readers:
     """Where each source is read. Tests pass their own."""
 
     def __init__(self, *, sched=None, briefing=None, disk=None, focus=None, playing=None,
-                 now=None):
+                 task=None, pending=None, gpu=None, tokens=None, now=None):
         self.sched = sched or _sched
         self.briefing = briefing or _briefing
         self.disk = disk or _disk
         self.focus = focus or _focus
         self.playing = playing or _playing
+        self.task = task or _task
+        self.pending = pending or _pending
+        self.gpu = gpu or _gpu
+        self.tokens = tokens or _tokens
         self.now = now or time.time
 
 
@@ -764,6 +776,34 @@ def _focus() -> dict:
 def _playing() -> dict:
     import jarvis_media
     return jarvis_media.now_playing()
+
+
+def _task() -> dict:
+    try:
+        import jarvis_agent
+        return getattr(jarvis_agent, "task_status", lambda: {})() or {}
+    except Exception:
+        return {}
+
+
+def _pending() -> list:
+    try:
+        import jarvis_gate
+        return jarvis_gate.pending()
+    except Exception:
+        return []
+
+
+def _gpu() -> tuple:
+    try:
+        import jarvis_hardware
+        return jarvis_hardware.gpu_memory_used()
+    except Exception:
+        return (0.0, 0.0)
+
+
+def _tokens() -> str:
+    return "not measured"
 
 
 def _end_of_today(now: float) -> float:
@@ -863,6 +903,11 @@ def fill(block: dict, r: Readers) -> dict:
                     items = [_item(said)]
                 elif not got.get("ok"):
                     out["note"] = said[:120] or "Could not read what is playing."
+            elif key == "current_task":
+                st = r.task() or {}
+                desc = st.get("description") or st.get("task") or st.get("name")
+                if desc:
+                    items = [_item(str(desc), "(running)" if st.get("running", True) else None)]
             out["items"] = items[:n]
             out["more"] = max(0, len(items) - n)
             out["empty"] = src.empty
@@ -875,6 +920,11 @@ def fill(block: dict, r: Readers) -> dict:
                                        and j.get("due") is not None and float(j["due"]) < end))
             elif key == "todo_count":
                 out["value"] = str(sum(1 for j in r.sched().todos() if not j.get("list")))
+            elif key == "approvals_count":
+                p = r.pending()
+                out["value"] = str(len(p) if isinstance(p, (list, tuple)) else 0)
+            elif key == "tokens_per_second":
+                out["value"] = str(r.tokens())
             elif key in ("email_count", "events_count"):
                 b = _briefing_today(r)
                 sec = None if b is None else _section(b, "email" if key == "email_count"
@@ -894,6 +944,10 @@ def fill(block: dict, r: Readers) -> dict:
                 free, total = r.disk()
                 out["fraction"] = round(free / total, 3) if total > 0 else 0.0
                 out["value"] = f"{_gb(free)} free of {_gb(total)}"
+            elif key == "gpu_memory":
+                used, total = r.gpu() or (0.0, 0.0)
+                out["fraction"] = round(used / total, 3) if total > 0 else 0.0
+                out["value"] = f"{_gb(used)} used of {_gb(total)}" if total > 0 else "0 GB used of 0 GB"
             elif key == "focus":
                 st = r.focus() or {}
                 if not st.get("on"):

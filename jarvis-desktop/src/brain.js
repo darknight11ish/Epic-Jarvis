@@ -656,6 +656,7 @@ const dom = {
   jobs: $("jobs"),
   undo: $("undo"),
   activity: $("activity"),
+  activityFilters: $("activity-filters"),
   focus: $("focus"),
   focusForm: $("focus-form"),
   focusMinutes: $("focus-minutes"),
@@ -11351,18 +11352,55 @@ function renderActivity() {
   const history = Array.isArray(body.history) ? body.history : [];
   const sorted = [...history].sort((a, b) => activityWhen(b) - activityWhen(a));
 
+  const filterDecision = state.activityFilterDecision || "all";
+  const filtered = sorted.filter((h) => {
+    if (filterDecision === "all") return true;
+    const outcome = activityOutcome(h).toLowerCase().replace(" ", "_");
+    return outcome === filterDecision;
+  });
+
+  if (dom.activityFilters) {
+    const filterRow = el("div", "activity-filters", "");
+    filterRow.style.display = "flex";
+    filterRow.style.gap = "8px";
+    filterRow.style.marginBottom = "8px";
+    const decisions = [
+      { id: "all", label: "All" },
+      { id: "approved", label: "Approved" },
+      { id: "denied", label: "Denied" },
+      { id: "timed_out", label: "Timed out" },
+    ];
+    for (const d of decisions) {
+      const btn = el("button", "btn btn-subtle", d.label);
+      if (filterDecision === d.id) {
+        btn.style.fontWeight = "bold";
+        btn.dataset.active = "true";
+      }
+      btn.onclick = () => {
+        state.activityFilterDecision = d.id;
+        renderActivity();
+      };
+      filterRow.append(btn);
+    }
+    dom.activityFilters.replaceChildren(filterRow);
+  }
+
   rows(
     dom.activity,
-    sorted,
+    filtered,
     (h) => {
       const outcome = activityOutcome(h);
       const device = String(h.decided_by || h.device || h.by || "");
       const when = activityWhen(h);
+      const summary = (h.notice && h.notice.summary) || h.summary || h.detail_one_line || h.what || "";
+      const meta = [outcome];
+      if (summary) meta.push(summary);
+      meta.push([device, when ? ago(when) : ""].filter(Boolean).join(" · "));
       return row({
         tag: outcome.toLowerCase(),
         state: outcome === "Approved" ? "ok" : outcome === "Denied" ? "bad" : "warn",
         title: (h.notice && h.notice.title) || fallbackTitle(h.action),
-        meta: [outcome, [device, when ? ago(when) : ""].filter(Boolean).join(" · ")],
+        meta: meta,
       });
     },
     "Nothing decided yet."

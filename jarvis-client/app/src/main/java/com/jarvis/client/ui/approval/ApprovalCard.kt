@@ -12,10 +12,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -48,6 +51,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.SecurityRules
 import com.jarvis.client.net.AsksFirst
 import com.jarvis.client.net.CardWords
 import com.jarvis.client.net.FormReview
@@ -84,6 +88,31 @@ private const val HEAVY_APPROVE_DELAY_MS = 2000L
 @Composable
 fun ApprovalCard(
     item: PendingItem,
+    blocker: String?,
+    focused: Boolean = false,
+    onApprove: () -> Unit,
+    onDeny: () -> Unit,
+    onAmend: suspend (note: String) -> Unit = {},
+    swipeAllowed: Boolean = true,
+    pictureHidden: Boolean = false,
+    modifier: Modifier = Modifier,
+    showFooter: Boolean = true,
+) = ApprovalCard(
+    item = item,
+    blocker = blocker,
+    focused = focused,
+    onApprove = { _ -> onApprove() },
+    onDeny = { _ -> onDeny() },
+    onAmend = onAmend,
+    swipeAllowed = swipeAllowed,
+    pictureHidden = pictureHidden,
+    modifier = modifier,
+    showFooter = showFooter,
+)
+
+@Composable
+fun ApprovalCard(
+    item: PendingItem,
     /** Null when a decision can be taken; the reason when it cannot. */
     blocker: String?,
     /**
@@ -94,8 +123,8 @@ fun ApprovalCard(
      * at is not an answer.
      */
     focused: Boolean = false,
-    onApprove: () -> Unit,
-    onDeny: () -> Unit,
+    onApprove: (onReset: () -> Unit) -> Unit,
+    onDeny: (onReset: () -> Unit) -> Unit,
     /**
      * A note typed before the first decision - AUTONOMY-PROPOSALS.md §3b.
      * NOT a decision and approves nothing. The desktop
@@ -139,17 +168,17 @@ fun ApprovalCard(
     var showAmend by rememberSaveable(item.id) { mutableStateOf(false) }
     var amendText by rememberSaveable(item.id) { mutableStateOf("") }
     var amendSending by remember(item.id) { mutableStateOf(false) }
-    // UI-AUDIT-2026-09-26 item 6: set the instant either button is tapped,
-    // and never cleared - this same composable keeps running, with this same
-    // `remember`, for as long as the card is on screen INCLUDING while it is
-    // sliding away once `item` leaves the list below (Compose keeps a
-    // removed lazy-list item's composition alive to animate its exit). So
-    // this one flag also covers "a tap during the exit animation can't fire
-    // twice or hit the wrong target" - the decision itself is already safe
-    // either way (JarvisRuntime.decide re-checks the pending list right
-    // before sending), but the buttons should look answered the moment they
-    // are, not just be safe if pressed again.
+    // UI-AUDIT-2026-09-26 item 6 & Section 5.2: set the instant either button is tapped,
+    // but reset if the decision check (e.g. fingerprint cancelled) or send fails,
+    // so buttons are not locked permanently.
     var decided by remember(item.id) { mutableStateOf(false) }
+
+    // Accidental touch-through guard when a card slides under the thumb after another card resolves.
+    var swapGuardElapsed by remember(item.id) { mutableStateOf(false) }
+    LaunchedEffect(item.id) {
+        delay(350)
+        swapGuardElapsed = true
+    }
 
     val expiry = item.expiresAtMs
     // One state change, at the deadline - not one a second.
@@ -175,7 +204,7 @@ fun ApprovalCard(
     // bottom) take `.value`, so the per-second tick recomposes those two and
     // nothing else - the same split ExpiryCountdown made, now shared by both.
     val secondsLeft: State<Long>? = if (expiry != null) rememberSecondsLeft(expiry) else null
-    val canDecide = blocker == null && !expired
+    val canDecide = blocker == null && !expired && swapGuardElapsed
 
     // Feasibility I110, "Slower Approve on risky cards": a heavy card's
     // Approve stays disabled for HEAVY_APPROVE_DELAY_MS AND until the card's
@@ -212,12 +241,12 @@ fun ApprovalCard(
     val approve: () -> Unit = {
         decided = true
         haptics.performHapticFeedback(HapticFeedbackType.Confirm)
-        onApprove()
+        onApprove { decided = false }
     }
     val deny: () -> Unit = {
         decided = true
         haptics.performHapticFeedback(HapticFeedbackType.Reject)
-        onDeny()
+        onDeny { decided = false }
     }
 
     // Swipe, gated on `canDecide` rather than `canApprove`.
@@ -355,6 +384,14 @@ fun ApprovalCard(
             style = MaterialTheme.typography.titleMedium,
             color = chrome.warnInk,
         )
+        item.task?.takeIf { it.isNotBlank() }?.let { taskName ->
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "Raised by $taskName",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
+        }
         Spacer(Modifier.height(6.dp))
         ReachBadge(item)
 
@@ -363,7 +400,14 @@ fun ApprovalCard(
         val shownSummary = item.shownSummary(JarvisRuntime.privateListsHidden)
         if (shownSummary.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
-            Text(shownSummary, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            Text(
+                shownSummary,
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textHi,
+                modifier = Modifier
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState()),
+            )
         }
 
         // The choices, when the desktop offers more than one plan. Each is a
@@ -452,7 +496,10 @@ fun ApprovalCard(
                         fontFamily = JarvisType.mono,
                     ),
                     color = chrome.textMid,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState()),
                 )
             }
         }
@@ -569,9 +616,19 @@ fun ApprovalCard(
         // screen, the desktop's included (CardWords.BUTTONS,
         // docs/ARCHITECTURE.md §3). It is also where this card's swipe goes:
         // right approves, left denies.
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             Refuse(CardWords.BUTTONS[0], enabled = canDecide && !decided, onClick = deny)
             Affirm(CardWords.BUTTONS[1], enabled = canApprove && !decided, onClick = approve)
+            if (SecurityRules.riskyByToday(item)) {
+                Text(
+                    text = "Fingerprint follows",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                )
+            }
         }
         if (showFooter) {
             Spacer(Modifier.height(8.dp))
@@ -668,20 +725,21 @@ private fun ExpiryBar(expiryMs: Long, secondsLeft: State<Long>) {
 private fun ExpiryCountdown(secondsLeft: State<Long>) {
     val chrome = LocalChrome.current
     val left = secondsLeft.value
+    val expiringSoon = left in 1..60
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.clearAndSetSemantics { contentDescription = spokenCountdown(left) },
     ) {
         Text(
-            "EXPIRES IN",
+            if (expiringSoon) "EXPIRING SOON" else "EXPIRES IN",
             style = MaterialTheme.typography.labelSmall,
-            color = chrome.textMid,
+            color = if (expiringSoon) chrome.warnInk else chrome.textMid,
         )
         Spacer(Modifier.width(8.dp))
         Text(
             clockCountdown(left),
             style = JarvisType.machine,
-            color = chrome.textHi,
+            color = if (expiringSoon) chrome.warnInk else chrome.textHi,
         )
     }
 }
@@ -813,13 +871,21 @@ private fun OptionsList(options: List<com.jarvis.client.net.ProposalOption>) {
 @Composable
 private fun ReachBadge(item: PendingItem) {
     val chrome = LocalChrome.current
-    val (label, tint) = when {
-        !item.risk.classified -> "UNCLASSIFIED" to chrome.badInk
-        item.risk.reach == "outbound" -> "LEAVES THIS MACHINE" to chrome.warnInk
-        item.risk.reversible == "no" -> "NO UNDO" to chrome.warnInk
-        else -> "LOCAL" to chrome.textMid
+    if (!item.risk.classified) {
+        Pill("UNCLASSIFIED", color = chrome.badInk)
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (item.risk.reach == "outbound") {
+                Pill("LEAVES THIS MACHINE", color = chrome.warnInk)
+            }
+            if (item.risk.reversible == "no") {
+                Pill("NO UNDO", color = chrome.warnInk)
+            }
+            if (item.risk.reach != "outbound" && item.risk.reversible != "no") {
+                Pill("LOCAL", color = chrome.textMid)
+            }
+        }
     }
-    Pill(label, color = tint)
 }
 
 @Composable

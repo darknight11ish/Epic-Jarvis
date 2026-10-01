@@ -427,6 +427,7 @@ data class PendingItem(
      * key. Null for every other card - which then looks exactly as before.
      */
     @SerialName("form_picture") val formPicture: String? = null,
+    val task: String? = null,
 ) {
     /**
      * The text under the card's title. A tag-suggestion card carries a chat's

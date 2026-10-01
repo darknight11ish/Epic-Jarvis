@@ -127,7 +127,7 @@ TITLES = {
     # both are this one card (jarvis_asks_first.py), so the words cover both.
     "loosen_what_asks_first": "loosen what asks first",
     "enable_reading_tool": "offer a reading tool to the AI model",
-    "check_tool_updates": "check PyPI, crates.io and GitHub for tool updates",
+    "check_tool_updates": "check online for tool updates",
     "modify_own_code": "change its own code",
     "power_manage": "change its power mode (Active, Quiet or Standby)",
     "schedule_repeat": "set up something that repeats",
