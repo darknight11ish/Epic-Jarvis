@@ -237,6 +237,70 @@ pub async fn set_humor(app: AppHandle, on: bool) -> Result<serde_json::Value, St
     Err(backend_refusal(status, &text))
 }
 
+const THINKING_PATH: &str = "/api/thinking";
+const THINKING_LEVELS: [&str; 4] = ["off", "quick", "deep", "auto"];
+pub(crate) const THINKING_MISSING: &str =
+    "Your PC's Jarvis does not have thinking controls yet - run apply-patches.ps1 on the PC.";
+
+/// Per-model thinking levels (Section 5.5): `GET /api/thinking`.
+#[tauri::command]
+pub async fn get_thinking(app: AppHandle) -> Result<serde_json::Value, String> {
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(READ_TIMEOUT))?
+        .get(format!("{base}{THINKING_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if missing(status, &body) {
+        return Ok(serde_json::json!({ "available": false, "why": THINKING_MISSING }));
+    }
+    Err(backend_refusal(status, &body))
+}
+
+/// Sets thinking level for a model or role with no approval card.
+#[tauri::command]
+pub async fn set_thinking(
+    app: AppHandle,
+    role: String,
+    level: String,
+) -> Result<serde_json::Value, String> {
+    if !THINKING_LEVELS.contains(&level.as_str()) {
+        return Err("Level must be off, quick, deep, or auto.".to_string());
+    }
+    if app.state::<crate::stream::StreamState>().link().stale {
+        return Err(STALE.to_string());
+    }
+    let base = jarvis_base(&app);
+    let body = serde_json::json!({ "role": role, "level": level });
+    let response = jarvis_client(Some(WRITE_TIMEOUT))?
+        .post(format!("{base}{THINKING_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| backend_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let text = response.text().await.unwrap_or_default();
+    if (200..300).contains(&status) {
+        return serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .filter(|v| v.is_object())
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if missing(status, &text) {
+        return Err(THINKING_MISSING.to_string());
+    }
+    Err(backend_refusal(status, &text))
+}
+
 /// The place an error's fix button opens: "settings" or "brain". Nothing
 /// else is accepted.
 ///

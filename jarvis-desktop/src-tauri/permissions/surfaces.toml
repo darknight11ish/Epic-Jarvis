@@ -522,6 +522,9 @@ permissions = [
   "allow-get-manner",
   "allow-set-manner",
   "allow-set-humor",
+  # "Thinking levels" (Section 5.5): per running model.
+  "allow-get-thinking",
+  "allow-set-thinking",
   # "Voice": what the PC says about listening to the owner - whether each
   # microphone's voice print is trained, which voice check is installed, the
   # wake word, the stop word and Smart Turn (GET /api/voice/status). A read:

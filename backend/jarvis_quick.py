@@ -1024,6 +1024,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- thinking commands (jarvis_thinking.py, Section 5.5) --------------------
+    got = _thinking_cmd(s)
+    if got is not None:
+        return got
+
     # --- "what can you do?" (jarvis_sayable.py) --------------------------------------
     if _SAYABLE.fullmatch(s):
         return Intent("sayable_help")
@@ -2540,18 +2545,57 @@ _TO_WARM = re.compile(
     r"|(?:be|stop\s+being)\s+less\s+(?:plain(?:ly)?|formal(?:ly)?|cold|robotic)")
 
 
+_TO_THINK_DEEP = re.compile(r"think\s+(?:harder|more|deeply|deeper)|deep\s+thinking", re.I)
+_TO_THINK_QUICK = re.compile(r"think\s+(?:fast|faster|quick|quicker|quickly|less)|quick\s+thinking", re.I)
+_TO_THINK_OFF = re.compile(r"stop\s+thinking|don't\s+think|turn\s+off\s+thinking|no\s+thinking|thinking\s+off", re.I)
+_TO_THINK_AUTO = re.compile(r"think\s+(?:automatically|auto|on\s+your\s+own)|auto\s+thinking", re.I)
+
+_THINK_DEEP_CMD = re.compile(
+    r"^(?:please\s+)?(?:think\s+(?:harder|more|deeply|deeper)|deep\s+thinking)\.?$", re.I)
+_THINK_QUICK_CMD = re.compile(
+    r"^(?:please\s+)?(?:think\s+(?:fast|faster|quick|quicker|quickly|less)|quick\s+thinking)\.?$", re.I)
+_THINK_OFF_CMD = re.compile(
+    r"^(?:please\s+)?(?:stop\s+thinking|don't\s+think|turn\s+off\s+thinking|no\s+thinking|thinking\s+off)\.?$", re.I)
+_THINK_AUTO_CMD = re.compile(
+    r"^(?:please\s+)?(?:think\s+(?:automatically|auto|on\s+your\s+own)|auto\s+thinking)\.?$", re.I)
+_THINK_STATUS_CMD = re.compile(
+    r"^(?:what\s+is\s+(?:the\s+)?thinking\s+level|how\s+is\s+thinking\s+set|thinking\s+status|thinking\s+level)\??$", re.I)
+
+
+def _thinking_cmd(s: str) -> Optional[Intent]:
+    if _THINK_DEEP_CMD.match(s):
+        return Intent("thinking_set", {"level": "deep"})
+    if _THINK_QUICK_CMD.match(s):
+        return Intent("thinking_set", {"level": "quick"})
+    if _THINK_OFF_CMD.match(s):
+        return Intent("thinking_set", {"level": "off"})
+    if _THINK_AUTO_CMD.match(s):
+        return Intent("thinking_set", {"level": "auto"})
+    if _THINK_STATUS_CMD.match(s):
+        return Intent("thinking_status")
+    return None
+
+
 def _from_now_on(s: str) -> Optional[Intent]:
-    """"From now on, be more plain" / "... be warmer" and close phrasings -
-    the mechanism, wired to jarvis_manner.py's one real dial. Whole
+    """"From now on, be more plain" / "... be warmer" / "... think harder" and close phrasings -
+    the mechanism, wired to jarvis_manner.py's and jarvis_thinking.py's dials. Whole
     sentences only, like the rest of this grammar."""
     m = _FROM_NOW_ON.fullmatch(s)
     if not m:
         return None
-    tail = m.group(1)
+    tail = m.group(1).strip()
     if _TO_PLAIN.fullmatch(tail):
         return Intent("manner_from_now_on", {"manner": "plain"})
     if _TO_WARM.fullmatch(tail):
         return Intent("manner_from_now_on", {"manner": "warm"})
+    if _TO_THINK_DEEP.fullmatch(tail):
+        return Intent("thinking_from_now_on", {"level": "deep"})
+    if _TO_THINK_QUICK.fullmatch(tail):
+        return Intent("thinking_from_now_on", {"level": "quick"})
+    if _TO_THINK_OFF.fullmatch(tail):
+        return Intent("thinking_from_now_on", {"level": "off"})
+    if _TO_THINK_AUTO.fullmatch(tail):
+        return Intent("thinking_from_now_on", {"level": "auto"})
     return Intent("manner_from_now_on", {"manner": None})
 
 
@@ -3419,6 +3463,34 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
     return Result(_from_now_on_said(manner, temporary), n)
 
 
+def _run_thinking_set(f: dict, temporary: bool = False) -> Result:
+    level = f.get("level", "off")
+    try:
+        import jarvis_thinking
+        code, out = jarvis_thinking.set_level("everyday", level)
+        if code != 200:
+            return Result(out.get("error", f"Could not set thinking level to {level}."), "thinking_set")
+    except Exception:
+        return Result("Your PC's Jarvis does not have thinking controls yet.", "thinking_set")
+    desc = {
+        "deep": "thinking deeply",
+        "quick": "quick thinking",
+        "off": "thinking is off",
+        "auto": "automatic thinking",
+    }.get(level, f"thinking {level}")
+    return Result(f"Done: {desc} from now on. You can change this in Settings.", "thinking_set")
+
+
+def _run_thinking_status() -> Result:
+    try:
+        import jarvis_thinking
+        lvl = jarvis_thinking.get_level("everyday")
+        return Result(f"Thinking is currently {lvl}. {jarvis_thinking.WHY.get(lvl, '')}", "thinking_status")
+    except Exception:
+        return Result("Thinking is currently off.", "thinking_status")
+
+
+
 def is_command(text) -> bool:
     """Does this sentence fit the grammar? For jarvis_intake.owner_turns:
     a command to set a timer or a reminder is not a fact to learn. Reads no
@@ -3666,6 +3738,10 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_animal(n, f, peer, local)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
+    if n in ("thinking_set", "thinking_from_now_on"):
+        return _run_thinking_set(f, temporary)
+    if n == "thinking_status":
+        return _run_thinking_status()
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)

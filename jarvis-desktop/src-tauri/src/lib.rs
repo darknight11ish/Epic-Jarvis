@@ -1043,6 +1043,8 @@ pub fn run() {
             plain_errors::get_manner,
             plain_errors::set_manner,
             plain_errors::set_humor,
+            plain_errors::get_thinking,
+            plain_errors::set_thinking,
             plain_errors::open_fix_place,
             sky::get_sky,
             sky::set_sky,

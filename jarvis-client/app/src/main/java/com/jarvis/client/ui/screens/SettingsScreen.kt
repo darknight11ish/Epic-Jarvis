@@ -376,7 +376,13 @@ fun SettingsScreen(
 
             // The seven sections moved whole from Brain's old "Settings"
             // group - see this file's own doc comment.
-            if (menus.shows("settings.manner")) item(key = "manner") { MenuFrame(menus, "settings.manner") { MannerSection(canAct = canAct) } }
+            if (menus.shows("settings.manner")) item(key = "manner") {
+                MenuFrame(menus, "settings.manner") {
+                    MannerSection(canAct = canAct)
+                    Gap(16)
+                    ThinkingSection(canAct = canAct)
+                }
+            }
             if (menus.shows("settings.web-search")) item(key = "web-search") { MenuFrame(menus, "settings.web-search") { WebSearchSection(canAct = canAct) } }
             item(key = "asks-first") { AsksFirstSection(canAct = canAct) }
             if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }

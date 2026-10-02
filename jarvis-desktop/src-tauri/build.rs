@@ -334,6 +334,10 @@ fn main() {
             // Humour, the same screen's second switch (the owner's decision,
             // 2026-09-27): off to start, no card either way.
             "set_humor",
+            // Settings' "Thinking levels" (Section 5.5): per running model.
+            // Settings window only.
+            "get_thinking",
+            "set_thinking",
             // The quickbar's error fix buttons ("Check the connection
             // settings", "Choose a model"): open Settings or the Brain,
             // nothing else (plain_errors.rs).
