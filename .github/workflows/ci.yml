@@ -177,8 +177,7 @@ jobs:
               name=$(echo "$line" | awk '{print $2}')
               [ -n "$name" ] || continue
               detail=$(python "backend/run_suites.py" "$name" 2>&1 \
-                       | grep -E '^      (FAIL|failed:|[A-Za-z_.]*(Error|Exception))' \
-                       | head -6 | tr '\n' '|' | cut -c1-900)
+                       | grep -A6 -E '^      FAIL ' | head -40 | tr '\n' '|' | cut -c1-1200)
               echo "::error title=Failing backend suite: $name::$detail"
             done <<< "$fails"
           fi
