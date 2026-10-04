@@ -130,6 +130,24 @@ def _plan_turn(steps_arg, *, goal="a test plan", checker, enabled_tools=None,
 # every test below is about what happens INSIDE an already-approved plan.
 _APPROVE_RUN_PLAN = {"run_plan": _Verdict(True, tier="ask", outcome="approved")}
 
+#: The two names the checker can be asked with for the home_control tool, and
+#: why there are two. On the owner's PC jarvis_agent resolves the tool's lookup
+#: name through `jarvis_gate.action_for_tool()` and asks with the RESOLVED
+#: action ("home_control") - 2026-10-03's fix, and the reason a real tier is
+#: found at all. In a CI or repository run there is no `jarvis_gate.py` to
+#: resolve with (it is not in this repository), so `jarvis_agent`'s
+#: `except Exception: pass` leaves the tool's own lookup name in place
+#: ("jarvis_home_control_run"). Registering both keeps every check below
+#: measuring the PLAN machinery on a machine of either shape; which name really
+#: arrived is asserted by `t_the_checker_is_asked_with_the_resolved_action_name`,
+#: which runs only where the table exists.
+HOME_CONTROL_NAMES = ("home_control", "jarvis_home_control_run")
+
+
+def _home_control(verdict):
+    """The same verdict registered under both names home_control can arrive as."""
+    return {name: verdict for name in HOME_CONTROL_NAMES}
+
 
 def _with_real_enabled(fn):
     """Runs `fn` with jarvis_plan.enabled() genuinely mocked True (a
@@ -242,16 +260,11 @@ def _risky_or_from_step_case(step_extra, label):
     def body():
         checker, calls = _fake_checker({
             **_APPROVE_RUN_PLAN,
-            # The name the checker is asked with is the RESOLVED ACTION, not the
-            # tool's gate_lookup_name. Both production paths do this
-            # (jarvis_agent._plan_step_dispatch and _one_call), and they have to:
-            # jarvis_gate.check() does tiers.get(action, UNKNOWN_TIER), and
-            # "jarvis_home_control_run" is not a key of [autonomy.tiers] - only
-            # the resolved "home_control" is. Same shape as
-            # jarvis_calendar_read_run -> calendar_read, which is why that one
-            # resolves to "auto" rather than falling to UNKNOWN_TIER ("ask").
-            # home_control resolves to "ask", which is what this case wants.
-            "home_control": _Verdict(True, tier="ask", outcome="approved"),
+            # The name the checker is asked with is the RESOLVED ACTION where
+            # the product can resolve it ("home_control"), and the tool's own
+            # lookup name where it cannot (no jarvis_gate.py: a CI/repo run).
+            # Both are registered - see HOME_CONTROL_NAMES.
+            **_home_control(_Verdict(True, tier="ask", outcome="approved")),
             "calculator": _Verdict(True, tier="auto", outcome="auto"),
         })
         steps = [{"tool": "calculator", "args": {"expression": "1+1"}, "why": "warm up"}] \
@@ -263,9 +276,9 @@ def _risky_or_from_step_case(step_extra, label):
         result, _ = _plan_turn(steps, checker=checker)
         check(f"{label}: the plan ran to completion", result.get("ok") is True, repr(result))
         check(f"{label}: its own card really was asked for the home_control step",
-              any(c[0] == "home_control" for c in calls), repr(calls))
+              any(c[0] in HOME_CONTROL_NAMES for c in calls), repr(calls))
         check(f"{label}: asked exactly once, whichever of gate_check/run_step asked it",
-              sum(1 for c in calls if c[0] == "home_control") == 1, repr(calls))
+              sum(1 for c in calls if c[0] in HOME_CONTROL_NAMES) == 1, repr(calls))
     _with_real_enabled(body)
 
 
@@ -449,7 +462,7 @@ def t_a_risky_step_denied_stops_the_run_there():
     def body():
         checker, calls = _fake_checker({
             **_APPROVE_RUN_PLAN,
-            "home_control": _Verdict(False, tier="ask", outcome="denied"),
+            **_home_control(_Verdict(False, tier="ask", outcome="denied")),
         })
         result, _ = _plan_turn(
             [{"tool": "home_control",
@@ -474,7 +487,9 @@ def t_a_step_the_model_did_not_flag_but_whose_real_tier_needs_a_person_is_refuse
     def body():
         checker, calls = _fake_checker({
             **_APPROVE_RUN_PLAN,
-            "home_control": _Verdict(True, tier="auto", outcome="auto"),
+            # home_control's real tier is auto here (as if the owner had set it
+            # that loose); registered under both names - see HOME_CONTROL_NAMES.
+            **_home_control(_Verdict(True, tier="auto", outcome="auto")),
         })
         result, _ = _plan_turn(
             [{"tool": "home_control",
@@ -482,7 +497,7 @@ def t_a_step_the_model_did_not_flag_but_whose_real_tier_needs_a_person_is_refuse
               "why": "the owner asked"}],   # NOT marked risky, no from_step
             checker=checker)
         check("the step's own real gate WAS consulted (never a bypass)",
-              any(c[0] == "home_control" for c in calls), repr(calls))
+              any(c[0] in HOME_CONTROL_NAMES for c in calls), repr(calls))
         check("but it is refused anyway - nobody was really asked",
               result.get("ok") is False, repr(result))
         check("the reason says which tool, and that it was let through unasked",
@@ -500,7 +515,7 @@ def t_a_denial_stops_later_safe_steps_too():
         checker, calls = _fake_checker({
             **_APPROVE_RUN_PLAN,
             "calculator": _Verdict(True, tier="auto", outcome="auto"),
-            "home_control": _Verdict(False, tier="ask", outcome="denied"),
+            **_home_control(_Verdict(False, tier="ask", outcome="denied")),
         })
         result, _ = _plan_turn(
             [{"tool": "calculator", "args": {"expression": "1+1"}, "why": "first"},
@@ -554,10 +569,9 @@ def t_running_a_step_goes_through_that_tools_own_real_prepare():
     def body():
         checker, calls = _fake_checker({
             **_APPROVE_RUN_PLAN,
-            # The resolved action, as above - and the point of this case is that
-            # it is never asked at all, because prepare() rejects the arguments
-            # first.
-            "home_control": _Verdict(True, tier="ask", outcome="approved"),
+            # Both names, as above - and the point of this case is that it is
+            # never asked at all, because prepare() rejects the arguments first.
+            **_home_control(_Verdict(True, tier="ask", outcome="approved")),
         })
         result, _ = _plan_turn(
             [{"tool": "home_control", "args": {"domain": "light", "service": "turn_on"},
@@ -568,7 +582,48 @@ def t_running_a_step_goes_through_that_tools_own_real_prepare():
         check("the real prepare()'s own message reaches the reason",
               "could not accept its arguments" in (result.get("reason") or ""), repr(result))
         check("never even reached the gate - a bad call is not what a person approves",
-              not any(c[0] == "home_control" for c in calls), repr(calls))
+              not any(c[0] in HOME_CONTROL_NAMES for c in calls), repr(calls))
+    _with_real_enabled(body)
+
+
+def t_the_checker_is_asked_with_the_resolved_action_name():
+    """2026-10-03's fix, and the reason HOME_CONTROL_NAMES has two entries.
+
+    The plan dispatcher asks the checker with the RESOLVED action name, looked
+    up through `jarvis_gate.action_for_tool()`, not the tool's own lookup name -
+    which is what makes a real tier findable at all. Without jarvis_gate.py (a
+    CI or repository run) there is no table, the lookup name arrives instead,
+    and the checks above still run because both names are registered. This is
+    the one that would go red if the resolution quietly stopped happening on
+    the owner's PC, so it is proved there and SKIPPED, with its reason, where
+    it cannot be.
+    """
+    from _where import missing as _missing
+    if _missing("jarvis_gate.py"):
+        return check("SKIP - no jarvis_gate.py here, so no table can turn "
+                     "'jarvis_home_control_run' into an action name; the owner's own "
+                     "run proves this", True)
+    try:
+        import jarvis_gate
+        want, _known = jarvis_gate.action_for_tool("jarvis_home_control_run", {})
+    except Exception as exc:
+        return check(f"SKIP - jarvis_gate.action_for_tool could not be asked "
+                     f"({type(exc).__name__}: {exc})", True)
+
+    def body():
+        checker, calls = _fake_checker({
+            **_APPROVE_RUN_PLAN,
+            **_home_control(_Verdict(True, tier="ask", outcome="approved")),
+        })
+        _plan_turn([{"tool": "home_control",
+                     "args": {"domain": "light", "service": "turn_on",
+                              "entity_id": "light.kitchen"},
+                     "why": "the owner asked", "risky": True}], checker=checker)
+        asked = [c[0] for c in calls]
+        check("the checker is asked with the RESOLVED action name, never the "
+              "tool's own",
+              [a for a in asked if a in HOME_CONTROL_NAMES] == [want]
+              and "jarvis_home_control_run" not in asked, (want, asked))
     _with_real_enabled(body)
 
 
@@ -585,7 +640,8 @@ if __name__ == "__main__":
                t_a_step_the_model_did_not_flag_but_whose_real_tier_needs_a_person_is_refused,
                t_a_denial_stops_later_safe_steps_too,
                t_excluded_tools_are_refused_as_plan_steps,
-               t_running_a_step_goes_through_that_tools_own_real_prepare):
+               t_running_a_step_goes_through_that_tools_own_real_prepare,
+               t_the_checker_is_asked_with_the_resolved_action_name):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
