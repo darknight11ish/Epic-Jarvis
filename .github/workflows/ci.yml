@@ -156,10 +156,16 @@ jobs:
         # (2026-10-04). They now also go to this run's Summary, and each one
         # becomes an ::error:: annotation, which the checks API serves to
         # anyone. The step still fails exactly as it did.
+        #
+        # `set +e` around the run is deliberate: GitHub runs this script under
+        # `bash -e`, so the failing pipeline aborted the step before a single
+        # annotation was written - which is what the first version of this step
+        # did.
         run: |
-          set -o pipefail
+          set +e
           python backend/run_suites.py 2>&1 | tee "$RUNNER_TEMP/backend-suites.txt"
-          status=$?
+          status=${PIPESTATUS[0]}
+          set -e
           fails=$(grep -E '^FAIL ' "$RUNNER_TEMP/backend-suites.txt" || true)
           if [ -n "$fails" ]; then
             while IFS= read -r line; do
