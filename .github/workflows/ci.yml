@@ -168,8 +168,18 @@ jobs:
           set -e
           fails=$(grep -E '^FAIL ' "$RUNNER_TEMP/backend-suites.txt" || true)
           if [ -n "$fails" ]; then
+            # One annotation per failing suite, carrying that suite's OWN FAIL
+            # lines: the failing checks are the useful part, and an annotation
+            # can be read through the public checks API - no log, no browser.
+            # Each suite is re-run on its own through run_suites.py, so it gets
+            # the same staged backend the sweep gave it.
             while IFS= read -r line; do
-              echo "::error title=Failing backend suite::${line#FAIL  }"
+              name=$(echo "$line" | awk '{print $2}')
+              [ -n "$name" ] || continue
+              detail=$(python "backend/run_suites.py" "$name" 2>&1 \
+                       | grep -E '^      (FAIL|failed:|[A-Za-z_.]*(Error|Exception))' \
+                       | head -6 | tr '\n' '|' | cut -c1-900)
+              echo "::error title=Failing backend suite: $name::$detail"
             done <<< "$fails"
           fi
           {
