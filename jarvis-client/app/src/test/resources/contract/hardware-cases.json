@@ -2225,7 +2225,7 @@
    "sources": {
     "nvidia_smi": "used",
     "ollama_log": "not found",
-    "registry": "not on Windows"
+    "registry": "not read"
    },
    "test_later": [
     {

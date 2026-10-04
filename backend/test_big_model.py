@@ -69,6 +69,35 @@ import jarvis_second_card as SC  # noqa: E402
 import jarvis_wiki as W  # noqa: E402
 import gen_big_model_cases as G  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `after[i:i + 1600]` counted characters from the route header and hoped
+    everything the check names was inside the next 1600 of them - a promise
+    about how long the route stays, which had to be re-tuned by hand when it
+    grew (2026-10-03). The block ends where the indentation returns to the
+    level of the line the marker sits on, however long it grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
 KEY = G.KEY
 #: Everything printed while the tests run, to grep for the key at the end.
@@ -1060,14 +1089,14 @@ def t_the_patch():
           "reverses, and wiki and second-card still reverse after it", ok, err)
     if not ok:
         return
-    i = after.index('if path in ("/api/big-model", "/api/deep"):')
-    blk = after[i:i + 1600]
+    blk = _block(after, 'if path in ("/api/big-model", "/api/deep"):')
+    check("the big-model GET route is still there to check", bool(blk))
     check("GET /api/big-model and /api/deep check origin and token",
           "_origin_ok(self)" in blk and "_token_ok(self)" in blk)
     check("... and answer status() / deep_status()",
           "jarvis_big_model.status()" in blk and "jarvis_big_model.deep_status()" in blk)
-    i = after.index('if route in ("/api/big-model", "/api/deep/ask"):')
-    blk = after[i:i + 2400]
+    blk = _block(after, 'if route in ("/api/big-model", "/api/deep/ask"):')
+    check("the big-model POST route is still there to check", bool(blk))
     check("POST /api/big-model and /api/deep/ask check origin and token and hand the body over",
           "_origin_ok(self)" in blk and "_token_ok(self)" in blk
           and "jarvis_big_model.handle_post(body)" in blk
@@ -1077,18 +1106,17 @@ def t_the_patch():
           and after.index('if route == "/api/wiki/ingest":')
           < after.index('if route in ("/api/big-model"'))
     check("the wiki's blocks are untouched",
-          before[before.index('if route == "/api/wiki/ingest":'):].split("\n\n")[0]
-          == after[after.index('if route == "/api/wiki/ingest":'):].split("\n\n")[0])
+          _block(before, 'if route == "/api/wiki/ingest":')
+          == _block(after, 'if route == "/api/wiki/ingest":'))
     check("the approval notice knows big_model_enable stays on this PC",
           '"big_model_enable": ("yes", "local",' in ga and '"wiki_update"' in ga)
-    for start, end in (('        if path in ("/api/big-model"', '        if path in ("/api/memory/pending"'),
-                       ('        if route in ("/api/big-model"', '        if route in ("/api/memory/forget"')):
-        block = after[after.index(start):after.index(end)]
+    for start in ('if path in ("/api/big-model"', 'if route in ("/api/big-model"'):
+        block = _block(after, start)
         try:
             compile("def f(self, path, route):\n" + block, "<patched block>", "exec")
-            check(f"the patched block {start.strip()[:30]}... compiles", True)
+            check(f"the patched block {start[:30]}... compiles", True)
         except SyntaxError as exc:
-            check(f"the patched block {start.strip()[:30]}... compiles", False, str(exc))
+            check(f"the patched block {start[:30]}... compiles", False, str(exc))
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()

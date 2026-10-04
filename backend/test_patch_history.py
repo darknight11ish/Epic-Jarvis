@@ -33,6 +33,7 @@ first. That only helps if the folder is complete, so:
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -271,7 +272,7 @@ def upgrade(backend: Path, stack: list, history: dict):
         if all(run(["apply", "--reverse", str(p)], rh) for _, p in reversed(stack)):
             return "already", []
     finally:
-        shutil.rmtree(rh, ignore_errors=True)
+        _rmtree(rh)
     rh = copy()
     try:
         if all([run(["apply", str(p)], rh) for _, p in stack]):
@@ -279,7 +280,7 @@ def upgrade(backend: Path, stack: list, history: dict):
                 assert run(["apply", str(p)], backend)
             return "applied", []
     finally:
-        shutil.rmtree(rh, ignore_errors=True)
+        _rmtree(rh)
     rh = copy()
     try:
         found = []
@@ -296,7 +297,7 @@ def upgrade(backend: Path, stack: list, history: dict):
         if not found or not all([run(["apply", str(p)], rh) for _, p in stack]):
             return "refused", []
     finally:
-        shutil.rmtree(rh, ignore_errors=True)
+        _rmtree(rh)
     for _, p in found:
         assert run(["apply", "--reverse", str(p)], backend)
     for _, p in stack:
@@ -304,11 +305,25 @@ def upgrade(backend: Path, stack: list, history: dict):
     return "applied", found
 
 
+def _rmtree(path):
+    """shutil.rmtree that can also delete what git wrote. Git marks its object
+    files READ-ONLY, and Windows refuses to unlink a read-only file - POSIX does
+    not care, so a plain rmtree works in CI and raised PermissionError here on
+    the owner's PC (2026-10-03)."""
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in list(dirnames) + list(filenames):
+            try:
+                os.chmod(os.path.join(dirpath, name), stat.S_IWRITE)
+            except OSError:
+                pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def diff_of(before: str, after: str, work: Path, out: Path):
     """A git-format patch turning jarvis_hud.py from `before` into `after`."""
     g = work / "g"
     if g.exists():
-        shutil.rmtree(g)
+        _rmtree(g)
     g.mkdir()
     git(["init", "-q"], g)
     git(["config", "core.autocrlf", "false"], g)

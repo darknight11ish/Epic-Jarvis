@@ -12,7 +12,7 @@ millisecond timings.
 
     python3 test_extraction_wiring.py
 """
-import ast, json, os, sys, threading, time, traceback, types, urllib.parse
+import ast, json, os, sys, tempfile, threading, time, traceback, types, urllib.parse
 from pathlib import Path
 from typing import Optional
 
@@ -24,6 +24,42 @@ sys.path.insert(0, str(HERE))
 # that runs Jarvis.
 from _where import BACKEND, REPO, missing, explain
 HUD = BACKEND / "jarvis_hud.py"
+
+# A SCRATCH MEMORY STORE, PINNED BEFORE ANY TEST RUNS.
+#
+# The learner's pass calls the real jarvis_intake.propose() - that is the
+# point of these tests - and it builds its prompt from whatever store
+# jarvis_memory already has loaded (jarvis_intake._live_store). Nothing here
+# used to pin one, so the moment any test in the process loaded jarvis_memory,
+# the learner's next pass read the OWNER'S OWN ~/.openjarvis/memory.db, and
+# fastembed downloaded bge-small-en-v1.5 there and back (about fifteen seconds
+# the first time) while holding that store's lock.
+#
+# Measured 2026-10-04: `a burst of turns produces one pass, not one per turn`
+# then reported "0 passes for 4 turns" - not because the learner was wrong
+# (the same test alone passes in 0.0 s) but because the SECOND pass waited on
+# the FIRST test's model download. With a scratch file and an 8-dimension hash
+# embedder that never downloads and is never trusted for meaning, every pass in
+# here is the same millisecond business the rest of the suite is written for,
+# and nothing this file runs reaches the owner's own memory.
+try:
+    import jarvis_memory as _MEM
+except ImportError:                      # the dev container: the rebuilt store
+    sys.path.append(str(REPO / "backend" / "rebuilt"))
+    import jarvis_memory as _MEM
+
+
+class _ScratchEmbedder(_MEM.Embedder):
+    """Words, not meaning: no model to download, no vector consulted."""
+    name, dim, semantic = "extraction-wiring-v1", 8, False
+
+    def embed(self, texts):
+        return [[1.0 + ((hash(t) >> i) & 1) for i in range(self.dim)] for t in texts]
+
+
+_MEM._store = _MEM.MemoryStore(
+    path=Path(tempfile.mkdtemp(prefix="jarvis-wiring-")) / "memory.db",
+    embedder=_ScratchEmbedder())
 
 FAILED, PASSED = [], []
 

@@ -39,6 +39,7 @@ the app workspace's own tests). `app_words` holds the sentences both apps
 must say the same way and the PC sends (how a merge ended), kept apart from
 `words` on purpose: `words` is compared key for key with each app's own list.
 """
+import itertools
 import json
 import os
 import sys
@@ -200,14 +201,19 @@ class _Ids:
         return f"{self.n:032x}"
 
 
+_STORES = itertools.count()
+
+
 def _store():
     P._reset_for_tests()
     A._reset_for_tests()
     P._new_id = _Ids()
     P.check_folder = lambda path, allowed=None: str(path)
-    path = _CONF / "projects.db"
-    if path.exists():
-        path.unlink()
+    # A fresh file for each store, never unlink-and-reuse: Windows refuses to
+    # delete a file sqlite still holds open (POSIX does not care), so the old
+    # `if path.exists(): path.unlink()` raised WinError 32 on the owner's PC and
+    # the whole generator crashed (2026-10-03).
+    path = _CONF / f"projects-{next(_STORES)}.db"
     return P.Projects(path, clock=lambda: AT)
 
 
@@ -735,7 +741,10 @@ def main(argv) -> int:
         return 0
     for path in COPIES:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # newline="\n": without it this writes CRLF on Windows and LF elsewhere.
+        # The two committed files were CRLF because of exactly that; they are
+        # LF now, like every other fixture here (.gitattributes: LF everywhere).
+        path.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {path.relative_to(ROOT)}")
     return 0
 

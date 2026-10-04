@@ -187,7 +187,9 @@ def main(argv) -> int:
         return 0
     for c in COPIES:
         c.parent.mkdir(parents=True, exist_ok=True)
-        c.write_text(text, encoding="utf-8")
+        # newline="\n": without it this writes CRLF on Windows and LF elsewhere
+        # (the repository is LF everywhere - .gitattributes).
+        c.write_text(text, encoding="utf-8", newline="\n")
         print("wrote", c.relative_to(ROOT))
     return 0
 

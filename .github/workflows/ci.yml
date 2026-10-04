@@ -216,6 +216,349 @@ jobs:
       - name: Desktop command ACL parity
         run: python tools/check_command_acl.py
 
+  backend-windows:
+    # The Windows half of the backend job above. CI ran the backend suites on
+    # Ubuntu only, which is why about fifteen of them turned out to assume
+    # Linux (docs/HANDOFF-2026-10-04-test-suite-fixes.md, section 7 item 3).
+    # Ubuntu cannot answer "does this suite pass on the operating system the
+    # owner actually runs". This job can - for the subset of suites that need
+    # nothing from the owner's PC.
+    #
+    # WHY THIS SUBSET, AND HOW IT WAS CHOSEN. All 244 backend suites were run
+    # in repo mode on the owner's Windows 11 PC, one at a time, with
+    # JARVIS_BACKEND unset (so backend/_where.py uses this repository's own
+    # backend/ folder and require_shipped() does nothing) and
+    # PYTHONIOENCODING=utf-8 (the console there is cp1252). 208 exited 0. Each
+    # of those was then run again with OLLAMA_URL pointed at a closed port and
+    # with only the packages installed below - the two things a GitHub runner
+    # has and the owner's PC does not. That is the list below. Nothing is in it
+    # because it looked likely to work: every line is a suite that exited 0
+    # with no model and no extra package.
+    # dshwork/audit-2026-10-04/audit-03-windows-ci.md has the exit code and the
+    # "N passed, M failed" line for all 244, and the reason each of the other
+    # 36 is left out.
+    #
+    # WHAT IS DELIBERATELY NOT HERE. Three kinds of suite the Ubuntu job runs:
+    #
+    #   * the ones that need a file only the owner's PC has - jarvis_hud.py,
+    #     jarvis_gate.py, jarvis_extract.py, jarvis_models.py, jarvis_skills.py.
+    #     In repo mode those are a traceback rather than a skip, because the
+    #     skip list lives in run_suites.py, not in the suites.
+    #   * the ones that need one of the ten rebuilt modules in backend/rebuilt/
+    #     on sys.path. run_suites.py is what flattens those onto sys.path (into
+    #     a staged copy of the backend), so in repo mode they fail on the
+    #     import. test_agent.py is the one that shows the difference plainly: 5
+    #     failures in repo mode, and `python backend/run_suites.py test_agent.py`
+    #     passes on this same machine.
+    #   * test_patch_history.py, which passed here only because this copy of the
+    #     repository has no .git at all; in CI it needs the whole history
+    #     (`fetch-depth: 0`, which the Ubuntu job above sets and this one does
+    #     not), and the owner's PC is a downloaded ZIP.
+    #
+    # This is NOT "run_suites.py again, on Windows" on purpose: that would
+    # stage the modules, so it would no longer be the configuration measured
+    # and recorded here, and the whole sweep already takes about 25 minutes on
+    # Ubuntu. What this job is for is the suites that assumed Linux.
+    #
+    # IT HAS NEVER RUN ON GITHUB. The repository was imported as a ZIP, so
+    # there is no history to push and no run to point at. Until it does run
+    # there, its evidence is the local run of this exact command in the audit
+    # file named above.
+    runs-on: windows-latest
+    # 90 minutes, chosen rather than derived. Measured on the owner's 24-core
+    # PC while another audit was running: 31 minutes of suite time in repo mode
+    # with the live model, 43 minutes in the CI-like pass with eight shards
+    # contending. The Ubuntu job that runs about 230 suites has a 25-minute
+    # limit; a Windows runner is slower and has no graphics card. The frontend
+    # job above was CANCELLED at 45 minutes with every test still passing, so
+    # this ceiling is deliberately generous rather than tight.
+    timeout-minutes: 90
+    defaults:
+      run:
+        # The suites are run from backend/, which is where a person runs them
+        # and where the local measurement was taken.
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+      - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.12"
+      # The four pins the Ubuntu backend job installs, for the same reason: a
+      # new release must not change what CI tests overnight. Update these
+      # together with requirements.lock. Nothing else from it - the memory
+      # packages (fastembed, sqlite-vec) are left out there and here, on
+      # purpose, and every suite below passes without them.
+      #
+      # Then the two the Ubuntu job cannot install, because they are Windows
+      # only and Ubuntu does not need them: backend/requirements.txt asks for
+      # both under `sys_platform == "win32"`, and both versions are read from
+      # backend/requirements.lock, the same place the four above come from.
+      #   tzdata       - Windows has no time-zone database of its own, so
+      #                  zoneinfo resolves no named zone without it.
+      #   uiautomation - what tells a password box from any other box on the
+      #                  screen (jarvis_screen_win.py).
+      # Measured 2026-10-04: without them, test_progress.py fails with
+      # "No module named 'tzdata'" and test_screen_win.py fails with "The
+      # 'uiautomation' package is missing"; with them both pass. On Ubuntu both
+      # suites pass without either, so the gap was invisible to CI.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29
+      - name: Backend suites that need no file from the owner's PC, on Windows
+        # One step, not two: an environment variable set in one step does not
+        # reach the next one.
+        run: |
+          # The suites run real code that writes - the audit log, approval
+          # queues, switch files - so their state goes to a throwaway folder
+          # first, the same way run_suites.py's private_state() does it on the
+          # Ubuntu side: both config variables, and a copy of the framework
+          # TOML with log_directory rewritten (it otherwise points at
+          # ~/.openjarvis/logs/ whoever is running). Without this the command
+          # here would not be the command that was run and recorded locally.
+          $state = Join-Path $env:RUNNER_TEMP 'jarvis-suite-state'
+          New-Item -ItemType Directory -Force -Path $state, (Join-Path $state 'logs') | Out-Null
+          $env:OPENJARVIS_CONFIG_DIR = $state
+          $env:JARVIS_CONFIG_DIR = $state
+          $toml = Get-Content -LiteralPath 'rebuilt/jarvis-framework.toml' -Raw
+          $toml = $toml -replace '(?m)^log_directory\s*=.*$', "log_directory = '$($state -replace '\\','/')/logs/'"
+          [IO.File]::WriteAllText((Join-Path $state 'jarvis-framework.toml'), $toml,
+                                  (New-Object System.Text.UTF8Encoding $false))
+          $env:JARVIS_FRAMEWORK_TOML = Join-Path $state 'jarvis-framework.toml'
+          # cp1252 is the code page on the owner's console, and many suites
+          # print a character it cannot encode; the suite would exit 1 with a
+          # UnicodeEncodeError while the check it was running had passed.
+          $env:PYTHONIOENCODING = 'utf-8'
+          $env:PYTHONDONTWRITEBYTECODE = '1'
+
+          # Every suite in the list, in name order. A suite that fails does not
+          # stop the rest: one red run lists every Windows failure at once.
+          $suites = @(
+            'test_account_secrets.py',
+            'test_agent_retirement_wiring.py',
+            'test_android_control.py',
+            'test_animal.py',
+            'test_app_workspace.py',
+            'test_apply_line_endings.py',
+            'test_apply_outcomes.py',
+            'test_approval_contract.py',
+            'test_approval_sign.py',
+            'test_asks_first.py',
+            'test_backoff_rule.py',
+            'test_backup.py',
+            'test_better_voice.py',
+            'test_between_us.py',
+            'test_big_model.py',
+            'test_bind_wildcard.py',
+            'test_bitemporal_asof.py',
+            'test_blend_voices.py',
+            'test_brain_reads.py',
+            'test_briefing.py',
+            'test_browser_control.py',
+            'test_browser_control_live.py',
+            'test_browser_engine.py',
+            'test_calendar.py',
+            'test_calendar_link.py',
+            'test_card_words.py',
+            'test_character.py',
+            'test_chat_fork.py',
+            'test_chat_kinds.py',
+            'test_chat_log.py',
+            'test_chat_marks.py',
+            'test_chat_picture.py',
+            'test_chat_stream.py',
+            'test_chat_stream_contract.py',
+            'test_chat_tags.py',
+            'test_chatbot.py',
+            'test_chatbot_api.py',
+            'test_chatbot_compare.py',
+            'test_chatbot_gemini.py',
+            'test_chatbot_local.py',
+            'test_chatbot_routes.py',
+            'test_chatbot_sites.py',
+            'test_cloud_one_turn.py',
+            'test_cloud_say_yes.py',
+            'test_connection_contract.py',
+            'test_cut_off_note.py',
+            'test_data_health.py',
+            'test_decks.py',
+            'test_devices.py',
+            'test_documents.py',
+            'test_documents_owned.py',
+            'test_email.py',
+            'test_email_draft.py',
+            'test_email_send.py',
+            'test_feedback.py',
+            'test_find_phone.py',
+            'test_focus.py',
+            'test_focus_brief.py',
+            'test_forecast.py',
+            'test_forget_range.py',
+            'test_form_review.py',
+            'test_front.py',
+            'test_gate_denial_rule.py',
+            'test_gate_fixes.py',
+            'test_gate_risk_words.py',
+            'test_gate_stack_clean.py',
+            'test_goals.py',
+            'test_handoff.py',
+            'test_hardware.py',
+            'test_history_import.py',
+            'test_home_control.py',
+            'test_home_several.py',
+            'test_identity.py',
+            'test_import_understanding.py',
+            'test_inbox_tidy.py',
+            'test_integrations_wiring.py',
+            'test_kokoro.py',
+            'test_learning_integration.py',
+            'test_learning_switch.py',
+            'test_live.py',
+            'test_local_http.py',
+            'test_lockdown.py',
+            'test_loopback_too.py',
+            'test_mail_mask.py',
+            'test_manner.py',
+            'test_mcp.py',
+            'test_mcp_wiring.py',
+            'test_media.py',
+            'test_memory_auto_true_from.py',
+            'test_memory_entities.py',
+            'test_memory_honesty.py',
+            'test_memory_intake.py',
+            'test_memory_locomo.py',
+            'test_memory_models.py',
+            'test_memory_review.py',
+            'test_memory_said_again.py',
+            'test_memory_tiebreak.py',
+            'test_memory_true_from.py',
+            'test_menu_visibility.py',
+            'test_model_chat_cases.py',
+            'test_model_tryout.py',
+            'test_mouth.py',
+            'test_mouth_corpus.py',
+            'test_news.py',
+            'test_next_time.py',
+            'test_note_capture.py',
+            'test_notes.py',
+            'test_obscura.py',
+            'test_obsidian_notes.py',
+            'test_ollama_direct.py',
+            'test_open_chat.py',
+            'test_ort_quiet.py',
+            'test_own_network_cases.py',
+            'test_pairing_cases.py',
+            'test_past_time_zones.py',
+            'test_paste_guard.py',
+            'test_patch_history.py',
+            'test_pc_help.py',
+            'test_phone_notifications.py',
+            'test_phone_second_card_contract.py',
+            'test_photo_remind.py',
+            'test_picture_text.py',
+            'test_places.py',
+            'test_plan.py',
+            'test_power_switch.py',
+            'test_private_aloud.py',
+            'test_profiles.py',
+            'test_progress.py',
+            'test_projects.py',
+            'test_quick_wins.py',
+            'test_quiz.py',
+            'test_quiz_cloud.py',
+            'test_reach.py',
+            'test_rebuilt.py',
+            'test_referee.py',
+            'test_research.py',
+            'test_retirement.py',
+            'test_router_private_terms.py',
+            'test_rules_first_relay.py',
+            'test_sayable.py',
+            'test_schedule.py',
+            'test_screen.py',
+            'test_screen_clean.py',
+            'test_screen_masks.py',
+            'test_screen_picture.py',
+            'test_screen_turn.py',
+            'test_screen_win.py',
+            'test_scrub.py',
+            'test_second_card.py',
+            'test_second_card_suggest.py',
+            'test_secret_rules.py',
+            'test_secrets.py',
+            'test_security_pc.py',
+            'test_selftest_doctor.py',
+            'test_selftest_preflight.py',
+            'test_sensitive.py',
+            'test_settings_registry.py',
+            'test_settings_switches.py',
+            'test_shipped_modules.py',
+            'test_short_tool_list.py',
+            'test_skill_discovery.py',
+            'test_skill_suggest.py',
+            'test_sky.py',
+            'test_smarter_answers.py',
+            'test_sources.py',
+            'test_speech.py',
+            'test_speed_record.py',
+            'test_spending.py',
+            'test_spoken_style.py',
+            'test_standby_schedule.py',
+            'test_stop_all.py',
+            'test_stopword.py',
+            'test_support_chat.py',
+            'test_support_widget.py',
+            'test_tag_suggest.py',
+            'test_talk_type.py',
+            'test_telemetry_off.py',
+            'test_tellme.py',
+            'test_tellme_watches.py',
+            'test_temporary_chat.py',
+            'test_thinking.py',
+            'test_tidy.py',
+            'test_today.py',
+            'test_token_file.py',
+            'test_token_store.py',
+            'test_tool_calling_wiring.py',
+            'test_tool_eval.py',
+            'test_tool_text.py',
+            'test_tool_updates.py',
+            'test_topics.py',
+            'test_topics_leaks.py',
+            'test_turn.py',
+            'test_ui_control.py',
+            'test_version.py',
+            'test_voice_contract.py',
+            'test_voice_enroll.py',
+            'test_voice_flow.py',
+            'test_voice_mic.py',
+            'test_voice_strict.py',
+            'test_voice_upgrades.py',
+            'test_voices.py',
+            'test_wakeword.py',
+            'test_warm_prefix.py',
+            'test_watch_notify.py',
+            'test_web_search.py',
+            'test_wellbeing.py',
+            'test_widgets.py',
+            'test_wiki.py',
+            'test_youtube.py'
+          )
+          $failed = @()
+          foreach ($suite in $suites) {
+            Write-Output "::group::$suite"
+            python $suite
+            $code = $LASTEXITCODE
+            if ($code -ne 0) {
+              $failed += $suite
+              Write-Output "::error::$suite exited $code"
+            }
+            Write-Output "::endgroup::"
+          }
+          "$($suites.Count) backend suites ran on Windows"
+          if ($failed.Count -gt 0) {
+            Write-Output "::error::$($failed.Count) backend suite(s) failed on Windows: $($failed -join ', ')"
+            exit 1
+          }
+          "Every backend suite in this job passed on Windows."
+
   credential-manager:
     # The pairing token lives in Windows Credential Manager (CLAUDE.md rule 3,
     # backend/jarvis_token_store.py). Linux has no Credential Manager, so the

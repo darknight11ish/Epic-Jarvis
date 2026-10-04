@@ -18,6 +18,10 @@ stack below: each only touches its own few lines, shared with no other patch
 here. Two ordering constraints remain: tool-calling needs ollama-direct (a
 logical one), and loopback-too needs token-file (a textual one - its context
 is token-file's output). See their own sections, after the table.
+`gate-entries.patch` (2026-10-03) is a fifth of the same kind, listed right
+after `ui-control-wiring.patch`: it only ADDS lines, at the very end of
+`jarvis_gate.py`'s `_TOOL_ACTIONS`, so it shares no line with any patch and
+has no ordering constraint at all - see its own section.
 
 Added 2026-09-23, from the learning research, five more at the very end, in
 this order: `feedback.patch`, `memory-intake.patch`, `skill-suggest.patch`,
@@ -87,6 +91,8 @@ on a throwaway copy instead.
 | `event-allowlist.patch` | `jarvis_events.py` | The approval doorbell shipped `raised` — which quotes hostile outside text — to every subscriber, including a phone lock screen. |
 | `approval-notice.patch` | `jarvis_gate.py`, `jarvis_events.py` | A waiting approval reached a phone as "fields: args, tool". Adds `notice_for()` — a readable title and reason built only from this module's own tables, so it is safe on a lock screen by construction. Since 2026-09-25 the title is a plain phrase from `jarvis_card_words.py` ("Jarvis wants to switch to a different AI model"), copied in by the script. Needs `event-allowlist`. |
 | `ui-control-wiring.patch` | `jarvis_gate.py` | Registers the three new capabilities below with the gate's own `_RISK`/`_TOOL_ACTIONS` tables. Textually independent of everything above it — see its own section. |
+| `gate-entries.patch` | `jarvis_gate.py` | **Eleven tools Jarvis offered the model were not in the gate's tool table at all.** `action_for_tool()` fell through to `unclassified_tool`, which is `"ask"` in the shipped config — so nothing ran unattended, but every call to a timer, a reminder, the to-do list, the calendar, email, notes, Home Assistant or the browser asked for no reason. Adds the missing `_TOOL_ACTIONS` lines only; the tiers themselves are unchanged. Goes right after `ui-control-wiring.patch`, the last patch above it that writes into that dict — see its own section. |
+| `gate-action-name.patch` | `jarvis_gate.py` | **The gate renamed an action on its way out.** For the 58 `_TOOL_ACTIONS` entries whose value is a *tier literal* (`"calculator": "auto"`), `action_for_tool()` returned `tool:calculator` as the action name — the string handed to the checker, written to the audit log, and shown on "What can Jarvis reach". No config, page or suite has ever used that name. It now returns the bare name, and still registers it in `_SYNTH_TIERS` (which is load-bearing: a tier literal is not a key of `[autonomy.tiers]`). One hunk, last in the list — see its own section. |
 | `ollama-direct.patch` | `jarvis_hud.py` | `/api/chat`'s local lane called an OpenJarvis instance that was never actually running. Points it at Ollama directly instead — see its own section. |
 | `tool-calling-wiring.patch` | `jarvis_hud.py` | Wires `jarvis_agent.py`'s tool-using loop into the local lane, and only the local lane. Needs `ollama-direct.patch` first (not textually, but a tool-enabled local turn is pointless before the local lane actually reaches Ollama) — see its own section. |
 | `loopback-too.patch` | `jarvis_hud.py` | **Pairing the phone unplugged the desktop.** `JARVIS_HUD_BIND` moved the one socket off `127.0.0.1` instead of adding one, and the desktop's HUD may only talk to loopback. Also serves `127.0.0.1` when bound elsewhere. Needs `token-file.patch` — see its own section. |
@@ -2470,6 +2476,180 @@ the right service for each case, and the surrounding routing/privacy/degrade
 code - `is_cloud`, the recalled-facts block, `jarvis_router.degrade` - is
 byte-for-byte unchanged by this patch. Cannot start a real HTTP server here to
 prove Ollama actually answers; that part is the owner's own machine to try.
+
+---
+
+# `gate-entries.patch` — eleven tools the gate had never heard of
+
+Written 2026-10-03, after the `apply-patches.ps1` run of that day. Eleven
+names `jarvis_agent.py`'s `TOOLS` puts to `jarvis_gate` had **no
+`_TOOL_ACTIONS` entry at all**. `action_for_tool()` does not raise on a name
+it does not recognise - it returns `("unclassified_tool", False)`, and
+`unclassified_tool` is `"ask"` in the shipped `[autonomy.tiers]`. So nothing
+ran unattended and this was never a safety hole; what it was is a prompt the
+owner should never have seen. Every timer, every reminder, every to-do item,
+every calendar and inbox read, every note search, every Home Assistant read
+and change, and every browser step asked for a yes it did not need - and
+`test_agent.py`'s `t_every_tool_resolves_to_a_real_jarvis_gate_action` failed
+on all eleven of them, silently, because it reports each miss instead of
+raising.
+
+**What it adds, and nothing else.** One hunk, additions only, at the very end
+of the `_TOOL_ACTIONS` dict, immediately after `"persona_write"`. It changes
+no existing line, no `_RISK` entry, no TOML value and no test:
+
+| lookup name | action | why |
+|---|---|---|
+| `jarvis_calendar_read_run` | `calendar_read` | reads only |
+| `jarvis_email_read_run` | `email_read` | reads only |
+| `jarvis_notes_search_run` | `notes_search` | reads only |
+| `jarvis_home_read_run` | `home_read` | reads only |
+| `jarvis_home_control_run` | `home_control` | acts on the real world - so it asks |
+| `jarvis_browser_control_run` | `control_browser` | sends, or lands on a page nobody has read - so it asks |
+| `set_timer` | `auto` | no card, per the owner's decision of 2026-09-25 |
+| `set_reminder` | `auto` | same, including a plain repeating one (2026-09-26) |
+| `todo_add` | `auto` | same |
+| `todo_done` | `auto` | making a list quieter; same |
+| `coming_up` | `auto` | reads the owner's own list back |
+
+**The four reads are `"auto"`, and that is the tier the project already
+chose.** `keyless-integrations-wiring` (below) documents `calendar_read`,
+`email_read`, `notes_search` and `home_read` as `"auto"` on the same
+"nothing is sent, nothing acts" reasoning every `_plan` entry is `auto` on;
+reading your own calendar, inbox, notes or Home Assistant entity state
+changes nothing and reaches only infrastructure you run yourself. They are
+**not** `"notify"`: that tier is for a write to the agent's own store, and
+none of these four writes anything. The turn is still marked as having read
+outside text - that is enforced inside `jarvis_agent.py` and does not depend
+on this tier.
+
+**The five scheduler tools are never decided by this table.** `_one_call`
+intercepts them by name *before* the gate (`SCHEDULE_TOOLS`), and
+`test_agent.py`'s own outbound loop skips them by name for that reason. Their
+lines are here so the table is complete and the test stops reporting them;
+the stricter case - a turn shaped by outside text cannot set or change an
+alarm - lives in `_schedule_call` and is unaffected. Reading the entries as
+"the tier that decides timers" would be wrong.
+
+**`jarvis_browser_control_run` is the same class of gap, one tool over.** Its
+`gate_lookup_name` has named it since `browser-control-wiring`, and that
+section already says this line belongs in `_TOOL_ACTIONS`; nothing had added
+it. `control_browser` is `"ask"` and never `"auto"`.
+
+**Two things this patch deliberately does not do.**
+
+1. **No `_RISK["control_browser"]` line.** `_RISK` has no entry for it, so
+   `risk_for()` falls back to `_UNKNOWN_RISK` - `("no", "outbound", ...)`:
+   risky, Windows Hello on the PC, exactly what a browser step should get.
+   Adding the line would only give the card its own wording, and
+   `browser-control-wiring` already specifies that entry; it belongs with
+   whoever writes that patch, not here.
+2. **No `jarvis-framework.toml` edit.** The owner's TOML has no explicit
+   `calendar_read`/`email_read`/`notes_search`/`home_read`/`home_control`
+   line even though `keyless-integrations-wiring` documents all five. They
+   fall back to `unknown_action_tier`, which is `"ask"`, so the four reads
+   still ask **more** than intended until those lines are added. That is the
+   next piece, not this one - and it is a config change on the owner's own
+   PC, which this repository's patches do not do silently.
+
+### Test it
+
+```powershell
+py -3 backend\test_agent.py
+py -3 backend\test_agent_plan_wiring.py
+py -3 backend\test_agent_retirement_wiring.py
+```
+
+`test_agent.py` is the one that was failing: `t_every_tool_resolves_to_a_real_jarvis_gate_action`
+must go from `97 passed, 1 failed` to all passing with no SKIP. The patch
+itself was checked by `_verify_gate_entries.py` in this folder, which reads
+the owner's real `jarvis_gate.py` (never writing it) and applies this patch
+to a copy in both endings `apply-patches.ps1` can hand it - CRLF as it sits
+on the PC, and LF after `-FixLineEndings` - then runs the owner's own
+`apply-patches.ps1` over a scratch clone. `t_every_outbound_tool_is_refused_unless_a_person_approved`
+and `t_every_outbound_gate_action_is_covered` are unchanged by this patch and
+must stay green: nothing here lowers a tier.
+
+**This is one cluster, not the whole update.** The same run's log also shows
+stale generated fixtures (`focus-cases.json`, `inbox-tidy-cases.json`,
+`voice-status-cases.json`, `voice-training-cases.json`,
+`phone-voice-cases.json`), a `bind '0x00000000' gets no second listener`
+family, a backup/restore cluster, a note-write outside-text check, a memory
+erase check, hardware golden files and `test_apps.py`. Each needs its own
+investigation; none of them is this.
+
+---
+
+# `gate-action-name.patch` — the gate renamed an action on its way out
+
+Written 2026-10-03, after `test_agent_plan_wiring.py` failed 23 checks and
+`test_agent_retirement_wiring.py` failed 1, all of them asking for a tool's
+action by name and getting something else back.
+
+`_TOOL_ACTIONS` has two kinds of value, and they behave differently:
+
+```python
+"calculator": "auto"                     # a TIER literal
+"jarvis_email_read_run": "email_read"    # an ACTION name
+```
+
+For the second kind nothing happened — the value was passed through. For the
+**first kind, 58 of the 112 entries**, [jarvis_gate.py](jarvis_gate.py)'s
+`action_for_tool()` also **rewrote the returned name**:
+
+```python
+action = f"tool:{name}"      # 58 entries reported as "tool:calculator"
+_SYNTH_TIERS[action] = base
+```
+
+That returned string is not internal. It is what reaches the checker, what the
+audit log stores, and what `jarvis_reach.action_of()` puts on the "What can
+Jarvis reach" page. Three suites expected `"calculator"`; the Reach page showed
+`tool:calculator` when the gate was importable and `calculator` when it was
+not. No config file has ever contained a `tool:` key.
+
+**The fix is smaller than it first looks: only the NAME changes.**
+
+```python
+_SYNTH_TIERS[name] = base     # still registered - this part is load-bearing
+action = name
+```
+
+**The registration must stay, and this is the trap.** A tier literal is *not* a
+key of `[autonomy.tiers]` — there is no `calculator = ...` line. `_tiers()`
+resolves an action with `tiers.get(action, UNKNOWN_TIER)`, and `UNKNOWN_TIER` is
+`"ask"`. So dropping the registration would silently resolve `calculator` to
+`"ask"` instead of `"auto"`, and would do that to all 58 entries — a
+prompt appearing where none belongs, which is the class of bug
+`gate-entries.patch` set out to fix.
+
+**Verified on the owner's real `jarvis_gate.py`**, in both line endings, by
+applying the patch to a copy and importing both versions side by side:
+
+- `calculator` / `memory_search` / `git_commit` / `db_query`: the action name
+  becomes the bare one.
+- the 54 action-name entries (`file_read`, `shell_exec`, `jarvis_ui_control_run`,
+  `send_email`, `run_plan`, ...): **byte-identical**, before and after.
+- **every one of them resolves to the same TIER as before** — `calculator`
+  `"auto"`, `shell_exec` `"ask"`, `web_research` `"auto"`. This is the check
+  that matters, and it is the one that would have caught the trap above.
+- the result still parses, and the patch reverses cleanly.
+
+Nothing parses the old `tool:` prefix, so there is no consumer to migrate:
+`jarvis_content_risk.py:631` and `jarvis_hud.py:1543` build their own `tool:`
+strings for MCP tools and the graph view, and neither reads this action name.
+
+### Test it
+
+```powershell
+py -3 backend\test_agent_plan_wiring.py
+py -3 backend\test_agent_retirement_wiring.py
+py -3 backend\test_reach.py
+```
+
+`test_agent_plan_wiring.py` should go from `36 passed, 23 failed` to all
+passing, and `test_agent_retirement_wiring.py` from `72 passed, 1 failed` to
+all passing. `test_reach.py` is the consumer check.
 
 ---
 

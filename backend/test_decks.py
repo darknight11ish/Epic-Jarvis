@@ -481,6 +481,13 @@ def t_ratings_and_rules():
 
 
 def t_day_rolls_over_by_this_pcs_clock():
+    # Windows has no time.tzset(), so TZ cannot be changed and another timezone
+    # cannot be simulated here at all. CI (Linux) proves this test; on the owner's
+    # PC it is reported as not proven rather than as a failure (2026-10-03).
+    if not hasattr(time, "tzset"):
+        check("SKIPPED (this system has no time.tzset, so another timezone cannot be "
+              "simulated; CI proves this one on Linux)", True)
+        return
     keep_tz = os.environ.get("TZ")
     try:
         os.environ["TZ"] = "Pacific/Auckland"
@@ -1108,6 +1115,11 @@ def t_zero_new_cards_promises_nothing():
 
 
 def t_days_are_calendar_days_across_dst():
+    # See t_day_rolls_over_by_this_pcs_clock above: no time.tzset() on Windows.
+    if not hasattr(time, "tzset"):
+        check("SKIPPED (this system has no time.tzset, so DST cannot be simulated; "
+              "CI proves this one on Linux)", True)
+        return
     keep_tz = os.environ.get("TZ")
     try:
         for tz, y, mo, d, _tomorrow in (("America/New_York", 2026, 3, 7, "2026-03-08"),

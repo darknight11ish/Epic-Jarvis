@@ -24,7 +24,10 @@ guided test come out of the real arithmetic; the approval card, answered
 "approved" at once or never; ZipVoice's and Kokoro's engines by stand-ins
 that make a quiet tone; and nvidia-smi / Ollama through
 tools/gen_second_card_cases.py's World, so "a capable second card" is
-jarvis_second_card's own reading of the owner's two cards.
+jarvis_second_card's own reading of stand-in cards - the owner's two by
+default, one card for the block that says so. Every case gets that stand-in
+(see DEFAULT_CARDS): without it, a `better_voice` block printed whatever
+graphics card the machine running the generator happened to have.
 
 WHAT IS CHANGED AFTER THE RUN, and only this, so the file is the same on
 every machine: the temporary folder and the home folder in the backend's
@@ -56,6 +59,14 @@ FIXTURE = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "voice-training-cases
 for p in (BACKEND, BACKEND / "rebuilt", ROOT / "tools"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+# The fixture is the SHARED contract between the backend and both apps, so it
+# must not depend on the machine that generated it. The owner's own
+# jarvis-framework.toml sets [voice] settings, the cases below print them, and
+# backend/run_suites.py points JARVIS_FRAMEWORK_TOML at a copy of the owner's
+# file - so the committed fixture differed from machine to machine and
+# test_voice_contract.py failed under the suite runner while passing when run by
+# hand (2026-10-03). Pin the settings file this repository ships instead.
+os.environ["JARVIS_FRAMEWORK_TOML"] = str(BACKEND / "rebuilt" / "jarvis-framework.toml")
 
 import numpy as np  # noqa: E402
 import jarvis_speech as S  # noqa: E402
@@ -71,6 +82,24 @@ FIXED_TIME = 1790000000.0
 FIXED_EXPIRES_IN = 170
 FIXED_TOOK = 0.84
 HOME_WORDS = "~/.openjarvis"
+
+#: The stand-in for the PC's own graphics cards, used by every case that does
+#: not name its own.
+#:
+#: jarvis_voices.status() asks jarvis_second_card.detect(), which runs
+#: nvidia-smi - so a case with no stand-in of its own carried whatever cards
+#: the machine running the generator happened to have. That is exactly the
+#: leak the 2026-10-03 pass fixed for jarvis-framework.toml, one layer down:
+#: fifteen `better_voice` blocks ("can_turn_on", "card", "why") read the real
+#: PC. On the owner's PC the real answer happened to spell the same words as
+#: this stand-in ("NVIDIA GeForce RTX 2060" - the owner really does have one
+#: now), so the committed file matched a hand run and the leak only showed on
+#: another machine: with no NVIDIA card readable, the same fifteen blocks say
+#: `can_turn_on: false` and "no NVIDIA graphics card could be read ...", 45
+#: lines of difference. tools/gen_second_card_cases.py's World replaces
+#: nvidia-smi, so what is left is jarvis_second_card's own reading of
+#: stand-in cards, the same on every machine.
+DEFAULT_CARDS = SCG.SMI["2080s_2060"]
 
 OWNER = [1.0, 0.2, 0.0, 0.0, 0.1, 0.0, 0.0, 0.0]
 STRANGER = [0.0, 0.0, 1.0, 0.0, 0.0, 0.3, 0.0, 0.0]
@@ -190,12 +219,22 @@ class StandInSherpa:
 
 class World:
     """A temporary config folder for every voice module, the stand-in
-    models, and the jarvis_voices hooks test_voices.py replaces."""
+    models, and the jarvis_voices hooks test_voices.py replaces.
 
-    def __init__(self, models: str = "both"):
+    `cards` is the nvidia-smi stand-in (SCG's own lines) every case reads
+    through jarvis_second_card - the owner's two cards unless a case names
+    its own. It is not optional on purpose: a case that reads the machine's
+    real cards is a case whose bytes change from PC to PC."""
+
+    def __init__(self, models: str = "both", cards=DEFAULT_CARDS, windows: bool = True):
         self.models = models            # "both", "small" or "none"
+        self.cards, self.windows = cards, windows
 
     def __enter__(self):
+        # First, so nothing below can read the real nvidia-smi: jarvis_voices
+        # asks jarvis_second_card, which is replaced here for the whole block.
+        self.cards_world = SCG.World(self.cards, windows=self.windows)
+        self.cards_world.install()
         self.tmp = tempfile.TemporaryDirectory()
         d = Path(self.tmp.name)
         self.dir = d
@@ -267,6 +306,7 @@ class World:
             S._TIMINGS.clear()
         self.tmp.cleanup()
         S.reload_engines()
+        self.cards_world.remove()
 
 
 def train_round(r: int, n: int, *, mic="desktop", add=False, finish=False, loud=(),
@@ -538,7 +578,8 @@ def voices_cases():
         keep(w, "builtin_nothing_installed", VO.status(), statuses)
 
     # A voice added and approved; ZipVoice and Kokoro running (stand-ins).
-    with World("both") as w, SCG.World(SCG.SMI["one_card"]):
+    # One card only, so "the better voice" cannot be turned on here.
+    with World("both", cards=SCG.SMI["one_card"], windows=False) as w:
         w.speaking()
         w.train("phone")
         keep(w, "create_accepted", post("/api/voice/voices/create",
@@ -719,15 +760,15 @@ def voices_cases():
         keep(w, "fallback", VO.status(), statuses)
 
     # The owner's two cards: the better voice may be turned on; its card
-    # waits, then is approved.
-    with World("both") as w, SCG.World(SCG.SMI["2080s_2060"], windows=True):
+    # waits, then is approved. (World's own default stand-in is these two.)
+    with World("both") as w:
         keep(w, "better_capable", VO.status(), statuses)
         keep(w, "better_on_pending", post("/api/voice/voices/better", {"enabled": True},
                                           gate=approved, tier_of=ask, spawn=never), posts)
         keep(w, "better_waiting", VO.status(), statuses)
         keep(w, "better_on_again", post("/api/voice/voices/better", {"enabled": True},
                                         gate=approved, tier_of=ask, spawn=never), posts)
-    with World("both") as w, SCG.World(SCG.SMI["2080s_2060"], windows=True):
+    with World("both") as w:
         post("/api/voice/voices/better", {"enabled": True}, **kw)
         keep(w, "better_on", VO.status(), statuses)
 

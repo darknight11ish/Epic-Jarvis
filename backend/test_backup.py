@@ -68,7 +68,28 @@ import jarvis_card_words as W  # noqa: E402
 import jarvis_framework as fw  # noqa: E402
 
 FAILED, PASSED = [], []
-TMP = Path(tempfile.mkdtemp(prefix="jarvis-backup-"))
+
+
+def _scratch_root() -> Path:
+    """A disposable folder the REAL jarvis_documents.check_folder() accepts.
+
+    The OS temp folder is not one on Windows: it lives under AppData, and Jarvis
+    refuses any folder under AppData on purpose (it holds keys and browser
+    data). Every check here that reaches the real check_folder() was failing
+    there for a reason that has nothing to do with backups, so ask first and
+    fall back to a folder beside the user's home where temp is refused
+    (2026-10-03). The root is removed in main() either way.
+    """
+    root = Path(tempfile.mkdtemp(prefix="jarvis-backup-"))
+    try:
+        D.check_folder(str(root))
+        return root
+    except ValueError:
+        shutil.rmtree(root, ignore_errors=True)
+    return Path(tempfile.mkdtemp(prefix=".jarvis-backup-tests-", dir=str(Path.home())))
+
+
+TMP = _scratch_root()
 
 
 def check(name, cond, detail=""):

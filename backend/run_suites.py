@@ -135,8 +135,21 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     the temporary folder with only log_directory changed, and
     JARVIS_FRAMEWORK_TOML points at the copy. A suite that sets
     JARVIS_FRAMEWORK_TOML itself (test_rebuilt, test_router_private_terms)
-    still reads the file it chose."""
+    still reads the file it chose.
+
+    PYTHONIOENCODING is set here too, and it is not about state: it is a
+    bug this runner had on Windows. A Windows console (and a pipe) defaults
+    Python's stdout to the ANSI code page, cp1252 here, and 56 of the
+    suites print a non-ASCII character that cp1252 cannot encode - the
+    Cyrillic host test_youtube.py refuses, an em dash, a curly quote. The
+    print raises UnicodeEncodeError, the suite exits 1, and it is reported
+    as a FAILING SUITE when the check itself passed. test_youtube.py failed
+    that way in both the 15:48 and the 19:09 runs on 2026-10-03, for a link
+    its parser had correctly refused. jarvis_voices.py:2490 and
+    backend/README.md's own preflight line already set this variable for
+    the same reason; the runners simply never did."""
     out = dict(env)
+    out["PYTHONIOENCODING"] = "utf-8"
     cfg = where / "config"
     logs = where / "logs"
     cfg.mkdir(parents=True, exist_ok=True)
@@ -190,9 +203,19 @@ def main(only=()) -> int:
             continue
         t0 = time.time()
         try:
+            # errors="replace" and an explicit utf-8 decode: the child is run
+            # with PYTHONIOENCODING=utf-8 (see private_state), so decoding its
+            # output with the console's own code page raised
+            # UnicodeDecodeError INSIDE subprocess's reader thread, which left
+            # r.stdout as None and crashed this whole runner with
+            # "unsupported operand type(s) for +: 'NoneType' and 'str'" - one
+            # suite's non-ASCII output taking the entire run down with it.
+            # That happened on 2026-10-03, at test_mail_mask.py.
             r = subprocess.run([sys.executable, str(s)], cwd=HERE, env=env,
-                               capture_output=True, text=True, timeout=900)
-            code, out = r.returncode, r.stdout + r.stderr
+                               capture_output=True, text=True, timeout=900,
+                               encoding="utf-8", errors="replace")
+            code = r.returncode
+            out = (r.stdout or "") + (r.stderr or "")
         except subprocess.TimeoutExpired:
             code, out = "timeout", ""
         took = f"{time.time() - t0:5.1f}s"
@@ -220,10 +243,17 @@ def state_env(where: str) -> int:
     """`--state-env DIR`: print, one KEY=VALUE a line, the variables that send
     the suites' state to DIR. apply-patches.ps1 runs the suites itself, one by
     one, and sets these first - so the two runners cannot disagree about
-    where test state goes."""
+    where test state goes.
+
+    PYTHONIOENCODING is printed here for a different reason: apply-patches.ps1
+    runs each suite as its own process, so without it in this list the suites
+    it runs would still be on the console's code page and still crash on a
+    non-ASCII suite name (see private_state). A variable already set to this
+    value is not printed, which is fine - the script's own copy is the same."""
     backend = Path(os.environ.get("JARVIS_BACKEND") or HERE).resolve()
     env = private_state(dict(os.environ), backend, Path(where))
-    for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML"):
+    for k in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR", "JARVIS_FRAMEWORK_TOML",
+              "PYTHONIOENCODING"):
         if env.get(k) and env.get(k) != os.environ.get(k):
             print(f"{k}={env[k]}")
     return 0

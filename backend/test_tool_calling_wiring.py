@@ -37,20 +37,31 @@ def _do_post_source() -> str:
     return ast.unparse(found[0])
 
 
+def _do_post_node():
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    found = [n for n in ast.walk(tree)
+             if isinstance(n, ast.FunctionDef) and n.name == "do_POST"]
+    if len(found) != 1:
+        raise AssertionError(f"expected exactly one do_POST, found {len(found)}")
+    return found[0]
+
+
+def _assigns_to(tree, name):
+    return [n for n in ast.walk(tree)
+            if isinstance(n, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == name for t in n.targets)]
+
+
 def t_use_tools_requires_the_local_lane():
     if missing("jarvis_hud.py"):
         return check("SKIP - " + explain(), True)
-    src = _do_post_source()
-    check("use_tools checks lane == local_model",
-          "use_tools = lane == local_model" in src.replace("\n", " ")
-          or "lane == local_model and" in src, src[:0])
-    # A more precise check than a substring: find the actual assignment and
-    # confirm it is a BoolOp whose operands include the lane comparison -
-    # not just that both strings happen to appear somewhere in the function.
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
-    assigns = [n for n in ast.walk(tree)
-               if isinstance(n, ast.Assign)
-               and any(isinstance(t, ast.Name) and t.id == "use_tools" for t in n.targets)]
+    # This used to be `"use_tools = lane == local_model" in src.replace("\n", " ")`
+    # - a check on how the line is SPELLED, which is why it had to be re-tuned
+    # every time the expression was reformatted (2026-10-03). The assignment is
+    # found as a node now and the checks below take it apart, so the same
+    # property is proven without depending on the whitespace.
+    assigns = _assigns_to(tree, "use_tools")
     check("found exactly one use_tools assignment", len(assigns) == 1, repr(len(assigns)))
     if assigns:
         rhs = ast.unparse(assigns[0].value)
@@ -69,11 +80,35 @@ def t_use_tools_requires_the_local_lane():
 def t_the_degrade_loop_is_skipped_when_tools_are_in_play():
     if missing("jarvis_hud.py"):
         return check("SKIP - " + explain(), True)
-    src = _do_post_source()
-    check("the degrade loop's iterable is conditioned on use_tools",
-          "use_tools else range(len(lanes) + 2)" in src
-          or "range(len(lanes) + 2) if not use_tools" in src
-          or ("_degrade_hops" in src and "use_tools" in src), src)
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    # This used to be a substring hunt for one of three spellings of
+    # `range(len(lanes) + 2)` (2026-10-03). What the check is really for is
+    # the hop list a tool turn is handed, so that is what is read: the loop
+    # must iterate the name, and the name must be empty when use_tools is on.
+    assigns = _assigns_to(tree, "_degrade_hops")
+    check("the degrade loop is sized by one _degrade_hops assignment",
+          len(assigns) == 1, repr(len(assigns)))
+    loops = [n for n in ast.walk(tree) if isinstance(n, ast.For)
+             and (ast.unparse(n.iter) or "") == "_degrade_hops"]
+    check("and the degrade loop really iterates it", len(loops) == 1,
+          repr([ast.unparse(n.iter) for n in ast.walk(tree) if isinstance(n, ast.For)]))
+    if len(assigns) != 1:
+        return
+    rhs = assigns[0].value
+    check("its iterable is conditioned on use_tools",
+          isinstance(rhs, ast.IfExp)
+          and any(isinstance(n, ast.Name) and n.id == "use_tools"
+                  for n in ast.walk(rhs.test)),
+          ast.unparse(rhs))
+    if not isinstance(rhs, ast.IfExp):
+        return
+    # `() if use_tools else range(...)`: a tool turn gets no hops at all.
+    # The order of the branches is the whole property - the old substring hunt
+    # accepted `range(len(lanes) + 2) if not use_tools` as an equivalent
+    # spelling, which is the same thing written the other way round.
+    check("a tool turn is handed NO hops (the empty branch is the use_tools one)",
+          isinstance(rhs.body, ast.Tuple) and not rhs.body.elts,
+          f"use_tools -> {ast.unparse(rhs.body)}")
 
 
 def t_the_plain_relay_path_still_exists_unconditionally_reachable():
@@ -83,11 +118,21 @@ def t_the_plain_relay_path_still_exists_unconditionally_reachable():
     """
     if missing("jarvis_hud.py"):
         return check("SKIP - " + explain(), True)
-    src = _do_post_source()
+    tree = ast.parse(SRC.read_text(encoding="utf-8"))
     check("an `else:` branch containing the original `with upstream:` relay still exists",
-          "with upstream:" in src, "expected the plain-relay path to still be reachable")
-    check("that branch is reachable through an if/else on use_tools, not only the tools path",
-          "if use_tools" in src and "else" in src)
+          "with upstream:" in _do_post_source(),
+          "expected the plain-relay path to still be reachable")
+    # `"if use_tools" in src and "else" in src` was nearly vacuous: any
+    # `if use_tools` anywhere, plus the word `else` anywhere, passed it. The
+    # branch has to be an if/else ON use_tools with something in the else.
+    branches = [n for n in ast.walk(tree)
+                if isinstance(n, ast.If) and isinstance(n.test, ast.Name)
+                and n.test.id == "use_tools"]
+    check("that branch is reachable through an if/else on use_tools, not only "
+          "the tools path",
+          any(n.orelse for n in branches),
+          f"{len(branches)} `if use_tools` branch(es), "
+          f"{sum(1 for n in branches if n.orelse)} with an else")
 
 
 def t_the_tool_branch_calls_run_local_turn_with_the_enabled_tools_whitelist():

@@ -58,6 +58,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import time
@@ -235,6 +236,25 @@ def list_projects() -> list:
     return out
 
 
+def _rmtree_forced(path) -> None:
+    """shutil.rmtree, but able to delete what git wrote.
+
+    Git marks its object files READ-ONLY, and Windows refuses to unlink a
+    read-only file (POSIX does not care). With `ignore_errors=True` that failure
+    was SILENT: a save that failed after its folder was made left the folder
+    behind, so it turned up in the apps list as an unlinked app, and the
+    rollback in create_project() rolled nothing back. Add the write bit back
+    first, then remove (2026-10-03)."""
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in list(dirnames) + list(filenames):
+            try:
+                os.chmod(os.path.join(dirpath, name),
+                         stat.S_IWRITE | stat.S_IREAD | stat.S_IEXEC)
+            except OSError:
+                pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def create_project(name: str, kind: str, title: str = "") -> dict:
     """A new, empty app project: a git repository with a README, a
     .gitignore that keeps build output and signing keys out, and
@@ -260,7 +280,7 @@ def create_project(name: str, kind: str, title: str = "") -> dict:
             _git(["add", "-A"], d)
             _git(["commit", "-q", "-m", f"Start {title}"], d)
         except Exception:
-            shutil.rmtree(d, ignore_errors=True)
+            _rmtree_forced(d)
             raise
     _audit("app_project_created", {"kind": kind})
     return {"name": name, "kind": kind, "title": title}
@@ -271,7 +291,7 @@ def remove_new_project(name: str) -> None:
     used yet (Projects, when saving the project fails afterwards). Only ever
     called with the name create_project() returned a moment ago."""
     with _LOCK:
-        shutil.rmtree(project_dir(name), ignore_errors=True)
+        _rmtree_forced(project_dir(name))
 
 
 # --------------------------------------------------------------------------

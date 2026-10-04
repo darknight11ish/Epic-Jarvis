@@ -138,6 +138,18 @@ $PATCHES = @(
     # patch here touches. Listed last for readability, not because order
     # matters for this one.
     'ui-control-wiring.patch'
+    # The tool->action gaps (2026-10-03). Eleven names jarvis_agent.py's
+    # TOOLS have always put to jarvis_gate had no _TOOL_ACTIONS entry, so
+    # action_for_tool() fell through to "unclassified_tool" and every call
+    # asked. It only ADDS entries, at the very END of the _TOOL_ACTIONS dict
+    # (after "persona_write"), so it touches no line any other patch edits -
+    # not the entries ui-control-wiring, plan-gate, email-send, draft-email
+    # or inbox-tidy add near the top of that dict, and not the closing brace
+    # the _RANK and _NO_RULE_FROM_DENIAL blocks further down are built on.
+    # It still goes right after ui-control-wiring because that is the last
+    # patch in this list that puts lines into _TOOL_ACTIONS above this one's
+    # own region - the table this patch completes.
+    'gate-entries.patch'
     # Also independent - touches jarvis_hud.py's /api/chat, but a different
     # few lines than degrade-filter or any other patch that lands there.
     'ollama-direct.patch'
@@ -454,10 +466,6 @@ $PATCHES = @(
     # jarvis_manner.py copied in; without it the routes answer 503 and
     # answers are worded as before.
     'manner.patch'
-    # Per-model thinking levels (2026-10-01, Section 5.5): GET and POST
-    # /api/thinking, no approval card either way. Its context is manner's
-    # route blocks. Needs jarvis_thinking.py copied in.
-    'thinking.patch'
     # "Stop everything" (the owner's decision of 2026-09-25): POST
     # /api/stop_all halts a running task, the tools of the answer being
     # written, and anything registered with jarvis_stop_all; it never
@@ -471,6 +479,15 @@ $PATCHES = @(
     # and power-mode's POST block, so it goes after both. Needs
     # jarvis_focus.py copied in; without it the routes answer 503.
     'focus.patch'
+    # Per-model thinking levels (2026-10-01, Section 5.5): GET and POST
+    # /api/thinking, no approval card either way. It goes AFTER focus.patch:
+    # its first hunk's trailing context is focus's own
+    # `if path in ("/api/focus", ...)` block, which does not exist in the file
+    # until focus.patch has inserted it. Applying it first makes `git apply`
+    # fail on that hunk (no fuzz, no --3way), which stops the WHOLE run with
+    # "N patch(es) will not apply" and leaves the backend unchanged. Needs
+    # jarvis_thinking.py copied in.
+    'thinking.patch'
     # "What asks first" (the owner's decisions of 2026-09-26, after the
     # approvals audit): GET /api/asks_first (every action and whether it
     # asks, from this PC's own settings), POST /api/asks_first/tier (stricter
@@ -1027,6 +1044,22 @@ $PATCHES = @(
     # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'quiz-cloud.patch'
+    # The gate renamed an action on its way out (2026-10-03). For the 58
+    # _TOOL_ACTIONS entries whose value is a TIER literal ("calculator": "auto"),
+    # action_for_tool() returned f"tool:{name}" as the action name. That string
+    # is what goes to the checker, into the audit log, and onto the "What can
+    # Jarvis reach" page (jarvis_reach.action_of) - and no config file, page or
+    # suite has ever used it. Three suites expected "calculator" and got
+    # "tool:calculator". It now returns the bare name.
+    #
+    # The entry is still REGISTERED in _SYNTH_TIERS under that bare name: a
+    # tier literal is not a key of [autonomy.tiers], so _tiers()'s
+    # tiers.get(action, UNKNOWN_TIER) would otherwise resolve "calculator" to
+    # "ask" instead of "auto". That registration is load-bearing and stays.
+    #
+    # One hunk, in action_for_tool, which no other patch touches - so it can go
+    # last, like every new patch, with no ordering constraint.
+    'gate-action-name.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

@@ -215,7 +215,7 @@
     "status_off": {
       "body": {
         "available": false,
-        "folder": "/home/owner/Vault/Jarvis Wiki",
+        "folder": "/home/owner/Vault\\Jarvis Wiki",
         "folder_why": "",
         "pages": 1,
         "reads": [
@@ -261,7 +261,7 @@
     "status_ready": {
       "body": {
         "available": true,
-        "folder": "/home/owner/Vault/Jarvis Wiki",
+        "folder": "/home/owner/Vault\\Jarvis Wiki",
         "folder_why": "",
         "pages": 1,
         "reads": [
@@ -307,7 +307,7 @@
     "status_running": {
       "body": {
         "available": true,
-        "folder": "/home/owner/Vault/Jarvis Wiki",
+        "folder": "/home/owner/Vault\\Jarvis Wiki",
         "folder_why": "",
         "pages": 1,
         "reads": [

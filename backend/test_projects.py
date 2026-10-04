@@ -58,6 +58,7 @@ import json
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -642,13 +643,28 @@ def t_an_older_projects_db_gains_the_new_column():
           b["sensitive"] is True and b["unmark"] == "card")
 
 
+def _rmtree(path):
+    """shutil.rmtree that can also delete what git wrote. Git marks its object
+    files READ-ONLY, and Windows refuses to unlink a read-only file - POSIX does
+    not care, so a plain rmtree works in CI and quietly left every earlier
+    test's app folders behind on the owner's PC. That is why the names checked
+    below came back with "doomed", "notes-app" and the rest (2026-10-03)."""
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in list(dirnames) + list(filenames):
+            try:
+                os.chmod(os.path.join(dirpath, name), stat.S_IWRITE)
+            except OSError:
+                pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def _git_here() -> bool:
     if shutil.which("git") is None:
         print("SKIP  git is not installed here - the app tests below need it")
         return False
     # Every app test starts with no app folders at all.
     import jarvis_app_workspace as W
-    shutil.rmtree(W.root(), ignore_errors=True)
+    _rmtree(W.root())
     return True
 
 

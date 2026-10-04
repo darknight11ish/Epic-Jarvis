@@ -58,6 +58,14 @@ FIXTURE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "cont
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+# The fixture is the SHARED contract between the backend and both apps, so it
+# must not depend on the machine that generated it. The owner's own
+# jarvis-framework.toml sets [voice] settings, the cases below print them, and
+# backend/run_suites.py points JARVIS_FRAMEWORK_TOML at a copy of the owner's
+# file - so the committed fixture differed from machine to machine and
+# test_voice_contract.py failed under the suite runner while passing when run by
+# hand (2026-10-03). Pin the settings file this repository ships instead.
+os.environ["JARVIS_FRAMEWORK_TOML"] = str(BACKEND / "rebuilt" / "jarvis-framework.toml")
 
 import numpy as np  # noqa: E402
 import jarvis_speech as S  # noqa: E402
@@ -880,7 +888,10 @@ def main(argv) -> int:
         print("phone-voice-cases.json matches the producer.")
         return 0
     FIXTURE.parent.mkdir(parents=True, exist_ok=True)
-    FIXTURE.write_text(text, encoding="utf-8")
+    # newline="\n": without it this wrote CRLF on Windows and LF elsewhere, and
+    # the committed copy was CRLF because of exactly that. It is LF now, like
+    # every other fixture here (.gitattributes: LF everywhere).
+    FIXTURE.write_text(text, encoding="utf-8", newline="\n")
     print(f"wrote {FIXTURE.relative_to(ROOT)}")
     return 0
 

@@ -70,6 +70,35 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_voice as JV  # noqa: E402
 import jarvis_f5_worker as W  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `after[i:i + 1400]` counted characters from the route header and hoped
+    everything the check names was inside the next 1400 of them - a promise
+    about how long the route stays, which had to be re-tuned by hand when it
+    grew (2026-10-03). The block ends where the indentation returns to the
+    level of the line the marker sits on, however long it grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
 
 
@@ -898,8 +927,8 @@ def t_nothing_leaves_at_run_time():
           and "email" not in blob, blob[:300])
     check("the module never prints or logs anything itself",
           not re.search(r"^\s*print\(", re.sub(r'def _time_cli[\s\S]*', "",
-                                              (HERE / "jarvis_voices.py").read_text()), re.M)
-          and "logging." not in (HERE / "jarvis_voices.py").read_text())
+                                              (HERE / "jarvis_voices.py").read_text(encoding="utf-8")), re.M)
+          and "logging." not in (HERE / "jarvis_voices.py").read_text(encoding="utf-8"))
 
 
 # ------------------------------------------------------ the real ZipVoice --
@@ -985,15 +1014,15 @@ def t_the_patch():
           "reverses, and big-model, wiki and second-card still reverse after it", ok, err)
     if not ok:
         return
-    i = after.index('if path == "/api/voice/voices":')
-    blk = after[i:i + 1400]
+    blk = _block(after, 'if path == "/api/voice/voices":')
+    check("the GET /api/voice/voices route is still there to check", bool(blk))
     check("GET /api/voice/voices checks origin and token and answers status()",
           "_origin_ok(self)" in blk and "_token_ok(self)" in blk
           and "jarvis_voices.status()" in blk)
     check("... and a missing module is a 503, like the other voice routes",
           "except ImportError:" in blk and "self._send(503" in blk)
-    i = after.index('if route in ("/api/voice/voices/create"')
-    blk = after[i:i + 3400]
+    blk = _block(after, 'if route in ("/api/voice/voices/create"')
+    check("the POST voices route is still there to check", bool(blk))
     check("POST create/active/delete/better check origin and token and hand the body over",
           "_origin_ok(self)" in blk and "_token_ok(self)" in blk
           and "jarvis_voices.handle_post(route, body)" in blk
@@ -1007,27 +1036,26 @@ def t_the_patch():
           and after.index('if route in ("/api/big-model"')
           < after.index('if route in ("/api/voice/voices/create"'))
     check("the big model's blocks are untouched",
-          before[before.index('if route in ("/api/big-model"'):].split("\n\n")[0]
-          == after[after.index('if route in ("/api/big-model"'):].split("\n\n")[0])
+          _block(before, 'if route in ("/api/big-model"')
+          == _block(after, 'if route in ("/api/big-model"'))
     check("the approval notice knows custom_voice and better_voice_enable stay on this PC",
           '"custom_voice": ("yes", "local",' in ga and '"better_voice_enable": ("yes", "local",' in ga
           and '"big_model_enable"' in ga)
-    i = after.index('if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample"):')
-    blk = after[i:after.index('if route in ("/api/voice/voices/create"')]
+    blk = _block(after, 'if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample"):')
+    check("the face_animal/sample route is still there to check", bool(blk))
     check("POST face_animal/try and sample ('Hear it') check origin and token and answer a WAV or words",
           "_origin_ok(self)" in blk and "_token_ok(self)" in blk
           and "jarvis_voices.handle_audio(route, body)" in blk and 'ctype="audio/wav"' in blk
           and "str(exc)" not in blk)
-    for start, end in (('        if path == "/api/voice/voices"', '        if path in ("/api/memory/pending"'),
-                       ('        if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample")',
-                        '        if route in ("/api/voice/voices/create"'),
-                       ('        if route in ("/api/voice/voices/create"', '        if route in ("/api/memory/forget"')):
-        block = after[after.index(start):after.index(end)]
+    for start in ('if path == "/api/voice/voices"',
+                  'if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample")',
+                  'if route in ("/api/voice/voices/create"'):
+        block = _block(after, start)
         try:
             compile("def f(self, path, route):\n" + block, "<patched block>", "exec")
-            check(f"the patched block {start.strip()[:34]}... compiles", True)
+            check(f"the patched block {start[:34]}... compiles", True)
         except SyntaxError as exc:
-            check(f"the patched block {start.strip()[:34]}... compiles", False, str(exc))
+            check(f"the patched block {start[:34]}... compiles", False, str(exc))
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()

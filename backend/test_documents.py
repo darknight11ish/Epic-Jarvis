@@ -59,8 +59,58 @@ import _stack  # noqa: E402
 import jarvis_agent as AG  # noqa: E402
 import jarvis_documents as D  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `after[i:i + 200]` counted characters from the install call and hoped the
+    two guards were inside the next 200 of them - a promise about how long the
+    call stays, which had to be re-tuned by hand when it grew (2026-10-03).
+    The call ends where the indentation comes back to its own level, however
+    many lines it grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
-TMP = Path(tempfile.mkdtemp(prefix="jarvis-documents-"))
+
+
+def _scratch_root() -> Path:
+    """A disposable folder the REAL jarvis_documents.check_folder() accepts.
+
+    The OS temp folder is not one on Windows: it lives under AppData, and Jarvis
+    refuses any folder under AppData on purpose (it holds keys and browser
+    data). Every check here that reaches the real check_folder() was failing
+    there for a reason that has nothing to do with folders, so ask first and
+    fall back to a folder beside the user's home where temp is refused
+    (2026-10-03). The root is removed in main() either way.
+    """
+    root = Path(tempfile.mkdtemp(prefix="jarvis-documents-"))
+    try:
+        D.check_folder(str(root))
+        return root
+    except ValueError:
+        shutil.rmtree(root, ignore_errors=True)
+    return Path(tempfile.mkdtemp(prefix=".jarvis-documents-tests-", dir=str(Path.home())))
+
+
+TMP = _scratch_root()
 CONF = TMP / "config"
 CONF.mkdir()
 D._config_dir = lambda: CONF
@@ -742,9 +792,10 @@ def t_the_patch():
         j = after.find("jarvis_stop_all.install(Handler")
         k = after.find("_loopback_companion(bind, HUD_PORT, Handler)\n    print(")
         check("installed after stop-all, before anything listens", -1 < j < i < k, (j, i, k))
+        call = _block(after, "jarvis_documents.install(Handler")
+        check("the install call is still there to check", bool(call))
         check("with the server's own origin and token checks",
-              "origin_ok=_origin_ok" in after[i:i + 200] and "token_ok=_token_ok"
-              in after[i:i + 200])
+              "origin_ok=_origin_ok" in call and "token_ok=_token_ok" in call)
     finally:
         shutil.rmtree(d, ignore_errors=True)
     import _where

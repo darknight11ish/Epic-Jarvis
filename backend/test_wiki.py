@@ -59,6 +59,35 @@ require_shipped("jarvis_wiki.py", "jarvis_notes.py", "jarvis_second_card.py")
 import jarvis_second_card as SC  # noqa: E402
 import jarvis_wiki as W  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `after[i:i + 1800]` counted characters from the route header and hoped
+    everything the check names was inside the next 1800 of them - a promise
+    about how long the route stays, which had to be re-tuned by hand when it
+    grew (2026-10-03). The block ends where the indentation returns to the
+    level of the line the marker sits on, however long it grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
 LANE = SC.Lane(url="http://127.0.0.1:11435", model="qwen3:14b", num_ctx=16384,
                why="Wiki builder: qwen3:14b on the RTX 2060")
@@ -234,6 +263,22 @@ def t_the_source_list():
         s = {x["name"]: x for x in W.status(lane_for=lambda: LANE)["sources"]}
         check("an unchanged source is 'in_wiki' and says so", s["notes.txt"]["state"] == "in_wiki"
               and "Already in the wiki" in s["notes.txt"]["why"])
+        # A source saved with WINDOWS line endings must hash the same as the
+        # wiki's own stored text, or it reads as "changed" forever and every
+        # later look re-ingests it. 2026-10-03: jarvis_wiki hashed the raw bytes
+        # and normalised the text AFTERWARDS, so the two disagreed about \r\n.
+        # Written with an explicit "\r\n" so the file really is CRLF whatever
+        # this machine's newline translation does.
+        (v.src / "windows.txt").write_bytes(b"plain text\r\n")
+        W._write_atomic(v.wiki / W.CACHE_NAME, json.dumps({"sources": {
+            "notes.txt": {"sha256": W._sha(b"plain text\n"), "added": "2026-09-20"},
+            "windows.txt": {"sha256": W._sha(b"plain text\n"), "added": "2026-09-20"},
+            "meeting.md": {"sha256": "0" * 64, "added": "2026-09-20"}}}))
+        s = {x["name"]: x for x in W.status(lane_for=lambda: LANE)["sources"]}
+        check("a CRLF-saved source is read as unchanged, like the wiki's own text",
+              s["windows.txt"]["state"] == "in_wiki"
+              and "Already in the wiki" in s["windows.txt"]["why"],
+              repr(s.get("windows.txt")))
         check("an edited source is 'changed'", s["meeting.md"]["state"] == "changed")
         check("a .pdf is listed as unreadable, saying only .md and .txt are read",
               s["scan.pdf"]["state"] == "unreadable" and ".md and .txt" in s["scan.pdf"]["why"])
@@ -879,14 +924,14 @@ def t_the_patch():
           "reverses, and second-card still reverses after it", ok, err)
     if not ok:
         return
-    i = after.index('if path in ("/api/wiki", "/api/wiki/ingest"):')
-    w = after[i:i + 1800]
+    w = _block(after, 'if path in ("/api/wiki", "/api/wiki/ingest"):')
+    check("the wiki GET route is still there to check", bool(w))
     check("GET /api/wiki and /api/wiki/ingest check origin and token",
           "_origin_ok(self)" in w and "_token_ok(self)" in w)
     check("GET /api/wiki answers status(); ?id= answers ingest_status",
           "jarvis_wiki.status()" in w and "jarvis_wiki.ingest_status(wid)" in w)
-    i = after.index('if route == "/api/wiki/ingest":')
-    w = after[i:i + 1600]
+    w = _block(after, 'if route == "/api/wiki/ingest":')
+    check("the wiki POST route is still there to check", bool(w))
     check("POST /api/wiki/ingest checks origin and token and hands the body over",
           "_origin_ok(self)" in w and "_token_ok(self)" in w and "jarvis_wiki.handle_post(body)" in w)
     check("the routes sit after second-card's",
@@ -894,13 +939,12 @@ def t_the_patch():
           and after.index('if route == "/api/second-card":')
           < after.index('if route == "/api/wiki/ingest":'))
     check("second-card's blocks are untouched",
-          before[before.index('if route == "/api/second-card":'):].split("\n\n")[0]
-          == after[after.index('if route == "/api/second-card":'):].split("\n\n")[0])
+          _block(before, 'if route == "/api/second-card":')
+          == _block(after, 'if route == "/api/second-card":'))
     check("the approval notice knows wiki_update stays on this PC",
           '"wiki_update": ("yes", "local",' in ga and '"second_card_enable"' in ga)
     # The added GET block is valid Python inside a method.
-    block = after[after.index('        if path in ("/api/wiki"'):
-                  after.index('        if path in ("/api/memory/pending"')]
+    block = _block(after, 'if path in ("/api/wiki"')
     try:
         compile("def f(self, path):\n" + block, "<patched block>", "exec")
         check("the patched GET block compiles", True)

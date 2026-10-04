@@ -952,6 +952,41 @@ def t_the_models_tools():
               and len(w.s.listed()) == n and steps[-1]["ran"] is False, res)
         check("every scheduler tool is in TOOLS with a schema",
               all(n in AG.TOOLS for n in AG.SCHEDULE_TOOLS))
+
+        # jarvis_quick.run() is declared `-> Optional[Result]` (its own line
+        # 3711). The todo_done branch always checked for None; set_timer and
+        # todo_add did not, so a None there was an AttributeError on res.ids,
+        # mid-turn, after the model had already asked for a timer. Found by
+        # pyright's reportOptionalMemberAccess, 2026-10-03 - and proven against
+        # the deployed file, where both raised:
+        #   AttributeError: 'NoneType' object has no attribute 'ids'
+        import jarvis_quick as Q
+        real_run = Q.run
+        Q.run = lambda *a, **k: None
+        try:
+            for name, args, want_error in (
+                    ("set_timer", {"minutes": 10}, "the timer was not set"),
+                    ("todo_add", {"text": "buy stamps"}, "the item was not added")):
+                # Counts, not emptiness: earlier in this same test a real
+                # set_timer and todo_add already ran, so the scheduler is not
+                # empty and "nothing at all" would be the wrong thing to assert.
+                before = (len(w.s.timers()), len(w.s.todos()))
+                raised = None
+                try:
+                    res, _st = call(name, args, clean)
+                except Exception as exc:            # noqa: BLE001 - the bug
+                    raised = exc
+                    res = {}
+                after = (len(w.s.timers()), len(w.s.todos()))
+                check(f"{name}: a None from jarvis_quick.run is a plain refusal, "
+                      f"not an AttributeError",
+                      raised is None and res.get("ok") is False
+                      and res.get("error") == want_error,
+                      repr(raised) if raised is not None else repr(res))
+                check(f"{name}: and that None added nothing",
+                      after == before, f"{before} -> {after}")
+        finally:
+            Q.run = real_run
     finally:
         S._SCHED = None
 

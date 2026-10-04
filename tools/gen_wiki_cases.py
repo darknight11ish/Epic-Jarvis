@@ -113,7 +113,15 @@ class Vault:
     def add_seed_list(self):
         """seed-list.txt added to the wiki earlier and unchanged since;
         planting-dates.md added earlier and edited since."""
-        sha = W._sha((self.wiki / W.SOURCES_DIR / "seed-list.txt").read_bytes())
+        raw = (self.wiki / W.SOURCES_DIR / "seed-list.txt").read_bytes()
+        # The hash the module itself computes when it reads the file back: its
+        # TEXT with the line endings normalised, never the raw bytes. Seeding the
+        # cache from the raw bytes meant a seed file saved with Windows line
+        # endings (write_text does that here) hashed one way in this cache and
+        # the other way when read, so this generator quietly produced a fixture
+        # with no "in_wiki" case at all and the apps' shared file lost that state
+        # (2026-10-03).
+        sha = W._sha(raw.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n").encode("utf-8"))
         (self.wiki / W.CACHE_NAME).write_text(json.dumps(
             {"version": 1, "sources": {
                 "seed-list.txt": {"sha256": sha, "added": "2026-09-20", "pages": []},

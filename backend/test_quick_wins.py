@@ -537,11 +537,23 @@ def t_what_did_i_miss_since_you_last_talked():
     w.clock.t = local(2026, 9, 25, 11, 0)
     w.s.tick()
     w.clock.t = local(2026, 9, 25, 14, 30)
+    # Build the deps OUTSIDE the no-socket window. Building them touches the
+    # memory store, and on a machine that has never run one that loads - and the
+    # first time, downloads - the embedding model over HTTP. That download is
+    # not the briefing opening a socket, and counting it inside the window made
+    # this check read as a bug while nothing was wrong (2026-10-03).
+    deps = _deps(pending=2, created=[local(2026, 9, 25, 8, 0),
+                                     local(2026, 9, 25, 12, 0)])
+    # Warm it once, outside the window: the first pass through the memory store
+    # loads - and the very first time on a machine, downloads from
+    # huggingface.co:443 - the embedding model. That is the model arriving, not
+    # the briefing reaching out, so the SECOND pass is what gets measured
+    # (2026-10-03).
+    B.build_missed(sched=w.s, now=w.clock.t, since=local(2026, 9, 25, 9, 30), deps=deps)
     with NoSockets() as ns:
         b = B.build_missed(sched=w.s, now=w.clock.t, since=local(2026, 9, 25, 9, 30),
-                           deps=_deps(pending=2, created=[local(2026, 9, 25, 8, 0),
-                                                          local(2026, 9, 25, 12, 0)]))
-    check("no socket, no model", not ns.tried)
+                           deps=deps)
+    check("no socket, no model", not ns.tried, repr(ns.tried))
     check("the heading says since when, and what that time is",
           b["heading"] == "What you missed since 09:30 today, when you last talked to Jarvis.",
           b["heading"])

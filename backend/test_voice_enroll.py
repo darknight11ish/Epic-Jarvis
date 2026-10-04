@@ -64,6 +64,25 @@ from _voice_test import semantic_voice  # noqa: E402
 SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
 
+
+def _block(text, marker):
+    """The statement `marker` opens, read off the tree, not off an offset."""
+    off = text.find(marker)
+    if off < 0:
+        return ""
+    line = text.count("\n", 0, off) + 1
+    best = None
+    for n in ast.walk(ast.parse(text)):
+        if not isinstance(n, ast.stmt):
+            continue
+        end = n.end_lineno or n.lineno
+        if not (n.lineno <= line <= end):
+            continue
+        if best is None or (n.lineno, -end) > (best.lineno,
+                                               -(best.end_lineno or best.lineno)):
+            best = n
+    return (ast.get_source_segment(text, best) or "") if best is not None else ""
+
 # Every enrolment here, real or fake, lands in a temporary folder. Approving
 # a card also rebuilds (or deletes) the "hey Jarvis" verifier that sits
 # beside the voice print, and this suite, run on the owner's PC, must never
@@ -791,11 +810,18 @@ def t_the_real_file():
         return check("voice-enroll.patch is applied to jarvis_hud.py", False,
                      "run scripts/apply-patches.ps1 first")
     ast.parse(src)
-    i = src.index('route == "/api/voice/enroll"')
-    seg = src[i:i + 2500]
+    # `seg = src[i:i + 2500]` counted characters from the route header and
+    # hoped the staging call and the token check were inside the next 2500 of
+    # them. The AST statement travels with the edit; a window has to be
+    # re-measured by hand (2026-10-03).
+    seg = _block(src, 'route == "/api/voice/enroll"')
+    check("the voice-enroll route is still there to check", bool(seg))
     check("the patched route is there and stages through jarvis_voice_enroll",
           "jarvis_voice_enroll.stage(raw)" in seg)
-    check("and checks the token", "_token_ok(self)" in seg[:seg.index("_read_body")])
+    read_at = seg.find("_read_body")
+    check("and checks the token",
+          "_token_ok(self)" in seg
+          and -1 < seg.find("_token_ok(self)") < (read_at if read_at != -1 else len(seg)))
 
 
 if __name__ == "__main__":
