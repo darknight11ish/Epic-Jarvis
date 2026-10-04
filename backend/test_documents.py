@@ -300,8 +300,17 @@ def t_only_inside_a_listed_folder():
                              [os.path.dirname(prog)]) is None)
     code, out = D.request_add({"path": prog}, here=True, spawn=run_now,
                               gate=lambda *a: Verdict(True, "approved"), tier_of=lambda a: "ask")
-    check("... and cannot be added", code == 400 and "never looks there" in out.get("error", ""),
-          out)
+    # TWO refusal wordings reach here, and either is the right answer: a folder
+    # inside the program folder is refused because it is Jarvis's own ("Jarvis
+    # never looks there...") or because the folder it sits in is a system one
+    # ("that folder belongs to Windows or your programs, not to your own
+    # files"). Which one fires depends on where the backend lives - under
+    # Documents on the owner's PC, under a TEMP/AppData path in a staged run,
+    # where _too_broad() matches first. Demanding the one wording made this
+    # check fail against a staged backend for no product reason (2026-10-04).
+    check("... and cannot be added",
+          code == 400 and ("never looks there" in out.get("error", "")
+                           or "not to your own files" in out.get("error", "")), out)
     real = D.protected
     D.protected = lambda p: True
     try:
