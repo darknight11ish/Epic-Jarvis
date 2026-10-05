@@ -310,13 +310,29 @@ def t_an_approved_tool_does_not_run_for_an_app_that_left():
         opener, calls = opener_for([calc_call(), ("done", "stop")],
                                    [("content", "It is 4."), ("done", "stop")])
         wrote = []
+        card_raised = []
 
         def closed_app(data):
-            # The phone gave up: every write after the first fails, the way
+            # The phone gave up WHILE THE CARD WAITED, which is what this
+            # test is about: every write reaches it until the one that tells
+            # it a card is waiting, and every write after that fails, the way
             # a socket with nobody reading it does.
-            if wrote:
+            #
+            # "every write after the FIRST fails" made the result depend on
+            # how fast the machine got through the model round: the
+            # heartbeat's first keepalive goes out 50 ms into a turn
+            # (keepalive_seconds=0.05 below), so on a slower machine - the
+            # Windows CI runner, 2026-10-05, PR #47 - the app was already
+            # gone before the gate was called. run_local_turn's own
+            # `if out.gone` before each call then raised ClientGone on the
+            # path that rings no doorbell, and the check below failed even
+            # though the tool had rightly not run. Letting the app die at the
+            # card instead makes the named scenario happen on any machine.
+            if card_raised:
                 raise BrokenPipeError(32, "Broken pipe")
             wrote.append(data)
+            if b"jarvis-status approval" in data:
+                card_raised.append(data)
         s = AG.run_local_turn([{"role": "user", "content": "2+2?"}], "jarvis-primary",
                               ollama_url="http://127.0.0.1:11434", stream_out=closed_app,
                               open_stream=opener, enabled_tools={"calculator"},

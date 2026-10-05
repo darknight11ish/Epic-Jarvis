@@ -105,7 +105,16 @@ class Verdict:
 
 
 def graph():
-    g = _TMP / f"graph{time.time_ns()}"
+    # tempfile.mkdtemp, not `_TMP / f"graph{time.time_ns()}"`. On Windows
+    # time.time_ns() is GetSystemTimeAsFileTime: 100-ns units, but the value
+    # only moves on the system timer tick (15.6 ms by default; about 0.5 ms on
+    # this PC, because desktop programs ask Windows for a finer timer). Two
+    # calls inside one tick return the SAME number, so the second one asks for
+    # a folder the first one already made and `mkdir(parents=True)` dies with
+    # `FileExistsError: [WinError 183] ... graph<ns>\logseq` - which is what
+    # the Windows CI runner reported on 2026-10-05 (PR #47). mkdtemp asks the
+    # filesystem for a free name instead, so it cannot collide on any machine.
+    g = Path(tempfile.mkdtemp(dir=_TMP, prefix="graph"))
     (g / "logseq").mkdir(parents=True)
     (g / "journals").mkdir()
     os.environ[NC.LOGSEQ_GRAPH_ENV] = str(g)
