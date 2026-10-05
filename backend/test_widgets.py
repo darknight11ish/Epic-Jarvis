@@ -86,7 +86,18 @@ GOOD = {"name": "Morning",
 
 
 def fresh_store(clock=None) -> W.Store:
-    p = TMP / f"w-{time.time_ns()}.json"
+    # A fresh FOLDER per store, from tempfile.mkdtemp - not
+    # `TMP / f"w-{time.time_ns()}.json"`. Measured on the owner's PC
+    # (2026-10-05): consecutive time.time_ns() calls were identical 399 times
+    # out of 399, so this function twice in a row returned the SAME path 200
+    # times out of 200. Two tests then share one widgets file, and the second
+    # one starts with the first one's list. Proving it by pinning the name
+    # makes 3 checks fail (147 passed, 3 failed: "chat: a preview, not a
+    # widget", "GET /api/widgets: the list and the menu", "POST delete").
+    # mkdtemp asks the filesystem for a free name instead, so no two calls can
+    # collide on any machine; the file itself still does not exist until
+    # W.Store writes it, which is what these checks rely on.
+    p = Path(tempfile.mkdtemp(dir=TMP, prefix="w-")) / "widgets.json"
     return W.Store(p, clock=clock or time.time)
 
 

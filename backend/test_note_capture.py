@@ -85,7 +85,16 @@ class Verdict:
 
 
 def graph():
-    g = _TMP / f"graph{time.time_ns()}"
+    # tempfile.mkdtemp, not `_TMP / f"graph{time.time_ns()}"`. On Windows
+    # time.time_ns() is GetSystemTimeAsFileTime: 100-ns units, but the value
+    # only moves on the system timer tick (15.6 ms by default; about 0.5 ms on
+    # this PC, because desktop programs ask Windows for a finer timer). Two
+    # calls inside one tick return the SAME number, so the second one asks for
+    # a folder the first one already made and `mkdir(parents=True)` dies with
+    # `FileExistsError: [WinError 183] ... graph<ns>\logseq` - which is what
+    # the Windows CI runner reported on 2026-10-05 (PR #47). mkdtemp asks the
+    # filesystem for a free name instead, so it cannot collide on any machine.
+    g = Path(tempfile.mkdtemp(dir=_TMP, prefix="graph"))
     (g / "logseq").mkdir(parents=True)
     (g / "journals").mkdir()
     os.environ[NC.LOGSEQ_GRAPH_ENV] = str(g)
@@ -133,8 +142,12 @@ def t_logseq_refuses_what_it_should():
     check("no graph folder: refused at plan time, with where to set it",
           p.reason_empty and "graph_directory" in p.reason_empty)
     check("and run() writes nothing", NC.run(p, approved=True)["ok"] is False)
-    plain = _TMP / f"plain{time.time_ns()}"
-    plain.mkdir()
+    # mkdtemp, not `_TMP / f"plain{time.time_ns()}"`: the same Windows timer
+    # tick that made graph() collide (above) would let a second call name this
+    # folder again, and `plain.mkdir()` would then die with
+    # FileExistsError [WinError 183]. mkdtemp asks the filesystem for a free
+    # name, so it cannot collide on any machine.
+    plain = Path(tempfile.mkdtemp(dir=_TMP, prefix="plain"))
     os.environ[NC.LOGSEQ_GRAPH_ENV] = str(plain)
     check("a folder that is not a Logseq graph is refused",
           "does not look like a Logseq graph" in NC.plan("logseq", "x").reason_empty)

@@ -104,7 +104,13 @@ def clear_env():
 def vault(settings=None, name=None) -> Path:
     """A fresh vault, set as THE vault. `settings` becomes daily-notes.json."""
     clear_env()
-    v = _TMP / (name or f"vault{time.time_ns()}")
+    # tempfile.mkdtemp, not `f"vault{time.time_ns()}"`: on Windows
+    # time.time_ns() only moves on the system timer tick, so two vaults asked
+    # for inside one tick get the same folder and the second
+    # `mkdir(parents=True)` dies with `FileExistsError: [WinError 183] ...
+    # vault<ns>\.obsidian` - what the Windows CI runner reported on
+    # 2026-10-05 (PR #47). mkdtemp asks the filesystem for a free name.
+    v = (_TMP / name) if name else Path(tempfile.mkdtemp(dir=_TMP, prefix="vault"))
     (v / ".obsidian").mkdir(parents=True)
     if settings is not None:
         (v / ".obsidian" / "daily-notes.json").write_text(
@@ -203,14 +209,20 @@ def t_no_vault_no_write_and_never_created():
     check("a vault folder that does not exist: refused", "there is no folder" in p.reason_empty)
     check("and run() does not create it",
           NC.run(p, approved=True)["ok"] is False and not missing.exists())
-    plain = _TMP / f"plain{time.time_ns()}"
-    plain.mkdir()
+    # mkdtemp, not `_TMP / f"plain{time.time_ns()}"`: on Windows the clock only
+    # moves on the system timer tick, so the same name can come back twice and
+    # `plain.mkdir()` then dies with FileExistsError [WinError 183] - the bug
+    # vault() above was fixed for. mkdtemp asks the filesystem for a free name.
+    plain = Path(tempfile.mkdtemp(dir=_TMP, prefix="plain"))
     os.environ[N.OBSIDIAN_VAULT_ENV] = str(plain)
     check("a folder with no .obsidian inside is not a vault",
           ".obsidian" in NC.plan("obsidian", "x", now=DAY).reason_empty)
     check("and nothing was made in it", list(plain.iterdir()) == [])
     clear_env()
-    v = _TMP / f"cfgvault{time.time_ns()}"
+    # mkdtemp for the same reason as `plain`, just above: a name from
+    # time.time_ns() can repeat inside one Windows timer tick, and the second
+    # `mkdir(parents=True)` would find `cfgvault<ns>\.obsidian` already made.
+    v = Path(tempfile.mkdtemp(dir=_TMP, prefix="cfgvault"))
     (v / ".obsidian").mkdir(parents=True)
     CONFIG["notes"] = {"obsidian": {"vault_directory": str(v)}}
     check("[notes.obsidian] vault_directory in the config is read",
@@ -253,8 +265,10 @@ def t_appends_and_never_overwrites():
 
 
 def t_links_out_of_the_vault_are_refused():
-    outside = _TMP / f"outside{time.time_ns()}"
-    outside.mkdir()
+    # mkdtemp for the same reason as vault(): this folder must be FRESH, and a
+    # name from time.time_ns() is not - two calls inside one Windows timer tick
+    # are the same name, and `outside.mkdir()` would die with WinError 183.
+    outside = Path(tempfile.mkdtemp(dir=_TMP, prefix="outside"))
     v = vault({"folder": "Daily"})
     try:
         (v / "Daily").symlink_to(outside, target_is_directory=True)
@@ -406,8 +420,11 @@ def t_vault_is_preferred_and_the_rest_still_work():
 
 def t_vault_search_skips_links_out_and_respects_caps():
     v = make_search_vault()
-    outside = _TMP / f"out{time.time_ns()}"
-    outside.mkdir()
+    # mkdtemp, not `_TMP / f"out{time.time_ns()}"`: this folder must be fresh,
+    # and on Windows the clock only moves on the system timer tick - so a
+    # second call inside one tick asks for the same folder and `mkdir()` dies
+    # with FileExistsError [WinError 183].
+    outside = Path(tempfile.mkdtemp(dir=_TMP, prefix="out"))
     (outside / "budget leak.md").write_text("budget outside the vault")
     try:
         (v / "linked").symlink_to(outside, target_is_directory=True)
@@ -502,7 +519,10 @@ def t_the_router_keeps_notes_questions_local():
 # ---- 6. which targets are set up ---------------------------------------------
 
 def _graph():
-    g = _TMP / f"graph{time.time_ns()}"
+    # mkdtemp, for the same reason as vault() above: a name from
+    # time.time_ns() can repeat inside one Windows timer tick, and then the
+    # second call here finds `graph<ns>` already made.
+    g = Path(tempfile.mkdtemp(dir=_TMP, prefix="graph"))
     (g / "journals").mkdir(parents=True)
     return g
 

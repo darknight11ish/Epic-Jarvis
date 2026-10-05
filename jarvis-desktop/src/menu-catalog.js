@@ -1065,25 +1065,6 @@ export const MENUS = [
     ]
   },
   {
-    "id": "brain.tab.tutorials",
-    "title": "Tutorials",
-    "about": "How Jarvis works, step by step, and the answers to the usual questions.",
-    "apps": [
-      "desktop"
-    ],
-    "area": "brain",
-    "view": "tutorials",
-    "kind": "tab",
-    "group": null,
-    "parent": null,
-    "hide": true,
-    "collapse": false,
-    "why": "",
-    "names": [
-      "tutorials"
-    ]
-  },
-  {
     "id": "brain.tab.galaxy",
     "title": "Galaxy",
     "about": "The map of what Jarvis knows.",
@@ -1574,26 +1555,6 @@ export const MENUS = [
     "why": "",
     "names": [
       "pc help"
-    ]
-  },
-  {
-    "id": "brain.model.tutorials",
-    "title": "Tutorials and the FAQ",
-    "about": "The intro, a tutorial for each part, and the answers to the usual questions.",
-    "apps": [
-      "phone"
-    ],
-    "area": "brain",
-    "view": "tutorials",
-    "kind": "card",
-    "group": null,
-    "parent": null,
-    "hide": true,
-    "collapse": true,
-    "why": "",
-    "names": [
-      "tutorials and the faq",
-      "tutorial"
     ]
   },
   {
@@ -2521,9 +2482,6 @@ export const ALIASES = {
   "topics": "brain.memory.topics",
   "trace": "brain.now.trace",
   "trust": "brain.tab.trust",
-  "tutorial": "brain.model.tutorials",
-  "tutorials": "brain.tab.tutorials",
-  "tutorials and the faq": "brain.model.tutorials",
   "undo shelf": "brain.work.undo",
   "updates": "settings.updates",
   "voice": "settings.voice",
