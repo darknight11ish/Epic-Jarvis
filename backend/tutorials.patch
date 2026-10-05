@@ -1,14 +1,14 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3650,4 +3650,16 @@
+@@ -6493,4 +6493,16 @@
      except Exception as exc:
-         print(f"  retirement NOT ON ({type(exc).__name__}) - the Retirement what-if is off")
-         print("             until jarvis_retirement.py is back: run apply-patches.ps1 again")
+         print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")
+         print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")
 +    # tutorials.patch (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md):
 +    # GET /api/tutorials, POST /api/tutorials/progress and GET /api/faq - one catalogue
 +    # for both apps, and the owner's reading progress kept on the PC. It writes its own
 +    # one JSON file, raises no card and calls nothing out. Wrapped round Handler here,
-+    # before anything listens, like retirement above.
++    # before anything listens, like quiz-cloud above.
 +    try:
 +        import jarvis_tutorials
 +        print(jarvis_tutorials.install(Handler, origin_ok=_origin_ok,
