@@ -1,0 +1,173 @@
+--- a/jarvis_extract.py
++++ b/jarvis_extract.py
+@@ -4,7 +4,8 @@
+ After a local turn, the transcript is handed to the LOCAL model with one
+ job: list anything in it that would still be true and useful next month.
+ Each proposal goes into a review queue. Nothing reaches memory until a
+-human accepts it - or until auto_accept is switched on, which it is not.
++human accepts it. There is no path that writes one without a decision:
++the auto_accept branch that used to sit in propose() has been removed.
+ 
+ WHY THE QUEUE
+ A system deciding on its own what to remember about you is exactly the
+@@ -18,7 +19,7 @@
+ and the dedupe against what is already known all need tuning against REAL
+ conversations. The owner asked for a proper set-up pass once Jarvis is
+ running; until [memory.extraction].setup_complete is true the boot banner
+-says so and auto_accept cannot be turned on.
++says so.
+ 
+ NEVER CLOUD
+ The extractor talks to Ollama on localhost and nothing else. If the local
+@@ -75,6 +76,15 @@
+             decided    REAL,
+             fact_id    INTEGER
+         )""")
++    # Added later: the fact a correction resolves to, settled when the
++    # proposal is queued rather than when it is accepted. Accepting used to
++    # re-run the lookup and retire whatever came back, so the human approved
++    # a destructive edit without being told what it destroyed.
++    for col, decl in (("replaces_id", "INTEGER"), ("replaces_text", "TEXT")):
++        try:
++            c.execute(f"ALTER TABLE proposals ADD COLUMN {col} {decl}")
++        except Exception:
++            pass                      # already there
+ 
+ 
+ def _local_llm(prompt: str, model: Optional[str] = None, timeout: float = 60) -> Optional[str]:
+@@ -138,32 +148,78 @@
+             if not isinstance(f, dict):
+                 continue
+             text = " ".join(str(f.get("text", "")).split())
+-            conf = float(f.get("confidence") or 0.5)
++            # A model that writes "confidence": "high" raised ValueError out
++            # of propose(), keeping the facts queued before it and losing
++            # every one after it. An unparseable confidence is a missing
++            # confidence, not a reason to abandon the batch.
++            try:
++                conf = float(f.get("confidence") or 0.5)
++            except (TypeError, ValueError):
++                conf = 0.5
+             # Cheap filters before anything reaches the queue: a question is
+             # not a fact, a fragment is not a fact, and the model's own low
+             # confidence is a signal worth honouring.
+-            if (not text or text.endswith("?") or len(text.split()) < 3 or conf < 0.3
+-                    or re.match(r"^(what|when|where|who|how|why|can|could|would|should|is|are|do|does)\b", text, re.I)):
++            if not text or text.endswith("?") or conf < 0.3:
++                continue
++            # The old guard dropped anything under three words and anything
++            # opening with an auxiliary. Measured against realistic output it
++            # discarded "Can't eat gluten", "Does not drink alcohol", "Is
++            # vegetarian", "Wife: Dana", "Do not suggest Docker, ever" and
++            # "Should always use metric units" - a coeliac diagnosis and four
++            # standing instructions - while keeping "Whose birthday is 3
++            # March". It was matching the shape of a question word, not a
++            # question. An auxiliary is only interrogative when a subject
++            # follows it, and a wh-word almost never opens a durable fact.
++            if len(text.split()) < 2:
++                continue
++            if re.match(r"^(what|when|where|which|who|whose|why|how)\b", text, re.I):
++                continue
++            if re.match(r"^(is|are|was|were|do|does|did|can|could|would|should|will|have|has)\s+"
++                        r"(i|you|we|they|he|she|it|there|that|this)\b", text, re.I):
+                 continue
+             if text.lower() in known or text.lower() in have or pending_n >= cap:
+                 continue
+-            cur = c.execute("INSERT INTO proposals (text, replaces, confidence, source, created) VALUES (?,?,?,?,?)",
+-                            (text, f.get("replaces"), conf, source, time.time()))
+-            row = {"id": cur.lastrowid, "text": text, "replaces": f.get("replaces"),
++            replaces = f.get("replaces")
++            # Settle the target now, so the approval card can name the fact
++            # this will retire. find_one returns None rather than a guess, and
++            # None means "add it, retire nothing" - two facts that disagree is
++            # a recoverable state, a silently deleted allergy is not.
++            target = store.find_one(replaces) if replaces else None
++            cur = c.execute(
++                "INSERT INTO proposals (text, replaces, confidence, source, created,"
++                " replaces_id, replaces_text) VALUES (?,?,?,?,?,?,?)",
++                (text, replaces, conf, source, time.time(),
++                 target["id"] if target else None,
++                 target["text"] if target else None))
++            row = {"id": cur.lastrowid, "text": text, "replaces": replaces,
++                   "replaces_id": target["id"] if target else None,
++                   "replaces_text": target["text"] if target else None,
+                    "confidence": conf, "state": "pending"}
+             out.append(row); have.add(text.lower()); pending_n += 1
+-            if _cfg("auto_accept", False) and _cfg("setup_complete", False) and conf >= 0.8:
+-                _accept(c, store, row)
++            # There is deliberately no auto-accept branch here. There used to
++            # be one, behind two config keys: a fact scoring 0.8 was written
++            # with no human decision. Nothing in Jarvis approves on the
++            # owner's behalf, and a queue whose contents can retire existing
++            # facts is the last place to make an exception.
+     return out
+ 
+ 
+ def _accept(c, store, row) -> int:
+-    supersedes = None
+-    if row.get("replaces"):
+-        old = store.search(row["replaces"], k=1)
+-        if old:
+-            supersedes = old[0]["id"]
+-    fid = store.add_fact(row["text"], source="extracted", supersedes=supersedes)
++    # Only the target recorded when the proposal was queued, which is the one
++    # the approval card showed. The old code re-ran `store.search(replaces,
++    # k=1)` here and retired the top hit - and search has no floor, so it
++    # always returned something. Accepting a fact about a car retired the
++    # owner's editor preference; a replaces string of "Mario's allergy"
++    # retired a note about Vim. Both permanent: retire() has no route back.
++    supersedes = row.get("replaces_id")
++    if supersedes:
++        # It may have been retired by something else since it was queued.
++        still = store.get(int(supersedes))
++        if not still or still.get("valid_to") is not None:
++            supersedes = None
++    fid = store.add_fact(row["text"], source="extracted", supersedes=supersedes,
++                         meta={"confidence": row.get("confidence"),
++                               "proposal_id": row.get("id")})
+     c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
+               (time.time(), fid, row["id"]))
+     return fid
+@@ -174,7 +230,8 @@
+     with closing(store._connect()) as c:
+         _init(c)
+         return [dict(r) for r in c.execute(
+-            "SELECT id,text,replaces,confidence,source,created FROM proposals WHERE state='pending' ORDER BY created")]
++            "SELECT id,text,replaces,replaces_id,replaces_text,confidence,source,created"
++            " FROM proposals WHERE state='pending' ORDER BY created")]
+ 
+ 
+ def decide(proposal_id: int, accept: bool) -> Optional[int]:
+@@ -194,8 +251,29 @@
+ def setup_status() -> dict:
+     return {"enabled": bool(_cfg("enabled", True)),
+             "setup_complete": bool(_cfg("setup_complete", False)),
+-            "auto_accept": bool(_cfg("auto_accept", False)) and bool(_cfg("setup_complete", False)),
+-            "pending": len(pending()),
++            # Always false, and reported so a client that warns about it
++            # keeps working. The config key is honoured nowhere: nothing in
++            # Jarvis writes a fact the owner has not decided on.
++            "auto_accept": False,
++            "pending": len(_pending_rows()),
++            "queue_full": _queue_full(),
+             "note": None if _cfg("setup_complete", False) else
+                     "extraction is a scaffold: review its proposals and tune the prompt "
+-                    "against real conversations before trusting auto_accept"}
++                    "against real conversations"}
++
++
++def _pending_rows() -> list[dict]:
++    return pending()
++
++
++def _queue_full() -> bool:
++    """Is the review queue at its cap, and therefore silently dropping?
++
++    propose() folds `pending_n >= cap` into the same `continue` as the dedupe
++    check, so once the queue fills, every further proposal goes on the floor
++    with no record. A client that can see this can say so.
++    """
++    try:
++        return len(pending()) >= int(_cfg("review_queue_max", 200))
++    except Exception:
++        return False

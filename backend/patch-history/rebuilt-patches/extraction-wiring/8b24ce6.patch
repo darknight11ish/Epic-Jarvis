@@ -1,0 +1,309 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -399,6 +399,266 @@
+         pass
+ 
+ 
++# --------------------------------------------------------------------------
++#   Learning from the conversation
++#
++#   jarvis_extract has a prompt, a proposals table, a review queue, an accept
++#   path that supersedes the fact it replaces, and a decide() the HUD exposes
++#   over HTTP. Every piece of it works. Nothing has ever called propose():
++#   grep the tree and there are zero call sites, so the queue has always been
++#   empty and the memory store has only ever held what was typed into it by
++#   hand. The learning loop the design is arranged around had no trigger.
++#
++#   Three constraints decide the shape, and they are why this is not a call at
++#   the end of the handler:
++#
++#   * Extraction is another full generation on the SAME model that answers.
++#     Inline, it doubles the wait on every turn. Concurrent, it halves the
++#     speed of both, on one GPU with one 8B resident.
++#   * It must not be able to affect the answer. It runs after, on its own
++#     thread, and nothing it raises reaches the request.
++#   * Every turn is the wrong cadence. A conversation is cumulative, so the
++#     same text would be re-read again and again for facts the queue already
++#     holds. It runs when you stop talking, not when you pause for breath.
++#
++#   WHERE IT SENDS - loopback, asserted rather than assumed. jarvis_extract's
++#   module docstring says "NEVER CLOUD ... talks to Ollama on localhost and
++#   nothing else", and that was vacuously true while propose() had no callers.
++#   It reads OLLAMA_URL, and one environment variable pointing at a shared or
++#   remote Ollama would ship everything typed here to it, automatically, 45
++#   seconds after every conversation, with no human in the loop. _loopback_ok
++#   below refuses to run at all in that case rather than trusting a docstring.
++#
++#   WHAT IT READS - user turns only, and this is the load-bearing decision.
++#   The cloud-lane filter below makes the same cut for the same reason, and
++#   the reasoning transfers exactly: the assistant turn is a carrier. It
++#   restates injected memory, it quotes tool output, and a Joplin read comes
++#   back through it - and the vault is deliberately kept out of the retrieval
++#   corpus (see the comment in retrieval_corpus) precisely so that something
++#   merely resembling it cannot pull it into a prompt. Extracting durable
++#   facts out of a vault read and filing them in memory would undo that
++#   separation quietly and permanently, one accepted proposal at a time.
++#   Reading only what you typed is the same promise the cloud lane makes, and
++#   it is also just better extraction: what you said is what you meant.
++#
++#   One consequence worth stating because it is invisible otherwise: a turn
++#   whose content is a LIST rather than a string - which is what the client
++#   sends whenever a screenshot is attached - is skipped whole, typed text
++#   included. That is the safe direction and it is deliberate, because the
++#   obvious "fix" of flattening content arrays would immediately start
++#   admitting tool_result blocks, which is the carrier problem again. It does
++#   mean extraction is silently blind to any turn with an image in it.
++# --------------------------------------------------------------------------
++EXTRACT_ENABLED = os.environ.get("JARVIS_EXTRACT", "1").lower() not in ("0", "false", "no", "off")
++# Seconds of silence before a pass runs. Every turn restarts this.
++EXTRACT_IDLE = float(os.environ.get("JARVIS_EXTRACT_IDLE", "45"))
++# And then nothing for this long, whatever happens. One pass covers a whole
++# conversation; the model that runs it is the model that answers.
++EXTRACT_MIN_GAP = float(os.environ.get("JARVIS_EXTRACT_MIN_GAP", "300"))
++
++
++def _loopback_ok(url: str) -> bool:
++    """Is that Ollama on this machine? Fails closed on anything unparseable."""
++    try:
++        host = (urllib.parse.urlparse(url).hostname or "").lower()
++    except Exception:
++        return False
++    return host in ("127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1")
++
++
++def _extract_model() -> str:
++    """The model the CHAT lane is using, not a second opinion about it.
++
++    jarvis_extract._local_llm defaults to os.environ["JARVIS_LOCAL_MODEL"] or
++    the literal "qwen3:8b", while the chat lane resolves its local model from
++    intelligence.default_model refined by jarvis_models.current_model(). Two
++    sources of truth for one question. If they disagree, either the extractor
++    asks for a model that is not pulled - Ollama 404s, _local_llm returns None,
++    propose() returns [], and the queue stays empty forever with a banner
++    saying learning is on - or both models are pulled and 8B-class, and every
++    pass evicts the chat model from an 8 GB card so the next turn reloads it.
++    """
++    name = os.environ.get("JARVIS_LOCAL_MODEL", "")
++    if name:
++        return name
++    try:
++        # _read_toml(CONFIG_FILE), the same call /api/status makes.
++        cfg = _read_toml(CONFIG_FILE)
++        name = (cfg.get("intelligence") or {}).get("default_model") or ""
++    except Exception:
++        name = ""
++    try:
++        import jarvis_models
++        name = jarvis_models.current_model() or name
++    except Exception:
++        pass
++    return name or "qwen3:8b"
++
++
++LEARNING_FILE = CONFIG_DIR / "learning.json"
++
++
++def learning_enabled() -> bool:
++    """Is the learner allowed to run right now?
++
++    JARVIS_EXTRACT is the floor: if it is off, nothing turns it on, because an
++    environment variable is the owner saying so before the process even
++    started. Above that floor the state file decides, so the switch in the
++    memory pane means something without a restart.
++
++    A missing file reads as on. That matches the shipped default and it is the
++    honest answer for a machine where nobody has touched the switch - inventing
++    "off" from an absent file would silently disable a feature the banner says
++    is running.
++    """
++    if not EXTRACT_ENABLED:
++        return False
++    try:
++        if LEARNING_FILE.is_file():
++            return bool(json.loads(LEARNING_FILE.read_text(encoding="utf-8"))
++                        .get("enabled", True))
++    except Exception:
++        pass
++    return True
++
++
++def set_learning(on: bool) -> dict:
++    """Flip the switch and say what it is now. Cosmetic: approves nothing."""
++    doc = {"enabled": bool(on), "changed": time.time()}
++    try:
++        LEARNING_FILE.parent.mkdir(parents=True, exist_ok=True)
++        tmp = LEARNING_FILE.with_suffix(".json.tmp")
++        tmp.write_text(json.dumps(doc, indent=2), encoding="utf-8")
++        tmp.replace(LEARNING_FILE)
++    except Exception as exc:
++        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
++                "enabled": learning_enabled()}
++    return {"ok": True, "enabled": learning_enabled(),
++            "floor": EXTRACT_ENABLED,
++            "note": None if EXTRACT_ENABLED else
++                    "JARVIS_EXTRACT is off in the environment, which overrides "
++                    "this switch. Unset it and restart to use the switch."}
++
++
++class _Learner:
++    """One thread, one pending transcript, latest wins.
++
++    No clock anywhere in here on purpose. The idle wait is an Event with a
++    timeout, so a turn arriving restarts it by construction rather than by
++    comparing timestamps - which is the version that cannot drift, cannot be
++    confused by the system clock moving, and reads as what it is.
++    """
++
++    def __init__(self) -> None:
++        self._lock = threading.Lock()
++        self._pending: Optional[list] = None
++        self._last = ""
++        self._woken = threading.Event()
++        self._stop = threading.Event()
++        self._thread: Optional[threading.Thread] = None
++
++    # -- called from the request thread; must be cheap and must not raise ---
++    def offer(self, messages) -> None:
++        """A turn just ended. Keep what was said; do not act on it yet."""
++        if not learning_enabled() or not messages:
++            return
++        said = [{"role": "user", "content": m.get("content")}
++                for m in messages
++                if isinstance(m, dict) and m.get("role") == "user"
++                and isinstance(m.get("content"), str) and m.get("content").strip()]
++        if not said:
++            return
++        with self._lock:
++            self._pending = said
++        self._woken.set()
++
++    def start(self) -> None:
++        if self._thread and self._thread.is_alive():
++            return
++        self._stop.clear()
++        self._thread = threading.Thread(target=self._loop, daemon=True,
++                                        name="jarvis-learn")
++        self._thread.start()
++
++    def stop(self) -> None:
++        self._stop.set()
++        self._woken.set()
++
++    # -- the thread ---------------------------------------------------------
++    def _loop(self) -> None:
++        while not self._stop.is_set():
++            if not self._woken.wait(1.0):
++                continue                       # nothing has been said yet
++            # Something landed. Wait for the talking to stop: each further
++            # turn sets the flag again and restarts this wait.
++            while not self._stop.is_set():
++                self._woken.clear()
++                if not self._woken.wait(EXTRACT_IDLE):
++                    break
++            if self._stop.is_set():
++                return
++            if self._pass() and self._stop.wait(EXTRACT_MIN_GAP):
++                return
++
++    def _pass(self) -> bool:
++        """One extraction. True if the model was actually asked."""
++        with self._lock:
++            convo, self._pending = self._pending, None
++        if not convo:
++            return False
++        seen = json.dumps(convo, sort_keys=True)[-8000:]
++        if seen == self._last:
++            return False                       # nothing new was said
++        try:
++            import jarvis_extract
++        except Exception:
++            return False                       # not installed; not an error
++        if not _loopback_ok(jarvis_extract.OLLAMA):
++            print(f"  ! learning is OFF: OLLAMA_URL is {jarvis_extract.OLLAMA}, "
++                  f"which is not this machine. Nothing you type will be sent "
++                  f"there, and nothing will be learned until it is loopback.",
++                  file=sys.stderr)
++            return False
++        model = _extract_model()
++        unreachable = []
++
++        def _ask(prompt: str):
++            # propose() takes the model call as an argument precisely so it can
++            # be replaced. Used here for two reasons: to ask for the model the
++            # chat lane actually uses, and to see the None that propose()
++            # would otherwise swallow into an empty list.
++            out = jarvis_extract._local_llm(prompt, model=model)
++            if out is None:
++                unreachable.append(True)
++            return out
++
++        try:
++            out = jarvis_extract.propose(convo, llm=_ask, source="conversation")
++        except Exception as exc:
++            # Never retried on the spot. The usual cause is that the local
++            # model is not up, and a tight retry against a model that is down
++            # is how a background thread becomes the reason the machine is
++            # warm.
++            print(f"  ! learning pass failed: {type(exc).__name__}: {exc}",
++                  file=sys.stderr)
++            return True
++        if unreachable:
++            # The failure that used to be perfectly silent: an empty list means
++            # BOTH "nothing durable was said" and "the model never answered",
++            # and only one of those is fine.
++            print(f"  ! learning pass reached no model at {jarvis_extract.OLLAMA} "
++                  f"(asked for {model!r}) - nothing was learned. Is it pulled?",
++                  file=sys.stderr)
++            return True
++        self._last = seen
++        if out:
++            print(f"  memory     {len(out)} proposal(s) waiting for review")
++        return True
++
++
++LEARNER = _Learner()
++
++
+ def _activity(state: str, detail: str = "") -> None:
+     """Announce what Jarvis is doing, if the event bus is importable.
+ 
+@@ -1940,6 +2200,18 @@
+             # refused, client vanished - the turn is over. In a finally block
+             # because the one state nobody must be left showing is "thinking".
+             _activity("idle")
++            # And the GPU is about to be free. Hand over what was typed; the
++            # learner does nothing with it until the conversation has actually
++            # stopped. `body["messages"]`, not the local `messages`, because
++            # that one has been rewritten for the lane - filtered on a cloud
++            # turn, and carrying the recalled-facts block on a local one.
++            # Off a try because a learning pass must never be the reason an
++            # answered turn reports an error.
++            try:
++                if MEMORY and not jarvis_side_memory:
++                    LEARNER.offer(body.get("messages") or [])
++            except Exception:
++                pass
+ 
+ 
+ # Keys whose values are content rather than plumbing. Walking only these
+@@ -2228,6 +2500,20 @@
+             xs = jarvis_extract.setup_status()
+             if not xs["setup_complete"]:
+                 print("  extraction SCAFFOLD - proposals queue for review; set-up pass still needed")
++            # Nothing was calling propose(). This banner has been reporting on
++            # a queue that could not fill, on every boot since it was written.
++            if learning_enabled():
++                LEARNER.start()
++                print(f"  learning   on - a pass runs after {EXTRACT_IDLE:g}s of quiet, "
++                      f"at most every {EXTRACT_MIN_GAP / 60:g} min, over your turns only")
++                print(f"             it will ask {_extract_model()!r} at "
++                      f"{jarvis_extract.OLLAMA}"
++                      + ("" if _loopback_ok(jarvis_extract.OLLAMA)
++                         else "  <- NOT LOOPBACK: learning will refuse to run"))
++                if xs["pending"]:
++                    print(f"             {xs['pending']} proposal(s) already waiting for review")
++            else:
++                print("  learning   off (JARVIS_EXTRACT) - nothing will reach the review queue")
+             if not jarvis_sleep.enabled():
+                 print("  sleep-time off (a daily card will offer to enable it; remind=false stops that)")
+             cp = jarvis_compute.plan()
