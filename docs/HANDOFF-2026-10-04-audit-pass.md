@@ -177,6 +177,86 @@ this pass: six suites. Four are §1.1–§1.4. The other two needed their own lo
   enshrine it. `test_task_control.py` is **112/0 both ways** (the check really
   runs on the owner's PC), and `test_suite_state` is **18/0**.
 
+### 1.6 The two failures CI caught (after the pull request)
+
+The pull request ran this project's CI for the first time on this work. Every
+job passed except the Ubuntu **`backend`** job, whose suite step failed after
+~12.7 minutes (the Windows job was still running; rust, audit, powershell-5,
+credential-manager and python-advisories were green). CI's logs need a token,
+so the job was reproduced locally **in CI's own shape** —
+`python backend/run_suites.py` with `JARVIS_BACKEND` unset, which stages a
+backend from the repository.
+
+Two suites, one cause — the same cause `test_task_control` had in §1.5:
+
+| suite | in the CI shape | now |
+|---|---|---|
+| `test_injection_cases.py` | 81 passed, **34 failed** | **116/0** |
+| `test_agent_plan_wiring.py` | 54 passed, **5 failed** | **60/0** |
+
+Both were changed by the previous pass to demand the **resolved** action name
+(`email_read`, `home_control`), because that is what `jarvis_agent` hands the
+checker on the owner's PC — the 2026-10-03 fix, and the reason a real tier is
+found at all. A CI or repository run has **no `jarvis_gate.py` to resolve
+with** (it is not in this repository), so `jarvis_agent`'s
+`except Exception: pass` leaves the tool's own lookup name in place
+(`jarvis_email_read_run`), the fake gate refused every read
+(`refused: tier is ask`), and the whole turn collapsed.
+
+Both now register **both names**, so the turn/plan machinery is exercised on a
+machine of either shape, and each gained **one owner-only check** that the
+resolved name really is what the checker is handed — so the 2026-10-03 promise
+stays guarded where it can be proved, and SKIPs with its reason where it
+cannot. No assertion was weakened.
+
+Verified: `test_injection_cases.py` **116/0** and `test_agent_plan_wiring.py`
+**60/0** in both environments, and in the CI shape `run_suites.py` is `ok` for
+`test_agent`, `test_agent_plan_wiring`, `test_injection_cases`,
+`test_task_control` and `test_suite_state`.
+
+**One trap worth remembering:** running a suite *directly* without
+`JARVIS_BACKEND` is **not** the CI shape. `python backend/test_agent.py`
+reports 182 passed / 5 failed that way and `ok` through `run_suites.py`, which
+stages the backend — audit 03 measured the same thing. Reproduce CI with
+`run_suites.py`, not with a bare `python backend/test_x.py`.
+
+### 1.7 CI still failed after that — and CI can now say why by itself
+
+The next run failed the same job again, so at least one more suite fails **only
+on Linux**: this PC cannot see those branches (about fifteen suites skip their
+Linux-only parts here, and audit 03 already found one such case —
+`test_ocr_words`'s PowerShell half cannot run on this PC at all). A Linux
+container would settle it in one run, but Docker Desktop cannot start its Linux
+engine on this machine: **WSL has no distribution installed**. So the remaining
+failure has to be found by CI itself.
+
+**What that cost, and the fix for it.** CI's job logs need a signed-in browser,
+so a red run could not be read from a terminal at all — the two suites in §1.6
+were found by re-running the whole sweep locally instead. The Ubuntu `backend`
+job's suite step now:
+
+* writes the failing suite names to the run's **Summary** (visible on the run
+  page), and
+* emits one **`::error::` annotation per failing suite**, which the public
+  checks API serves to anyone with no token.
+
+Its first version did not work, and the reason is a trap worth keeping: GitHub
+runs a `run:` script under `bash -e`, so the failing pipeline aborted the step
+*before* the annotations were written — the step failed exactly as before and
+named nothing. It now wraps the run in `set +e` and takes the suite's own
+status from `${PIPESTATUS[0]}`.
+
+**Also fixed, from running the suites in CI's own shape:**
+`test_documents.py`'s "... and cannot be added" demanded ONE of the two refusal
+wordings the product uses for a folder that is Jarvis's own — `never looks
+there` where `protected()` fires, or `not to your own files` where
+`_too_broad()` fires, and which one is reached depends on where the backend
+lives (under Documents on the owner's PC, under a TEMP/AppData path in a staged
+or CI backend). It now accepts either and still fails if the folder is accepted
+or refused for an unrelated reason. `test_documents.py` is **131/0** against
+the owner's backend and `ok` through `run_suites.py`; that check was the only
+failure in a 62-suite run of everything this branch can affect, in CI's shape.
+
 ## 2. The audits
 
 ### 2.1 §7.1 — promises vs tests
