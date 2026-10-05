@@ -1,6 +1,32 @@
 # Tutorials and FAQ — design
 
-Status: **for the owner's read** (2026-10-05). Nothing here is built yet.
+Status: **BUILT** (2026-10-05). Everything below is implemented; this section at
+the top says where each piece lives, so the design and the code can be read
+together.
+
+* `backend/jarvis_tutorials.py` — the catalogue (an intro plus a tutorial per
+  major part), the 20-question FAQ, and the owner's progress in
+  `tutorials.json`. `backend/test_tutorials.py` is 303 checks.
+* `backend/tutorials.patch` — one hunk in `jarvis_hud.py`, after
+  `retirement.patch`; `scripts/apply-patches.ps1` has its patch entry and its
+  `$SHIPPED` entry; `docs/JARVIS-API.md` section 114 is the API page.
+* Desktop: `jarvis-desktop/src-tauri/src/tutorials.rs` (three commands, with the
+  generated ACL permission files and `brain-tutorials` in
+  `permissions/surfaces.toml` plus `capabilities/brain.json`),
+  `jarvis-desktop/src/tutorials.js` (the Brain section) and
+  `jarvis-desktop/tests/tutorials.mjs` (17 checks).
+* Phone: `net/Tutorials.kt`, `net/JarvisApi.kt`'s three calls,
+  `JarvisRuntime`'s wrappers, `ui/screens/TutorialsPlate.kt`, the `MenuCatalog`
+  and `MenuPlaces` entries, `BrainScreen.kt`'s item, and
+  `test/.../TutorialsTest.kt`.
+* `tools/check_parity.py` lists the three routes as ported, and exits 0.
+
+**What is proven where, and what is not.** The backend, the patch stack and the
+desktop's JS are proven here. The Rust is proven by `cargo check` (exit 0) and
+the Kotlin by CI's own `.github/workflows/jarvis-client.yml` - this machine has
+no Android SDK, so every Kotlin commit says that rather than implying otherwise.
+The DOM drawing of the desktop panel is proven by CI's browser suites and by
+the owner opening it; the phone screen by the same CI build.
 
 The owner's request, in their words: a skippable comprehensive intro tutorial,
 tutorials for each of the major parts of Jarvis, on the desktop program and in
