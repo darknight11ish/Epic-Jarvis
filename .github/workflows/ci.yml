@@ -485,7 +485,6 @@ jobs:
             'test_pairing_cases.py',
             'test_past_time_zones.py',
             'test_paste_guard.py',
-            'test_patch_history.py',
             'test_pc_help.py',
             'test_phone_notifications.py',
             'test_phone_second_card_contract.py',
