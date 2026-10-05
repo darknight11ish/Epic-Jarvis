@@ -26,6 +26,11 @@ What it proves:
     heard and when the voice prints change, and a voice that fails is not
     listed, not chosen and not spoken with; not being able to check is not a
     pass;
+  - nothing to compare with is not a pass either: with no voice print trained
+    at all, or one that could not be compared, a blend cannot be chosen, heard
+    or spoken with once it is checked, the note says why, and the pack's own
+    default speaks until a print exists - then the check runs for real and
+    the blend speaks again;
   - no animal can use either, ever.
 """
 import hashlib
@@ -67,11 +72,71 @@ CHECKED = []          # what the (stand-in) owner check was asked, in order
 OWNER = {"ok": True}  # what the stand-in owner check answers
 _ORIG = {n: getattr(V, n) for n in ("_config_dir", "_cfg", "_audit", "_publish", "_gate",
                                     "_voices_file", "owner_check", "prints_fingerprint",
-                                    "_spawn")}
+                                    "_spawn", "_voice_mod")}
 _S_CFG = S._cfg
 _S_SHERPA = S.sherpa_onnx
 _K_PINS = (K.BLEND_SHA256, K.V1_VOICES_SHA256)
 V1_SIZE = K.voices_file_size(K.V1)
+
+
+# What jarvis_voice (the voice check) looks like to blend_check, which asks it
+# whether there is a print to compare with at all. The print FILES are that
+# module's own business and are tested in test_voices.py; here they are the
+# one thing each case needs, so the suite never reads - or depends on - the
+# real voice prints of the machine running it.
+
+class _OnePrint:
+    """A trained print: something to compare with (what reset() gives every
+    test, matching the stand-in owner_check's own "checked: 1")."""
+
+    @staticmethod
+    def lookup_order(mic=""):
+        return [("phone", TMP / "one-print-phone.json")]
+
+    @staticmethod
+    def load_profile(path):
+        return types.SimpleNamespace(embedder="fake-emb", centroid=[1.0, 0.0, 0.0],
+                                     threshold=0.5)
+
+
+class _NoPrints:
+    """No voice print trained: lookup_order lists where a print would live,
+    load_profile finds none - the state the real owner_check answers ok to
+    with "nothing to compare with" (the bug's trigger)."""
+
+    @staticmethod
+    def lookup_order(mic=""):
+        return [("phone", TMP / "no-print-phone.json"),
+                ("desktop", TMP / "no-print-desktop.json")]
+
+    @staticmethod
+    def load_profile(path):
+        return None
+
+
+class _PrintFromAnotherCheck:
+    """A print that cannot be used: it was made with a different voice check
+    than the one installed now, so owner_check compares nothing and answers
+    "checked: 0"."""
+
+    class _Emb:
+        name = "the-voice-check-installed-now"
+
+        def embed(self, audio):
+            return [0.5, 0.5, 0.0, 0.0]
+
+    @staticmethod
+    def lookup_order(mic=""):
+        return [("phone", TMP / "other-check-phone.json")]
+
+    @staticmethod
+    def load_profile(path):
+        return types.SimpleNamespace(embedder="an-older-voice-check",
+                                     centroid=[1.0, 0.0, 0.0, 0.0], threshold=0.5)
+
+    @staticmethod
+    def EcapaEmbedder():
+        return _PrintFromAnotherCheck._Emb()
 
 
 class FakeKokoro:
@@ -161,6 +226,10 @@ def reset(pack="v1", blends="none", engine_loaded="path"):
     V._publish = lambda data: EVENTS.append(dict(data))
     V.prints_fingerprint = lambda: FP["v"]
     V._spawn = lambda fn: SPAWNED.append(fn)
+    # One print to compare with, so the stand-in owner_check's "checked: 1"
+    # above is the truth of this world too. A case with no print (or one that
+    # cannot be compared) sets its own for its own test.
+    V._voice_mod = lambda: _OnePrint()
 
     def no_card(*a, **k):
         CARDS.append(a)
@@ -576,6 +645,120 @@ def t_not_being_able_to_check_is_not_a_pass():
           and "socket" not in body)
 
 
+# --------------------------------------------- nothing to compare with --
+
+def t_no_voice_print_trained_means_no_blend_is_spoken():
+    """The bug this test was written for (2026-10-04). With no voice print
+    trained, the real owner_check answers ok with "nothing to compare with" -
+    it has to: a recorded voice may be added and used before the owner trains,
+    and speak() checks it again on every utterance. blend_check kept that
+    answer as a PASS for the current prints, so the guard in _builtin_now read
+    it as "checked and fine" and Ashby spoke for as long as no print existed,
+    never compared with the owner's voice at all. In broad mode, where the
+    voice check accepts any voice, a blend that happened to sound like the
+    owner would then pass Jarvis's own voice check from the speakers. Nothing
+    to compare with is not a pass."""
+    orig = V._voice_mod
+    try:
+        reset("v1", "ready")
+        V.owner_check = _ORIG["owner_check"]        # the real one, not the stand-in
+        V._voice_mod = lambda: _NoPrints()
+        c, o = choose("mix_ashby")
+        check("no print trained: Ashby cannot be chosen, the answer is in words about the "
+              "missing print, and nothing is saved",
+              c == 503 and o["error"] == V.BLEND_NO_PRINT.format(who="Ashby")
+              and not V._state_path().exists(), (c, o))
+        check("the refusal is remembered for these prints, with one audit line carrying a name "
+              "and yes/no only",
+              V.blend_refused("mix_ashby")
+              and [e for e in AUDIT if e[0] == "voices.blend_check"]
+              == [("voices.blend_check", {"voice": "mix_ashby", "ok": False})], AUDIT)
+        view = V.speaker_view()
+        check("Ashby, once checked and refused, is not listed (so it cannot be picked or heard) "
+              "and the note says why in the owner's words",
+              not any(r["id"] == "mix_ashby" for r in view["choices"])
+              and V.BLEND_NO_PRINT.format(who="Ashby") in view["note"], view["note"])
+        c, o = choose("mix_clara")
+        check("Clara is refused in the same words the first time it is asked for",
+              c == 503 and o["error"] == V.BLEND_NO_PRINT.format(who="Clara")
+              and V.blend_refused("mix_clara") and not V._state_path().exists(), (c, o))
+        check("no background check is queued for something that cannot be checked",
+              not SPAWNED, SPAWNED)
+        c, o = V.sample_voice({"voice": "mix_ashby"})
+        check("Hear it will not play it either", c == 400
+              and o["error"] == "choose one of the listed voices", (c, o))
+        V._BLEND_CHECKS.clear()
+        c, o = V.sample_voice({"voice": "mix_ashby"})
+        check("... and asked for directly: the same refusal in words, never a sound",
+              c == 503 and o["error"] == V.BLEND_NO_PRINT.format(who="Ashby"), (c, o))
+        # The reported line: an Ashby already saved (chosen before the prints
+        # changed, or on a PC whose voice was never trained), which _builtin_now
+        # served once the queued check answered "ok" - with nothing compared.
+        reset("v1", "ready")
+        V.owner_check = _ORIG["owner_check"]
+        V._voice_mod = lambda: _NoPrints()
+        V._write_state(speaker="mix_ashby")
+        V.speaker_view()
+        check("a saved Ashby with no answer yet: the default speaks and the check is queued "
+              "(the guard that already worked)",
+              V.speaker() == 3 and V.speaker_name() == "af_heart" and len(SPAWNED) == 1, SPAWNED)
+        SPAWNED.pop()()                     # the check runs, and finds nothing to compare with
+        view = V.speaker_view()
+        check("THE REPORTED ONE: that check has nothing to compare with, so the saved Ashby "
+              "still does not speak - the default does, the note says why, and it is not listed",
+              V.speaker() == 3 and V.speaker_name() == "af_heart"
+              and view["choice"] == "af_heart"
+              and view["note"].startswith("Your own voice has not been trained yet")
+              and view["note"].endswith("Right now American (female) - Heart speaks.")
+              and not any(r["id"] == "mix_ashby" for r in view["choices"]), view)
+        check("the owner's saved choice is kept as they made it (a print may pass it later)",
+              json.loads(V._state_path().read_text())["speaker"] == "mix_ashby")
+        check("and nothing further is queued for it", not SPAWNED, SPAWNED)
+        # The other half of the same promise: once there IS a print to compare
+        # with, the check runs for real and the blend speaks again.
+        V._voice_mod = lambda: _OnePrint()
+        V.owner_check = lambda samples, margin=None: {
+            "ok": True, "checked": 1, "why": "it does not sound like your voice",
+            "fingerprint": FP["v"], "score": 0.1, "bar": 0.5}
+        FP["v"] = "prints-2"
+        V.speaker_view()
+        check("trained since: the default speaks while the real check runs, never the blend",
+              V.speaker() == 3 and len(SPAWNED) == 1, SPAWNED)
+        SPAWNED.pop()()
+        check("... and with a print to compare with, the same saved choice is checked for real "
+              "and speaks",
+              V.speaker() == 53 and V.speaker_name() == "mix_ashby"
+              and V.blend_verdict("mix_ashby").get("checked") == 1,
+              V.blend_verdict("mix_ashby"))
+    finally:
+        V._voice_mod = orig
+
+
+def t_a_print_that_cannot_be_compared_is_not_a_pass():
+    """The same shape one step along, and the same rule: a print IS there, but
+    it was made with a different voice check than the one installed now, so
+    owner_check compares nothing and answers ok with "checked: 0". Kept as a
+    pass, that is a blend spoken with nothing ever compared - refused now."""
+    orig = V._voice_mod
+    try:
+        reset("v1", "ready")
+        V.owner_check = _ORIG["owner_check"]
+        V._voice_mod = lambda: _PrintFromAnotherCheck()
+        c, o = choose("mix_clara")
+        check("choosing Clara is refused, in words about the print, and nothing is saved",
+              c == 503 and o["error"] == V.BLEND_NOT_COMPARED.format(who="Clara")
+              and not V._state_path().exists(), (c, o))
+        V._write_state(speaker="mix_clara")
+        check("and a saved Clara does not speak either: the default does, Clara is not listed, "
+              "and the note names the print as the reason",
+              V.speaker() == 3 and V.speaker_name() == "af_heart"
+              and not any(r["id"] == "mix_clara" for r in V.speaker_view()["choices"])
+              and V.BLEND_NOT_COMPARED.format(who="Clara") in V.speaker_view()["note"],
+              V.speaker_view()["note"])
+    finally:
+        V._voice_mod = orig
+
+
 # ------------------------------------------------------------- speaking with them --
 
 def t_they_speak_with_their_number_accent_and_pace():
@@ -818,6 +1001,7 @@ if __name__ == "__main__":
         V._audit, V._publish, V._gate = _ORIG["_audit"], _ORIG["_publish"], _ORIG["_gate"]
         V._voices_file, V.owner_check = _ORIG["_voices_file"], _ORIG["owner_check"]
         V.prints_fingerprint, V._spawn = _ORIG["prints_fingerprint"], _ORIG["_spawn"]
+        V._voice_mod = _ORIG["_voice_mod"]
         K.BLEND_SHA256, K.V1_VOICES_SHA256 = _K_PINS
         S._cfg = _S_CFG
         S.sherpa_onnx = _S_SHERPA

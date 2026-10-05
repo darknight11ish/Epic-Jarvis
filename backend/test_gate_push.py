@@ -15,7 +15,7 @@ path. On tier `notify` that fires with no human in the loop at all.
 Runs against a stubbed network and a stubbed framework module. No requests are
 made and no approvals database is touched.
 """
-import ast, copy, json, re, sys, types, traceback
+import ast, copy, json, os, re, sys, types, traceback
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -26,12 +26,19 @@ sys.path.insert(0, str(HERE))
 # that runs Jarvis.
 from _where import BACKEND, REPO, missing, explain
 
-FAILED, PASSED = [], []
+FAILED, PASSED, SKIPPED = [], [], []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 # A framework stub: redaction ON, which is the default the real one uses.
@@ -42,7 +49,19 @@ fw.load_framework = lambda: {"logging": {"redact_private_content_in_logs": True}
 fw.audit_log = lambda *a, **k: None
 sys.modules["jarvis_framework"] = fw
 
-import jarvis_gate as G
+# jarvis_gate.py is the owner's own file and this repository does not hold it
+# (backend/README.md says why). Every check below except
+# t_the_push_has_no_default_destination needs that module loaded; without it
+# they SKIP - in those words, counted on their own - instead of dying on an
+# ImportError that reads like the patch having broken something. On the
+# owner's PC (or with JARVIS_BACKEND set) all of them run.
+try:
+    import jarvis_gate as G
+    _NO_MODULE = None
+except Exception as _exc:                      # noqa: BLE001
+    G = None
+    _NO_MODULE = (f"jarvis_gate.py is not on this machine ({type(_exc).__name__}): "
+                  f"{explain()}")
 
 SENSITIVE = {
     "command": "grep -r 'password' /home/mario/.env",
@@ -80,6 +99,8 @@ def captured(body, *, tainted=False):
 
 
 def t_redact_keeps_shape_drops_values():
+    if G is None:
+        return skip(_NO_MODULE)
     out = G._redact(SENSITIVE)
     blob = json.dumps(out)
     leaked = [s for s in SECRETS if s in blob]
@@ -89,6 +110,8 @@ def t_redact_keeps_shape_drops_values():
 
 
 def t_push_sends_only_what_it_was_given():
+    if G is None:
+        return skip(_NO_MODULE)
     body = json.dumps(G._redact(SENSITIVE))
     got = captured(body)
     check("a redacted body reaches the broker unchanged", got == [body], f"{got}")
@@ -97,6 +120,8 @@ def t_push_sends_only_what_it_was_given():
 
 
 def t_push_refuses_while_tainted():
+    if G is None:
+        return skip(_NO_MODULE)
     got = captured(json.dumps(G._redact(SENSITIVE)), tainted=True)
     check("no push at all while the conversation is latched local", got == [],
           f"sent {len(got)} message(s) during a taint window")
@@ -113,6 +138,8 @@ def t_the_push_redaction_does_not_ride_the_logging_switch():
     an ntfy.sh topic is behind a guess. They are not the same decision and
     must not share a switch.
     """
+    if G is None:
+        return skip(_NO_MODULE)
     out = G._safe_detail(SENSITIVE, 400)
     leaked = [s for s in SECRETS if s in out]
     check("_safe_detail leaks nothing", not leaked, f"leaked: {leaked} in {out!r}")
@@ -209,6 +236,8 @@ def _leaks(node):
 
 def t_call_sites_redact():
     """CONTROL. The rule lives at the call sites; _push cannot enforce it."""
+    if G is None:
+        return skip(_NO_MODULE)
     src = (BACKEND / "jarvis_gate.py").read_text()
     calls = [n for n in ast.walk(ast.parse(src))
              if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_push"]
@@ -237,6 +266,8 @@ def t_the_call_site_check_can_actually_fail():
     Every expression below leaks, and an earlier version of the check above
     passed four of the six. They are run here rather than described.
     """
+    if G is None:
+        return skip(_NO_MODULE)
     leaky = [
         '_push("t", prompt)',
         '_push("t", json.dumps(detail))',
@@ -269,10 +300,110 @@ def t_the_call_site_check_can_actually_fail():
               and any(t in body for t in _SAFE_SOURCES))
 
 
+def _after_image(text: str) -> list:
+    """The lines a patch installs: its context plus every `+` line.
+
+    Written out here rather than borrowed from backend/_stack.py: that module
+    walks the whole stack and drives `git apply`, and this check is about one
+    patch's own text - the text that goes onto the owner's PC.
+    """
+    out = []
+    for line in text.replace("\r\n", "\n").split("\n"):
+        if line.startswith(("+++ ", "--- ", "@@", "diff ", "index ")):
+            continue
+        if line[:1] in (" ", "+"):
+            out.append(line[1:])
+    return out
+
+
+def _guard_says_send(server_line: str, guard_line: str, topic: str, server: str) -> bool:
+    """Run the patch's own two lines and report whether a push would go out.
+
+    The statements are executed as the file will hold them - the server line
+    reads JARVIS_NTFY_SERVER, exactly as the installed file does - so this is
+    behaviour rather than a spelling test.
+    """
+    keep = os.environ.get("JARVIS_NTFY_SERVER")
+    # An EMPTY setting is "not set", not "set to nothing": a variable that
+    # exists and is empty would answer os.environ.get(...) itself and hide the
+    # default the line carries - which is the whole thing being measured.
+    if server:
+        os.environ["JARVIS_NTFY_SERVER"] = server
+    else:
+        os.environ.pop("JARVIS_NTFY_SERVER", None)
+    try:
+        ns = {}
+        exec("\n".join([
+            "import os",
+            f"NTFY_TOPIC = {topic!r}",
+            server_line,
+            "def would_send():",
+            "    " + guard_line.strip(),
+            "        return False",
+            "    return True",
+        ]), ns)
+        return bool(ns["would_send"]())
+    finally:
+        if keep is None:
+            os.environ.pop("JARVIS_NTFY_SERVER", None)
+        else:
+            os.environ["JARVIS_NTFY_SERVER"] = keep
+
+
+def t_the_push_has_no_default_destination():
+    """A push goes NOWHERE unless the owner set a destination himself.
+
+    The patch used to carry `NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER",
+    "https://ntfy.sh")` as untouched context, so an owner who set only
+    JARVIS_NTFY_TOPIC - which is all the setup notes ever asked for - had every
+    card title posted to a public broker whose topic name is the only secret.
+    Rule 1 does not allow that, and a place nobody picked is not one anybody
+    agreed to. Both settings must now be there.
+
+    This one runs whether or not the owner's jarvis_gate.py is on the machine:
+    what it reads is the patch in this repository, which is what apply-patches
+    puts there.
+    """
+    text = (REPO / "backend" / "gate-push.patch").read_text(encoding="utf-8")
+    after = _after_image(text)
+    server = [ln for ln in after if ln.startswith("NTFY_SERVER = ")]
+    guard = [ln.strip() for ln in after if ln.strip().startswith("if not NTFY_TOPIC")]
+
+    check("the installed file has exactly one NTFY_SERVER line", len(server) == 1, server)
+    check("... and it has NO default destination",
+          bool(server) and 'JARVIS_NTFY_SERVER", "")' in server[0], server)
+    check("... the guard needs BOTH the topic and the server",
+          bool(guard) and "or not NTFY_SERVER" in guard[0], guard)
+
+    if not (len(server) == 1 and guard):
+        return
+    topic_set = "my-topic"
+    # The owner set a topic but no server: the old default filled in ntfy.sh.
+    check("a topic with no server is not pushed anywhere",
+          _guard_says_send(server[0], guard[0], topic_set, "") is False)
+    # And the other way round: a server is not a channel.
+    check("a server with no topic is not pushed either",
+          _guard_says_send(server[0], guard[0], "", "https://ntfy.example") is False)
+    # CONTROL: both, chosen by the owner, and it does go - so the two checks
+    # above are measuring the guard and not a guard that never opens.
+    check("CONTROL: both set by the owner, and the push does go",
+          _guard_says_send(server[0], guard[0], topic_set, "https://ntfy.example") is True)
+
+    # CONTROL ON THE CONTROL: the same harness, over the line this patch
+    # replaced, must say a topic alone WOULD have been sent - otherwise the
+    # first two checks above would pass on any text at all.
+    old = 'NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER", "https://ntfy.sh").rstrip("/")'
+    check("REJECTED: with the old default, a topic alone WAS sent to ntfy.sh",
+          _guard_says_send(old, guard[0], topic_set, "") is True,
+          "the harness cannot tell the two defaults apart - these checks prove nothing")
+
+
 if __name__ == "__main__":
     for fn in (t_redact_keeps_shape_drops_values, t_push_sends_only_what_it_was_given,
                t_the_push_redaction_does_not_ride_the_logging_switch,
-               t_push_refuses_while_tainted, t_call_sites_redact,
+               t_push_refuses_while_tainted,
+               t_the_push_has_no_default_destination,
+               t_call_sites_redact,
                t_the_call_site_check_can_actually_fail):
         print(f"\n--- {fn.__name__} ---")
         try:
@@ -280,5 +411,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
+    if FAILED:
+        print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

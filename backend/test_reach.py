@@ -58,11 +58,20 @@ import jarvis_agent as AG  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 # Fake secrets, built by concatenation so nothing here is shaped like a real one.
@@ -313,7 +322,13 @@ def t_no_secret_anywhere():
         check("the email: host and user only", row(v, "email_read")["where"]
               == "imap.example.com (as me@example.com)")
         check("a key: saved yes/no only", "A key is saved on this PC." in row(v, "web_search")["line"])
-        check("ntfy: the server's host, never the topic", row(v, "phone_push")["where"] == "ntfy.sh")
+        check("ntfy: with no server set, the row says nothing is pushed anywhere",
+              row(v, "phone_push")["state"] == "not_set_up"
+              and row(v, "phone_push")["where"] == ""
+              and "default is" in row(v, "phone_push")["line"],
+              row(v, "phone_push"))
+        check("... and it never names the public broker it used to fall back to",
+              "ntfy.sh" not in json.dumps(row(v, "phone_push")), row(v, "phone_push"))
         check("Home Assistant: host only", row(v, "home_read")["where"] == "homeassistant.local")
         check("GitHub: a token is 'saved', never shown", "token is saved" in row(v, "github")["line"])
     with Env(dict(ENV, JARVIS_CALENDAR_ICS_SECRET_URL="")):
@@ -561,7 +576,7 @@ class _Handler:
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, why, hud = _rehearse()
     check("reach.patch applies to what the earlier patches wrote, and reverses", ok, why)
     if not ok:
@@ -657,6 +672,52 @@ def t_account_secrets_from_credential_manager_show_too():
               R._env("JARVIS_CALDAV_URL") == FAKE_CALDAV)
 
 
+def t_phone_push_needs_an_owner_chosen_destination():
+    """Phone notifications go NOWHERE unless the owner chose a place.
+
+    The row used to fall back to `https://ntfy.sh`, a public broker, so an
+    owner who set the topic alone - which is all the setup notes ever asked
+    for - had every card title posted to a destination he never picked. Rule 1
+    says private things stay on this PC, and a place nobody chose is not one
+    anybody agreed to. Both settings must now be there, and the row says the
+    default is nowhere (2026-10-05, backend/gate-push.patch puts the same
+    guard in the gate itself).
+    """
+    # 1. Neither setting: not set up, and it says why.
+    with Env(dict(ENV, JARVIS_NTFY_TOPIC="", JARVIS_NTFY_SERVER="")):
+        r = row(R.view(ctx(ALL)), "phone_push")
+        check("ntfy: with neither setting the row says nothing is pushed anywhere",
+              r["state"] == "not_set_up" and r["where"] == "", r)
+        check("... in those words: the default is nowhere",
+              "default is NOWHERE" in r["line"], r["line"])
+    # 2. A topic alone - the exact case the old default silently completed.
+    with Env(dict(ENV, JARVIS_NTFY_TOPIC=FAKE_TOPIC, JARVIS_NTFY_SERVER="")):
+        v = R.view(ctx(ALL))
+        r = row(v, "phone_push")
+        check("CONTROL: a topic on its own is still nowhere (the old fallback "
+              "would have made this 'on' at ntfy.sh)",
+              r["state"] == "not_set_up" and r["where"] == "", r)
+        check("... and the topic itself is still never shown", FAKE_TOPIC not in json.dumps(v))
+    # 3. A server alone is the same: nothing is sent without a channel.
+    with Env(dict(ENV, JARVIS_NTFY_TOPIC="", JARVIS_NTFY_SERVER="https://ntfy.example")):
+        check("a server on its own is nowhere as well: a server is not a channel",
+              row(R.view(ctx(ALL)), "phone_push")["state"] == "not_set_up")
+    # 4. Both, set by the owner: on, the host only, never the topic.
+    with Env(dict(ENV, JARVIS_NTFY_TOPIC=FAKE_TOPIC,
+                  JARVIS_NTFY_SERVER="https://ntfy.example")):
+        r = row(R.view(ctx(ALL)), "phone_push")
+        check("both set: the row is on and names the server's host only",
+              r["state"] == "on" and r["where"] == "ntfy.example", r)
+        check("... still never the topic", FAKE_TOPIC not in json.dumps(r))
+    # 5. CONTROL ON THE CODE: the old public fallback cannot come back. The
+    #    expression, not the words - the docstring above names the broker on
+    #    purpose, so that a reader learns what the default used to be.
+    src = (REPO / "backend" / "jarvis_reach.py").read_text(encoding="utf-8")
+    check("REJECTED: the old `or \"https://ntfy.sh\"` fallback is gone from the code",
+          'or "https://ntfy.sh"' not in src,
+          [ln.strip() for ln in src.splitlines() if 'or "https://ntfy.sh"' in ln])
+
+
 def t_both_apps_say_the_same_words():
     js = (REPO / "jarvis-desktop" / "src" / "reach.js").read_text(encoding="utf-8")
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
@@ -680,6 +741,7 @@ def t_both_apps_read_the_current_contract():
 
 if __name__ == "__main__":
     for fn in (t_rows_and_order, t_youtube_row, t_chatbot_row, t_chatbot_api_row, t_no_secret_anywhere,
+               t_phone_push_needs_an_owner_chosen_destination,
                t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
@@ -692,7 +754,7 @@ if __name__ == "__main__":
             FAILED.append(fn.__name__)
             traceback.print_exc()
     shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

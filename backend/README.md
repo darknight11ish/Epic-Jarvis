@@ -655,7 +655,31 @@ set. **Aggravating:** ntfy appears in none of the three spec documents, so an
 owner who sets that variable to get phone alerts has no way to learn what it
 sends.
 
-The patch does three things:
+**Fixed 2026-10-05: the destination is the owner's to choose, and the default
+is nowhere.** The topic was never the whole opt-in. `_push` posts to
+`f"{NTFY_SERVER}/{NTFY_TOPIC}"`, and `NTFY_SERVER` defaulted to
+`https://ntfy.sh` — so an owner who set only a topic, which is all the setup
+notes ever asked for, had every card title posted to a public broker he never
+chose. Rule 1 does not allow a destination nobody picked. `NTFY_SERVER` now
+defaults to `""`, and `_push` returns unless **both** are set:
+
+```python
+NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER", "").rstrip("/")
+...
+    # Both, or nothing. A topic with no server is a channel with no
+    # destination, and the old default quietly supplied one.
+    if not NTFY_TOPIC or not NTFY_SERVER:
+        return
+```
+
+`jarvis_reach.py`'s "Phone notifications (ntfy)" row says the same thing in
+plain words on the Reach page in both apps, and `JARVIS-API.md` §24.2 names
+both settings. **If you already had a topic set and relied on the old
+default, phone alerts stop until you set `JARVIS_NTFY_SERVER` as well** —
+that is the change, not a fault. Set it to your own ntfy, or to whichever
+service you chose.
+
+The patch does four things:
 
 1. **Both call sites redact before sending.** The redactor already existed and
    already keeps enough shape to make a useful alert — you still learn that a
@@ -668,6 +692,8 @@ The patch does three things:
    prose rather than a dict of keys. The notification is now a doorbell: what
    is waiting, its id, and "open Jarvis to read it". Same rule the SSE
    approval event already follows.
+4. **Nothing is pushed anywhere unless the owner set a destination** (above):
+   no default server, and the guard needs both settings.
 
 ### Test it
 
@@ -675,12 +701,19 @@ The patch does three things:
 $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_gate_push.py
 ```
 
-Ten checks against a stubbed network and a stubbed framework — nothing is sent
-and no approvals database is touched. Four are controls: that `_redact` still
-keeps the keys so the alert means something, that a redacted body reaches the
-broker unchanged, and (parsing the source) that **neither** call site passes
-raw `detail` or falls back to `prompt`. That last pair is what fails if someone
-later "simplifies" the call sites back.
+The checks run against a stubbed network and a stubbed framework — nothing is
+sent and no approvals database is touched. Several are controls: that
+`_redact` still keeps the keys so the alert means something, that a redacted
+body reaches the broker unchanged, and (parsing the source) that **neither**
+call site passes raw `detail` or falls back to `prompt`. That pair is what
+fails if someone later "simplifies" the call sites back.
+
+`t_the_push_has_no_default_destination` reads the patch itself and runs the
+two lines it installs, so it also runs where `jarvis_gate.py` is not on the
+machine (the rest print a plain `skip` there, and the summary counts them):
+a topic alone sends nothing, a server alone sends nothing, both together send
+to the server the owner named — and the check is watched failing against the
+old `"https://ntfy.sh"` line, so it cannot pass on any text at all.
 
 
 ---
@@ -2594,8 +2627,9 @@ action by name and getting something else back.
 ```
 
 For the second kind nothing happened — the value was passed through. For the
-**first kind, 58 of the 112 entries**, [jarvis_gate.py](jarvis_gate.py)'s
-`action_for_tool()` also **rewrote the returned name**:
+**first kind, 58 of the 112 entries**, `jarvis_gate.py`'s `action_for_tool()` also
+**rewrote the returned name** — that file is not in this repo; it lives only on the
+owner's PC, one of the files `backend/run_suites.py` treats as owner-only:
 
 ```python
 action = f"tool:{name}"      # 58 entries reported as "tool:calculator"
@@ -12897,7 +12931,15 @@ own folders, protected places), and raises the same kind of card
 and `feedback.db` with SQLite's own online backup API (`sqlite3.
 Connection.backup`, safe while Jarvis keeps them open), zips them with
 every top-level `*.json` settings file, `jarvis-framework.toml`, `notes/`,
-`voice/` (the owner's own voice-print - not `voice-models/` or `voices/`)
+`voice/` (the owner's own voice-print - not `voice-models/` or `voices/`),
+**every `*.py` file directly in the folder `jarvis_backup.py` is running
+from, as `source/<name>.py`** (2026-10-05: an audit found five sources -
+`jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py`, `jarvis_models.py`,
+`jarvis_skills.py` - that existed in exactly one place on Earth and that no
+backup of any kind read; top level only, never the tree, because
+`__pycache__/` is bytecode that rebuilds itself and the patcher's own
+`_jarvis-backup-*` folders already hold older copies of the same sources -
+188 files, 10.1 MB, about 3.6 MB deflated)
 and the chat-history key (read from Windows Credential Manager, kept
 base64 INSIDE the archive only), then encrypts the whole zip with
 AES-256-GCM under a key stretched from a fresh 20-character recovery code
@@ -12924,7 +12966,11 @@ CURRENT state first, automatically, with a fresh one-time recovery code
 (carried in the outcome exactly once, then gone on the next read), so the
 restore itself can be undone - then writes the backup's files back.
 Restore only adds and overwrites; it never deletes a file that is not in
-the backup.
+the backup. Since 2026-10-05 it also writes the archive's `source/*.py`
+back into the folder the module runs from, so the CODE comes back with the
+data; the card says plainly that restoring an OLDER backup therefore puts
+back the older program and undoes updates applied since, naming
+`apply-patches.ps1`.
 
 ## `jarvis_gate.py`: a denial proposes no standing rule
 
@@ -17210,7 +17256,10 @@ words, and an approval card on the PC - always with Windows Hello - decides
 whether the phone gets **its own key**. Every device is listed with its own
 Remove, which cuts it off within seconds. The old shared key keeps working
 until you press Retire; after that it works on this PC only, so you can
-never lock yourself out of the PC.
+never lock yourself out of the PC. **Since 2026-10-05 it is a first-pairing
+bootstrap as well**: it is accepted from another device only while no device
+has a key of its own, so the shared key can no longer bring a second device
+in - see "The old shared key is a bootstrap" below.
 
 ## Owner steps
 
@@ -17226,7 +17275,8 @@ Tailscale or NordVPN Meshnet - pairing is refused over anything else.
   `jdk1.` is checked against `devices/registry.json` (its SHA-256, compared
   in constant time) and never falls back to the old check; anything else
   goes to your own `_token_ok`, unchanged, and is then refused from another
-  device only if the old shared key was retired.
+  device if the old shared key was retired **or if a device holds a key of
+  its own** (the bootstrap rule below).
 - **The registry** (`<settings folder>/devices/registry.json`) holds names,
   dates and the SHA-256 of each key - never a key. In a subfolder on
   purpose: backups copy only the settings folder's own `*.json`, so a
@@ -17241,11 +17291,47 @@ Tailscale or NordVPN Meshnet - pairing is refused over anything else.
 - **Remove** is immediate, no card: the device's open event stream stops at
   its next write (about 10 s). **Retire** is immediate and cannot be pressed
   by a device that still uses the shared key itself. **Bring back** is a
-  card with Windows Hello, on this PC only, and refused under Lockdown.
+  card with Windows Hello, on this PC only, and refused under Lockdown - and
+  refused with a plain 409, no card, while a device holds a key of its own,
+  because it could not work then.
 - **A damaged registry** refuses every device key and treats the shared key
   as retired for other devices - this PC keeps working. To start again:
   `py -3 jarvis_devices.py --start-fresh` (the bad file is kept beside it as
   `registry.json.broken-<time>`; every phone then pairs again).
+
+## The old shared key is a bootstrap (2026-10-05)
+
+The owner's own machine had no `devices/registry.json` at all when this was
+written: no device had ever been given a key of its own, so the shared key was
+the only way in that had ever worked there - and the QR path needs Windows
+Hello set up before its `pair_device` card can be approved at all ("no lock, no
+risky approval"). **Removing the shared path outright would therefore have
+risked leaving that PC with no way to pair a phone**, so it was narrowed
+instead of deleted:
+
+- the shared key is accepted from another device **only while no device holds a
+  key of its own** (`_first_pairing`). That is the first pairing;
+- once one does, per-device pairing has been proven on that PC - the very thing
+  that was in doubt - and the shared key is refused from other devices, with
+  `key: shared_first_pair_only` in the 401 and its own sentence telling the
+  owner to pair that device with the QR code;
+- either way **this PC keeps working, and so does every device with its own
+  key**. The refusal can only ever start in a state that proves the way out
+  exists, so it cannot lock anyone out;
+- removing every device opens the window again, and **Bring it back** is
+  refused with plain words rather than a card that could not work;
+- each decision is audited at most once a minute (`devices.shared`, state
+  `first-pairing` / `refused-first-pairing-done` / `refused-retired`) - never a
+  key, and never once per poll, because a phone with a stale key asks every
+  couple of seconds.
+
+What it cannot do, said plainly: a device that has used the shared key for
+months and a brand new one typing the same string are indistinguishable - they
+send the same key. So "the shared key cannot pair a new device" is only
+enforceable by refusing it from other devices altogether, which is why the rule
+waits for the first device key rather than acting at once. **The next step,
+when the owner is ready, is to press Retire** (Settings, Devices - immediate,
+no card) so nothing rides on the shared key at all.
 
 ## Signed approvals from the phone (phase 2, 2026-09-29)
 
@@ -17647,8 +17733,11 @@ press Hear it, and again (in the background) after your voice prints change. One
 that sounded too much like you would not be listed, chosen or spoken with, and
 the picker would say why. It cannot be checked without a working voice engine,
 and then it is not used (nothing is treated as fine because it could not be
-checked). With no voice print trained yet there is nothing to compare with, and
-it is checked as soon as you train one.
+checked). **That includes having no voice print trained yet** (fixed
+2026-10-04): there is then nothing to compare with, so neither blend is listed,
+chosen, heard or spoken with - the pack's own voice speaks and the picker says
+why - and both are checked for real as soon as you train your voice, because
+the answer is kept for one set of prints and training makes a new set.
 
 **Animals keep their four voices** (Bella, Nicole, Sarah, Michael). Neither
 blend can be given to an animal.

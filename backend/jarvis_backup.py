@@ -65,6 +65,28 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     unopenable. A restore writes the file and the key back together and makes
     the running store reopen (jarvis_decks.forget_key). Same recovery code, same
     lock; the deck words are never in the archive in the clear.
+  * **The backend's own program files** - every `*.py` directly in the folder
+    this module is running from (`_source_dir()`), kept as `source/<name>.py`.
+    Added 2026-10-05, after an audit found FIVE files that existed in exactly
+    one place on Earth - the live backend folder - and were read by no backup
+    of any kind: not this module (nothing in it read a `.py` file), not
+    apply-patches.ps1, not git (`backend/.gitignore` keeps the live sources
+    out on purpose, with a written exception only for the ten under
+    `backend/rebuilt/`). The five were `jarvis_hud.py` (the whole control
+    plane), `jarvis_gate.py` (the approval gate), `jarvis_extract.py`,
+    `jarvis_models.py` and `jarvis_skills.py`; a bad patch or a deleted folder
+    would have taken them with it. TOP LEVEL ONLY, never the tree: the folder
+    also holds `__pycache__/` (9.6 MB of bytecode that is rebuilt from the
+    sources anyway) and the patcher's own `_jarvis-backup-*` folders, which
+    already hold older copies of the same sources - archiving those would nest
+    a copy of the whole source inside every new backup and grow each
+    generation. Top level is 188 files, 10.1 MB, about 3.6 MB once deflated: a
+    bounded, one-off cost beside data that grows on its own. The source rides
+    inside the same encrypted archive, so the code is never in the clear
+    either. A restore writes these back into the folder this module runs from,
+    so the CODE comes back with the data - and therefore a restore also
+    replaces the current program files with that day's, which the restore card
+    now says in plain words.
 
 EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
   * The pairing token and every API key (Exa, Tavily, Brave, GitHub, ...):
@@ -77,6 +99,10 @@ EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
   * Model files (large, and Ollama already keeps its own copy) and logs
     (`*.log` in the settings folder - the `*.json` glob above never matches
     them).
+  * Any backend file that is NOT a top-level `*.py`: the subfolders
+    (`__pycache__/`, `_jarvis-logs/`, the patcher's `_jarvis-backup-*`
+    folders - see the source bullet above), other file types beside the
+    sources, and `*.py` nested deeper than one level.
   * approvals.db and holds.db (pending-approval state, not memory - restoring
     a stale "waiting" row would be misleading, never a security hole: the
     in-memory approval stamp, jarvis_owner_check.stamp, is gone the moment
@@ -237,6 +263,18 @@ SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "pro
 
 STUDY_DB = "study.db"
 
+#: The backend's own program files, inside the archive (2026-10-05). Added
+#: after an audit found five sources - jarvis_hud.py, jarvis_gate.py,
+#: jarvis_extract.py, jarvis_models.py, jarvis_skills.py - that existed in
+#: exactly one place on Earth (the live backend folder) and that no backup of
+#: any kind read. See the module docstring's "WHAT IS BACKED UP".
+#: TOP LEVEL ONLY: `*.py` directly in the folder this module runs from, never
+#: a subfolder - `__pycache__/` is bytecode that rebuilds itself, and the
+#: patcher's `_jarvis-backup-*` folders already hold older copies of these same
+#: sources, so recursing would nest the whole source inside every new backup.
+SOURCE_PREFIX = "source/"
+SOURCE_GLOB = "*.py"
+
 MISSING = "backup.py could not be reached - run apply-patches.ps1 on this PC"
 NO_CRYPTO = ("Backing up needs the `cryptography` package, which is not installed on this "
              "PC - without it nothing is ever written unencrypted, so backups are off "
@@ -276,6 +314,23 @@ def _config_dir() -> Path:
     if env:
         return Path(os.path.expanduser(env))
     return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def _source_dir() -> Path:
+    """The folder this module is RUNNING FROM - the live backend folder, the
+    one holding jarvis_hud.py, jarvis_gate.py and the rest. There is exactly
+    one honest answer and this is it: the copy of this module that is executing
+    is in that folder by definition, so `__file__` always names it, with no
+    setting to keep in step and nothing to get wrong on the owner's PC (the
+    path is different on every machine, and a setting would only be a second
+    thing to fix).
+
+    Replaceable in tests, exactly like `_config_dir()`, so a test never writes
+    into the folder the test itself is running from."""
+    try:
+        return Path(__file__).resolve().parent
+    except Exception:
+        return Path.cwd()
 
 
 def settings_path() -> Path:
@@ -540,7 +595,8 @@ def build_archive() -> tuple:
     conf = _config_dir()
     manifest = {"created_at": time.time(), "databases": {}, "settings_files": 0,
                 "notes_files": 0, "voice_files": 0, "chat_history_key": False,
-                "study_decks_key": False, "framework_toml": False}
+                "study_decks_key": False, "framework_toml": False,
+                "source_files": 0}
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory(prefix="jarvis-backup-") as tmp:
         tmp_path = Path(tmp)
@@ -586,6 +642,21 @@ def build_archive() -> tuple:
             for f in _walk_files(voice_root):
                 zf.write(f, arcname=f"voice/{f.relative_to(voice_root)}")
                 manifest["voice_files"] += 1
+            # The backend's own program files, so a backup brings the CODE back
+            # with the data (2026-10-05). Top level only: `glob`, not
+            # `_walk_files` - see SOURCE_GLOB above for why recursing here is
+            # wrong, not merely expensive. A file that cannot be read is left
+            # out and the count says how many really went in; this is never a
+            # reason to fail the whole backup.
+            source_root = _source_dir()
+            for sf in sorted(source_root.glob(SOURCE_GLOB)):
+                if not sf.is_file():
+                    continue
+                try:
+                    zf.write(sf, arcname=f"{SOURCE_PREFIX}{sf.name}")
+                    manifest["source_files"] += 1
+                except OSError:
+                    continue
             key_b64 = _chat_history_key_b64()
             if key_b64:
                 zf.writestr("secrets/chat-history-key.b64", key_b64)
@@ -1182,9 +1253,14 @@ def restore_card(name: str, manifest: dict) -> str:
         f"Made: {when_text}",
         "",
         "This REPLACES your memory and chat files, review decks, settings and notes with that day's "
-        "copies. Anything you added or changed in them since is lost - unless it is in the "
-        "safety backup Jarvis makes first. Only files the backup does not have at all are "
-        "left as they are.",
+        "copies, and puts that day's copy of Jarvis's own program files (the .py files beside "
+        "jarvis_hud.py) back into the folder Jarvis runs from. Anything you added or changed in "
+        "them since is lost - unless it is in the safety backup Jarvis makes first. Only files "
+        "the backup does not have at all are left as they are.",
+        "",
+        "Because the program files are included from 2026-10-05 on, restoring an OLDER backup "
+        "also puts back the older program and undoes any updates applied to the code since. "
+        "Run apply-patches.ps1 again afterwards if you want those back.",
         "",
         "Before doing this, Jarvis will back up your CURRENT data first, with a fresh "
         "recovery code shown once, so this restore itself can be undone.",
@@ -1281,6 +1357,7 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     conf.mkdir(parents=True, exist_ok=True)
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
                "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
+               "source_files": 0,
                "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False}
     plan: list = []              # (dest, data, is_database)
     key_data = None
@@ -1299,6 +1376,17 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 where = ("notes_files", _inside(conf / "notes", name[len("notes/"):]))
             elif name.startswith("voice/"):
                 where = ("voice_files", _inside(conf / "voice", name[len("voice/"):]))
+            elif name.startswith(SOURCE_PREFIX):
+                # The backend's own program files go back into the folder this
+                # module runs from (2026-10-05) - `_source_dir()`, read HERE and
+                # not before the chain, so an archive with no `source/` entry
+                # (every backup made before this change) never even asks where
+                # the sources live. `flat=True`: build_archive writes one name
+                # per file, so a nested name is a tampered archive, not a
+                # layout to honour - `_inside` refuses it and it is counted
+                # under "skipped" like any other bad name.
+                where = ("source_files",
+                         _inside(_source_dir(), name[len(SOURCE_PREFIX):], flat=True))
             if where is not None and where[1] is None:
                 applied["skipped"] += 1
                 continue

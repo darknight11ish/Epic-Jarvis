@@ -12,6 +12,12 @@ docs/PAIRING-DESIGN.md section 10's backend list, row by row:
     device keys and treats the shared key as retired - except from this PC;
     the 401 gets its `key` reason; last_seen is written at most once a
     minute;
+  * the shared key is a FIRST-PAIRING bootstrap (2026-10-05): accepted from
+    another device only while no device holds a key of its own, refused
+    afterwards with `key: shared_first_pair_only` and an audit line, and the
+    window reopens when every device is removed; this PC and every device
+    with its own key keep working either way, and Bring it back is refused
+    with plain words instead of a card that could not work;
   * the stream guard: a write after Remove raises BrokenPipeError;
   * the hunk order on the stacked jarvis_hud.py;
   * pairing: start is PC only; the address rule; the QR text round-trips
@@ -24,7 +30,8 @@ docs/PAIRING-DESIGN.md section 10's backend list, row by row:
     collect gives the key once, a second collect is 410; a new start
     withdraws the old card;
   * Remove, Retire (uses_it_yourself), Bring back (a card, PC only, 409
-    under Lockdown);
+    under Lockdown - and 409 with plain words, no card, while a device holds
+    a key of its own);
   * devices/registry.json is not in a backup (jarvis_backup's own code);
   * the tables that must know the new actions;
   * no key, secret or code in any audit line, event or printed line.
@@ -72,6 +79,7 @@ import _stack  # noqa: E402
 OC._OWN_CACHE.update(at=time.monotonic() + 1e9, set=frozenset())
 
 PASSED, FAILED = [], []
+SKIPPED = []
 EVENTS: list = []
 D._publish = lambda kind, data: EVENTS.append((kind, dict(data)))
 
@@ -86,6 +94,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Verdict:
@@ -360,17 +376,94 @@ def t_last_seen_at_most_once_a_minute():
             c.tick(60)
             ok(FakeHandler(token=token, peer=MESH))
             check("a minute later, once more", len(writes) == 2, writes)
+            # 2026-10-05: a device holds a key of its own now, so the shared
+            # key is no longer a way in from another device (the next test
+            # covers that rule). Nothing is written for those requests, and
+            # the shared key's own once-a-minute write is checked there.
             for _ in range(3):
                 ok(FakeHandler(token=SHARED, peer=MESH))
-            check("the shared key's use from another device: once too", len(writes) == 3, writes)
+            check("the shared key from another device: refused, and nothing written",
+                  len(writes) == 2, writes)
         finally:
             D._write = keep
         doc = json.loads(D.registry_path().read_text(encoding="utf-8"))
         row = doc["devices"][0]
         check("last_seen is rounded to the minute", row["last_seen"] % 60 == 0, row)
-        check("the shared key's last other use and address are kept",
-              doc["shared"]["last_other_address"] == MESH
-              and doc["shared"]["last_other_seen"] % 60 == 0, doc["shared"])
+        check("... and a refused shared key left the shared row alone",
+              doc["shared"]["last_other_address"] is None
+              and doc["shared"]["last_other_seen"] is None, doc["shared"])
+
+
+def t_the_shared_key_is_a_first_pairing_only():
+    """The old shared key brings the FIRST device in, and then stops.
+
+    The owner decided per-device keys are the right shape ("more devices",
+    docs/APPROVAL-GAP-DESIGN.md) and the QR pairing above gives every device
+    one. What was left was the shared key, still accepted from any device on
+    the mesh - so a device could still be brought in with a key that cannot be
+    removed on its own. Since 2026-10-05 it is a bootstrap and nothing else:
+    it works from another device only while NO device holds a key of its own.
+
+    Removing the shared path outright was the other option and was NOT taken:
+    what the owner has today is a PC with no device key at all (no
+    devices/registry.json on it), so the shared key is the only way in that has
+    ever worked there, and the QR path needs Windows Hello set up before its
+    card can be approved at all ("no lock, no risky approval"). Narrowing it to
+    the first pairing keeps today's behaviour for him, and the refusal only
+    ever starts once a device key exists - which is itself the proof that the
+    QR way works on that PC.
+    """
+    # 1. No device yet: the shared key still brings the first device in.
+    fresh()
+    with Clock():
+        h = FakeHandler(token=SHARED, peer=MESH)
+        check("with no device paired, the shared key works from the mesh",
+              D.wrap_token_ok(Original())(h) is True)
+        check("... and that request is 'shared'", h._jarvis_device == "shared")
+        check("... and it is written down as the first pairing",
+              ("devices.shared", {"state": "first-pairing"}) in AUDIT, AUDIT)
+
+    # 2. A device of its own: the shared key stops, in its own words.
+    with Clock():
+        dev, token, _ = pair()
+    AUDIT.clear()
+    with Clock():
+        h = FakeHandler(token=SHARED, peer=MESH)
+        check("once a device has its own key, the shared key is refused from the mesh",
+              D.wrap_token_ok(Original())(h) is False)
+        h._send(401, {"error": "bad or missing X-Jarvis-Token"})
+        check("... with key: shared_first_pair_only",
+              h.sent[-1][1].get("key") == "shared_first_pair_only", h.sent)
+        check("... and that is written down too",
+              ("devices.shared", {"state": "refused-first-pairing-done"}) in AUDIT, AUDIT)
+        check("... this PC itself is never cut off",
+              D.wrap_token_ok(Original())(FakeHandler(token=SHARED, peer="127.0.0.1")) is True)
+        check("... nor is the device that has its own key",
+              D.wrap_token_ok(Original())(FakeHandler(token=token, peer=MESH)) is True)
+        check("... and the sentence says what to do instead",
+              "QR code" in D.KEY_WORDS["shared_first_pair_only"]
+              and "Settings, Devices" in D.KEY_WORDS["shared_first_pair_only"],
+              D.KEY_WORDS["shared_first_pair_only"])
+
+    # 3. The Devices page says it, in its own words, and does not offer a
+    #    button that could not work.
+    v = D.devices_view(you="pc", here=True)
+    check("the shared row reports first_pair_only",
+          v["shared"]["first_pair_only"] is True and v["shared"]["retired"] is False, v["shared"])
+    check("... and Bring it back is not offered", v["shared"]["can_bring_back_here"] is False)
+    code, out = D.shared({"retired": False}, you="pc", here=True)
+    check("Bring it back while a device has its own key: refused, no card raised",
+          code == 409 and out.get("first_pair_only") is True
+          and out.get("error") == D.DEVICES_WORDS["unretire_first_pair"], out)
+
+    # 4. The window opens again only when the PC has no device of its own -
+    #    which is also what keeps the rule from ever locking anyone out.
+    D.remove({"id": dev}, you="pc")
+    with Clock():
+        check("with every device removed, the first-pairing window is back",
+              D.wrap_token_ok(Original())(FakeHandler(token=SHARED, peer=MESH)) is True)
+        check("... and the row stops saying first_pair_only",
+              D.devices_view(you="pc", here=True)["shared"]["first_pair_only"] is False)
 
 
 def t_the_stream_guard():
@@ -458,7 +551,7 @@ def t_the_hunk_comes_before_every_token_ok():
 def t_the_patch_applies_and_reverses():
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     order = _stack.order()
     for target in ("jarvis_hud.py", "jarvis_gate.py"):
         at = order.index("devices.patch")
@@ -1129,8 +1222,15 @@ def t_the_registry_is_not_in_a_backup():
     names = zipfile.ZipFile(io.BytesIO(data)).namelist()
     check("the backup has the settings folder's own JSON (the test is real)",
           "settings/manner.json" in names, names)
-    check("... and not devices/registry.json", not any("registry" in n or "devices" in n
-                                                       for n in names), names)
+    # The registry is the file that holds every device's pairing key, so it must
+    # never travel in a backup. Match the FILE, not any name containing "devices"
+    # or "registry": a backup now also carries the backend's own source as
+    # source/*.py, and jarvis_devices.py / jarvis_settings_registry.py are
+    # programs, not keys. The old substring test failed on those four names and
+    # said the registry was exposed when it was not.
+    check("... and not the device registry itself",
+          not any(n.replace("\\", "/").rsplit("/", 1)[-1].lower() == "registry.json"
+                  for n in names), names)
 
 
 def t_the_scrubber_knows_the_key():
@@ -1201,6 +1301,54 @@ def t_a_proof_that_is_not_ascii_is_just_wrong():
           (code, ans))
 
 
+def t_the_apps_know_the_first_pairing_state():
+    """Both apps word the shared key's new state from the PC's own words.
+
+    Neither app builds in this repository, so a sentence or a button that
+    drifted from the PC would go unnoticed - the same reason the address test
+    above reads `PhoneAddress.kt`. What this pins (2026-10-05):
+
+      * the row's sentence is `DEVICES_WORDS["shared_first_pair_row"]`, word
+        for word, in the phone and in the desktop;
+      * the phone's `KeyRefusal` knows `shared_first_pair_only`, carries the
+        PC's sentence, and reads it out of a 401;
+      * the phone hides "Retire for other devices" in that state (it would
+        change nothing), and the desktop offers neither Retire nor Bring it
+        back.
+    """
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
+          "client" / "net" / "Devices.kt").read_text(encoding="utf-8")
+    plate = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
+             "client" / "ui" / "screens" / "DevicesPlate.kt").read_text(encoding="utf-8")
+    js = (REPO / "jarvis-desktop" / "src" / "devices-words.js").read_text(encoding="utf-8")
+
+    def quoted(src, start, end):
+        i = src.index(start)
+        return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', src[i:src.index(end, i)]))
+
+    row = D.DEVICES_WORDS["shared_first_pair_row"]
+    got = quoted(kt, "const val SHARED_FIRST_PAIR_ROW", "const val THIS_PHONE")
+    check("the phone's row sentence is the PC's, word for word", got == row, got)
+    check("... and the desktop's is too (SHARED_FIRST_PAIR_ROW)", row in js, row)
+    check("the phone reads first_pair_only off the wire, an absent field as false",
+          'firstPairOnly = it.bool("first_pair_only") == true' in kt
+          and "val firstPairOnly: Boolean = false" in kt)
+    refusal = D.KEY_WORDS["shared_first_pair_only"]
+    got = quoted(kt, "const val SHARED_FIRST_PAIR_ONLY_WORDS", "private val _reason")
+    check("the phone's refusal sentence is the PC's, word for word", got == refusal, got)
+    check("... and the phone recognises it in a 401 (reasonIn, words, isWords)",
+          "it == SHARED_FIRST_PAIR_ONLY }" in kt
+          and "SHARED_FIRST_PAIR_ONLY -> SHARED_FIRST_PAIR_ONLY_WORDS" in kt
+          and "text == SHARED_FIRST_PAIR_ONLY_WORDS" in kt
+          and 'const val SHARED_FIRST_PAIR_ONLY = "shared_first_pair_only"' in kt)
+    check("the phone hides Retire in that state - it would change nothing",
+          "!shared.retired && !shared.firstPairOnly && v.usesOwnKey" in plate)
+    check("the desktop offers neither button in that state",
+          "s.first_pair_only === true" in js and "bringBack: false," in js)
+    check("... and neither app offers a card for it (the PC refuses with words)",
+          "unretire_first_pair" in D.DEVICES_WORDS)
+
+
 def main() -> int:
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
@@ -1211,7 +1359,7 @@ def main() -> int:
                 FAILED.append(name)
                 traceback.print_exc()
     shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     return 1 if FAILED else 0

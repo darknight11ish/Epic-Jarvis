@@ -765,12 +765,28 @@ def _youtube(ctx: Ctx) -> dict:
 
 
 def _phone_push(ctx: Ctx) -> dict:
+    """Where phone notifications go. Nowhere, unless the owner chose a place.
+
+    Two settings, and both are the owner's: JARVIS_NTFY_TOPIC says which
+    channel, JARVIS_NTFY_SERVER says where that channel lives. The server
+    used to default to https://ntfy.sh, a public broker, so an owner who set
+    only a topic - which is all the setup notes asked for - had every card
+    title posted to a place he never chose. Rule 1 says private things stay
+    on this PC, and a destination nobody picked is not one anybody agreed to.
+    So both must be set, and this row says plainly that the default is
+    nowhere. Changed 2026-10-05 (backend/gate-push.patch, _push's own guard).
+    """
     name = "Phone notifications (ntfy)"
-    topic = ctx.env("JARVIS_NTFY_TOPIC")
-    if not topic:
-        return _row("phone_push", name, "not_set_up", "", ASK_NA,
-                    "Not set up: no ntfy topic is set, so nothing is pushed.")
-    server = ctx.env("JARVIS_NTFY_SERVER") or "https://ntfy.sh"
+    topic = (ctx.env("JARVIS_NTFY_TOPIC") or "").strip()
+    server = (ctx.env("JARVIS_NTFY_SERVER") or "").strip()
+    if not topic or not server:
+        missing = ("no ntfy topic is set" if not topic else "no ntfy server is set")
+        return _row(
+            "phone_push", name, "not_set_up", "", ASK_NA,
+            "Not set up: " + missing + ", so nothing is pushed anywhere. The default is "
+            "NOWHERE, so that alerts about this PC cannot leave it by accident: set both "
+            "JARVIS_NTFY_TOPIC (which channel) and JARVIS_NTFY_SERVER (where that channel "
+            "lives) to turn phone notifications on.")
     return _row("phone_push", name, "on", where_words(host_of(server)), ASK_NA,
                 "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the "
                 "details, and never while the conversation holds private text.")
