@@ -268,14 +268,23 @@ installed), so two things were built first:
   annotation per suite, carrying that suite's own `FAIL` lines. The public
   checks API serves those annotations to anyone, with no token - which is how
   every remaining suite below was identified.
-* **`dshwork/audit-2026-10-04/linux_sim.py`** - a local Linux pretence. An
-  import hook hands each `jarvis_*`/`gen_*` module a proxy `os` (naming
-  `posix`), proxy `sys` and `platform` (Linux), and hides the Windows-only
-  tools; directory listings come back reversed, to catch a fixture that
-  depends on the order a file system happens to return names in. It runs a
-  generator (`--check`) or a whole suite, in CI's own shape. It is a
-  simulation, not Linux, and it says so - it found two of the seven, and CI's
-  annotations found the rest.
+* **`tools/pretend_linux.py`** - a local Linux pretence, kept in the repository
+  because it is the only way to see a Linux-only failure from this PC (the
+  audit's own copy lived in `dshwork/`, which is not committed and is meant to
+  be deleted). An import hook hands each `jarvis_*`/`gen_*` module a proxy `os`
+  (naming `posix`), proxy `sys` and `platform` (Linux), and hides the
+  Windows-only tools; directory listings come back reversed, to catch a fixture
+  that depends on the order a file system happens to return names in. It runs a
+  generator (`--check`) or a whole suite, in CI's own shape:
+
+      py -3 tools/pretend_linux.py gen_wiki_cases.py
+      py -3 tools/pretend_linux.py test_wiki.py
+
+  `os.name` and `sys.platform` are patched per module, never globally: pathlib
+  picks its flavour from `os.name` at call time, and `shutil.which("git")`
+  returns None the moment `sys.platform` says Linux on a Windows interpreter.
+  It is a simulation, not Linux, and it says so - it found two of the seven,
+  and CI's annotations found the rest.
 
 Each generator's `--check` also now prints **the first line where a fresh run
 and the committed file disagree** (both values), instead of only "out of date":
