@@ -311,6 +311,19 @@ from this repository's.
 across runs, `test_apps` 253/0 and `test_projects` 280/0 against the owner's
 backend, and the whole repository suite set green locally on Windows.
 
+**A CI trap worth knowing, because it hid two jobs for the whole pass.** The
+workflow sets `concurrency: group: ci-${{ github.ref }}` with
+`cancel-in-progress: true`, on purpose ("a newer push to the same branch stops
+the older run: its result would be out of date before it finished"). The Ubuntu
+`backend` job takes ~15 minutes, `frontend` more than 28, and
+`backend-windows` covers 209 suites - so **each of the eight pushes made while
+fixing the backend job cancelled the previous run's `frontend` and
+`backend-windows` jobs mid-flight**. They were never seen to fail or pass; they
+were `cancelled`, with the annotation "Canceling since a higher priority waiting
+request for ci-refs/pull/47/merge exists". Nothing about that work is wrong -
+but it means those two jobs are only proven by a run that is left alone from
+push to finish.
+
 ## 2. The audits
 
 ### 2.1 §7.1 — promises vs tests
