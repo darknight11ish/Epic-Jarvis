@@ -380,6 +380,32 @@ jobs:
     #        (Resolve-Path -LiteralPath ...).Path the short one), so the test's
     #        own mid-way-failure hook never fired; the other 3 the line endings
     #        above.
+    #
+    # A LATER RUN FOUND THE TIMER-TICK CAUSE ONCE MORE (run 37369387182, job
+    # 111962928099, 2026-10-05) - this time in test_backup.py, which is in the
+    # list below and stays there:
+    #
+    #   test_backup.py        123 passed, 4 failed: the four checks
+    #        t_backup_now_is_this_pc_only_no_card_needs_a_folder,
+    #        t_restore_never_writes_outside_its_own_folders,
+    #        t_retention_never_deletes_the_file_just_written and
+    #        t_a_same_second_backup_sorts_newer_and_survives each died in
+    #        fresh_conf() before its own first check ran - hence 4 FAILs and no
+    #        "FAIL ..." lines. FileExistsError: [WinError 183] on
+    #        conf-1791232696015878900 (and one on backups-1791232692749314200).
+    #        Same cause as the two suites above: it named its throwaway folders
+    #        from time.time_ns(), which only moves on the system timer tick.
+    #        Measured on the owner's PC: 155 FileExistsError(s) in 400 calls of
+    #        the old two-mkdir body, 0 in 400 with tempfile.mkdtemp. RULED OUT,
+    #        by reading what the four checks assert and the job's own log:
+    #        jarvis_documents.check_folder() refusing the temp folder (the suite
+    #        already asks it first in _scratch_root and falls back beside the
+    #        user's home - it ran from C:\Users\runneradmin\.jarvis-backup-tests-*),
+    #        a path length or separator problem (the failing path is 88 bytes),
+    #        and the runner's %USERPROFILE% shape (the same fallback root is
+    #        used for a whole run, and the other 123 checks passed there). The
+    #        same-second name collision the checks exist for is untouched: it is
+    #        a backup FILE name (jarvis-backup-<stamp>-2), not a folder name.
     runs-on: windows-latest
     # 90 minutes, chosen rather than derived. Measured on the owner's 24-core
     # PC while another audit was running: 31 minutes of suite time in repo mode
