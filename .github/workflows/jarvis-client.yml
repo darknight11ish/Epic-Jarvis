@@ -167,7 +167,14 @@ jobs:
               text = open("test.log", encoding="utf-8", errors="replace").read()
               seen = []
               for line in text.splitlines():
-                  if (re.match(r"^[ew]: ", line) or "Unresolved reference" in line
+                  if line.startswith("w: "):
+                      # A warning is NOT a failure: several files in this app
+                      # carry them already. Labelling them ::error:: made a
+                      # green compile look red and hid the real failure
+                      # (2026-10-05).
+                      print(f"::warning title=Kotlin warning::{line.strip()[:400]}")
+                      continue
+                  if (line.startswith("e: ") or "Unresolved reference" in line
                           or "Compilation error" in line or "error: " in line):
                       if line.strip() and line not in seen:
                           seen.append(line)
