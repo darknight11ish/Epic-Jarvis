@@ -1851,7 +1851,7 @@ null, "assignable": [feature ids currently on and eligible to be moved],
 style `"combined"` already uses, so both apps' UI code can reuse the exact
 same rendering pattern.
 
-**Card sizes and the third card's identity (added 2026-09-30; calculated, not measured - no extra card is installed).** *Sizes.* The capability floor is now 7,680 MiB as nvidia-smi reports it (`MIN_TOTAL_MB`), so an 8 GB second or third card is used; `detected.why` then names the switches that card can take. An 8 GB card runs `learning` and `wiki` (qwen3:8b at 16,384 tokens, or 8,192 when a monitor is plugged into it) and `vision` (qwen2.5vl:7b at 8,192, only with no monitor on it). It does NOT run `long_context` or `browser_control`: it holds no more than the main card's 16,384 tokens, so they would not help. Turning one of those on returns **503** `"<name>" cannot be turned on: ...` (the same shape a preset's unsupported feature already has), the row's `why` says so and its `model` is `null`. 10 GB and up (10/11/12/16/24 GB) is unchanged: qwen3:8b at 32,768. *The third card's answer* gains two additive keys: `unavailable` (`{feature id: why}` for a switch that card cannot run) and `assignable` now leaves those out; assigning one returns **503** with the same words. *Identity.* `second-card.json` gains `third_card`, the id of the card the owner approved `third_feature` for. `third.assigned` is that feature only while the card in the third slot has that id; otherwise it is `null`, `third.why` says the choice is kept and must be approved again, and no lane starts on the other card. A file with `third_feature` but no `third_card` (written before this) is read the same way - asked again once, never "whichever card is third now". The card raised for a move now refuses (and saves nothing) if the third slot's card changed while it waited. Not fixed here, and reported: the second card's own lane has the same weakness - the master switch's approval names the card but is not bound to its id.
+**Card sizes and the third card's identity (added 2026-09-30; calculated, not measured - no third card is installed. The second card is installed and measured as of 2026-10-05: [MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md).)** *Sizes.* The capability floor is now 7,680 MiB as nvidia-smi reports it (`MIN_TOTAL_MB`), so an 8 GB second or third card is used; `detected.why` then names the switches that card can take. An 8 GB card runs `learning` and `wiki` (qwen3:8b at 16,384 tokens, or 8,192 when a monitor is plugged into it) and `vision` (qwen2.5vl:7b at 8,192, only with no monitor on it). It does NOT run `long_context` or `browser_control`: it holds no more than the main card's 16,384 tokens, so they would not help. Turning one of those on returns **503** `"<name>" cannot be turned on: ...` (the same shape a preset's unsupported feature already has), the row's `why` says so and its `model` is `null`. 10 GB and up (10/11/12/16/24 GB) is unchanged: qwen3:8b at 32,768. *The third card's answer* gains two additive keys: `unavailable` (`{feature id: why}` for a switch that card cannot run) and `assignable` now leaves those out; assigning one returns **503** with the same words. *Identity.* `second-card.json` gains `third_card`, the id of the card the owner approved `third_feature` for. `third.assigned` is that feature only while the card in the third slot has that id; otherwise it is `null`, `third.why` says the choice is kept and must be approved again, and no lane starts on the other card. A file with `third_feature` but no `third_card` (written before this) is read the same way - asked again once, never "whichever card is third now". The card raised for a move now refuses (and saves nothing) if the third slot's card changed while it waited. Not fixed here, and reported: the second card's own lane has the same weakness - the master switch's approval names the card but is not bound to its id.
 
 *The lane process.* A third, literal `_LaneProcess` (`_THIRD_LANE`) -
 mirroring `_LANE` and `_COMBINED_LANE`, not a new dict-keyed structure.
@@ -5782,9 +5782,15 @@ then `line`. The words are the PC's; the apps add none.
   morning briefing reads it) AND its account set up - the same environment
   variables each module reads (`JARVIS_IMAP_HOST`, `JARVIS_CALDAV_URL` or
   `JARVIS_CALENDAR_ICS_SECRET_URL`, `JARVIS_HOME_URL`, the notes settings,
-  `JARVIS_NTFY_TOPIC`). Browser control also needs the second card's
-  "Browser control" switch on (its switch file; nothing is probed, so it
-  says "switched on", not "working").
+  `JARVIS_NTFY_TOPIC` **and** `JARVIS_NTFY_SERVER`). Phone notifications
+  need **both** of theirs: the topic says which channel, the server says
+  where that channel lives, and the default is **nowhere** (2026-10-05,
+  `gate-push.patch`). The server used to default to `https://ntfy.sh`, a
+  public broker, so setting only a topic posted every card title to a place
+  the owner never chose - rule 1 does not allow a destination nobody picked.
+  The row itself says this in plain words. Browser control also needs the
+  second card's "Browser control" switch on (its switch file; nothing is
+  probed, so it says "switched on", not "working").
 - **Asks first**: the tool's gate action (jarvis_gate's own
   `action_for_tool` when it is there, else the names `backend/README.md`
   lists) and that action's tier in `[autonomy.tiers]`. The six tools the
@@ -8446,13 +8452,36 @@ One `.jbak` file: a zip archive, encrypted, holding -
   their key, so a `study.db` is never carried without it (and a backup
   never makes a key for decks nobody has). A restore writes the file and
   the key back together and the running store reopens with them.
+- **The backend's own program files** (added 2026-10-05): every `*.py` file
+  directly in the folder `jarvis_backup.py` is running from - the live
+  backend folder, the one holding `jarvis_hud.py` - kept as
+  `source/<name>.py`. Five of them (`jarvis_hud.py`, the whole control
+  plane; `jarvis_gate.py`, the approval gate; `jarvis_extract.py`,
+  `jarvis_models.py`, `jarvis_skills.py`) were found to exist in exactly
+  ONE place on Earth, with nothing reading a `.py` file: not this module,
+  not `apply-patches.ps1`, not git (`backend/.gitignore` keeps the live
+  sources out on purpose, with a written exception only for the ten under
+  `backend/rebuilt/`). **Top level only, never the tree:** `__pycache__/`
+  is bytecode that rebuilds itself, and the patcher's own
+  `_jarvis-backup-*` folders already hold older copies of the same
+  sources, so recursing would nest the whole source inside every new
+  backup. Top level is 188 files, 10.1 MB, about 3.6 MB once deflated,
+  inside the same encrypted archive - so the code is never in the clear
+  either. A restore writes them back into the folder the module runs from
+  (`flat=True`, one name per file, the same second lock `db/` and
+  `settings/` have), which means **restoring an older backup also puts
+  back the older program**; the restore card says so in plain words and
+  points at `apply-patches.ps1` for getting later updates back.
 
 **Never backed up**, on purpose (rule 3): the pairing token and every API
 key (Exa, Tavily, Brave, GitHub, ...) - all of them live in Windows
 Credential Manager under their own target names, never in a settings
 file, and this module reads exactly two Credential Manager entries, the
 chat-history key and the review decks' key. Also never: model files (large; Ollama keeps its own
-copy) and logs. Also never: `approvals.db`/`holds.db` (pending-approval
+copy) and logs. Also never: any backend file that is not a top-level
+`*.py` - the subfolders (`__pycache__/`, `_jarvis-logs/`, the patcher's
+`_jarvis-backup-*` folders), other file types beside the sources, and
+`*.py` nested deeper than one level. Also never: `approvals.db`/`holds.db` (pending-approval
 state, not memory - restoring a stale row would be misleading, not a
 security hole, since the in-memory approval stamp is gone the moment the
 backend restarts).
@@ -8480,7 +8509,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
-| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
 
 `[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
 every other PC-only-with-Windows-Hello action); `jarvis_card_words.TITLES`
@@ -14692,7 +14721,11 @@ shared cases file and checked by `backend/test_pairing_cases.py`.
   usual `approval_timeout_seconds`; the 10-minute session covers the
   scanning before it.
 - **`unretire_shared_key`**, tier `ask`, also PC only with Windows Hello:
-  bringing the old shared key back for other devices.
+  bringing the old shared key back for other devices. **Refused with a plain
+  409, and no card raised, while a device holds a key of its own** (2026-10-05):
+  the shared key is then a first-pairing bootstrap and works from this PC only,
+  so the card could not change anything. The owner can still get it back by
+  removing every device first - each one pairs again with the QR code.
 
 Both are in the gate's `_NO_RULE_FROM_DENIAL` (a "no" answers one card, it
 is not a standing wish) and its `_RISK` table (local, reversible).
@@ -14708,7 +14741,7 @@ is not a standing wish) and its `_RISK` table (local, reversible).
    {"id": "d3f9a1c2e", "name": "Pixel 9", "kind": "phone",
     "created": 1790000000, "last_seen": 1790003580,
     "this_device": true, "removable": true, "approval_key": false}],
- "shared": {"retired": false, "retired_at": null,
+ "shared": {"retired": false, "retired_at": null, "first_pair_only": false,
             "last_other_seen": 1790003000, "last_other_address": "100.101.2.3",
             "can_bring_back_here": false},
  "pairing": {"available": true, "why_not": null}}
@@ -14725,15 +14758,26 @@ approvals not checked by this PC). Windows Hello being missing is found only
 when the card is approved - Windows cannot be asked without showing the
 prompt.
 
+**`shared.first_pair_only`** (2026-10-05) is `true` once a device holds a key
+of its own: the old shared key then works from this PC only, whether or not
+the owner ever pressed Retire, and `can_bring_back_here` is `false` with it.
+It is the same fact `shared.retired` reports, told with the right reason -
+both apps word the row from it ("The first device has its own key, so the old
+shared key now works on this PC only.") and neither offers a button that
+could not work. An older PC does not send the field, and the apps read an
+absent field as `false`.
+
 | Route | Body | Answers |
 |---|---|---|
 | `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. |
 | `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
-| `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
+| `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, **409** `{"first_pair_only": true}` while a device holds a key of its own (removing every device first is the way back), else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
 
 A 401 for a device key the PC removed (or never had) carries `"key":
 "device_removed"`; for the old shared key from another device after Retire,
-`"key": "shared_retired"`. Both apps say the design's sentences (in the
+`"key": "shared_retired"`; for the old shared key from another device once a
+device holds a key of its own (2026-10-05), `"key":
+"shared_first_pair_only"`. Both apps say the design's sentences (in the
 shared cases file); without `key`, today's words.
 
 ### 90.6 Failing safe
@@ -14747,6 +14791,15 @@ shared cases file); without `key`, today's words.
   every phone then pairs again).
 - Retire never touches this PC, and cannot be pressed by the device that
   still depends on the shared key.
+- The shared key is a first-pairing bootstrap (2026-10-05): it is accepted
+  from another device only while no device holds a key of its own, so a PC
+  where the QR card can never be approved (no Windows Hello - "no lock, no
+  risky approval") can still pair its first device. The refusal only ever
+  starts once a device key exists, which is itself proof that the QR way
+  works on that PC; this PC and every device with its own key keep working
+  either way. The PC module's docstring has the reasoning, and the next step
+  is the owner pressing Retire (Settings, Devices) so nothing rides on the
+  shared key at all.
 
 ---
 
