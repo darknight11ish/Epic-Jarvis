@@ -414,9 +414,24 @@ Trying other chat models, and other memory-search models, is
 
 ## The planned second card: RTX 2060 12 GB
 
-The owner is adding one, alongside the 2080 Super, not instead of it. Recorded
-2026-09-23. Nothing below has been measured on the real cards yet; the figures
-are published specs and the same arithmetic as the budget above.
+The owner added one, alongside the 2080 Super, not instead of it. Recorded
+2026-09-23. (The heading keeps the name the rest of the project links to; "the
+planned card" is now the fitted one - see the next paragraph.)
+
+**It is installed, and the pair has now been measured** (2026-10-05): both
+cards are present; the everyday model is running on the 12 GB card, which
+`nvidia-smi` calls GPU 0 (the 2080 SUPER is GPU 1 and runs the desktop); it is
+**100% on the card** with nothing spilling to the processor; its context is
+4,096 while the 16,384 this page documents **fits** with room to spare
+([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md); re-measure
+with `scripts\measure-cards.ps1`, described in
+[MEASURE-CARDS.md](MEASURE-CARDS.md)). So the spill this page and
+HARDWARE-PROFILES.md section 3 feared - the old one-card arithmetic that put
+~4 of 37 layers on the processor - **does not happen on this machine.**
+
+**Everything below is still the plan, and still calculated, not measured.**
+The figures are published specs and the same arithmetic as the budget above,
+and no second-card lane has been switched on yet.
 
 **Why this card avoids the P100's problems (see the next section).** It is
 the same generation as the 2080 Super: Turing, compute capability 7.5. So:

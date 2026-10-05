@@ -3,6 +3,16 @@
 Paste everything below the line into Gemini, and attach **`SOURCE-BUNDLE.md`**
 (every source file in the module, plus the CI workflows that build it).
 
+`SOURCE-BUNDLE.md` was deleted from the repository on 2026-10-05 (13.5 MB of
+generated output; see `docs/README.md`). Regenerate it before attaching it, so
+the reviewer reads the code as it is now rather than an old commit:
+
+    py -3 tools/gen_source_bundle.py
+
+It writes `docs/SOURCE-BUNDLE.md` again. Or, on a machine where
+`jarvis-client/` is already to hand, attach that folder instead and skip the
+bundle entirely.
+
 Optionally also attach `AUDIT-2026-09-14.md` — three earlier audit passes on this
 code. Attaching it makes the review sharper, because it can check those
 conclusions rather than rediscover them. Leaving it off gives you a clean second
