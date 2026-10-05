@@ -321,7 +321,7 @@ fun ApprovalCard(
     // the red line near the buttons (as before) and whether the deadline
     // readout is shown in its place.
     val why = when {
-        expired -> "Expired — ask the desktop to raise this again."
+        expired -> "Timed out — ask the desktop to raise this again."
         blocker != null -> blocker
         // Used to say "choose one on the desktop" - wrong, per
         // docs/JARVIS-API.md §8: the desktop's own option buttons send

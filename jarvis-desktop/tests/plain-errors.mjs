@@ -392,13 +392,17 @@ await check("greyed on a stale link", async () => {
 
 /* ── Control ──────────────────────────────────────────────────────────── */
 
-await check("the manner commands are Settings-only; the fix button's is the quickbar's", async () => {
+await check("the manner commands are Settings-only; the fix button has its own narrow set", async () => {
   const sets = read("src-tauri/permissions/surfaces.toml").split("[[set]]").slice(1);
   const holders = (cmd) => sets.filter((s) => s.includes(`"allow-${cmd.replace(/_/g, "-")}"`))
     .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
   assert.deepEqual(holders("get_manner"), ["settings-surface"]);
   assert.deepEqual(holders("set_manner"), ["settings-surface"]);
-  assert.deepEqual(holders("open_fix_place"), ["quickbar-surface"]);
+  // One command, on its own, exactly as `external-links` is: the Brain's own
+  // "hidden menus" button calls this too now (bug audit 2026-10-05, R5 - it
+  // was granted only by quickbar-surface and did nothing), and a window that
+  // only opens a place should not take on the bar's whole surface to get it.
+  assert.deepEqual(holders("open_fix_place"), ["open-fix-place", "quickbar-surface"]);
   const rs = read("src-tauri/src/plain_errors.rs");
   // `async`, not a plain command (bug audit 2026-09-27, desktop-rust
   // finding #3): both windows it opens are built the first time they are

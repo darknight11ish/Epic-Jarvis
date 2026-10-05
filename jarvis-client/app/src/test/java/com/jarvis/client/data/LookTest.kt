@@ -19,7 +19,9 @@ class LookTest {
     fun theDefaultLookIsTheOneHomeHadBefore() {
         val look = Look()
         assertEquals(0.75f, look.faceFraction, 0f)
-        assertFalse(look.navAlwaysShown)
+        // Shown by default since 2026-10-05 (ease-of-use audit row 3). This
+        // line is the whole change: it fails on the old `false`.
+        assertTrue(look.navAlwaysShown)
         assertEquals(1f, look.glow, 0f)
         assertEquals(MotionPref.FOLLOW, look.motion)
         // "Keep the animal still" is off unless chosen (owner, 2026-09-28).
@@ -28,6 +30,27 @@ class LookTest {
         assertTrue(look.makeRoomForApprovals)
         // The default is already inside the ranges setLook clamps to.
         assertEquals(look, look.clamped())
+    }
+
+    /**
+     * An owner who already chose "Hidden until swiped" keeps it.
+     *
+     * The saved record is the choice: every field is written on save, so a
+     * record holding `nav_always_shown: false` means he turned the row off.
+     * Only a record that says nothing about it - a fresh install, or one saved
+     * before the field existed - takes the new default. `tabsRowShown` is the
+     * rule `AppearanceStore.loadLook` applies, and the null below is exactly
+     * what it passes for "the record does not mention it" (the JSON half needs
+     * org.json, a stub in a JVM unit test).
+     */
+    @Test
+    fun aStoredChoiceOfHiddenIsNotOverwrittenByTheNewDefault() {
+        // Unset: the new default, shown.
+        assertTrue(tabsRowShown(null))
+        // Chosen hidden, before this change: still hidden.
+        assertFalse(tabsRowShown(false))
+        // Chosen shown: shown, so the check cannot pass by ignoring the record.
+        assertTrue(tabsRowShown(true))
     }
 
     @Test

@@ -224,8 +224,11 @@ internal fun DevicesSection() {
                     )
                     // Only when this phone has a key of its own - retiring the
                     // shared key from a phone that uses it would cut it off (the
-                    // PC refuses that anyway, design §6.4).
-                    if (!shared.retired && v.usesOwnKey) {
+                    // PC refuses that anyway, design §6.4). Not offered once the
+                    // first device has its own key either: the shared key already
+                    // works from this PC only, so the button would change nothing
+                    // (backend, 2026-10-05).
+                    if (!shared.retired && !shared.firstPairOnly && v.usesOwnKey) {
                         if (signedState == SignedApproval.State.ON) {
                             Gap(4)
                             Text(

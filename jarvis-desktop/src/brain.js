@@ -13122,12 +13122,19 @@ window.addEventListener("storage", (e) => {
 });
 
 $("btn-rail-hidden-menus")?.addEventListener("click", () => {
+  // The place travels in storage, not in the call: open_fix_place opens the
+  // Settings window and accepts only "settings", "brain" and "history"
+  // (plain_errors.rs), and settings.js's goToPlace() reads this key on load,
+  // on focus and on the storage event. Exactly what the Jarvis bar's own "open
+  // <a section>" does (main.js openSettingsFromRoute). Bug audit 2026-10-05,
+  // R5: with no grant for this window, and "menu-visibility" asked for as the
+  // place, this button did nothing at all.
+  try {
+    localStorage.setItem("jarvis.settings.place", JSON.stringify({ place: "menu-visibility", at: Date.now() }));
+  } catch {}
   if (IS_TAURI) {
-    TAURI.core.invoke("open_fix_place", { place: "menu-visibility" });
+    TAURI.core.invoke("open_fix_place", { place: "settings" });
   } else {
-    try {
-      localStorage.setItem("jarvis.settings.place", JSON.stringify({ place: "menu-visibility", at: Date.now() }));
-    } catch {}
     window.location.href = "settings.html#menu-visibility";
   }
 });

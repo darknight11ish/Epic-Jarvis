@@ -128,9 +128,20 @@ export const SHARED_UNSIGNED = "Risky approvals from this device are not yet sig
 
 export const SHARED_PROMPT_RETIRE = "Your phone now signs risky approvals. Retire the old shared key now so unverified devices cannot approve risky actions.";
 
+/**
+ * The row's line once the first device holds a key of its own, so the old
+ * shared key now works from this PC only - even though the owner never pressed
+ * Retire (backend, 2026-10-05). The PC's own words: `DEVICES_WORDS[
+ * "shared_first_pair_row"]` in backend/jarvis_devices.py.
+ */
+export const SHARED_FIRST_PAIR_ROW = "The first device has its own key, so the old shared key now works on this PC only.";
+
 export function sharedSignedLine(shared, enabled, anySigned = false) {
   const s = shared && typeof shared === "object" ? shared : {};
   if (!enabled || s.retired) return "";
+  // Nothing left to retire: a device of its own already keeps the shared key
+  // on this PC, so asking the owner to press Retire would ask for a no-op.
+  if (s.first_pair_only === true) return "";
   if (anySigned) return SHARED_PROMPT_RETIRE;
   if (typeof s.last_other_seen !== "number") return "";
   return SHARED_UNSIGNED;
@@ -143,6 +154,10 @@ const THIRTY_DAYS = 30 * 24 * 3600;
  * `{ line, retire, retireQuestion, bringBack }` - the sentence, whether
  * Retire and Bring it back are offered, and the confirm Retire asks first
  * (only when another device used the key in the last 30 days).
+ *
+ * Neither button is offered once `first_pair_only` is true (2026-10-05): the
+ * shared key already works from this PC only, so Retire would change nothing,
+ * and "Bring it back" could not work while a device holds its own key.
  */
 export function sharedView(shared, now = Date.now()) {
   const s = shared && typeof shared === "object" ? shared : {};
@@ -153,6 +168,14 @@ export function sharedView(shared, now = Date.now()) {
       retire: false,
       retireQuestion: null,
       bringBack: s.can_bring_back_here === true,
+    };
+  }
+  if (s.first_pair_only === true) {
+    return {
+      line: SHARED_FIRST_PAIR_ROW,
+      retire: false,
+      retireQuestion: null,
+      bringBack: false,
     };
   }
   const seen = typeof s.last_other_seen === "number" ? s.last_other_seen : null;
