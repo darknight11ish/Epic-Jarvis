@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3650,6 +3650,18 @@
+@@ -3650,4 +3650,16 @@
      except Exception as exc:
          print(f"  retirement NOT ON ({type(exc).__name__}) - the Retirement what-if is off")
          print("             until jarvis_retirement.py is back: run apply-patches.ps1 again")
@@ -17,5 +17,3 @@
 +        print(f"  tutorials  NOT ON ({type(exc).__name__}) - the tutorials and FAQ are off")
 +        print("             until jarvis_tutorials.py is back: run apply-patches.ps1 again")
      # Before the main socket, so the banner lists every address together.
-     _loopback_companion(bind, HUD_PORT, Handler)
-     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

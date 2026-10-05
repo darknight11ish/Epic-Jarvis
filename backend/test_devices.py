@@ -425,7 +425,7 @@ def t_the_hunk_comes_before_every_token_ok():
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",
-                                "progress.patch", "topics.patch", "referee.patch",
+                                "progress.patch", "tutorials.patch", "topics.patch", "referee.patch",
                                 "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
                                 # gate-action-name.patch (2026-10-03) rewrites one line
                                 # inside jarvis_gate.py's action_for_tool() and leaves
