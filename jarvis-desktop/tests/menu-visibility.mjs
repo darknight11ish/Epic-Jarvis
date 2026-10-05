@@ -259,6 +259,38 @@ await check("createMenuManager manages visits and subscriptions", async () => {
   assert.ok(!mgr.isHidden("brain.work.decks"), "decks visible after reset");
 });
 
+/* ── 8. The way to this card from the Brain ──────────────────────────── */
+
+await check("the Brain's hidden-menus button leaves the place and asks for a place open_fix_place takes", async () => {
+  // The button on the Brain's rail ("Show or hide menus") opens Settings at
+  // this card. The place travels in storage, not in the call: `open_fix_place`
+  // opens the Settings window and accepts only "settings", "brain" and
+  // "history" (src-tauri/src/plain_errors.rs), and settings.js's own
+  // goToPlace() reads this key on load, on focus and on the storage event.
+  // Bug audit 2026-10-05, R5: the button asked for "menu-visibility" as the
+  // place and had no grant for this window, so it did nothing at all - and
+  // neither failure was visible anywhere.
+  const brain = read("src/brain.js");
+  const at = brain.indexOf('$("btn-rail-hidden-menus")');
+  assert.ok(at > 0, "the button's handler is still in brain.js");
+  const body = brain.slice(at, at + 1200);
+  // The place is left BEFORE the branch, so the desktop path leaves it too:
+  // the old code left it only in the browser branch, and asked the command for
+  // "menu-visibility", which the command refuses.
+  const branch = body.indexOf("if (IS_TAURI)");
+  assert.ok(branch > 0, "the handler still branches on IS_TAURI");
+  assert.match(body.slice(0, branch), /localStorage\.setItem\("jarvis\.settings\.place", JSON\.stringify\(\{ place: "menu-visibility"/);
+  assert.match(body, /invoke\("open_fix_place", \{ place: "settings" \}\)/);
+  assert.doesNotMatch(body, /place: "menu-visibility" \}\)/, "the place must not be the command's argument");
+  // The card it aims at is Settings' own, in Settings' own words.
+  assert.match(read("src/settings.html"), /id="menu-visibility"/);
+  // And the window that draws the button is granted the command it calls.
+  const brainCap = JSON.parse(read("src-tauri/capabilities/brain.json"));
+  assert.ok(brainCap.permissions.includes("open-fix-place"));
+  const surfaces = read("src-tauri/permissions/surfaces.toml");
+  assert.match(surfaces, /identifier = "open-fix-place"[\s\S]*?"allow-open-fix-place"/);
+});
+
 if (fails.length) {
   console.error(`\n${fails.length} test(s) failed`);
   process.exit(1);

@@ -47,6 +47,12 @@ object Devices {
     data class Shared(
         val retired: Boolean,
         val retiredAt: Long?,
+        /**
+         * A device holds a key of its own, so the old shared key now works
+         * from this PC only - whether or not the owner ever pressed Retire
+         * (backend 2026-10-05). False on an older PC that does not say.
+         */
+        val firstPairOnly: Boolean = false,
         val lastOtherSeen: Long?,
         val lastOtherAddress: String?,
     )
@@ -102,6 +108,7 @@ object Devices {
             Shared(
                 retired = it.bool("retired") == true,
                 retiredAt = it.long("retired_at"),
+                firstPairOnly = it.bool("first_pair_only") == true,
                 lastOtherSeen = it.long("last_other_seen"),
                 lastOtherAddress = it.str("last_other_address"),
             )
@@ -121,6 +128,15 @@ object Devices {
     const val MISSING = "Your PC's Jarvis does not have a device list yet."
 
     const val SHARED_ROW = "Old shared key - used by this PC, and by devices paired before per-device keys."
+
+    /**
+     * The row's line once the first device has a key of its own, so the shared
+     * key now works on this PC only - the PC's own words (`DEVICES_WORDS[
+     * "shared_first_pair_row"]`, 2026-10-05). Not "Retired": nobody retired it,
+     * and saying so would teach the owner the wrong thing about what to do.
+     */
+    const val SHARED_FIRST_PAIR_ROW =
+        "The first device has its own key, so the old shared key now works on this PC only."
 
     const val THIS_PHONE = "This phone"
 
@@ -157,11 +173,13 @@ object Devices {
         }
     }
 
-    /** The shared key row's state line (design §7.1's three states). */
+    /** The shared key row's state line (design §7.1's three states, plus the
+     *  first-pairing one the backend reports from 2026-10-05). */
     fun sharedLine(shared: Shared, nowSec: Long, locale: Locale = Locale.getDefault()): String = when {
         shared.retired ->
             "Retired" + (shared.retiredAt?.let { " on " + day(it, locale) } ?: "") +
                 " - it now works on this PC only."
+        shared.firstPairOnly -> SHARED_FIRST_PAIR_ROW
         shared.lastOtherSeen != null && nowSec - shared.lastOtherSeen < 30L * 86_400L ->
             "Last used from another device" +
                 (shared.lastOtherAddress?.let { " ($it)" } ?: "") + " " + ago(nowSec - shared.lastOtherSeen) +
@@ -221,6 +239,7 @@ object KeyRefusal {
 
     const val DEVICE_REMOVED = "device_removed"
     const val SHARED_RETIRED = "shared_retired"
+    const val SHARED_FIRST_PAIR_ONLY = "shared_first_pair_only"
 
     const val DEVICE_REMOVED_WORDS =
         "This phone's key was removed on your PC, so Jarvis no longer answers it. Pair again with the QR " +
@@ -228,6 +247,9 @@ object KeyRefusal {
     const val SHARED_RETIRED_WORDS =
         "This phone was using the old shared key, which has been retired on your PC. Pair it with the QR " +
             "code in Settings, Devices, on your PC."
+    const val SHARED_FIRST_PAIR_ONLY_WORDS =
+        "This PC gives every device its own key now, so the old shared key works on this PC only. Pair " +
+            "this phone with the QR code in Settings, Devices, on your PC."
 
     private val _reason = MutableStateFlow<String?>(null)
     val reason: StateFlow<String?> = _reason.asStateFlow()
@@ -236,7 +258,7 @@ object KeyRefusal {
     fun reasonIn(bodyText: String?): String? {
         val obj = runCatching { JarvisJson.parseToJsonElement(bodyText.orEmpty()) as? JsonObject }.getOrNull()
         val key = (obj?.get("key") as? JsonPrimitive)?.takeIf { it.isString }?.content
-        return key?.takeIf { it == DEVICE_REMOVED || it == SHARED_RETIRED }
+        return key?.takeIf { it == DEVICE_REMOVED || it == SHARED_RETIRED || it == SHARED_FIRST_PAIR_ONLY }
     }
 
     /** A 401 arrived, with this body. */
@@ -253,9 +275,11 @@ object KeyRefusal {
     fun words(reason: String? = _reason.value): String? = when (reason) {
         DEVICE_REMOVED -> DEVICE_REMOVED_WORDS
         SHARED_RETIRED -> SHARED_RETIRED_WORDS
+        SHARED_FIRST_PAIR_ONLY -> SHARED_FIRST_PAIR_ONLY_WORDS
         else -> null
     }
 
     /** Is [text] one of this object's sentences? (MainActivity matches notices as strings.) */
-    fun isWords(text: String?): Boolean = text == DEVICE_REMOVED_WORDS || text == SHARED_RETIRED_WORDS
+    fun isWords(text: String?): Boolean = text == DEVICE_REMOVED_WORDS ||
+        text == SHARED_RETIRED_WORDS || text == SHARED_FIRST_PAIR_ONLY_WORDS
 }
