@@ -257,6 +257,51 @@ or refused for an unrelated reason. `test_documents.py` is **131/0** against
 the owner's backend and `ok` through `run_suites.py`; that check was the only
 failure in a 62-suite run of everything this branch can affect, in CI's shape.
 
+### 1.8 How the Linux-only failures were actually found and fixed
+
+CI cannot be read from a terminal (job logs need a signed-in browser) and this
+PC has no Linux (Docker Desktop's engine needs a WSL distribution, and none is
+installed), so two things were built first:
+
+* **CI names its own failures.** The Ubuntu `backend` job's suite step writes
+  the failing suite names to the run's Summary and emits one `::error::`
+  annotation per suite, carrying that suite's own `FAIL` lines. The public
+  checks API serves those annotations to anyone, with no token - which is how
+  every remaining suite below was identified.
+* **`dshwork/audit-2026-10-04/linux_sim.py`** - a local Linux pretence. An
+  import hook hands each `jarvis_*`/`gen_*` module a proxy `os` (naming
+  `posix`), proxy `sys` and `platform` (Linux), and hides the Windows-only
+  tools; directory listings come back reversed, to catch a fixture that
+  depends on the order a file system happens to return names in. It runs a
+  generator (`--check`) or a whole suite, in CI's own shape. It is a
+  simulation, not Linux, and it says so - it found two of the seven, and CI's
+  annotations found the rest.
+
+Each generator's `--check` also now prints **the first line where a fresh run
+and the committed file disagree** (both values), instead of only "out of date":
+the differing value is the useful half, and it fits in an annotation.
+
+The seven suites, and what was wrong - every one a Windows-only habit or fix
+that only shows on Linux:
+
+| Suite | What was wrong |
+|---|---|
+| `test_patch_history.py` | `_rmtree` chmodded git's objects to `stat.S_IWRITE` (0o200). Right on Windows ("not read-only"); on POSIX it strips a **directory's** read+execute bits, so the tree could not be deleted and the next `diff_of()` hit `FileExistsError` on its own `g/`. |
+| `test_apps.py`, `test_projects.py` | the same `_rmtree`, copied into both: seventeen "ran without crashing" checks failed on the leftovers. 0o700 for directories, 0o600 for files. |
+| `test_projects.py` (fixture) | `jarvis_app_workspace` wrote `README.md`, `.gitignore` and `.jarvis-app.json` without `newline="\n"`, so on Windows they were committed as CRLF - different blob, different commit id, and the contract records that id. CI's fresh run said `"head": "8dc2396"` where the file said `"cbdb2ee"`; with the endings pinned, regenerating here produces exactly `"8dc2396"`. |
+| `test_wiki.py` (fixture) | the scrub that shows the made-up vault as `/home/owner/Vault` normalised `folder` only at the **top level**; these sit one level down inside `status`, so they kept the Windows separator (`/home/owner/Vault\Jarvis Wiki`). `_folders_posix` now walks the whole structure. |
+| `test_hardware.py`, `test_profiles.py` | `jarvis_hardware` reads `os.name` itself for the registry answer ("not read" on Windows, "not on Windows" elsewhere). The World replaced the registry text and nvidia-smi but not the platform; the generator now pins it (`_WindowsOS`). |
+| `test_focus.py` | `status()` puts `probe_available()` straight into the answers as `"watching"` - a platform fact (pywinrt is Windows-only). Pinned to the owner's PC's answer, the way that file's clock is pinned to `T0`. |
+| `test_second_card.py` | the check says "the model answering cannot see pictures", but `keep_picture` is `sees is None` - what happens when Ollama does not **report** capabilities, which this suite's stand-in server does not. On CI the picture was kept and no note written; the same suite passed on the owner's PC, whose Ollama does report. Reproduced by forcing `None` (504 passed, 1 failed, the same check); the case now pins that answer to `False`. |
+
+`jarvis_app_workspace.py` is a shipped module, so it was staged to the owner's
+PC with the usual backup - `_where` refuses a suite whose shipped copy differs
+from this repository's.
+
+**Verified:** each fix in CI's own shape, both fixture generators byte-stable
+across runs, `test_apps` 253/0 and `test_projects` 280/0 against the owner's
+backend, and the whole repository suite set green locally on Windows.
+
 ## 2. The audits
 
 ### 2.1 §7.1 — promises vs tests
