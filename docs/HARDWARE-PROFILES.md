@@ -999,15 +999,15 @@ Generated from `backend/fixtures/hardware_cases.json` - the planner's own output
 | Smartest answers | qwen3:14b, 16K - 10.10 (12 GB card A) | qwen3:8b, 32K - 7.36 (12 GB card B, taking turns) | qwen2.5vl:7b, 8K - 6.39 (12 GB card B, taking turns) | `████████████████` 10.10 + 1.68 = 11.78 / 12 · `█████████████░░░` 7.36 + 2.18 = 9.54 / 12 |
 | Most features (rec.) | qwen3:8b, 32K - 7.36 (12 GB card A) | chat itself | qwen2.5vl:7b, 8K - 6.39 (12 GB card B) | `████████████░░░░` 7.36 + 1.68 = 9.04 / 12 · `███████████░░░░░` 6.39 + 2.18 = 8.57 / 12 |
 
-**RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2060** (`two_2080s_2060_mon12`)
+**RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the design's 'monitor on the 12' row, not a second machine** (`two_2080s_2060_mon12`)
 
 | Preset | Chat | Long context | Pictures | Memory |
 |---|---|---|---|---|
-| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | qwen2.5vl:7b, 8K - 6.39 (RTX 2060) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `███████████░░░░░` 6.39 + 2.18 = 8.57 / 12 |
-| Smartest answers | qwen3:14b, 8K - 9.44 (RTX 2060) | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER, taking turns) | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER, taking turns) | `█████████████░░░` 4.94 + 1.68 = 6.62 / 8 · `███████████████░` 9.44 + 2.18 = 11.62 / 12 |
-| Most features (rec.) | qwen3:8b, 16K - 6.17 (RTX 2080 SUPER) | qwen3:8b, 32K - 7.36 (RTX 2060, taking turns) | qwen2.5vl:7b, 8K - 6.39 (RTX 2060, taking turns) | `████████████████` 6.17 + 1.68 = 7.85 / 8 · `█████████████░░░` 7.36 + 2.18 = 9.54 / 12 |
+| Fastest answers | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER) | chat itself | qwen2.5vl:7b, 8K - 6.39 (RTX 2060) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `███████████░░░░░` 6.39 + 1.68 = 8.07 / 12 |
+| Smartest answers | qwen3:14b, 16K - 10.10 (RTX 2060) | qwen3:4b, 32K - 4.94 (RTX 2080 SUPER, taking turns) | qwen2.5vl:3b, 8K - 3.66 (RTX 2080 SUPER, taking turns) | `██████████████░░` 4.94 + 2.18 = 7.12 / 8 · `████████████████` 10.10 + 1.68 = 11.78 / 12 |
+| Most features (rec.) | qwen3:8b, 8K - 5.57 (RTX 2080 SUPER) | qwen3:14b, 16K - 10.10 (RTX 2060, taking turns) | qwen2.5vl:7b, 8K - 6.39 (RTX 2060, taking turns) | `███████████████░` 5.57 + 2.18 = 7.75 / 8 · `████████████████` 10.10 + 1.68 = 11.78 / 12 |
 
-**RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the planned pair** (`two_2080s_2060_mon8`)
+**RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the owner's machine** (`two_2080s_2060_mon8`)
 
 | Preset | Chat | Long context | Pictures | Memory |
 |---|---|---|---|---|
