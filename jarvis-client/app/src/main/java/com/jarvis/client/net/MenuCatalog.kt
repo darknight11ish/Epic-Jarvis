@@ -108,7 +108,7 @@ object MenuCatalog {
         Menu("brain.model.skills", "Skills", "Installed skills with scan verdicts.", true, true, "brain", "faculties", "card", null, "brain.tab.faculties", true, true, ""),
         Menu("brain.model.memory", "Memory (model view)", "The memory summary on the Model page.", true, false, "brain", "faculties", "card", null, "brain.tab.faculties", true, true, ""),
         Menu("brain.model.pc-help", "PC help", "Five plain answers about the PC.", false, true, "brain", "faculties", "card", null, "brain.tab.faculties", true, true, ""),
-        Menu("brain.model.tutorials", "Tutorials", "The intro and a tutorial for each part, and the answers to the usual questions.", false, true, "brain.model")
+        Menu("brain.model.tutorials", "Tutorials", "The intro and a tutorial for each part, and the answers to the usual questions.", false, true, "brain", "faculties", "card", null, "brain.tab.faculties", true, true, "")
         Menu("brain.work.focus", "Focus session", "Start and stop a focus session.", true, true, "brain", "work", "card", null, "brain.tab.work", true, true, ""),
         Menu("brain.work.chatbot", "Talk to a chatbot for me", "Jarvis holds a conversation with another AI for you.", true, true, "brain", "work", "card", "group.chatbots", "brain.tab.work", true, true, ""),
         Menu("brain.work.support", "Chat with customer support for me", "Customer-support chats, one card per offer.", true, true, "brain", "work", "card", "group.chatbots", "brain.tab.work", true, true, ""),
