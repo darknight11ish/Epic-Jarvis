@@ -48,6 +48,12 @@
 //! hidden, the toast says only what KIND of thing is due ("Jarvis: a
 //! reminder is due.") - the same lock-screen words the phone uses.
 //!
+//! Whether a toast is raised at all is the owner's own choice, made in
+//! Settings (notifications.rs): a kind he switched off never reaches one, and
+//! quiet hours hold back the three kinds that can wait. An alarm is never
+//! held back, and every gate lives in [`show`] and [`show_quiet`] - the two
+//! functions here that actually post.
+//!
 //! "Tell me when" (backend jarvis_tellme.py, 2026-09-25): a watch that
 //! matched says `"state": "matched"`, and [`toast_matched`] shows the job's
 //! `alert` ("An email from Alex arrived.") - built on the PC from the
@@ -66,6 +72,7 @@ use tauri::AppHandle;
 
 use super::{require_link_live, READ_TIMEOUT, WRITE_TIMEOUT};
 use crate::commands;
+use crate::notifications::{self, Kind};
 
 /// A PC whose backend has no scheduler yet. The phone says the same
 /// (`Schedule.MISSING`).
@@ -597,6 +604,15 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     if kind == "briefing" {
         return;
     }
+    // The owner's own switches, and quiet hours (notifications.rs). Asked
+    // before the job is read: a kind he switched off costs no round trip, and
+    // a reminder quiet hours hold back is never fetched only to be thrown
+    // away. An ALARM is never held back by quiet hours - that module's doc
+    // says why, and its tests walk every minute of the day.
+    let toast_kind = Kind::for_event(&kind, false);
+    if !notifications::may_post(&app, toast_kind) {
+        return;
+    }
     let job = read_job(&app, &base, &id).await;
     let fired_at = job
         .as_ref()
@@ -625,7 +641,7 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
             .and_then(|j| j.get("went_off_at"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        show_quiet(&app, &title, &missed_words(at, &body));
+        show_quiet(&app, toast_kind, &title, &missed_words(at, &body));
         return;
     }
     // A timer, alarm or reminder gets a Snooze button (2026-09-25) - on
@@ -635,7 +651,7 @@ pub async fn toast_fired(app: AppHandle, base: String, data: serde_json::Value) 
     let snooze = SNOOZABLE
         .contains(&kind.as_str())
         .then_some((id.as_str(), SNOOZE_LABEL));
-    show(&app, &title, &body, rings(&kind, &data), snooze);
+    show(&app, toast_kind, &title, &body, rings(&kind, &data), snooze);
 }
 
 /// A "tell me when" matched (`{"id", "kind": "tellme", "state": "matched",
@@ -652,6 +668,14 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
         return;
     };
     if !valid_id(&id) || data.get("kind").and_then(|v| v.as_str()) != Some("tellme") {
+        return;
+    }
+    // An urgent match rings until it is dismissed, exactly like an alarm, so
+    // it rides the "Alarms and urgent alerts" switch; a plain match has no
+    // switch of its own and is shown as before (notifications.rs).
+    let urgent = data.get("urgent").and_then(|v| v.as_bool()) == Some(true);
+    let toast_kind = Kind::for_event("tellme", urgent);
+    if !notifications::may_post(&app, toast_kind) {
         return;
     }
     let job = read_job(&app, &base, &id).await;
@@ -679,10 +703,17 @@ pub async fn toast_matched(app: AppHandle, base: String, data: serde_json::Value
             .and_then(|j| j.get("went_off_at"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        show_quiet(&app, &title, &missed_words(went_off, &body));
+        show_quiet(&app, toast_kind, &title, &missed_words(went_off, &body));
         return;
     }
-    show(&app, &title, &body, rings("tellme", &data), None);
+    show(
+        &app,
+        toast_kind,
+        &title,
+        &body,
+        rings("tellme", &data),
+        None,
+    );
 }
 
 /// A "tell me when" cannot look (`{"id", "kind": "tellme", "state":
@@ -715,13 +746,39 @@ pub async fn toast_broken(app: AppHandle, base: String, data: serde_json::Value)
     let security = crate::lock::current(&app);
     let private = security.app_lock || crate::lock::private_hidden(&app);
     let (title, body) = broken_words(job.as_ref(), private);
-    show(&app, &title, &body, false, None);
+    // A "tell me when" that cannot look has no switch of its own and is not
+    // one of the kinds quiet hours act on (notifications.rs), so this is
+    // `Kind::Other` - shown, exactly as before the switches existed.
+    show(
+        &app,
+        Kind::for_event("tellme", false),
+        &title,
+        &body,
+        false,
+        None,
+    );
 }
 
 /// One toast: a ringing one (an alarm, an urgent "tell me when") through
 /// WinRT, where its sound can loop until it is dismissed; one with Snooze
 /// through WinRT too; any other through the plugin, as before.
-fn show(app: &AppHandle, title: &str, body: &str, ring: bool, snooze: Option<(&str, &str)>) {
+///
+/// The owner's notification switches and quiet hours are asked HERE, first
+/// thing, because this function is where a Windows toast is actually raised
+/// (notifications.rs). Every caller says what kind it is posting; a kind he
+/// switched off, or (for the three kinds that can wait) the quiet-hours
+/// window, ends the call before any toast exists.
+fn show(
+    app: &AppHandle,
+    kind: Kind,
+    title: &str,
+    body: &str,
+    ring: bool,
+    snooze: Option<(&str, &str)>,
+) {
+    if !notifications::may_post(app, kind) {
+        return;
+    }
     #[cfg(windows)]
     {
         if ring {
@@ -763,7 +820,15 @@ pub(crate) fn removes_on_change(id: &str, kind: &str) -> bool {
 }
 
 /// A toast without a sound: a job heard about too late to ring.
-pub(crate) fn show_quiet(app: &AppHandle, title: &str, body: &str) {
+///
+/// Gated exactly like [`show`] - a kind the owner switched off must not
+/// notify even quietly, and a late reminder is still a reminder. A late ALARM
+/// keeps its own exception: quiet hours never hold it back, only lateness
+/// does, which is why this takes the kind rather than assuming one.
+pub(crate) fn show_quiet(app: &AppHandle, kind: Kind, title: &str, body: &str) {
+    if !notifications::may_post(app, kind) {
+        return;
+    }
     #[cfg(windows)]
     {
         crate::winrt_toast::notify_quiet(app, title, body);
@@ -791,6 +856,10 @@ pub(crate) async fn snooze_from_toast(app: AppHandle, id: String) {
             },
         },
     };
+    // The answer to the owner's own Snooze press - a job whose toast was
+    // shown a moment ago, so there is no switch it could be failing to honour
+    // (notifications.rs `Kind::Other`) - and deliberately not gated: "not
+    // snoozed" is a refusal he must hear about.
     commands::notify(&app, "Jarvis", &said);
 }
 

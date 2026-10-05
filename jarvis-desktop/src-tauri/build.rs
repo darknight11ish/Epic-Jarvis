@@ -26,6 +26,12 @@ fn main() {
             "refresh_link",
             "decide_approval",
             "notify_user",
+            // Settings -> Notifications: the owner's per-kind switches and his
+            // quiet-hours window, pushed in by notifications-prefs.js. Without
+            // this line the command has no permission at all and every push is
+            // refused at the ACL - which is exactly the silent failure the
+            // switches themselves had. Settings window only.
+            "set_notification_prefs",
             // The HUD page's requests, made in Rust so the page holds no
             // token (apps security audit M2; hud_proxy.rs).
             "hud_get",

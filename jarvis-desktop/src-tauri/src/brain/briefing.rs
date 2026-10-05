@@ -343,6 +343,13 @@ pub async fn toast_ready(app: AppHandle, base: String, data: serde_json::Value) 
     if data.get("kind").and_then(|v| v.as_str()) != Some("briefing") {
         return;
     }
+    // The "Morning briefing" switch, and quiet hours (notifications.rs) - the
+    // briefing is one of the three kinds quiet hours are allowed to hold
+    // back. Asked before the job is read, so a briefing that will not be
+    // shown costs no round trip.
+    if !crate::notifications::may_post(&app, crate::notifications::Kind::Briefing) {
+        return;
+    }
     let Some(id) = data.get("id").and_then(|v| v.as_str()).map(str::to_string) else {
         return;
     };
@@ -372,6 +379,7 @@ pub async fn toast_ready(app: AppHandle, base: String, data: serde_json::Value) 
             .unwrap_or("");
         crate::brain::schedule::show_quiet(
             &app,
+            crate::notifications::Kind::Briefing,
             TOAST_TITLE,
             &crate::brain::schedule::missed_words(went_off, LOCK_SCREEN),
         );

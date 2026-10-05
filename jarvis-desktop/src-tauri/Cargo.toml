@@ -96,6 +96,11 @@ windows-sys = { version = "0.59", features = [
   "Win32_System_JobObjects",
   "Win32_System_Threading",
   "Win32_System_Diagnostics_ToolHelp",
+  # GetLocalTime and SYSTEMTIME, for the quiet-hours window (notifications.rs):
+  # quiet hours are the owner's wall clock, so the choice must be judged
+  # against the OS's own local time and not UTC. A feature of a crate already
+  # here, not a new dependency.
+  "Win32_System_SystemInformation",
   # ShellExecuteExW, for opening a link in the user's browser. SHELLEXECUTEINFOW
   # carries an HKEY, so the struct and the function are both gated on
   # Win32_System_Registry as well as Win32_UI_Shell.

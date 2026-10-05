@@ -836,6 +836,12 @@ async fn toast_handoff(app: AppHandle, data: serde_json::Value) {
     if data["available"].as_bool() != Some(true) {
         return;
     }
+    // The "Website needs you" switch, and quiet hours (notifications.rs): a
+    // captcha can wait until morning, which is the whole reason a handoff is
+    // one of the three kinds quiet hours are allowed to hold back.
+    if !crate::notifications::may_post(&app, crate::notifications::Kind::Handoff) {
+        return;
+    }
     let locked = crate::commands::toast_privacy_on(&app);
     let (title, body) = if locked {
         (
@@ -1173,6 +1179,15 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     // a card's own body can quote the owner's words.
     let app_lock = seeded && !arrived.is_empty() && crate::commands::toast_privacy_on(app);
     for item in arrived.iter().filter(|_| seeded) {
+        // An approval card's toast is NEVER silenced - not by a switch (there
+        // is none for it) and not by quiet hours (notifications.rs): a
+        // decision nobody was told about is rule 4 failing quietly. The gate
+        // is called here ON PURPOSE, so the rule lives at the site and not
+        // only in a test: `Kind::Approval` can only ever answer yes, and
+        // notifications.rs's own tests hold every minute of the day to that.
+        if !crate::notifications::may_post(app, crate::notifications::Kind::Approval) {
+            continue;
+        }
         // `notice` is built server-side by jarvis_gate.notice_for, from the
         // action name and the risk table — it never reads `detail`, `prompt`
         // or the contents of `raised`, so it is safe to display anywhere. One
