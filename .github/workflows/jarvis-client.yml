@@ -149,6 +149,37 @@ jobs:
             exit 1
           fi
 
+      # A failing test's NAME is the useful part, and it was only in the log -
+      # which needs a signed-in browser. The checks API is public, so the same
+      # names go out as annotations and on the run's Summary. This is the same
+      # trick the backend job uses, and it exists because a red phone job could
+      # not be diagnosed from a terminal at all (2026-10-05).
+      - name: Name the failing tests, for anyone without the log
+        if: failure()
+        run: |
+          python3 - <<'PYEOF' || true
+          import glob, os, xml.etree.ElementTree as ET
+          results = "app/build/test-results/testDebugUnitTest"
+          lines = []
+          for path in sorted(glob.glob(os.path.join(results, "TEST-*.xml"))):
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception:
+                  continue
+              for case in root.iter("testcase"):
+                  for bad in list(case.findall("failure")) + list(case.findall("error")):
+                      name = f'{case.get("classname")}.{case.get("name")}'
+                      why = (bad.get("message") or bad.get("text") or "").strip()
+                      why = " ".join(why.split())[:600]
+                      print(f"::error title=Failing phone test: {name}::{why}")
+                      lines.append(f"* `{name}` - {why[:300]}")
+          if lines:
+              with open(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null"), "a") as out:
+                  out.write("### Failing phone tests\n\n" + "\n".join(lines) + "\n")
+          else:
+              print("no failing test cases were recorded in the XML")
+          PYEOF
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
