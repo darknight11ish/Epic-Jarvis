@@ -276,7 +276,7 @@ jobs:
     # "N passed, M failed" line for all 244, and the reason each of the other
     # 36 is left out.
     #
-    # WHAT IS DELIBERATELY NOT HERE. Five kinds of suite the Ubuntu job runs:
+    # WHAT IS DELIBERATELY NOT HERE. Four kinds of suite the Ubuntu job runs:
     #
     #   * the ones that need a file only the owner's PC has - jarvis_hud.py,
     #     jarvis_gate.py, jarvis_extract.py, jarvis_models.py, jarvis_skills.py.
@@ -306,24 +306,35 @@ jobs:
     #     (the Ubuntu runner has neither either). The check is not lost - the
     #     Ubuntu job runs it on every push. Take this line out again as soon as
     #     someone has a Windows runner and a minute to look at the real bytes.
-    #   * test_apply_outcomes.py, from the same day, for one measured reason.
-    #     Its checks are byte-level: after a run the backend files must be LF
-    #     and patched, and -Revert must put the original bytes back. On Windows
-    #     they are not, and it is git's own doing: `git apply` writes the file
-    #     through git's line-ending conversion, so with core.autocrlf=true an LF
-    #     target and an LF patch still come out CRLF. Measured on this PC with
-    #     three lines of Python and a three-line patch: autocrlf=true -> the
-    #     result has CRLF, `-c core.autocrlf=false` -> it does not, and
-    #     `git config --get core.autocrlf` here says true. The Ubuntu job has
-    #     the setting unset, which is why it passes there. THE REAL FIX IS IN
-    #     scripts/apply-patches.ps1 - pin core.autocrlf=false for its own
-    #     `git apply` calls, the way it already pins the patches' own endings -
-    #     and that file is outside this change and cannot be tested on this PC
-    #     (no PowerShell 7, so this suite skips). Said plainly: taking it out
-    #     here gives up the only Windows run of that CRLF path until the script
-    #     is fixed; the Ubuntu job still runs it on every push. The four other
-    #     FAILs the suite had WERE fixed and are verified on the runner - see
-    #     the run below.
+    #
+    # AND THE ONE EXCLUSION THAT HAS BEEN LIFTED. test_apply_outcomes.py was
+    # taken out of the list below on 2026-10-05, when its byte-level checks -
+    # after a run the backend files must be LF and patched, and -Revert must
+    # put the original bytes back - could not pass on Windows: `git apply`
+    # writes the file through git's line-ending conversion, so with
+    # core.autocrlf=true an LF target and an LF patch still come out CRLF.
+    # Measured on this PC with three lines of Python and a three-line patch:
+    # autocrlf=true -> the result has CRLF, `-c core.autocrlf=false` -> it does
+    # not, and `git config --get core.autocrlf` here says true. The Ubuntu job
+    # has the setting unset, which is why it always passed there.
+    #
+    # THE FIX LANDED IN 677844d6. scripts/apply-patches.ps1 now pins
+    # `-c core.autocrlf=false -c core.eol=lf` on the one `git apply` call that
+    # writes files, measured in a scratch repo as CR=3 before that commit and
+    # CR=0 after, with --check and --reverse both verified. It also fixes a
+    # real bug on the owner's PC, where core.autocrlf=true was making patched
+    # files come out CRLF. So the suite is back in the list below, and THE NEXT
+    # WINDOWS RUN IS WHAT VERIFIES IT: nobody has seen it green on a Windows
+    # runner yet.
+    #
+    # Nothing on the owner's PC can stand in for that run. PowerShell 7 was not
+    # installed there when the exclusion was written; it is now, and the suite
+    # still cannot reach those checks - it builds its own repository out of
+    # symlinks, which Windows refuses without elevation (WinError 1314). Run
+    # here it ends 8 passed, 11 failed, with all 11 at that symlink step, so
+    # the real `git apply` runs are among the 11 and only the -FixLineEndings
+    # group of 8 actually ran (it passed). The four other FAILs the suite had
+    # WERE fixed and are verified on the runner - see the run below.
     #
     # This is NOT "run_suites.py again, on Windows" on purpose: that would
     # stage the modules, so it would no longer be the configuration measured
@@ -442,11 +453,16 @@ jobs:
             'test_animal.py',
             'test_app_workspace.py',
             'test_apply_line_endings.py',
-            # test_apply_outcomes.py is NOT in this list: git's line-ending
-            # conversion writes the patched files CRLF on a Windows machine
-            # with core.autocrlf=true, so its byte-level checks cannot pass
-            # here. The measured reason, and the fix that belongs in
-            # scripts/apply-patches.ps1, are in the comment block above the job.
+            'test_apply_outcomes.py',
+            # Back in the list on 2026-10-05: 677844d6 pinned
+            # `-c core.autocrlf=false -c core.eol=lf` on the one `git apply`
+            # in scripts/apply-patches.ps1 that writes files, which is what
+            # made the patched files CRLF on a Windows machine with
+            # core.autocrlf=true. It was taken out while that was still true.
+            # The measurement, and why the owner's PC cannot run the suite in
+            # its place, are in the comment block above the job. Nobody has
+            # seen it green on a Windows runner yet - THE NEXT RUN OF THIS JOB
+            # IS WHAT SHOWS IT.
             'test_approval_contract.py',
             'test_approval_sign.py',
             'test_asks_first.py',
