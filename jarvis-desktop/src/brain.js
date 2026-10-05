@@ -540,10 +540,14 @@ const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 /**
  * Every view, and what the topbar says about it.
  *
- * Order here is the rail's order (see `TAB_ORDER` below): the three
- * everyday views first, then the four moved behind "Advanced" — galaxy,
- * live, trust, watch, unchanged and still fully wired, just not on the
- * rail by default.
+ * Order here is the rail's order (see `TAB_ORDER` below), and it has to match
+ * the order of the `<li>`s in brain.html: the arrow keys, `Home` and `End`
+ * all count through this list, so a view named here that has no button over
+ * there is a tab the keyboard walks onto and cannot land on. The everyday
+ * views come first, then the four behind "Advanced" — galaxy, now (called
+ * Live until 2026-09-28), trust and watch, unchanged and still fully wired,
+ * just not on the rail by default. `tests/rail-tabs.mjs` holds the two lists
+ * equal, and `tests/a11y.mjs` holds the roving tabindex they feed.
  */
 const VIEWS = {
   memory: { title: "Memory", sub: "what Jarvis has learned about you" },
@@ -551,16 +555,16 @@ const VIEWS = {
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
   projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
+  // The owner's own request (2026-10-05): a skippable intro and a tutorial for
+  // each major part, the same ones the phone shows, with reading progress kept
+  // on this PC and shared by both apps (JARVIS-API section 114).
+  tutorials: { title: "Tutorials", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
   galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
   // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
   // not confused with Jarvis Live (the voice conversation).
   now: { title: "Now", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
-  // The owner's own request (2026-10-05): a skippable intro and a tutorial for
-  // each major part, the same ones the phone shows, with reading progress kept
-  // on this PC and shared by both apps (JARVIS-API section 114).
-  tutorials: { title: "Tutorials", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
 };
 
 /** Views tucked behind the "Advanced" disclosure until it is opened. */

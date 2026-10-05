@@ -89,10 +89,23 @@
               <span class="rail-label">Projects</span>
             </button>
           </li>
+          <!-- Tutorials is an everyday tab, not one of the four behind
+               "Advanced", so it sits above that group — and in the same
+               order as `VIEWS` in brain.js, which is the order the arrows,
+               Home and End walk. Landing on a tab this list does not have
+               is what left the rail with no tab stop at all (d41a0de8
+               named the view and never drew the button). -->
+          <li>
+            <button class="rail-item" role="tab" id="tab-tutorials" data-goto="tutorials"
+                    aria-selected="false" aria-controls="view-tutorials" tabindex="-1">
+              <span class="rail-glyph" aria-hidden="true">❐</span>
+              <span class="rail-label">Tutorials</span>
+            </button>
+          </li>
           <!-- The other four views are unchanged and still fully wired — see
                the module note in brain.js — just hidden until "Advanced" is
-               opened, so the window's everyday surface is the three things
-               most sessions actually need. -->
+               opened, so the window's everyday surface stays the handful of
+               things most sessions actually need. -->
           <li hidden>
             <button class="rail-item" role="tab" id="tab-galaxy" data-goto="galaxy"
                     aria-selected="false" aria-controls="view-galaxy" tabindex="-1">
