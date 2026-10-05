@@ -1353,7 +1353,15 @@ def t_hooks_are_no_ops_when_off():
     # secrets first, so this PC's text reader must be able to read it: a stand-in that finds no
     # words at all (nothing to hide) lets the picture go on exactly as it came.
     nothing_to_hide = {"ok": True, "text": "", "left_out": 0, "why": "", "lines": [], "size": None}
-    with mock.patch.object(AG, "_read_picture", lambda image: dict(nothing_to_hide)):
+    # The case is "the model answering cannot see pictures", and that is what
+    # is pinned here. `keep_picture` is `sees is None` - the answer when Ollama
+    # does not REPORT the model's capabilities (an older Ollama). The stand-in
+    # server in this suite does not report them either, so on CI the picture
+    # was kept and no note was written: the same suite passed on the owner's PC
+    # (whose Ollama does report) and failed on Linux, on nothing to do with the
+    # behaviour it is checking (2026-10-04, reproduced here by forcing None).
+    no_vision = mock.patch.object(AG, "_model_can_see_pictures", lambda *a, **k: False)
+    with mock.patch.object(AG, "_read_picture", lambda image: dict(nothing_to_hide)), no_vision:
         sent = _turn(pic, enabled={"calculator"})
     # Second card off, and this PC's text reader found no words in the picture -
     # so the model answering cannot see it, and the picture is replaced by a note
