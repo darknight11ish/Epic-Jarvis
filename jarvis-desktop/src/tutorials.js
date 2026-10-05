@@ -42,6 +42,7 @@ export const LABELS = {
   stepOf: "Step",
   of: "of",
   done: "Done",
+  due: "Not read yet",
   inProgress: "In progress",
   notStarted: "Not started",
   skipped: "Skipped",
@@ -126,6 +127,203 @@ export function searchFaq(questions, typed) {
 /** What to send when a step is reached. Pure, so a test can read it. */
 export function progressBody(tutorial, index, state = "in_progress") {
   return { id: tutorial.id, state, step: index };
+}
+
+// --------------------------------------------------------------------------
+//   The panel itself
+// --------------------------------------------------------------------------
+
+/** A node with a class and some text, the way brain.js builds everything. */
+function el(tag, className, text) {
+  const n = document.createElement(tag);
+  if (className) n.className = className;
+  if (text !== undefined) n.textContent = text;
+  return n;
+}
+
+/** An error in words, never a bridge error or JSON. */
+function problemWords(error) {
+  const said = String((error && error.message) || error || "").trim();
+  if (!said || /[{}<>]|::|undefined|null|not found/i.test(said) || said.length > 300) {
+    return "Try again in a moment, or restart Jarvis Desktop.";
+  }
+  return said;
+}
+
+/**
+ * Draw the whole panel into `root`.
+ *
+ * Called by brain.js's view switch, the way showProjects() is. Everything is
+ * built from the backend's own answers; nothing is held between openings, so a
+ * tutorial finished on the phone shows as finished here the next time this is
+ * drawn.
+ */
+export async function showTutorials(root) {
+  root.textContent = "";
+  const head = el("div", "panel-head");
+  head.append(el("h2", null, LABELS.heading));
+  root.append(head);
+  const body = el("div", "tutorials-body");
+  root.append(body);
+
+  let catalogue;
+  try {
+    catalogue = await loadTutorials();
+  } catch (error) {
+    body.append(el("p", "problem", problemWords(error)));
+    return;
+  }
+  if (catalogue && catalogue.available === false) {
+    body.append(el("p", "problem", catalogue.why || "The tutorials are not on this PC yet."));
+    return;
+  }
+
+  const columns = el("div", "tutorial-columns");
+  for (const section of SECTION_ORDER) {
+    const title = ((catalogue.sections || []).find((s) => s.id === section) || {}).title
+      || section;
+    const column = el("section", "tutorial-section");
+    column.append(el("h3", null, title));
+    const list = el("ul", "tutorial-list");
+    for (const item of sectionList(catalogue, section)) {
+      const row = el("li", "tutorial-row");
+      const open = el("button", "tutorial-open");
+      open.type = "button";
+      open.append(el("strong", null, item.title));
+      open.append(el("span", "tutorial-state", stateWords(item)));
+      if (item.due && !item.done) open.append(el("span", "tutorial-due", LABELS.due));
+      open.addEventListener("click", () => openTutorial(item, column));
+      row.append(open);
+      if (showsAgain(item)) {
+        const again = el("button", "tutorial-again", LABELS.again);
+        again.type = "button";
+        again.addEventListener("click", async () => {
+          try {
+            await showAgain(item);
+          } catch (error) {
+            column.append(el("p", "problem", problemWords(error)));
+            return;
+          }
+          showTutorials(root);
+        });
+        row.append(again);
+      }
+      list.append(row);
+    }
+    column.append(list);
+    columns.append(column);
+  }
+  body.append(columns);
+
+  const faqBox = el("section", "tutorial-faq");
+  faqBox.append(el("h3", null, LABELS.faqHeading));
+  let questions = [];
+  try {
+    const answer = await loadFaq();
+    questions = (answer && answer.questions) || [];
+  } catch (error) {
+    faqBox.append(el("p", "problem", problemWords(error)));
+  }
+  const search = el("input", "tutorial-search");
+  search.type = "search";
+  search.placeholder = LABELS.search;
+  const answers = el("div", "tutorial-answers");
+  const paint = (typed) => {
+    answers.textContent = "";
+    const found = searchFaq(questions, typed);
+    if (!found.length && questions.length) {
+      answers.append(el("p", "empty", LABELS.nothingFound));
+      return;
+    }
+    for (const item of found) {
+      const one = el("details", "tutorial-question");
+      one.append(el("summary", null, item.q));
+      one.append(el("p", null, item.a));
+      if (item.where) one.append(el("p", "where", item.where));
+      answers.append(one);
+    }
+  };
+  search.addEventListener("input", () => paint(search.value));
+  faqBox.append(search, answers);
+  paint("");
+  body.append(faqBox);
+}
+
+/** One tutorial's step card, inside its own section column. */
+function openTutorial(tutorial, column) {
+  const card = column.querySelector(".tutorial-card");
+  if (card) card.remove();
+  const box = el("div", "tutorial-card");
+  let index = startIndex(tutorial);
+  let lastSaved = index;
+
+  const paint = () => {
+    box.textContent = "";
+    const step = (tutorial.steps || [])[index] || {};
+    box.append(el("p", "tutorial-step", stepWords(tutorial, index)));
+    box.append(el("h4", null, step.title || ""));
+    box.append(el("p", null, step.body || ""));
+    if (step.where) box.append(el("p", "where", step.where));
+
+    const row = el("div", "tutorial-buttons");
+    const back = el("button", null, LABELS.back);
+    back.type = "button";
+    back.disabled = backIndex(index) === null;
+    back.addEventListener("click", () => {
+      const at = backIndex(index);
+      if (at !== null) {
+        index = at;
+        save(index);
+      }
+    });
+    const next = el("button", "primary", LABELS.next);
+    next.type = "button";
+    const at = nextIndex(tutorial, index);
+    next.addEventListener("click", () => {
+      if (at === null) {
+        save(index, "done");
+        box.append(el("p", "done-words", LABELS.done));
+        return;
+      }
+      index = at;
+      save(index);
+    });
+    const skip = el("button", null, LABELS.skip);
+    skip.type = "button";
+    skip.addEventListener("click", () => {
+      save(index, "skipped");
+      box.append(el("p", "done-words", LABELS.skipped));
+    });
+    const quit = el("button", null, LABELS.quit);
+    quit.type = "button";
+    quit.addEventListener("click", () => {
+      save(index);
+      box.remove();
+    });
+    row.append(back, next, skip, quit);
+    box.append(row);
+  };
+
+  /** Write where the owner is. A failure is shown, never swallowed. */
+  const save = async (at, state = "in_progress") => {
+    const opening = box.querySelector(".problem");
+    if (opening) opening.remove();
+    try {
+      if (at !== lastSaved || state !== "in_progress") {
+        await saveProgress(tutorial, at, state);
+        lastSaved = at;
+        tutorial.state = state;
+        tutorial.resume_at = at;
+      }
+      paint();
+    } catch (error) {
+      box.append(el("p", "problem", problemWords(error)));
+    }
+  };
+
+  paint();
+  column.append(box);
+  save(index);   // opening the card is itself a place in it
 }
 
 // --------------------------------------------------------------------------

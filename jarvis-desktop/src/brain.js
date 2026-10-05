@@ -50,6 +50,9 @@ import { validToFromText } from "./valid-to.js";
 import { CANNOT_CHAT, canChat } from "./model-chat.js";
 // Brain -> Projects: its own module (projects-panel.js, projects.js).
 import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
+// Brain -> Tutorials and the FAQ: its own module (tutorials.js), its own three
+// commands (brain/tutorials.rs), progress kept on this PC (JARVIS-API 114).
+import { showTutorials } from "./tutorials.js";
 import { tellChatsGone } from "./chat-history.js";
 // Brain -> History -> "Forget a time frame": its own module too.
 import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
@@ -554,6 +557,10 @@ const VIEWS = {
   now: { title: "Now", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
+  // The owner's own request (2026-10-05): a skippable intro and a tutorial for
+  // each major part, the same ones the phone shows, with reading progress kept
+  // on this PC and shared by both apps (JARVIS-API section 114).
+  tutorials: { title: "Tutorials", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
 };
 
 /** Views tucked behind the "Advanced" disclosure until it is opened. */
@@ -1222,6 +1229,15 @@ function render(name) {
     case "watch":
       renderWatch();
       renderWatchReport();
+      break;
+    case "tutorials":
+      // Its own read of the catalogue and the FAQ, and it draws itself: the
+      // steps, where the owner has read to, and the search box (tutorials.js).
+      // Nothing here is held on a stale link - reading a tutorial acts on
+      // nothing - so there is no freshness wait before it can be shown.
+      showTutorials($("tutorials-root")).catch((error) => {
+        $("tutorials-root").textContent = `The tutorials could not be opened: ${error.message}`;
+      });
       break;
   }
   renderRushStrip();
