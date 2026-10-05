@@ -163,7 +163,7 @@ fun InboxScreen(
             if (read != null) {
                 val problems = listOf(
                     Triple("digest", "Today's brief", read.digest),
-                    Triple("jobs", "Running jobs", read.jobs),
+                    Triple("jobs", "Background jobs", read.jobs),
                     Triple("undo", "The undo shelf", read.undo),
                     Triple("activity", "Activity", read.activity),
                 )

@@ -652,7 +652,7 @@ fun BrainScreen(
             if (jobs.isNotEmpty()) {
                 if (menus.shows("brain.work.jobs")) item(key = "jobs") {
                     MenuFrame(menus, "brain.work.jobs") {
-                        Section("Background work") {
+                        Section("Background jobs") {
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 jobs.forEach { JobPlate(it) }
                             }
