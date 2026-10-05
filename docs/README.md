@@ -35,6 +35,12 @@ Also current, for one area each:
 | [MEMORY-SCOREBOARD.md](MEMORY-SCOREBOARD.md) | The memory/learning self-test numbers, updated after every change - not a one-day snapshot. |
 | [GRAPHENEOS.md](GRAPHENEOS.md) | What to check before moving the phone to GrapheneOS. Nothing needed building yet. |
 | [designs/](designs/) | Draft designs not built yet (an MCP bridge, a skills system), each in its own subfolder with the draft's own README. |
+| [FEATURE-REVIEW-2026-10-04.md](FEATURE-REVIEW-2026-10-04.md) | A whole-project feature review (2026-10-04): what Jarvis has, what is missing next to other projects, what to remove, what to change, and the risks. A review, not a plan - it ends with six decisions for the owner. |
+| [COMPETITORS-2026-10-05.md](COMPETITORS-2026-10-05.md) | Jarvis next to Meta's Muse, OpenAI's ChatGPT "Dots" and the rest, as of 2026-10-05: the one-page matrix, where Jarvis is ahead and behind, what to copy and what never to copy. Updates the three 2026-09-25 competitor audits. |
+| [BUG-AUDIT-2026-10-05.md](BUG-AUDIT-2026-10-05.md) | A fresh bug hunt (2026-10-05): the cross-cutting pass, what came back clean, the two small defects it found, and the bug class this project actually suffers from. The four deeper area passes follow. |
+| [UI-AUDIT-2026-10-05.md](UI-AUDIT-2026-10-05.md) | A user-interface audit of both apps (2026-10-05): what is measurably right (the token and contrast guards, the shared-look contract), what good looks like for an approval-gated assistant, and the findings from all three passes. |
+| [DEEP-AUDITS-2026-10-05.md](DEEP-AUDITS-2026-10-05.md) | The four deeper audits (2026-10-05): prompt injection and untrusted text end to end (the rush latch has no caller on the read path), and dependencies, supply chain and what breaks in twelve months. Disaster recovery and performance follow. |
+| [AUDIT-PASS-2026-10-05.md](AUDIT-PASS-2026-10-05.md) | **Start here for the 2026-10-05 audit pass.** The timestamped record: what was run, what is still running, the headline results, and a link to each of the five documents. |
 
 ## Audits and research (dated - true on the day written)
 
