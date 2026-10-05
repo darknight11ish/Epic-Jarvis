@@ -32,15 +32,8 @@
  
      deadline = time.time() + (APPROVAL_TIMEOUT if timeout is None else timeout)
      # One connection for the whole wait rather than one per poll.
-@@ -1016,11 +1029,72 @@
--NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
-+# No default destination. "https://ntfy.sh" used to be the fallback, so an
-+# owner who set only a topic - which is all the setup notes ever asked for -
-+# had every card title posted to a public broker they never chose. Rule 1
-+# says private things stay on this PC, and a place the owner did not pick is
-+# not one they agreed to. Empty means NOWHERE: set this to your own ntfy (or
-+# whichever service you chose) to have phone alerts again.
-+NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER", "").rstrip("/")
+@@ -1016,11 +1029,62 @@
+ NTFY_SERVER = os.environ.get("JARVIS_NTFY_SERVER", "https://ntfy.sh").rstrip("/")
  
  
 +def _safe_detail(detail: dict, limit: int) -> str:
@@ -77,7 +70,6 @@
  def _push(title: str, body: str) -> None:
      """Best effort, and deliberately not on the critical path: a phone that
 -    cannot be reached must not stop the desktop HUD from asking."""
--    if not NTFY_TOPIC:
 +    cannot be reached must not stop the desktop HUD from asking.
 +
 +    Callers must pass an ALREADY REDACTED body - use _safe_detail above. This
@@ -85,16 +77,12 @@
 +    shape is gone. The rule lives at the two call sites and this docstring
 +    exists to keep it there.
 +
-+    WHERE IT GOES: NOWHERE, unless the owner set BOTH JARVIS_NTFY_TOPIC (which
-+    channel) and JARVIS_NTFY_SERVER (where that channel lives). The server
-+    used to default to ntfy.sh - a public broker whose topic name is the only
-+    secret, travelling in a URL, so anyone who guesses it subscribes. That is
-+    fine for "something is waiting" and wrong as the default, because it means
-+    the owner never chose a destination at all.
++    The destination is a public broker. ntfy.sh topics are unauthenticated by
++    design: the topic name is the only secret, it travels in a URL, and anyone
++    who guesses it subscribes. That is fine for "something is waiting" and
++    wrong for anything else.
 +    """
-+    # Both, or nothing. A topic with no server is a channel with no
-+    # destination, and the old default quietly supplied one.
-+    if not NTFY_TOPIC or not NTFY_SERVER:
+     if not NTFY_TOPIC:
          return
 +    # Never while the conversation is latched local. The latch exists because
 +    # private content is in play; a push is egress to a third party, which is

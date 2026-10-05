@@ -552,7 +552,16 @@ def t_a_removed_device_or_no_approval_key():
                         "error": "Turn on signed approvals for this phone first."}), res)
 
 
-def t_the_shared_key_is_allowed_until_it_is_retired():
+def t_the_shared_key_is_the_first_pairing_only():
+    """The old shared key, and the two ways it stops (2026-10-05).
+
+    Since a device of its own can approve risky cards (this file's own
+    subject), the shared key - which cannot be removed on its own - is a
+    first-pairing bootstrap and nothing else: it is accepted from another
+    device only while no device holds a key of its own. A fresh PC, or one
+    that has paired nothing yet, keeps today's behaviour; this PC and every
+    device with its own key keep working either way.
+    """
     dev, _t, _p = phone(register=False)
     row = risky_row()
     check("the old shared key from another device: as today (allowed)",
@@ -560,7 +569,17 @@ def t_the_shared_key_is_allowed_until_it_is_retired():
     orig = T.Original()
     ok = D.wrap_token_ok(orig)
     h = T.FakeHandler(token=T.SHARED, peer=MESH)
-    check("before Retire the request is 'shared' and passes the key check",
+    check("a device has its own key, so the shared key is refused from another device",
+          ok(h) is False)
+    h._send(401, {"error": "bad or missing X-Jarvis-Token"})
+    check("... with key: shared_first_pair_only",
+          h.sent[-1][1].get("key") == "shared_first_pair_only", h.sent)
+    # With every device removed the window is open again - which is also what
+    # keeps this rule from ever locking the owner out of a PC where the QR
+    # card cannot be approved at all (no Windows Hello).
+    D.remove({"id": dev}, you="pc")
+    h = T.FakeHandler(token=T.SHARED, peer=MESH)
+    check("with no device of its own, the shared key is allowed (the first pairing)",
           ok(h) is True and h._jarvis_device == "shared")
     check("... so approve_check leaves it alone", approve(None, row, device=h._jarvis_device) is None)
     D.shared({"retired": True}, you="pc", here=True)
@@ -645,8 +664,12 @@ def t_end_to_end_through_the_wrapped_handlers():
         code, out = post("/api/approve/challenge", {"id": "r1"})
         check("challenge through the server: 200 and a nonce", code == 200 and len(out["nonce"]) == 22, out)
         nonce = out["nonce"]
-        check("the shared key on the challenge route: 403",
-              post("/api/approve/challenge", {"id": "r1"}, tok=T.SHARED)[0] == 403)
+        # This test paired a device of its own above (`phone()`), so the old
+        # shared key is refused from another device before any route is
+        # reached - it is a first-pairing bootstrap now (2026-10-05).
+        code, out = post("/api/approve/challenge", {"id": "r1"}, tok=T.SHARED)
+        check("the shared key on the challenge route: refused by the key check (401)",
+              code == 401 and out.get("key") == "shared_first_pair_only", (code, out))
         sent = post("/api/approve", {"id": "r1"})
         check("approve without a signature: refused by the wrapper, never reaches the owner's handler",
               sent[0] == 403 and sent[1]["owner_check"] == "no_signature", sent)
@@ -662,10 +685,17 @@ def t_end_to_end_through_the_wrapped_handlers():
         sent = post("/api/deny", {"id": "r1"})
         check("Deny is never held up", sent == ("original POST", "/api/deny"), sent)
         sent = post("/api/approve", {"id": "r1"}, tok=T.SHARED)
-        check("the old shared key from another device: handed on, as today",
-              sent == ("original POST", "/api/approve"), sent)
+        # A device of its own has paired above, so the devices check refuses
+        # the shared key - and owner_check hands such a request straight on
+        # rather than asking a signature of it. Nothing is approved: the
+        # owner's own handler is what refuses it in production, with 401 and
+        # `key: shared_first_pair_only`.
+        check("the old shared key from another device: refused, never approved",
+              tok(T.FakeHandler(token=T.SHARED, peer=MESH)) is False
+              and sent == ("original POST", "/api/approve"), sent)
         code, out = post("/api/devices/approval-key", {"public_key": spki_of(new_key())}, tok=T.SHARED)
-        check("the register route with the shared key: 403", code == 403, out)
+        check("the register route with the shared key: refused by the key check (401)",
+              code == 401 and out.get("key") == "shared_first_pair_only", (code, out))
         h = Handler("/api/devices", b"{}")
         h.do_GET()
         me = [r for r in h.sent[-1][1]["devices"] if r.get("this_device")][0]
