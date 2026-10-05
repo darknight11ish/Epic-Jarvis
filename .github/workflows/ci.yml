@@ -318,6 +318,14 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # The WHOLE history, exactly as the Ubuntu job above. This job was
+          # written without it, and test_patch_history.py says so itself when CI
+          # is set: "this is a shallow clone (only recent commits are here);
+          # run `git fetch --unshallow` first. The CI job must check out with
+          # fetch-depth: 0." It got away with it locally because the copy it was
+          # measured in had a .git with everything in it (2026-10-05).
+          fetch-depth: 0
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: "3.12"
@@ -579,20 +587,32 @@ jobs:
             'test_wiki.py',
             'test_youtube.py'
           )
-          $failed = @()
-          foreach ($suite in $suites) {
-            Write-Output "::group::$suite"
-            python $suite
-            $code = $LASTEXITCODE
-            if ($code -ne 0) {
-              $failed += $suite
-              Write-Output "::error::$suite exited $code"
-            }
-            Write-Output "::endgroup::"
+          # run_suites.py, NOT a bare `python $suite` loop.
+          #
+          # The suites in the list above were measured in a COPY of the
+          # repository that had a .git and the audit's dshwork folder. A CI
+          # checkout has neither, and nine of them turned out to depend on the
+          # shape run_suites.py provides and this loop did not: a staged backend
+          # (backend/rebuilt on sys.path), a private state folder per suite, and
+          # the skip list for suites whose owner files are absent. Two were
+          # reproduced here - test_patch_history.py fails on a shallow clone by
+          # design (fetch-depth, above) and test_note_capture.py fails when git
+          # has no identity, which a runner does not.
+          #
+          # The list is unchanged and every name in it is one this runs. The
+          # Ubuntu job already runs this way, so both jobs are now the same
+          # shape on two systems - which is what "does this suite pass on
+          # Windows" was asking for in the first place (2026-10-05).
+          $log = Join-Path $env:RUNNER_TEMP 'windows-suites.txt'
+          python run_suites.py @suites 2>&1 | Tee-Object -FilePath $log
+          $code = $LASTEXITCODE
+          $fails = @(Select-String -Path $log -Pattern '^FAIL ' | ForEach-Object { $_.Line })
+          foreach ($f in $fails) { Write-Output "::error::$f" }
+          if ($fails.Count -gt 0) {
+            Write-Output "::error::$($fails.Count) backend suite(s) failed on Windows: see the run's Summary"
           }
-          "$($suites.Count) backend suites ran on Windows"
-          if ($failed.Count -gt 0) {
-            Write-Output "::error::$($failed.Count) backend suite(s) failed on Windows: $($failed -join ', ')"
+          if ($code -ne 0) {
+            Write-Output "::error::run_suites.py exited $code on Windows"
             exit 1
           }
           "Every backend suite in this job passed on Windows."
