@@ -113,14 +113,28 @@ is worth one line in the API doc, because it is an exception to the usual rule.
 
 ## 4. The screens
 
-**Desktop.** A new window, `tutorials.html`, in the same shape as `brain.html`
-and `onboarding.html`: the left side lists the two sections and the tutorials in
-them, each row showing done / in progress / not started; the right side is the
-step card with Next / Back / Skip / Quit and a "step 3 of 8" line. Opening the
-window with `?tutorial=memory&step=3` resumes; closing it at any point writes
-the step. A "Show this one again" button per finished tutorial. The FAQ is a
-third part of the same window, searchable, with the questions in the owner's
-own words rather than the code's.
+**Desktop: a Brain section, not its own window** (changed 2026-10-05, after
+reading how the PC-help window is built). The design first said a separate
+`tutorials.html` window, in the shape of `brain.html`. Reading the code, that
+would mean a new window registered in Rust, a tray or menu entry to open it, and
+a first-run hook — while `jarvis-desktop/src/pc-help.js` shows the cheaper and
+better-fitting pattern: a **Brain section** that is a plain ES module, reached
+from the Hardware and models page, with its labels mirrored by the phone. It is
+also where this design's own `where` lines already send the owner ("Brain →
+Memory"). So:
+
+* `jarvis-desktop/src/tutorials.js` — an ES module like `pc-help.js`: the two
+  section lists, the step card with Next / Back / Skip / Quit, the resume
+  offer, "Show this one again", and the FAQ (searchable, its own list).
+  Labels exported, so the phone's own file can be checked against them word for
+  word by a test, exactly as `backend/test_pc_help.py` checks `PC_HELP`.
+* The bridge is a Rust command per route (`tutorials.rs`, registered in
+  `lib.rs`'s `invoke_handler` beside `hardware::get_pc_help`), because that is
+  how every other page reaches the backend.
+* The intro is **offered once** from the Brain's own list (a line at the top:
+  "New here? Start with What Jarvis is"), never a modal that blocks anything.
+  The existing first-run `onboarding.html` is untouched: it is three screens
+  about first setup, and this is the reference the owner comes back to.
 
 **Android.** A Tutorials screen reachable from the Brain list (and offered once,
 on first run, in place of the desktop's onboarding), with the same two sections,
