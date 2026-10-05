@@ -24,6 +24,23 @@
 # the branch and commit, so a build from the working branch is never mistaken
 # for one from main.
 #
+# TODO (for the owner, not a blocker and not changed here on purpose): the list
+# above names `claude/admiring-ritchie-5urg5h` as the working branch, and that
+# is no longer where the work happens - `fix/2026-10-04-audit-pass` is. A push
+# there starts nothing at all (see `on.push.branches` above), which is the safe
+# default rather than a fault. To get the first signed installer, with the two
+# secrets from INSTALL.md's "The desktop installer, and the update signing
+# key" in place:
+#   * run it by hand from that branch - Actions -> Desktop release -> Run
+#     workflow -> choose the branch. It signs, and publishes nothing, because
+#     publishing is what the list above decides; the installer and its .sig
+#     are still kept with the run. Install that one by hand, once; or
+#   * merge to `main` (the one pull request the owner already planned) and let
+#     the push sign and publish it.
+# Widening the list is a one-line edit here, and it is deliberately left to the
+# owner: whichever branch is named becomes a branch that can replace his own
+# download.
+#
 # Where it publishes: the rolling release tagged `desktop-latest`, the exact
 # URL in tauri.conf.json. Not `/releases/latest/`: that is whichever full
 # release in the whole repository is newest, which says nothing about the

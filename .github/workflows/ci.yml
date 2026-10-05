@@ -534,6 +534,47 @@ jobs:
         run: |
           cargo fetch --locked
           python3 ../../tools/gen_notices.py --check
+      # The structural guards (2026-10-05). Each one asserts a rule the code
+      # cannot state about itself, in the shape `check-tokens.py` and
+      # `tools/check_command_acl.py` already use: a plain list of violations and
+      # a non-zero exit only when there really is one. They read the repository
+      # rather than this crate, so each is called by its path from here.
+      #
+      # Every media clip this app plays is a `data:` URI, and `media-src` said
+      # `'self' blob:` - so the browser refused every one of them and Jarvis
+      # spoke nothing at all, with no error anywhere and no failing test. The
+      # CSP is fixed; this is what keeps it fixed.
+      - name: Media sources are permitted by the app CSP
+        run: python3 ../../tools/check_media_csp.py
+      # The shell hands the event stream to the HUD by dispatching each frame
+      # with its KIND as the EventSource event type, while the page reads those
+      # kinds inside `onmessage` - which only ever sees type `message`. Five
+      # branches of the HUD's live path can never run. The page is vendored from
+      # the backend folder and cannot be fixed here, so this guard records those
+      # five (file, line and kind) in KNOWN_BREAKS: it prints every one of them,
+      # loudly, on every run, and still exits 1 for anything NOT recorded -
+      # a branch added, renamed or moved out from under its entry. It protects
+      # the HUD's live path from going quietly dead, and the list from growing.
+      - name: Event names dispatched and listened for
+        run: python3 ../../tools/check_event_names.py
+      # A dictionary or a JSON object that writes the same key twice keeps the
+      # last one, silently, in both languages. The owner's own gate carried four
+      # duplicated `_RISK` keys - one of them the entry that decides whether an
+      # email draft can be swipe-approved - and nothing in the project could see
+      # it. This does: it reads every *.py and *.json git would carry, and skips
+      # only what git itself ignores (the audit pass's scratch copies), so a
+      # duplicate in a tracked file is still a failure. What it protects is a
+      # table that looks complete while one of its entries no longer exists.
+      - name: No literal repeats a key
+        run: python3 ../../tools/check_literal_keys.py
+      # A button that calls a Tauri command its window's capability does not
+      # grant is refused at runtime and does nothing at all: no compile error,
+      # no test failure. tools/check_command_acl.py checks that the command has
+      # a permission FILE, which is necessary and not sufficient - the file also
+      # has to be in a set, and the set granted to the window whose page calls
+      # it. This is the other half.
+      - name: Every command a page calls is granted to its window
+        run: python3 ../../tools/check_invoke_grants.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
