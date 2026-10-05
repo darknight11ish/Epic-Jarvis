@@ -50,6 +50,7 @@ import jarvis_quick as Q  # noqa: E402
 import _ollama_wire as W  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
@@ -68,6 +69,14 @@ def _cleanup(tmp) -> None:
         tmp.cleanup()
     except OSError:
         pass
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 BLOCK = {"role": "system", "content": AG.LANE_SYSTEM}
@@ -567,7 +576,7 @@ def t_from_now_on_applies_at_once_no_card_and_can_be_undone_by_saying_the_other(
     with Folder():
         sched, tmp = _quick_sched()
         if sched is None:
-            check("skipped: no Scheduler", True)
+            skip("no Scheduler")
             _cleanup(tmp)
             return
         try:
@@ -597,7 +606,7 @@ def t_from_now_on_unmapped_tail_says_so_honestly():
     with Folder():
         sched, tmp = _quick_sched()
         if sched is None:
-            check("skipped: no Scheduler", True)
+            skip("no Scheduler")
             _cleanup(tmp)
             return
         try:
@@ -614,7 +623,7 @@ def t_from_now_on_temporary_chat_stays_in_that_chat_only():
     with Folder():
         sched, tmp = _quick_sched()
         if sched is None:
-            check("skipped: no Scheduler", True)
+            skip("no Scheduler")
             _cleanup(tmp)
             return
         try:
@@ -650,7 +659,7 @@ def t_from_now_on_in_a_game_stays_in_the_chat_even_after_the_window_slides():
     with Folder():
         sched, tmp = _quick_sched()
         if sched is None:
-            check("skipped: no Scheduler", True)
+            skip("no Scheduler")
             _cleanup(tmp)
             return
         try:
@@ -687,7 +696,7 @@ def t_from_now_on_temporary_chat_needs_a_real_conversation_id():
     with Folder():
         sched, tmp = _quick_sched()
         if sched is None:
-            check("skipped: no Scheduler", True)
+            skip("no Scheduler")
             _cleanup(tmp)
             return
         try:
@@ -906,7 +915,7 @@ def main():
                 FAILED.append(name)
                 print(f"FAIL {name} raised")
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

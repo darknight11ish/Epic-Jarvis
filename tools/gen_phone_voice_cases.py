@@ -561,6 +561,20 @@ def create_body(name="Grandpa", words=WORDS, clip=None):
             "transcript": words}
 
 
+def owner_print(mic="phone"):
+    """A trained voice print, written the way the owner's own training writes
+    it (the same three clips and the same call the refusal case below uses).
+
+    Ashby or Clara cannot be checked without one: blend_check compares a blend
+    with the owner's voice print, and since 2026-10-05 a blend with no print to
+    compare with is refused in words (BLEND_NO_PRINT, jarvis_voices.py) instead
+    of passing unchecked. The blend cases below are about a printed owner, so
+    they say so here rather than recording that refusal five times."""
+    owner = np.frombuffer(voice_clip(130.0, 8.0, 16000)[44:], dtype="<i2")
+    clips = [owner[(i + 1) * 16000:(i + 4) * 16000].tobytes() for i in range(3)]
+    V.enroll(clips, embedder=VS._embedder(V), sample_rate=16000, mic=mic)
+
+
 NOT_OWNER = None
 
 
@@ -809,16 +823,20 @@ def voices_cases():
         answers["pack_v1_sky"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "af_sky"})), w)
     # Ashby and Clara (2026-09-29): the copy of the pack that holds them is
     # beside it and loaded; the voice check passes, or one sounds like the owner.
+    # `owner_print()` is what makes the first of those true (see its docstring).
     with VoicesWorld() as w, Blends(w):
+        owner_print()
         status["pack_v1_blends"] = scrub(VS.status(), w)
         answers["pack_v1_ashby"] = scrub(answer(vpost(VS.set_speaker,
                                                       {"speaker": "mix_ashby"})), w)
         status["pack_v1_ashby_chosen"] = scrub(VS.status(), w)
     with VoicesWorld() as w, Blends(w, owner_ok=False):
+        owner_print()
         answers["pack_v1_ashby_refused"] = scrub(answer(vpost(VS.set_speaker,
                                                               {"speaker": "mix_ashby"})), w)
         status["pack_v1_ashby_refused_listed"] = scrub(VS.status(), w)
     with VoicesWorld() as w, Blends(w, owner_ok=False):
+        owner_print()
         answers["pack_v1_sample_refused"] = scrub(answer(vpost(VS.sample_voice,
                                                                {"voice": "mix_ashby"})), w)
     with VoicesWorld() as w:
@@ -845,12 +863,10 @@ def voices_cases():
         status["broken_folder"] = scrub(VS.status(), w)
 
     with VoicesWorld() as w:
-        # The owner's own voice, refused through the real voice check: a
-        # print made by jarvis_voice.enroll() (the basic check - no model is
-        # installed here) from the same person, then offered as a voice.
-        owner = np.frombuffer(voice_clip(130.0, 8.0, 16000)[44:], dtype="<i2")
-        clips = [owner[(i + 1) * 16000:(i + 4) * 16000].tobytes() for i in range(3)]
-        V.enroll(clips, embedder=VS._embedder(V), sample_rate=16000, mic="phone")
+        # The owner's own voice, refused through the real voice check: the same
+        # print `owner_print()` writes (the basic check - no model is installed
+        # here) from the same person, then offered as a voice.
+        owner_print()
         answers["create_owner_voice"] = scrub(answer(VS.create(
             create_body("Me", clip=voice_clip(130.0, 5.0)), gate=gate(), tier_of=ask,
             spawn=run_now)), w)

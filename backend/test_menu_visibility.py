@@ -75,8 +75,20 @@ def t_catalogue_shape():
           all(M.menu(i).hide for g in M.GROUPS for i in M.members(g.id)))
     check("a member belongs to one group only (the field holds one)",
           all(isinstance(m.group, (str, type(None))) for m in M.MENUS))
+    # `or True` used to make this constant. The second half of the name is a
+    # real rule: a Brain row can be phone-only while the view tab that
+    # CONTAINS it is desktop-only (people-things, as-of, pc-help, findings,
+    # rush-latch), because the tab is the container both layouts hand their
+    # rows under - it is not a row of its own. What must never happen is a
+    # child under a parent that is not a container and does not have the
+    # child's app at all: nothing would ever show that row.
     check("a child is in its parent's apps or the parent is the other app's container",
-          all(set(m.apps) & set(M.menu(m.parent).apps) or True for m in M.MENUS if m.parent))
+          all(set(m.apps) & set(M.menu(m.parent).apps) or M.menu(m.parent).kind == "tab"
+              for m in M.MENUS if m.parent),
+          [(m.id, m.parent, sorted(m.apps), sorted(M.menu(m.parent).apps))
+           for m in M.MENUS
+           if m.parent and not set(m.apps) & set(M.menu(m.parent).apps)
+           and M.menu(m.parent).kind != "tab"])
     # Names: no two different menus answer to the same spoken name.
     seen = {}
     clashes = []
@@ -88,7 +100,14 @@ def t_catalogue_shape():
     for m in M.MENUS:
         for n in (m.title.lower(),) + tuple(m.names):
             k = M.normalise_name(n)
-            if seen.setdefault(k, m.id) != m.id:
+            owner = seen.setdefault(k, m.id)
+            # Two menus MAY answer to the same name when that name is the same
+            # words in both apps - "Memory" is the Memory tab and the Model
+            # page's memory summary, and the owner's fix of 2026-10-05 (wording
+            # disagreement 4) made those two say the same thing on purpose.
+            # What must never happen is two menus with DIFFERENT titles
+            # answering to one spoken name.
+            if owner != m.id and M.title_of(owner).lower() != m.title.lower():
                 clashes.append(k)
     check("no spoken name means two things", not clashes, clashes)
     check("groups with no member are exactly the ones the design says are empty",

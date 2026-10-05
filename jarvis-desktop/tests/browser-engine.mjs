@@ -167,7 +167,12 @@ await check("no proxy, no address, no picture, no page: the page and the command
   assert.ok(!/type="(text|url|password)"(?![^>]*readonly)/.test(card), "the card has an editable text box");
   assert.ok(!/proxy|address/i.test(card.replace(/<!--[\s\S]*?-->/g, "").replace(/never downloads|Every page/gi, "")), "the card has a proxy or address field");
   assert.ok(html.includes('src="browser-engine.js"'), "the page loads the script");
-  assert.ok(html.includes('href="#browser-engine"'), "the jump list has it");
+  // The jump list reaches this card through "Security", which it is a section
+  // of now (settings audit 2026-10-05: Security, "Look at this and Watch with
+  // me" and this card all answer "what may see"). It had a link of its own
+  // until then; tests/settings-merge.mjs holds that arrangement.
+  assert.ok(html.includes('href="#security"'), "the jump list cannot reach Security");
+  assert.ok(html.indexOf('id="screen-look"') < start, "Browser without a window is not in Security");
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -1,11 +1,17 @@
 # Hardware profiles: any 8 GB card, up to two cards and 24 GB
 
 **Status: built 2026-09-25 (section 7 says what, and where the build differs
-from this design); still nothing measured on a real PC.** Written
-2026-09-24. Every memory figure is *calculated, not measured* until the
-Hardware screen's Measure has a row for it (section 4.7). Nothing changes on
-the owner's PC until a setup is chosen there, and then only one approval
-card at a time.
+from this design).** Written 2026-09-24. **Measured 2026-10-05:** both cards are
+installed - the 12 GB card as GPU 0, holding the everyday model, and the
+2080 SUPER as GPU 1, running the desktop. The model is **100% on the card**
+with nothing spilling to the processor, and its context is 4,096 while 16,384
+fits with room to spare
+([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md);
+re-measure with `scripts\measure-cards.ps1`, described in
+[MEASURE-CARDS.md](MEASURE-CARDS.md)). **Every other memory figure here is still
+*calculated, not measured*** until the Hardware screen's Measure has a row for
+it (section 4.7) - no setup has been chosen on the owner's PC, and nothing
+changes there until one is, one approval card at a time.
 
 ---
 
@@ -713,7 +719,8 @@ How to read it:
 
 #### One card
 
-**8 GB** (room 5.57 GiB) - *the owner's PC today*
+**8 GB** (room 5.57 GiB) - *the single-card case; the owner's PC is two cards
+now, and the model runs on the 12 GB one (measured 2026-10-05)*
 
 | Preset | Chat | Long context | Pictures | Memory | Off, and why |
 |---|---|---|---|---|---|
@@ -936,7 +943,7 @@ Generated from `backend/fixtures/hardware_cases.json` - the planner's own output
 | Smartest answers (rec.) | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | off | `███████████████░` 3.44 + 2.18 = 5.62 / 6 |
 | Most features | qwen3:4b, 12K - 3.44 (6 GB card) | chat itself | qwen2.5vl:3b, 8K - 3.66 (6 GB card, by swapping with chat) | `████████████████` 3.66 + 2.18 = 5.84 / 6 |
 
-**8 GB - the owner's PC today** (`one_8gb`)
+**8 GB - the single-card case; the owner's PC is two cards now** (`one_8gb`)
 
 | Preset | Chat | Long context | Pictures | Memory |
 |---|---|---|---|---|

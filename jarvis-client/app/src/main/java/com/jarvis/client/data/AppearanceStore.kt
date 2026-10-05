@@ -523,7 +523,13 @@ class AppearanceStore(context: Context) {
             if (o.has(key)) o.optBoolean(key, default) else default
         Look(
             faceFraction = f("face_fraction", d.faceFraction),
-            navAlwaysShown = b("nav_always_shown", d.navAlwaysShown),
+            // Three-way on purpose: a record that says `false` is an owner who
+            // chose hidden, and a record that says nothing takes the default.
+            // `b(..., d.navAlwaysShown)` would read the same here; this shape
+            // is what `tabsRowShown` is unit-tested through.
+            navAlwaysShown = tabsRowShown(
+                if (o.has("nav_always_shown")) o.optBoolean("nav_always_shown") else null,
+            ),
             glow = f("glow", d.glow),
             motion = MotionPref.byId(o.optString("motion")),
             stillAnimal = b("still_animal", d.stillAnimal),
@@ -684,8 +690,24 @@ enum class EdgePref(val id: String, val label: String) {
 data class Look(
     /** The face's share of Home, 0.20..0.85. The rest is the conversation. */
     val faceFraction: Float = DEFAULT_FACE_FRACTION,
-    /** The tabs row on Home: hidden until swiped (false) or always shown. */
-    val navAlwaysShown: Boolean = false,
+    /**
+     * The tabs row on Home: always shown (true) or hidden until swiped.
+     *
+     * Shown by default since 2026-10-05 - the ease-of-use audit's do-first
+     * table, row 3 ("Phone: show the way around", docs/EASE-OF-USE-AUDIT-
+     * 2026-09-27.md: `navAlwaysShown = false` today; keep "hide" as an
+     * Appearance option). Brain, Inbox, Live, Appearance and Help were one
+     * swipe and one 14x8 dp chevron away from anyone who did not already know
+     * they were there.
+     *
+     * The default moving does NOT move an owner who already chose. Every
+     * field of this record is written on save ([encodeLook] says why), so a
+     * record that says `nav_always_shown: false` means he chose hidden and
+     * [loadLook] reads it back as false; only a record with no such key - a
+     * fresh install, or one saved before this field existed - takes the new
+     * default. That is why this is a plain flip and not a migration.
+     */
+    val navAlwaysShown: Boolean = true,
     /**
      * Multiplier on the face's glow, 0.25..1. The caller multiplies it with
      * the theme's own `Chrome.postScale`, so it can only ever dim the glow
@@ -756,3 +778,18 @@ data class Look(
         private fun Float.orIfNotFinite(default: Float): Float = if (isFinite()) this else default
     }
 }
+
+/**
+ * Whether the tabs row on Home is always shown, from what the stored record
+ * says - or, when it says nothing, from the default.
+ *
+ * `stored` is `nav_always_shown` read out of the saved look record, or null
+ * when the record does not mention it at all: a fresh install, or a record
+ * saved before the field existed. Those take the default, which is "shown"
+ * since 2026-10-05. A record that says `false` is an owner who chose "Hidden
+ * until swiped", and it stays hidden - the default moving must never overwrite
+ * a choice. [AppearanceStore.loadLook] is the only caller; it is a function of
+ * its own so this three-way rule can be unit-tested without org.json, which a
+ * JVM test only has as a stub.
+ */
+fun tabsRowShown(stored: Boolean?): Boolean = stored ?: Look().navAlwaysShown

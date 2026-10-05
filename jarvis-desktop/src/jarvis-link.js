@@ -306,14 +306,18 @@ function expiryOf(row) {
 }
 
 /**
- * How long a card has left, in words: "2:13 left", or "expired", or "" when
+ * How long a card has left, in words: "2:13 left", or "Timed out", or "" when
  * nobody said. The gate refuses the card by itself at the deadline, so this
  * is the difference between a decision and a card that silently vanishes.
+ *
+ * "Timed out" is the one word for this on every screen (settings audit
+ * 2026-10-05, wording disagreement 1): the phone's card said "Expired" while
+ * its own list and this one said "Timed out".
  */
 export function expiryWords(expiresAt, now = Date.now()) {
   if (expiresAt === null || expiresAt === undefined || !Number.isFinite(expiresAt)) return "";
   const left = Math.ceil((expiresAt - now) / 1000);
-  if (left <= 0) return "Expired: Jarvis stopped waiting and refused it by itself.";
+  if (left <= 0) return "Timed out: Jarvis stopped waiting and refused it by itself.";
   const m = Math.floor(left / 60);
   const sec = String(left % 60).padStart(2, "0");
   return `${m}:${sec} left to decide, then Jarvis refuses it by itself.`;

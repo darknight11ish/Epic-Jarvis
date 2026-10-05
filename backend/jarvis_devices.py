@@ -20,8 +20,10 @@ WHAT THIS MODULE DOES
   1. Checks every request's key (`wrap_token_ok`, design 5.2). A device key
      (`jdk1.<id>.<secret>`) is checked against the registry here and NEVER
      falls through to the old check. Anything else goes to the owner's own
-     `_token_ok`, unchanged - today's rule - and then, only if the old
-     shared key has been retired, is refused from any device but this PC.
+     `_token_ok`, unchanged - today's rule - and is then refused from any
+     device but this PC once the old shared key has been retired OR once a
+     device holds a key of its own (`_first_pairing`). This PC always keeps
+     working.
   2. Keeps the device registry: `<settings folder>/devices/registry.json`,
      holding a SHA-256 of each key, never the key (design section 4). In a
      subfolder on purpose: backups copy only `*.json` directly in the
@@ -35,6 +37,34 @@ WHAT THIS MODULE DOES
      refuses to write once that device is removed.
   5. The old shared key's Retire (immediate) and Bring back (a card,
      `unretire_shared_key`, PC only, Windows Hello; refused under Lockdown).
+
+THE OLD SHARED KEY IS A BOOTSTRAP, NOT A FALLBACK (2026-10-05)
+
+The owner decided per-device keys are the right shape ("more devices",
+docs/APPROVAL-GAP-DESIGN.md), and this module gives every device one. The
+shared key is what the PC itself uses, and it is how the FIRST device gets in
+on a PC where the QR path cannot run at all (no Windows Hello set up, so the
+`pair_device` card could never be approved - "no lock, no risky approval").
+
+So it is kept for exactly that, and for nothing else:
+
+  * It works from another device only while NO device holds a key of its own
+    (`_first_pairing`). That is the first pairing.
+  * Once a device has its own key, pairing by device key has been PROVEN to
+    work on this PC - the very thing that was in doubt - and the shared key
+    stops being accepted from other devices, with a sentence telling the owner
+    to pair that device with the QR code. This is why the refusal is safe: the
+    condition that triggers it is itself the proof that the way out exists.
+  * Either way the PC keeps working, and a device already holding its own key
+    keeps working. Nobody is locked out of anything they can still use.
+
+What it does NOT do, said plainly: it cannot tell a device that has used the
+shared key for months from a brand new one typing the same string - they send
+the same key. So "the shared key cannot pair a new device" can only be
+enforced by refusing it from other devices altogether, which is what the rule
+above does, and why it waits for the first device key rather than acting at
+once. The next step, when the owner is ready, is to retire the shared key on
+his PC (Settings, Devices - immediate, no card) so nothing rides on it at all.
 
 FAILING SAFE MEANS TODAY'S BEHAVIOUR, NEVER A LOCK-OUT
   * Without this module (or if devices.patch's block fails), only the
@@ -188,6 +218,12 @@ KEY_WORDS = {
                        "your PC."),
     "shared_retired": ("This phone was using the old shared key, which has been retired on "
                        "your PC. Pair it with the QR code in Settings, Devices, on your PC."),
+    # The first pairing is done (a device holds a key of its own): the shared
+    # key has stopped being a way in. Its own sentence, not "retired" - nobody
+    # retired it, and saying so would teach the owner the wrong thing.
+    "shared_first_pair_only": (
+        "This PC gives every device its own key now, so the old shared key works on this PC "
+        "only. Pair this phone with the QR code in Settings, Devices, on your PC."),
 }
 
 #: GET /api/pair/session's `message`, by state. {words} and {name} filled in.
@@ -216,6 +252,14 @@ DEVICES_WORDS = {
     "shared_row": ("Old shared key - used by this PC, and by devices paired before "
                    "per-device keys."),
     "shared_retired": "Retired - it now works on this PC only.",
+    # The row while a device holds a key of its own but the owner never pressed
+    # Retire: the same fact, told with the right reason (2026-10-05).
+    "shared_first_pair_row": (
+        "The first device has its own key, so the old shared key now works on this PC only."),
+    "unretire_first_pair": (
+        "Every device has its own key now, so the old shared key cannot be let back out: "
+        "that is what keeps a copied key from reaching Jarvis. To use it again, remove every "
+        "device below first (each one pairs again with the QR code afterwards)."),
     "unretire_waiting": ("Waiting for your approval. Other devices can use the old shared "
                          "key again only if you approve the card, on this PC."),
     "registry_unreadable": (
@@ -902,6 +946,21 @@ def is_live(device_id: str) -> bool:
     return not why and _live_row(doc, device_id) is not None
 
 
+def _first_pairing(doc: dict) -> bool:
+    """True while NO device holds a key of its own - the shared key's window.
+
+    Read the way `devices()` reads a live row (not removed, and a token hash),
+    so "a device of its own" cannot mean one thing here and another there. The
+    shared key is the bootstrap for the first device; once one has a key, the
+    QR path has been proven on this PC and the shared key stops being a way in
+    for anybody else (module docstring, "THE OLD SHARED KEY IS A BOOTSTRAP").
+    """
+    for row in doc.get("devices", ()):
+        if row.get("token_sha256") and not row.get("removed"):
+            return False
+    return True
+
+
 def _hash(key: str) -> str:
     return hashlib.sha256(key.encode("utf-8")).hexdigest()
 
@@ -959,7 +1018,11 @@ def _note_seen(device_id: str) -> None:
         pass
 
 
-def _note_other(address: str) -> None:
+def _note_other(address: str) -> bool:
+    """Remember the shared key's last use from another device. True when this
+    call is the one that wrote it (at most once a minute per the lock), so the
+    caller can log the same beat rather than logging every poll - a phone asks
+    every couple of seconds and the audit log is the owner's to read."""
     now = _wall()
     with _SEEN_LOCK:
         _OTHER.update(at=_minute(now), address=str(address or ""))
@@ -967,7 +1030,7 @@ def _note_other(address: str) -> None:
         if due:
             _SEEN_WRITTEN["shared"] = now
     if not due:
-        return
+        return False
 
     def change(doc):
         doc["shared"]["last_other_seen"] = _minute(now)
@@ -977,6 +1040,23 @@ def _note_other(address: str) -> None:
         _mutate(change)
     except Exception:
         pass
+    return True
+
+
+def _log_shared_once(what: str) -> None:
+    """One audit line a minute for a shared-key decision, never the key.
+
+    The same throttle as `_note_other`: a device with a stale shared key asks
+    again every few seconds, and 30 lines a minute would bury everything else
+    in the file the owner reads when something is wrong.
+    """
+    now = _wall()
+    with _SEEN_LOCK:
+        due = now - _SEEN_WRITTEN.get("shared:" + what, 0.0) >= SEEN_EVERY
+        if due:
+            _SEEN_WRITTEN["shared:" + what] = now
+    if due:
+        _audit("devices.shared", {"state": what})
 
 
 # ---------------------------------------------------------------------------
@@ -1095,10 +1175,24 @@ def wrap_token_ok(original: Callable) -> Callable:
             here = from_this_pc(peer, local)
             if not here:
                 doc, why = load()
-                if why or doc["shared"]["retired"]:
-                    _say_why(handler, None if why else "shared_retired")
+                if why:
+                    _say_why(handler, None)
                     return False
-                _note_other(peer)
+                if doc["shared"]["retired"]:
+                    _say_why(handler, "shared_retired")
+                    _log_shared_once("refused-retired")
+                    return False
+                if not _first_pairing(doc):
+                    # A device has a key of its own, so per-device pairing
+                    # works on this PC and the shared key is no longer a way
+                    # in for anyone else (module docstring).
+                    _say_why(handler, "shared_first_pair_only")
+                    _log_shared_once("refused-first-pairing-done")
+                    return False
+                if _note_other(peer):
+                    # Still the first pairing: kept, and written down, so the
+                    # owner can see the old path was used and pair properly.
+                    _log_shared_once("first-pairing")
             handler._jarvis_device = "pc" if here else "shared"
             _say_why(handler, None)
             _guard(handler, None)
@@ -1606,9 +1700,15 @@ def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
         else sh.get("last_other_address")
     with _U_LOCK:
         waiting = bool(_U)
+    # `first_pair_only`: a device holds a key of its own, so the shared key
+    # works from this PC only - whether or not the owner ever pressed Retire.
+    # Both apps word the row from this, and "Bring it back" is not offered,
+    # because it could not work while a device key exists.
+    first_pair_only = not _first_pairing(doc)
     shared = {"retired": bool(sh["retired"]) or bool(why), "retired_at": sh.get("retired_at"),
+              "first_pair_only": first_pair_only,
               "last_other_seen": last_other, "last_other_address": address,
-              "can_bring_back_here": bool(here)}
+              "can_bring_back_here": bool(here) and not first_pair_only}
     if waiting:
         shared["waiting"] = True
     problem = why_not(tier_of, armed)
@@ -1739,6 +1839,12 @@ def shared(body, *, you: str, here: bool, gate: Optional[Callable] = None,
     doc, why = load()
     if why:
         return 503, {"ok": False, "error": DEVICES_WORDS["registry_unreadable"]}
+    if not _first_pairing(doc):
+        # A card here would be a card that changes nothing: every device has
+        # its own key, so the shared key cannot reach them again (module
+        # docstring). Said plainly instead of asking the owner to approve it.
+        return 409, {"ok": False, "first_pair_only": True,
+                     "error": DEVICES_WORDS["unretire_first_pair"]}
     if not doc["shared"]["retired"]:
         return 200, {"ok": True, "retired": False, "waiting": False}
     tier = tier_of(UNRETIRE_ACTION)
@@ -2263,7 +2369,12 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     if why:
         return "  devices    the device list cannot be read - only this PC can reach Jarvis"
     n = sum(1 for r in doc["devices"] if not r.get("removed") and r.get("token_sha256"))
-    retired = " ; old shared key retired (this PC only)" if doc["shared"]["retired"] else ""
+    if doc["shared"]["retired"]:
+        retired = " ; old shared key retired (this PC only)"
+    elif n:
+        retired = " ; old shared key: first pairing done, so this PC only"
+    else:
+        retired = " ; old shared key still open for a first device"
     return f"  devices    {n} paired device(s), pairing by QR code on{retired}"
 
 
@@ -2279,4 +2390,5 @@ if __name__ == "__main__":
     print(f"  devices    {len(live)} paired")
     for r in live:
         print(f"             {r['id']}  {r.get('name', '')}")
-    print(f"  shared key {'retired (this PC only)' if doc['shared']['retired'] else 'works'}")
+    print(f"  shared key {'retired (this PC only)' if doc['shared']['retired'] else 'works'}"
+          f"{'' if _first_pairing(doc) else ' - from this PC only now: the first device has its own key'}")

@@ -32,6 +32,7 @@ import _skeleton  # noqa: E402
 PATCH = "cloud-one-turn.patch"
 SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
+SKIPPED = []
 LOCAL = "qwen3:8b"
 PRIVATE = "my salary is 91,000 and my bank is Nordea"
 
@@ -39,6 +40,14 @@ PRIVATE = "my salary is 91,000 and my bank is Nordea"
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _added() -> str:
@@ -78,7 +87,7 @@ def t_the_patch_context():
     ok, out = _skeleton.rehearse(PATCH, "ollama-direct.patch", "tool-calling-wiring.patch",
                                  "speed-record.patch", "feedback.patch")
     if ok is None:
-        return check("SKIP - " + out, True)
+        return skip(out)
     check("cloud-one-turn.patch applies to what ollama-direct (and the patches after it) wrote",
           ok is True, out)
     if ok:
@@ -135,7 +144,7 @@ def t_the_script_lists_it():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
     fns = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "_open"]
     if not fns:
@@ -158,7 +167,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

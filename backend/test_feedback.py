@@ -59,12 +59,21 @@ require_shipped("jarvis_feedback.py")
 import jarvis_feedback as F
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class NoNetwork:
@@ -341,7 +350,7 @@ def t_nothing_leaves_and_the_model_cannot_mark():
 
 def t_the_card_goes_through_the_review_queue():
     if missing("jarvis_extract.py"):
-        return check("SKIP review-queue half - " + explain(), True)
+        return skip("review-queue half - " + explain())
     import jarvis_extract as X
     if not hasattr(X, "propose_retire"):
         return check("jarvis_extract has propose_retire - feedback.patch is applied",
@@ -431,7 +440,7 @@ class _Handler:
 
 def t_the_routes():
     if missing("jarvis_hud.py"):
-        return check("SKIP route half - " + explain(), True)
+        return skip("route half - " + explain())
     src = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     if 'route == "/api/feedback/mark"' not in src:
         return check("jarvis_hud.py carries /api/feedback/mark - feedback.patch is applied",
@@ -558,11 +567,11 @@ def _check_pending_route(src, where):
 def t_retire_cards_only_for_a_client_that_asks():
     _check_pending_route(_pending_route_from_patch(), "the patch")
     if missing("jarvis_hud.py"):
-        return check("SKIP the same on jarvis_hud.py - " + explain(), True)
+        return skip("the same on jarvis_hud.py - " + explain())
     src = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     if 'if path == "/api/memory/pending":' not in src:
-        return check("SKIP the same on jarvis_hud.py - it has no memory pane route "
-                     "(memory-pane.patch is not applied)", True)
+        return skip("the same on jarvis_hud.py - it has no memory pane route "
+                    "(memory-pane.patch is not applied)")
     if "retire_cards" not in src:
         return check("jarvis_hud.py hides retire cards - feedback.patch is applied",
                      False, "the file is there without this part of the patch")
@@ -591,5 +600,5 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     sys.exit(1 if FAILED else 0)

@@ -79,6 +79,7 @@ import _stack  # noqa: E402
 SENS.ASK_MODEL = lambda prompt: '{"sensitive": false, "category": "none"}'
 
 PASSED, FAILED = [], []
+SKIPPED = []
 KEY = bytes(range(32))
 CID = "conv-auto-0001"
 LOCAL = "http://127.0.0.1:11434"
@@ -87,6 +88,14 @@ LOCAL = "http://127.0.0.1:11434"
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 # ------------------------------------------------ jarvis_extract, as patched
@@ -1370,7 +1379,7 @@ def t_the_patch_is_last_and_builds():
 def t_the_patch_applies_forwards_and_backwards():
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     order = _stack.order()
     before = order[:order.index("auto-learn.patch")]
     d = Path(tempfile.mkdtemp(prefix="jarvis-auto-learn-patch-"))
@@ -2234,7 +2243,7 @@ if __name__ == "__main__":
                 FAILED.append(name)
                 traceback.print_exc()
     shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

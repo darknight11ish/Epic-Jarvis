@@ -82,7 +82,9 @@ check("expires_in becomes a deadline on this machine's clock; a bad `created` gi
 check("the countdown reads as words, and says when the gate gave up", () => {
   assert.equal(expiryWords(10_000 + 133_000, 10_000),
                "2:13 left to decide, then Jarvis refuses it by itself.");
-  assert.match(expiryWords(10_000, 20_000), /^Expired/);
+  // "Timed out", not "Expired": one word for this on every screen (settings
+  // audit 2026-10-05, wording disagreement 1).
+  assert.match(expiryWords(10_000, 20_000), /^Timed out/);
   assert.equal(expiryWords(null), "");
 });
 

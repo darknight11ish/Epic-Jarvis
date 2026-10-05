@@ -77,12 +77,21 @@ def _block(src, marker):
 
 
 FAILED, PASSED = [], []
+SKIPPED = []
 TOKEN = "s3cr3t+tok/en=="
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class NoNetwork:
@@ -181,7 +190,7 @@ def t_logseq_refuses_what_it_should():
         check("a journal file that is a link elsewhere is refused",
               out["ok"] is False and target.read_text() == "do not touch", repr(out))
     except (OSError, NotImplementedError):
-        check("SKIP - cannot make a symlink here", True)
+        skip("cannot make a symlink here")
 
 
 def t_joplin_plan_card_and_token():
@@ -456,7 +465,7 @@ def t_the_patch():
     import _skeleton
     ok, out = TT.rehearse(["task-control.patch", "note-capture.patch"], TT.stack_skeleton())
     if ok is None:
-        return check("SKIP - " + out, True)
+        return skip(out)
     check("note-capture.patch applies after task-control.patch, and reverts", ok is True, out)
     if ok:
         window = _block(out, 'if route == "/api/notes/capture":')
@@ -499,7 +508,7 @@ def t_the_patch():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - no jarvis_hud.py here; the rehearsal above is the proof", True)
+        return skip("no jarvis_hud.py here; the rehearsal above is the proof")
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has the notes route (note-capture.patch applied)",
           '"/api/notes/capture"' in s)
@@ -514,7 +523,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

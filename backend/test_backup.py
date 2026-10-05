@@ -39,6 +39,7 @@ fake key provider stands in). What it proves:
 from __future__ import annotations
 
 import io
+import itertools
 import json
 import os
 import shutil
@@ -147,9 +148,53 @@ def fresh_conf() -> Path:
     B._config_dir = lambda: conf
     D._config_dir = lambda: conf
     fw.CONFIG_DIR = conf
+    # build_archive() also reads the folder jarvis_backup.py is RUNNING FROM,
+    # for the backend's own program files (2026-10-05). Left alone that is this
+    # repository's own backend/ folder, so every test would archive the real
+    # sources - slow, and a test that called _apply_restore would write into
+    # the checkout. Point it at an empty scratch folder by default; a test that
+    # wants files there calls fake_backend().
+    empty = _scratch_dir("backend")
+    B._source_dir = lambda: empty
     B._reset_for_tests()
     backups = Path(tempfile.mkdtemp(dir=str(TMP), prefix="backups-"))
     return conf, backups
+
+
+_SEQ = itertools.count()
+
+
+def _scratch_dir(kind: str) -> Path:
+    """A new empty folder under TMP. The counter, not the clock: two calls in
+    the same nanosecond would otherwise collide and raise."""
+    d = TMP / f"{kind}-{next(_SEQ)}"
+    d.mkdir()
+    return d
+
+
+def fake_backend(files=("jarvis_hud.py", "jarvis_gate.py"), *, decoys=True) -> Path:
+    """A scratch stand-in for the live backend folder, holding `files` as real
+    `*.py` files, and pointing jarvis_backup.py at it. `decoys`: the things
+    that must NOT be swept in - a `.txt`, a `.pyc` and a nested `*.py`, plus a
+    `__pycache__` folder to stand for the 9.6 MB of bytecode beside the real
+    sources, and a `_jarvis-backup-*` folder to stand for the patcher's own
+    older copies (archiving those would nest a copy of the whole source inside
+    every new backup)."""
+    d = _scratch_dir("fake-backend")
+    for name in files:
+        (d / name).write_text(f"# {name}\nVALUE = {name!r}\n", encoding="utf-8")
+    if decoys:
+        (d / "notes.txt").write_text("NOT SOURCE", encoding="utf-8")
+        (d / "stale.pyc").write_bytes(b"BYTECODE")
+        (d / "sub").mkdir()
+        (d / "sub" / "nested.py").write_text("# nested", encoding="utf-8")
+        (d / "__pycache__").mkdir()
+        (d / "__pycache__" / "jarvis_hud.cpython-312.pyc").write_bytes(b"BYTECODE")
+        (d / "_jarvis-backup-2026-10-04-222810").mkdir()
+        (d / "_jarvis-backup-2026-10-04-222810" / "jarvis_hud.py").write_text(
+            "# an older copy\n", encoding="utf-8")
+    B._source_dir = lambda: d
+    return d
 
 
 def make_memory_db(conf: Path, rows=("secret one",)) -> None:
@@ -199,10 +244,22 @@ def t_setting_the_folder_reuses_documents_refusals():
                                      spawn=sync_spawn)
     check("the whole user folder is refused (jarvis_documents.check_folder, not a copy)",
           code == 400, out)
-    check("B.check_folder IS D.check_folder, imported not copied",
-          B.check_folder.__module__ == D.check_folder.__module__
-          or "jarvis_documents" in B.check_folder.__code__.co_filename
-          or True)   # the real assertion is the shared refusal above
+    # The name used to end in `or True`, so it could never fail - and the two
+    # clauses above it were both false (check_folder is a wrapper in
+    # jarvis_backup, not a re-export). What is worth asserting is the thing
+    # the wrapper's own docstring claims: the path really is handed to
+    # jarvis_documents.check_folder, so there is one list of unsafe places and
+    # not two that can drift apart. Watch the delegation happen.
+    seen = []
+    real = D.check_folder
+    D.check_folder = lambda p: (seen.append(p), real(p))[1]
+    try:
+        code, out = B.request_set_folder({"path": home}, here=True, gate=approve,
+                                         tier_of=tier_ask, spawn=sync_spawn)
+    finally:
+        D.check_folder = real
+    check("B.check_folder goes through jarvis_documents.check_folder, imported not copied",
+          code == 400 and seen == [home], out)
 
 
 # ======================================================== 2. "Back up now"
@@ -379,6 +436,122 @@ def t_what_is_backed_up_and_what_is_excluded():
 def zf_read(zip_bytes: bytes, name: str) -> bytes:
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         return zf.read(name)
+
+
+def t_the_backend_source_is_backed_up_and_put_back():
+    """2026-10-05: an audit found five files - jarvis_hud.py (the whole control
+    plane), jarvis_gate.py (the approval gate), jarvis_extract.py,
+    jarvis_models.py, jarvis_skills.py - that existed in exactly ONE place on
+    Earth, the live backend folder, and that no backup of any kind read: not
+    this module (nothing in it touched a .py file), not apply-patches.ps1, not
+    git (backend/.gitignore keeps the live sources out on purpose, with a
+    written exception only for the ten under backend/rebuilt/). A bad patch or
+    a deleted folder would have taken them with it.
+
+    So the archive now carries the backend's own top-level *.py files as
+    source/<name>, and a restore writes them back into the folder this module
+    runs from. What this proves:
+      * every top-level .py goes in, byte for byte, and the manifest counts them;
+      * the things beside them do NOT: other file types, deeper *.py, the
+        __pycache__ bytecode, and the patcher's own _jarvis-backup-* folders
+        (which already hold older copies of the same sources - recursing would
+        nest the whole source inside every new backup);
+      * a restore puts them back, overwriting what is there now;
+      * a name that tries to escape the source folder, or to nest, is refused
+        and counted - the same second lock db/, settings/ and notes/ already have;
+      * an archive made BEFORE this change (no source/ entry at all) still
+        restores, and never even asks where the sources live.
+    """
+    conf, _backups = fresh_conf()
+    backend = fake_backend()
+    before = {p.name: p.read_bytes() for p in backend.glob("*.py")}
+
+    zip_bytes, manifest = B.build_archive()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = set(zf.namelist())
+    check("every top-level backend .py is in the archive, byte for byte",
+          {f"source/{n}" for n in before} <= names
+          and all(zf_read(zip_bytes, f"source/{n}") == data for n, data in before.items()),
+          sorted(n for n in names if n.startswith("source/")))
+    check("the manifest counts them", manifest["source_files"] == len(before), manifest)
+    check("... so the restore preview can say how many (counts only, never content)",
+          manifest["source_files"] == 2)
+    check("a file beside them that is NOT a top-level .py stays out",
+          not any(n.startswith("source/") and not n.endswith(".py") for n in names)
+          and "source/notes.txt" not in names and "source/stale.pyc" not in names)
+    check("bytecode, the patcher's older copies and deeper .py are all left out "
+          "(recursing would nest the whole source inside every backup)",
+          not any("__pycache__" in n for n in names)
+          and not any("_jarvis-backup-" in n for n in names)
+          and "source/nested.py" not in names and "source/sub/nested.py" not in names,
+          sorted(n for n in names if n.startswith("source/")))
+
+    # A restore puts them back - both the file that changed and the one deleted.
+    (backend / "jarvis_hud.py").write_text("# WRECKED\n", encoding="utf-8")
+    (backend / "jarvis_gate.py").unlink()
+    applied = B._apply_restore(zip_bytes)
+    check("a restore writes the program files back into the backend folder",
+          (backend / "jarvis_hud.py").read_bytes() == before["jarvis_hud.py"]
+          and (backend / "jarvis_gate.py").read_bytes() == before["jarvis_gate.py"],
+          applied)
+    check("and the summary counts them as restored, not skipped",
+          applied["source_files"] == 2 and applied["skipped"] == 0, applied)
+    check("the staging cleaned up after itself in the backend folder too: no leftover "
+          ".tmp or .old files",
+          not [p.name for p in backend.rglob("*") if ".tmp" in p.name or ".old" in p.name],
+          sorted(p.name for p in backend.rglob("*")))
+    check("nothing created a source/ folder inside the backend folder",
+          not (backend / "source").exists())
+
+    # The second lock, exactly as db/ and settings/ have it.
+    outside = backend.parent / f"escaped-{time.time_ns()}.py"
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("source/../evil.py", b"x")
+        zf.writestr("source/sub/deep.py", b"x")
+        zf.writestr("source/ok.py", b"# fine\n")
+    applied = B._apply_restore(buf.getvalue())
+    check("a source/ name that escapes the backend folder is refused, not written",
+          not outside.exists() and not (backend.parent / "evil.py").exists(), str(outside))
+    check("... and a nested one is refused too (build_archive writes one name per file)",
+          applied["skipped"] == 2 and applied["source_files"] == 1
+          and (backend / "ok.py").read_text(encoding="utf-8") == "# fine\n", applied)
+
+    # A backup made before this change: no source/ entry anywhere. It must
+    # restore exactly as it did, and must not touch the backend folder at all.
+    (backend / "ok.py").write_text("# changed by the owner\n", encoding="utf-8")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("settings/folders.json", "{}")
+        zf.writestr("manifest.json", "{}")
+    applied = B._apply_restore(buf.getvalue())
+    check("an OLD backup with no source/ entry restores and leaves the code alone",
+          applied["source_files"] == 0 and applied["settings_files"] == 1
+          and (backend / "ok.py").read_text(encoding="utf-8") == "# changed by the owner\n",
+          applied)
+
+
+def t_the_backend_source_never_lands_in_the_settings_folder():
+    """The one way this new branch could go wrong on the owner's PC: writing
+    program files somewhere they do not belong. It must read the source folder
+    from `_source_dir()` and NOT from the settings folder, and it must never
+    create a `source/` folder inside ~/.openjarvis."""
+    conf, _backups = fresh_conf()
+    backend = fake_backend(files=("jarvis_hud.py",))
+    zip_bytes, _m = B.build_archive()
+    B._apply_restore(zip_bytes)
+    check("the program file lands in the backend folder, not the settings folder",
+          (backend / "jarvis_hud.py").is_file() and not (conf / "source").exists()
+          and not (conf / "jarvis_hud.py").exists())
+    check("the settings folder still got what it should - nothing, it was empty",
+          sorted(p.name for p in conf.iterdir()) == [], sorted(p.name for p in conf.iterdir()))
+    src = Path(B.__file__).read_text(encoding="utf-8")
+    body = src[src.index("def _source_dir"):]
+    body = body[:body.index("\n\n\n")]
+    check("the REAL _source_dir() is __file__'s own folder - not a setting that can drift, "
+          "and not the settings folder",
+          "__file__" in body and "CONFIG_DIR" not in body and "expanduser" not in body,
+          body[:300])
 
 
 def t_the_chat_history_key_is_carried_but_only_inside_the_lock():
@@ -633,9 +806,18 @@ def t_restore_needs_the_right_code():
     check("preview with the wrong code: 400, wrong_code, nothing decrypted",
           code == 400 and resp["wrong_code"] is True, resp)
     code, resp = B.preview_restore({"name": out["name"], "code": out["recovery_code"]}, here=True)
+    # `or True` used to make this constant. The clause it hid was wrong as
+    # written: `"facts" not in json.dumps(counts)` is false because a TABLE is
+    # called `facts` - and a table's name is exactly what a preview may carry.
+    # What "never content" really means is that every number in there is a row
+    # COUNT: a string would be the one place a row's words could leak. (The
+    # check below still reads the whole response for the fact's own text.)
+    databases = resp["counts"]["databases"]
     check("preview with the right code: counts and a date, never content",
           code == 200 and resp["created_at"] and "databases" in resp["counts"]
-          and "facts" not in json.dumps(resp["counts"]) or True, resp)
+          and bool(databases)
+          and all(isinstance(n, int) and not isinstance(n, bool)
+                  for tables in databases.values() for n in tables.values()), resp)
     check("the preview never carries the actual fact text",
           "secret" not in json.dumps(resp).lower())
 
@@ -1071,6 +1253,14 @@ def t_the_restore_card_says_what_it_really_does():
     check("... it says it replaces with that day's copies, and what is lost",
           "REPLACES your memory and chat files" in text and "that day's copies" in text
           and "since is lost" in text, text)
+    # 2026-10-05: a restore now also puts back the backend's own program files,
+    # which is a bigger thing to do than it used to be. The card must say so,
+    # and must say that an older backup therefore restores an older program.
+    check("... and it says plainly that Jarvis's own program files come back too",
+          "program files" in text and "jarvis_hud.py" in text
+          and "back into the folder Jarvis runs from" in text, text)
+    check("... and warns that restoring an OLDER backup undoes updates to the code",
+          "restoring an OLDER backup" in text and "apply-patches.ps1" in text, text)
 
 
 def t_delete_older_backups_is_one_card_this_pc_only():

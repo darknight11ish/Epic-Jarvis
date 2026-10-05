@@ -31,6 +31,18 @@
   Retiring stops other devices using it; this PC's own apps keep using it,
   so the owner can never be locked out of the PC. Nothing is retired
   automatically.
+  **Narrowed 2026-10-05: it is a first-pairing bootstrap.** The shared key is
+  accepted from another device only while **no device holds a key of its own**.
+  Once one does, per-device pairing has been proven on that PC, and the shared
+  key stops being a way in for anybody else - refused with its own sentence
+  ("This PC gives every device its own key now...") and an audit line, and
+  **Bring it back** is refused with plain words rather than raising a card
+  that could not work. Removing every device opens the window again, so this
+  can never lock anyone out, and a PC where the `pair_device` card cannot be
+  approved at all (no Windows Hello - "no lock, no risky approval") can still
+  pair its first device. The reasoning is in `backend/jarvis_devices.py`'s
+  module docstring, "THE OLD SHARED KEY IS A BOOTSTRAP, NOT A FALLBACK"; the
+  next step is the owner pressing Retire, so nothing rides on it at all.
 - **Keys are never logged and the PC stores only a fingerprint of each key**
   (a SHA-256 hash - a one-way scramble that cannot be turned back into the
   key).

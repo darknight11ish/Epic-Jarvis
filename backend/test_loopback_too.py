@@ -33,11 +33,20 @@ SRC = BACKEND / "jarvis_hud.py"
 PATCH = HERE / "loopback-too.patch"
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _source():
@@ -109,7 +118,7 @@ def t_a_mesh_bind_also_answers_on_loopback():
         try:
             main = ThreadingHTTPServer(("127.0.0.2", 0), Echo)
         except OSError as exc:
-            return check(f"SKIP - this machine cannot bind 127.0.0.2 ({exc})", True)
+            return skip(f"this machine cannot bind 127.0.0.2 ({exc})")
         probe = socket.socket()
         try:
             probe.bind(("127.0.0.1", main.server_address[1]))
@@ -120,7 +129,7 @@ def t_a_mesh_bind_also_answers_on_loopback():
         finally:
             probe.close()
     if main is None:
-        return check("SKIP - no port free on both 127.0.0.1 and 127.0.0.2", True)
+        return skip("no port free on both 127.0.0.1 and 127.0.0.2")
     port = main.server_address[1]
     import threading
     threading.Thread(target=main.serve_forever, daemon=True).start()
@@ -156,7 +165,7 @@ def t_a_taken_loopback_port_warns_instead_of_crashing_the_boot():
 
 def t_main_calls_it_before_opening_the_main_socket():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
     mains = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "main"]
     check("found main()", len(mains) == 1, f"found {len(mains)}")
@@ -180,7 +189,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

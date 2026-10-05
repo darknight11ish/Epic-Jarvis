@@ -50,6 +50,7 @@ import jarvis_tag_suggest as T  # noqa: E402
 
 KEY = bytes(range(32))
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-tag-suggest-"))
 _N = [0]
 # 03:00 local on 2026-10-01: inside the 01:00-06:00 window.
@@ -62,6 +63,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -128,9 +137,9 @@ def chat(log, cid, words=("please plan the roof repair budget",
     return cid
 
 
-def skip():
+def _no_crypto():
     if H.AESGCM is None:
-        check("SKIP - the cryptography package is not installed", True)
+        skip("the cryptography package is not installed")
         return True
     return False
 
@@ -184,7 +193,7 @@ class FakeSched:
 # ------------------------------------------------------------------ tests
 
 def t_off_by_default_and_the_switch():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     code, out = T.handle_get()
@@ -222,7 +231,7 @@ def t_off_by_default_and_the_switch():
 
 
 def t_switch_card_denied_and_needs_conditions():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     ask = Asker()
@@ -257,7 +266,7 @@ def t_switch_card_denied_and_needs_conditions():
 
 
 def t_switch_withdrawn_by_off():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     ask = Asker()
@@ -286,7 +295,7 @@ def t_switch_withdrawn_by_off():
 
 
 def t_candidates_one_rule_each():
-    if skip():
+    if _no_crypto():
         return
     log, clk = new_log()
     good = chat(log, "conv-good-0000001")
@@ -341,7 +350,7 @@ def t_candidates_one_rule_each():
 
 
 def t_history_off_and_no_key_read_nothing():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     chat(log, "conv-good-0000002")
@@ -361,7 +370,7 @@ def t_history_off_and_no_key_read_nothing():
 
 
 def t_prompt_is_only_the_owners_first_six_within_1500():
-    if skip():
+    if _no_crypto():
         return
     log, clk = new_log()
     words = [f"OWNERWORD{i} " + ("x" * 100) for i in range(9)]
@@ -385,7 +394,7 @@ def t_prompt_is_only_the_owners_first_six_within_1500():
 
 
 def t_hostile_chat_and_bad_replies():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     chat(log, "conv-hostile-0001", words=(
@@ -415,7 +424,7 @@ def t_hostile_chat_and_bad_replies():
 
 
 def t_only_files_on_a_real_ask_yes():
-    if skip():
+    if _no_crypto():
         return
     for label, verdict in (
             ("an auto tier", V("approved", tier="auto")),
@@ -456,7 +465,7 @@ def t_only_files_on_a_real_ask_yes():
 
 
 def t_deny_is_remembered_and_stale_chats_skipped():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-deny-0000001")
@@ -513,7 +522,7 @@ def t_deny_is_remembered_and_stale_chats_skipped():
 
 
 def t_limits():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     for i in range(9):
@@ -597,7 +606,7 @@ def t_limits():
 
 
 def t_once_a_night_in_the_window():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     for i in range(2):
@@ -629,7 +638,7 @@ def t_once_a_night_in_the_window():
 
 
 def t_model_that_says_none_is_not_asked_again_for_two_weeks():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-passed-00001")
@@ -644,7 +653,7 @@ def t_model_that_says_none_is_not_asked_again_for_two_weeks():
 
 
 def t_nothing_of_the_chat_is_stored_or_logged():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-quiet-000001", words=("MYSECRETTITLEWORD about the loft", "second line"))
@@ -679,7 +688,7 @@ def t_nothing_of_the_chat_is_stored_or_logged():
 
 
 def t_model_must_be_local():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     chat(log, "conv-local-0000001")
@@ -713,7 +722,7 @@ def t_model_must_be_local():
 
 
 def t_hidden_lists_card():
-    if skip():
+    if _no_crypto():
         return
     when = time.mktime((2026, 9, 28, 14, 5, 0, 0, 0, -1))
     full = T.card_text("Roof repair budget", when, "Projects")
@@ -741,7 +750,7 @@ def t_hidden_lists_card():
 
 
 def t_forget_a_time_frame_keeps_the_tag_and_a_gone_chat_files_nothing():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-undo-0000001")
@@ -753,7 +762,7 @@ def t_forget_a_time_frame_keeps_the_tag_and_a_gone_chat_files_nothing():
 
 
 def t_routes_through_history_module():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     code, out = H.handle_get("/api/history/tags/suggest")
@@ -774,7 +783,7 @@ def main():
         except Exception:
             FAILED.append(name)
             print(f"FAIL {name} raised\n{traceback.format_exc()}")
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     H.use(None)
     return 1 if FAILED else 0
 

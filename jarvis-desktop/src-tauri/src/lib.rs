@@ -41,6 +41,7 @@ pub mod live;
 pub mod lock;
 pub mod logfile;
 pub mod look;
+pub mod notifications;
 pub mod plain_errors;
 pub mod proctree;
 pub mod pyfind;
@@ -450,12 +451,17 @@ fn spawn_telemetry_loop(app: AppHandle) {
 
             // A drag is persisted even while the widget is collapsed or
             // hidden - and the same for the floating face. `flush` writes a
-            // file, so both go to the blocking pool too.
+            // file, so both go to the blocking pool too. The notification
+            // prefs ride along: their command writes through at once, so this
+            // is only the belt to that pair of braces.
             {
                 let handle = app.clone();
                 if let Err(err) = tokio::task::spawn_blocking(move || {
                     handle.state::<windows::WidgetState>().flush(&handle);
                     handle.state::<windows::FloatingState>().flush(&handle);
+                    handle
+                        .state::<notifications::NotificationState>()
+                        .flush(&handle);
                 })
                 .await
                 {
@@ -764,6 +770,11 @@ pub fn run() {
         .manage(tray::TrayFlashGovernor::default())
         .manage(windows::WidgetState::default())
         .manage(windows::FloatingState::default())
+        // The owner's notification switches and quiet hours (notifications.rs).
+        // Registered here with every other managed type, not inside setup: a
+        // poster on the event stream reads it, and `state` PANICS on a type
+        // that was never managed.
+        .manage(notifications::NotificationState::default())
         .manage(window_memory::PendingMaximize::default())
         .manage(RouteState::default())
         // Registered here with every other managed type, not inside setup: the
@@ -803,6 +814,14 @@ pub fn run() {
             commands::cancel_chat,
             commands::decide_approval,
             commands::notify_user,
+            // Settings -> Notifications: the owner's per-kind switches and his
+            // quiet-hours window, pushed here by notifications-prefs.js - the
+            // one place the page keeps them - so the posters in Rust can
+            // honour them. Until this command existed those switches were
+            // written to localStorage and read by nothing that posts a toast,
+            // so a kind switched off still notified (notifications.rs).
+            // Settings window only.
+            notifications::set_notification_prefs,
             // The HUD page's requests, made in Rust so the page holds no
             // token (apps security audit M2; hud_proxy.rs).
             hud_proxy::hud_get,
@@ -1362,6 +1381,17 @@ pub fn run() {
                 }
             }
 
+            // The owner's notification switches, read from disk before the
+            // first toast can be posted (notifications.rs). There is nothing
+            // to put on screen with them: the gates in brain/schedule.rs,
+            // brain/briefing.rs and stream.rs read this state directly. A
+            // missing file leaves them all on, which is what this app did
+            // before the switches existed.
+            let notification_prefs = notifications::load_notification_prefs(&handle);
+            handle
+                .state::<notifications::NotificationState>()
+                .update(|prefs| *prefs = notification_prefs);
+
             spawn_telemetry_loop(handle.clone());
 
             // Notification-area icon and context menu. Built before the
@@ -1538,9 +1568,11 @@ pub fn run() {
             // either one) right before Quit could be lost - the on-disk file
             // still says what it said before (bug audit 2026-09-27,
             // desktop-rust finding #6). Both flushes are cheap no-ops when
-            // nothing changed since the last tick.
+            // nothing changed since the last tick, and the notification
+            // prefs' own flush is the same kind of no-op.
             app.state::<windows::WidgetState>().flush(app);
             app.state::<windows::FloatingState>().flush(app);
+            app.state::<notifications::NotificationState>().flush(app);
             sidecar::stop_on_exit(app);
         }
 
@@ -1551,6 +1583,7 @@ pub fn run() {
             stream::save_resume_now(app);
             app.state::<windows::WidgetState>().flush(app);
             app.state::<windows::FloatingState>().flush(app);
+            app.state::<notifications::NotificationState>().flush(app);
             sidecar::stop_on_exit(app);
         }
 

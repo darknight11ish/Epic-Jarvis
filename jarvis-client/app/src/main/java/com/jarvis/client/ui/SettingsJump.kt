@@ -39,7 +39,7 @@ object SettingsJump {
         Entry("Backups", "backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),
-        Entry("Picture mode (Look at this)", "screen-look"),
+        Entry("Look at this and Watch with me", "screen-look"),
         Entry("Browser without a window", "browser-engine"),
         Entry("Devices", "devices"),
         Entry("Quick Settings tiles", "quick-tiles"),

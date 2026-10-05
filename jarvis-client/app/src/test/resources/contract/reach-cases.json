@@ -6,7 +6,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 3,
+   "on": 2,
    "rows": [
     {
      "asks": "-",
@@ -141,12 +141,12 @@
     {
      "asks": "-",
      "id": "phone_push",
-     "line": "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the details, and never while the conversation holds private text.",
+     "line": "Not set up: no ntfy server is set, so nothing is pushed anywhere. The default is NOWHERE, so that alerts about this PC cannot leave it by accident: set both JARVIS_NTFY_TOPIC (which channel) and JARVIS_NTFY_SERVER (where that channel lives) to turn phone notifications on.",
      "name": "Phone notifications (ntfy)",
-     "on": true,
-     "state": "on",
-     "state_words": "On",
-     "where": "ntfy.sh"
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
     },
     {
      "asks": "-",
@@ -425,7 +425,7 @@
     {
      "asks": "-",
      "id": "phone_push",
-     "line": "Not set up: no ntfy topic is set, so nothing is pushed.",
+     "line": "Not set up: no ntfy topic is set, so nothing is pushed anywhere. The default is NOWHERE, so that alerts about this PC cannot leave it by accident: set both JARVIS_NTFY_TOPIC (which channel) and JARVIS_NTFY_SERVER (where that channel lives) to turn phone notifications on.",
      "name": "Phone notifications (ntfy)",
      "on": false,
      "state": "not_set_up",
@@ -570,7 +570,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 7,
+   "on": 6,
    "rows": [
     {
      "asks": "-",
@@ -705,12 +705,12 @@
     {
      "asks": "-",
      "id": "phone_push",
-     "line": "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the details, and never while the conversation holds private text.",
+     "line": "Not set up: no ntfy server is set, so nothing is pushed anywhere. The default is NOWHERE, so that alerts about this PC cannot leave it by accident: set both JARVIS_NTFY_TOPIC (which channel) and JARVIS_NTFY_SERVER (where that channel lives) to turn phone notifications on.",
      "name": "Phone notifications (ntfy)",
-     "on": true,
-     "state": "on",
-     "state_words": "On",
-     "where": "ntfy.sh"
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
     },
     {
      "asks": "Yes, every time",
@@ -1393,7 +1393,7 @@
     {
      "asks": "-",
      "id": "phone_push",
-     "line": "Not set up: no ntfy topic is set, so nothing is pushed.",
+     "line": "Not set up: no ntfy topic is set, so nothing is pushed anywhere. The default is NOWHERE, so that alerts about this PC cannot leave it by accident: set both JARVIS_NTFY_TOPIC (which channel) and JARVIS_NTFY_SERVER (where that channel lives) to turn phone notifications on.",
      "name": "Phone notifications (ntfy)",
      "on": false,
      "state": "not_set_up",

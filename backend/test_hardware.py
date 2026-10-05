@@ -54,11 +54,20 @@ import gen_hardware_cases as G  # noqa: E402
 import _stack  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 Verdict = G.Verdict
@@ -685,7 +694,7 @@ def _rehearse():
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, why, before, after = _rehearse()
     check("hardware.patch applies to what the earlier patches wrote (no invented context), "
           "and reverses", ok, why)
@@ -734,7 +743,7 @@ def t_the_patch():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - no jarvis_hud.py here; the rehearsal above is the proof", True)
+        return skip("no jarvis_hud.py here; the rehearsal above is the proof")
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has /api/hardware (hardware.patch applied)",
           '"/api/hardware"' in s and '"/api/hardware/apply"' in s)
@@ -750,7 +759,7 @@ def main():
                 import traceback
                 traceback.print_exc()
                 check(f"{name} ran without crashing", False, repr(exc))
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed in test_hardware: " + ", ".join(FAILED))
     return 1 if FAILED else 0

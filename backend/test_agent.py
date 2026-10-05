@@ -40,11 +40,20 @@ PUBLISHED_STEPS = []
 AG._publish_step = PUBLISHED_STEPS.append
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class NoRealIO:
@@ -389,7 +398,7 @@ def t_every_tool_resolves_to_a_real_jarvis_gate_action():
     try:
         import jarvis_gate
     except Exception:
-        return check("SKIP - jarvis_gate not importable in this environment", True)
+        return skip("jarvis_gate not importable in this environment")
     for tname, tool in AG.TOOLS.items():
         if tname == "web_search":
             # Put to the gate under its own action (jarvis_search.ACTION_SEARCH,
@@ -1185,7 +1194,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

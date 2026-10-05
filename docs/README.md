@@ -1,9 +1,32 @@
 # The documents, and which ones are current
 
-There are about ninety documents here. **Five of them are the ones to read**;
-the rest are the history of how Jarvis got here: audits, research, and notes
-that one working session left for another. Nothing has been moved or
-deleted, so every old link still works. This page says which is which.
+There are **288 markdown documents** here, adding up to about **20 MB**. Neither
+number is a guess, and neither is asked to stay still: the documents are written
+to all day, so the count and the size both move. Both were measured on 2026-10-05
+with the two lines below, run from the top of the repository - so run them again
+whenever you want today's numbers rather than this page's:
+
+```powershell
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 288 documents
+"{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
+  Measure-Object -Property Length -Sum).Sum                             # about 20,000,000 bytes
+```
+
+Both lines count the documents in the subfolders too, not only the ones sitting
+directly in `docs/`. The count is the honest measure of how much is here; treat
+the size as "around 20 MB" and re-measure it rather than trusting the digits
+above. **Five of the documents are the ones to read**; the rest are the history of
+how Jarvis got here: audits, research, and notes that one working session left for
+another. Apart from one generated file that was deleted on 2026-10-05 (the source
+bundle, in the last table below - its contents are still in git history), nothing
+has been moved or deleted, so every old link still works. This page says which is
+which.
+
+(An earlier version of this paragraph said "about ninety documents", and at some
+point it also gave a size of 720 KB for something that had grown far past that -
+the source bundle alone was 13.5 MB when it was deleted on 2026-10-05, as the last
+table on this page records. Both figures were wrong, which is why the numbers now
+come with the commands that measure them.)
 
 If two documents disagree, `ARCHITECTURE.md` wins, and the other one is out
 of date.
@@ -41,6 +64,10 @@ Also current, for one area each:
 | [UI-AUDIT-2026-10-05.md](UI-AUDIT-2026-10-05.md) | A user-interface audit of both apps (2026-10-05): what is measurably right (the token and contrast guards, the shared-look contract), what good looks like for an approval-gated assistant, and the findings from all three passes. |
 | [DEEP-AUDITS-2026-10-05.md](DEEP-AUDITS-2026-10-05.md) | The four deeper audits (2026-10-05): prompt injection and untrusted text end to end (the rush latch has no caller on the read path), and dependencies, supply chain and what breaks in twelve months. Disaster recovery and performance follow. |
 | [AUDIT-PASS-2026-10-05.md](AUDIT-PASS-2026-10-05.md) | **Start here for the 2026-10-05 audit pass.** The timestamped record: what was run, what is still running, the headline results, and a link to each of the five documents. |
+| [WORK-ORDER-2026-10-05.md](WORK-ORDER-2026-10-05.md) | What the owner decided after that pass (2026-10-05): the fourteen choices, what gets fixed and in what order, what only the owner can do, and what is deliberately left out. |
+| [MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md) | **The first real measurement of the owner's own PC.** Both cards are in and working and the model runs entirely on the 12 GB card, so nothing spills onto the processor - and 16,384 tokens of context fits with room to spare. Also records the honest correction about the Ollama log: it does exist, and a search that returns nothing is not proof that a file is absent. |
+| [MEASURE-CARDS.md](MEASURE-CARDS.md) | The one-line check to run on the PC (reads only, changes nothing) and how to read what it prints: is the model on a card or partly on the processor, how much room is left, why 16,384 fits, and why the earlier advice to drop to 8,192 was wrong for this machine. |
+| [SETTINGS-MERGE-FINDINGS-2026-10-05.md](SETTINGS-MERGE-FINDINGS-2026-10-05.md) | Why the plan to merge the desktop Settings page from 33 cards to about 20 was **parked**, and what a correct retry must satisfy - read from the test suites, not guessed. The page on disk is the unchanged one, so the owner sees no difference. |
 
 ## Audits and research (dated - true on the day written)
 
@@ -96,7 +123,7 @@ them; the current documents above replace them.
 
 | Document | Why it is stale |
 |---|---|
-| [SOURCE-BUNDLE.md](SOURCE-BUNDLE.md) | A 720 KB copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`. |
+| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05.** It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. Git history still has it (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |
 | [ANDROID-FEATURE-AUDIT.md](ANDROID-FEATURE-AUDIT.md), [ANDROID-REPLY-2026-09-15.md](ANDROID-REPLY-2026-09-15.md), [ANDROID-REPLY-2026-09-15-GRADIENT.md](ANDROID-REPLY-2026-09-15-GRADIENT.md), [ANDROID-REPLY-2026-09-18-CATCHUP.md](ANDROID-REPLY-2026-09-18-CATCHUP.md), [ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md](ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md), [ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md](ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md) | Messages between the phone and desktop sessions, 15-18 September. |

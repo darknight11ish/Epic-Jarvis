@@ -41,11 +41,20 @@ import jarvis_profiles as P  # noqa: E402
 import gen_hardware_cases as G  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def nv(key, name, gb, **kw):
@@ -434,7 +443,7 @@ def t_the_one_line():
 def t_powershell_parses_every_line():
     pwsh = "/opt/pwsh/pwsh"
     if not os.path.exists(pwsh):
-        return check("SKIP - no PowerShell here to parse the lines", True)
+        return skip("no PowerShell here to parse the lines")
     texts = [P.CHECK_LINE]
     for _, line, undo, undo2 in _lines():
         texts += [t for t in (line, undo, undo2) if t]
@@ -453,7 +462,7 @@ def t_powershell_parses_every_line():
         r = subprocess.run([pwsh, "-NoProfile", "-NonInteractive", "-Command", probe],
                            capture_output=True, text=True, timeout=120)
     except Exception as exc:
-        return check("SKIP - PowerShell would not start here", True, str(exc))
+        return skip("PowerShell would not start here")
     check(f"PowerShell parses all {len(texts)} generated lines, with no PowerShell-7-only "
           f"token in any", r.stdout.strip().endswith("bad=0"), (r.stdout + r.stderr)[-800:])
 
@@ -532,7 +541,7 @@ def main():
                 import traceback
                 traceback.print_exc()
                 check(f"{name} ran without crashing", False, repr(exc))
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

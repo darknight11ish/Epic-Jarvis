@@ -94,6 +94,7 @@ def _block(src, marker):
 
 
 FAILED, PASSED = [], []
+SKIPPED = []
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-spending-"))
 CONF = TMP / "config"
 CONF.mkdir()
@@ -106,6 +107,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond
                                                         else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def fresh():
@@ -994,7 +1003,7 @@ def t_the_table_is_not_in_chat_history():
     try:
         from test_chat_log import World, req, local
     except BaseException as exc:            # cryptography missing or broken on this Python
-        check(f"SKIP - chat history needs the cryptography package ({type(exc).__name__})", True)
+        skip(f"chat history needs the cryptography package ({type(exc).__name__})")
         return
     fresh()
     d = folder("History", "a_signed.csv")
@@ -1787,7 +1796,7 @@ def t_a_conversation_that_added_up_spending_is_money_sensitive():
     mk = lambda: H.ChatLog(tmp / "chat-history.db", tmp / "chat-history.json", lambda: key)
     log = mk()
     if H.AESGCM is None:
-        check("SKIP - the cryptography package is not installed", True)
+        skip("the cryptography package is not installed")
         return
     cid = "conv-money-0001"
 
@@ -1988,7 +1997,7 @@ if __name__ == "__main__":
                 FAILED.append(name)
                 traceback.print_exc()
     shutil.rmtree(TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

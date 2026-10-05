@@ -61,12 +61,21 @@ import jarvis_bakeoff as B  # noqa: E402
 import jarvis_voice_flow as F  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 ASSETS = REPO / "jarvis-client" / "app" / "src" / "main" / "assets" / "wakeword"
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def sha(p) -> str:
@@ -1005,7 +1014,7 @@ def t_real_pocket():
     root = os.environ.get("JARVIS_TEST_VOICE_MODELS")
     folder = Path(root) / "pocket-tts" if root else None
     if not folder or not folder.is_dir() or _ORIG["sherpa_onnx"] is None:
-        check("SKIP - no pocket-tts under JARVIS_TEST_VOICE_MODELS", True)
+        skip("no pocket-tts under JARVIS_TEST_VOICE_MODELS")
         return
     d = reset()
     V._ZIP.update(engine=None, why="", built=False)
@@ -1081,7 +1090,7 @@ def t_the_candidate_fails_closed():
         check("the file the training wrote down: ok, threshold held inside 0.1-0.99",
               st["ok"] and st["threshold"] == 0.99 and st["sha256"] == sha(d / W.CANDIDATE_FILE), st)
         if W.ort is None:
-            check("SKIP - onnxruntime is not installed", True)
+            skip("onnxruntime is not installed")
             return
         m = W.load_head(d / W.CANDIDATE_FILE)
         check("a (1, 16, 96) -> (1, 1) model loads on today's front end", m is not None)
@@ -1100,7 +1109,7 @@ def t_the_candidate_fails_closed():
 
 def t_both_heads_score_the_same_windows():
     if W.ort is None:
-        check("SKIP - onnxruntime is not installed", True)
+        skip("onnxruntime is not installed")
         return
     orig = W.model_dir
     try:
@@ -1314,7 +1323,7 @@ if __name__ == "__main__":
         S._cfg = _S_CFG
         S._tts_cache = S._UNSET
         shutil.rmtree(TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

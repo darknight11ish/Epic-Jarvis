@@ -89,6 +89,7 @@ def _block(src, marker):
 
 
 FAILED, PASSED = [], []
+SKIPPED = []
 LANE = SC.Lane(url="http://127.0.0.1:11435", model="qwen3:14b", num_ctx=16384,
                why="Wiki builder: qwen3:14b on the RTX 2060")
 
@@ -96,6 +97,14 @@ LANE = SC.Lane(url="http://127.0.0.1:11435", model="qwen3:14b", num_ctx=16384,
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Verdict:
@@ -293,7 +302,7 @@ def t_the_source_list():
             check("a link out of Sources is unreadable, not read",
                   s["link.md"]["state"] == "unreadable" and "outside" in s["link.md"]["why"])
         else:
-            check("SKIP - symlinks not allowed here", True)
+            skip("symlinks not allowed here")
         outside.unlink()
         big = SC.Lane(LANE.url, LANE.model, 32768, "")
         s2 = {x["name"]: x for x in W.status(lane_for=lambda: big)["sources"]}
@@ -315,7 +324,7 @@ def t_the_folder():
             check("a Jarvis Wiki folder that links out of the vault is refused",
                   s["vault_folder_ok"] is False and "outside the vault" in s["folder_why"])
         except OSError:
-            check("SKIP - symlinks not allowed here", True)
+            skip("symlinks not allowed here")
         finally:
             shutil.rmtree(outside, ignore_errors=True)
     env = os.environ.pop("JARVIS_OBSIDIAN_VAULT", None)
@@ -393,7 +402,7 @@ def t_plan_refuses_whole():
         refused(Model(pages(("create", "Pages/New.md", "s", "body"))), "outside",
                 "a Pages folder that links out of the wiki is refused", setup=link_pages)
     except OSError:
-        check("SKIP - symlinks not allowed here", True)
+        skip("symlinks not allowed here")
 
     def link_page(v):
         out = v.dir.parent / (v.dir.name + "-target.md")
@@ -403,7 +412,7 @@ def t_plan_refuses_whole():
         refused(Model(pages(("create", "Pages/Linked.md", "s", "body"))), "link",
                 "a page that is a symlink is refused", setup=link_page)
     except OSError:
-        check("SKIP - symlinks not allowed here", True)
+        skip("symlinks not allowed here")
     refused(Model(pages(*[("create", f"Pages/P{i}.md", "s", "b") for i in range(13)])),
             "at most 12", "13 pages are refused (at most 12)")
     refused(Model(pages(("create", "Pages/Big.md", "s", "x" * 6001))), "at most 6,000",
@@ -918,7 +927,7 @@ def _rehearse():
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, err, before, after, gb, ga = _rehearse()
     check("wiki.patch applies after second-card.patch to what the earlier patches wrote, "
           "reverses, and second-card still reverses after it", ok, err)
@@ -1002,7 +1011,7 @@ def t_the_fixture():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - no jarvis_hud.py here; the rehearsal above is the proof", True)
+        return skip("no jarvis_hud.py here; the rehearsal above is the proof")
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has /api/wiki (wiki.patch applied)", '"/api/wiki"' in s)
 
@@ -1016,7 +1025,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
