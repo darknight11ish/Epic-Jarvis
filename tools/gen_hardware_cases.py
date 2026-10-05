@@ -73,9 +73,14 @@ def _one(gb, name=None, **kw):
 
 #: (id, the design's heading, cards). "A" is the faster card where the design
 #: says so; speeds for made-up cards are made up to put them in that order.
+#: `one_8gb`'s heading is not "the owner's PC today" any more: both cards are
+#: installed (docs/MEASURED-2026-10-05-owner-pc.md), so the 8 GB case is the
+#: single-card one. The document's own words around the table say the same
+#: thing; this heading is generated, so it has to be said here.
 PLAN_CASES = (
     ("one_6gb", "6 GB", _one(6)),
-    ("one_8gb", "8 GB - the owner's PC today", _one(8, "RTX 2080 SUPER", speed=496.0)),
+    ("one_8gb", "8 GB - the single-card case; the owner's PC is two cards now",
+     _one(8, "RTX 2080 SUPER", speed=496.0)),
     ("one_10gb", "10 GB", _one(10)),
     ("one_11gb", "11 GB", _one(11)),
     ("one_12gb", "12 GB", _one(12)),

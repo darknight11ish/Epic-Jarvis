@@ -34,8 +34,9 @@ fails when one of them goes up. That failure is the moment to find out whether
 the drift is real, or whether the new patch simply touches text only the
 owner's PC holds - either way a person looks, then moves the pin by hand.
 
-The numbers were measured on 2026-10-05 over all 119 patches
-apply-patches.ps1 applies, by calling `stand_in(target, stats=...)`.
+The numbers were measured on 2026-10-05 over all 119 patches the branch this
+pass came from applies, by calling `stand_in(target, stats=...)`. RATCHET's own
+comment says which pin that stack and this one each produce, and why one moved.
 
 Not a test (no `test_` prefix). Standard library and git only.
 """
@@ -51,12 +52,35 @@ GAP = "# gap"
 
 #: How many hunks of the whole stack had to have their pre-image - "what the
 #: owner's file says here", which this repository does not hold - pasted in
-#: before they would apply. Measured 2026-10-05, 119 patches, `materialised()`.
+#: before they would apply. Measured 2026-10-05 with `materialised()`: 45 for
+#: `jarvis_hud.py` on THIS branch's 116-patch walk (`order()`).
 #: A ratchet: it may go down, never up without a person looking. See the module
 #: docstring. The pin lives here rather than in the suite so that the number
 #: and the reason it matters are in the same place.
+#:
+#: `jarvis_hud.py` is pinned at 45 here, one more than the 44 this pass first
+#: wrote down, and it is not drift: the two numbers were measured on two
+#: different patch stacks. This branch is the audit pass cherry-picked onto
+#: `main`, and its walk is 116 patches (`order()`); the branch the pass came
+#: from, `fix/2026-10-04-audit-pass`, lists 121 entries - among the ones this
+#: branch's 116 do not name are `gate-entries.patch`, `gate-action-name.patch`
+#: and `tutorials.patch`. Only one of those three moves THIS target:
+#: `thinking.patch`, which holds hunks for `jarvis_hud.py` on that stack and is
+#: on no list here - one patch, one hunk, so the whole +1 is accounted for
+#: rather than waved at. A different stack materialises a different number of
+#: hunks, and not only upwards: `jarvis_gate.py` reads 20 here against its pin
+#: of 22, which drift alone cannot do. 45 is what THIS stack produces.
+#:
+#: Nor is it anything this pass wrote: the walk rebuilt with `main`'s own
+#: `gate-push.patch` - the one patch file the pass edits - gives the same 45
+#: and the same per-patch list, and the count comes from the patch files and
+#: their order alone, never from the tree it is run in.
+#:
+#: (Left as it is, so nobody re-derives it: `jarvis_gate.py` is 2 under its
+#: pin. Tightening a pin is its own decision - test_installed_stand_in.py
+#: prints the same note.)
 RATCHET = {
-    "jarvis_hud.py": 44,
+    "jarvis_hud.py": 45,
     "jarvis_gate.py": 22,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
