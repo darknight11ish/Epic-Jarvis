@@ -116,3 +116,214 @@ with no notice - half a day; (4) **vendor the wake word** (four ONNX files plus
 their hashes) and mirror the Kokoro v1.0 pack while its checksum is fresh,
 recording in `THIRD-PARTY-NOTICES.txt` exactly what is mirrored, because
 CC BY-NC-SA asks the share-alike copy to travel with them.
+
+---
+
+## 3. Disaster recovery and data integrity
+
+**One correction first, because it changes the ranking.** The brief said the seven
+PC-only files have no second copy. **Two of the seven do**:
+`backend/rebuilt/jarvis_memory.py` and `jarvis_events.py` are byte-identical to
+the live copies (verified by hash) - which is exactly why
+`backend/.gitignore:29-35` un-ignores that directory ("this directory IS the only
+copy and must be committed"). **The other five - `jarvis_hud.py` (346 KB),
+`jarvis_gate.py` (119 KB), `jarvis_extract.py`, `jarvis_models.py`,
+`jarvis_skills.py` - have no copy anywhere off this PC.** The patcher's ten
+`_jarvis-backup-*` folders hold them, and `dshwork/` holds older hashes, but both
+live on the same disk.
+
+**The irreplaceable set:** those five files (nothing covers them), the owner's
+facts in `memory.db` (in the backup), `schedule.db` (in), the voice-print once
+created (in, not yet created), and 7 Credential Manager entries of which **only 2
+travel in a backup**. Five of the seven `SOURCE_DBS` do not exist on this PC at
+all yet (no `chat-history.db`), so `_snapshot_db` silently omits them from every
+archive.
+
+**The hard finding: the backup cannot cover what is irreplaceable.**
+`build_archive` (`jarvis_backup.py:536-594`) reads the config directory, one TOML
+path, `notes/`, `voice/` and two Credential Manager keys. **No code path in its
+1,678 lines reads a `.py` file.** The single most irreplaceable asset in the
+product is outside the backup by construction, and the Backups section of
+`INSTALL.md` never says so.
+
+**Three backup gaps:** old `.old` copies are deleted *before* the Credential
+Manager key is written, so a failed key write leaves a restored `chat-history.db`
+unreadable with nothing to roll back to; a restore with the backend running
+probably cannot succeed at all (Windows SQLite does not open with
+`FILE_SHARE_DELETE`, so the swap fails and rolls back cleanly); and there is no
+version field, so restoring an old backup over a new schema is untested.
+
+**No database has a version.** `grep user_version|schema_version` across all 188
+live modules returns **zero**. Eight modules do idempotent additive DDL well, so
+old file + new code adapts - but new file + old code **silently ignores the extra
+columns**: silent wrong data, not a crash and not a message, because a mismatch
+cannot be detected without a marker.
+
+**Durability:** `memory.db` - the one database whose contents cannot be re-made -
+runs `synchronous = NORMAL` (`jarvis_memory.py:1421`), while `jobs.db` already
+carries the written argument for `FULL` (`jarvis_jobs.py:178-182`). Writes with no
+temp file include the owner's **voice-print** (`jarvis_voice.py:1280-1284`, a plain
+`write_text`). And `approvals.db` is the **closest sibling of the erase bug**:
+`jarvis_gate.py` deletes rows whose `prompt` and `detail` quote the owner's email
+text and file paths (`:1621`, `:1748`) with no `secure_delete` and no VACUUM - the
+same overwrite/free-page mechanism just fixed for memory.
+
+**The upgrade path is strong where it counts.** `apply-patches.ps1` is idempotent
+by design (whole-stack rehearsal on a throwaway copy, so running it twice does
+nothing), a partial failure is **loudly announced** ("HALF updated… do NOT start
+it yet", exit 1), and the one-line restore works for code. But `-Revert` restores
+code only and there is no down-migration anywhere, so "old code, migrated
+database" is a state supported by accident and never tested. The desktop updater
+is inert (no signing key), the phone downloads nothing, and a differently-signed
+APK cannot install over the old one - the only way through wipes the pairing token
+and the offline queue, which has already happened twice.
+
+**Recovery documentation is the weakest part.** A careful beginner **cannot**
+restore from a backup plus a clone: the clone does not produce a runnable backend,
+the backup does not contain the backend, and there is no restore-onto-a-new-PC
+walkthrough. ~53 desktop and ~25 phone messages say "run `apply-patches.ps1`" and
+**none give the command or the path**. The old 4/10 becomes **5/10** - the backup
+exists now and the checker is no longer hidden, but the backup provably excludes
+the irreplaceable files and **no real Windows restore has ever been run**.
+
+**Do first:** (1) **get the five files off this PC today** - one `git add -f` into
+a path the project already has a precedent for, 605 KB, and every other fix here
+is worth less than the thing it protects; (2) add the backend source folder to
+`build_archive` (~30 lines, so it stops recurring); (3) `secure_delete` + VACUUM
+for `approvals.db`, and `synchronous = FULL` for `memory.db`.
+
+---
+
+## 4. Performance, resources and battery
+
+**Static only** - nothing was started or measured; numbers carry whatever label
+their source document gives them, or are marked implied.
+
+**The desktop launch path is already good.** Everything expensive in `setup` is
+spawned rather than awaited, the quickbar does not paint at launch, and **no
+`nvidia-smi` runs on any boot path**. The `openpyxl`/`cryptography`/`fsrs`
+on-demand-import claim is verified true in both trees. Two honest costs: the
+widget paints at (40,40) for a frame on every launch, and three unguarded
+1-second timers run whether or not their window is visible.
+
+**The highest-value measurement in the project is also the cheapest, and it is
+about the card already installed.** The project's own arithmetic says the shipped
+everyday configuration (8B at 16,384 with a `q8_0` cache, 6.48 GiB) is **~0.6 GiB
+over an 8 GB card** - `HARDWARE-PROFILES.md:528` puts it at 8.60 GiB of 8.0, which
+would push **~4 of 37 layers onto the processor at roughly a fifth of the speed,
+with no warning**. `MODEL-TOPOLOGY.md:153` has the one-line check
+(`offloaded N/M layers to GPU`) and **it has never been run**. If it shows a spill,
+every answer on this machine is already several times slower than it should be,
+and dropping the context to 8,192 fixes it.
+
+**Costs that run while nothing is happening:** the Rust side ticks at 500 ms (tray
+animation) + 2 s (theme registry) + 3 s + 5 s + 15 s, and `lib.rs:454-464` writes
+**two preference JSON files every 3 seconds for ever** - that block sits *before*
+the visibility check on the next line. Three `setInterval(…, 1000)` loops run with
+no `document.hidden` guard (`jarvis_hud.html:2300`, `main.js:2638`,
+`widget.js:1221`), while the correct pattern is three lines away in the same file.
+The faces are the best-behaved thing in either app: `requestAnimationFrame`
+properly cancelled when hidden, a layered frame ladder (30/15/2), reduced-motion
+rates, and an adaptive quality ladder.
+
+**Disk: one thing grows.** Audit logs - **364 KB in one day, ~130 MB/year, no
+cap** - even though `jarvis_framework.prune_logs` exists and reads
+`retention_days = 90`; its own docstring says "nothing surviving calls this" and a
+grep confirms it. Everything else is small or capped: all SQLite together is
+~0.5 MB, backups keep 5, `speed.jsonl` does not exist. Un-capped: the Obscura
+browser's cache (nothing caps it and nothing in Jarvis knows it exists), the
+Ollama store (~18-19 GB if everything is pulled), and the 1.96 GB `target/` cache.
+
+**The phone: two real costs.** `WakeWordService` pushes every 80 ms chunk through
+three ONNX models **continuously with no duty cycling and no pause when the screen
+is off** - the one item clearly visible in Android's battery screen, controlled by
+a single switch (off by default). And `JarvisRuntime.kt:873-889` fires `updateAll`
+on every emission of two `combine` flows, so one link flap repaints **five
+widgets, three of them boards**. There is no `isActiveNetworkMetered` anywhere in
+the client, so cellular and Wi-Fi are treated identically. Quick Settings tiles are
+correctly free while the shade is closed.
+
+**The 12 GB card - settle a contradiction first:** the two documents from
+2026-10-04/05 say it **is** installed; `SECOND-CARD.md:29`, `MODEL-TOPOLOGY.md:418`,
+`HARDWARE-PROFILES.md:4-5` and `JARVIS-API.md:1854` all still say it is not and
+everything is calculated. `nvidia-smi` settles it in one command and is step zero.
+**Measurement order:** (1) `nvidia-smi`; (2) the Ollama server log's
+`inference compute` lines, which give each card's *free* memory; (3) the
+`offloaded N/M` line - **the one to run if only one can be**; (4) the Hardware
+screen's Measure button, which writes the first-ever `speed.jsonl` row; (5) switch
+on one lane and watch that the second card's memory rises while the 2080 Super's
+does not; (6) the two engine settings (`LLAMA_ARG_CACHE_RAM`,
+`LLAMA_ARG_SPEC_TYPE`) one at a time. **Free, right now:** `/api/voice/status`'s
+`flow.timings` already holds the last 20 turns' `owner_check_ms / stt_ms /
+first_token_ms / first_sentence_ms / first_audio_ms / total_ms`, which turns the
+2.5-4 s estimate into a measured number - nobody has read it.
+
+**On Glimmer:** at 2-3 bit it is a **both-cards** proposition competing with "one
+bigger model on both cards" (`qwen3:14b`), not with the 12 GB lane. A fair test
+measures load-or-not, `size_vram ÷ size`, time-to-first-word and tokens/s (where
+the split-by-free-memory placement hurts, since most of a 30B lands on the *slower*
+2060), and the project's own tool-call and memory self-tests - because tool calls
+are parsed out of free text with no grammar, which is where a 2-bit model fails.
+**Measure Qwen 3.5 9B first**: it unblocks features already built.
+
+---
+
+## 5. The open-findings register
+
+Every report in `docs/audit-reports-2026-09-29-30/` was re-checked against today's
+tree: **1,132 findings extracted, 1,004 re-checked, 408 already fixed.** What
+follows is the deduplicated still-open set - including five items none of the
+other passes found.
+
+**The five that matter most:**
+
+| # | Finding | Where |
+|---|---|---|
+| 1 | **The desktop widget can approve the wrong card.** The queue handler shows `queue.items[0]` with no swap guard, so a click aimed at a card decided elsewhere acts on whatever slid into slot 0. Buttons are disabled for stale or deciding states, not for a swap | `widget.js:1731-1733`, `:1175` |
+| 2 | **The owner-voice gate fails open for a blend with no voice print trained** - Ashby and Clara are spoken with **no voice check at all**, because `if not profs: return {"ok": True}` returns before the new guard can fire | `jarvis_voices.py:1922-1925`, `:796-810` vs `:472-480` |
+| 3 | **The plan card's gate can never be satisfied on the real install** - the reader looks beside the module's *parent*, the writer writes beside *itself*, and on the owner's PC those are different folders | `jarvis_plan.py:387-389` vs `tools/tool_eval/ollama_tool_eval.py:59` |
+| 4 | **Desktop per-kind notification switches do nothing** - written to `localStorage`, read by nothing that posts a toast, so a kind switched off still notifies | `notifications-prefs.js:8` |
+| 5 | **141 suite lines print SKIP as PASS** (`check("SKIP …", True)`), and the patcher's counter only matches a line-start SKIP - **which is why several of the items above went unnoticed** | `test_chat_stream.py:499`; `apply-patches.ps1:2776` |
+
+**Also high, security-shaped:** the stealth engine's `PINNED_DIGEST` is empty and
+`obscura-worker.exe` is never hashed (`jarvis_obscura.py:146`, `:311`); the picture
+model is pulled by tag with an empty pin; the agent's catch-all still returns the
+phone's **raw** `screen_text` and its uncleaned picture where `jarvis_screen.py`
+was fixed (`jarvis_agent.py:5086-5087`); saved facts can leave through a URL's
+**path or host** because `private_words_problem` compares only the query and
+fragment; Lockdown neither stops the ntfy push nor refuses a running "Watch with
+me"; and the Rust launcher sets no telemetry switches when it starts the backend.
+
+**Time and scheduling bugs:** a missed alarm can ring as if it were now when the
+job read fails, because neither client reads the event's own `late` flag; the
+phone has **no `AlarmManager` or `WorkManager` anywhere**, so alarms depend
+entirely on the PC's event stream and a missed one shows only `HH:MM` with no
+date; timers are absolute epochs, so a **forward** clock step fires them early
+(only the backwards case is re-anchored); calendar events with a `TZID` are read
+as the PC's own time; and "friday at 5pm" said on a Friday afternoon sets next
+Friday.
+
+**Also open:** nothing lists or removes Ollama models on disk (the owner already
+approved a list with Remove behind one card); the patcher never prunes its
+`_jarvis-backup-*` folders; **"What asks first" still over-promises** - no rows
+for Focus, Today cards, "between us", remind-me-next-time, ring-my-phone, history
+import or photo-to-reminder, and it ships a developer-facing internal sentence;
+inbox-tidy Undo un-reads or un-stars mail the owner handled since (and the Undo is
+memory-only); backups have no schedule, no "your backup is old" nudge and no verify
+button; phone notification settings are half-built; desktop text is 10-11 px in
+places **including the widget's own Approve and Deny**; and Android has no Gradle
+lock or verification metadata while CI installs Playwright unpinned beside a pinned
+pip line.
+
+**Deliberately deferred, with a reason** (not to be re-raised): a mesh peer can
+burn a pairing session; screen scanning cannot catch a show-password eye or text
+inside a picture; any local program holding the token can start a Watch; four
+separate "plan" mechanisms; retired facts keep their vectors until a measurement
+says otherwise; and the recorded 2026-10-04 limits.
+
+**Closed since those audits, verified in code:** the erase hole; one-time codes in
+notifications across more languages; captured notifications Keystore-encrypted;
+the second/third-card switch bound to the card id; "call my mum's phone" no longer
+ringing the owner's phone; Lockdown now stopping the weather and a comparison; and
+tap-to-talk **is** built on the phone - though its own doc comment still says
+otherwise.
