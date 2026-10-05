@@ -20,6 +20,7 @@ import {
   announce,
   amend as amendOnBackend,
   currentLink,
+  currentQueue,
   decide as decideOnBackend,
   injectTaskNote,
   onEvent,
@@ -38,6 +39,10 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
+// The wrong-card fix: a decision names the card the buttons were PRESSED on,
+// looked up in the live queue - never whichever card a queue re-read has since
+// repainted in its place (docs/DEEP-AUDITS-2026-10-05.md §5, finding 1).
+import { ApprovalTarget, GONE_DETAIL, GONE_LINE } from "./approval-target.js";
 import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
@@ -198,6 +203,12 @@ const state = {
   alwaysOnTop: true,
   /** Id of the gate awaiting a decision, or null. */
   approval: null,
+  /** Which card a decision belongs to (approval-target.js): the one this
+   *  window painted and the owner pressed, looked up in the queue that is live
+   *  when the click lands. `state.approval` alone was not enough: a queue
+   *  re-read replaces it under the owner's finger, and the click then decided
+   *  whatever had slid into slot 0. */
+  cards: new ApprovalTarget(),
   /** `"logseq"`, `"joplin"` or `"obsidian"` — which store the capture field
    *  files to. Only ever one the PC says is set up. */
   captureTarget: "logseq",
@@ -1042,6 +1053,10 @@ function openApproval(approval) {
   }
   const fresh = !state.approval || state.approval.id !== approval.id;
   state.approval = approval;
+  // This is the paint: the card a press on Approve or Deny now belongs to.
+  // Recorded here, not read back at click time, so a swap under the owner's
+  // finger cannot move the decision to a card they never saw.
+  state.cards.paint(approval.id);
   // An email is approved in the Jarvis bar, lock or not: this card shows
   // one line, and an email's card is its recipients, subject and every word
   // (the owner's decision of 2026-09-25). Rust refuses an email's Approve
@@ -1149,6 +1164,9 @@ function renderOptions(approval) {
 
 function closeApproval() {
   state.approval = null;
+  // No card on screen: nothing a press could be about, and a pin left behind
+  // here would be spent by the next card's buttons.
+  state.cards.clear();
   dom.apprCard.hidden = true;
   dom.apprOptions.replaceChildren();
   dom.apprOptions.hidden = true;
@@ -1223,12 +1241,32 @@ setInterval(() => {
 }, 1000);
 
 async function decide(approved, optionId = null) {
-  if (!state.approval || state.deciding) return;
+  if (state.deciding) return;
+  // Which card this decision is for: the one that was ON SCREEN when the
+  // buttons were pressed, looked up in the queue that is live now
+  // (approval-target.js). Reading `state.approval` here is how the widget
+  // approved the wrong card - between the press and the click, a queue re-read
+  // repaints whatever slid into slot 0, and the click decided that instead
+  // (docs/DEEP-AUDITS-2026-10-05.md §5, finding 1). `syncApprovalButtons` is
+  // no help: it disables the buttons for a stale stream or a decision already
+  // in flight, which is a different thing from a swapped card.
+  const target = state.cards.resolve(currentQueue());
+  // The pin is spent either way: a refused decision must not leave it behind
+  // for the next click to use.
+  state.cards.forgetPress();
+  if (!target.card) {
+    // Refuse, with a sentence - never silently send it for the card that
+    // replaced the one the owner pressed. A click on a widget with nothing
+    // waiting stays quiet: there was no card to lose.
+    if (target.gone) flash(GONE_LINE, "bad", GONE_DETAIL);
+    return;
+  }
+  const approval = target.card;
   // App lock on: this window approves nothing (see `applyAppLock`). Nor,
   // lock or not, an email: all of it is read in the Jarvis bar first. Nor a
   // heavy card (feasibility I110): the whole card cannot honestly be said
   // to have been "in view" on a surface that clamps it to two lines.
-  if (approved && (state.appLock || isEmailCard(state.approval) || isHeavy(state.approval))) {
+  if (approved && (state.appLock || isEmailCard(approval) || isHeavy(approval))) {
     await approveInBar();
     return;
   }
@@ -1237,8 +1275,8 @@ async function decide(approved, optionId = null) {
   // broadcasts the resolution — so between those two moments a second click
   // sent a SECOND, contradictory decision for the same action. Only the
   // server's 409 stood between that and a real double-decide.
-  if (state.decided === state.approval.id) return;
-  state.decided = state.approval.id;
+  if (state.decided === approval.id) return;
+  state.decided = approval.id;
   // `deciding`, not the shared `busy`. One flag served both this and the note
   // field, so filing a note — which runs a whole chat turn and takes seconds —
   // made Approve and Deny into live-looking no-ops with no feedback, and an
@@ -1249,7 +1287,7 @@ async function decide(approved, optionId = null) {
   flash(approved ? "Approving…" : "Denying…");
 
   try {
-    await decideOnBackend(state.approval.id, approved, optionId);
+    await decideOnBackend(approval.id, approved, optionId);
     // The backend broadcasts approval-resolved, which closes the card.
     flash(approved ? "Approved." : "Denied.", approved ? "ok" : null);
   } catch (error) {
@@ -1544,6 +1582,22 @@ dom.btnObs.addEventListener("click", () => invoke("prefill_quickbar", { target: 
 
 dom.btnApprYes.addEventListener("click", () => decide(true));
 dom.btnApprNo.addEventListener("click", () => decide(false));
+for (const btn of [dom.btnApprYes, dom.btnApprNo]) {
+  // The press is where a decision's card is fixed. A queue re-read between the
+  // press and the click used to repaint the card under the owner's finger, and
+  // the click approved whatever had slid into slot 0 - a card they had never
+  // read. Capturing the painted id HERE, before any of that can happen, is what
+  // keeps the decision on the card that was on screen.
+  btn.addEventListener("pointerdown", () => state.cards.press());
+  // Enter and Space press the focused button and fire a click, exactly as a
+  // pointer does - and the keyboard press is made on the card on screen too.
+  btn.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") state.cards.press();
+  });
+  // A press that is cancelled, or dragged off into something else, never
+  // becomes a click: the pin must not survive to be spent by the next one.
+  btn.addEventListener("pointercancel", () => state.cards.forgetPress());
+}
 dom.btnApprNoteSend.addEventListener("click", sendNote);
 dom.apprNoteInput.addEventListener("keydown", (event) => {
   if (event.key === "Enter") {

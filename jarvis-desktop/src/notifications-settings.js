@@ -9,6 +9,7 @@
 import {
   loadNotificationPrefs,
   saveNotificationPrefs,
+  pushNotificationPrefs,
   DEFAULT_QUIET_START,
   DEFAULT_QUIET_END,
 } from "./notifications-prefs.js";
@@ -56,6 +57,13 @@ export function initNotificationsSettings() {
   if (dom.quietTimes) dom.quietTimes.hidden = !prefs.quietEnabled;
   if (dom.quietStart) dom.quietStart.value = prefs.quietStart || DEFAULT_QUIET_START;
   if (dom.quietEnd) dom.quietEnd.value = prefs.quietEnd || DEFAULT_QUIET_END;
+
+  // Hand what is shown to Rust, which raises every toast. On a first run
+  // these choices are only in localStorage - they were made before Rust kept
+  // them - so this is the carry-over: what the owner already turned off stays
+  // off instead of coming back on, and a page with nothing stored sends
+  // everything on, which is what the app did before the switches existed.
+  void pushNotificationPrefs(prefs);
 
   const saveCurrent = () => {
     saveNotificationPrefs({
