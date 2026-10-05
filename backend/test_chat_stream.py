@@ -309,7 +309,6 @@ def t_an_approved_tool_does_not_run_for_an_app_that_left():
     try:
         opener, calls = opener_for([calc_call(), ("done", "stop")],
                                    [("content", "It is 4."), ("done", "stop")])
-        wrote = []
         card_raised = []
 
         def closed_app(data):
@@ -330,7 +329,6 @@ def t_an_approved_tool_does_not_run_for_an_app_that_left():
             # card instead makes the named scenario happen on any machine.
             if card_raised:
                 raise BrokenPipeError(32, "Broken pipe")
-            wrote.append(data)
             if b"jarvis-status approval" in data:
                 card_raised.append(data)
         s = AG.run_local_turn([{"role": "user", "content": "2+2?"}], "jarvis-primary",
