@@ -64,12 +64,11 @@ GAP = "# gap"
 #: `main`, and its walk is 116 patches (`order()`); the branch the pass came
 #: from, `fix/2026-10-04-audit-pass`, lists 121 entries - among the ones this
 #: branch's 116 do not name are `gate-entries.patch`, `gate-action-name.patch`
-#: and `tutorials.patch`. Only one of those three moves THIS target:
-#: `thinking.patch`, which holds hunks for `jarvis_hud.py` on that stack and is
-#: on no list here - one patch, one hunk, so the whole +1 is accounted for
-#: rather than waved at. A different stack materialises a different number of
-#: hunks, and not only upwards: `jarvis_gate.py` reads 20 here against its pin
-#: of 22, which drift alone cannot do. 45 is what THIS stack produces.
+#: and `tutorials.patch`. Which extra hunk of that stack accounts for the one
+#: this branch adds is not measurable from here and so is not guessed at: what
+#: is measured is that this stack reads 45. A different stack materialises a
+#: different number of hunks, and not only upwards: `jarvis_gate.py` reads 20
+#: here against its pin of 22, which drift alone cannot do.
 #:
 #: Nor is it anything this pass wrote: the walk rebuilt with `main`'s own
 #: `gate-push.patch` - the one patch file the pass edits - gives the same 45
