@@ -47,8 +47,9 @@ WHAT THIS FILE ALWAYS DOES
     (IDLE_MAX_S), a page-load cap (PAGE_CALLS_MAX) and a time limit on every
     single call (CALL_TIMEOUT_S). Past any of them the program is stopped and
     the caller is told in words; it is never left running. A small watchdog
-    thread (`_watch`) enforces the idle and session limits ON ITS OWN, so a
-    program nobody is talking to is stopped after IDLE_MAX_S (3 minutes) even
+    thread (`_watch`) calls `Driver.tick()` between sleeps, which enforces the
+    idle and session limits ON ITS OWN, so a program nobody is talking to is
+    stopped after IDLE_MAX_S (3 minutes) even
     if no further call ever comes (a page stays open between two plans, which
     is what lets a click follow a read, but never longer than that). An idle
     or old program met by the NEXT call is simply replaced by a fresh one on
@@ -447,6 +448,21 @@ def _kill_tree(p) -> None:
 # --------------------------------------------------------------------------
 
 
+def _watch_thread(drv: "Driver", gen: int) -> None:
+    """Starts the watchdog thread for one run of the program."""
+    threading.Thread(target=drv._watch, args=(gen,),
+                     name="jarvis-obscura-watchdog", daemon=True).start()
+
+
+#: How the watchdog thread is started. A test that proves the idle and session
+#: limits sets this to a no-op and drives `Driver.tick()` with its OWN clock:
+#: then whether the program is stopped does not depend on a background thread
+#: being scheduled inside the test's own real-time window (the shape
+#: `_reset_for_tests` has elsewhere in the backend). The real thread is what
+#: production uses, and `t_...` in the suites still starts it to prove it runs.
+WATCH_THREAD: Callable[["Driver", int], None] = _watch_thread
+
+
 class Driver:
     """The one Obscura process, or none. All methods are safe to call from any
     thread; calls are one at a time.
@@ -512,20 +528,37 @@ class Driver:
             pass
         self.lines.put((gen, None, "eof"))
 
+    def tick(self, gen: Optional[int] = None) -> bool:
+        """One look by the watchdog: stops a program nobody is using
+        (IDLE_MAX_S) or that has run for SESSION_MAX_S, without waiting for
+        another call to notice. True while the run it was asked about should
+        still be watched, False when it is over (a newer run has its own
+        watchdog).
+
+        Public, and named `tick`, on purpose: the same shape jarvis_focus.py
+        and jarvis_schedule.py use. The tests drive this with their own clock
+        instead of waiting for the background thread to wake up on a busy
+        machine, so "the watchdog stops it" is proved without racing real
+        elapsed time. Nothing here waits, so a test never blocks - and it takes
+        no lock, so a program hung on a call still gets stopped."""
+        gen = self.gen if gen is None else gen
+        if self.gen != gen or not self.alive():
+            return False
+        now = self.clock()
+        if now - self.started > SESSION_MAX_S:
+            self.stop("time limit")
+            return False
+        if not self.busy and now - self.last_used > IDLE_MAX_S:
+            self.stop("idle")
+            return False
+        return True
+
     def _watch(self, gen: int) -> None:
-        """The watchdog: stops a program nobody is using (IDLE_MAX_S) or that has
-        run for SESSION_MAX_S, without waiting for another call to notice. It
-        ends when that program is gone (a newer run has its own watchdog)."""
+        """The watchdog thread: sleeps WATCH_POLL_S between ticks, and ends when
+        that program is gone."""
         while True:
             time.sleep(WATCH_POLL_S)
-            if self.gen != gen or not self.alive():
-                return
-            now = self.clock()
-            if now - self.started > SESSION_MAX_S:
-                self.stop("time limit")
-                return
-            if not self.busy and now - self.last_used > IDLE_MAX_S:
-                self.stop("idle")
+            if not self.tick(gen):
                 return
 
     def start(self) -> None:
@@ -574,8 +607,7 @@ class Driver:
             self.lines = queue.Queue()
             threading.Thread(target=self._reader, args=(self.proc, self.gen),
                              name="jarvis-obscura-reader", daemon=True).start()
-            threading.Thread(target=self._watch, args=(self.gen,),
-                             name="jarvis-obscura-watchdog", daemon=True).start()
+            WATCH_THREAD(self, self.gen)
             self.started = self.last_used = self.clock()
             self.pages = 0
             self.next_id = 0
