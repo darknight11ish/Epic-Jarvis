@@ -87,7 +87,7 @@ class TutorialsTest {
     }
 
     @Test
-    fun `quitting and resuming: the recorded step is the one offered`() {
+    fun `quitting and resuming, the recorded step is the one offered`() {
         val loaded = (Tutorials.readOf(ApiResult.Ok(catalogue)) as Tutorials.Read.Loaded).catalogue
         assertEquals(2, loaded.tutorials.first { it.id == "memory" }.startIndex)
         assertEquals(0, loaded.tutorials.first { it.id == "intro" }.startIndex)
