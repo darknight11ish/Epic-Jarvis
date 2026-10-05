@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 from unittest import mock
 
@@ -1022,6 +1023,116 @@ def t_combined_capable_arithmetic():
     check("no card ids at all: the same plain reason",
           SC._combined_capable({"cards": []}) == (False, "needs two graphics cards; only one "
                                                     "is here"))
+
+
+U_16 = "GPU-1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+
+
+def _preset_plan(*, preset="fast", lane_card=None, long=("qwen3:8b", 16384, 6.50),
+                 pictures=None):
+    """One lane_plan() answer, in jarvis_hardware's own shape. `lane_card`
+    None is the "main" case (the extra models sit beside chat in the everyday
+    Ollama, so no second copy starts); a real card is a preset that runs them
+    in their own lane on the other graphics card."""
+    return {"preset": preset, "chat_card": types.SimpleNamespace(
+                uuid=G.U_2080S, name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0),
+            "lane_card": lane_card, "long": long, "pictures": pictures,
+            "pictures_mode": None, "fit_target": None, "why_none": {}}
+
+
+def _two_cards():
+    """The same two cards the neighbouring preset test builds, as _cards()
+    answers them (an nvidia-smi answer is not what is under test here)."""
+    return [CP.Device(index=0, name="NVIDIA GeForce RTX 2080 SUPER", total_mb=8192,
+                      free_mb=6000, uuid=G.U_2080S, compute_cap=7.5, display_active=True),
+            CP.Device(index=1, name="NVIDIA GeForce RTX 2060", total_mb=12288,
+                      free_mb=12000, uuid=G.U_2060, compute_cap=7.5, display_active=False)]
+
+
+def t_combined_is_refused_under_a_chosen_preset():
+    """Bug audit 2026-10-05, BUG 1. _combined_capable() only ever checked the
+    two card ROWS and the Turing/memory floors, so under a chosen hardware
+    preset (det["_plan"] set by _detect_preset) it still answered capable: the
+    "combined" switch - which IS "split one model across both cards" - could be
+    turned on while the preset was running the extra models on ONE card. The
+    two arrangements would then fight over the same cards.
+
+    Both preset shapes are covered: the one that runs the extra models in
+    their own lane on the other card (where the old code really did answer
+    capable), and the "main" one that runs them beside chat in the everyday
+    Ollama. The preset is the owner's own, more specific answer about how
+    their cards are used, and it is already running, so it wins: the switch
+    refuses. The preset's own path must be untouched."""
+    lane_card = types.SimpleNamespace(uuid=G.U_2060, name="NVIDIA GeForce RTX 2060",
+                                      total_gib=12.0)
+    for label, plan, main in (
+            ("a preset with its own lane card", _preset_plan(preset="features",
+                                                             lane_card=lane_card,
+                                                             long=("qwen3:8b", 32768, 7.69),
+                                                             pictures=("qwen2.5vl:7b", 8192, 6.45)),
+             False),
+            ("a preset with no separate lane card",
+             _preset_plan(pictures=("qwen2.5vl:7b", 8192, 6.45)), True)):
+        with G.World(G.SMI["2080s_2060"]) as w:
+            with mock.patch.object(SC, "_cards", return_value=_two_cards()), \
+                 mock.patch.object(SC, "_preset_lanes", lambda p=plan: p):
+                det = SC.detect(fresh=True)
+                check(f"{label}: both cards are seen, and the preset is really chosen",
+                      det.get("_plan") is not None and det.get("_main") is main
+                      and len(det.get("cards") or []) == 2, det)
+                ok, why = SC._combined_capable(det)
+                check(f"{label}: two capable cards, and yet split is not capable - "
+                      f"the preset wins", ok is False, (ok, why))
+                check(f"{label}: it names the setup and says which way out",
+                      '"Most features" setup' in why or '"Fastest answers" setup' in why,
+                      why)
+                check(f"{label}: and it is never the raw arithmetic message",
+                      "needs two graphics cards" not in why
+                      and "older than Turing" not in why and "together have" not in why, why)
+                held = []
+                code, out = SC.request_change("combined", True,
+                                              gate=lambda *a: Verdict(True, "ask", "approved"),
+                                              spawn=held.append)
+                # A card was raised after all: run its own decision work now,
+                # on purpose, so the wrong behaviour is reported instead of
+                # leaving a card waiting and skewing every check after it.
+                for fn in held:
+                    fn()
+                check(f"{label}: asking for it anyway is refused, and the sentence is "
+                      f"the refusal",
+                      code == 503 and "cannot be turned on" in out.get("error", "")
+                      and "setup" in out["error"], (code, out))
+                check(f"{label}: the refusal is one clean sentence, no doubled full stop",
+                      ".." not in out.get("error", "") and out["error"].endswith("."),
+                      out.get("error"))
+                check(f"{label}: no approval card was raised for it",
+                      not SC._PENDING, SC._PENDING)
+                check(f"{label}: the switch is still off",
+                      SC._read_switches()["combined"] is False)
+                check(f"{label}: combined_lane() is None, so no turn is routed to both cards",
+                      SC.combined_lane() is None)
+                st = SC.status()
+                check(f"{label}: status reports it honestly, in the preset's own words",
+                      st["combined"]["capable"] is False
+                      and "setup" in st["combined"]["capable_why"], st["combined"])
+                check(f"{label}: nothing was started - no second copy of Ollama under "
+                      f"a preset", not w.started, [p.args for p in w.started])
+    # The preset path itself: the lanes still run, on the card the preset
+    # picked, exactly as before.
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        with mock.patch.object(SC, "_preset_lanes",
+                               lambda: _preset_plan(pictures=("qwen2.5vl:7b", 8192, 6.45))):
+            w.switches(master=True, master_card=G.U_2080S, vision=True)
+            det = SC.detect(fresh=True)
+            check("preset: the extra model is supported and ready",
+                  SC._unsupported("vision", det) is None
+                  and SC._feature_active("vision", SC._read_switches(), det) is True)
+            lane = SC.lane_for("vision")
+            check("preset: vision still routes to the everyday Ollama's own address",
+                  lane is not None and lane.url == SC._main_ollama_url()
+                  and lane.model == "qwen2.5vl:7b", repr(lane))
+            check("preset: and no separate Ollama was started for it",
+                  not w.started, [p.args for p in w.started])
 
 
 def t_combined_lane_env_and_lane_for():

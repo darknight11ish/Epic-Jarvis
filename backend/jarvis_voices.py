@@ -1868,24 +1868,61 @@ def _clip_samples(v: Voice):
     return x
 
 
+#: How many numbered folder names a colliding voice write will try before it
+#: gives up. The pattern is jarvis_documents.py's "Notion export {day} (2)"
+#: one; 99 spare names is far past any real pile-up, and a bound is what
+#: keeps this from ever being a loop that cannot end.
+_VOICE_ID_TRIES = 99
+
+
 def _write_voice(vid: str, name: str, transcript: str, samples, seconds: float,
-                 check: dict) -> None:
+                 check: dict) -> str:
     """Writes the voice into a temporary folder, then renames it into place,
-    so a half-written voice never appears. Raises OSError."""
+    so a half-written voice never appears. Raises OSError only when nothing
+    could be written at all. Returns the id it ACTUALLY saved under.
+
+    Bug audit 2026-10-05. It used to write straight to `vid`'s folder and
+    rename, which raises OSError on Windows when a folder with that name is
+    already there - so a voice folder that appeared between the card being
+    raised and the answer coming back (or a re-create, or a re-train) threw
+    instead of saving. Worse, `Path.rename` REPLACES an existing folder on
+    Linux and macOS, so the same line quietly destroyed one voice there.
+
+    An existing voice is never destroyed now, and the owner is never left
+    guessing: a colliding name gets the next free NUMBERED one ("grandpa-2",
+    "grandpa-3", ...), exactly the shape jarvis_documents.py's "Notion
+    export {day} (2)" uses, and the id that was really used goes back to the
+    caller so the decision card's own record and the audit line say it.
+    Replacing instead would lose the recording and words the owner made the
+    first time, which is not something a rename should decide on its own."""
     root = voices_dir()
     root.mkdir(parents=True, exist_ok=True)
-    final = _voice_path(vid)
-    if final is None:
+    if _voice_path(vid) is None:
         raise OSError("bad voice id")
     tmp = root / f".{vid}.{_uuid.uuid4().hex[:8]}.tmp"
     tmp.mkdir()
     try:
-        (tmp / "clip.wav").write_bytes(wav_bytes(samples, SAMPLE_RATE))
-        (tmp / "transcript.txt").write_text(transcript + "\n", encoding="utf-8")
-        (tmp / "voice.json").write_text(json.dumps({
-            "id": vid, "name": name, "seconds": seconds, "sample_rate": SAMPLE_RATE,
-            "created": time.time(), "owner_check": check}, indent=1), encoding="utf-8")
-        tmp.rename(final)
+        # A folder can appear AFTER the check above and before the rename
+        # below (another voice saved meanwhile). rename() refuses to land on
+        # an existing one on Windows and REPLACES it on Linux and macOS, so
+        # this never calls rename until the name is free - and it still
+        # catches the lossy case, in case one appears in the gap.
+        for n in range(_VOICE_ID_TRIES + 1):
+            want = vid if n == 0 else f"{vid}-{n + 1}"
+            final = _voice_path(want)
+            if final is None or final.exists():
+                continue
+            (tmp / "clip.wav").write_bytes(wav_bytes(samples, SAMPLE_RATE))
+            (tmp / "transcript.txt").write_text(transcript + "\n", encoding="utf-8")
+            (tmp / "voice.json").write_text(json.dumps({
+                "id": want, "name": name, "seconds": seconds, "sample_rate": SAMPLE_RATE,
+                "created": time.time(), "owner_check": check}, indent=1), encoding="utf-8")
+            try:
+                tmp.rename(final)
+            except OSError:
+                continue        # something took that name in the gap: try the next
+            return want
+        raise OSError(f"too many voices are already named like {vid!r}")
     except Exception:
         shutil.rmtree(tmp, ignore_errors=True)
         raise
@@ -3361,18 +3398,32 @@ def _decide_create(pid: str, gate: Callable, check: Callable) -> dict:
         samples = _PENDING.get("samples") if _PENDING.get("id") == pid else None
     if samples is None:
         return _finish(pid, "failed", "the recording was gone", rid)
-    if _voice_path(vid) is None or _voice_path(vid).exists():
-        return _finish(pid, "failed", "a voice with that name was added meanwhile", rid)
+    if _voice_path(vid) is None:
+        return _finish(pid, "failed", "that name cannot be used for a voice", rid)
+    # A voice with this name may have appeared while the card waited. That
+    # used to be a flat failure here; it is not one any more, because
+    # _write_voice numbers a taken name instead of throwing or overwriting
+    # (bug audit 2026-10-05). It decides, and the id it really used is what
+    # gets recorded below.
     # Checked again now: a voice print may have been trained while it waited.
     chk = check(samples)
     if not chk.get("ok"):
         return _finish(pid, "refused", str(chk.get("why")), rid)
     try:
-        _write_voice(vid, name, transcript, samples, seconds,
-                     {k: chk[k] for k in ("ok", "why", "fingerprint", "score", "bar",
-                                          "checked") if k in chk})
+        saved = _write_voice(vid, name, transcript, samples, seconds,
+                             {k: chk[k] for k in ("ok", "why", "fingerprint", "score", "bar",
+                                                  "checked") if k in chk})
     except OSError as exc:
         return _finish(pid, "failed", f"it could not be saved ({type(exc).__name__})", rid)
+    if saved != vid:
+        # The name was taken, so the voice is saved under the next free
+        # numbered one ("grandpa-2"). Record the id that was REALLY used, so
+        # the outcome, the audit line and the app all say that, never the
+        # name that lost the race.
+        with _PENDING_LOCK:
+            if _PENDING.get("id") == pid:
+                _PENDING["voice"] = saved
+        _audit("voices.renamed", {"from": vid, "to": saved})
     return _finish(pid, "created", "", rid)
 
 

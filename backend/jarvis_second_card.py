@@ -694,6 +694,13 @@ COMBINED_MODEL = ("qwen3:14b", 32768, 12.28)
 #: card with a 10 GB one). Below it, "combined" is refused as not capable.
 COMBINED_MIN_TOTAL_MB = 18432
 
+#: The presets' own names (jarvis_hardware._preset_name's list, kept here so
+#: this module never has to import jarvis_hardware just to say a name in a
+#: refusal). An id that is not one of these - a preset added later - reads as
+#: "chosen", which still says what to do without naming the wrong thing.
+_PRESET_NAMES = {"fast": "Fastest answers", "smart": "Smartest answers",
+                 "features": "Most features"}
+
 
 # --------------------------------------------------------------------------
 #   Suggesting the bigger model (2026-09-27) - see the module docstring's
@@ -1632,7 +1639,31 @@ def _combined_capable(det: dict) -> tuple:
     gate). The combined-memory floor (COMBINED_MODEL's comment) applies to
     the two cards' TOTAL, never to either one alone - the primary card
     (today's 2080 Super, 8 GB) is well under MIN_TOTAL_MB by itself, and
-    that is fine: it only has to hold its own share of the split model."""
+    that is fine: it only has to hold its own share of the split model.
+
+    A CHOSEN HARDWARE PRESET WINS (bug audit 2026-10-05). det["_plan"] is
+    set only by _detect_preset, and a preset is the owner's own answer to
+    "how should my cards be used": its lanes run inside the everyday Ollama,
+    on the card the preset picked (HARDWARE-PROFILES.md 4.3). "Combined" is
+    the opposite arrangement - it takes BOTH cards for one model - so the
+    two would fight over the same cards, which is exactly what
+    _combined_conflict refuses for the five features. The preset is the more
+    specific instruction and is already running, so it wins: this returns
+    not-capable, and every caller that gates on it (the switch's own
+    request_change, _combined_wanted/_reconcile_combined so a lane already
+    up is stopped, combined_lane, and maybe_suggest_combined so Jarvis never
+    raises a card for it) refuses in the same breath. Nothing here touches
+    the preset path itself: the lanes still run beside chat on one card,
+    exactly as before."""
+    if det.get("_plan") is not None:
+        name = _PRESET_NAMES.get((det.get("_plan") or {}).get("preset"), "chosen")
+        # No full stop on purpose: request_change's own refusal ("... cannot
+        # be turned on: {why}.") adds one, so this reads as one sentence
+        # there and as its own line where status() shows it bare.
+        return False, (f"your cards are set to run the \"{name}\" setup, which keeps the "
+                       f"extra models beside chat on one card, while splitting one model "
+                       f"across both cards needs both cards to itself - so turn that setup "
+                       f"off first (Brain, Hardware), then ask again")
     prim, second = _combined_rows(det)
     if prim is None or second is None:
         return False, "needs two graphics cards; only one is here"

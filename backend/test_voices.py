@@ -419,6 +419,85 @@ def t_create_needs_a_card():
     check("a second voice with the same name is refused", code == 409 and "already" in out["error"])
 
 
+def t_a_taken_voice_folder_is_not_destroyed_and_not_an_error():
+    """Bug audit 2026-10-05, BUG 2. `_write_voice` wrote straight to
+    voices/<id> and renamed onto it. On Windows that raises OSError when the
+    folder is already there, so re-creating a voice threw instead of doing
+    the obvious thing; on Linux and macOS the same rename REPLACES the
+    folder, so it silently destroyed one voice instead. Inside `create` the
+    same collision was caught a moment earlier and reported as a failure.
+
+    An existing voice must never be destroyed, and the owner must be told in
+    plain words what happened - so a taken name gets the next free NUMBERED
+    one, jarvis_documents.py's own "Notion export {day} (2)" pattern, and
+    the id really used is what the outcome reports."""
+    reset()
+    voices = V.voices_dir()     # not `tempdir / "voices"`: reset() picks a NEW
+    #                             config dir each time, so a path captured
+    #                             before the second reset() reads the old one
+    x = tone(5.0)
+    words = "One two three four five six seven eight nine ten eleven twelve"
+    chk = {"ok": True, "why": "it does not sound like your voice"}
+
+    # (1) A re-create / re-train of a voice already on disk: no raise.
+    first = V._write_voice("grandpa", "Grandpa", words, x, 5.0, chk)
+    check("the first voice saves under its own id", first == "grandpa", first)
+    try:
+        second = V._write_voice("grandpa", "Grandpa", words, x, 5.0, chk)
+        raised = None
+    except OSError as exc:
+        second, raised = None, repr(exc)
+    check("re-creating it does not raise on a machine where the folder exists",
+          raised is None, raised)
+    check("the new recording is kept under the next free numbered name",
+          second == "grandpa-2", second)
+    check("the FIRST voice's folder is still there, whole (never destroyed)",
+          V.load_voice("grandpa") is not None
+          and (voices / "grandpa" / "clip.wav").is_file()
+          and (voices / "grandpa" / "transcript.txt").is_file())
+    check("both voices are on disk, under two ids",
+          V._ids_on_disk() == ["grandpa", "grandpa-2"], V._ids_on_disk())
+    check("the new voice carries its own words and name",
+          V.load_voice("grandpa-2") is not None
+          and V.load_voice("grandpa-2").transcript == words)
+    third = V._write_voice("grandpa", "Grandpa", words, x, 5.0, chk)
+    check("and a third time takes grandpa-3, so nothing is ever overwritten",
+          third == "grandpa-3" and V._ids_on_disk()
+          == ["grandpa", "grandpa-2", "grandpa-3"], (third, V._ids_on_disk()))
+
+    # (2) The collision create() cannot catch: a voice folder for that id
+    #     appears AFTER its own look and before the write. Built inside the
+    #     gate's answer, so the order is fixed and there is no thread race.
+    reset()
+    voices = V.voices_dir()
+
+    class ArrivesWhileTheCardIsUp(Gate):
+        def __call__(self, action, detail, prompt):
+            V._write_voice("grandpa", "Somebody else", words, tone(5.0), 5.0, chk)
+            return super().__call__(action, detail, prompt)
+
+    gate = ArrivesWhileTheCardIsUp("approved")
+    code, out = V.create(body(), gate=gate, tier_of=ASK, spawn=inline, check=NOT_OWNER)
+    check("the name was taken between create() looking and the write",
+          (voices / "grandpa").is_dir())
+    check("the approved voice is still SAVED (not 'failed'), under the free name",
+          V._LAST["outcome"] == "created" and V._LAST["voice"] == "grandpa-2", V._LAST)
+    kept = V.load_voice("grandpa")
+    kept_meta = json.loads((voices / "grandpa" / "voice.json").read_text(encoding="utf-8"))
+    check("and the voice that was already there is untouched",
+          kept is not None and kept_meta.get("name") == "Somebody else",
+          (kept, kept_meta, V._ids_on_disk()))
+    check("both are on disk, and neither is half-written",
+          V._ids_on_disk() == ["grandpa", "grandpa-2"]
+          and (voices / "grandpa-2" / "clip.wav").is_file())
+    check("the new voice is the one the card described (its own words, its own name)",
+          (voices / "grandpa-2" / "transcript.txt").read_text(
+              encoding="utf-8").strip() == WORDS)
+    check("and it is the voice the app is told about, not the one that lost the race",
+          V._LAST["voice"] != "grandpa" and V._ids_on_disk() == ["grandpa", "grandpa-2"],
+          V._LAST)
+
+
 def t_create_never_saves_without_a_yes():
     for label, gate in (("denied", Gate("denied")), ("timed out", Gate("timed_out")),
                         ("the gate said notify (no person)", Gate("notify", tier="notify")),
