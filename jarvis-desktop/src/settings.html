@@ -1608,6 +1608,25 @@
           <p class="note" id="sc-found"></p>
           <ul class="sc-cards" id="sc-cards"></ul>
 
+          <!-- The owner's own choice (2026-10-05). One decision between the
+               two ways two cards can be used, rather than leaving him to work
+               it out from the switches below: "One model across both cards"
+               (the split) or "Two models at once, one on each card". Both
+               choices ARE the switches below - the split is the "combined"
+               switch - and the backend DERIVES the choice from them, so the
+               two can never disagree. Every word comes from the backend
+               (status.mode), and an older backend with no mode hides this
+               whole block rather than drawing blanks. -->
+          <div id="sc-mode-section" hidden>
+            <h3 class="subhead" id="sc-mode-title"></h3>
+            <p class="note" id="sc-mode-note"></p>
+            <p class="sc-blocked" id="sc-mode-conflict" hidden></p>
+            <div class="sc-switches" id="sc-mode-options"></div>
+            <div class="row">
+              <span class="status" id="sc-mode-status" role="status"></span>
+            </div>
+          </div>
+
           <h3 class="subhead">Switches</h3>
           <p class="sc-blocked" id="sc-blocked" hidden></p>
           <div class="sc-switches" id="sc-switches"></div>
@@ -1647,6 +1666,14 @@
             each card, not by how fast each card is, so it runs at roughly
             the slower card's pace. Real speed is not measured yet: the
             extra card is not installed yet.
+          </p>
+          <!-- Said here because it is true and would otherwise look like two
+               separate settings: this switch and the choice's "One model
+               across both cards" are the SAME setting, so either one moves
+               both. -->
+          <p class="note">
+            This is the same setting as "One model across both cards" in the
+            choice above; turning on either one turns on both.
           </p>
           <div class="sc-switches" id="sc-combined"></div>
           <div class="row">

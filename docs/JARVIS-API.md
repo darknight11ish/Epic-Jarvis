@@ -1716,7 +1716,7 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
+| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first") - since 2026-10-05 the refusal NAMES the switches to turn off ("... and \"Pictures\" and \"Wiki builder\" are on. Turn them off first, then pick this again."), so a client shows `error` as it is; **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
@@ -1751,7 +1751,14 @@ none: both apps behave as before.
               "capable": bool, "capable_why": str,   is there a SECOND capable card too
               "conflict": bool,                      a feature above is genuinely on
               "active": bool, "available": bool,
-              "model", "context": int|null, "memory_gib": float|null, "why"}}
+              "model", "context": int|null, "memory_gib": float|null, "why"},
+ "mode": {"mode": "split"|"concurrent"|"",         the owner's own choice (2026-10-05)
+          "name": str, "chosen": bool, "detail": str, "title": str, "note": str,
+          "preset": bool,                            a hardware preset runs the lanes on one card
+          "conflict": bool, "conflict_why": str,
+          "options": [{"id": "split"|"concurrent", "name", "detail",
+                       "selected": bool, "available": bool,
+                       "blocked": str, "hint": str, "pending": bool}]}}
 ```
 
 `last` (2026-09-24) is how the most recent approval card for any of these
@@ -1770,6 +1777,38 @@ card; `available` is active and actually working (second Ollama running,
 model installed). Show `why` as the line under each switch - it always says,
 in words, what is missing. A switch whose card has gone stays `enabled` with
 `active: false`: show it as on-but-waiting, never flip it off.
+
+**The owner's own choice - `mode` (added 2026-10-05).** The owner asked to be
+given a choice between the two ways his two cards can be used, rather than
+working it out from the switches: **`split`** (one bigger model spread across
+both cards) and **`concurrent`** (two different models at once, one on each
+card). Both ways already existed - `split` IS the `combined` switch above,
+`concurrent` IS every other switch here - and so did the rule that they cannot
+both run. What this key adds is the choice itself, in one place and in plain
+words.
+
+**It is DERIVED from the switches and never stored.** There is no `mode`
+field in `second-card.json`; `jarvis_second_card.current_mode()` reads the
+answer back off `combined` and `features`, so the choice and the switches
+cannot disagree. `""` is a real third answer - neither way is set up yet, or
+the two have somehow both been saved on (a hand-edited file, or a machine
+that died between two writes), which is reported as `conflict: true` with a
+sentence in `conflict_why` naming both sides, and in which NEITHER lane runs.
+`preset` is true while a chosen hardware preset runs the extra features
+inside the everyday copy of Ollama on one card: then the two-card choice does
+not apply and `mode` is `""`.
+
+Draw `title` and `note` once above the two `options`, then each option's
+`name`, `detail`, `blocked` and `hint` as they are - they are plain sentences,
+written on the PC. `selected` is what the switches currently say;
+`available` is whether picking it would do anything now; `pending` is its
+card waiting unanswered; `blocked` says why it cannot be picked. **A client
+never needs a new write for this**: picking `split` is `POST
+{"feature": "combined", "enabled": true}` and picking `concurrent` is
+`{"feature": "combined", "enabled": false}` - the same switch, so the same
+approval card (`second_card_combined_enable`, tier `ask`) and the same
+immediate OFF. An older PC sends no `mode` at all: show nothing extra, never
+a blank row.
 
 `pin_command` is one PowerShell line (Windows PowerShell 5.1-safe) that keeps
 the owner's everyday Ollama on the main card; show it with a copy button and
