@@ -37,20 +37,32 @@ desktop front end, desktop Rust, Android Kotlin - the last four counted
 together); the UI audit in three areas (phone, desktop, cross-app); prompt
 injection end to end; dependencies and supply chain.
 
-**Still running (2).**
+**Complete: all fourteen.** External feature research; backend capability
+inventory; desktop audit; Android audit; decision-log conformance; privacy/security
+and the five rules; repository and code hygiene; user-facing sprawl; independent
+verification of the headline claims; the bug hunt in four areas (backend Python,
+desktop front end, desktop Rust, Android Kotlin); the UI audit in three areas
+(phone, desktop, cross-app); prompt injection end to end; dependencies and supply
+chain; **disaster recovery and data integrity**; **performance, resources and
+battery**; and an **open-findings register** that re-checked the project's own
+1,132 earlier findings against today's tree (408 already fixed).
 
-- **Disaster recovery and data integrity** - the loss surface if the PC died
-  (seven patched files exist only on the owner's PC), whether the backup feature
-  covers what is irreplaceable including the Credential Manager keys and the
-  keystore, schema versioning and migrations, torn-write safety, and the upgrade
-  and rollback path.
-- **Performance, resources and battery** - startup and first-response cost, every
-  poller and timer including what runs while hidden, VRAM per configuration,
-  what grows on disk with no cap, and what the phone does to a battery.
+The last three are in [DEEP-AUDITS-2026-10-05.md](DEEP-AUDITS-2026-10-05.md) §3-§5.
+Three findings there outrank everything in the earlier sections:
 
-Their findings will be appended to
-[DEEP-AUDITS-2026-10-05.md](DEEP-AUDITS-2026-10-05.md) and a second commit will
-record them, so this page stays true.
+1. **The desktop widget can approve the wrong card** - the queue handler shows
+   `items[0]` with no swap guard, so a click aimed at a card decided elsewhere
+   acts on whatever slid into slot 0 (`widget.js:1731-1733`).
+2. **The owner-voice gate fails open for a blend with no voice print trained** -
+   Ashby and Clara are spoken with no voice check at all
+   (`jarvis_voices.py:1922-1925`).
+3. **The shipped everyday configuration may already be spilling to the
+   processor** - the project's own arithmetic puts it ~0.6 GiB over an 8 GB card,
+   which would make every answer several times slower, and the one-line check has
+   never been run (`MODEL-TOPOLOGY.md:153`).
+
+And one structural cause: **141 suite lines print SKIP as PASS**
+(`check("SKIP …", True)`), which is why several of these went unnoticed.
 
 ## The headline results
 
