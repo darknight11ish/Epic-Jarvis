@@ -29,6 +29,7 @@ The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -77,6 +78,45 @@ OWNER_FILES = {"jarvis_hud.py", "jarvis_gate.py", "jarvis_extract.py", "jarvis_m
 
 
 CONFIG_NAME = "jarvis-framework.toml"
+
+#: "N passed" / "N skipped" / "N failed" as a suite prints them at the end.
+#: Looked up by the word, not by position: every harness in this folder prints
+#: the three, but the older ones print them in a different order.
+_SUMMARY = {"passed": re.compile(r"(\d+)\s+passed\b"),
+            "skipped": re.compile(r"(\d+)\s+skipped\b"),
+            "failed": re.compile(r"(\d+)\s+failed\b")}
+
+#: What a reader counts by eye, for a suite that prints no summary at all:
+#: `ok` and `FAIL` from check(), `skip` from skip() (or an older harness's own
+#: "SKIP  <name>"). The word has to end there or be followed by a space or a
+#: colon - test_topics.py has a real check named "skipped-this-week is a number
+#: per topic", and counting a check as a skip would be this bug in reverse.
+_LINE = {"passed": re.compile(r"^ok\b"),
+         "skipped": re.compile(r"^skip(ped)?(?=[ \t:]|$)", re.I),
+         "failed": re.compile(r"^FAIL\b")}
+
+
+def counts(out: str) -> dict:
+    """{'passed': n, 'skipped': n, 'failed': n} for one suite's output.
+
+    The suite's OWN final line is believed when it has one: it knows what it
+    counted, and a `skip()` no longer lands in its "passed". Only a suite that
+    prints no summary is counted from its own lines."""
+    tail = "\n".join(out.strip().splitlines()[-4:])
+    got = {}
+    for word, pat in _SUMMARY.items():
+        m = pat.search(tail)
+        got[word] = int(m.group(1)) if m else None
+    if got["passed"] is not None and got["failed"] is not None:
+        return {"passed": got["passed"], "skipped": got["skipped"] or 0,
+                "failed": got["failed"]}
+    counted = {w: 0 for w in _LINE}
+    for line in out.splitlines():
+        for word, pat in _LINE.items():
+            if pat.match(line):
+                counted[word] += 1
+                break
+    return counted
 
 
 def _config_the_suites_would_read(env: dict, backend: Path):
@@ -183,6 +223,10 @@ def main(only=()) -> int:
     names = {s.name for s in suites}
     stale = [] if only else sorted(set(NEEDS_OWNER) - names)
     passed, failed, skipped = [], [], []
+    # The checks inside the suites that ran, summed from what each suite
+    # reported. A suite that exits 0 having skipped every check it has is still
+    # "ok" here - the numbers beside it are what say so.
+    ran = {"passed": 0, "skipped": 0, "failed": 0}
     if stale:
         print(f"FAIL  run_suites.py lists suites that do not exist: {stale}")
         failed += stale
@@ -219,12 +263,17 @@ def main(only=()) -> int:
         except subprocess.TimeoutExpired:
             code, out = "timeout", ""
         took = f"{time.time() - t0:5.1f}s"
+        n = counts(out)
+        for w in ran:
+            ran[w] += n[w]
+        said = f"{n['passed']} passed, {n['skipped']} skipped, {n['failed']} failed"
         if code == 0:
             passed.append(s.name)
-            print(f"ok    {s.name:<34} {took}")
+            note = f"  {said}" if n["skipped"] else ""
+            print(f"ok    {s.name:<34} {took}{note}")
         else:
             failed.append(s.name)
-            print(f"FAIL  {s.name:<34} {took}  (exit {code})")
+            print(f"FAIL  {s.name:<34} {took}  (exit {code})  {said}")
             fail_lines = [l for l in out.splitlines() if l.startswith("FAIL") or "Traceback" in l or "failed:" in l]
             for fl in fail_lines:
                 print("      " + fl)
@@ -232,8 +281,11 @@ def main(only=()) -> int:
     if not real:
         shutil.rmtree(backend, ignore_errors=True)
     shutil.rmtree(state, ignore_errors=True)
-    print(f"\n{len(passed)} passed, {len(failed)} failed, {len(skipped)} skipped "
-          f"(they need files that live only on the owner's PC)")
+    print(f"\n{ran['passed']} passed, {ran['skipped']} skipped, {ran['failed']} failed")
+    if ran["skipped"] or skipped:
+        print(f"      (a skip is a check that could not run here: {ran['skipped']} inside the "
+              f"suites above, {len(skipped)} whole suite(s) that need files which live only on "
+              f"the owner's PC)")
     if failed:
         print("failed: " + ", ".join(failed))
     return 1 if failed else 0

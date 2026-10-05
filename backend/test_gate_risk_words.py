@@ -14,6 +14,12 @@ big-model), and two of those sentences said something untrue (audit AP-10):
   - wiki_update promised the earlier copy of a page is kept in .versions, and
     said nothing of index.md and log.md, which are appended to with no copy.
 
+And one thing no check here could see (added 2026-10-05): an action written
+into the table TWICE. Every check above reads the table through a dict, and a
+dict keeps only the last value for a repeated key - so the earlier sentence
+would be dead code that a reader could edit for ever without a test noticing.
+`t_each_action_is_given_one_risk_line` reads the table as a list instead.
+
 Runs anywhere: jarvis_gate.py is the owner's file, so its _RISK lines come
 from a stand-in built from the whole patch stack (backend/_stack.py).
 """
@@ -29,25 +35,68 @@ import _stack  # noqa: E402
 
 FAILED, PASSED = [], []
 
+#: One line of jarvis_gate.py's _RISK table. Shared by _risk() below and by
+#: the duplicate-key check, so the two cannot drift apart.
+_RISK_LINE = re.compile(r'^    "(\w+)":\s*(\(.*\)),\s*$', re.M)
+
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
 
 
-def _risk() -> dict:
+def _risk_rows() -> list:
+    """[(action, value, line number)] for the table, IN SOURCE ORDER, repeats
+    kept. _risk() below cannot see a repeat: it builds a dict, and Python keeps
+    only the last value for a key given twice."""
     text, log = _stack.stand_in("jarvis_gate.py")
     if text is None:
         raise AssertionError("\n".join(log))
-    out = {}
-    for m in re.finditer(r'^    "(\w+)":\s*(\(.*\)),\s*$', text, re.M):
+    out = []
+    for i, line in enumerate(text.splitlines(), 1):
+        m = _RISK_LINE.match(line)
+        if not m:
+            continue
         try:
             v = ast.literal_eval(m.group(2))
         except (ValueError, SyntaxError):
             continue
         if isinstance(v, tuple) and len(v) == 3:
-            out[m.group(1)] = v
+            out.append((m.group(1), v, i))
     return out
+
+
+def _risk() -> dict:
+    out = {}
+    for action, v, _line in _risk_rows():
+        out[action] = v
+    return out
+
+
+def t_each_action_is_given_one_risk_line():
+    """A repeated action in _RISK is invisible to every check above.
+
+    _risk() returns a dict, and a dict keeps only the LAST value for a key
+    given twice. So an action written into _RISK twice is silently the second
+    sentence: editing the first one would change nothing, the stand-in would
+    still parse, and every check here would still pass. The table is read as a
+    LIST for this one, and a repeat is a failure naming both lines.
+
+    This cannot be seen in this repository either way - jarvis_gate.py is the
+    owner's file and is not here (backend/run_suites.py's OWNER_FILES) - so the
+    stand-in built from the patch stack is the only copy a reader can check.
+    """
+    rows = _risk_rows()
+    check("jarvis_gate.py's _RISK table was found in the stand-in", bool(rows),
+          "no line matched; the table's shape has changed and this check is blind")
+    seen = {}
+    for action, v, line in rows:
+        seen.setdefault(action, []).append(line)
+    dupes = {a: lines for a, lines in seen.items() if len(lines) > 1}
+    check("no action is given a second sentence further down the table",
+          not dupes,
+          "; ".join(f"{a} at lines {lines}" for a, lines in sorted(dupes.items()))
+          + " - the LAST one wins, so the earlier one is dead code")
 
 
 def t_the_second_card_and_big_model_do_not_promise_one_switch_stops_them():

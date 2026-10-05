@@ -80,11 +80,20 @@ import jarvis_news as NW  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -501,8 +510,8 @@ def t_it_goes_off_is_built_without_a_model_and_rings_ready():
     # own zone: 09:30 came out as 01:30 and the check read as a bug. CI (Linux)
     # proves it; here it is reported as not proven (2026-10-03).
     if not use_tz("Europe/London"):
-        check("SKIPPED (this system has no time.tzset, so the PC's timezone cannot be "
-              "set to Europe/London; CI proves this one on Linux)", True)
+        skip("this system has no time.tzset, so the PC's timezone cannot be "
+             "set to Europe/London; CI proves this one on Linux")
         return
     B.forget()
     w = World(local(2026, 9, 25, 6, 0), name="fire")
@@ -580,8 +589,8 @@ def t_calendar_lines():
     # expected clock times are London's, and there is no time.tzset() on Windows
     # (2026-10-03).
     if not use_tz("Europe/London"):
-        check("SKIPPED (this system has no time.tzset, so the PC's timezone cannot be "
-              "set to Europe/London; CI proves this one on Linux)", True)
+        skip("this system has no time.tzset, so the PC's timezone cannot be "
+             "set to Europe/London; CI proves this one on Linux")
         return
     now = local(2026, 9, 25, 7, 0)
     xml = calendar_xml(("Stand-up", "", "20260911T080000Z", "RRULE:FREQ=WEEKLY\n"),
@@ -610,7 +619,7 @@ def t_calendar_lines():
 
 def t_the_calendar_day_on_clock_change_days():
     if not use_tz("Europe/London"):
-        return check("SKIP clock-change days: this platform cannot set the time zone", True)
+        return skip("clock-change days: this platform cannot set the time zone")
     asked = []
 
     def cal(q):
@@ -1421,7 +1430,7 @@ class _Handler:
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, why, before, after = _rehearse()
     check("briefing.patch applies to what the earlier patches wrote, and reverses", ok, why)
     if not ok:
@@ -1571,7 +1580,7 @@ def main():
         if S._SCHED is not None:
             S._SCHED.stop()
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

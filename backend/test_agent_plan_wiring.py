@@ -59,11 +59,20 @@ AG._record_chain = lambda steps: None
 AG._publish_step = lambda step: None
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class _Verdict:
@@ -600,15 +609,15 @@ def t_the_checker_is_asked_with_the_resolved_action_name():
     """
     from _where import missing as _missing
     if _missing("jarvis_gate.py"):
-        return check("SKIP - no jarvis_gate.py here, so no table can turn "
-                     "'jarvis_home_control_run' into an action name; the owner's own "
-                     "run proves this", True)
+        return skip("no jarvis_gate.py here, so no table can turn "
+                    "'jarvis_home_control_run' into an action name; the owner's own "
+                    "run proves this")
     try:
         import jarvis_gate
         want, _known = jarvis_gate.action_for_tool("jarvis_home_control_run", {})
     except Exception as exc:
-        return check(f"SKIP - jarvis_gate.action_for_tool could not be asked "
-                     f"({type(exc).__name__}: {exc})", True)
+        return skip(f"jarvis_gate.action_for_tool could not be asked "
+                    f"({type(exc).__name__}: {exc})")
 
     def body():
         checker, calls = _fake_checker({
@@ -648,7 +657,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

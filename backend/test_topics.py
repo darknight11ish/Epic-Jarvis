@@ -418,8 +418,14 @@ def t_identical_when_every_topic_is_on():
     M._ENTITY_RECALL = False
     check("every topic on Learn and use: the same facts, order and scores as no topics", same)
     check("... the fast path: no blocked ids", M.topic_blocked(a._connect(), "use") == frozenset())
+    # `or True` used to make this constant, and the call inside it - the real
+    # point, since a store whose topics tables were dropped must not raise -
+    # went with it. The call is its own statement now, and what is checked is
+    # what "nothing blocked" means: the same hits as a store that has them.
+    hits_b = b.search("sister", k=3)
+    hits_a = a.search("sister", k=3)
     check("a store from before the tables: nothing blocked, no error",
-          b.search("sister", k=3) != [] or True)
+          hits_b != [] and [h["text"] for h in hits_b] == [h["text"] for h in hits_a])
 
 
 def t_sorting_layers():
@@ -918,7 +924,7 @@ def t_delete_moves_the_facts():
     check("into an equally strict home: at once, no card", code == 200 and not Gate.calls)
     # id reuse
     code, out = T.op_add({"name": "Fresh"}, st)
-    check("a topic added later gets a fresh id", out["id"] not in (ids["Money"],) or True)
+    check("a topic added later gets a fresh id", out["id"] not in (ids["Money"],))
 
 
 def t_erase_keeps_the_topic_and_backup_keeps_modes():

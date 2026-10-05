@@ -48,11 +48,20 @@ if str(HERE / "rebuilt") not in sys.path:
 import jarvis_backoff as BO  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -207,7 +216,7 @@ def t_answers_to_the_owner_never_point_at_a_key():
     try:
         import jarvis_search as WS
     except Exception as exc:
-        return check(f"SKIP - jarvis_search not importable ({type(exc).__name__})", True)
+        return skip(f"jarvis_search not importable ({type(exc).__name__})")
     for p in list(WS.PROVIDERS) + [None]:
         line = WS.offer_line(p)
         check(f"switching offer after {p or 'a left-out one'} names no keyed provider",
@@ -226,7 +235,7 @@ if __name__ == "__main__":
             traceback.print_exc()
     import shutil
     shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

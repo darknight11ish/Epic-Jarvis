@@ -45,6 +45,7 @@ import jarvis_chat_log as H  # noqa: E402
 
 KEY = bytes(range(32))
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-chat-fork-"))
 _N = [0]
 
@@ -53,6 +54,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -88,9 +97,9 @@ def turn(log, cid, words, *, provenance="typed", answer="Sure.", live=False,
                            lane="qwen3:8b", turn=t)
 
 
-def skip():
+def _no_crypto():
     if H.AESGCM is None:
-        check("SKIP - the cryptography package is not installed", True)
+        skip("the cryptography package is not installed")
         return True
     return False
 
@@ -120,7 +129,7 @@ def source(log, cid="conv-source-001", n=3, **kw):
 # ----------------------------------------------------------------- the copy
 
 def t_a_fork_copies_the_first_turns_into_a_new_chat():
-    if skip():
+    if _no_crypto():
         return
     clock = Clock()
     log = new_log(clock=clock)
@@ -167,7 +176,7 @@ def t_a_fork_copies_the_first_turns_into_a_new_chat():
 
 
 def t_the_copy_is_sealed_again_under_the_new_id():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -199,7 +208,7 @@ def t_the_copy_is_sealed_again_under_the_new_id():
 
 
 def t_a_fork_point_can_be_a_user_message():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -214,7 +223,7 @@ def t_a_fork_point_can_be_a_user_message():
 
 
 def t_read_outside_is_copied_and_taints_the_fork():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = "conv-outside-01"
@@ -233,7 +242,7 @@ def t_read_outside_is_copied_and_taints_the_fork():
 
 
 def t_a_fork_taken_before_outside_text_is_clean():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = "conv-outside-02"
@@ -247,7 +256,7 @@ def t_a_fork_taken_before_outside_text_is_clean():
 # ------------------------------------------------------ what cannot be forked
 
 def t_only_chats_the_apps_may_continue_are_forkable():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     log.record_support("sup-fork-000001", "Support: refund",
@@ -270,7 +279,7 @@ def t_only_chats_the_apps_may_continue_are_forkable():
 
 
 def t_a_crisis_chat_is_never_forked():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     turn(log, "conv-crisis-fork", "I feel like I can't go on", crisis=True)
@@ -290,7 +299,7 @@ def t_a_crisis_chat_is_never_forked():
 
 
 def t_a_live_session_can_be_forked_as_an_ordinary_chat():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     turn(log, "conv-live-fork01", "tell me a joke", live=True, provenance="voice")
@@ -307,7 +316,7 @@ def t_a_live_session_can_be_forked_as_an_ordinary_chat():
 # ---------------------------------------------------------------- the errors
 
 def t_bad_requests_and_missing_things():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -338,7 +347,7 @@ def t_bad_requests_and_missing_things():
 
 
 def t_the_route_takes_exactly_id_and_upto():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     H.use(log)
@@ -366,7 +375,7 @@ def t_the_route_is_whitelisted_in_the_hud_patch():
 # ---------------------------------------------------- key, recording, hush
 
 def t_fork_works_while_recording_is_off_but_needs_the_key():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -393,7 +402,7 @@ def t_fork_works_while_recording_is_off_but_needs_the_key():
 
 
 def t_the_source_hush_is_not_copied_the_fork_has_its_own():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log, n=3)
@@ -428,12 +437,12 @@ def t_the_source_hush_is_not_copied_the_fork_has_its_own():
 
 def t_copied_turns_are_not_learned_twice():
     """End to end with the real learner: test_auto_learn's World."""
-    if skip():
+    if _no_crypto():
         return
     try:
         import test_auto_learn as TA
     except Exception as exc:               # pragma: no cover - needs the shipped modules
-        check(f"SKIP - the learner's test World cannot be built here ({type(exc).__name__})", True)
+        skip(f"the learner's test World cannot be built here ({type(exc).__name__})")
         return
     A, H2 = TA.A, TA.H
     w = TA.World()
@@ -483,13 +492,13 @@ def t_a_fork_does_not_double_the_said_again_count():
     a few seconds EARLIER than the moment the live registry saw it, so the
     fork's copy (put back from the record) has another time than the source's
     live entry - and a store that keeps one row per time counted both."""
-    if skip():
+    if _no_crypto():
         return
     try:
         import test_auto_learn as TA
         import jarvis_intake as I
     except Exception as exc:               # pragma: no cover
-        check(f"SKIP - the learner's test World cannot be built here ({type(exc).__name__})", True)
+        skip(f"the learner's test World cannot be built here ({type(exc).__name__})")
         return
 
     class Store:
@@ -561,12 +570,12 @@ def t_a_fork_of_an_erased_chat_secure_deletes_re_proposals():
     """The source hush says 'erased': the fork's must too, so the learner
     deletes (secure_delete) a re-proposal of the erased fact in the fork, as
     it does in the source, instead of keeping the words as a rejected row."""
-    if skip():
+    if _no_crypto():
         return
     try:
         import test_auto_learn as TA
     except Exception as exc:               # pragma: no cover
-        check(f"SKIP - the learner's test World cannot be built here ({type(exc).__name__})", True)
+        skip(f"the learner's test World cannot be built here ({type(exc).__name__})")
         return
     w = TA.World()
     try:
@@ -605,7 +614,7 @@ def A_hush(cid):
 # ------------------------------------------------- forks, tags, Undo, delete
 
 def t_a_fork_of_a_fork():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -628,7 +637,7 @@ def t_a_fork_of_a_fork():
 
 
 def t_forks_continue_normally_and_are_independent():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -648,7 +657,7 @@ def t_forks_continue_normally_and_are_independent():
 
 
 def t_deleting_the_original_leaves_the_fork_whole():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -668,7 +677,7 @@ def t_deleting_the_original_leaves_the_fork_whole():
 
 
 def t_undo_of_forget_a_time_frame_restores_a_fork_with_its_tag():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log)
@@ -695,7 +704,7 @@ def t_undo_of_forget_a_time_frame_restores_a_fork_with_its_tag():
 # ------------------------------------------------------- the shared column list
 
 def t_one_column_list_covers_every_row_copy():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     turn(log, "conv-cols-000001", "hello")
@@ -723,7 +732,7 @@ def t_one_column_list_covers_every_row_copy():
 # ------------------------------------------------------------------ the read
 
 def t_the_single_read_gains_idx_and_forkable():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     cid = source(log, n=2)
@@ -754,7 +763,7 @@ if __name__ == "__main__":
     finally:
         H.use(None)
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

@@ -28,6 +28,7 @@ sys.path.insert(0, str(HERE))
 import _stack  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 PATCH = "gate-outcome.patch"
 #: The actions the audit named, each checked below against its module.
 LISTED = ("second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
@@ -46,6 +47,14 @@ LISTED = ("second_card_enable", "second_card_browser_enable", "second_card_combi
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _gate():
@@ -88,7 +97,7 @@ def _proposals(ns, action):
 def t_the_patch_applies_forwards_and_backwards_on_the_stack():
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     order = _stack.order()
     upto = order[:order.index(PATCH) + 1]
     after, log = _stack.stand_in("jarvis_gate.py", upto)
@@ -168,7 +177,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

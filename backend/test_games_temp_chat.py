@@ -57,12 +57,21 @@ import jarvis_intake as I  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def mk(*texts, role="user"):
@@ -342,7 +351,7 @@ def t_a_detected_game_is_not_in_the_real_chat_history():
     require_shipped("jarvis_chat_log.py")
     import jarvis_chat_log as CL
     if CL.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     fn = _temporary_chat_fn(src)
     snippet = _finally_snippet(src)
     d = Path(tempfile.mkdtemp(prefix="jarvis-games-real-log-"))
@@ -393,7 +402,7 @@ def t_listed_and_applies():
           "jarvis_intake.py" in _where.SHIPPED)
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     at = order.index("games-temporary.patch")
     text, _ = _stack.stand_in("jarvis_hud.py", order[:at])
     check("jarvis_hud.py: the stack before games-temporary.patch builds", text is not None)
@@ -425,7 +434,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

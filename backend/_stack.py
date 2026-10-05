@@ -25,6 +25,18 @@ whose context an EARLIER patch was meant to write, but did not, would be
 materialised too rather than fail - scripts/apply-patches.ps1, on a copy of
 the real files, is the only proof of that.
 
+THE RATCHET. A hunk whose context an EARLIER patch was meant to write, but did
+not, is materialised rather than failing - so a patch whose context has drifted
+still "applies", and every suite reading that stand-in proves nothing about the
+real file. The number of hunks that had to invent a pre-image is therefore
+recorded per target in RATCHET, and may only go DOWN: test_installed_stand_in.py
+fails when one of them goes up. That failure is the moment to find out whether
+the drift is real, or whether the new patch simply touches text only the
+owner's PC holds - either way a person looks, then moves the pin by hand.
+
+The numbers were measured on 2026-10-05 over all 119 patches
+apply-patches.ps1 applies, by calling `stand_in(target, stats=...)`.
+
 Not a test (no `test_` prefix). Standard library and git only.
 """
 import re
@@ -36,6 +48,32 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 PS1 = HERE.parent / "scripts" / "apply-patches.ps1"
 GAP = "# gap"
+
+#: How many hunks of the whole stack had to have their pre-image - "what the
+#: owner's file says here", which this repository does not hold - pasted in
+#: before they would apply. Measured 2026-10-05, 119 patches, `materialised()`.
+#: A ratchet: it may go down, never up without a person looking. See the module
+#: docstring. The pin lives here rather than in the suite so that the number
+#: and the reason it matters are in the same place.
+RATCHET = {
+    "jarvis_hud.py": 44,
+    "jarvis_gate.py": 22,
+    "jarvis_extract.py": 9,
+    "jarvis_models.py": 5,
+    "jarvis_skills.py": 2,
+}
+
+
+def materialised(target: str, patches=None) -> dict:
+    """What building `target`'s stand-in had to invent.
+
+    {'target', 'hunks', 'materialised', 'by_patch'} - 'materialised' is the
+    count the RATCHET pins, 'by_patch' names the patches that needed it, so a
+    failure can say which patch drifted. Empty counts when git is missing (the
+    stand-in could not be built at all, which the caller reports as a skip)."""
+    stats = {}
+    stand_in(target, patches, stats=stats)
+    return stats
 
 
 def order() -> list:
@@ -114,30 +152,40 @@ def _apply(git: str, d: Path, target: str, hunk: str, *extra: str) -> bool:
     return r.returncode == 0
 
 
-def stand_in(target: str, patches=None, *, replace: dict = None):
+def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = None):
     """(text, log) - `target` after every patch in `patches` (default: the
     whole stack, order()). `replace` maps a patch name to other text to use
     for it (a rehearsal of an edited patch before it is committed). Returns
     (None, why) when git is missing or a hunk will not apply even to its own
-    pre-image (a broken patch)."""
+    pre-image (a broken patch).
+
+    `stats`, when given, is filled in with what the walk had to invent -
+    {'target', 'hunks', 'materialised', 'by_patch'} - for the RATCHET above.
+    Callers that do not ask for it are unaffected."""
     git = shutil.which("git")
     if not git:
+        if stats is not None:
+            stats.update(target=target, hunks=0, materialised=0, by_patch={})
         return None, ["git is not installed"]
     patches = order() if patches is None else list(patches)
     d = Path(tempfile.mkdtemp(prefix="jarvis-stack-"))
     log = []
+    gaps = 0
+    seen = 0
+    by_patch = {}
     try:
         f = d / target
         f.write_text("", encoding="utf-8")
-        gaps = 0
         for name in patches:
             text_of = (replace or {}).get(name)
             if text_of is None:
                 text_of = (HERE / name).read_text(encoding="utf-8")
             for hunk, pre in hunks(text_of, target):
+                seen += 1
                 if _apply(git, d, target, hunk):
                     continue
                 gaps += 1
+                by_patch[name] = by_patch.get(name, 0) + 1
                 text = f.read_text(encoding="utf-8")
                 if text and not text.endswith("\n"):
                     text += "\n"
@@ -149,6 +197,9 @@ def stand_in(target: str, patches=None, *, replace: dict = None):
                 log.append(f"{name}: materialised {len(pre)} line(s) of the original")
         return f.read_text(encoding="utf-8"), log
     finally:
+        if stats is not None:
+            stats.update(target=target, hunks=seen, materialised=gaps,
+                         by_patch=dict(by_patch))
         shutil.rmtree(d, ignore_errors=True)
 
 

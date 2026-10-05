@@ -60,6 +60,7 @@ import jarvis_quiz as Q  # noqa: E402
 import jarvis_schedule as S  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-decks-"))
 KEY = b"k" * 32
 DAY = 24 * 3600.0
@@ -68,6 +69,14 @@ DAY = 24 * 3600.0
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -485,8 +494,8 @@ def t_day_rolls_over_by_this_pcs_clock():
     # cannot be simulated here at all. CI (Linux) proves this test; on the owner's
     # PC it is reported as not proven rather than as a failure (2026-10-03).
     if not hasattr(time, "tzset"):
-        check("SKIPPED (this system has no time.tzset, so another timezone cannot be "
-              "simulated; CI proves this one on Linux)", True)
+        skip("this system has no time.tzset, so another timezone cannot be "
+             "simulated; CI proves this one on Linux")
         return
     keep_tz = os.environ.get("TZ")
     try:
@@ -1117,8 +1126,8 @@ def t_zero_new_cards_promises_nothing():
 def t_days_are_calendar_days_across_dst():
     # See t_day_rolls_over_by_this_pcs_clock above: no time.tzset() on Windows.
     if not hasattr(time, "tzset"):
-        check("SKIPPED (this system has no time.tzset, so DST cannot be simulated; "
-              "CI proves this one on Linux)", True)
+        skip("this system has no time.tzset, so DST cannot be simulated; "
+             "CI proves this one on Linux")
         return
     keep_tz = os.environ.get("TZ")
     try:
@@ -1275,7 +1284,7 @@ def main() -> int:
         S._SCHED = None
         D._reset_for_tests()
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

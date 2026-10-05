@@ -56,6 +56,7 @@ import jarvis_notes as N  # noqa: E402
 FIXTURE = (REPO / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
            / "note-targets.json")
 FAILED, PASSED = [], []
+SKIPPED = []
 DAY = dt.datetime(2026, 9, 24, 9, 30)
 SECRET = "the lighthouse key is under the blue stone"
 TOKEN = "j0pl1n-t0ken-9f3"
@@ -64,6 +65,14 @@ TOKEN = "j0pl1n-t0ken-9f3"
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class NoNetwork:
@@ -250,7 +259,7 @@ def t_links_out_of_the_vault_are_refused():
     try:
         (v / "Daily").symlink_to(outside, target_is_directory=True)
     except (OSError, NotImplementedError):
-        return check("SKIP - cannot make a symlink here", True)
+        return skip("cannot make a symlink here")
     p = NC.plan("obsidian", "x", now=DAY)
     check("a daily folder that is a link out of the vault: refused at plan time",
           "outside the vault" in p.reason_empty, repr(p))
@@ -407,7 +416,7 @@ def t_vault_search_skips_links_out_and_respects_caps():
         check("folders and files that link out of the vault are never read",
               "outside the vault" not in json.dumps(out), repr(out))
     except (OSError, NotImplementedError):
-        check("SKIP - cannot make a symlink here", True)
+        skip("cannot make a symlink here")
     real = (N.VAULT_MAX_FILES, N.VAULT_MAX_FILE_BYTES)
     try:
         N.VAULT_MAX_FILES = 1
@@ -655,7 +664,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

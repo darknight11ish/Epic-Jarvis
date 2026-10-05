@@ -41,6 +41,7 @@ import jarvis_chat_log as H  # noqa: E402
 
 KEY = bytes(range(32))
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-chat-marks-"))
 _N = [0]
 
@@ -49,6 +50,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -86,9 +95,9 @@ def chat(log, cid, exchanges=6, **kw):
     return cid
 
 
-def skip():
+def _no_crypto():
     if H.AESGCM is None:
-        check("SKIP - the cryptography package is not installed", True)
+        skip("the cryptography package is not installed")
         return True
     return False
 
@@ -101,7 +110,7 @@ def raw_marks(log):
 # ------------------------------------------------------------------ tests
 
 def t_read_and_offer():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     chat(log, "conv-short-00001", exchanges=4)          # 8 turns
@@ -120,7 +129,7 @@ def t_read_and_offer():
 
 
 def t_add_remove_idempotent():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00001", exchanges=6)
@@ -143,7 +152,7 @@ def t_add_remove_idempotent():
 
 
 def t_bad_input():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00002", exchanges=6)     # turns 0..11
@@ -162,7 +171,7 @@ def t_bad_input():
 
 
 def t_limit_of_twenty():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00003", exchanges=15)    # 30 turns
@@ -182,7 +191,7 @@ def t_limit_of_twenty():
 
 
 def t_sealed_and_view_only():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00004", exchanges=6)
@@ -217,7 +226,7 @@ def t_sealed_and_view_only():
 
 
 def t_kinds_refused():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     chat(log, "conv-crisis-0001", exchanges=6, crisis=True)
@@ -251,7 +260,7 @@ def t_kinds_refused():
 
 
 def t_history_off_and_no_key():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00005", exchanges=6)
@@ -267,7 +276,7 @@ def t_history_off_and_no_key():
 
 
 def t_through_take_out_and_put_back():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00006", exchanges=6)
@@ -300,7 +309,7 @@ def t_through_take_out_and_put_back():
 
 
 def t_joined_marks_follow_their_messages():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00008", exchanges=5)     # 10 turns, break at 3
@@ -321,7 +330,7 @@ def t_joined_marks_follow_their_messages():
 
 
 def t_fork_carries_marks_up_to():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00009", exchanges=8)     # 16 turns
@@ -345,7 +354,7 @@ def t_fork_carries_marks_up_to():
 
 
 def t_delete_removes_marks():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00010", exchanges=6)
@@ -356,7 +365,7 @@ def t_delete_removes_marks():
 
 
 def t_sweep_removes_marks():
-    if skip():
+    if _no_crypto():
         return
     log, clk = new_log()
     cid = chat(log, "conv-marks-00011", exchanges=6)
@@ -368,7 +377,7 @@ def t_sweep_removes_marks():
 
 
 def t_routes():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     H.use(log)
@@ -391,7 +400,7 @@ def t_routes():
 
 
 def t_no_chat_words_in_audit_or_learner():
-    if skip():
+    if _no_crypto():
         return
     log, _ = new_log()
     cid = chat(log, "conv-marks-00013", exchanges=6)
@@ -418,7 +427,7 @@ def main():
         except Exception:
             FAILED.append(name)
             print(f"FAIL {name} raised\n{traceback.format_exc()}")
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

@@ -100,11 +100,20 @@ def _block(src, marker):
 
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 # ------------------------------------------------------------------ helpers --
@@ -937,13 +946,13 @@ def t_real_zipvoice():
     base = os.environ.get("JARVIS_TEST_VOICE_MODELS")
     zdir = Path(base) / "zipvoice" if base else None
     if not zdir or not (zdir / "tokens.txt").is_file():
-        return check("SKIP - set JARVIS_TEST_VOICE_MODELS to a voice-models folder holding "
-                     "zipvoice\\ to run the real ZipVoice", True)
+        return skip("set JARVIS_TEST_VOICE_MODELS to a voice-models folder holding "
+                    "zipvoice\\ to run the real ZipVoice")
     prompt = zdir / "test_wavs" / "news-female.wav"
     ptxt = zdir / "test_wavs" / "prompt.txt"
     if not prompt.is_file() or not ptxt.is_file():
-        return check("SKIP - the model folder has no test_wavs/news-female.wav to use as a "
-                     "recording", True)
+        return skip("the model folder has no test_wavs/news-female.wav to use as a "
+                    "recording")
     words = next(l.split(" ", 1)[1].strip() for l in ptxt.read_text(encoding="utf-8").splitlines()
                  if l.startswith("news-female.wav"))
     reset(zipvoice=False)
@@ -1008,7 +1017,7 @@ def _rehearse():
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, err, before, after, gb, ga = _rehearse()
     check("voices.patch applies after big-model.patch to what the earlier patches wrote, "
           "reverses, and big-model, wiki and second-card still reverse after it", ok, err)
@@ -1092,7 +1101,7 @@ def t_the_toml():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - no jarvis_hud.py here; the rehearsal above is the proof", True)
+        return skip("no jarvis_hud.py here; the rehearsal above is the proof")
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has /api/voice/voices (voices.patch applied)",
           '"/api/voice/voices"' in s)
@@ -1115,7 +1124,7 @@ if __name__ == "__main__":
             pass
         S._tts_cache = S._UNSET
         shutil.rmtree(TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

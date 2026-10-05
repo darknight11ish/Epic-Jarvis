@@ -45,6 +45,7 @@ import jarvis_quick as Q  # noqa: E402
 
 KEY = bytes(range(32))
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-chat-tags-"))
 _N = [0]
 
@@ -53,6 +54,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -79,9 +88,9 @@ def turn(log, cid, words, *, provenance="typed", answer="Sure.", read_outside=Fa
         {"role": "user", "content": words, "provenance": provenance}]}, lane="test", turn=t)
 
 
-def skip():
+def _no_crypto():
     if H.AESGCM is None:
-        check("SKIP - the cryptography package is not installed", True)
+        skip("the cryptography package is not installed")
         return True
     return False
 
@@ -99,7 +108,7 @@ class Sched:
 # ------------------------------------------------------------ the registry
 
 def t_starters_and_ids():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     out = log.tags()
@@ -126,7 +135,7 @@ def t_starters_and_ids():
 
 
 def t_limits_and_errors():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     log.tags()
@@ -186,7 +195,7 @@ def t_limits_and_errors():
 
 
 def t_style_move_delete():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     log.tags()
@@ -233,7 +242,7 @@ def t_style_move_delete():
 # -------------------------------------------------------------- the chats
 
 def t_filing_and_filter():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     for i in range(4):
@@ -277,7 +286,7 @@ def t_filing_and_filter():
 def t_page_boundary_keeps_the_filter():
     """list() pulls in rows that share the last row's second; the filter must
     apply to them too (a tag=1 page used to be able to leak a tag=none row)."""
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     for i in range(3):
@@ -291,7 +300,7 @@ def t_page_boundary_keeps_the_filter():
 
 
 def t_undo_keeps_tags():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     turn(log, "conv-u-000001", "keep my tag")
@@ -336,7 +345,7 @@ def t_undo_keeps_tags():
 
 
 def t_migration_of_an_old_file():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     turn(log, "conv-m-000001", "an older chat")
@@ -364,7 +373,7 @@ def t_migration_of_an_old_file():
 # --------------------------------------------------------------- sealing
 
 def t_names_are_sealed():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     secret = "Zebrafish-Divorce-Lawyer"
@@ -402,7 +411,7 @@ def t_names_are_sealed():
 
 
 def t_fail_closed():
-    if skip():
+    if _no_crypto():
         return
     # No key provider result: nothing is kept.
     def nokey():
@@ -445,7 +454,7 @@ def t_fail_closed():
 
 
 def t_names():
-    if skip():
+    if _no_crypto():
         return
     import unicodedata
     log = new_log()
@@ -484,7 +493,7 @@ def t_names():
 # ----------------------------------------------------------- the routes
 
 def t_routes():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     H.use(log)
@@ -584,7 +593,7 @@ def ask(words, cid="conv-q-000001", *, provenance="typed", earlier=(), temporary
 
 
 def t_quick_current_chat():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     H.use(log)
@@ -638,7 +647,7 @@ def t_quick_current_chat():
 
 
 def t_quick_guards():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     H.use(log)
@@ -707,7 +716,7 @@ def t_quick_guards():
 
 
 def t_quick_older_chat():
-    if skip():
+    if _no_crypto():
         return
     log = new_log()
     H.use(log)
@@ -747,7 +756,7 @@ def t_quick_older_chat():
 
 
 def t_quick_near_misses_go_to_the_model():
-    if skip():
+    if _no_crypto():
         return
     for text in ("file this", "file this away", "tag", "label this chat", "how do I file this under taxes",
                  "what tags do I have", "put it in the oven", "label the jars",
@@ -792,7 +801,7 @@ if __name__ == "__main__":
     finally:
         H.use(None)
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

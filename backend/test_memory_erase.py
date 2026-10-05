@@ -52,6 +52,7 @@ except ImportError:
 import jarvis_chat_log as CH  # noqa: E402 - "Also delete the chat it came from"
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 #: A word no other fact, file header or SQLite page will ever hold, so
 #: finding it in the raw bytes can only mean the erased words survived.
@@ -64,6 +65,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Emb(M.Embedder):
@@ -348,8 +357,8 @@ def t_the_vector_goes():
     check("backfill never embeds the marker", st.backfill_embeddings() == 0
           and st.get(fid)["embedded"] == 0)
     if not st._vec_ok:
-        return check("SKIP - sqlite-vec is not installed here, so there is no vector table "
-                     "(the owner's PC has it; the DELETE is the same line edit() uses)", True)
+        return skip("sqlite-vec is not installed here, so there is no vector table "
+                    "(the owner's PC has it; the DELETE is the same line edit() uses)")
     with closing(st._connect()) as c:
         n = c.execute("SELECT COUNT(*) FROM facts_vec WHERE fact_id=?", (fid,)).fetchone()[0]
     check("its meaning vector is deleted", n == 0, n)
@@ -464,7 +473,7 @@ def t_the_lists_show_it_as_erased():
     try:
         import jarvis_auto_learn as A
     except Exception as exc:
-        return check(f"SKIP - jarvis_auto_learn.py not importable here ({type(exc).__name__})", True)
+        return skip(f"jarvis_auto_learn.py not importable here ({type(exc).__name__})")
     fw = sys.modules.get("jarvis_framework")
     if fw is not None:
         fw.CONFIG_DIR = _TMP
@@ -586,7 +595,7 @@ def t_the_patch_applies_forwards_and_backwards():
     import _stack
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     order = _stack.order()
     at = order.index("memory-erase.patch")
     text, log = _stack.stand_in("jarvis_hud.py", order[:at])
@@ -617,7 +626,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
