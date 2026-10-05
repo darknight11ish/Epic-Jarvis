@@ -214,6 +214,9 @@ fn main() {
             // "PC help" (JARVIS-API section 84): five plain answers about
             // this PC, read-only. Settings window only.
             "get_pc_help",
+    "get_tutorials",
+    "mark_tutorial",
+    "get_faq",
             // Settings' "Web search" (backend/web-search.patch): the five
             // providers and their "why" lines, ONE change at a time (turning
             // "Ask before every web search" off raises a card on the PC), a
