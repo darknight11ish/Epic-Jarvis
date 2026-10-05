@@ -1956,6 +1956,36 @@ object JarvisRuntime {
      */
     suspend fun pcHelp(): PcHelp.Read = PcHelp.readOf(api.pcHelp())
 
+    // -------------------------------------------------------- tutorials ----
+
+    /**
+     * Reads `/api/tutorials` once ([Tutorials]): one catalogue for both apps and
+     * where the owner has read to. Nothing is kept here - the screen that asked
+     * holds it and drops it when it closes. A read, so not held on a stale link.
+     */
+    suspend fun tutorials(): Tutorials.Read = Tutorials.readOf(api.tutorials())
+
+    /**
+     * Reads `/api/faq` once: the questions and answers, in the PC's own order.
+     * A read, so not held on a stale link.
+     */
+    suspend fun faq(): List<Tutorials.Question>? =
+        when (val answer = api.faq()) {
+            is ApiResult.Ok -> Tutorials.parseFaq(answer.value)
+            is ApiResult.Failed -> null
+        }
+
+    /**
+     * Records where the owner has read to ([Tutorials.progressBody]). NO card
+     * and NOT held while the event stream is stale: this is the owner marking
+     * their own reading and it acts on nothing. Answers whether the PC took it,
+     * so the screen can say so rather than pretending.
+     */
+    suspend fun markTutorial(id: String, at: Int, state: String = "in_progress"): Boolean {
+        val body = Tutorials.progressBody(id, at, state).toString()
+        return api.markTutorial(body) is ApiResult.Ok
+    }
+
     // --------------------------------------------------------- hardware ----
 
     /** Re-reads `/api/hardware`. Reads only; a failed read is said in words. */

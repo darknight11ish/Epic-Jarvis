@@ -204,4 +204,36 @@ object Tutorials {
                 "step" to JsonPrimitive(at),
             )
         )
+
+    /**
+     * The PC's answer as the screen's own state. A 404 or a 501 is not a
+     * failure to shout about: it is an older backend, and the screen says so in
+     * words (UPDATE) instead of showing a status number.
+     */
+    fun readOf(result: ApiResult<JsonObject>): Read = when (result) {
+        is ApiResult.Ok -> {
+            val obj = result.value
+            if ((obj["available"] as? JsonPrimitive)?.booleanOrNull == false) {
+                Read.OlderBackend
+            } else {
+                parse(obj)?.let { Read.Loaded(it) }
+                    ?: Read.Failed("Your PC answered, but not in a shape this screen can read.")
+            }
+        }
+        is ApiResult.Failed -> when (val e = result.error) {
+            ApiError.NotFound, ApiError.NotAvailable -> Read.OlderBackend
+            // The plain words both apps use (PlainErrors): what happened, then
+            // what to do - never the raw error or a status number.
+            else -> Read.Failed(PlainErrors.forApiError(e).text)
+        }
+    }
+
+    /** The line under the panel, or null when the catalogue says it all. */
+    fun readLine(read: Read): String? = when (read) {
+        Read.NotAsked -> null
+        Read.Loading -> "Asking your PC…"
+        is Read.Loaded -> null
+        Read.OlderBackend -> UPDATE
+        is Read.Failed -> read.reason
+    }
 }
