@@ -129,6 +129,7 @@ everyday quick wins)
 """
 from __future__ import annotations
 
+import atexit
 import hashlib
 import json
 import os
@@ -1868,6 +1869,60 @@ def _tz_name(now: float) -> str:
 _SCHED: Optional[Scheduler] = None
 _SCHED_LOCK = threading.Lock()
 
+#: How long, at exit, to wait for the scheduler's loop and its after-start
+#: jobs to notice and stop. Bounded on purpose: an after-start job can be
+#: waiting on something this PC has switched off (a plug-in program, a
+#: window), and a process that will not exit is worse than the risk below.
+EXIT_JOIN_SECONDS = 2.0
+
+#: The after-start jobs that are running right now, so exit can wait for them
+#: (see `_on_exit`). Nothing else reads it.
+_AFTER_START_RUNNING: list = []
+
+
+def _on_exit() -> None:
+    """Stop this process's own threads before the interpreter tears itself
+    down, and wait - briefly - for them to finish.
+
+    WHY. The scheduler's loop and an after-start job are daemon threads: the
+    interpreter exits without waiting for them, so one can be inside a
+    `sqlite3` call (or anywhere else in a C extension) when the process is
+    already going away. A test suite that starts the scheduler and simply
+    ends - `test_find_phone.py` does, through `jarvis_quick.answer()` - then
+    dies at teardown with the C++ runtime's "terminate called without an
+    active exception" and SIGABRT, after every one of its checks has already
+    printed "ok". That is the unexplained one-in-four flake recorded in
+    docs/HANDOFF-2026-10-05-tutorials-and-ci.md section 2.2, and it is a
+    property of this module: it is the part that starts threads and never
+    stopped them.
+
+    This is not a way of hiding an error: nothing is caught and nothing is
+    suppressed. It stops the loop the way `Scheduler.stop()` and
+    `test_briefing.py` already do, it runs after the interpreter's own
+    `threading._shutdown()` (which only waits for non-daemon threads), and it
+    does nothing at all when the scheduler was never started (the usual case
+    in a suite).
+
+    Safe at exit: `Scheduler.stop()` only sets an Event, wakes the loop and
+    joins it. Nothing here calls into sqlite or prints.
+    """
+    sched = _SCHED
+    if sched is not None:
+        try:
+            sched.stop(EXIT_JOIN_SECONDS)
+        except Exception:
+            pass
+    with _SCHED_LOCK:
+        running = list(_AFTER_START_RUNNING)
+    for t in running:
+        if t.is_alive():
+            try:
+                t.join(EXIT_JOIN_SECONDS)
+            except Exception:
+                pass
+
+
+atexit.register(_on_exit)
 
 
 #: Called once, on their own thread, after the scheduler first starts in
@@ -1883,8 +1938,24 @@ def after_start(fn: Callable[[], None]) -> None:
     thread, when it already has). Nothing it raises reaches anyone."""
     _AFTER_START.append(fn)
     if _SCHED is not None and _SCHED.running:
-        threading.Thread(target=lambda: _safe(lambda _j: fn(), ""), daemon=True,
-                         name="jarvis-schedule-after-start").start()
+        _start_after_start(fn)
+
+
+def _start_after_start(fn: Callable[[], None]) -> None:
+    """One after-start job on its own thread, remembered until it has
+    finished so exit can wait for it (`_on_exit`)."""
+    def run() -> None:
+        try:
+            _safe(lambda _j: fn(), "")
+        finally:
+            with _SCHED_LOCK:
+                if t in _AFTER_START_RUNNING:
+                    _AFTER_START_RUNNING.remove(t)
+
+    t = threading.Thread(target=run, daemon=True, name="jarvis-schedule-after-start")
+    with _SCHED_LOCK:
+        _AFTER_START_RUNNING.append(t)
+    t.start()
 
 
 def get() -> Scheduler:
@@ -1902,8 +1973,7 @@ def get() -> Scheduler:
     s.start()
     if first:
         for fn in list(_AFTER_START):
-            threading.Thread(target=lambda fn=fn: _safe(lambda _j: fn(), ""), daemon=True,
-                             name="jarvis-schedule-after-start").start()
+            _start_after_start(fn)
     return s
 
 

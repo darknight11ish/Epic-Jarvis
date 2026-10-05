@@ -20,7 +20,11 @@ Runs anywhere; the event bus is a list here. What it proves:
 from __future__ import annotations
 
 import ast
+import os
+import subprocess
 import sys
+import threading
+import time
 import traceback
 from pathlib import Path
 
@@ -29,7 +33,6 @@ sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 
 require_shipped("jarvis_find_phone.py", "jarvis_quick.py")
-import os  # noqa: E402
 import tempfile  # noqa: E402
 _TMP = tempfile.mkdtemp(prefix="jarvis-find-phone-")
 os.environ["JARVIS_SCHEDULE_DB"] = os.path.join(_TMP, "schedule.db")
@@ -139,9 +142,71 @@ def t_never_a_card_by_construction():
     check("... nor opens a socket", "socket" not in names and "urllib" not in src)
 
 
+def t_the_threads_it_starts_are_stopped_before_the_process_ends():
+    """The scheduler's loop and its after-start jobs are daemon threads, and
+    the interpreter exits without waiting for them. A suite that asks a fast
+    question - `Q.answer("ring my phone")` below runs a real scheduler, because
+    jarvis_quick.answer() calls jarvis_schedule.get() - then ends with the loop
+    inside a `sqlite3` call, which is the SIGABRT this suite produced about one
+    run in four on Ubuntu ("terminate called without an active exception",
+    docs/HANDOFF-2026-10-05-tutorials-and-ci.md section 2.2), after all 28
+    checks had passed.
+
+    So jarvis_schedule stops its own threads at exit (`_on_exit`). This checks
+    it really does - the loop is stopped and waited for, a job of its is waited
+    for, and the hook is the one the process itself runs. Nothing is suppressed
+    and nothing is exited early; the loop is asked to stop exactly as
+    test_briefing.py already asks it."""
+    import jarvis_schedule as S
+
+    S.get()                                   # what Q.answer() did above
+    check("the scheduler's own loop is running",
+          S._SCHED is not None and S._SCHED.running)
+    # A job that is really doing something: exit must WAIT for it, up to
+    # EXIT_JOIN_SECONDS, instead of walking away from it - that wait is the
+    # thing that stops a thread being inside sqlite while the interpreter
+    # finalizes. A job that never finishes is a real job too (one waiting on a
+    # plug-in program); this one does finish, on purpose.
+    ran = []
+    S.after_start(lambda: (ran.append(time.time()), time.sleep(0.6)))
+    S._on_exit()                              # the hook the process runs itself
+    check("after that hook, the loop has stopped", not S._SCHED.running)
+    check("... and its own loop is waited for, not left behind",
+          not [t for t in threading.enumerate() if t.name == "jarvis-schedule"],
+          repr([t.name for t in threading.enumerate()]))
+    check("... and a job of its was really waited for, not abandoned",
+          bool(ran) and time.time() - ran[0] >= 0.6, repr(ran))
+    check("and that hook really is what the process runs at exit",
+          _exit_hook_is_registered(), "atexit did not run jarvis_schedule._on_exit")
+
+
+def _exit_hook_is_registered() -> bool:
+    """Start the scheduler in a fresh interpreter, then run the exit handlers
+    the way the interpreter itself will - `atexit._run_exitfuncs()`. The
+    question is not "did someone write the line" but "does the process end
+    with no thread of jarvis_schedule's still running". Removing the
+    registration is what makes this check go red."""
+    child = (
+        "import atexit, os, sys, threading\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "os.environ['JARVIS_SCHEDULE_DB'] = sys.argv[2]\n"
+        "os.environ['OPENJARVIS_CONFIG_DIR'] = sys.argv[3]\n"
+        "import jarvis_schedule as S\n"
+        "S.get()\n"
+        "atexit._run_exitfuncs()\n"
+        "left = [t.name for t in threading.enumerate()\n"
+        "        if t.name.startswith('jarvis-schedule')]\n"
+        "print('LEFT', left)\n")
+    r = subprocess.run([sys.executable, "-c", child, str(HERE), os.environ["JARVIS_SCHEDULE_DB"],
+                        os.environ["OPENJARVIS_CONFIG_DIR"]],
+                       capture_output=True, text=True, timeout=90)
+    return r.returncode == 0 and "LEFT []" in r.stdout
+
+
 if __name__ == "__main__":
     for fn in (t_one_event_with_no_words, t_stop, t_honest_about_which_phone, t_the_fast_path,
-               t_never_a_card_by_construction):
+               t_never_a_card_by_construction,
+               t_the_threads_it_starts_are_stopped_before_the_process_ends):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()
