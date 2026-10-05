@@ -41,11 +41,20 @@ CASES = HERE.parent / "jarvis-desktop" / "tests" / "bind-address-cases.json"
 LIFTED = ("_binds_every_interface", "_refuse_every_interface", "_loopback_companion")
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 _SOURCE = None
@@ -131,7 +140,7 @@ class Echo(BaseHTTPRequestHandler):
 def t_the_patch_applies_over_loopback_too():
     ok, out = _skeleton.rehearse(PATCH.name, "token-file.patch", "loopback-too.patch")
     if ok is None:
-        return check("SKIP - " + out, True)
+        return skip(out)
     check(f"{PATCH.name} applies (and reverses) over what loopback-too wrote", ok is True, out)
     if ok:
         # The rehearsal file repeats context lines across hunks, so read the
@@ -159,7 +168,7 @@ def t_the_table_is_true_and_every_wildcard_is_refused():
     for spelling in _cases()["every_interface"]:
         real = _os_binds_every_interface(spelling)
         if real is None:
-            check(f"SKIP - this machine cannot bind {spelling!r} to ask the OS", True)
+            skip(f"this machine cannot bind {spelling!r} to ask the OS")
         else:
             asked += 1
             check(f"the OS really binds every interface for {spelling!r}", real is True)
@@ -195,7 +204,7 @@ def t_no_second_listener_for_any_wildcard_spelling():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = SRC.read_text(encoding="utf-8")
     if "_refuse_every_interface" not in src:
         return check("bind-wildcard.patch is applied to jarvis_hud.py", False,
@@ -222,7 +231,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

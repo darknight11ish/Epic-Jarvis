@@ -30,6 +30,7 @@ require_shipped("jarvis_chat_log.py", "jarvis_agent.py")
 import jarvis_chat_log as H  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 KEY = bytes(range(32))
 SENTENCE = "my sister's birthday is on the ninth of March"
 
@@ -37,6 +38,14 @@ SENTENCE = "my sister's birthday is on the ninth of March"
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -244,7 +253,7 @@ def t_credential_manager_key():
             check("off Windows: KeyUnavailable in words, not a crash",
                   "Credential Manager" in str(exc), str(exc))
     except ImportError:
-        check("SKIP - jarvis_token_store not importable", True)
+        skip("jarvis_token_store not importable")
 
 
 def t_only_the_newest_user_turn():
@@ -1375,7 +1384,7 @@ def t_the_patch():
 def t_the_patch_applies_forwards_and_backwards():
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     import _stack
     order = _stack.order()
     before = order[:order.index("chat-history.patch")]
@@ -1423,7 +1432,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

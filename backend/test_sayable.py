@@ -47,11 +47,20 @@ import jarvis_schedule as SCHED  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class _Sched:
@@ -208,7 +217,7 @@ class _Handler:
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, why, hud = _rehearse()
     check("sayable.patch applies to what the earlier patches wrote, and reverses", ok, why)
     if not ok:
@@ -285,7 +294,7 @@ def main():
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     return 1 if FAILED else 0

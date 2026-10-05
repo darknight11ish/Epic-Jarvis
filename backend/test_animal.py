@@ -75,12 +75,21 @@ AN.publish = lambda kind, data: RUNG.append((kind, data))
 SK.publish = lambda kind, data: RUNG.append((kind, data))
 
 FAILED, PASSED = [], []
+SKIPPED = []
 PC, PHONE = "127.0.0.1", "100.100.5.9"
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def fresh():
@@ -442,7 +451,7 @@ def t_install_wraps_the_route():
 def t_the_patch():
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     order = _stack.order()
     check("animal.patch is in apply-patches.ps1's list, after sky.patch",
           "animal.patch" in order and order.index("animal.patch") > order.index("sky.patch"))
@@ -512,7 +521,7 @@ if __name__ == "__main__":
             FAILED.append(fn.__name__)
             traceback.print_exc()
     shutil.rmtree(TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("\nFAILED:")
         for f in FAILED:

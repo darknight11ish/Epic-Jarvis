@@ -27,11 +27,20 @@ require_shipped("jarvis_past.py")
 import jarvis_past as P  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def use_tz(name) -> bool:
@@ -64,7 +73,7 @@ def t_last_week_after_a_clock_change():
             ("Europe/London", at(2026, 3, 29), (2026, 3, 16, 0, 0), (2026, 3, 23, 0, 0)),
             ("UTC", at(2026, 9, 27), (2026, 9, 14, 0, 0), (2026, 9, 21, 0, 0))):
         if not use_tz(zone):
-            check(f"SKIPPED ({zone}: this system has no time.tzset)", True)
+            skip(f"{zone}: this system has no time.tzset")
             continue
         got = P.when("what did we do last week", now_at)
         check(f"{zone} {wall(now_at)[:3]}: 'last week' is Monday 00:00 to Monday 00:00",
@@ -83,7 +92,7 @@ def main() -> int:
             os.environ["TZ"] = orig
         if hasattr(time, "tzset"):
             time.tzset()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

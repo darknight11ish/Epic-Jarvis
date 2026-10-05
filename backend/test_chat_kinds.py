@@ -41,6 +41,7 @@ import jarvis_chat_log as H  # noqa: E402
 
 KEY = bytes(range(32))
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-chat-kinds-"))
 _N = [0]
 
@@ -49,6 +50,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -83,7 +92,7 @@ def turn(log, cid, words, *, live=False, provenance="typed", answer="Sure.", cri
 
 def t_kinds_on_new_rows():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-plain-0001", "what is the weather")
     turn(log, "conv-live-00002", "tell me a joke", live=True, provenance="voice")
@@ -110,7 +119,7 @@ def t_kinds_on_new_rows():
 
 def t_the_route_filters_by_kind():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     H.use(log)
     try:
@@ -129,7 +138,7 @@ def t_the_route_filters_by_kind():
 
 def t_migration():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-old-00005", "an old chat")
     log.record_support("sup-old-000006", "Support: refund",
@@ -160,7 +169,7 @@ def t_migration():
 
 def t_chatbot_and_compare_records():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     got = log.record_chatbot("chat_0123456789ab", "Gemini: best tent",
                              [{"provenance": "chatbot_note", "text": "Your goal: best tent"},
@@ -198,7 +207,7 @@ def t_chatbot_and_compare_records():
 
 def t_crisis_title():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-crisis-007", "I feel like I can't go on", crisis=True)
     rows = {c["id"]: c for c in log.list()["conversations"]}
@@ -229,7 +238,7 @@ def t_a_crisis_chat_is_not_continued():
     """The second chat audit (2026-09-28): a chat titled "A difficult moment"
     is kept but not carried on - its words would go back to the model."""
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-crisis-101", "I feel like I can't go on", crisis=True)
     conv = log.get("conv-crisis-101")
@@ -244,7 +253,7 @@ def t_a_crisis_chat_is_not_continued():
 
 def t_title_prefers_the_owners_words():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-share-0010", "what does this say?", device="phone",
          extra=[{"role": "user", "content": "Dear customer, your parcel...",
@@ -256,7 +265,7 @@ def t_title_prefers_the_owners_words():
 
 def t_support_is_not_swept():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     clock = Clock()
     log = new_log(clock)
     turn(log, "conv-old-00011", "an old chat")
@@ -285,7 +294,7 @@ def t_support_is_not_swept():
 
 def t_take_out_keeps_the_kind():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-live-00013", "a live chat", live=True, provenance="voice")
     held = log.take_out(["conv-live-00013"])
@@ -301,7 +310,7 @@ def t_take_out_keeps_the_kind():
 
 def t_the_live_mark_is_the_first_message():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-mixed-0014", "typed first")
     turn(log, "conv-mixed-0014", "then live", live=True, provenance="voice",
@@ -314,7 +323,7 @@ def t_the_live_mark_is_the_first_message():
 
 def t_search_rows_carry_the_kind():
     if H.AESGCM is None:
-        return check("SKIP - the cryptography package is not installed", True)
+        return skip("the cryptography package is not installed")
     log = new_log()
     turn(log, "conv-live-00015", "pancakes recipe please", live=True, provenance="voice")
     got = log.search("pancakes")
@@ -330,7 +339,7 @@ def t_chatbot_keeps_its_conversation():
         import jarvis_chatbot as CB
         import jarvis_chatbot_compare as CC
     except Exception as exc:
-        return check(f"SKIP - the chatbot modules do not import ({type(exc).__name__})", True)
+        return skip(f"the chatbot modules do not import ({type(exc).__name__})")
     kept = []
     d = CB.Deps(keep_history=lambda cid, title, rows, kind: kept.append(
         (cid, title, rows, kind)) or {"recorded": True})
@@ -396,7 +405,7 @@ if __name__ == "__main__":
                     traceback.print_exc()
     finally:
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

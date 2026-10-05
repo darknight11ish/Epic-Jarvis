@@ -70,6 +70,7 @@ import jarvis_wiki as W  # noqa: E402
 import gen_big_model_cases as G  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 KEY = G.KEY
 #: Everything printed while the tests run, to grep for the key at the end.
 CAPTURED = io.StringIO()
@@ -79,6 +80,18 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     line = f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else "")
     sys.__stdout__.write(line + "\n")
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)
+
+    Written past the capture, like check() above: __main__ redirects stdout
+    into CAPTURED for the whole run, so a print() here would be kept for the
+    key-grep and never seen."""
+    SKIPPED.append(why)
+    sys.__stdout__.write(f"skip  {why}\n")
 
 
 def no_key(*things) -> bool:
@@ -1054,7 +1067,7 @@ def _rehearse():
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, err, before, after, gb, ga = _rehearse()
     check("big-model.patch applies after wiki.patch to what the earlier patches wrote, "
           "reverses, and wiki and second-card still reverse after it", ok, err)
@@ -1148,7 +1161,7 @@ def t_one_line_powershell():
           script and "\n" not in script and "??" not in script and "Get-PhysicalDisk" in script)
     pwsh = "/opt/pwsh/pwsh"
     if not os.path.exists(pwsh):
-        return check("SKIP - no PowerShell here to parse it", True)
+        return skip("no PowerShell here to parse it")
     probe = script.replace("{letter}", "C").replace("{{", "{").replace("}}", "}")
     r = subprocess.run([pwsh, "-NoProfile", "-Command",
                         "$e=$null; [System.Management.Automation.Language.Parser]::ParseInput("
@@ -1172,7 +1185,7 @@ def t_the_fixture():
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - no jarvis_hud.py here; the rehearsal above is the proof", True)
+        return skip("no jarvis_hud.py here; the rehearsal above is the proof")
     s = (BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
     check("the backend's jarvis_hud.py has /api/big-model (big-model.patch applied)",
           '"/api/big-model"' in s)
@@ -1193,7 +1206,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc(file=sys.__stdout__)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

@@ -68,12 +68,21 @@ import jarvis_quick as Q  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-schedule-"))
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Clock:
@@ -137,7 +146,7 @@ def wall(t):
 
 def t_next_run_in_london_across_both_clock_changes():
     if not use_tz("Europe/London"):
-        return check("SKIP - no time.tzset here (Windows); the rules are the same", True)
+        return skip("no time.tzset here (Windows); the rules are the same")
     rule = S.check_rule({"every": "day", "at": "07:00"})
     # Clocks go forward at 01:00 on Sunday 29 March 2026.
     sat = local(2026, 3, 28, 7, 0)
@@ -167,7 +176,7 @@ def t_next_run_in_london_across_both_clock_changes():
 
 def t_next_run_in_new_york():
     if not use_tz("America/New_York"):
-        return check("SKIP - no time.tzset here", True)
+        return skip("no time.tzset here")
     rule = S.check_rule({"every": "weekday", "at": "07:30"})
     fri = local(2026, 3, 6, 7, 30)          # Friday; clocks go forward Sun 8 March
     mon = S.next_run(rule, fri)
@@ -796,7 +805,7 @@ class _Handler:
 
 def t_no_model_on_a_match():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     use_tz("Europe/London")
     hud, log = _patched("jarvis_hud.py")
     check("the whole stack, schedule.patch included, builds", hud is not None, log)
@@ -993,7 +1002,7 @@ def _rehearse():
 
 def t_the_patch():
     if not shutil.which("git"):
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     ok, why, before, after = _rehearse()
     check("schedule.patch applies to what the earlier patches wrote, and reverses", ok, why)
     if not ok:
@@ -1119,7 +1128,7 @@ def main():
             time.tzset()
         S._audit = _real_audit
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

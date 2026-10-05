@@ -32,6 +32,7 @@ sys.path.insert(0, str(HERE))
 import _stack  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 #: suite -> (the functions it lifts from jarvis_hud.py, a line of main() it reads,
 #: what it prints when it used the installed file)
@@ -64,6 +65,14 @@ class Handler:
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _main_from(lines: list) -> str:
@@ -116,10 +125,43 @@ def t_the_stack_builds():
               f"original had to be filled in)")
 
 
+def t_the_stand_in_invents_no_more_than_it_used_to():
+    """The ratchet (backend/_stack.py's RATCHET).
+
+    A hunk whose pre-image is not in the stand-in gets that pre-image pasted in
+    for it, and then applies - so a patch whose context has drifted looks fine,
+    and every suite reading the stand-in proves nothing about the owner's real
+    file. That is the shape of several bugs an audit found (2026-10-04). The
+    number of such hunks is pinned per file and may only go DOWN.
+
+    This FAILS when one goes up. That is not automatically a bug: a new patch
+    whose context is text only the owner's PC holds raises the count honestly.
+    Either way, look at which patch needed it, decide, then move the pin by
+    hand in _stack.py's RATCHET. It never fails for going down."""
+    for target, pinned in sorted(_stack.RATCHET.items()):
+        st = _stack.materialised(target)
+        if not st.get("hunks"):
+            return skip(f"{target}: the stand-in could not be built here (no git)")
+        got = st["materialised"]
+        check(f"{target}: {got} hunk(s) invented a pre-image, pinned at {pinned}",
+              got <= pinned,
+              f"{got} now, {pinned} pinned - it went UP by {got - pinned}. Which patch "
+              f"needed it: {sorted(st['by_patch'].items(), key=lambda kv: -kv[1])}. Look "
+              f"at whether that patch's context is text an earlier patch should have "
+              f"written (a real drift - fix the patch) or text only the owner's PC holds "
+              f"(honest - raise _stack.py's RATCHET['{target}']), then say which in the "
+              f"commit message.")
+        if got < pinned:
+            print(f"(note: {target} is {pinned - got} lower than the pin ({got} of "
+                  f"{pinned}) - _stack.py's RATCHET can be tightened to {got})")
+
+
 def t_each_installed_file_suite_passes_on_the_stand_in():
     text, log = _stack.stand_in("jarvis_hud.py")
     if text is None:
-        return check("SKIP - " + log[-1], "git is not installed" in log[-1])
+        if "git is not installed" in log[-1]:
+            return skip("git is not installed, so the whole stack cannot be built here")
+        return check("the stack stand-in could not be built", False, log[-1])
     for suite, (names, needle, said) in SUITES.items():
         module, why = build(text, names, needle)
         check(f"{suite}: a stand-in module is made from the stack", module is not None, why)
@@ -148,7 +190,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
