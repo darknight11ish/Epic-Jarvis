@@ -1060,6 +1060,15 @@ $PATCHES = @(
     # One hunk, in action_for_tool, which no other patch touches - so it can go
     # last, like every new patch, with no ordering constraint.
     'gate-action-name.patch'
+    # "Tutorials and the FAQ" (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md,
+    # JARVIS-API section 114): GET /api/tutorials, POST /api/tutorials/progress and GET
+    # /api/faq. ONE hunk in jarvis_hud.py, an install block right after retirement.patch's
+    # own, so it goes after it. One catalogue and the owner's reading progress, kept on the
+    # PC and shared by both apps: it writes its own one JSON file in the config folder,
+    # raises no card and calls nothing out. Needs jarvis_tutorials.py copied in (it is in
+    # SHIPPED below); without it, or on any error, the banner says so and the routes are
+    # simply not there.
+    'tutorials.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1225,6 +1234,8 @@ $SHIPPED = @(
     'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
     # --- "PC help" (2026-09-28, no patch of its own) ---
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
+    # --- Tutorials and the FAQ (2026-10-05) ---
+    'jarvis_tutorials.py'        # the owner's own request: one catalogue for both apps and the reading progress kept on the PC (tutorials.patch); no gate line, no card, no tool
     # --- "Smarter answers" (2026-09-28, no patch of its own) ---
     'jarvis_claims.py'           # "I've done it" when nothing was done: one plain line at the end of the answer; jarvis_agent.py calls it
     # --- "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28) ---

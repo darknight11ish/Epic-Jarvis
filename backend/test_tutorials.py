@@ -212,16 +212,26 @@ def t_no_card_no_network_no_tool():
     imported = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
-            imported.update(a.name.split(".")[0] for a in node.names)
+            imported.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module:
-            imported.add(node.module.split(".")[0])
+            imported.add(node.module)
+    # `urllib.parse` is string parsing and is allowed; `urllib.request` is a
+    # network call and is not. The difference matters, so they are separate.
     for banned, why in (("jarvis_gate", "it must never raise a card"),
                         ("jarvis_agent", "it must not be offered to the model as a tool"),
-                        ("urllib", "it must not make a network call"),
+                        ("urllib.request", "it must not make a network call"),
+                        ("urllib.error", "it must not make a network call"),
+                        ("http.client", "it must not make a network call"),
                         ("requests", "it must not make a network call"),
                         ("socket", "it must not open a socket"),
                         ("subprocess", "it must not run anything")):
-        check(f"{banned} is not imported: {why}", banned not in imported, sorted(imported))
+        check(f"{banned} is not imported: {why}",
+              not any(m == banned or m.startswith(banned + ".") for m in imported),
+              sorted(imported))
+    check("it parses URLs with the string parser, and nothing else from urllib",
+          "urllib.parse" in imported
+          and not [m for m in imported if m.startswith("urllib.") and m != "urllib.parse"],
+          sorted(imported))
     check("nothing in it can write the toml: its one path is its own file, and "
           "the file the route can reach is that one",
           T._state_path().name == T.PROGRESS_NAME
@@ -259,6 +269,95 @@ def t_the_faq_is_worth_shipping():
                   for q in questions), questions[:3])
 
 
+class _FakeHandler:
+    """A stand-in for jarvis_hud.py's own handler: just enough for install().
+
+    The owner's jarvis_hud.py is not in this repository, so this is the only
+    place the wiring can be proved from: that install() wraps the handler,
+    answers its own two GET routes and its one POST, leaves every other request
+    to the original, and still refuses a cross-origin request or a bad token
+    BEFORE looking at anything of ours.
+    """
+
+    def __init__(self, path, *, origin=True, token=True, body=b"{}"):
+        self.path, self.sent, self.passed_through = path, [], []
+        self._origin, self._token, self._body = origin, token, body
+
+    def _send(self, code, body):
+        self.sent.append((code, body))
+        return code
+
+    def do_GET(self):
+        self.passed_through.append("GET")
+        return "original GET"
+
+    def do_POST(self):
+        self.passed_through.append("POST")
+        return "original POST"
+
+
+def _wired(path, *, origin=True, token=True, body=b"{}"):
+    """A handler with install() applied, and what it answered."""
+    _records()
+    cls = type("H", (_FakeHandler,), {})
+    banner = T.install(cls, origin_ok=lambda self: self._origin,
+                       token_ok=lambda self: self._token,
+                       read_body=lambda self: self._body)
+    fake = cls(path, origin=origin, token=token, body=body)
+    return fake, banner, cls
+
+
+def t_the_routes_are_wired_and_guarded():
+    fake, banner, cls = _wired("/api/tutorials")
+    check("install() says what it turned on", "tutorial" in banner.lower(), banner)
+    check("it answers GET /api/tutorials itself",
+          fake.do_GET() == 200 and fake.sent[0][1].get("ok") is True, fake.sent)
+    check("with the catalogue in it", fake.sent[0][1]["tutorials"][0]["id"] == "intro")
+    check("nothing was passed through for our own route", fake.passed_through == [],
+          fake.passed_through)
+
+    fake, _b, _c = _wired("/api/faq")
+    check("it answers GET /api/faq itself",
+          fake.do_GET() == 200 and fake.sent[0][1]["count"] >= 15, fake.sent[:1])
+
+    fake, _b, _c = _wired("/api/tutorials/progress", body=json.dumps(
+        {"id": "memory", "state": "in_progress", "step": 2}).encode())
+    check("it answers POST /api/tutorials/progress itself",
+          fake.do_POST() == 200 and fake.sent[0][1]["step"] == 2, fake.sent)
+    check("and the record is really written",
+          next(i for i in T.read()["tutorials"] if i["id"] == "memory")["resume_at"] == 2)
+
+    fake, _b, _c = _wired("/api/something/else")
+    check("every other GET goes to the original handler",
+          fake.do_GET() == "original GET" and fake.sent == [], (fake.sent, fake.passed_through))
+    fake, _b, _c = _wired("/api/something/else", body=b"{}")
+    check("and every other POST does too", fake.do_POST() == "original POST", fake.sent)
+
+    fake, _b, _c = _wired("/api/tutorials", origin=False)
+    check("a cross-origin request is refused with 403, before ours runs",
+          fake.do_GET() is None and fake.sent and fake.sent[0][0] == 403
+          and "ok" not in fake.sent[0][1], fake.sent)
+    fake, _b, _c = _wired("/api/tutorials", token=False)
+    check("a bad token is refused with 401",
+          fake.do_GET() is None and fake.sent[0][0] == 401
+          and "ok" not in fake.sent[0][1], fake.sent)
+
+    fake, _b, _c = _wired("/api/tutorials/progress", body=b"{not json")
+    check("a body that is not JSON is answered with a status, not a crash",
+          fake.do_POST() == 400, fake.sent)
+
+    _records()
+    cls2 = type("H2", (_FakeHandler,), {})
+    T.install(cls2, origin_ok=lambda self: True, token_ok=lambda self: True,
+              read_body=lambda self: b"{}")
+    second = T.install(cls2, origin_ok=lambda self: True, token_ok=lambda self: True,
+                       read_body=lambda self: b"{}")
+    check("installing twice says so rather than wrapping twice",
+          "already on" in second, second)
+    check("and the routes still answer once, not twice",
+          cls2("/api/tutorials").do_GET() == 200)
+
+
 if __name__ == "__main__":
     for fn in (t_the_catalogue_is_well_formed, t_both_sections_have_tutorials,
                t_nothing_is_done_before_it_is_read,
@@ -269,6 +368,7 @@ if __name__ == "__main__":
                t_bad_input_is_refused_and_nothing_raises,
                t_only_its_own_file_is_written,
                t_no_card_no_network_no_tool,
+               t_the_routes_are_wired_and_guarded,
                t_the_routes_are_the_ones_the_design_names,
                t_the_faq_is_worth_shipping):
         print(f"\n--- {fn.__name__} ---")

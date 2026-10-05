@@ -36,6 +36,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit  # parsing a path, not a network call
 
 try:  # the framework module, when it is there (the real backend, not a suite)
     import jarvis_framework as fw
@@ -46,6 +47,12 @@ PATH = "/api/tutorials"
 PROGRESS_PATH = "/api/tutorials/progress"
 FAQ_PATH = "/api/faq"
 PROGRESS_NAME = "tutorials.json"
+
+#: What the install block below answers. Everything else goes to the server's own
+#: handler untouched, which is what keeps this module from standing in front of
+#: anything else.
+_ROUTES_GET = (PATH, FAQ_PATH)
+_ROUTES_POST = (PROGRESS_PATH,)
 
 #: The states a record may hold. No record at all means "not started", which is
 #: not the same as skipped - a tutorial nobody opened was not turned down.
@@ -585,3 +592,67 @@ def handle_post(payload: Optional[dict] = None) -> tuple:
         return mark(body.get("id", ""), body.get("state", ""), body.get("step", 0))
     except Exception as exc:
         return 500, {"ok": False, "error": type(exc).__name__}
+
+
+def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+    """Wrap do_GET and do_POST so the tutorial and FAQ routes are answered here,
+    after the server's own origin and token checks. Every other request goes
+    straight to the original. Returns the banner line.
+
+    Called from jarvis_hud.py by `tutorials.patch`, in the same shape as
+    jarvis_retirement.install and the other route-adding modules.
+    """
+    get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    if getattr(post0, "_jarvis_tutorials", False):
+        return "  tutorials  Tutorials and the FAQ (already on)"
+
+    def _allowed(self) -> bool:
+        try:
+            if not origin_ok(self):
+                self._send(403, {"error": "cross-origin request refused"})
+                return False
+            if not token_ok(self):
+                self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+                return False
+        except Exception:
+            self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            return False
+        return True
+
+    def do_GET(self):
+        split = urlsplit(str(getattr(self, "path", "") or ""))
+        if split.path.rstrip("/") not in _ROUTES_GET:
+            return get0(self)
+        if not _allowed(self):
+            return None
+        try:
+            if split.path.rstrip("/") == FAQ_PATH:
+                code, out = 200, faq()
+            else:
+                code, out = handle_get(split.query)
+        except Exception as exc:
+            code, out = 503, {"ok": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    def do_POST(self):
+        split = urlsplit(str(getattr(self, "path", "") or ""))
+        if split.path.rstrip("/") not in _ROUTES_POST:
+            return post0(self)
+        if not _allowed(self):
+            return None
+        try:
+            body = json.loads(read_body(self) or b"{}")
+        except Exception:
+            body = {}
+        try:
+            code, out = handle_post(body)
+        except Exception as exc:
+            code, out = 500, {"ok": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    do_GET._jarvis_tutorials = True      # so a second install() is a no-op
+    do_POST._jarvis_tutorials = True
+    handler_cls.do_GET = do_GET
+    handler_cls.do_POST = do_POST
+    return ("  tutorials  Tutorials and the FAQ "
+            "(GET /api/tutorials, POST /api/tutorials/progress, GET /api/faq)")
