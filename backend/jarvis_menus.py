@@ -291,6 +291,13 @@ MENUS: tuple = (
        (DESKTOP,), area="brain", view="faculties", names=("model memory",)),
     _m("brain.model.pc-help", "PC help", "Five plain answers about the PC.", (PHONE,),
        area="brain", view="faculties", names=("pc help",)),
+    # Tutorials and the FAQ (the owner's request of 2026-10-05; JARVIS-API
+    # section 114, docs/TUTORIALS-DESIGN.md). One catalogue for BOTH apps and
+    # the owner's reading progress, kept on the PC: an intro, a tutorial for
+    # each major part, and the questions and answers.
+    _m("brain.model.tutorials", "Tutorials",
+       "The intro and a tutorial for each part, and the answers to the usual questions.",
+       BOTH, area="brain", view="tutorials", names=("tutorials", "tutorial")),
 
     # ---- Brain: Work ---------------------------------------------------
     _m("brain.work.focus", "Focus session", "Start and stop a focus session.",

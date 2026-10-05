@@ -1558,6 +1558,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "brain.model.tutorials",
+    "title": "Tutorials",
+    "about": "The intro and a tutorial for each part, and the answers to the usual questions.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "brain",
+    "view": "tutorials",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "tutorials",
+      "tutorial"
+    ]
+  },
+  {
     "id": "brain.work.focus",
     "title": "Focus session",
     "about": "Start and stop a focus session.",
@@ -2482,6 +2503,8 @@ export const ALIASES = {
   "topics": "brain.memory.topics",
   "trace": "brain.now.trace",
   "trust": "brain.tab.trust",
+  "tutorial": "brain.model.tutorials",
+  "tutorials": "brain.model.tutorials",
   "undo shelf": "brain.work.undo",
   "updates": "settings.updates",
   "voice": "settings.voice",
