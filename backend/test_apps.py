@@ -150,11 +150,22 @@ def _rmtree(path):
     """shutil.rmtree that can also delete what git wrote. Git marks its object
     files READ-ONLY, and Windows refuses to unlink a read-only file - POSIX does
     not care, so a plain rmtree works in CI and raised PermissionError on the
-    owner's PC (2026-10-03). Clear the bit first, then remove."""
+    owner's PC (2026-10-03). Clear the bit first, then remove.
+
+    THE MODE MUST KEEP READ AND EXECUTE. `stat.S_IWRITE` alone is 0o200: on
+    Windows that is "not read-only", which is what this needs, but on POSIX it
+    strips a DIRECTORY's read and execute bits - so the walk that clears the
+    flag left an undeletable tree behind, every later test in the run found the
+    earlier app folders still there, and CI's "ran without crashing" checks
+    failed seventeen times in a row (2026-10-04). 0o700 is right on both:
+    writable on Windows, still listable and traversable on POSIX.
+    """
     for dirpath, dirnames, filenames in os.walk(path):
         for name in list(dirnames) + list(filenames):
+            full = os.path.join(dirpath, name)
             try:
-                os.chmod(os.path.join(dirpath, name), stat.S_IWRITE)
+                os.chmod(full, stat.S_IRWXU
+                         if os.path.isdir(full) else stat.S_IREAD | stat.S_IWRITE)
             except OSError:
                 pass
     shutil.rmtree(path, ignore_errors=True)

@@ -272,11 +272,19 @@ def create_project(name: str, kind: str, title: str = "") -> dict:
         try:
             _git(["init", "-q"], d)
             _git(["checkout", "-B", "main"], d)
+            # newline="\n" on all three: without it these are written CRLF on
+            # Windows and LF everywhere else, so the bytes git commits - and
+            # therefore the commit id the app shows - differ by platform. The
+            # contract file records that id, so one file could not be right on
+            # the owner's PC and on CI at once (2026-10-04). The repository's
+            # own policy is the same: text files are made with LF.
             (d / "README.md").write_text(f"# {title}\n\n{KINDS[kind].capitalize()}, "
-                                         "built with Jarvis.\n", encoding="utf-8")
-            (d / ".gitignore").write_text(GITIGNORE, encoding="utf-8")
+                                         "built with Jarvis.\n", encoding="utf-8",
+                                         newline="\n")
+            (d / ".gitignore").write_text(GITIGNORE, encoding="utf-8", newline="\n")
             (d / ".jarvis-app.json").write_text(
-                json.dumps({"kind": kind, "title": title}, indent=2) + "\n", encoding="utf-8")
+                json.dumps({"kind": kind, "title": title}, indent=2) + "\n",
+                encoding="utf-8", newline="\n")
             _git(["add", "-A"], d)
             _git(["commit", "-q", "-m", f"Start {title}"], d)
         except Exception:

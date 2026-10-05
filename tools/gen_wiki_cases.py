@@ -91,22 +91,30 @@ class Vault:
         if wiki:
             src = self.wiki / W.SOURCES_DIR
             src.mkdir(parents=True)
+            # newline="\n" on every file written here. Without it these are
+            # CRLF on Windows and LF on CI, and the module keeps a SHA-256 of
+            # what it read (and the fixture records the answers that come from
+            # it), so the same contract file could not be right on both
+            # platforms at once (2026-10-04). Pinning the endings is what the
+            # 2026-10-03 note below was working around one hash at a time.
             (src / "spring-meeting.md").write_text(
                 "# Spring meeting\n\nMargaret Hale was elected chair. The society will now "
-                "meet every two weeks.\n", encoding="utf-8")
+                "meet every two weeks.\n", encoding="utf-8", newline="\n")
             (src / "seed-list.txt").write_text("Beans, peas, two kinds of kale.\n",
-                                               encoding="utf-8")
+                                               encoding="utf-8", newline="\n")
             (src / "planting-dates.md").write_text("Sow broad beans in late October.\n",
-                                                   encoding="utf-8")
+                                                   encoding="utf-8", newline="\n")
             (src / "plot-map.pdf").write_bytes(b"%PDF-1.4 not read yet")
-            (src / "old-minutes.md").write_text("x " * 40000, encoding="utf-8")
+            (src / "old-minutes.md").write_text("x " * 40000, encoding="utf-8",
+                                                newline="\n")
             pages = self.wiki / W.PAGES_DIR
             pages.mkdir()
             (pages / "Allotment Society.md").write_text(
-                '---\nsources: ["seed-list.txt"]\n---\n\nMeets monthly.\n', encoding="utf-8")
+                '---\nsources: ["seed-list.txt"]\n---\n\nMeets monthly.\n', encoding="utf-8",
+                newline="\n")
             (self.wiki / W.INDEX_NAME).write_text(
                 "# Jarvis Wiki\n\n- [[Allotment Society]] - the allotment society\n",
-                encoding="utf-8")
+                encoding="utf-8", newline="\n")
         self._env = os.environ.get("JARVIS_OBSIDIAN_VAULT")
         os.environ["JARVIS_OBSIDIAN_VAULT"] = str(self.dir)
 
@@ -126,10 +134,10 @@ class Vault:
             {"version": 1, "sources": {
                 "seed-list.txt": {"sha256": sha, "added": "2026-09-20", "pages": []},
                 "planting-dates.md": {"sha256": "0" * 64, "added": "2026-09-21",
-                                      "pages": []}}}), encoding="utf-8")
+                                      "pages": []}}}), encoding="utf-8", newline="\n")
         (self.wiki / W.LOG_NAME).write_text(
             "## [2026-09-20] ingest | seed-list.txt\n\n- created [[Allotment Society]]\n",
-            encoding="utf-8")
+            encoding="utf-8", newline="\n")
 
     def close(self):
         if self._env is None:
@@ -248,8 +256,8 @@ def cases() -> dict:
         def job_failed(v):
             # The source changes while its card is up, so the write is refused.
             def gate(a, d, p):
-                (v.wiki / W.SOURCES_DIR / "spring-meeting.md").write_text("edited\n",
-                                                                         encoding="utf-8")
+                (v.wiki / W.SOURCES_DIR / "spring-meeting.md").write_text(
+                    "edited\n", encoding="utf-8", newline="\n")
                 return Verdict(True, "approved")
             return job(gate)(v)
         run("job_failed", job_failed)
