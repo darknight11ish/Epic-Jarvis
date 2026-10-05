@@ -1698,6 +1698,13 @@ if ($UsingRebuilt) {
 # temp folder with its endings forced to LF and the copy is what gets applied.
 # Nothing in the repository or the backend is rewritten. It is correct on a
 # machine where the files were already LF, so there is no case to detect.
+#
+# THE FILES THE PATCHES WRITE - the other side, and not fixed here. `git apply`
+# writes its result through git's own conversion too, so `core.autocrlf=true`
+# turns an LF patch on an LF target into a CRLF file however clean the patch
+# is. That half is pinned at the one call that writes anything (Invoke-Patch,
+# with `-c core.autocrlf=false -c core.eol=lf`); the comment there has the
+# measured bytes.
 $LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
 
@@ -2007,11 +2014,38 @@ function Invoke-Patch {
     # NOT $args - that is an automatic variable in PowerShell, and writing to
     # it inside a function is a way to lose an afternoon.
     if ($UseGit) {
+        # THE ENDINGS OF THE FILE THIS WRITES (2026-10-05). `git apply` does
+        # not write the patch's bytes: it writes them through git's own
+        # line-ending conversion, so on a machine whose `core.autocrlf` is
+        # true - this PC's system config sets exactly that - an LF target and
+        # an LF patch still land as a CRLF file. Normalising the PATCHES (see
+        # the section above) cannot help with this half: the conversion
+        # happens on the way OUT. Measured here with three lines of Python
+        # and a three-line patch, in a scratch repo with
+        # `core.autocrlf=true`: plain `git apply` left
+        # `6f 6e 65 0d 0a 54 57 4f 0d 0a 74 68 72 65 65 0d 0a` (3 CRLF,
+        # bytes=17), and the same call with the pins below left
+        # `6f 6e 65 0a 54 57 4f 0a 74 68 72 65 65 0a` (no CR at all,
+        # bytes=14). That drift is what the .gitattributes comment calls an
+        # afternoon, and on the owner's PC it would be every run.
+        #
+        # Pinned per call with -c, the way the GIT_CEILING_DIRECTORIES above
+        # is pinned per call: nothing global and nothing in a repository is
+        # changed, and nothing about which patch is chosen or in what order
+        # changes. core.autocrlf=false is the measured half. core.eol=lf is
+        # the other half of the same conversion, and it is not decoration:
+        # if the backend folder is itself a git repository then the ceiling
+        # above cannot hide its .gitattributes, and a `* text=auto` attribute
+        # with autocrlf=false still writes CRLF unless core.eol says lf
+        # (measured: CR=3 without it, CR=0 with it). An explicit `eol=crlf`
+        # attribute beats both - only the ceiling stops that one, which is
+        # why the ceiling is not optional either.
+        #
         # --3way is deliberately absent. It can leave conflict markers in a
         # working Python file, which turns "the patch did not apply" into
         # "the backend will not start and the error is a syntax error on
         # line 900".
-        $gitArgs = @('apply', '--verbose')
+        $gitArgs = @('-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--verbose')
         if ($Check)   { $gitArgs += '--check' }
         if ($Reverse) { $gitArgs += '--reverse' }
         $gitArgs += $File
