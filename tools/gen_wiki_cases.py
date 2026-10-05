@@ -147,15 +147,34 @@ class Vault:
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
+def _folders_posix(node):
+    """Every `folder` value gets forward slashes, wherever it sits.
+
+    The same answers are written for the desktop and the phone, and CI is Linux
+    while the owner's PC is Windows: `os.path.realpath` gives "Vault\\Jarvis
+    Wiki" here and "Vault/Jarvis Wiki" there, so one contract file could not be
+    right on both. Only a top-level `folder` was normalised before, so the
+    nested one (inside `status`) kept its backslash and CI reported this file as
+    out of date (2026-10-04).
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "folder" and isinstance(value, str):
+                node[key] = value.replace("\\", "/")
+            else:
+                _folders_posix(value)
+    elif isinstance(node, list):
+        for value in node:
+            _folders_posix(value)
+    return node
+
+
 def _fix(obj, vault: Vault):
     """The made-up vault's real folder, shown as SHOWN_VAULT."""
     real = os.path.realpath(str(vault.dir))
     text = json.dumps(obj)
     text = text.replace(json.dumps(real)[1:-1], SHOWN_VAULT)
-    out = json.loads(text)
-    if isinstance(out, dict) and isinstance(out.get("folder"), str):
-        out["folder"] = out["folder"].replace("\\", "/")
-    return out
+    return _folders_posix(json.loads(text))
 
 
 def _off_why() -> str:
