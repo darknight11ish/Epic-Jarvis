@@ -58,3 +58,49 @@ brag-output-*/
 # checkout on its own branch, never meant to be committed - see the
 # handoff's "at most 3-4 builders at once" note).
 .claude/worktrees/
+
+# ---------------------------------------------------------------------------
+# Scratch that must never be swept in (added 2026-10-05).
+#
+# Five of these - dshwork/, the nested Epic-Jarvis-main/, final-run.txt,
+# final-run2.txt and yt-out.txt - were excluded on THIS machine only, by
+# .git/info/exclude. That file is never cloned, so it protected nothing
+# anywhere else: on another machine, or after a fresh clone here, a plain
+# `git add -A` would have swept about 88 MB of agent scratch into a public
+# repository. The rules belong here, where they travel with the repository.
+# None of them matches a tracked file; this adds no new ignore for anything
+# the project actually keeps.
+# ---------------------------------------------------------------------------
+
+# Audit-pass scratch. dshwork/ also holds whole copies of the backend sources
+# under audit-*/_stage/, which is exactly what backend/.gitignore keeps out of
+# this repository on purpose.
+dshwork/
+
+# An accidental nested copy of the repository root. A directory of this name
+# INSIDE the repository is never intended. This does not match the
+# repository's own root: a .gitignore pattern is relative to the directory the
+# file sits in.
+Epic-Jarvis-main/
+
+# Old suite and tool output pasted to the root by hand.
+final-run*.txt
+yt-out.txt
+
+# Logs - the backend writes its own beside the live backend folder, never here.
+*.log
+
+# Stray package tarballs. One (@evidence-dev/telemetry 2.1.3, a third-party
+# TELEMETRY package, which nothing imported) sat tracked in this repository
+# until 2026-10-05, in a project whose first rule is that nothing leaves the PC.
+*.tgz
+
+# Python virtualenvs.
+.venv/
+venv/
+
+# The timestamped folder apply-patches.ps1 makes beside the backend it patches,
+# holding the previous copy of every file it changes. It lives beside the live
+# backend rather than in this repository, so this is only a guard against a
+# stray copy being committed from here.
+_jarvis-backup-*

@@ -27,6 +27,11 @@ explains it, for when something does not go as written.
 In every command, replace `<your backend folder>` with the folder that holds
 `jarvis_hud.py` on your PC (keep the quotes around it).
 
+**You type that path once, not every time.** Step 3 below runs a script that
+tells this PC where the folder is; the live check and the test suites read it
+from then on. The patch script still takes the path on its own command line,
+so keep it there where you see it.
+
 **On the PC**
 
 1. **Install Git, Python and Ollama** (section 1.1). One line; the programs
@@ -46,7 +51,15 @@ In every command, replace `<your backend folder>` with the folder that holds
    ```
 
 3. **Have your backend folder ready** (section 1.3 - there is no download
-   for it). Then set it up with the one script (section 1.5). It changes
+   for it). First tell this PC where it is: one line, it changes nothing
+   inside the folder, and the live check and the test suites then find the
+   folder by themselves (section 1.5 has this in full):
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1 -BackendPath "<your backend folder>"
+   ```
+
+   Then set it up with the one script (section 1.5). It changes
    only that folder, and saves everything it prints to
    `<your backend folder>\_jarvis-logs\apply-patches-<date>.txt`:
 
@@ -243,13 +256,45 @@ changing any setting. Without it, Windows refuses script files by default.)
   Find it before going on (the list is most-needed first, and one missing
   file hides the others). It lists the files that need each one.
 
-### 1.5 Run the one script
+### 1.5 Tell this PC where the backend is, then run the one script
 
-One line:
+**First, one line that retires the path.** Almost every command in this
+project needs to know which folder your backend is in, and this writes it
+down once, for your Windows account:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+(That path between the quotes is the author's own - **replace it with
+yours**, the folder holding `jarvis_hud.py`. Every command on this page with
+that path in it needs the same replacement.)
+
+It checks the folder really is a backend folder (it must hold
+`jarvis_hud.py`) **before** it changes anything, so a wrong path cannot be
+half-installed. It looks at file **names** in that folder and nothing else:
+it never opens a file, and the only thing it changes anywhere is that one
+setting. It prints exactly what it changed and how to undo it. Add `-Print`
+to see what it would do without doing it. Safe to run twice, and again if
+you move the folder.
+
+If it says the folder has no `jarvis_hud.py`, fix that first - step 1.3 says
+where those files come from. **Open a NEW PowerShell window** afterwards, so
+the new setting is picked up.
+
+**Then the script that does the work.** One line:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
+
+**Keep `-BackendPath` on this one, with your own folder in it.** The setting
+you just saved is read by the live check and the test suites; this script
+still has a folder of its own written into it, and if you leave the parameter
+out it uses that one. (Making it read the saved setting too is a change to
+the patch script itself - the one script on this page that is allowed to
+alter your backend - so it is written down here rather than done quietly:
+**not done yet**.)
 
 In order, it:
 
@@ -471,6 +516,12 @@ cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri bui
 
 The installers land in `jarvis-desktop\src-tauri\target\release\bundle\` —
 `nsis\*-setup.exe` and `msi\*.msi`. Use the NSIS one.
+
+**You only build by hand until the update signing key exists.** After that,
+GitHub builds the installer and it appears on the Releases page - see "The
+desktop installer, and the update signing key", later in this page (about ten
+minutes of setup). Nothing above stops working; there is just no longer a
+reason to do it.
 
 ### 2.2 Get past SmartScreen
 
@@ -1070,9 +1121,11 @@ your PC's Jarvis is too old for something), update all three parts:
    ```
 
    Then start Jarvis again (step 1.8).
-2. **The desktop app.** Until the update signing key exists (Known rough
-   edges, "The updater is off"), build it again (step 2.1's second line)
-   and run the new installer over the old one. Your settings stay.
+2. **The desktop app.** If the update signing key is set up ("The desktop
+   installer, and the update signing key", above), it is now the app's own
+   button: Settings → Updates → **Check now**, then **Install**. Until that
+   key exists, build it again (step 2.1's second line) and run the new
+   installer over the old one. Your settings stay either way.
 3. **The phone app.** Download the newest `.apk` from the `client-latest`
    release and install it over the old one (step 3.3, 1-2). It stays
    paired: an update signed with the same key keeps the app's data.
@@ -1085,6 +1138,200 @@ anything, and the first press asks once with an approval card (it reaches
 the internet). You do not need it to update Jarvis: the steps above are the
 update. A command it shows is a version nobody has tested with Jarvis yet,
 so leave those alone unless you know why you want one.
+
+---
+
+## The desktop installer, and the update signing key
+
+Right now the only way to get the desktop app is to build it yourself (step
+2.1). Nothing is wrong with that, but it is not something a second person
+could do - and it is also the reason **Settings → Updates says "Not set up
+yet"**.
+
+This section is the one thing that changes both, and it is about **ten
+minutes of your time**. When you have finished it, GitHub builds the
+installer for you, you download it like any other program, and each new
+version after that appears in Settings → Updates.
+
+**What a signing key is, in one line.** Two files made together: the
+**private** key stamps each installer (kept secret, on your PC and in
+GitHub's secrets), and the **public** key goes inside the app so it can
+refuse any installer that does not match. The public key is safe to share;
+the private one is the whole security of the update, so it follows the same
+rule as every other key in this project (rule 3) and **never goes in this
+repository**.
+
+**Do not do half of this.** Half-done is worse than not started: an app with
+a public key but a build nobody signed cannot check anything, and a release
+page with an installer but no signature is a download the app must refuse.
+So the order below is the order that works, and nothing publishes until both
+halves exist. Until then the committed settings file stays switched off, and
+the app tells the truth about it rather than offering a button that fails.
+
+### 1. Make the key
+
+One line, in PowerShell. It needs Node, which step 2.1 already installed
+(the command downloads the Tauri tool itself, so it works before you have
+ever built the app):
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.tauri" | Out-Null; npx --yes @tauri-apps/cli@2 signer generate -w "$env:USERPROFILE\.tauri\jarvis-desktop.key"
+```
+
+The plain command is `tauri signer generate`; the line above is only that,
+wrapped so it writes to a known place without a prompt.
+
+- **It asks twice for a password.** Type one and write it down somewhere
+  safe (a password manager). It is asked for every time the installer is
+  signed, so step 3 needs it too.
+  - **Choose a password.** If you press Enter twice and leave it blank, the
+    key has no password and the key file alone signs anything - so anyone who
+    ever copies that one file could publish an update your app would accept.
+    The password is the only thing that stops that.
+- It writes **two** files into `C:\Users\<you>\.tauri\`:
+  - `jarvis-desktop.key` - the **private** key. Secret. Never send it to
+    anyone, never paste it into a chat, never commit it.
+  - `jarvis-desktop.key.pub` - the **public** key. It goes in the app.
+
+**Back both up now** - the two files and the password. If you lose the
+private key or its password, GitHub can no longer sign a build that your
+installed copy will accept, and getting updates working again means
+installing one build by hand (step 5, all over again).
+
+### 2. Put the public key in the app
+
+This copies the public key to your clipboard:
+
+```powershell
+(Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key.pub" -Raw).Trim() | Set-Clipboard; Write-Host "The PUBLIC key is on your clipboard."
+```
+
+Open `jarvis-desktop\src-tauri\tauri.conf.json` and find this near the
+bottom:
+
+```json
+"pubkey": "",
+```
+
+Paste between the two quotes, so the value is the whole long line the file
+holds - the public key is one very long string starting
+`dW50cnVzdGVkIGNvbW1lbnQ6`.
+
+**That empty string is the entire reason updates are off**: as long as the
+value is empty, the app is built without an update key, and `update.rs`
+deliberately reports "this build cannot update itself" instead of offering a
+Check button that could only fail. Filling it in is what switches the app's
+half on.
+
+**It is filled in by you, and never by a script.** In this repository the
+value is empty **on purpose** and must stay empty until you have a key of
+your own - an empty value is a working, honest "no", not a placeholder
+somebody forgot. If you are reading this without having made a key in step 1,
+leave it exactly as it is.
+
+**`createUpdaterArtifacts` stays `false` in this file. Do not change it.** It
+is off so that a build on your own PC works with no key at all, exactly as
+step 2.1 describes. The build that runs on GitHub turns it on **by itself,
+only in the run where a key is present**, using a small extra settings file
+it writes for that one build. That is the same "off unless it can really
+sign" rule as above, done where it cannot be forgotten. (A test in
+`jarvis-desktop\tests\updates.mjs` fails if this line is ever committed as
+`true`, on purpose: a `true` here would make your own local builds fail
+looking for a key that is not in the repository.)
+
+Commit and push that one-line change (or ask for it to be put in for you -
+it is the public key, so it is safe to send).
+
+### 3. Give GitHub the private key, and the password
+
+This copies the private key to your clipboard:
+
+```powershell
+(Get-Content "$env:USERPROFILE\.tauri\jarvis-desktop.key" -Raw).Trim() | Set-Clipboard; Write-Host "The PRIVATE key is on your clipboard. Paste it into GitHub now, then copy something else."
+```
+
+Then, on github.com:
+
+1. Open `darknight11ish/Epic-Jarvis` and click **Settings** (the tab at the
+   top of the repository, not your account).
+2. In the left column: **Secrets and variables** → **Actions**.
+3. **New repository secret**. Name: `TAURI_SIGNING_PRIVATE_KEY`. Secret:
+   paste. **Add secret**.
+4. **New repository secret** again. Name:
+   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Secret: the password from step 1.
+   **Add secret**.
+
+Nobody can read a secret back after saving it - not even you; GitHub hands
+it to the build machine only while it builds.
+
+These two names are not a choice: `TAURI_SIGNING_PRIVATE_KEY` is the name the
+Tauri build reads and the name this repository's workflow looks for. Under
+any other name the build finds no key, signs nothing, and publishes nothing -
+after twenty minutes of building.
+
+**Both secrets, or neither is any use.** GitHub shows a secret's name and
+never its value, so if you are unsure whether the password one saved, the
+run in step 4 is what tells you: a build with the private key but the wrong
+password fails at "Build the installer" instead of publishing something
+unsigned.
+
+### 4. Let it build and publish
+
+Push the step-2 change, or press the button: repository **Actions** tab →
+**Desktop release** in the left column → **Run workflow** → **Run workflow**
+(choose the branch). It takes 15-25 minutes.
+
+**Pushing only starts it by itself on `main`** (and on the one working branch
+the workflow names). A push on any other branch builds nothing at all - that
+is deliberate, not broken: whichever branch could publish is a branch that can
+replace your own download. **Run workflow works from any branch**, so that is
+the way to try it from wherever you are now.
+
+Read the run's own summary line before anything else - it says in one plain
+sentence what happened:
+
+| the summary says | what it means |
+|---|---|
+| `Signed, and published to the 'desktop-latest' release as version 0.2.<n>` | worked; the installer and its signature are on the release you download from |
+| `The TAURI_SIGNING_PRIVATE_KEY secret is not set...` | step 3 did not save, or you are on a branch that does not publish |
+| `The signing secret is set, but tauri.conf.json has no public key...` | step 2 did not get committed, or is not on this branch |
+| `Signed, but <branch> is neither main nor the owner's working branch, so it is not published` | everything works; this branch is just not a publishing one. Take the installer from the run itself (the **Artifacts** box at the bottom of the run's page) |
+
+**If it failed at "Publish" with a 403:** repository **Settings** →
+**Actions** → **General** → **Workflow permissions** → **Read and write
+permissions** → **Save**, then run it again.
+
+**What should be on the release afterwards:** the installer
+(`jarvis-desktop_0.2.<n>_x64-setup.exe`), a small `latest.json` next to it
+(the file the app reads), and - the proof that signing happened - an
+`.exe.sig` file beside the installer. A release with the installer but no
+`.sig` is not a signed release, whatever the summary said; do not install
+from it.
+
+### 5. Install that build once, by hand
+
+The copy on your PC now was built **before** the public key existed, so it
+cannot check or accept anything - it is the honest "no" from step 2. This is
+the one step that cannot be done through the app.
+
+Open the repository's **Releases** (right-hand column on the main page) →
+**Jarvis Desktop - latest** → download
+`jarvis-desktop_0.2.<n>_x64-setup.exe` → run it. SmartScreen will complain
+exactly as in step 2.2 (**More info** → **Run anyway**); that is unchanged
+and is not a sign anything is wrong, because signing here means the *update*
+is verified by the app, not that Windows trusts the publisher.
+
+Your settings and your pairing stay: the installer runs over the old one.
+
+### 6. Check it, then stop thinking about it
+
+Open the new app: tray icon → **Settings and help…** → **Updates**. It should
+now offer **Check now** instead of saying "Not set up yet". Press it. If it
+answers "the newest published", you are done - the whole path works, and
+**every future build on `main` publishes itself** from then on.
+
+Installing stays a button a person presses. Nothing installs on its own; that
+is a rule, not an unfinished setting.
 
 ---
 
@@ -1239,8 +1486,19 @@ rather than your fault.
   terminal. Both are plain text; `backend.log` has passwords, keys and the
   pairing key taken out, `jarvis-desktop.log` does not, and neither catches
   everything - so read one before sending it anywhere.
-- **The updater is off.** No signing key exists, so the in-app updater is inert
-  and reports itself unsupported. Updating means building and installing again.
+- **The updater is off until you make a signing key.** No key exists in this
+  repository and none can - a private key kept in a repository is not a key -
+  so the committed app is built unable to verify a download, and says so
+  rather than offering a button that fails. You can change that: "The desktop
+  installer, and the update signing key" (above, about ten minutes) makes
+  GitHub build and publish a signed installer, after which Settings →
+  Updates stops saying "Not set up yet".
+- **There is no download link for the backend, and there will not be one.**
+  The Python program Jarvis is made of is on the author's PC only, so a
+  second person cannot install Jarvis today - you cannot download it from
+  here, and neither can anyone else. Step 1.3 says where the files come from
+  for the one PC that has them. This is written down rather than papered
+  over: it is the real limit of this project, not a missing step.
 - **Where the token is kept, honestly.** Two places.
   - A token you **typed into Settings** is in **Windows Credential Manager**
     (since 2026-09-23), encrypted to your Windows account — the same place

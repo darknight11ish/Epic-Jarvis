@@ -716,10 +716,33 @@ def migrate_saved_choices() -> list:
 # The answer is kept in memory for one set of voice prints (prints_fingerprint)
 # and one blend file; nothing is written to disk and nothing is sent anywhere.
 # Not being able to check (no voice engine, no voice-check module) is not
-# "fine": the voice is not used until it can be. With no voice print trained
-# yet there is nothing to compare with, and owner_check says so and lets it
-# through (as it does for a recorded voice); it is checked again as soon as the
-# owner trains their voice.
+# "fine": the voice is not used until it can be. That includes having NO voice
+# print trained yet. owner_check answers "nothing to compare with" and lets
+# anything through there, which a recorded voice survives (speak() checks
+# again on every utterance), but a blend does not: its one answer is kept for
+# as long as the prints do not change, so a pass nobody earned would be read
+# as "checked and fine" by every door below, and Ashby or Clara would speak
+# unchecked - in broad mode, where the voice check accepts any voice at all, a
+# blend that happens to sound like the owner would then pass Jarvis's own
+# voice check from the speakers. So blend_check refuses that answer itself
+# (BLEND_NO_PRINT): the pack's default speaks. The moment the owner trains
+# their voice the fingerprints change, the answer is dropped and the check
+# runs for real.
+
+#: Said when a blend cannot be checked at all - no voice print has been trained
+#: yet. Not a pass: it is not listed, not chosen and not spoken with.
+BLEND_NO_PRINT = ("Your own voice has not been trained yet, so there is nothing to check "
+                  "{who} against. A voice Jarvis has not checked could pass its own voice "
+                  "check, so it will not speak in it. Train your voice under Voice, Your "
+                  "voice, and {who} is checked then.")
+#: Said when a print is there but could not be compared with the blend (it was
+#: made with a different voice check than the one installed now). Same refusal,
+#: named honestly rather than blamed on the blend.
+BLEND_NOT_COMPARED = ("Your saved voice print could not be compared with {who}: it was made "
+                      "with a different voice check than the one installed now. A voice Jarvis "
+                      "has not checked could pass its own voice check, so it will not speak in "
+                      "it. Train your voice again under Voice, Your voice, and {who} is "
+                      "checked then.")
 
 #: What the sample says: about five seconds, so the check sees more than one
 #: three-second stretch (owner_check compares every stretch).
@@ -749,14 +772,42 @@ def blend_refused(name: str) -> bool:
     return v is not None and not v.get("ok")
 
 
+def _keep_blend(name: str, keep: dict) -> dict:
+    """Keep one answer for the current voice prints, with this module's one
+    audit line - the cap and the line every path that decides must go
+    through, so a refusal is remembered exactly like a pass."""
+    if len(_BLEND_CHECKS) > 64:
+        _BLEND_CHECKS.clear()
+    _BLEND_CHECKS[_blend_key(name)] = keep
+    _audit("voices.blend_check", {"voice": name, "ok": bool(keep.get("ok"))})
+    return keep
+
+
 def blend_check(name: str, speech_module=None) -> dict:
     """{"ok": True | False, "why": words, ...}: does Ashby or Clara sound
     like the owner? Speaks BLEND_CHECK_LINE in it and gives the sound to
-    owner_check(). `"unchecked": True` (and not kept) when it could not be
-    made to speak. The caller holds _TRY_LOCK (one sound at a time)."""
+    owner_check(). `"unchecked": True` when it could not be checked at all -
+    no voice print to compare with, or nothing that could be made to speak -
+    which is never a pass. The caller holds _TRY_LOCK (one sound at a time)."""
     hit = blend_verdict(name)
     if hit is not None:
         return hit
+    who = K.MIX[name]["name"]
+    try:
+        have_prints = bool(_owner_profiles(_voice_mod()))
+    except Exception:
+        have_prints = True      # no voice check installed: owner_check refuses below
+    if not have_prints:
+        # No voice print trained yet: owner_check answers "nothing to compare
+        # with" and lets anything through there, and keeping that as this
+        # blend's answer is a pass it never earned - the guard in _builtin_now
+        # reads it as "checked and fine", so Ashby or Clara would speak for as
+        # long as no print exists. A recorded voice gets a fresh check on every
+        # utterance; a blend gets this one answer and nothing else, so nothing
+        # to compare with is not a pass here: the pack's default speaks, and
+        # the check runs for real as soon as a print exists to compare with.
+        return _keep_blend(name, {"ok": False, "unchecked": True,
+                                  "why": BLEND_NO_PRINT.format(who=who)})
     S = speech_module
     if S is None:
         try:
@@ -798,18 +849,21 @@ def blend_check(name: str, speech_module=None) -> dict:
     if not keep.get("ok"):
         # owner_check's own words talk about "a recording" and "someone else"
         # - not what to say about a built-in voice.
-        who = K.MIX[name]["name"]
         keep["why"] = (f"{who} sounds too close to your own voice, and a voice that sounds like "
                        f"you could pass Jarvis's own voice check. Jarvis will not use it, so "
                        f"the normal voice speaks."
                        if keep.get("refused") == "owner_voice" else
                        f"Jarvis could not compare {who} with your saved voice, so it will not "
                        f"use it yet. Try again, or retrain your voice under Voice, Your voice.")
-    if len(_BLEND_CHECKS) > 64:
-        _BLEND_CHECKS.clear()
-    _BLEND_CHECKS[_blend_key(name)] = keep
-    _audit("voices.blend_check", {"voice": name, "ok": bool(keep.get("ok"))})
-    return keep
+    elif not keep.get("checked"):
+        # owner_check passed it with nothing actually compared: the print is
+        # there but was made with a different voice check than the one
+        # installed now, which is the one case it answers "checked: 0" for.
+        # The same unearned pass as no print at all, and the same refusal.
+        keep["ok"] = False
+        keep["unchecked"] = True
+        keep["why"] = BLEND_NOT_COMPARED.format(who=who)
+    return _keep_blend(name, keep)
 
 
 def _recheck_saved_blend(kind: str) -> None:
@@ -1896,21 +1950,12 @@ def prints_fingerprint() -> str:
     return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
-def owner_check(samples, margin: Optional[float] = None) -> dict:
-    """Does this 24 kHz clip sound like the OWNER? Scored against every
-    trained voice print, each at its own threshold minus the margin.
-
-    {"ok": True} means "not the owner's voice as far as the prints can tell"
-    - it may be used. {"ok": False, "why": ...} refuses, and every path that
-    cannot compare against a print that could be compared refuses too."""
-    margin = _owner_margin() if margin is None else float(margin)
-    fp = prints_fingerprint()
-    try:
-        V = _voice_mod()
-    except Exception:
-        return {"ok": False, "refused": "no_voice_check", "fingerprint": fp,
-                "why": ("the voice check (jarvis_voice.py) is not installed on this PC, so "
-                        "Jarvis cannot make sure this is not your own voice")}
+def _owner_profiles(V) -> list:
+    """[(label, profile)]: every trained voice print there is, which is
+    everything owner_check can compare against. `V` is the voice-check module
+    (jarvis_voice). [] means there is nothing to compare with at all - the one
+    answer owner_check lets through, and the one blend_check must not read as
+    a pass."""
     profs = []
     for label, path in V.lookup_order(""):
         try:
@@ -1919,6 +1964,33 @@ def owner_check(samples, margin: Optional[float] = None) -> dict:
             prof = None
         if prof is not None:
             profs.append((label, prof))
+    return profs
+
+
+def owner_check(samples, margin: Optional[float] = None) -> dict:
+    """Does this 24 kHz clip sound like the OWNER? Scored against every
+    trained voice print, each at its own threshold minus the margin.
+
+    {"ok": True} means "not the owner's voice as far as the prints can tell"
+    - it may be used. {"ok": False, "why": ...} refuses, and every path that
+    cannot compare against a print that could be compared refuses too.
+
+    With NO print trained at all this answers ok, "nothing to compare with".
+    A recorded custom voice may be added and used before the owner trains
+    their voice, and speak() runs this check again on every utterance, so a
+    print that appears stops it at once (test_voices.py). A BLEND gets no such
+    second chance - its one answer is kept for one set of prints - so
+    blend_check refuses that answer itself (BLEND_NO_PRINT) rather than
+    reading it as "checked and fine"."""
+    margin = _owner_margin() if margin is None else float(margin)
+    fp = prints_fingerprint()
+    try:
+        V = _voice_mod()
+    except Exception:
+        return {"ok": False, "refused": "no_voice_check", "fingerprint": fp,
+                "why": ("the voice check (jarvis_voice.py) is not installed on this PC, so "
+                        "Jarvis cannot make sure this is not your own voice")}
+    profs = _owner_profiles(V)
     if not profs:
         return {"ok": True, "checked": 0, "fingerprint": fp, "prints": [],
                 "why": ("your own voice has not been trained yet, so there was nothing to "

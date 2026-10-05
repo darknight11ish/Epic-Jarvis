@@ -39,6 +39,7 @@ import _skeleton  # noqa: E402
 import jarvis_memory as M  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 DAY = 86400.0
 COPIES = ("bitemporal.patch", "rebuilt-patches/bitemporal.patch")
 START = "rows = st.known_at(known, limit=limit)"
@@ -49,6 +50,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def route_loop(after_image: str) -> str:
@@ -112,7 +121,7 @@ def t_both_copies_rehearse_and_label_from_what_was_known():
     for copy in COPIES:
         ok, out = rehearsed(copy)
         if ok is None:
-            check(f"SKIP - {out}", True)
+            skip(f"{out}")
             continue
         check(f"{copy} applies to what memory-pane wrote, and reverses", ok, out[:400])
         if not ok:
@@ -152,7 +161,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

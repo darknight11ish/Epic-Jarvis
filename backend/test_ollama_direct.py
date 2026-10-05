@@ -28,11 +28,20 @@ from _where import BACKEND, missing, explain
 SRC = BACKEND / "jarvis_hud.py"
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _completions_url_fn(source: str):
@@ -55,7 +64,7 @@ def _completions_url_fn(source: str):
 
 def t_local_lane_goes_to_ollama():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     fn = _completions_url_fn(SRC.read_text(encoding="utf-8"))
     check("the local lane resolves to Ollama's own endpoint",
           fn("qwen3:8b") == "http://127.0.0.1:11434/v1/chat/completions",
@@ -64,7 +73,7 @@ def t_local_lane_goes_to_ollama():
 
 def t_a_non_local_lane_is_left_alone():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     fn = _completions_url_fn(SRC.read_text(encoding="utf-8"))
     check("a cloud lane still resolves to JARVIS_URL - unimplemented, not silently redirected",
           fn("jarvis-escalate") == "http://127.0.0.1:8000/v1/chat/completions",
@@ -78,7 +87,7 @@ def t_open_calls_the_new_function_not_the_old_literal():
     the call site) would leave the original bug live with a decoy function
     sitting unused beside it."""
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
     opens = [n for n in ast.walk(tree)
              if isinstance(n, ast.FunctionDef) and n.name == "_open"]
@@ -96,7 +105,7 @@ def t_the_error_message_names_the_right_service():
     a program that was never supposed to be running - that string is what a
     confused owner would actually go act on."""
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = SRC.read_text(encoding="utf-8")
     check("mentions Ollama's own start command for the local-lane failure",
           "ollama serve" in src, "expected the literal `ollama serve` advice somewhere")
@@ -120,7 +129,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

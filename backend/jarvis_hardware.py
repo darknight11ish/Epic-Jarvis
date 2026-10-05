@@ -797,7 +797,13 @@ def _detect(fresh: bool) -> dict:
         "ollama_log": ("used" if log is not None and log["devices"] else
                        "no cards in it" if log is not None else "not found"),
         "nvidia_smi": "used" if smi else "not found",
-        "registry": "used" if reg else ("not on Windows" if os.name != "nt" else "not read"),
+        # `_on_windows()`, not `os.name`: the golden files carry this sentence,
+        # and a stand-in that says what this PC is (tools/gen_hardware_cases.py
+        # and test_hardware.py) must get the answer its case describes. On the
+        # owner's PC the two ask the same question - `_on_windows()` IS
+        # `os.name == "nt"` - but with `os.name` the same producer wrote two
+        # different files, one on Windows and one on Linux.
+        "registry": "used" if reg else ("not on Windows" if not _on_windows() else "not read"),
     }
     return {"cards": rows, "planned": planned, "sources": sources, "log": log,
             "found": _found_sentence(rows, planned, log)}

@@ -48,6 +48,7 @@ except ImportError:  # Python < 3.11
     tomllib = None
 
 FAILED, PASSED = [], []
+SKIPPED = []
 LANES = ["jarvis-escalate", "jarvis-bulk"]
 # Long and clause-heavy, so the complexity gate alone would escalate it - the
 # private gate is the only thing that can keep these local.
@@ -60,6 +61,14 @@ def check(name, cond, detail=""):
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
 
 
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
+
+
 def _config_list():
     if CONFIG is None or tomllib is None:
         return None
@@ -70,7 +79,7 @@ def _config_list():
 def t_every_config_topic_keeps_a_turn_local():
     terms = _config_list()
     if terms is None:
-        return check("SKIP - no jarvis-framework.toml (or no tomllib) to read", True)
+        return skip("no jarvis-framework.toml (or no tomllib) to read")
     check("the config has the list", isinstance(terms, list) and len(terms) > 5, repr(terms))
     # CONTROL: without a private word, this question does escalate - so the
     # private gate is what keeps each one below local, not something else.
@@ -183,7 +192,7 @@ def t_distress_and_crisis_words_stay_local():
     except Exception:
         skip = True
     if skip:
-        return check("SKIP - jarvis_wellbeing.py is not importable here", True)
+        return skip("jarvis_wellbeing.py is not importable here")
     for q in ("I want to kill myself", "I want to end my life", "I just want to die",
               "there is no reason to live anymore", "everyone would be better off "
               "without me", "she took her own life"):
@@ -312,7 +321,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

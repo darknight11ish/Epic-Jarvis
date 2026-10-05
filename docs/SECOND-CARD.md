@@ -25,8 +25,15 @@ command-line tool, installed with the driver). A second card counts only if:
   sold as 8 GB reports 8,192 MiB, and some drivers a few MiB less, so the
   line is drawn at 7,680 MiB. A 6 GB card is still refused.
 
-What a card can do depends on its size (all of these numbers are worked
-out on paper - no extra card is installed yet, so **none is measured**):
+What a card can do depends on its size. **The cards are now installed and
+measured** (2026-10-05): both are present, the everyday model is on the 12 GB
+card, it is 100% on the card with nothing spilling to the processor, and its
+context is 4,096 while 16,384 fits and leaves room
+([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md); re-measure
+with `scripts\measure-cards.ps1`, described in
+[MEASURE-CARDS.md](MEASURE-CARDS.md)). **The rows below are still worked out on
+paper and none of them is measured** - they are what each card size *can* run
+once its lane is switched on, and no lane is on yet:
 
 | Card | What it runs |
 |---|---|
@@ -40,10 +47,20 @@ one your monitor is plugged into; else the first one `nvidia-smi` lists.
 With the monitors on the 2080 Super, that is the 2080 Super, which is what
 you want: it is the faster card.
 
+**Measured 2026-10-05, and this is where the rule above and the machine
+disagree:** the model is running on the 12 GB card, which `nvidia-smi` calls
+**GPU 0**, while the 2080 SUPER is **GPU 1** and runs the desktop
+([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)). Setting
+`primary_gpu` is how you say which card you mean; until then, read which card
+the model is really on from `scripts\measure-cards.ps1` rather than from the
+rule above.
+
 ## The seven switches
 
-(Five since 2026-09-24; **Study helper** and **Referee suggestions** joined on 2026-09-30, both off
-until the card is installed and measured - see the two rows at the end of the table.)
+(Five since 2026-09-24; **Study helper** and **Referee suggestions** joined on 2026-09-30, both off.
+The card they were waiting on is installed and measured as of 2026-10-05, so
+turning either one on is the owner's decision now - see the two rows at the end
+of the table.)
 
 There is one main switch ("use the second card") and one switch per feature.
 The main switch must be on before any feature can be.
@@ -90,8 +107,9 @@ free memory each one has right now, not by how fast it is**. Your planned
 pair has an RTX 2060 with more memory than the RTX 2080 Super, but the
 2060's memory is the *slower* of the two - so most of the model lands on
 the slower card, and answers come out at roughly its pace. **Real speed has
-not been measured yet**, because the second card is not installed. Once it
-is, the desktop's Hardware screen "Measure" button (or asking Jarvis one
+not been measured yet** - the card is installed (2026-10-05), but no lane is
+switched on, so nothing about the split's speed has been measured. Once one is,
+the desktop's Hardware screen "Measure" button (or asking Jarvis one
 question and timing it) tells the truth about it.
 
 **Turning it on**: Settings → "Second graphics card" (desktop) or Brain
@@ -165,7 +183,8 @@ be moved here.
 **"One bigger model on both cards" stays two-card-only.** A third card is
 never part of it - that switch still only ever uses the everyday card and
 the second one, because how fast splitting one model across even two cards
-really is has not been measured yet (the second card is not installed).
+really is has not been measured yet (the card is installed; no lane is on, so
+nothing about the split has been measured).
 Adding a third untested unknown on top of a first untested one is not a
 decision Jarvis makes on its own.
 

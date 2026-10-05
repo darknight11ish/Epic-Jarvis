@@ -98,24 +98,29 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
 
 ## Install it
 
-**Read this first: the backend is not public.** The Python program that
-does the work (`jarvis_hud.py` and a few files beside it) is not in this
-repository and has no download anywhere - only the owner's PC has it
-(INSTALL.md, step 1.3). This repository holds changes for it, the rebuilt
-parts and the two apps. Without those files the apps have nothing to
-connect to, so check you have them before installing anything else.
+**Read this first: the backend is not public, so nobody else can install this.**
+The Python program that does the work (`jarvis_hud.py` and the files beside
+it) is not in this repository and is not downloadable anywhere - it exists on
+the author's PC and nowhere else (INSTALL.md, step 1.3). That is not a
+missing link to be found later: there is no such file to publish, so a second
+person cannot install Jarvis today, however carefully they follow the page.
+This repository holds the changes for that program, the parts of it that were
+rebuilt, and the two apps - which have nothing to connect to without it. If
+you are not the author, this is where the install stops.
 
 Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
 
 1. **The backend on the PC** - the Python program that does the work, plus
-   the model in Ollama. One script, `scripts/apply-patches.ps1`, puts this
-   repository's changes into it (INSTALL.md part 1 has the exact command).
+   the model in Ollama. One script, `scripts/install-backend.ps1`, writes
+   down where your backend folder is (one line; the live check and the test
+   suites read it from then on); then `scripts/apply-patches.ps1` puts this
+   repository's changes into it (INSTALL.md part 1 has both exact commands).
 2. **The desktop app** - for now you build it yourself on the PC
-   (INSTALL.md part 2). A ready-made installer will appear under
+   (INSTALL.md part 2). A ready-made installer appears under
    [Releases](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest)
-   once the updater's signing key is set up
-   ([`jarvis-desktop/README.md`](jarvis-desktop/README.md), "Turning on
-   updates").
+   once the update signing key is set up - about ten minutes, in
+   [`docs/INSTALL.md`](docs/INSTALL.md), "The desktop installer, and the
+   update signing key".
 3. **The phone app** - download the `.apk` from the
    [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest)
    and open it on the phone, or run `adb install -r <file>.apk` from the PC.

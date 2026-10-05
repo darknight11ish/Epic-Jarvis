@@ -68,12 +68,21 @@ import jarvis_chatbot_routes as R  # noqa: E402
 import jarvis_task_control as TC  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 GOAL = "Find out how to keep houseplants alive in a flat that gets very little light."
@@ -456,7 +465,7 @@ def t_install():
 def t_the_patch():
     git = shutil.which("git")
     if not git:
-        return check("SKIP - git is not installed", True)
+        return skip("git is not installed")
     order = _stack.order()
     # Last until live.patch (2026-09-28), which anchors on THIS patch's
     # install block and so follows it. Later patches (rules-first-relay,
@@ -527,7 +536,7 @@ def main():
     finally:
         fresh()
         shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 

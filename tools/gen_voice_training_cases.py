@@ -221,6 +221,15 @@ class World:
         self.patches.append(mock.patch.object(V, "strong_embedder", lambda *a: strong))
         for p in self.patches:
             p.start()
+        # The cards, for the whole run and not only for the two better-voice
+        # cases below that name their own pair: jarvis_second_card reads the
+        # real nvidia-smi, so without this the `better_voice` answers come from
+        # whatever cards the machine writing the file happens to have (a 12 GB
+        # 2060 answers very differently from a machine with no nvidia-smi at
+        # all), and the file is not what its _about says - "the same on every
+        # machine". An empty answer is the one this file has always carried,
+        # and it is what a machine with no NVIDIA card reading produces.
+        self.cards = SCG.World("", windows=True).install()
         S.reload_engines()
         E._reset_for_tests()
         S._reset_wake_for_tests()
@@ -258,6 +267,7 @@ class World:
         return {"code": code, "body": out}
 
     def __exit__(self, *a):
+        self.cards.remove()
         for p in reversed(self.patches):
             p.stop()
         S._reset_wake_for_tests()
@@ -678,19 +688,28 @@ def voices_cases():
         keep(w, "pack_v1_sky", post("/api/voice/voices/speaker", {"speaker": "af_sky"}), posts)
     # Ashby and Clara (2026-09-29): the copy of the pack that holds them is
     # beside it and loaded; the voice check passes, or one sounds like the owner.
+    # `w.train` is what makes the first of those true. blend_check compares a
+    # blend with the owner's own voice print, and with no print at all there is
+    # nothing to compare with - which since 2026-10-05 is a refusal of its own
+    # (BLEND_NO_PRINT, jarvis_voices.py), not the pass this line used to take
+    # for granted. The print is the same stand-in the training cases use; the
+    # `owner_check` stand-in below still decides pass or too-close.
     with World("both") as w, Blends(w):
         w.speaking()
+        w.train("phone")
         keep(w, "pack_v1_blends", VO.status(), statuses)
         keep(w, "pack_v1_ashby", post("/api/voice/voices/speaker", {"speaker": "mix_ashby"}),
              posts)
         keep(w, "pack_v1_ashby_chosen", VO.status(), statuses)
     with World("both") as w, Blends(w, owner_ok=False):
         w.speaking()
+        w.train("phone")
         keep(w, "pack_v1_ashby_refused", post("/api/voice/voices/speaker",
                                               {"speaker": "mix_ashby"}), posts)
         keep(w, "pack_v1_ashby_refused_listed", VO.status(), statuses)
     with World("both") as w, Blends(w, owner_ok=False):
         w.speaking()
+        w.train("phone")
         keep(w, "pack_v1_sample_refused", post("/api/voice/voices/sample",
                                                {"voice": "mix_ashby"}), posts)
     with World("both") as w:

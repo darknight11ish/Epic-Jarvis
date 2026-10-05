@@ -21,11 +21,20 @@ from _where import BACKEND, missing, explain
 SRC = BACKEND / "jarvis_hud.py"
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _do_post_source() -> str:
@@ -39,7 +48,7 @@ def _do_post_source() -> str:
 
 def t_use_tools_requires_the_local_lane():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = _do_post_source()
     check("use_tools checks lane == local_model",
           "use_tools = lane == local_model" in src.replace("\n", " ")
@@ -68,7 +77,7 @@ def t_use_tools_requires_the_local_lane():
 
 def t_the_degrade_loop_is_skipped_when_tools_are_in_play():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = _do_post_source()
     check("the degrade loop's iterable is conditioned on use_tools",
           "use_tools else range(len(lanes) + 2)" in src
@@ -82,7 +91,7 @@ def t_the_plain_relay_path_still_exists_unconditionally_reachable():
     every cloud turn into a tool-enabled one - or break cloud chat outright.
     """
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = _do_post_source()
     check("an `else:` branch containing the original `with upstream:` relay still exists",
           "with upstream:" in src, "expected the plain-relay path to still be reachable")
@@ -92,7 +101,7 @@ def t_the_plain_relay_path_still_exists_unconditionally_reachable():
 
 def t_the_tool_branch_calls_run_local_turn_with_the_enabled_tools_whitelist():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = _do_post_source()
     check("jarvis_agent.run_local_turn is actually called",
           "jarvis_agent.run_local_turn(" in src)
@@ -117,7 +126,7 @@ def t_a_run_local_turn_failure_after_headers_are_sent_still_reaches_the_client()
     main.js's `consumeLine`/`routeFromPayload` handling already renders via
     `showError()` - before giving up."""
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
     do_post = [n for n in ast.walk(tree)
                if isinstance(n, ast.FunctionDef) and n.name == "do_POST"][0]
@@ -183,7 +192,7 @@ def t_tools_are_never_offered_on_a_non_local_lane():
     construction (an `or` typo would look identical in the substring checks
     above but fail this one)."""
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
     assigns = [n for n in ast.walk(tree)
                if isinstance(n, ast.Assign)
@@ -209,7 +218,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

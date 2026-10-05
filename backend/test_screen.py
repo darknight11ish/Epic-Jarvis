@@ -749,7 +749,8 @@ def t_the_sign_and_the_shared_table():
     check("... a session that ended long ago has no sign",
           SC.sign(table["statuses"]["ended_time"], ended_ago=SC.ENDED_SHOW_S)["show"] is False)
     check("the sign never carries a word that is not fixed",
-          all(SC.PAUSE_WORDS.get(k) or True for k in SC.PAUSE_WORDS))
+          all(SC.PAUSE_WORDS.get(k) for k in SC.PAUSE_WORDS),
+          [k for k in SC.PAUSE_WORDS if not SC.PAUSE_WORDS.get(k)])
 
 
 # ---------------------------------------------------------------- hygiene

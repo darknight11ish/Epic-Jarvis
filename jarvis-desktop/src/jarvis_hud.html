@@ -2293,7 +2293,7 @@ function apprTick(){
     if(!line) return;
     const left = Math.ceil((Number(el.dataset.deadline) - now) / 1000);
     line.textContent = left <= 0
-      ? "Expired: Jarvis stopped waiting and refused it by itself."
+      ? "Timed out: Jarvis stopped waiting and refused it by itself."
       : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left to decide, then Jarvis refuses it by itself.`;
   });
 }

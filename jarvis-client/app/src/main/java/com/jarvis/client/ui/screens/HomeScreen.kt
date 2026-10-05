@@ -299,11 +299,17 @@ data class HomeState(
      */
     val faceFraction: Float = DEFAULT_FACE_FRACTION,
     /**
-     * The navigation row (Mind, Inbox, Appearance, Help) is always on screen
-     * instead of one swipe or tap away. The status line above it is shown
-     * either way - it is not a setting.
+     * The navigation row (Brain, Inbox, Live, Appearance, Help) is always on
+     * screen instead of one swipe or tap away. The status line above it is
+     * shown either way - it is not a setting.
+     *
+     * Shown by default, matching [com.jarvis.client.data.Look.navAlwaysShown],
+     * which IS the setting and the only thing that fills this in (MainActivity
+     * passes `look.navAlwaysShown`). Changed with it on 2026-10-05: leaving
+     * this at `false` would keep the old default written in the one other
+     * place a reader looks.
      */
-    val navAlwaysShown: Boolean = false,
+    val navAlwaysShown: Boolean = true,
     /**
      * Shrink the face to its smallest when the first approval arrives or one
      * is opened from a notification, and give the owner's split back once
@@ -1409,10 +1415,13 @@ private fun ConversationList(
  * on a stale stream, and a screen showing last-known data without saying so
  * is the one thing that rule cannot tolerate.
  *
- * The status words are the way to Checks, as before. A swipe down anywhere
- * on the line shows the navigation row and a swipe up hides it; the chevron
- * at the end does the same with a tap, for anyone who does not swipe and for
- * TalkBack, which cannot perform the swipe at all.
+ * The status words are the way to Checks, as before. While the row is set to
+ * "Hidden until swiped", a swipe down anywhere on the line shows the
+ * navigation row and a swipe up hides it; the chevron at the end does the same
+ * with a tap, for anyone who does not swipe and for TalkBack, which cannot
+ * perform the swipe at all. Set to "Always shown" - the default since
+ * 2026-10-05 - there is nothing to toggle, so neither the swipe nor the
+ * chevron is drawn (onNavToggle comes in null below).
  */
 @Composable
 private fun StatusLine(
@@ -1671,7 +1680,8 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
  * A newer build of this app, when there is one (net/UpdateCheck.kt). Under
  * the status line rather than in the conversation: it is about the app, not
  * about Jarvis, and it must not push the approval cards down. Not inside
- * [NavRow] either, which is hidden by default.
+ * [NavRow] either, which the owner may set to "Hidden until swiped" - a line
+ * about a newer build must not itself sit behind a gesture.
  */
 /**
  * Jarvis Live on Home (the review of 2026-09-28, C2): "Jarvis Live · 24 min

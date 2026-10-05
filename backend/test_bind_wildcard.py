@@ -14,6 +14,15 @@ socket to every "every_interface" entry first, so the table is proven against
 the operating system rather than against itself, and only then asks the
 patched functions about it.
 
+That table is true of glibc, which reads every numeric shorthand in it - "0",
+"00", "0x0", "0x00000000", "0.0", "0.0.0" and "000.000.000.000" - as 0.0.0.0.
+Windows' getaddrinfo refuses those seven, and socket.bind goes through it, so
+on Windows they are not every-interface addresses at all: there is no listener
+to refuse, and the guard is asked only about the entries this machine's own
+resolver accepts. The IPv6 spellings and "0.0.0.0" are read the same way by
+both. Both answers are asserted, so a guard that called a plain address a
+wildcard fails here too.
+
 The functions are lifted from the installed jarvis_hud.py when it has them,
 otherwise from a rehearsal: `_skeleton` rebuilds the lines token-file and
 loopback-too wrote and `git apply` puts this patch on top.
@@ -41,11 +50,20 @@ CASES = HERE.parent / "jarvis-desktop" / "tests" / "bind-address-cases.json"
 LIFTED = ("_binds_every_interface", "_refuse_every_interface", "_loopback_companion")
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("SKIP - ...", True) - a condition of
+    the constant True, so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 _SOURCE = None
@@ -100,8 +118,16 @@ def _cases():
 
 
 def _os_binds_every_interface(spelling):
-    """What the operating system does with it: bind a real socket and look.
-    None when this machine cannot answer (no IPv6, say)."""
+    """What this machine does with the spelling: True when the OS reads it as
+    every interface, False when its own resolver refuses the spelling, None
+    when it cannot be told here (no IPv6, say).
+
+    False and None are not the same thing and the difference matters. glibc
+    reads "0", "0x0" and "000.000.000.000" as 0.0.0.0, so the bind below finds
+    them. Windows' getaddrinfo refuses them, and socket.bind - which goes
+    through it - can never use them either, so on Windows they are not
+    every-interface addresses and there is no listener to refuse. None is left
+    for a machine that cannot be asked at all."""
     family = socket.AF_INET6 if ":" in spelling else socket.AF_INET
     try:
         s = socket.socket(family, socket.SOCK_STREAM)
@@ -111,6 +137,13 @@ def _os_binds_every_interface(spelling):
         s.bind((spelling, 0))
         return s.getsockname()[0] in ("0.0.0.0", "::")
     except OSError:
+        # The bind failed: either this machine's resolver refuses the spelling,
+        # or it cannot be asked at all. `_binds_every_interface` asks the same
+        # resolver, so ask it the same question.
+        try:
+            socket.getaddrinfo(spelling, 0, family, socket.SOCK_STREAM)
+        except (OSError, UnicodeError, ValueError):
+            return False
         return None
     finally:
         s.close()
@@ -131,7 +164,7 @@ class Echo(BaseHTTPRequestHandler):
 def t_the_patch_applies_over_loopback_too():
     ok, out = _skeleton.rehearse(PATCH.name, "token-file.patch", "loopback-too.patch")
     if ok is None:
-        return check("SKIP - " + out, True)
+        return skip(out)
     check(f"{PATCH.name} applies (and reverses) over what loopback-too wrote", ok is True, out)
     if ok:
         # The rehearsal file repeats context lines across hunks, so read the
@@ -158,10 +191,20 @@ def t_the_table_is_true_and_every_wildcard_is_refused():
     asked = 0
     for spelling in _cases()["every_interface"]:
         real = _os_binds_every_interface(spelling)
-        if real is None:
-            check(f"SKIP - this machine cannot bind {spelling!r} to ask the OS", True)
-        else:
+        if real is not None:
             asked += 1
+        if real is False:
+            # This machine's own resolver refuses the spelling, so socket.bind
+            # cannot listen on every interface with it (Windows, for the seven
+            # numeric shorthands only glibc reads). There is no listener to
+            # refuse here; the guard must simply not invent one - and asking it
+            # for True would be asking about a different machine's resolver.
+            check(f"this machine refuses {spelling!r} itself, and the backend does not call it "
+                  f"an every-interface address", wild(spelling) is False)
+            continue
+        if real is None:
+            skip(f"this machine cannot bind {spelling!r} to ask the OS")
+        else:
             check(f"the OS really binds every interface for {spelling!r}", real is True)
         check(f"_binds_every_interface({spelling!r}) is True", wild(spelling) is True)
         try:
@@ -188,14 +231,27 @@ def t_no_second_listener_for_any_wildcard_spelling():
     # taken 127.0.0.1 first and then collided with the main 0.0.0.0 socket.
     ns, _ = _lifted()
     fn = ns["_loopback_companion"]
-    for bind in _cases()["every_interface"] + ["", "127.0.0.1", "localhost"]:
+    for bind in _cases()["every_interface"]:
+        if _os_binds_every_interface(bind) is False:
+            # This machine's resolver refuses the spelling, so the main listener
+            # could not open on it at all (Windows - see
+            # _os_binds_every_interface). A companion on 127.0.0.1 is then the
+            # only listener there is, not a second one, and this check has
+            # nothing to say about it.
+            skip(f"this machine cannot bind {bind!r} at all, so there is no wildcard to cover")
+            continue
+        result, said = _quiet(fn, bind, 1, Echo)
+        check(f"bind {bind!r} gets no second listener", result is None, said)
+    # These three never reach the resolver: the companion covers loopback
+    # itself, and "" is every interface whatever the OS's parser says.
+    for bind in ("", "127.0.0.1", "localhost"):
         result, said = _quiet(fn, bind, 1, Echo)
         check(f"bind {bind!r} gets no second listener", result is None, said)
 
 
 def t_the_real_file():
     if missing("jarvis_hud.py"):
-        return check("SKIP - " + explain(), True)
+        return skip(explain())
     src = SRC.read_text(encoding="utf-8")
     if "_refuse_every_interface" not in src:
         return check("bind-wildcard.patch is applied to jarvis_hud.py", False,
@@ -222,7 +278,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

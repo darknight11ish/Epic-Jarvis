@@ -224,7 +224,11 @@ function paint() {
   el.retire.disabled = busy;
   el.bringBack.hidden = !shared.bringBack;
   el.bringBack.disabled = busy || !live();
-  placeOldKey(view.shared && view.shared.retired ? "hidden" : "moved");
+  // The old reveal ("Show the old shared key") is hidden once the shared key
+  // works from this PC only - retired by the owner, or (2026-10-05) kept here
+  // because a device holds a key of its own. It can no longer pair anything.
+  const sharedGone = Boolean(view.shared && (view.shared.retired || view.shared.first_pair_only));
+  placeOldKey(sharedGone ? "hidden" : "moved");
 }
 
 async function loadList() {

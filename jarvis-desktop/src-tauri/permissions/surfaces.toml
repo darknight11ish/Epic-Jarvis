@@ -206,6 +206,26 @@ permissions = [
 ]
 
 # ---------------------------------------------------------------------------
+# One command, on its own: opening Settings or the Brain at a named place -
+# the fix button under an error, and the Brain's own "hidden menus" rail
+# button, which opens Settings at "Show or hide menus". Same reasoning as
+# `external-links` above: the Brain needs this one navigation command, and
+# should not have to take on the rest of quickbar-surface's grants (streaming,
+# clipboard, its own geometry) to get it.
+#
+# It changes no setting and decides nothing, and the app lock still applies to
+# whichever window it opens. Bug audit 2026-10-05, R5: it was granted only by
+# quickbar-surface, so the Brain's own button was refused and silently did
+# nothing.
+# ---------------------------------------------------------------------------
+[[set]]
+identifier = "open-fix-place"
+description = "Ask the app to open Settings or the Brain at a named place. Navigation only: it changes no setting and approves nothing."
+permissions = [
+  "allow-open-fix-place",
+]
+
+# ---------------------------------------------------------------------------
 # The spotlight. Streaming, its own geometry, the clipboard, and the shell-free
 # external link opener.
 # ---------------------------------------------------------------------------
@@ -358,6 +378,12 @@ permissions = [
   "allow-set-api-settings",
   # "Send test notification" in notification settings.
   "allow-notify-user",
+  # Notification settings' own switches (notifications.rs): the four per-kind
+  # toggles and the quiet-hours window, pushed into Rust by
+  # notifications-prefs.js. No approval card and no backend call: it changes
+  # only what THIS PC shows its owner, so it sits with the rest of the
+  # settings-only powers rather than anywhere a chat page could reach it.
+  "allow-set-notification-prefs",
   # "Show the token for my phone": returns the pairing token to this one
   # page, on a click, so the owner can type it into the phone. Here and
   # nowhere else - the other windows never need to see it.
@@ -633,6 +659,16 @@ permissions = [
   # anything - the owner still confirms the result with Save.
   "allow-crash-notes",
   "allow-find-python",
+  # "What Jarvis can see" (Settings -> Look at this and Watch with me): whether
+  # a look or a Watch with me session is on right now, in fixed words and
+  # numbers only - never a program, a site, a title or a word from the screen
+  # (look.rs). The page needs it to say whether this PC can look at all, and
+  # with the call refused the whole section - the Never look at list and
+  # picture mode with it - stayed hidden behind its own catch (bug audit
+  # 2026-10-05, R2). Reading the session is not owning one: `allow-screen-watch`
+  # stays with the two windows that start and stop it, which is why this is one
+  # line here rather than the whole `screen-watch` set.
+  "allow-screen-status",
 ]
 
 # ---------------------------------------------------------------------------
@@ -906,6 +942,30 @@ permissions = [
   "allow-brain-quiz-answer",
   "allow-brain-quiz-finish",
   "allow-brain-quiz-stop",
+]
+
+# "Grade this better": the cloud half of Quiz me on a text (the owner's
+# decision of 2026-09-30; src/brain/quiz_cloud.rs, backend
+# jarvis_quiz_cloud.py; JARVIS-API.md section 113, docs/STUDY-FROM-TEXT-DESIGN.md
+# section 15). ONE text quiz may be sent to ONE cloud AI service to be marked
+# better than the local model can - the one place study words leave this PC,
+# and only for that quiz. The PC raises ONE approval card showing the whole
+# message before anything is sent (a risky approval, never an "always allow",
+# never by voice), so these four commands are a way out of the PC like sending
+# email. They are the Brain quiz screen's own and no other window shows it:
+# start is held on a stale link (rule 4), polling and Cancel never are, and the
+# quiz's words come back hidden with the private lists.
+#
+# Its own set rather than four more lines in `brain-quiz` above, whose whole
+# promise is "no card, nothing saved": the two must not read as one power.
+[[set]]
+identifier = "brain-quiz-cloud"
+description = "Ask whether the PC has cloud quiz grading and which service would take it, send ONE quiz to be graded (ONE approval card on this PC; nothing leaves it before a yes), poll the request and cancel it while its card waits - the quiz's words hidden with the private lists."
+permissions = [
+  "allow-brain-quiz-cloud-info",
+  "allow-brain-quiz-cloud-start",
+  "allow-brain-quiz-cloud-get",
+  "allow-brain-quiz-cloud-cancel",
 ]
 
 # Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md section 14;

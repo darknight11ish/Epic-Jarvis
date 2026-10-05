@@ -6,6 +6,22 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A full audit pass, recorded 2026-10-04 23:44 PDT (2026-10-05 06:44 UTC).**
+  Twelve of fourteen read-only passes are complete and written up as five
+  documents, indexed by `docs/AUDIT-PASS-2026-10-05.md`: a whole-project feature
+  review, a comparison against Muse and ChatGPT "Dots" and the rest, a bug hunt
+  across the backend, both clients and the Rust shell, a UI audit of both apps,
+  and two deep audits (prompt injection end to end; dependencies and supply
+  chain). Nothing in the product was changed - the pass only added documents.
+  Two passes, disaster recovery and performance, were still running and are
+  appended in a second commit. Headlines: the 12 GB card is installed and
+  nothing is measured; fourteen of the worst defects are features or tests that
+  silently do nothing (including **all spoken audio**, the "What Jarvis can see"
+  privacy section, and 46 of 56 local UI suites); the live backend is exactly
+  base + stack, with all 119 applied patches reverse-applying cleanly; and the
+  rush latch that would catch "approve this now, before it expires" has no
+  caller on Jarvis's own read path. The pass ends with eleven choice groups for
+  the owner.
 - **The "driven openly" rule is gone (2026-09-29, your decision).** You asked
   several times, after being told the risk each time, for stealth to be on for everything the
   new headless browser runs, so the old rule "nothing that hides that a
