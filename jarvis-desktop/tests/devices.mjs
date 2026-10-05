@@ -31,6 +31,7 @@ import {
   countdown,
   removeQuestion,
   sessionLine,
+  SHARED_FIRST_PAIR_ROW,
   SHARED_PROMPT_RETIRE,
   sharedSignedLine,
   sharedView,
@@ -101,6 +102,15 @@ await check("the words: the PC's own sentence wins, the design's otherwise", asy
   assert.equal(retired.retire, false);
   assert.equal(retired.bringBack, true);
   assert.equal(sharedView({ retired: true, can_bring_back_here: false }).bringBack, false);
+  // The first pairing is done: a device holds a key of its own, so the shared
+  // key now works from this PC only - even though nobody pressed Retire
+  // (backend, 2026-10-05). Neither button is offered: Retire would change
+  // nothing, and Bring it back could not work.
+  const firstOnly = sharedView({ retired: false, first_pair_only: true, can_bring_back_here: true });
+  assert.equal(firstOnly.line, SHARED_FIRST_PAIR_ROW);
+  assert.equal(firstOnly.retire, false);
+  assert.equal(firstOnly.retireQuestion, null);
+  assert.equal(firstOnly.bringBack, false);
 });
 
 await check("a device key is taken out of an error's Details (design 8.6)", async () => {
@@ -129,6 +139,9 @@ await check("signed approvals: the words for on, waiting, off and absent; nothin
   assert.equal(sharedSignedLine({ retired: true, last_other_seen: NOW }, true), "");
   assert.equal(sharedSignedLine({ retired: true, last_other_seen: NOW }, true, true), "");
   assert.equal(sharedSignedLine({ retired: false, last_other_seen: null }, true), "");
+  // Nothing left to retire once the first device has its own key: the prompt
+  // would ask the owner to press a button that changes nothing.
+  assert.equal(sharedSignedLine({ retired: false, first_pair_only: true }, true, true), "");
 });
 
 /* ── The page ─────────────────────────────────────────────────────────── */

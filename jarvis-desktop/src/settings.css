@@ -503,6 +503,13 @@ select:focus-visible {
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: 1.55;
+  /* The reading measure. `.page` is 640px wide, which at this size is about
+     90 characters a line; comfortable is 45-75 (findings D6 and the settings
+     audit's Medium list, 2026-10-05). 46em is a little over 70 characters at
+     this font size, and it never widens a line - a note narrower than the
+     card keeps its own width. Nothing here is a table, a grid or a control,
+     so no layout rule depends on a note filling the card. */
+  max-width: 46em;
 }
 
 /* The face's sharpness levels, one line each (Animal options). */
@@ -1185,4 +1192,52 @@ select:focus-visible {
 
 .card.card-collapsed > :not(h2):not(.card-collapse-toggle):not(.menu-visit-banner) {
   display: none !important;
+}
+
+/* Windows high-contrast (forced-colors): the system palette replaces ours, so
+   box-shadows and tinted fills vanish. Keep every control's edge and its focus
+   outline visible, in the system's own colours - the same four rules the
+   quickbar (style.css) and the widget (widget.css) already carry. Settings is
+   the biggest reading surface in the app and had none (findings D6, 2026-10-05).
+
+   `forced-color-adjust: none` is added only where colour IS the data, never to
+   ordinary text or controls:
+     - the theme swatch, which is the colour it offers;
+     - the app-lock state dot, whose colour is which state the PC is in;
+     - the spend bar, whose length is a total and whose fill is a warning. */
+@media (forced-colors: active) {
+  .btn,
+  .choice,
+  .theme-row,
+  .menu-switch-row input,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    border: 1px solid ButtonText;
+  }
+
+  .btn:focus-visible,
+  .choice:focus-visible,
+  .theme-row:focus-visible,
+  .settings-jump-group a:focus-visible,
+  .more > summary:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .card,
+  .settings-jump,
+  .menu-visit-banner {
+    border: 1px solid CanvasText;
+  }
+
+  /* Colour is the data here and nowhere else on this page: `.link .dot` is
+     the connection state (settings.html line 198's data-connected and
+     data-tone). Everything else keeps the system's own colours. */
+  .dot {
+    forced-color-adjust: none;
+  }
 }

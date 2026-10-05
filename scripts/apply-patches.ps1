@@ -2773,7 +2773,14 @@ try {
         $exitCode = $LASTEXITCODE
         $txt = ($out | Out-String)
         if ($exitCode -eq 0) {
-            $skipN = ([regex]::Matches($txt, '(?m)^[ \t]*(ok[ \t]+)?SKIP(PED)?\b')).Count
+            # A check a suite could not run now prints "skip  <why>" (each
+            # suite's own skip() helper, beside its check()), and a handful of
+            # older harnesses still print "SKIP  <name>" themselves. Both are
+            # read here, case-insensitively. The word has to be a whole word
+            # followed by a space, a colon or the end of the line: test_topics.py
+            # has a real check named "skipped-this-week is a number per topic",
+            # and counting that as a skip would be the same mistake in reverse.
+            $skipN = ([regex]::Matches($txt, '(?mi)^[ \t]*(ok[ \t]+)?skip(ped)?(?=[ \t:]|$)')).Count
             $sm = [regex]::Match($txt, '(?i)\b(\d+) skipped\b')
             if ($sm.Success -and [int]$sm.Groups[1].Value -gt $skipN) { $skipN = [int]$sm.Groups[1].Value }
             $pass++

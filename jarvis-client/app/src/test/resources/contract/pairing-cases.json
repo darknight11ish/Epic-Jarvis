@@ -671,7 +671,8 @@
   },
   "key": {
    "device_removed": "This phone's key was removed on your PC, so Jarvis no longer answers it. Pair again with the QR code in Settings, Devices, on your PC.",
-   "shared_retired": "This phone was using the old shared key, which has been retired on your PC. Pair it with the QR code in Settings, Devices, on your PC."
+   "shared_retired": "This phone was using the old shared key, which has been retired on your PC. Pair it with the QR code in Settings, Devices, on your PC.",
+   "shared_first_pair_only": "This PC gives every device its own key now, so the old shared key works on this PC only. Pair this phone with the QR code in Settings, Devices, on your PC."
   },
   "session": {
    "waiting_for_phone": "Waiting for your phone...",
@@ -691,6 +692,8 @@
    "uses_it_yourself": "This phone is still using the old shared key. Pair it with the QR code first, or it would cut itself off.",
    "shared_row": "Old shared key - used by this PC, and by devices paired before per-device keys.",
    "shared_retired": "Retired - it now works on this PC only.",
+   "shared_first_pair_row": "The first device has its own key, so the old shared key now works on this PC only.",
+   "unretire_first_pair": "Every device has its own key now, so the old shared key cannot be let back out: that is what keeps a copied key from reaching Jarvis. To use it again, remove every device below first (each one pairs again with the QR code afterwards).",
    "unretire_waiting": "Waiting for your approval. Other devices can use the old shared key again only if you approve the card, on this PC.",
    "registry_unreadable": "The device list on this PC cannot be read (devices/registry.json in the Jarvis settings folder), so no device key works and only this PC can reach Jarvis. To start fresh, run  py -3 jarvis_devices.py --start-fresh  on the PC - every phone then pairs again.",
    "no_owner_check": "This PC does not check approvals itself yet (jarvis_owner_check.py is not running), so a pairing card could never be approved. Run apply-patches.ps1 again.",
