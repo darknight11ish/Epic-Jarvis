@@ -594,7 +594,7 @@ def t_the_patch_and_the_lists():
     # inside jarvis_gate.py's action_for_tool() and touches no list referee.patch's
     # hunks anchor on.
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
-             "gate-action-name.patch"}
+             "gate-action-name.patch", "tutorials.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")
