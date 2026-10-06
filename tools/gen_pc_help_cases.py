@@ -122,7 +122,9 @@ def main() -> int:
             bad.append(path)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
+            # newline="\n": without it a stale file would be rewritten CRLF on
+            # Windows and LF elsewhere (the repository is LF everywhere).
+            path.write_text(text, encoding="utf-8", newline="\n")
             print(f"wrote {path.relative_to(ROOT)}")
     if bad:
         for p in bad:

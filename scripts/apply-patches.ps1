@@ -138,6 +138,18 @@ $PATCHES = @(
     # patch here touches. Listed last for readability, not because order
     # matters for this one.
     'ui-control-wiring.patch'
+    # The tool->action gaps (2026-10-03). Eleven names jarvis_agent.py's
+    # TOOLS have always put to jarvis_gate had no _TOOL_ACTIONS entry, so
+    # action_for_tool() fell through to "unclassified_tool" and every call
+    # asked. It only ADDS entries, at the very END of the _TOOL_ACTIONS dict
+    # (after "persona_write"), so it touches no line any other patch edits -
+    # not the entries ui-control-wiring, plan-gate, email-send, draft-email
+    # or inbox-tidy add near the top of that dict, and not the closing brace
+    # the _RANK and _NO_RULE_FROM_DENIAL blocks further down are built on.
+    # It still goes right after ui-control-wiring because that is the last
+    # patch in this list that puts lines into _TOOL_ACTIONS above this one's
+    # own region - the table this patch completes.
+    'gate-entries.patch'
     # Also independent - touches jarvis_hud.py's /api/chat, but a different
     # few lines than degrade-filter or any other patch that lands there.
     'ollama-direct.patch'
@@ -454,10 +466,6 @@ $PATCHES = @(
     # jarvis_manner.py copied in; without it the routes answer 503 and
     # answers are worded as before.
     'manner.patch'
-    # Per-model thinking levels (2026-10-01, Section 5.5): GET and POST
-    # /api/thinking, no approval card either way. Its context is manner's
-    # route blocks. Needs jarvis_thinking.py copied in.
-    'thinking.patch'
     # "Stop everything" (the owner's decision of 2026-09-25): POST
     # /api/stop_all halts a running task, the tools of the answer being
     # written, and anything registered with jarvis_stop_all; it never
@@ -471,6 +479,15 @@ $PATCHES = @(
     # and power-mode's POST block, so it goes after both. Needs
     # jarvis_focus.py copied in; without it the routes answer 503.
     'focus.patch'
+    # Per-model thinking levels (2026-10-01, Section 5.5): GET and POST
+    # /api/thinking, no approval card either way. It goes AFTER focus.patch:
+    # its first hunk's trailing context is focus's own
+    # `if path in ("/api/focus", ...)` block, which does not exist in the file
+    # until focus.patch has inserted it. Applying it first makes `git apply`
+    # fail on that hunk (no fuzz, no --3way), which stops the WHOLE run with
+    # "N patch(es) will not apply" and leaves the backend unchanged. Needs
+    # jarvis_thinking.py copied in.
+    'thinking.patch'
     # "What asks first" (the owner's decisions of 2026-09-26, after the
     # approvals audit): GET /api/asks_first (every action and whether it
     # asks, from this PC's own settings), POST /api/asks_first/tier (stricter
@@ -1027,6 +1044,31 @@ $PATCHES = @(
     # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'quiz-cloud.patch'
+    # The gate renamed an action on its way out (2026-10-03). For the 58
+    # _TOOL_ACTIONS entries whose value is a TIER literal ("calculator": "auto"),
+    # action_for_tool() returned f"tool:{name}" as the action name. That string
+    # is what goes to the checker, into the audit log, and onto the "What can
+    # Jarvis reach" page (jarvis_reach.action_of) - and no config file, page or
+    # suite has ever used it. Three suites expected "calculator" and got
+    # "tool:calculator". It now returns the bare name.
+    #
+    # The entry is still REGISTERED in _SYNTH_TIERS under that bare name: a
+    # tier literal is not a key of [autonomy.tiers], so _tiers()'s
+    # tiers.get(action, UNKNOWN_TIER) would otherwise resolve "calculator" to
+    # "ask" instead of "auto". That registration is load-bearing and stays.
+    #
+    # One hunk, in action_for_tool, which no other patch touches - so it can go
+    # last, like every new patch, with no ordering constraint.
+    'gate-action-name.patch'
+    # "Tutorials and the FAQ" (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md,
+    # JARVIS-API section 114): GET /api/tutorials, POST /api/tutorials/progress and GET
+    # /api/faq. ONE hunk in jarvis_hud.py, an install block right after retirement.patch's
+    # own, so it goes after it. One catalogue and the owner's reading progress, kept on the
+    # PC and shared by both apps: it writes its own one JSON file in the config folder,
+    # raises no card and calls nothing out. Needs jarvis_tutorials.py copied in (it is in
+    # SHIPPED below); without it, or on any error, the banner says so and the routes are
+    # simply not there.
+    'tutorials.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1192,6 +1234,8 @@ $SHIPPED = @(
     'jarvis_photo_remind.py'     # "Photo to reminder": the dates in a picture, read on this PC and PROPOSED, never set by itself (photo-reminder.patch)
     # --- "PC help" (2026-09-28, no patch of its own) ---
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
+    # --- Tutorials and the FAQ (2026-10-05) ---
+    'jarvis_tutorials.py'        # the owner's own request: one catalogue for both apps and the reading progress kept on the PC (tutorials.patch); no gate line, no card, no tool
     # --- "Smarter answers" (2026-09-28, no patch of its own) ---
     'jarvis_claims.py'           # "I've done it" when nothing was done: one plain line at the end of the answer; jarvis_agent.py calls it
     # --- "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28) ---
@@ -1654,6 +1698,13 @@ if ($UsingRebuilt) {
 # temp folder with its endings forced to LF and the copy is what gets applied.
 # Nothing in the repository or the backend is rewritten. It is correct on a
 # machine where the files were already LF, so there is no case to detect.
+#
+# THE FILES THE PATCHES WRITE - the other side, and not fixed here. `git apply`
+# writes its result through git's own conversion too, so `core.autocrlf=true`
+# turns an LF patch on an LF target into a CRLF file however clean the patch
+# is. That half is pinned at the one call that writes anything (Invoke-Patch,
+# with `-c core.autocrlf=false -c core.eol=lf`); the comment there has the
+# measured bytes.
 $LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
 
@@ -1963,11 +2014,38 @@ function Invoke-Patch {
     # NOT $args - that is an automatic variable in PowerShell, and writing to
     # it inside a function is a way to lose an afternoon.
     if ($UseGit) {
+        # THE ENDINGS OF THE FILE THIS WRITES (2026-10-05). `git apply` does
+        # not write the patch's bytes: it writes them through git's own
+        # line-ending conversion, so on a machine whose `core.autocrlf` is
+        # true - this PC's system config sets exactly that - an LF target and
+        # an LF patch still land as a CRLF file. Normalising the PATCHES (see
+        # the section above) cannot help with this half: the conversion
+        # happens on the way OUT. Measured here with three lines of Python
+        # and a three-line patch, in a scratch repo with
+        # `core.autocrlf=true`: plain `git apply` left
+        # `6f 6e 65 0d 0a 54 57 4f 0d 0a 74 68 72 65 65 0d 0a` (3 CRLF,
+        # bytes=17), and the same call with the pins below left
+        # `6f 6e 65 0a 54 57 4f 0a 74 68 72 65 65 0a` (no CR at all,
+        # bytes=14). That drift is what the .gitattributes comment calls an
+        # afternoon, and on the owner's PC it would be every run.
+        #
+        # Pinned per call with -c, the way the GIT_CEILING_DIRECTORIES above
+        # is pinned per call: nothing global and nothing in a repository is
+        # changed, and nothing about which patch is chosen or in what order
+        # changes. core.autocrlf=false is the measured half. core.eol=lf is
+        # the other half of the same conversion, and it is not decoration:
+        # if the backend folder is itself a git repository then the ceiling
+        # above cannot hide its .gitattributes, and a `* text=auto` attribute
+        # with autocrlf=false still writes CRLF unless core.eol says lf
+        # (measured: CR=3 without it, CR=0 with it). An explicit `eol=crlf`
+        # attribute beats both - only the ceiling stops that one, which is
+        # why the ceiling is not optional either.
+        #
         # --3way is deliberately absent. It can leave conflict markers in a
         # working Python file, which turns "the patch did not apply" into
         # "the backend will not start and the error is a syntax error on
         # line 900".
-        $gitArgs = @('apply', '--verbose')
+        $gitArgs = @('-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'apply', '--verbose')
         if ($Check)   { $gitArgs += '--check' }
         if ($Reverse) { $gitArgs += '--reverse' }
         $gitArgs += $File

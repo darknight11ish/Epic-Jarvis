@@ -268,6 +268,23 @@ def _real_statuses() -> list:
     keep_on = M._RERANK_ON
     out = []
 
+    # PINNED, like FIXED_DB below: whether sqlite-vec is installed on the
+    # machine that runs this must not change the document. CI installs no
+    # sqlite-vec ON PURPOSE (.github/workflows/ci.yml, the backend job: "the
+    # memory ones (fastembed, sqlite-vec) are left out - the suites use a hash
+    # embedder and must pass without them"), and the owner's PC has it, so the
+    # same generator wrote two different files - 20,991 characters with it,
+    # 22,503 without: `vector_search` true -> false and `unembedded` 0 -> 4
+    # (measured 2026-10-04, audit 03) - and backend/test_memory_words.py then
+    # FAILED in CI on a fixture that machine had just written. The store's own
+    # status() is still what every case below holds; only the extension's
+    # presence is stated here rather than read off the box. The four facts
+    # above are what the owner's PC embeds, so they are marked embedded too.
+    if not st._vec_ok:
+        st._vec_ok = True
+        with contextlib.closing(st._connect()) as c:
+            c.execute("UPDATE facts SET embedded=1")
+
     def reset(**kw):
         M._rr.update(state="not started", model=None, why="", said=False, slow=0, used=0)
         M._rr.update(**kw)

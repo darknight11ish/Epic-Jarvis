@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-quiz-cloud-cancel"
+description = "Enables the brain_quiz_cloud_cancel command without any pre-configured scope."
+commands.allow = ["brain_quiz_cloud_cancel"]
+
+[[permission]]
+identifier = "deny-brain-quiz-cloud-cancel"
+description = "Denies the brain_quiz_cloud_cancel command without any pre-configured scope."
+commands.deny = ["brain_quiz_cloud_cancel"]

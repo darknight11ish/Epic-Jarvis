@@ -226,6 +226,9 @@ MENUS: tuple = (
        area="brain", view="work", kind="tab", names=("work",)),
     _m("brain.tab.projects", "Projects", "Projects, their notes and benchmarks.",
        area="brain", view="projects", kind="tab", group="goals-projects", names=("projects",)),
+    _m("brain.tab.tutorials", "Tutorials",
+       "How Jarvis works, step by step, and the answers to the usual questions.",
+       (DESKTOP,), area="brain", view="tutorials", kind="tab", names=("tutorials",)),
     _m("brain.tab.galaxy", "Galaxy", "The map of what Jarvis knows.", (DESKTOP,),
        area="brain", view="galaxy", kind="tab", names=("galaxy",)),
     _m("brain.tab.now", "Now", "What Jarvis is doing right now.", (DESKTOP,),
@@ -291,6 +294,23 @@ MENUS: tuple = (
        (DESKTOP,), area="brain", view="faculties", names=("model memory",)),
     _m("brain.model.pc-help", "PC help", "Five plain answers about the PC.", (PHONE,),
        area="brain", view="faculties", names=("pc help",)),
+    # Tutorials and the FAQ (the owner's request of 2026-10-05; JARVIS-API
+    # section 114, docs/TUTORIALS-DESIGN.md). One catalogue for BOTH apps and
+    # the owner's reading progress, kept on the PC: an intro, a tutorial for
+    # each major part, and the questions and answers.
+    #
+    # The desktop draws them as its own "Tutorials" rail tab
+    # (`brain.tab.tutorials`); the phone draws the same catalogue as a plate
+    # inside its Model view, and this is that plate. Its title names the FAQ
+    # it also holds, because only one menu may answer to a spoken name and the
+    # rail tab has it: the backend does not know which app asked, so two menus
+    # both called "Tutorials" could not be told apart (test_menu_visibility.py
+    # "no spoken name means two things"). It is the phone's alone now - the
+    # desktop has no Model-view tutorials card, only the tab.
+    _m("brain.model.tutorials", "Tutorials and the FAQ",
+       "The intro, a tutorial for each part, and the answers to the usual questions.",
+       (PHONE,), area="brain", view="tutorials",
+       names=("tutorials and the faq", "tutorial")),
 
     # ---- Brain: Work ---------------------------------------------------
     _m("brain.work.focus", "Focus session", "Start and stop a focus session.",

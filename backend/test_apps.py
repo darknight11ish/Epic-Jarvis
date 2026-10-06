@@ -39,6 +39,7 @@ import json
 import os
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -145,10 +146,38 @@ def ask(**kw):
     return dict(tier_of=lambda a: _TIER.get(a, "ask"), **kw)
 
 
+def _rmtree(path):
+    """shutil.rmtree that can also delete what git wrote. Git marks its object
+    files READ-ONLY, and Windows refuses to unlink a read-only file - POSIX does
+    not care, so a plain rmtree works in CI and raised PermissionError on the
+    owner's PC (2026-10-03). Clear the bit first, then remove.
+
+    THE MODE MUST KEEP READ AND EXECUTE. `stat.S_IWRITE` alone is 0o200: on
+    Windows that is "not read-only", which is what this needs, but on POSIX it
+    strips a DIRECTORY's read and execute bits - so the walk that clears the
+    flag left an undeletable tree behind, every later test in the run found the
+    earlier app folders still there, and CI's "ran without crashing" checks
+    failed seventeen times in a row (2026-10-04). 0o700 is right on both:
+    writable on Windows, still listable and traversable on POSIX.
+    """
+    for dirpath, dirnames, filenames in os.walk(path):
+        for name in list(dirnames) + list(filenames):
+            full = os.path.join(dirpath, name)
+            try:
+                os.chmod(full, stat.S_IRWXU
+                         if os.path.isdir(full) else stat.S_IREAD | stat.S_IWRITE)
+            except OSError:
+                pass
+    shutil.rmtree(path, ignore_errors=True)
+
+
 def fresh():
     """A new store, no app folders, no card state."""
     _N[0] += 1
-    shutil.rmtree(W.root(), ignore_errors=True)
+    # NOT plain rmtree(ignore_errors=True): git's object files are read-only and
+    # Windows refuses to unlink them, so the old app folders survived and the
+    # next app of the same name came out as "notes-app-3" (2026-10-03).
+    _rmtree(W.root())
     A._reset_for_tests()
     return P.Projects(_TMP / f"projects-{_N[0]}.db")
 
@@ -418,7 +447,7 @@ def t_git_missing_and_the_folder_gone():
     check("... reading a task and merging are 503",
           code == 503 and code2 == 503 and "Git is not installed" in body["error"]
           and "Git is not installed" in body2["error"], (body, body2))
-    shutil.rmtree(W.project_dir(app))
+    _rmtree(W.project_dir(app))
     full = s.get(pid)["app"]
     check("an app whose folder was deleted by hand: git_ok false and a sentence, no crash",
           full["git_ok"] is False and "folder is missing" in full["said"]
@@ -644,7 +673,7 @@ def t_the_card_is_exactly_the_workspaces_words():
           "aside, and your app stays as it is." in prompt)
     check("the card says the owner pasted it", "You pasted this change in on your PC." in prompt)
     check("the gate's audit detail carries counts, not text",
-          plan.detail() == {"project": "notes-app", "files": 3})
+          plan.detail() == {"project": "notes-app", "files": 3}, plan.detail())
 
 
 def t_the_card_carries_a_change_up_to_the_cap():
@@ -913,7 +942,7 @@ def t_discard():
     code, body = A.handle_post(route(pid, "/nope/discard"), {}, store=s)
     check("a task id that is not an id: 404", code == 404)
     task = ready(s, pid, title="Copy deleted by hand")
-    shutil.rmtree(W.task_dir(app, task))
+    _rmtree(W.task_dir(app, task))
     check("a task whose copy was deleted by hand is not listed",
           task not in [t["task"] for t in s.get(pid)["app"]["tasks"]])
     code, body = A.handle_get(route(pid, f"/{task}"), store=s)

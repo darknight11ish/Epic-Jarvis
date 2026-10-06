@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import sys
+import threading
 import traceback
 from pathlib import Path
 
@@ -139,6 +140,41 @@ def t_never_a_card_by_construction():
     check("... nor opens a socket", "socket" not in names and "urllib" not in src)
 
 
+def _stop_what_this_suite_started() -> None:
+    """Shut the ONE scheduler down again, and wait for it, before this process
+    exits.
+
+    `t_the_fast_path` calls jarvis_quick.answer(), which reaches
+    jarvis_schedule.get() - and get() STARTS the scheduler's singleton loop
+    on a daemon thread that never returns (it waits TICK_MAX = 30 s between
+    ticks), plus two one-shot "after start" threads it fires on the first
+    start. This suite used to leave all three alive at interpreter teardown,
+    which is the abort CI reported once in four runs on this file:
+
+        terminate called without an active exception   (exit -6, SIGABRT)
+
+    A daemon thread does not keep the process alive, but the C runtime it is
+    standing in when finalization begins does abort the process. Windows
+    happens to survive it; Linux does not, which is why this passed here and
+    on the owner's PC and failed on the Ubuntu job. Stop-and-join is already
+    in test_briefing.py (twice) and test_tidy.py for the same reason. Joining
+    them here is the honest fix: shut down what this suite started, rather
+    than hide the crash."""
+    try:
+        import jarvis_schedule as S
+        if S._SCHED is not None:
+            S._SCHED.stop()
+    except Exception as exc:                       # pragma: no cover - belt and braces
+        print(f"note: the scheduler could not be stopped ({type(exc).__name__}: {exc})")
+    # The one-shot starters (jarvis_schedule.after_start) are milliseconds of
+    # work, but they hold the SQLite handle the scheduler opened, so they get
+    # the same courtesy: a bounded join, never a bare exit underneath them.
+    for t in list(threading.enumerate()):
+        if t is not threading.main_thread() and t.name in (
+                "jarvis-schedule", "jarvis-schedule-after-start"):
+            t.join(5.0)
+
+
 if __name__ == "__main__":
     for fn in (t_one_event_with_no_words, t_stop, t_honest_about_which_phone, t_the_fast_path,
                t_never_a_card_by_construction):
@@ -148,6 +184,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
+    _stop_what_this_suite_started()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
