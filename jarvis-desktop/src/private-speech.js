@@ -116,11 +116,20 @@ export function isToolRun(data) {
  * `read_screen`, an answer about the screen (the owner's answer of
  * 2026-09-28; a read the PC records, not a model tool) - and `read_camera`,
  * an answer about what the phone's camera sees in Jarvis Live (the owner's
- * answer of 2026-09-28; off until the 12 GB card passes the photo test).
+ * answer of 2026-09-28; off until the 12 GB card passes the photo test) -
+ * and `read_web_page`, an answer about a page the owner handed over (the
+ * owner's request of 2026-10-05: "post a webpage into jarvis and it can read
+ * the content out loud"). It sits beside `web_search` because both are the
+ * public web the owner asked for, with the address shown on a card first; a
+ * sensitive saved fact, a private question, the router's private gate and a
+ * stale or dropped stream all still keep the answer on screen.
  * Exact names, as the `step` event carries them. The phone's
- * `PrivateAloud.READ_ALOUD_TOOLS`.
+ * `PrivateAloud.READ_ALOUD_TOOLS` and the shared table
+ * `tests/fixtures/private-aloud-cases.json` are checked against this list, so
+ * a name added to one of the three alone fails a test.
  */
-export const READ_ALOUD_TOOLS = Object.freeze(["home_read", "read_camera", "read_screen", "web_search"]);
+export const READ_ALOUD_TOOLS = Object.freeze(["home_read", "read_camera", "read_screen", "web_search",
+  "read_web_page"]);
 
 /** A tool ran, and its answer stays on screen: its name is not on
  *  `READ_ALOUD_TOOLS`, or it has none. The phone's `isPrivateToolRun`. */
