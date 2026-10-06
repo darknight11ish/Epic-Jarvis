@@ -6,6 +6,19 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Past approvals get their own screen on the phone.** The read-only list you
+  asked for on 2026-09-27 was built and drawn inside the Inbox, and the
+  approvals audit of 2026-09-30 found the one thing wrong with it: "It is only
+  reachable via Inbox". The Inbox keeps its ACTIVITY row, which now opens a
+  screen of its own (`jarvis-client/.../ui/screens/ApprovalsScreen.kt`) with
+  the same fields the PC's Activity pane shows - what each card was, Approved /
+  Denied / Timed out, when, and which device - and the same four filters.
+  Nothing on it decides anything: no approve, deny, cancel, clear or re-open,
+  no new permission, and no new way out of the PC. While "Hide memory lists and
+  chat history" is on, the list hides behind the same Show as the phone's other
+  history surfaces. With nothing decided yet it says "Nothing decided yet.",
+  the PC's own words.
+
 - **A full audit pass, recorded 2026-10-04 23:44 PDT (2026-10-05 06:44 UTC).**
   Twelve of fourteen read-only passes are complete and written up as five
   documents, indexed by `docs/AUDIT-PASS-2026-10-05.md`: a whole-project feature

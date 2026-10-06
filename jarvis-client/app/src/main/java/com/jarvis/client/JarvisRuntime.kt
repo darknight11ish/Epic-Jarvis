@@ -173,7 +173,11 @@ data class InboxRead(
     val digest: SectionRead = SectionRead.Reading,
     val undo: SectionRead = SectionRead.Reading,
     val jobs: SectionRead = SectionRead.Reading,
-    /** "Activity" - past approvals. Its own key: see [pastApprovals]. */
+    /**
+     * "Past approvals" - the decided cards ([pastApprovals]). Its own key:
+     * see that flow. Read by the Inbox alongside the other three, and by
+     * [refreshPastApprovals] when its own screen opens.
+     */
     val activity: SectionRead = SectionRead.Reading,
     /** When the last read finished. 0 means never, on this run of the app. */
     val fetchedAtMs: Long = 0L,
@@ -507,11 +511,16 @@ object JarvisRuntime {
     val jobs: StateFlow<List<JobRecord>> = _jobs.asStateFlow()
 
     /**
-     * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
-     * row 11). Never the same list as [pending]: this is `/api/pending`'s
-     * `history` array, fetched by name ([JarvisApi.gateHistoryRead]), which
-     * is a different call to a different key than the one [refreshPending]
+     * "Past approvals" - past approvals, read-only (ease-of-use audit,
+     * 2026-09-27, row 11). Never the same list as [pending]: this is
+     * `/api/pending`'s `history` array, fetched by name ([JarvisApi.gateHistoryRead]),
+     * which is a different call to a different key than the one [refreshPending]
      * makes - see that function's own comment on why the two must not mix.
+     *
+     * Drawn on its own screen now
+     * ([com.jarvis.client.ui.screens.ApprovalsScreen]), which the Inbox's
+     * "ACTIVITY" row opens; read by [refreshPastApprovals] when that screen
+     * shows the list, and by [refreshInbox] alongside the Inbox's other three.
      */
     private val _pastApprovals = MutableStateFlow<List<GateHistoryItem>>(emptyList())
     val pastApprovals: StateFlow<List<GateHistoryItem>> = _pastApprovals.asStateFlow()
@@ -3027,6 +3036,59 @@ object JarvisRuntime {
 
     /** Overlapping refreshInbox calls, so the first to finish does not clear "refreshing" early. */
     private val inboxReadsInFlight = java.util.concurrent.atomic.AtomicInteger(0)
+
+    /**
+     * "Past approvals" (its own screen now,
+     * [com.jarvis.client.ui.screens.ApprovalsScreen]): the history half
+     * of `/api/pending`, and nothing else.
+     *
+     * [refreshInbox] reads the same rows, but alongside the brief, the undo shelf
+     * and the job list. The screen shows none of those three, so opening it used
+     * to mean three reads whose answers were thrown away - and a phone owner on a
+     * mesh link pays for every one of them. This reads the one list.
+     *
+     * The same read the Inbox makes, into the same place: [pastApprovals] and the
+     * `activity` field of [inboxRead], so the Inbox's own row and this screen can
+     * never show two different answers. It only ever READS [JarvisApi.gateHistoryRead]
+     * - there is no write, no decision and no new gate action here.
+     *
+     * It shares [inboxReadsInFlight] rather than keeping a counter of its own:
+     * both writes land in the same `inboxRead.refreshing`, so two separate counts
+     * would let the first read to finish clear a flag the other had just set.
+     */
+    suspend fun refreshPastApprovals() {
+        inboxReadsInFlight.incrementAndGet()
+        _inboxRead.update { it.copy(refreshing = true) }
+        try {
+            when (val result = api.gateHistoryRead()) {
+                is ApiResult.Ok -> {
+                    _pastApprovals.value = result.items
+                    _absent.value = _absent.value - INBOX_ACTIVITY_KEY
+                    _inboxRead.update {
+                        it.copy(
+                            activity = SectionRead.Read,
+                            fetchedAtMs = System.currentTimeMillis(),
+                        )
+                    }
+                }
+                is ApiResult.Failed -> {
+                    val state = readOf(result.error)
+                    // The same bookkeeping refreshInbox does for its own keys:
+                    // "not on this backend" is remembered, and cleared by the
+                    // first read that works.
+                    _absent.value = if (state == SectionRead.Absent) {
+                        _absent.value + INBOX_ACTIVITY_KEY
+                    } else {
+                        _absent.value - INBOX_ACTIVITY_KEY
+                    }
+                    _inboxRead.update { it.copy(activity = state) }
+                }
+            }
+        } finally {
+            val left = inboxReadsInFlight.decrementAndGet()
+            _inboxRead.update { it.copy(refreshing = left > 0) }
+        }
+    }
 
     /** Overlapping refreshBrain calls; same reason as [inboxReadsInFlight]. */
     private val brainReadsInFlight = java.util.concurrent.atomic.AtomicInteger(0)
@@ -8049,8 +8111,11 @@ object JarvisRuntime {
      * connection the socket has not noticed; below that a single late frame on
      * a dozing radio would flap the indicator for no reason.
      */
+    /** The one key [refreshPastApprovals] owns, inside [INBOX_KEYS]. */
+    private const val INBOX_ACTIVITY_KEY = "activity"
+
     /** The keys refreshInbox owns; it must not touch the rest of the set. */
-    private val INBOX_KEYS = setOf("digest", "undo", "jobs", "activity")
+    private val INBOX_KEYS = setOf("digest", "undo", "jobs", INBOX_ACTIVITY_KEY)
 
     /** How often the coalesced resume point may reach SharedPreferences. */
     private const val RESUME_WRITE_GAP_MS = 2_000L

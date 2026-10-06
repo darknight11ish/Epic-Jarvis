@@ -15,10 +15,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -32,6 +28,7 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.GateHistoryItem
 import com.jarvis.client.net.JobRecord
+import com.jarvis.client.net.PastApprovals
 import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.ui.parts.Freshness
 import com.jarvis.client.ui.parts.Gap
@@ -39,7 +36,6 @@ import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Toggle
-import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.pressable
 import com.jarvis.client.ui.theme.LocalChrome
 
@@ -58,6 +54,11 @@ import com.jarvis.client.ui.theme.LocalChrome
  * is no re-sorting: the digest arrives ranked by consequence, server-side, and
  * sorting it by anything in an item's own text would let the text decide its own
  * priority. There is no control that clears a rush latch.
+ *
+ * Past approvals are the one thing here that is only a way in: the rows live on
+ * their own read-only screen ([ApprovalsScreen]), opened from the ACTIVITY row
+ * under the Undo shelf, so that list can hide by the same rule as the phone's
+ * other history surfaces.
  */
 @Composable
 fun InboxScreen(
@@ -94,11 +95,15 @@ fun InboxScreen(
     /** Re-reads the Inbox after a failed read. Null draws no Retry. */
     onRetry: (() -> Unit)? = null,
     /**
-     * "Activity" - past approvals, read-only (ease-of-use audit, 2026-09-27,
-     * row 11): title, Approved/Denied/Timed out, when, and which device.
-     * Never the same list as a waiting card - see `JarvisApi.gateHistoryRead`.
+     * "Past approvals" (the ease-of-use audit's row 11). The Inbox keeps the
+     * heading and hands the list itself to its own screen: the approvals audit
+     * of 2026-09-30 found the rows were "only reachable via Inbox", and a
+     * surface of its own is also the only way this list can hide under "Hide
+     * memory lists and chat history" without the same rows still showing here.
      */
     pastApprovals: List<GateHistoryItem> = emptyList(),
+    /** Opens the "Past approvals" screen ([ApprovalsScreen]). */
+    onOpenApprovals: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     // Rule 4, on this screen: Revert and Cancel are actions, so a stream we
@@ -112,6 +117,14 @@ fun InboxScreen(
     val showDigest = digest.isNotEmpty() && read?.digest != SectionRead.Absent
     val showJobs = jobs.isNotEmpty() && read?.jobs != SectionRead.Absent
     val showUndo = undo.isNotEmpty() && read?.undo != SectionRead.Absent
+    // The rows themselves are on their own screen now ([ApprovalsScreen]), so
+    // the Inbox draws the way in and nothing else. It is drawn even with
+    // nothing decided: a way in that vanishes when the list is empty cannot be
+    // told apart from a list that is not on this backend at all - and "nothing
+    // decided yet" is said in words on the screen behind it.
+    val showApprovals = read?.activity != SectionRead.Absent
+    // Only for the "Nothing waiting" claim below: with no rows to draw here,
+    // past approvals must not count as something waiting.
     val showActivity = pastApprovals.isNotEmpty() && read?.activity != SectionRead.Absent
     // "Nothing waiting" is a claim that every list was read and came back
     // empty. Before the first read, or after a read that failed, the phone
@@ -121,7 +134,6 @@ fun InboxScreen(
         reads.all { it == SectionRead.Read || it == SectionRead.Absent } &&
             reads.any { it == SectionRead.Read }
         )
-    var activityFilter by rememberSaveable { mutableStateOf("all") }
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         TopBar("Inbox", onBack, subtitle = budgetLine(attention))
 
@@ -165,15 +177,18 @@ fun InboxScreen(
                     Triple("digest", "Today's brief", read.digest),
                     Triple("jobs", "Background jobs", read.jobs),
                     Triple("undo", "The undo shelf", read.undo),
-                    Triple("activity", "Activity", read.activity),
+                    Triple("activity", "Past approvals", read.activity),
                 )
                 problems.forEach { (key, name, state) ->
                     if (state is SectionRead.Failed || state == SectionRead.Absent) {
+                        // Past approvals keeps no rows on this screen any more,
+                        // so nothing of it is "shown below" either way - the
+                        // rows it last read are on its own screen.
                         val showingOld = when (key) {
                             "digest" -> showDigest
                             "jobs" -> showJobs
                             "undo" -> showUndo
-                            else -> showActivity
+                            else -> false
                         }
                         item(key = "read-$key") {
                             ReadProblem(
@@ -373,8 +388,14 @@ fun InboxScreen(
                 }
             }
 
-            if (showActivity) {
-                item(key = "activity-label") {
+            // "Past approvals" - the way in. It was a list of rows here until
+            // the approvals audit of 2026-09-30 found it was "only reachable
+            // via Inbox"; the heading and this row keep it reachable from where
+            // it always was, and the rows moved to their own screen, where they
+            // can hide under "Hide memory lists and chat history" like every
+            // other history surface. Nothing here decides anything either way.
+            if (showApprovals) {
+                item(key = "approvals-entry") {
                     Column {
                         Text(
                             "ACTIVITY",
@@ -383,73 +404,21 @@ fun InboxScreen(
                             modifier = Modifier.semantics { heading() },
                         )
                         Gap(6)
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Quiet(
-                                text = "All",
-                                color = if (activityFilter == "all") chrome.warnInk else chrome.textMid,
-                                onClick = { activityFilter = "all" },
+                        Plate {
+                            Text(
+                                PastApprovals.TITLE,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = chrome.textHi,
                             )
-                            Quiet(
-                                text = "Approved",
-                                color = if (activityFilter == "approved") chrome.okInk else chrome.textMid,
-                                onClick = { activityFilter = "approved" },
-                            )
-                            Quiet(
-                                text = "Denied",
-                                color = if (activityFilter == "denied") chrome.badInk else chrome.textMid,
-                                onClick = { activityFilter = "denied" },
-                            )
-                            Quiet(
-                                text = "Timed out",
-                                color = if (activityFilter == "timed_out") chrome.warnInk else chrome.textMid,
-                                onClick = { activityFilter = "timed_out" },
-                            )
-                        }
-                    }
-                }
-                val filtered = pastApprovals.filter { entry ->
-                    when (activityFilter) {
-                        "approved" -> entry.outcomeLabel == "Approved"
-                        "denied" -> entry.outcomeLabel == "Denied"
-                        "timed_out" -> entry.outcomeLabel == "Timed out"
-                        else -> true
-                    }
-                }.sortedByDescending { it.whenAt }
-                items(filtered, key = { "a-" + it.id }) { entry ->
-                    Plate {
-                        Text(
-                            entry.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = chrome.textHi,
-                        )
-                        entry.summary?.takeIf { it.isNotBlank() }?.let { summary ->
                             Gap(4)
                             Text(
-                                summary,
-                                style = MaterialTheme.typography.bodySmall,
+                                PastApprovals.ENTRY_ABOUT,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = chrome.textMid,
                             )
+                            Gap(8)
+                            Quiet(PastApprovals.OPEN, onClick = onOpenApprovals)
                         }
-                        Gap(4)
-                        Text(
-                            buildString {
-                                append(entry.outcomeLabel)
-                                if (entry.whenAt > 0) {
-                                    append(" · ")
-                                    append(ageText(System.currentTimeMillis() - (entry.whenAt * 1000).toLong()))
-                                }
-                                entry.device?.let {
-                                    append(" · ")
-                                    append(it)
-                                }
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = when (entry.outcomeLabel) {
-                                "Approved" -> chrome.okInk
-                                "Denied" -> chrome.badInk
-                                else -> chrome.textMid
-                            },
-                        )
                     }
                 }
             }

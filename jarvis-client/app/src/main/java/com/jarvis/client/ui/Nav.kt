@@ -87,6 +87,14 @@ enum class Screen {
 
     /** "Solve it here" (ui/screens/HandoffScreen.kt). Last, for the same reason. */
     HANDOFF,
+
+    /**
+     * "Past approvals" - the read-only list of cards already decided
+     * (ui/screens/ApprovalsScreen.kt, the owner's decision of 2026-09-27).
+     * Opened from the Inbox's own ACTIVITY row. Last, for the same reason as
+     * the others above: a saved back stack from an older build restores by name.
+     */
+    APPROVALS,
 }
 
 /**
