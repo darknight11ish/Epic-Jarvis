@@ -99,6 +99,7 @@ TOOL_NAMES = {
     "browser_control": "Browser control",
     "github_search": "GitHub research",
     "web_search": "Web search",
+    "read_web_page": "Reading one web page out loud (one card each)",
     "send_email": "Send an email (one card each)",
     "draft_email": "Save an email draft (one card each)",
     "tidy_inbox": "Tidy your inbox (one card lists every email)",
@@ -1241,11 +1242,30 @@ def _quiz_cloud(ctx: Ctx) -> dict:
                 "It costs a little, within your monthly limit.")
 
 
+def _read_web_page(ctx: Ctx) -> dict:
+    """"Read one web page out loud" (jarvis_readpage.py, the owner's request of
+    2026-10-05; JARVIS-API section 115): ONE approval card per address, then ONE
+    plain GET of that one page and its words read back as outside text. A way
+    out of this PC (ARCHITECTURE section 4), so it has its row."""
+    return _tool_row(
+        "read_web_page", "Read one web page out loud", "read_web_page", ctx,
+        configured=True,
+        where="the one address the card shows",
+        on_line=("Fetches the one address the card shows, once, and reads its words back as "
+                 "outside text. Only the address is sent - no memory, no email, no files go "
+                 "with it - and it never follows a link on the page or fetches a second one."),
+        # Off because the model is not offered it yet: the owner's own one-line
+        # step, said in the same words every other tool off for that reason uses
+        # (the settings file only - it is a way out, so no app can switch it on).
+        not_set_up=_off_line("read_web_page"), off_line=_off_line("read_web_page"))
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
     ("cloud_model", _cloud_model),
     ("web_search", _web_search),
+    ("read_web_page", _read_web_page),
     ("calendar", _calendar),
     ("email_read", _email_read),
     ("email_send", _email_send),

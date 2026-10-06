@@ -425,6 +425,11 @@ SHIPPED = (
     # "Grade this better" (2026-09-30; quiz-cloud.patch): one card per request,
     # the whole message shown, the cheapest set-up cloud service; never private.
     "jarvis_quiz_cloud.py",
+    # "Read one web page out loud" (2026-10-05; readpage.patch, JARVIS-API
+    # section 115): the model's read_web_page tool - ONE card per address, then
+    # one plain GET and the words a reader would see, handed back as outside
+    # text; no new dependency.
+    "jarvis_readpage.py",
     # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
     # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
     "jarvis_menus.py",

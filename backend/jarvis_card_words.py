@@ -105,6 +105,10 @@ TITLES = {
     # --- news feeds and "tell me when this page changes" (2026-09-27)
     "news_read": "read a news feed you added",
     "page_read": "fetch a web page you're watching",
+    # jarvis_readpage.py (2026-10-05): ONE card per address the owner hands
+    # over, then that one page's words are read out. Its own name, not
+    # "page_read" above: that one is the watch's per-look fetch.
+    "read_web_page": "read a web page out loud",
     # --- GitHub watches in "tell me when" (2026-09-28)
     "github_read": "check GitHub for a \"tell me when\"",
     # --- models and graphics cards

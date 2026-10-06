@@ -374,8 +374,10 @@ def t_the_short_list():
     tokens = AG.estimate_tokens(AG.TOOLS[AG.RETIREMENT_TOOL].schema())
     check(f"the tool fits the per-tool token budget of 300 ({tokens})", tokens <= 300)
     every = set(AG.TOOLS) - {"browser_control"}
-    check("more_tools itself still fits 300 tokens with its group in",
-          AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True))) <= 300)
+    check("more_tools itself still fits the budget with every group in (325 since "
+          "2026-10-05: read_web_page's own group - see test_short_tool_list.py's note)",
+          AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
+          <= 325)
     check("the tool is offered only when [tools].enabled names it",
           AG.RETIREMENT_TOOL not in AG.offered_tools({"calculator"}) and AG.RETIREMENT_TOOL in AG.offered_tools(enabled))
 
