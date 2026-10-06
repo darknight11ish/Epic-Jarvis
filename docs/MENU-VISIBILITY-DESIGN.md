@@ -1,6 +1,6 @@
 # Menu visibility: hide and collapse menus (design, 2026-09-30)
 
-Status: **designed, not built.** Owner's request (2026-09-30): "make sure I can
+Status: **built** (2026-09-30; `backend/jarvis_menus.py`, `backend/test_menu_visibility.py`, JARVIS-API section 109). Owner's request (2026-09-30): "make sure I can
 hide settings or collapse them to make them more compact. If I don't care about
 the finance features I can hide the menu (and unhide it reasonably easily too)."
 The owner's answers are in `docs/BUILD-QUEUE-2026-09-30.md` ("Menu and section

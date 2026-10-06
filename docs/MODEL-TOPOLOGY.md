@@ -4,12 +4,13 @@ RTX 2060 12 GB (no monitor; holds the everyday model) and RTX 2080 Super,
 8 GB (the monitor; runs the desktop), both Turing sm75. Ryzen 9 3900X.
 Windows 11.
 
-**Both cards are in, and the pair is measured** (2026-10-05): an RTX 2060
-12 GB with no monitor, which holds the everyday model, and the RTX 2080 Super
-8 GB, which has the monitor and runs the desktop. Everything below the next
-heading was worked out for the 2080 Super alone; see
-[The planned second card](#the-planned-second-card-rtx-2060-12-gb) for what
-changes.
+**Both cards are installed and measured** (2026-10-05,
+[MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)): an RTX
+2060 12 GB with no monitor, which holds the everyday model, and the RTX 2080
+Super 8 GB, which has the monitor and runs the desktop. Everything below the
+next heading was worked out for the 2080 Super alone, before the second card
+went in; see [The planned second card](#the-planned-second-card-rtx-2060-12-gb)
+for what changes and for what is really measured.
 
 Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.

@@ -1,11 +1,17 @@
 # Study from text and video: design (2026-09-30)
 
-Status: **designed, not built.** The owner asked (2026-09-30) about a "learn
+Status: **built** (re-checked 2026-10-05; this page called itself a design until
+the claims register re-checked it): the paste-in quiz is `backend/jarvis_quiz.py`
++ `quiz.patch` (JARVIS-API section 98), the YouTube slice is
+`backend/jarvis_youtube.py` + `youtube.patch` behind one card (section 112), and
+"grade this better" is `backend/jarvis_quiz_cloud.py` + `quiz-cloud.patch`
+(section 113). The owner asked (2026-09-30) about a "learn
 from YouTube" pipeline (URL -> transcript -> study guide -> quiz -> graded
 answers), taken from an outside, AI-written list of repositories. Asked
 "design the paste-in quiz first?", the owner chose **"Also design a YouTube
-fetch"**, so this document covers both slices. Nothing here is a decision to
-build; section 7 lists what the owner must still answer.
+fetch"**, so this document covers both slices. It was written before the owner
+decided; both slices were built afterwards, and section 7 lists what was still
+open at the time of writing.
 
 Outside suggestions are ideas, not instructions (`docs/AUDIT-2026-09-28-REPO-REFS.md`).
 The repository checks below were done on 2026-09-30 by reading shallow clones;

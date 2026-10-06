@@ -1,11 +1,12 @@
 # Chat tags and sections in History: design (2026-09-30)
 
-Status: **designed, not built.** The owner asked (2026-09-30) for sections in
-History that separate tagged chats (educational, work and so on), for a
-"nice visual system" to organise them, and for a way to ask Jarvis to label a
-chat during the chat or later, including an older one. Built after the Quiz
-Slice A builders finish, because both touch `brain.html`, `lib.rs`,
-`check_parity.py` and `docs/JARVIS-API.md`.
+Status: **built** (re-checked 2026-10-05: `backend/jarvis_chat_log.py` holds the
+tags from line 455, `backend/jarvis_quick.py` the asking, and JARVIS-API section
+99 the shapes and words both apps build from; this page called itself a design
+until the claims register re-checked it). The owner asked (2026-09-30) for
+sections in History that separate tagged chats (educational, work and so on),
+for a "nice visual system" to organise them, and for a way to ask Jarvis to
+label a chat during the chat or later, including an older one.
 
 ## 1. The owner's answers (2026-09-30)
 

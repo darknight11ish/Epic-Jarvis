@@ -1,6 +1,9 @@
 # Galaxy "facts behind this dot" panel: design (2026-09-30)
 
-Status: **designed, not built.** Queue item 8 (JARVIS-API section 106, shared with
+Status: **built** (re-checked 2026-10-05: the desktop panel is
+`jarvis-desktop/src/galaxy-panel.js`, documented in JARVIS-API section 106.4;
+this page called itself a design until the claims register re-checked it).
+Queue item 8 (JARVIS-API section 106, shared with
 the "new section here" marker in `docs/OVERNIGHT-TAGS-DESIGN.md`). The owner ticked
 "a Galaxy facts panel" on 2026-09-30.
 

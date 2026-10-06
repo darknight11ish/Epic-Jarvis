@@ -1983,11 +1983,12 @@ Qwen 3 14B Q4_K_M, q8_0 KV @ 32K:
 main card" rule the long-context lane already follows. `COMBINED_MIN_TOTAL_MB`
 (18,432 MiB) is the floor below which this arithmetic no longer clears with
 margin; below it `combined`'s `capable` is false and `capable_why` says so.
-**Nothing above is measured**: the second card is installed (2026-10-05), but
-no lane that splits one model across both cards has been run. The approval
-card and `combined.why` both say plainly that real speed is
-unmeasured, and `docs/MODEL-TOPOLOGY.md`/`HARDWARE-PROFILES.md` carry the
-same figure with the same caveat.
+**The cards are installed and measured** (2026-10-05,
+`docs/MEASURED-2026-10-05-owner-pc.md`), so the figures above are the plan:
+**nothing above is measured** - no lane that splits one model across both
+cards has been run. The approval card and `combined.why` both say plainly that
+real speed is unmeasured, and `docs/MODEL-TOPOLOGY.md` and
+`HARDWARE-PROFILES.md` carry the same figure with the same caveat.
 
 *Both apps* show it in the same place as the five switches above (not a
 separate screen): the desktop's Settings → "Second graphics card" gets a
