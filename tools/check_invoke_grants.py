@@ -85,6 +85,7 @@ DYNAMIC_BELOW = {
     ("account-secrets-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("briefing-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("folders-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
+    ("first-run-settings.js", "command"): "the first-run card's invoke(command, args); every caller passes a literal.",
     ("hardware-panel.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("manner-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("notifications-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",

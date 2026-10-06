@@ -52,6 +52,7 @@
         <p class="settings-jump-title">Jump to:</p>
         <div class="settings-jump-group">
           <span class="settings-jump-label">Everyday</span>
+          <a href="#first-run">Set up Jarvis</a>
           <a href="#connection">Connection</a>
           <a href="#devices">Devices</a>
           <a href="#faq">FAQ</a>
@@ -102,6 +103,53 @@
       </div>
 
       <h2 class="settings-group-heading">Everyday</h2>
+
+      <!-- ── Set up Jarvis ──────────────────────────────────────────────────
+           The owner's approved option 8A (2026-10-06): "a first-run setup
+           page: the important settings in one place, in plain words, each
+           raising its card where the rule requires."
+
+           GATHERS, DOES NOT DUPLICATE. `onboarding.html` already exists and
+           is five static screens that teach what Jarvis is; it has no
+           controls, so it is not this. `settings.html` already holds all five
+           of these settings further down; this card puts the five that matter
+           on the first run together, in order, and every control in it calls
+           the SAME Rust command its own card calls - so the approval cards
+           are raised in one place, by one code path, and nothing is written
+           by hand. See first-run-settings.js's header for the list.
+
+           The two states are the two boxes below: `fr-body-plain` is what a
+           new owner meets, `fr-again-line` is what is left once they press
+           "Done - don't show this again". The card itself never disappears,
+           so the way back is the same place it always was. The choice is
+           remembered in localStorage under `jarvis.setup.seen`, following
+           `commands.rs`'s ONBOARDING_VERSION pattern (a version number, not a
+           yes/no, so a later card can be shown once more). -->
+      <section class="card" id="first-run">
+        <h2>Set up Jarvis</h2>
+        <p class="note" id="fr-body-plain">
+          The few choices that matter on the first run, in the order you would
+          make them. Everything here is optional — Jarvis works without any of
+          it — and each choice says what it does in one line. Nothing is
+          changed for you: you make each change yourself, and anything that
+          opens a way out of this PC still asks first.
+        </p>
+        <div id="fr-body-full">
+          <p class="state" id="fr-state" role="status">Reading this PC…</p>
+          <div id="fr-rows" class="fr-rows"></div>
+          <div class="row">
+            <button class="btn" id="fr-done" type="button">Done — don't show this again</button>
+          </div>
+        </div>
+        <p class="note" id="fr-again-line" hidden>
+          Set up done. Everything here is still in the cards below, and this
+          one can be opened again whenever you want.
+        </p>
+        <div class="row">
+          <button class="btn ghost small" id="fr-again" type="button" hidden>Set up again</button>
+        </div>
+        <span class="status" id="fr-status" role="status"></span>
+      </section>
 
       <section class="card" id="connection">
         <h2>Connection</h2>
@@ -2437,6 +2485,7 @@
     </main>
 
     <script src="sky.js"></script>
+    <script type="module" src="first-run-settings.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
