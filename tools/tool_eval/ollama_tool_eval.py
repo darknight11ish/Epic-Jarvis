@@ -720,6 +720,10 @@ def save(runs, path=RESULTS):
     text = json.dumps(doc, indent=1, ensure_ascii=False)
     with open(path, "w", encoding="utf-8") as f:
         f.write(text)
+    if path != RESULTS:
+        # A caller that named its own file is a test or another tool: it wants
+        # the record beside it and nothing written into the owner's config folder.
+        return path
     # The copy the backend reads. Best effort: a config folder that cannot be
     # written must not lose the run's own record, and the caller says so.
     where = publish_path()
