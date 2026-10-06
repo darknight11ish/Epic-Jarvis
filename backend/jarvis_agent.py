@@ -1954,9 +1954,18 @@ def _schedule_run(name: str, args: dict, sched, now: float) -> dict:
         res = Q.run(Q.Intent("timer_set", {"seconds": float(minutes) * 60,
                                            "label": str(args.get("label") or "").strip()}),
                     sched, now)
+        if res is None:
+            # jarvis_quick.run() is declared -> Optional[Result] (its own line
+            # 3711). The todo_done branch below has always checked for this;
+            # these two did not, so a None here was an AttributeError on
+            # res.ids, mid-turn, after the model had already asked for a timer.
+            # Found by pyright's reportOptionalMemberAccess, 2026-10-03.
+            return {"ok": False, "error": "the timer was not set"}
         return {"ok": bool(res.ids), "said": res.reply}
     if name == "todo_add":
         res = Q.run(Q.Intent("todo_add", {"text": str(args.get("text") or "")}), sched, now)
+        if res is None:
+            return {"ok": False, "error": "the item was not added"}
         return {"ok": bool(res.ids), "said": res.reply}
     if name == "todo_done":
         res = Q.run(Q.Intent("todo_done", {"text": str(args.get("item") or "")}), sched, now)

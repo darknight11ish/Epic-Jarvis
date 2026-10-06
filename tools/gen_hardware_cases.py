@@ -535,14 +535,33 @@ def outputs() -> dict:
     return {PLAN_FIXTURE: plans, DOC: doc, DESKTOP: status, PHONE: status}
 
 
+def _first_difference(fresh: str, have: str) -> str:
+    """The first line where a fresh run and the committed file disagree.
+
+    The check exists to catch a fixture that has drifted, and "out of date" is
+    only half of that: WHICH value moved is the useful half, and it was left in
+    the CI log - which is not always readable from a terminal (2026-10-04). One
+    line, so it fits in a CI annotation too.
+    """
+    a, b = fresh.splitlines(), have.splitlines()
+    for i, (x, y) in enumerate(zip(a, b), 1):
+        if x != y:
+            return f"line {i}: fresh {x.strip()[:160]!r} vs file {y.strip()[:160]!r}"
+    if len(a) != len(b):
+        return f"{len(a)} lines fresh vs {len(b)} in the file"
+    return "the same lines; only the ending or the length differs"
+
+
 def main(argv) -> int:
     outs = outputs()
     if "--check" in argv:
-        stale = [p for p, text in outs.items()
-                 if (p.read_text(encoding="utf-8").replace("\r\n", "\n") if p.is_file() else "")
-                 != text]
-        for p in stale:
-            print(f"{p.relative_to(ROOT)} is out of date: run python3 tools/gen_hardware_cases.py")
+        stale = []
+        for p, text in outs.items():
+            have = p.read_text(encoding="utf-8").replace("\r\n", "\n") if p.is_file() else ""
+            if have != text:
+                stale.append(p)
+                print(f"{p.relative_to(ROOT)} is out of date: run python3 tools/gen_hardware_cases.py")
+                print("    " + _first_difference(text, have))
         if stale:
             return 1
         print("hardware cases match the producer (plans, the design's table, desktop and phone "

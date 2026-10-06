@@ -644,8 +644,14 @@ def t_not_built_yet():
     look = e.look_at_this()
     check("... nor look", look["ok"] is False and look["paused"] == "not_built", look)
     check("status says built: false", e.status()["built"] is False)
-    check("off Windows the module's own engine has no readers, so it is not built",
-          SC.ENGINE.built() is False and SC.ENGINE.front is None and SC.ENGINE.capture is None)
+    # ENGINE is built from the real platform: with the Windows readers and the
+    # word reader here it is built, and off Windows (or without uiautomation) it
+    # is not. This used to assert the off-Windows answer on every machine, so it
+    # could only ever pass off Windows (2026-10-03).
+    import jarvis_screen_win as _win
+    check("the module's own engine is built exactly when this PC has the screen readers",
+          SC.ENGINE.built() == (_win.available() and SC._default_ocr() is not None),
+          (SC.ENGINE.built(), _win.available()))
 
 
 # ------------------------------------------------- a look for the routes and the turn

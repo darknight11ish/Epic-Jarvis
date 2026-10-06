@@ -1,0 +1,27 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -925,8 +925,20 @@
+         return "unclassified_tool", False
+     if base in _VALID_TIERS:
+-        # A tier literal rather than an action name: synthesise an action so
+-        # the tier table lookup below still works and the log stays readable.
+-        action = f"tool:{name}"
+-        _SYNTH_TIERS[action] = base
++        # A tier literal rather than an action name. Keep the entry in
++        # _SYNTH_TIERS - that is what makes the tier lookup below find it,
++        # since a bare name like "calculator" is NOT a key of
++        # [autonomy.tiers] and would otherwise fall to UNKNOWN_TIER ("ask",
++        # stricter than the "auto" this entry means). Only the NAME RETURNED
++        # changes: 2026-10-03.
++        #
++        # It used to return f"tool:{name}" as well, which renamed the action
++        # on its way OUT - the string handed to the checker, written to the
++        # audit log, and shown by jarvis_reach.action_of() on "What can Jarvis
++        # reach". No config file has ever used that name; three suites
++        # expected "calculator" and got "tool:calculator", and the Reach page
++        # showed one string when the gate was importable and "calculator"
++        # when it was not.
++        _SYNTH_TIERS[name] = base
++        action = name
+     else:
+         action = base

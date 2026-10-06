@@ -401,6 +401,11 @@ def t_the_fast_path_adds_and_removes():
     res2 = Q.run(Q.Intent("news_list"), None, 0.0)
     check("listing with none actually added yet (the card above never ran)",
           res2 is not None and res2.reply == NW.EMPTY)
+    # Clear the waiting card first: only one add is pending at a time, so the
+    # second address was refused while the first card was still up and the list
+    # stayed empty - the two checks below read as failures although the add
+    # path was fine (2026-10-03).
+    fresh()
     NW.request_add({"url": "https://example.com/added.xml"},
                    gate=lambda a, d, p: type("V", (), {"allowed": True, "outcome": "approved",
                                                         "tier": "ask"})(),

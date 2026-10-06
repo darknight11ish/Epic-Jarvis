@@ -135,7 +135,7 @@
     "streak": 0,
     "timer_on_scheduler": true,
     "title": "Focus session",
-    "watching": false
+    "watching": true
   },
   "excused": {
     "adrift_s": 0,
@@ -166,7 +166,7 @@
     "streak": 0,
     "timer_on_scheduler": true,
     "title": "Focus session",
-    "watching": false
+    "watching": true
   },
   "locked_on_target": {
     "adrift_s": 0,
@@ -197,7 +197,7 @@
     "streak": 0,
     "timer_on_scheduler": true,
     "title": "Focus session",
-    "watching": false
+    "watching": true
   },
   "off_never": {
     "adrift_s": 0,
@@ -380,7 +380,7 @@
         "streak": 0,
         "timer_on_scheduler": true,
         "title": "Focus session",
-        "watching": false
+        "watching": true
       },
       "ok": true,
       "said": "Research it is - that doesn't count. I'll stay quiet until you're back."
@@ -416,7 +416,7 @@
     "streak": 0,
     "timer_on_scheduler": true,
     "title": "Focus session",
-    "watching": false
+    "watching": true
   },
   "snoozed": {
     "adrift_s": 0,
@@ -447,7 +447,7 @@
     "streak": 0,
     "timer_on_scheduler": true,
     "title": "Focus session",
-    "watching": false
+    "watching": true
   },
   "start_answer": {
     "body": {
@@ -480,7 +480,7 @@
         "streak": 0,
         "timer_on_scheduler": true,
         "title": "Focus session",
-        "watching": false
+        "watching": true
       },
       "ok": true,
       "said": "Focus for 30 minutes, on the essay. Go to what you're working on - I'll lock on there once you settle."

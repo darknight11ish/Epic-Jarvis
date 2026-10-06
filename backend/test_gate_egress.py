@@ -58,6 +58,33 @@ def src(path):
     return path.read_text(encoding="utf-8") if path.is_file() else None
 
 
+def _block(text, marker):
+    """The statement `marker` opens, read off the tree, not off an offset.
+
+    `window = s[i:i + 700]` counted characters from the route header and hoped
+    the origin check, the token check and the two status codes were inside the
+    next 700 of them. A refactor that adds a guard line moves the last of those
+    out of the window and the check reports on the wrong code - the site keeps
+    having to be re-measured (2026-10-03). The AST statement travels with the
+    edit instead.
+    """
+    off = text.find(marker)
+    if off < 0:
+        return ""
+    line = text.count("\n", 0, off) + 1
+    best = None
+    for n in ast.walk(ast.parse(text)):
+        if not isinstance(n, ast.stmt):
+            continue
+        end = n.end_lineno or n.lineno
+        if not (n.lineno <= line <= end):
+            continue
+        if best is None or (n.lineno, -end) > (best.lineno,
+                                               -(best.end_lineno or best.lineno)):
+            best = n
+    return (ast.get_source_segment(text, best) or "") if best is not None else ""
+
+
 def t_site_1_the_row_keeps_it():
     """Not a leak. The queue must hold the real thing or nobody can decide."""
     s = src(GATE)
@@ -77,10 +104,8 @@ def t_site_2_the_route_is_behind_both_checks():
     s = src(HUD)
     if s is None:
         return check("/api/pending requires origin and token", False, f"no {HUD}")
-    i = s.find('if path == "/api/pending":')
-    if i < 0:
-        return check("/api/pending requires origin and token", False, "route not found")
-    window = s[i:i + 700]
+    window = _block(s, 'if path == "/api/pending":')
+    check("/api/pending is still there to check", bool(window))
     check("/api/pending checks the origin", "_origin_ok(self)" in window)
     check("/api/pending checks the token", "_token_ok(self)" in window)
     check("and it refuses rather than degrading",
@@ -99,8 +124,8 @@ def t_site_4_history_never_reads_it():
     s = src(GATE)
     if s is None:
         return check("history() does not select the content", False, f"no {GATE}")
-    i = s.find("def history(")
-    body = s[i:i + 500]
+    body = _block(s, "def history(")
+    check("history() is still there to check", bool(body))
     leaked = [k for k in SECRET_KEYS if k in body]
     check("history() does not select the content", not leaked, f"found {leaked}")
 
