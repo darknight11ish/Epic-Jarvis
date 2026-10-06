@@ -38,6 +38,11 @@ WHAT WENT WRONG HERE BEFORE, so it is not reintroduced:
     every subscriber, because it filtered with a DENYLIST naming `detail` and
     `prompt`, and `raised` was added later. It is an allowlist now, and
     `raised` travels as a boolean.
+  * The audit log had no cap, because nothing called
+    jarvis_framework.prune_logs() - its docstring admitted as much. Fixed
+    2026-10-05 by `_poll_log_retention` below, one of the pump's pollers, so
+    the config's 90-day promise is kept by the thread that already runs every
+    second.
 """
 from __future__ import annotations
 
@@ -550,13 +555,68 @@ def _poll_proposals(bus: Bus) -> None:
     bus.note("proposals", ids, "proposal", extra={"count": len(rows)})
 
 
+# --------------------------------------------------------------------------
+#   Retention (added 2026-10-05)
+# --------------------------------------------------------------------------
+#
+# The audit log had no cap. ~/.openjarvis/logs/jarvis-<date>.jsonl was measured
+# at 364 KB for one day - 0.4 MB/day, about 130 MB a year, growing for ever -
+# while jarvis-framework.toml promised `[logging].retention_days = 90` and
+# jarvis_framework.prune_logs() sat there with "INFERRED - nothing surviving
+# calls this" in its own docstring. This is the caller.
+
+#: The local day logged retention already ran on. A strftime date rather than a
+#: timestamp, so it is "once a day" the way the owner reads it and not "once
+#: every 24 hours since the process happened to start". jarvis_sleep.py gates
+#: its daily card the same way.
+_RETENTION_SEEN: dict = {}
+
+
+def _poll_log_retention(bus: Bus) -> None:
+    """Once a day, delete audit log files past the retention window.
+
+    Why the pump, of the two periodic things this backend runs. The scheduler
+    (jarvis_schedule.py) is for jobs the owner asked for, and its list is the
+    owner's: a housekeeping delete has no place on a list that shows a timer
+    they set. The pump already ticks every second in the server process, which
+    is exactly the "cheap check on an existing tick" shape - and the check is
+    one strftime and a string compare per tick, with the directory read
+    happening only on the one tick a day that gets past the gate. Nothing new
+    is started and nothing new is scheduled.
+
+    `bus` is taken and unused, like every poller's signature, because
+    Pump.tick calls poll(self.bus). Nothing is published: a tidy-up is not news
+    for the owner's lock screen, and the count is in `_RETENTION_SEEN` (and so
+    in status()) for anyone who wants it.
+
+    Swallows its own failures on purpose, like the pollers above: a missing
+    jarvis_framework must not stop the other four, and the pump thread must not
+    die because a log file was locked for a moment. The day is marked even when
+    the sweep fails, so a failure retries tomorrow rather than every second.
+    """
+    today = time.strftime("%Y-%m-%d")
+    if _RETENTION_SEEN.get("day") == today:
+        return
+    _RETENTION_SEEN["day"] = today
+    try:
+        # Lazy, like the pollers above. It also matters for the import order:
+        # jarvis_framework imports nothing from here, so this cannot cycle.
+        import jarvis_framework as fw
+        _RETENTION_SEEN["removed"] = fw.prune_logs()
+    except Exception:
+        _RETENTION_SEEN["removed"] = None
+
+
 #: VERBATIM from extraction-wiring.patch @ 385, which is where _poll_proposals
 #: joins the list - second, not last. Order has no effect (Pump.tick runs them
 #: all and none depends on another) but the comment said "verbatim" while the
 #: list was reordered, and a provenance note that is not true is worse than no
 #: note. events-pump.patch prints len(POLLERS) at startup.
+#:
+#: _poll_log_retention joined last, 2026-10-05. It is NOT from that patch, and
+#: the count events-pump.patch prints is now five rather than four.
 POLLERS: list[Callable] = [_poll_approvals, _poll_proposals, _poll_power,
-                           _poll_persona]
+                           _poll_persona, _poll_log_retention]
 
 
 # --------------------------------------------------------------------------
@@ -908,7 +968,12 @@ def status() -> dict:
     return {"latest": BUS.latest, "oldest": BUS.oldest,
             "ring": RING, "pollers": len(POLLERS),
             "poll_seconds": POLL_SECONDS, "activity": activity(),
-            "persona_events": "NOT WIRED - see _poll_persona"}
+            "persona_events": "NOT WIRED - see _poll_persona",
+            # The last day retention ran and how many files it removed. None
+            # means it has not run yet this process, or the sweep itself
+            # failed - see _poll_log_retention, which keeps its failures quiet
+            # so a locked file cannot stop the other pollers.
+            "log_retention": dict(_RETENTION_SEEN)}
 
 
 if __name__ == "__main__":

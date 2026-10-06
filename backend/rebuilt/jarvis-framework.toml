@@ -558,6 +558,11 @@ complexity_threshold = 0.40
 [logging]
 enabled = true
 log_directory = "~/.openjarvis/logs/"
+# How many days of audit log to keep. After this many days a whole day's file
+# (jarvis-<date>.jsonl) is deleted, not trimmed or compressed. 0 or less keeps
+# everything. Kept by jarvis_framework.prune_logs(), which jarvis_events.py's
+# event pump calls once a day; today's file is never deleted, even if it is
+# quiet enough to look old.
 retention_days = 90
 log_every_routing_decision = true      # lane, gate, reason, complexity score
 log_every_tool_call = true
@@ -570,6 +575,9 @@ redact_private_content_in_logs = true  # log that a gate fired, never the privat
 # Not written yet: self-modification attempts, since no self-mod pipeline
 # exists to attempt anything (see pipeline_implemented above).
 # A failed log write now prints once to stderr instead of vanishing.
+# retention_days is now enforced too (2026-10-05): until then nothing called
+# prune_logs(), so the log grew with no cap - about 0.4 MB a day, ~130 MB a
+# year, for ever.
 persistence_implemented = true
 log_write_failures_are_visible = true
 

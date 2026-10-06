@@ -480,7 +480,9 @@ def audit_log(event: str, detail: Optional[dict] = None) -> bool:
             # One file per day. The config keeps 90 days; rotating by name
             # makes retention a matter of deleting files rather than rewriting
             # one growing file, which cannot be done safely while appending.
-            name = f"jarvis-{time.strftime('%Y-%m-%d', time.gmtime())}.jsonl"
+            # The name comes from log_name() so prune_logs can skip today's
+            # file by comparing names instead of guessing at dates.
+            name = log_name()
             with open(where / name, "a", encoding="utf-8", newline="\n") as fh:
                 fh.write(line + "\n")
             _LOG_FAILED = False
@@ -507,14 +509,58 @@ def audit_log(event: str, detail: Optional[dict] = None) -> bool:
         return False
 
 
-def prune_logs(days: Optional[int] = None) -> int:
-    """Delete log files older than the retention window. Returns how many.
+def log_name(when: Optional[float] = None) -> str:
+    """The audit log's file name for a moment in time - today, by default.
 
-    INFERRED - nothing surviving calls this. It is here because
-    `[logging].retention_days = 90` is a promise the config makes and nothing
-    else in the backend can keep: a retention setting with no code behind it
-    is precisely the "control that doesn't do anything" JARVIS-FRAMEWORK.md
-    warns about.
+    One place makes this name, so the writer and the pruner cannot disagree
+    about which file is "today's". They did disagree until 2026-10-05: the
+    writer built the name here inline while prune_logs could only compare a
+    modification time against a cutoff, and a name is the stronger statement.
+    """
+    return f"jarvis-{time.strftime('%Y-%m-%d', time.gmtime(when))}.jsonl"
+
+
+def prune_logs(days: Optional[int] = None) -> int:
+    """Delete audit log files older than the retention window. Returns how many.
+
+    WHAT THE SETTING MEANS. `[logging].retention_days` in
+    jarvis-framework.toml (90 in the shipped file) is how many days of audit
+    log to keep. After that many days a whole day's file is deleted - not
+    trimmed, not compressed, gone. `days=` overrides it for one call, which is
+    how a test drives a 90-day window without owning a 90-day-old file.
+
+    WHAT IS DELETED. Only `jarvis-*.jsonl` files directly inside this module's
+    log directory (`[logging].log_directory`, ~/.openjarvis/logs). Nothing
+    else, in that folder or anywhere: the glob cannot leave the folder (it
+    matches names, and a name cannot contain a separator), so a file the owner
+    keeps beside the logs - or a shortcut pointing out of the folder - is not
+    reachable from here. This deletes; it never moves and never rewrites.
+
+    THREE THINGS THAT MUST STAY TRUE, because this runs on the owner's machine
+    while the backend is writing those same files:
+
+      * TODAY'S FILE IS NEVER TOUCHED, even if its own timestamp is old (a
+        quiet day, a restored backup, a clock that moved). The writer and this
+        function both build the name with log_name(), so the skip is exact
+        rather than a guess about dates.
+      * The delete runs under _LOG_LOCK, the same lock audit_log appends
+        under. A file can therefore never be unlinked between the moment the
+        writer chooses its name and the moment it opens it.
+      * Running twice changes nothing the second time: the files are already
+        gone, so "delete what is old" is a no-op. That is what makes it safe to
+        run on a timer at all.
+
+    A window of 0 or less means "delete nothing" and a value that cannot be
+    read as a number does too. Keep-till-deleted is the safe reading of a
+    setting nobody can parse - the alternative deletes the owner's audit trail
+    over a typo.
+
+    WHO CALLS THIS. Nothing in this module: it is imported by everything and
+    runs on its own never. jarvis_events.py's `_poll_log_retention`, one of
+    the pump's pollers, calls it once a day - so the 90-day promise now has
+    the code behind it that JARVIS-FRAMEWORK.md's "a control that doesn't do
+    anything" warning asks for. It said INFERRED and uncalled until
+    2026-10-05, and the log grew with no cap until then.
     """
     keep = days if days is not None else section("logging").get("retention_days", 90)
     try:
@@ -525,19 +571,29 @@ def prune_logs(days: Optional[int] = None) -> int:
         return 0
 
     cutoff = time.time() - keep * 86400
+    today_name = log_name()
     removed = 0
     where = log_dir()
     try:
         entries = list(where.glob("jarvis-*.jsonl"))
     except OSError:
         return 0
-    for f in entries:
-        try:
-            if f.stat().st_mtime < cutoff:
-                f.unlink()
-                removed += 1
-        except OSError:
-            continue
+    with _LOG_LOCK:
+        for f in entries:
+            if f.name == today_name:
+                # Still being written. Checked by name, before the timestamp,
+                # and outside the try below so a stat failure cannot turn this
+                # into a delete.
+                continue
+            try:
+                if f.stat().st_mtime < cutoff:
+                    f.unlink()
+                    removed += 1
+            except OSError:
+                # Gone already, or held open by something that is not the
+                # writer. Either way it is not an error worth stopping for:
+                # one unreadable file must not abandon the rest of the sweep.
+                continue
     return removed
 
 
