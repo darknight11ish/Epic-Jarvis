@@ -1175,6 +1175,63 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      # ONE library, before the emulator is used: libpulse.so.0, from the
+      # libpulse0 package.
+      #
+      # WHAT WENT WRONG. Run of 2026-10-06 06:50 UTC (PR #61) was red here:
+      #
+      #   ##[error]The Android emulator could not be installed:
+      #   /usr/local/lib/android/sdk/emulator/emulator exists but does not run.
+      #   Nothing was rendered and no screenshots exist.
+      #   /usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64:
+      #   error while loading shared libraries: libpulse.so.0: cannot open
+      #   shared object file: No such file or directory
+      #
+      # so the download had finished and the binary could not START. That is not
+      # the corrupt-download flake the retry below answers, and the retry cannot
+      # cure it: retrying a download that already succeeded gives the same
+      # binary. The library is what was missing, and now the script's own
+      # post-install assertion - which runs `emulator -version` and refuses to
+      # call a binary that will not answer "installed" - is what said so plainly
+      # instead of leaving a missing-artifact warning to be misread as the
+      # cause. That assertion stays exactly as it is.
+      #
+      # WHY libpulse0 AND NOT A LIST. libpulse.so.0 is a DIRECT dependency of
+      # the emulator's qemu-system-x86_64: the dynamic loader named it, by name,
+      # as the only library it could not open (one missing library makes the
+      # loader stop and report that one), so it is the one library proved
+      # absent. libpulse0 is the Ubuntu package that provides exactly that file.
+      # The X11 and GL libraries the emulator also links against are pulled in
+      # on this image by xvfb and the preinstalled browsers, and the job has
+      # rendered all twenty-five faces with them on commit 04ea68c7
+      # (run 37398385830), which is the evidence that they are already there.
+      # Adding a guessed superset would hide that reading and make a future
+      # failure of the same shape harder to find, not easier.
+      #
+      # WHY IT IS HERE, at the top of the job. The install step below ends by
+      # RUNNING `emulator -version`, and the photograph step starts the emulator
+      # for real. This step is above both, so nothing executes the binary before
+      # the library is on disk.
+      #
+      # WHAT IT CANNOT DO. Nothing here can run an Android emulator, so only a
+      # real CI run proves the emulator now starts. If some OTHER library is
+      # missing too, the result is unchanged from today: the install step fails
+      # by name and prints the loader's own line, which is where the next name
+      # will come from.
+      #
+      # This image does not carry libpulse0 today, and although a
+      # `libpulse0 is already the newest version` run is a cheap no-op, this is
+      # a stable package name rather than a pinned version, so - unlike a pinned
+      # emulator build - it cannot be withdrawn out from under the job.
+      - name: Install the library the emulator needs to run
+        working-directory: .
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          # --no-install-recommends: libpulse0 is the shared library, nothing
+          # here wants the PulseAudio daemon that a plain install also pulls in.
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libpulse0
+
       # The emulator download is the one part of this job that is GitHub's and
       # Google's rather than this project's, and on 2026-10-04 it failed on its
       # own: run 6ace099c died at "21% Downloading emulator-linux_x64-164" with
