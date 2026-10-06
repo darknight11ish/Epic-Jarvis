@@ -13141,6 +13141,25 @@ window.addEventListener("storage", (e) => {
   }
 });
 
+$("open-settings")?.addEventListener("click", () => {
+  // The owner asked (2026-10-05) for a Settings door in the program itself,
+  // not only the tray icon's row. This opens Settings at the TOP - no place
+  // key is left behind, so settings.js's goToPlace() finds nothing to jump
+  // to and the window opens where the tray row leaves it. That is what
+  // matches the tray row ("Settings and help…", tray.rs ID_SETTINGS ->
+  // windows::show_settings) and the jump list, so every door agrees.
+  //
+  // App lock is not re-checked here and must not be: it lives in
+  // windows::show_settings (lock.rs may_open, Covered::Settings), which asks
+  // Windows Hello and opens the window once the owner confirms. One gate,
+  // every door through it.
+  if (IS_TAURI) {
+    TAURI.core.invoke("open_fix_place", { place: "settings" });
+  } else {
+    window.location.href = "settings.html";
+  }
+});
+
 $("btn-rail-hidden-menus")?.addEventListener("click", () => {
   // The place travels in storage, not in the call: open_fix_place opens the
   // Settings window and accepts only "settings", "brain" and "history"
