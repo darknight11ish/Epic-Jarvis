@@ -107,6 +107,26 @@ def world():
     c.execute("UPDATE facts SET valid_to=?, retired_at=NULL WHERE id=?", (feb1, ids["gone"]))
     c.commit()
     c.close()
+    # The instant this world is ASKED ABOUT, sampled AFTER the writes above -
+    # not before them. It used to be `now`, taken at the top of this function,
+    # and that made the "asked about now" check race the clock: retire() stamps
+    # retired_at = time.time() at the moment it runs, so a `now` from before
+    # the four add_fact calls can sit BEFORE elm's retirement, and
+    # known_at(now + 1) then drops elm only if those four calls finished inside
+    # a second. Measured 2026-10-06: 0.155 s on the owner's PC, where the check
+    # passed; past a second on a cold, busy Windows runner, where the belief
+    # set at now + 1 still held elm and the check printed exactly this -
+    #
+    #     FAIL  bitemporal.patch: asked about now, the Elm Street fact is not
+    #           in the belief set
+    #             {4: False, 3: True, 2: True, 1: True}
+    #
+    # while the very same backend/ code passed that job on main's own run
+    # minutes earlier. Sampling here asks the question the check means to ask -
+    # once that retirement has happened, is the fact still believed? - and the
+    # answer no longer depends on how fast the machine is. Nothing the check
+    # asserts is changed.
+    now = time.time()
     return s, ids, {"feb15": feb15, "mar1": mar1, "now": now}
 
 
