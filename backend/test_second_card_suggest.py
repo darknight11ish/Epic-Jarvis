@@ -34,6 +34,7 @@ import sys
 import tempfile
 import time
 import traceback
+from unittest import mock
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -443,6 +444,46 @@ def t_never_offers_without_a_capable_card():
                   SC._read_switches()["combined"] is False)
         finally:
             BO._ONE = saved
+
+
+def t_never_offers_under_a_chosen_preset():
+    """Bug audit 2026-10-05, BUG 1's other direction. A chosen hardware preset
+    runs the extra features inside the everyday Ollama on ONE card, and the
+    "combined" mode the offer would turn on needs both cards to itself. The
+    offer is gated on exactly that hard check (`_combined_capable`, called by
+    _maybe_suggest_combined before it even looks at the counts), so with a
+    preset chosen the check must refuse - and, because it refuses, Jarvis
+    raises no offer card at all, however high the counts are."""
+    import types
+    with G.World(G.SMI["2080s_2060"]):
+        plan = {"preset": "fast",
+                "chat_card": types.SimpleNamespace(
+                    uuid=G.U_2080S, name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0),
+                "lane_card": None, "long": ("qwen3:8b", 16384, 6.50), "pictures": None,
+                "pictures_mode": None, "fit_target": None, "why_none": {}}
+        with mock.patch.object(SC, "_preset_lanes", lambda: plan):
+            det = SC.detect(fresh=True)
+            ok, why = SC._combined_capable(det)
+            check("the offer's own hard gate refuses while a preset is chosen",
+                  ok is False, (ok, why))
+            check("and it says which setup, and which way out",
+                  '"Fastest answers" setup' in why and "turn that setup off first" in why, why)
+            cid = "conv-preset"
+            AG.reset_suggest_counts(cid)
+            AG.note_struggle(cid, SC.STRUGGLE_THRESHOLD)
+            AG.note_correction(cid, SC.CORRECTION_THRESHOLD)
+            bo, _clock = fresh_backoff()
+            saved = _bo_context(bo)
+            try:
+                seen = []
+                gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+                SC.maybe_suggest_combined(cid, gate=gate)
+                check("a chosen preset: no offer card is raised, however high the counts",
+                      not seen, seen)
+                check("and the split switch was never turned on",
+                      SC._read_switches()["combined"] is False)
+            finally:
+                BO._ONE = saved
 
 
 def t_never_offers_with_the_setting_off():
