@@ -165,6 +165,14 @@ MENUS: tuple = (
        "The section for a third card, when one is capable.", group="graphics-cards",
        parent="settings.second-card", kind="row",
        names=("third graphics card", "third card")),
+    # "Everyday chat runs on" (the owner's decision, 2026-10-05): which
+    # graphics card runs everyday chat - Ollama's own choice by default, or
+    # one the owner pins (one approval card).
+    _m("settings.second-card.chat-card", "Everyday chat runs on",
+       "One row inside the second graphics card.", group="graphics-cards",
+       parent="settings.second-card", kind="row",
+       names=("everyday chat runs on", "which card runs chat", "the chat card",
+              "leave it to ollama", "pin everyday chat")),
     _m("settings.big-model", "Big model (slow)", "One bigger model split across both cards.",
        group="graphics-cards", names=("big model", "the big model")),
     _m("settings.folders", "Folders Jarvis may look in", "The folders and the Notion export.",

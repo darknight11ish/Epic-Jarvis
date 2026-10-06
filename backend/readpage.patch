@@ -1,0 +1,24 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -187,5 +187,6 @@
+     "chat_tags_suggest_on",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card to let the local model read a few old chats at night to suggest tags (tag-suggest.patch)
+     "chat_tag_suggest",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card per suggested tag for one chat; only the owner's tap files it (tag-suggest.patch)
+     "youtube_captions_read",  # jarvis_youtube.py acts only on tier "ask": ONE card per YouTube link; caption text only, and it breaks YouTube's terms (youtube.patch)
+     "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
++    "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
+ })
+@@ -904,5 +904,14 @@
+     # get it. Your study words leave this PC for that one quiz - a named way out
+     # (ARCHITECTURE section 4) that cannot be taken back, so "no" and "outbound": a
+     # risky approval (Windows Hello on the PC, a screen lock on the phone).
+     "quiz_cloud_grade": ("no", "outbound", "sends the questions, your answers and the passages of one quiz, word for word as the card shows them, to the cloud AI service named on the card to be marked; it bends the rule that your study words stay on this PC for that one quiz only, it costs a little on your account, and it cannot be taken back"),
++    # readpage.patch (jarvis_readpage.py, JARVIS-API section 115; the owner's
++    # request of 2026-10-05: "post a webpage into jarvis and it can read the
++    # content out loud"). ONE card per address the owner hands over, showing
++    # it in full, raised BEFORE any fetch. Your PC contacts that one website
++    # and the site sees this PC's address - a named way out of the PC
++    # (ARCHITECTURE section 4) that cannot be taken back, so "no" and
++    # "outbound": a risky approval (Windows Hello on the PC, a screen lock on
++    # the phone). Only that one page's words come back, never a link on it.
++    "read_web_page": ("no", "outbound", "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on"),
+ }

@@ -18,6 +18,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import vm from "node:vm";
+import { pythonFor } from "./lib/python.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
@@ -25,11 +26,17 @@ const REPO = join(ROOT, "..");
 const require = createRequire(import.meta.url);
 const L = require(join(ROOT, "src", "lipsync.js"));
 const CLIPS = join(REPO, "jarvis-client", "app", "src", "test", "resources", "lipsync");
+// `python3` else `python` (tests/lib/python.mjs), so the golden-fixture check
+// below needs no Unix-only name of its own.
+const PY = pythonFor(join(REPO, "backend"));
 
 const fails = [];
 const check = (name, fn) => {
-  try { fn(); console.log(`ok    ${name}`); }
-  catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
+  try { fn(); PY.noteRan(); console.log(`ok    ${name}`); }
+  catch (e) {
+    if (PY.caught(name, e)) return; // counted and printed as a skip, not a pass or a failure
+    fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`);
+  }
 };
 
 const load = (name) => {
@@ -615,20 +622,19 @@ check("a 10 s reply analyses in well under 50 ms", () => {
 /* ── The phone's fixture ──────────────────────────────────────────────────── */
 
 check("the phone's golden fixture is fresh (tools/gen_lipsync.py --check)", () => {
-  for (const py of ["python3", "python"]) {
-    try {
-      execFileSync(py, [join(REPO, "tools", "gen_lipsync.py"), "--check"], { stdio: "pipe" });
-      return;
-    } catch (e) {
-      if (e.code === "ENOENT") continue;
-      throw new Error(String(e.stderr || e.message));
-    }
+  if (!PY.have) return PY.skip("the phone's golden fixture is fresh (tools/gen_lipsync.py --check)",
+    "no Python here - CI's backend job runs it");
+  try {
+    execFileSync(PY.cmd, [join(REPO, "tools", "gen_lipsync.py"), "--check"], { stdio: "pipe" });
+  } catch (e) {
+    throw new Error(String(e.stderr || e.message));
   }
-  console.log("      (no python here - CI's backend job runs it)");
 });
 
 if (fails.length) {
+  console.log(PY.summary());
   console.log(`\n${fails.length} failed: ${fails.join(", ")}`);
   process.exit(1);
 }
+console.log(PY.summary());
 console.log("\nall lip-sync checks passed");

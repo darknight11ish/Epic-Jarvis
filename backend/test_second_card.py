@@ -37,6 +37,7 @@ import subprocess
 import sys
 import tempfile
 import traceback
+import types
 from pathlib import Path
 from unittest import mock
 
@@ -1053,6 +1054,116 @@ def t_combined_capable_arithmetic():
                                                     "is here"))
 
 
+U_16 = "GPU-1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d"
+
+
+def _preset_plan(*, preset="fast", lane_card=None, long=("qwen3:8b", 16384, 6.50),
+                 pictures=None):
+    """One lane_plan() answer, in jarvis_hardware's own shape. `lane_card`
+    None is the "main" case (the extra models sit beside chat in the everyday
+    Ollama, so no second copy starts); a real card is a preset that runs them
+    in their own lane on the other graphics card."""
+    return {"preset": preset, "chat_card": types.SimpleNamespace(
+                uuid=G.U_2080S, name="NVIDIA GeForce RTX 2080 SUPER", total_gib=8.0),
+            "lane_card": lane_card, "long": long, "pictures": pictures,
+            "pictures_mode": None, "fit_target": None, "why_none": {}}
+
+
+def _two_cards():
+    """The same two cards the neighbouring preset test builds, as _cards()
+    answers them (an nvidia-smi answer is not what is under test here)."""
+    return [CP.Device(index=0, name="NVIDIA GeForce RTX 2080 SUPER", total_mb=8192,
+                      free_mb=6000, uuid=G.U_2080S, compute_cap=7.5, display_active=True),
+            CP.Device(index=1, name="NVIDIA GeForce RTX 2060", total_mb=12288,
+                      free_mb=12000, uuid=G.U_2060, compute_cap=7.5, display_active=False)]
+
+
+def t_combined_is_refused_under_a_chosen_preset():
+    """Bug audit 2026-10-05, BUG 1. _combined_capable() only ever checked the
+    two card ROWS and the Turing/memory floors, so under a chosen hardware
+    preset (det["_plan"] set by _detect_preset) it still answered capable: the
+    "combined" switch - which IS "split one model across both cards" - could be
+    turned on while the preset was running the extra models on ONE card. The
+    two arrangements would then fight over the same cards.
+
+    Both preset shapes are covered: the one that runs the extra models in
+    their own lane on the other card (where the old code really did answer
+    capable), and the "main" one that runs them beside chat in the everyday
+    Ollama. The preset is the owner's own, more specific answer about how
+    their cards are used, and it is already running, so it wins: the switch
+    refuses. The preset's own path must be untouched."""
+    lane_card = types.SimpleNamespace(uuid=G.U_2060, name="NVIDIA GeForce RTX 2060",
+                                      total_gib=12.0)
+    for label, plan, main in (
+            ("a preset with its own lane card", _preset_plan(preset="features",
+                                                             lane_card=lane_card,
+                                                             long=("qwen3:8b", 32768, 7.69),
+                                                             pictures=("qwen2.5vl:7b", 8192, 6.45)),
+             False),
+            ("a preset with no separate lane card",
+             _preset_plan(pictures=("qwen2.5vl:7b", 8192, 6.45)), True)):
+        with G.World(G.SMI["2080s_2060"]) as w:
+            with mock.patch.object(SC, "_cards", return_value=_two_cards()), \
+                 mock.patch.object(SC, "_preset_lanes", lambda p=plan: p):
+                det = SC.detect(fresh=True)
+                check(f"{label}: both cards are seen, and the preset is really chosen",
+                      det.get("_plan") is not None and det.get("_main") is main
+                      and len(det.get("cards") or []) == 2, det)
+                ok, why = SC._combined_capable(det)
+                check(f"{label}: two capable cards, and yet split is not capable - "
+                      f"the preset wins", ok is False, (ok, why))
+                check(f"{label}: it names the setup and says which way out",
+                      '"Most features" setup' in why or '"Fastest answers" setup' in why,
+                      why)
+                check(f"{label}: and it is never the raw arithmetic message",
+                      "needs two graphics cards" not in why
+                      and "older than Turing" not in why and "together have" not in why, why)
+                held = []
+                code, out = SC.request_change("combined", True,
+                                              gate=lambda *a: Verdict(True, "ask", "approved"),
+                                              spawn=held.append)
+                # A card was raised after all: run its own decision work now,
+                # on purpose, so the wrong behaviour is reported instead of
+                # leaving a card waiting and skewing every check after it.
+                for fn in held:
+                    fn()
+                check(f"{label}: asking for it anyway is refused, and the sentence is "
+                      f"the refusal",
+                      code == 503 and "cannot be turned on" in out.get("error", "")
+                      and "setup" in out["error"], (code, out))
+                check(f"{label}: the refusal is one clean sentence, no doubled full stop",
+                      ".." not in out.get("error", "") and out["error"].endswith("."),
+                      out.get("error"))
+                check(f"{label}: no approval card was raised for it",
+                      not SC._PENDING, SC._PENDING)
+                check(f"{label}: the switch is still off",
+                      SC._read_switches()["combined"] is False)
+                check(f"{label}: combined_lane() is None, so no turn is routed to both cards",
+                      SC.combined_lane() is None)
+                st = SC.status()
+                check(f"{label}: status reports it honestly, in the preset's own words",
+                      st["combined"]["capable"] is False
+                      and "setup" in st["combined"]["capable_why"], st["combined"])
+                check(f"{label}: nothing was started - no second copy of Ollama under "
+                      f"a preset", not w.started, [p.args for p in w.started])
+    # The preset path itself: the lanes still run, on the card the preset
+    # picked, exactly as before.
+    with G.World(G.SMI["2080s_2060"], installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        with mock.patch.object(SC, "_preset_lanes",
+                               lambda: _preset_plan(pictures=("qwen2.5vl:7b", 8192, 6.45))):
+            w.switches(master=True, master_card=G.U_2080S, vision=True)
+            det = SC.detect(fresh=True)
+            check("preset: the extra model is supported and ready",
+                  SC._unsupported("vision", det) is None
+                  and SC._feature_active("vision", SC._read_switches(), det) is True)
+            lane = SC.lane_for("vision")
+            check("preset: vision still routes to the everyday Ollama's own address",
+                  lane is not None and lane.url == SC._main_ollama_url()
+                  and lane.model == "qwen2.5vl:7b", repr(lane))
+            check("preset: and no separate Ollama was started for it",
+                  not w.started, [p.args for p in w.started])
+
+
 def t_combined_lane_env_and_lane_for():
     env = SC.lane_env((G.U_2080S, G.U_2060), port=11435, num_ctx=32768, base={}, spread=True)
     check("lane_env joins multiple ids and sets OLLAMA_SCHED_SPREAD=1 when asked",
@@ -1223,7 +1334,16 @@ def t_status_shape_and_no_secrets():
     check("status() has exactly the contract's keys",
           set(st) == {"detected", "enabled", "active", "pending", "lane", "main_ollama_pinned",
                       "pin_note", "pin_command", "features", "last", "picture_text",
-                      "combined", "third", "suggest"}, sorted(st))
+                      "combined", "third", "suggest", "chat_card", "mode"}, sorted(st))
+    check("mode has exactly its keys",
+          set(st["mode"]) == {"mode", "name", "chosen", "detail", "title", "note", "preset",
+                              "conflict", "conflict_why", "options"}, sorted(st["mode"]))
+    check("mode offers exactly the two ways, in the order the choice is explained",
+          [o["id"] for o in st["mode"]["options"]] == [SC.MODE_SPLIT, SC.MODE_CONCURRENT])
+    check("each mode option has exactly its keys",
+          all(set(o) == {"id", "name", "detail", "selected", "available", "blocked", "hint",
+                         "pending"} for o in st["mode"]["options"]),
+          st["mode"]["options"])
     check("suggest has exactly its keys, both signals on by default",
           set(st["suggest"]) == {"available", "title", "detail", "signals"}
           and all(s["enabled"] is True for s in st["suggest"]["signals"])
@@ -1245,7 +1365,13 @@ def t_status_shape_and_no_secrets():
           [f["id"] for f in st["features"]] == ["long_context", "vision", "learning",
                                                  "browser_control", "wiki", "study", "referee"])
     text = json.dumps(st)
-    check("no token or key in it", "s3cr3t" not in text and "token" not in text.lower())
+    # "token" as a credential, not the word "tokens" inside the owner's own
+    # measurement text (docs/MEASURED-2026-10-05-owner-pc.md says "4,096
+    # tokens of conversation", which is quoted here). Narrowed 2026-10-05;
+    # the secret probe below is unchanged, so a real leak still fails.
+    check("no token or key in it",
+          "s3cr3t" not in text
+          and not re.search(r"x-jarvis-token|jarvis[_-]?token|\"token\"|\btoken\s*[:=]", text, re.I))
     check("pin_command is ONE line, 5.1-safe (no ?? and no newline)",
           "\n" not in st["pin_command"] and "??" not in st["pin_command"]
           and G.U_2080S in st["pin_command"] and "'User'" in st["pin_command"])
@@ -1259,8 +1385,12 @@ def t_main_ollama_pin():
     apps = f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n"
     with G.World(G.SMI["2080s_2060"], windows=True, apps=apps, user_env=G.U_2080S):
         st = SC.status()
-    check("the everyday Ollama seen on the second card: false, says so",
-          st["main_ollama_pinned"] is False and "using the NVIDIA GeForce RTX 2060" in st["pin_note"])
+    check("the everyday Ollama seen on a card other than the settings' own: false, and the "
+          "note names both cards",
+          st["main_ollama_pinned"] is False
+          and G.U_2080S[:30] in st["pin_note"]
+          and "the model was read on the NVIDIA GeForce RTX 2060" in st["pin_note"],
+          st["pin_note"])
     with G.World(G.SMI["2080s_2060"], windows=True, user_env=G.U_2080S):
         st = SC.status()
     check("pinned to the main card in the user settings: true", st["main_ollama_pinned"] is True)
@@ -1308,6 +1438,377 @@ def t_main_ollama_pin():
     check("the combined lane's own Ollama on the second card does not count "
           "against the pin either",
           st["main_ollama_pinned"] is True, st["pin_note"])
+
+
+# --------------------- which card everyday chat runs on (2026-10-05) -------
+
+#: Every way this project's own words say "Jarvis cannot say which card is
+#: faster". The check below removes these DISCLAIMERS and then looks for a
+#: real speed claim - so a card that honestly says it has no measurement
+#: passes, and one that says "the 2080 Super is faster" fails.
+NO_SPEED_DISCLAIMERS = (
+    "does not claim one card is faster than the other",
+    "cannot say which card is faster",
+    "cannot say which is faster",
+    "no speed number for these cards has been measured on this pc",
+)
+
+
+def _claims_speed(text: str) -> bool:
+    """Does this text claim a card is faster, or quote a speed number?"""
+    low = text.lower()
+    for phrase in NO_SPEED_DISCLAIMERS:
+        low = low.replace(phrase, "")
+    return any(w in low for w in ("is faster", "faster than", "fastest", "gb/s",
+                                 "tokens per second", "tok/s"))
+
+
+def t_the_chat_card_setting():
+    """The owner's decision of 2026-10-05: leave it to Ollama by default, pin
+    one card on request (ONE approval card), and report where the model
+    really is rather than assuming a card.
+
+    What this proves: the default is no pin and no claim; the analysis is
+    built only from what the machine reports; the suggestion is labelled a
+    suggestion and makes no speed claim; pinning raises exactly one card and
+    changes nothing until a person says yes; and going back is immediate."""
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        st = SC.status()
+    cc = st["chat_card"]
+    check("as shipped: nothing is pinned, and it says the choice is Ollama's",
+          cc["chosen"] is None and cc["chosen_name"] is None
+          and "Ollama's own choice" in cc["leave_words"])
+    check("the analysis is one entry per card, each with its own facts",
+          [c["name"] for c in cc["cards"]] == ["NVIDIA GeForce RTX 2080 SUPER",
+                                               "NVIDIA GeForce RTX 2060"]
+          and all(c["facts"] for c in cc["cards"]))
+    check("the facts are the machine's own: memory, compute capability, the "
+          "monitor and free memory, in those words",
+          "8,192 MiB total (8 GB)" in " ".join(cc["cards"][0]["facts"])
+          and "Compute capability 7.5" in " ".join(cc["cards"][0]["facts"])
+          and "A monitor is plugged into this card" in " ".join(cc["cards"][0]["facts"])
+          and "No monitor is plugged into this card" in " ".join(cc["cards"][1]["facts"]))
+    check("the measured lines are quoted for the card the owner measured, and "
+          "read from the store, not worked out",
+          any("Measured on 2026-10-05" in m for m in cc["cards"][1]["measured"])
+          and any("Measured on 2026-10-05" in m for m in cc["cards"][0]["measured"]))
+    check("the measured model line says 37/37 layers, 4,096 tokens and 5.6 GB",
+          any("37/37" in m and "4,096 tokens" in m and "5.6 GB" in m
+              for m in cc["cards"][1]["measured"]))
+    check("nothing measured means nothing said: a card with different memory "
+          "gets no measured line",
+          SC._measured_lines("NVIDIA GeForce RTX 2060", 6144) == []
+          and SC._measured_lines("Some Other Card", 12288) == [])
+    check("no speed claim anywhere in the analysis or the suggestion",
+          not _claims_speed(json.dumps(cc)))
+    check("the suggestion is labelled as Jarvis's own and names the roomy card",
+          cc["suggestion"]["words"].startswith("Jarvis's suggestion:")
+          and "RTX 2060" in cc["suggestion"]["words"]
+          and "cannot say which card is faster" in cc["suggestion"]["words"])
+
+    # Where the model is: read from nvidia-smi's own process list.
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 apps=f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n") as w:
+        st = SC.status()
+    seen = st["chat_card"]["where"]
+    check("with nothing pinned, the model is reported on the card nvidia-smi "
+          "names, not on the monitor card",
+          seen["pinned"] is None and (seen["card"] or {}).get("uuid") == G.U_2060
+          and "RTX 2060" in seen["words"], seen)
+    check("... and nothing claims the monitor card is running chat",
+          next(c for c in st["detected"]["cards"] if c["uuid"] == G.U_2080S)["role"] == "second"
+          and "everyday chat runs here" not in next(
+              c for c in st["detected"]["cards"] if c["uuid"] == G.U_2080S)["why"])
+    check("... and the report is where the reading is: the model, its card "
+          "and that Jarvis did not pin it",
+          "RTX 2060" in seen["words"] and "did not pin" in seen["words"], seen)
+    check("... and the PLANNED card is the card the model was read on, not the "
+          "monitor card: the everyday card moving to the other card",
+          st["detected"]["primary"]["uuid"] == G.U_2060
+          and (st["detected"]["second"] or {}).get("uuid") == G.U_2080S,
+          (st["detected"]["primary"], st["detected"].get("second")))
+    check("... and the row that WAS the planning card says the model is on the "
+          "other card, not that chat runs there",
+          "the second-card features would run here" in next(
+              c for c in st["detected"]["cards"] if c["uuid"] == G.U_2080S)["why"])
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        st = SC.status()
+    check("nothing loaded and nothing pinned: Jarvis says it cannot tell, "
+          "rather than naming a card",
+          st["chat_card"]["where"]["card"] is None
+          and "Nothing is loaded right now" in st["chat_card"]["where"]["words"])
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 apps=f"4242, some_other_program.exe, {G.U_2060}, 5200\n"):
+        st = SC.status()
+    check("a program that is not a model is never read as the model",
+          st["chat_card"]["where"]["card"] is None)
+
+    # A pinned card is remembered, and the model is checked against it.
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 user_env={"CUDA_VISIBLE_DEVICES": G.U_2060, "OLLAMA_VULKAN": "0"}) as w:
+        w.pin(G.U_2060)
+        st = SC.status()
+    cc = st["chat_card"]
+    check("a pinned card is reported as the owner's own choice",
+          cc["chosen"] == G.U_2060 and cc["chosen_name"] == "NVIDIA GeForce RTX 2060"
+          and cc["problem"] == "")
+    check("a pinned card with the model on it says exactly that",
+          cc["where"]["pinned"] == G.U_2060 and "you pinned" not in cc["where"]["words"]
+          and "Jarvis cannot see the model" in cc["where"]["words"], cc["where"]["words"])
+    with G.World(G.SMI["2080s_2060"], windows=True, user_env=None) as w:
+        w.pin(G.U_2060)
+        st = SC.status()
+    check("a pin Ollama does not have yet is said plainly, never reported as done",
+          "does not have this pin yet" in st["chat_card"]["problem"])
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 user_env={"CUDA_VISIBLE_DEVICES": G.U_2060, "OLLAMA_VULKAN": "1"}) as w:
+        w.pin(G.U_2060)
+        st = SC.status()
+    check("a pin with Vulkan still on is said plainly too",
+          "Vulkan" in st["chat_card"]["problem"])
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        w.pin("not-an-id")
+        st = SC.status()
+    check("a broken pin file reads as no pin (the default), never as a guess",
+          st["chat_card"]["chosen"] is None)
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 apps=f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n") as w:
+        w.pin(G.U_2060)
+        st = SC.status()
+    check("a pinned card with the model really on it says so",
+          "the model really is on it now" in st["chat_card"]["where"]["words"],
+          st["chat_card"]["where"]["words"])
+
+
+def t_the_chat_card_pin_asks_first():
+    """ON is ONE card (chat_card_pin, tier "ask") and changes nothing until a
+    person says yes; OFF is immediate. Nothing is written to the registry
+    before the yes."""
+    def gate_yes(action, detail, prompt):
+        return types.SimpleNamespace(allowed=True, outcome="approved", tier="ask", action=action,
+                                     prompt=prompt)
+
+    def gate_no(action, detail, prompt):
+        return types.SimpleNamespace(allowed=False, outcome="denied", tier="ask", action=action)
+
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        seen = {}
+
+        def gate(action, detail, prompt):
+            seen["action"] = action
+            seen["text"] = prompt
+            return types.SimpleNamespace(allowed=True, outcome="approved", tier="ask",
+                                         action=action, prompt=prompt)
+        code, out = SC.handle_pin({"action": "pin", "card": G.U_2060}, gate=gate,
+                                  tier_of=lambda a: "ask", spawn=lambda fn: fn())
+        st = SC.status()
+    check("pinning by id: one card, action chat_card_pin, and it really applied",
+          code == 200 and seen["action"] == SC.PIN_ACTION
+          and st["chat_card"]["chosen"] == G.U_2060, out)
+    check("exactly the two settings were set, to the card's id and Vulkan 0",
+          w.user_env_writes == [("CUDA_VISIBLE_DEVICES", G.U_2060), ("OLLAMA_VULKAN", "0")],
+          w.user_env_writes)
+    check("the card names the exact settings and the exact line",
+          "CUDA_VISIBLE_DEVICES" in seen["text"] and "OLLAMA_VULKAN" in seen["text"]
+          and "SetEnvironmentVariable" in seen["text"], seen["text"])
+    check("the card lists the measured facts behind the choice",
+          "Measured on 2026-10-05" in seen["text"] and "37/37" in seen["text"], seen["text"])
+    check("the card claims no speed", not _claims_speed(seen["text"]), seen["text"])
+    check("the card says Ollama must be restarted",
+          "Ollama reads these settings only when it starts" in seen["text"]
+          and "start it again" in seen["text"], seen["text"])
+
+    # A no changes nothing at all.
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        code, out = SC.handle_pin({"action": "pin", "card": G.U_2060}, gate=gate_no,
+                                  tier_of=lambda a: "ask", spawn=lambda fn: fn())
+        st = SC.status()
+    check("a denied pin: chosen stays null and no setting is written",
+          st["chat_card"]["chosen"] is None and w.user_env_writes == [], (out, w.user_env_writes))
+
+    # A second request while the first card waits is refused.
+    with G.World(G.SMI["2080s_2060"], windows=True):
+        SC.handle_pin({"action": "pin", "card": G.U_2060},
+                      gate=lambda a, d, p: None, tier_of=lambda a: "ask", spawn=lambda fn: None)
+        code, out = SC.handle_pin({"action": "pin", "card": G.U_2060},
+                                  tier_of=lambda a: "ask", spawn=lambda fn: None)
+    check("a second pin while its card waits: 409 with a sentence",
+          code == 409 and "already waiting" in out["error"], out)
+
+    # Every refusal that must not raise a card.
+    with G.World(G.SMI["2080s_2060"], windows=True):
+        code, out = SC.handle_pin({"action": "pin", "card": "GPU-nope-0000"},
+                                  tier_of=lambda a: "ask", spawn=lambda fn: None)
+        check("a card that is not here: 400, naming nvidia-smi -L",
+              code == 400 and "nvidia-smi -L" in out["error"], out)
+        code, out = SC.handle_pin({"action": "sideways"}, tier_of=lambda a: "ask")
+        check("an unknown action: 400 with the two shapes", code == 400, out)
+        code, out = SC.handle_pin({"action": "pin", "card": G.U_2060},
+                                  tier_of=lambda a: "auto", spawn=lambda fn: None)
+        check("a tier that is not ask: 503, before any card is raised",
+              code == 503 and "must stay" in out["error"], out)
+    with G.World("garbage only\n"):
+        code, out = SC.handle_pin({"action": "pin", "card": "0"}, tier_of=lambda a: "ask")
+        check("no card at all: 503, nothing to pin", code == 503, out)
+
+    # Going back is immediate, with no card at all.
+    with G.World(G.SMI["2080s_2060"], windows=True,
+                 user_env={"CUDA_VISIBLE_DEVICES": G.U_2060, "OLLAMA_VULKAN": "0"}) as w:
+        w.pin(G.U_2060)
+        code, out = SC.handle_pin({"action": "leave"})
+        st = SC.status()
+    check("leaving it to Ollama: 200, immediate, no card, both settings removed",
+          code == 200 and out["chosen"] is None and st["chat_card"]["chosen"] is None
+          and w.user_env_writes == [("CUDA_VISIBLE_DEVICES", None), ("OLLAMA_VULKAN", None)],
+          (out, w.user_env_writes))
+    check("... and it says the choice is Ollama's again",
+          "leaves the choice to Ollama" in out["words"], out)
+
+    # The route reaches it.
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        code, out = SC.handle_post({"feature": "chat_card", "action": "leave"})
+    check("POST /api/second-card reaches it: feature chat_card",
+          code == 200 and out["chosen"] is None, out)
+
+
+def t_planning_uses_the_card_the_model_is_on():
+    """The owner's decision, 2026-10-06 (option B: "true to its reporting").
+
+    THE INCONSISTENCY THIS CLOSES. `where_chat_runs` reports where the model
+    really is; the PLANNING rule (`_primary`) used to skip that reading and
+    fall back to the card a monitor is plugged into. On this PC those are two
+    different cards (the 12 GB 2060 holds the model, the 8 GB 2080 SUPER runs
+    the desktop), so Jarvis could say "Ollama has the model on the 2060" in
+    one breath and plan around "the main card is busy with chat" in another.
+
+    What this proves, each with the real `_primary` (nothing stubbed over it -
+    that stub is what let the two drift apart unnoticed):
+
+      - an observed card is PLANNED around (`primary`), and the monitor card
+        becomes the card the second-card features would run on;
+      - when Jarvis cannot tell, the monitor-card rule still applies, it is
+        still the planning card, and the words say ASSUMES rather than
+        reporting it as something read;
+      - when nothing observes anything, the old rule is exactly what it was.
+
+    Every case below is the OBSERVED reading only - no speed is claimed
+    anywhere in it, the same standard the fixture check applies."""
+    load = f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n"
+
+    # 1. The model is observed on the card with NO monitor. Planning follows
+    #    the reading, not the monitor rule.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load) as w:
+        det = SC.detect(fresh=True)
+        st = SC.status()
+    check("observed: the card the model is on is the card Jarvis plans around",
+          (det["primary"] or {}).get("uuid") == G.U_2060
+          and (det["second"] or {}).get("uuid") == G.U_2080S,
+          (det.get("primary"), det.get("second")))
+    check("observed: the monitor card is now the card the extra features would use",
+          next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["role"] == "second"
+          and "the second-card features would run here" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+    check("observed: the primary row says it was READ, and from where",
+          "read this card from Ollama and nvidia-smi" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2060)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2060)["why"])
+    check("observed: no assumption is claimed anywhere, and no speed either",
+          "ASSUMES" not in " ".join(c["why"] for c in det["cards"])
+          and not _claims_speed(json.dumps(
+              {"cards": det["cards"], "primary": det["primary"],
+               "second": det["second"], "why": det["why"]})))
+    check("observed: the plan and the report name the same card",
+          st["chat_card"]["where"]["card"]["uuid"] == st["detected"]["primary"]["uuid"])
+
+    # 2. A model is LOADED (Ollama says so) but nvidia-smi does not name the
+    #    program using a card, which some Windows drivers do not
+    #    (docs/MEASURE-CARDS.md section 2). `where_chat_runs` says it cannot
+    #    tell; planning must fall back AND say it is assuming.
+    loaded = {"name": "qwen3:8b", "size": 7_000_000_000, "size_vram": 6_000_000_000,
+              "context_length": 4096}
+    with G.World(G.SMI["2080s_2060"], windows=True, ps=[loaded]) as w:
+        det = SC.detect(fresh=True)
+        seen = SC.where_chat_runs({"cards": det["cards"]})
+    check("cannot tell: a model IS loaded, and the reading still names no card",
+          seen["model_loaded"] is True and seen["card"] is None
+          and "cannot say which card it is on" in seen["words"], seen)
+    check("cannot tell: the fallback rule still picks one card to plan around",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and (det["second"] or {}).get("uuid") == G.U_2060,
+          (det.get("primary"), det.get("second")))
+    why = next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"]
+    check("cannot tell: the plan says plainly that it is ASSUMING",
+          why.startswith("Jarvis ASSUMES everyday chat is here")
+          and "you have not pinned a card" in why
+          and "not something it read" in why, why)
+    check("cannot tell: it never claims the model was seen on that card",
+          "everyday chat runs here now" not in why
+          and "read this card from Ollama" not in why, why)
+    check("cannot tell: the monitor rule is exactly what chose it",
+          "a monitor is plugged into it" in why, why)
+    check("cannot tell: no speed claim in the assuming words either",
+          not _claims_speed(why))
+
+    # 3. With nothing else to go on the old rule is unchanged: the monitor
+    #    card, still the planning card, still named as the monitor rule.
+    with G.World(G.SMI["2060_first"], windows=True) as w:
+        det = SC.detect(fresh=True)
+    check("nothing known: the monitor card is still the planning card",
+          (det["primary"] or {}).get("uuid") == G.U_2080S,
+          det.get("primary"))
+    check("nothing known: and the reason still names the monitor rule",
+          "a monitor is plugged into it" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+
+    # 4. No monitor seen anywhere: nvidia-smi's first card, as before.
+    nodisp = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Disabled\n" \
+             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+    with G.World(nodisp, windows=True) as w:
+        det = SC.detect(fresh=True)
+    check("no monitor seen: still nvidia-smi's first card",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and "first card" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+
+    # 5. A card the owner pinned is HIS choice, never described as a reading,
+    #    even when the model is observed on the other card.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load) as w:
+        w.pin(G.U_2080S)
+        det = SC.detect(fresh=True)
+    check("pinned: the pin wins over the reading, and is called the pin",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and "you pinned this card" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+    check("pinned: the card the model is really on is not silently called the plan",
+          "read this card from Ollama and nvidia-smi" not in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2060)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2060)["why"])
+
+    # 6. Nothing overrides `[compute] primary_gpu`, and it is never a reading.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load) as w:
+        with mock.patch.object(CP, "_cfg",
+                               lambda k, d=None: G.U_2080S if k == "primary_gpu" else d):
+            det = SC.detect(fresh=True)
+    check("primary_gpu set: his own override still decides, and is named as the setting",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and "primary_gpu" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+
+    # 7. He pinned a card that is not in the PC any more, and nothing is
+    #    observed: that is an assumption too, and it is said as one.
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        w.pin(G.U_2080TI)                       # never a card in this PC
+        det = SC.detect(fresh=True)
+    why = next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"]
+    check("a pin whose card is gone: the monitor rule plans, and says it is ASSUMING",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and why.startswith("Jarvis ASSUMES everyday chat is here")
+          and "you pinned the other card" in why
+          and "nvidia-smi does not see that card now" in why, why)
+    check("a pin whose card is gone: no speed claim, and never called a reading",
+          not _claims_speed(why) and "read this card from Ollama" not in why, why)
 
 
 # ------------------------------------------------------------- the hooks --

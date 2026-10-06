@@ -95,6 +95,7 @@ object MenuPlaces {
         "settings.second-card.study-helper" to "SecondCardPlate: the Study helper switch",
         "settings.second-card.referee" to "SecondCardPlate: the Referee suggestions switch",
         "settings.second-card.third-card" to "SecondCardPlate: the Third graphics card section",
+        "settings.second-card.chat-card" to "SecondCardPlate: the Everyday chat runs on row",
         "brain.work.quiz.youtube" to "QuizPlate: the YouTube link block",
     )
 

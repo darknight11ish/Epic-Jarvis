@@ -30,6 +30,16 @@
     },
     {
      "asks": "-",
+     "id": "read_web_page",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "name": "Read one web page out loud",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "calendar",
      "line": "Set up on this PC, but the AI model is not offered it yet. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Calendar (reading)",
@@ -314,6 +324,16 @@
     },
     {
      "asks": "-",
+     "id": "read_web_page",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "name": "Read one web page out loud",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "calendar",
      "line": "No calendar is set up on this PC.",
      "name": "Calendar (reading)",
@@ -591,6 +611,16 @@
      "state": "on",
      "state_words": "On",
      "where": "this PC (SearXNG, which asks other search engines)"
+    },
+    {
+     "asks": "-",
+     "id": "read_web_page",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "name": "Read one web page out loud",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
     },
     {
      "asks": "No",
@@ -874,7 +904,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 24,
+   "on": 25,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -895,6 +925,16 @@
      "state": "on",
      "state_words": "On",
      "where": "api.tavily.com"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "read_web_page",
+     "line": "Fetches the one address the card shows, once, and reads its words back as outside text. Only the address is sent - no memory, no email, no files go with it - and it never follows a link on the page or fetches a second one.",
+     "name": "Read one web page out loud",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "the one address the card shows"
     },
     {
      "asks": "No",
@@ -1172,6 +1212,10 @@
      "name": "Web search"
     },
     {
+     "id": "read_web_page",
+     "name": "Reading one web page out loud (one card each)"
+    },
+    {
      "id": "calendar_read",
      "name": "Reading your calendar"
     },
@@ -1275,6 +1319,16 @@
      "id": "web_search",
      "line": "Off: \"web_search\" is missing from the tool list in the settings file on your PC (jarvis-framework.toml, [tools] enabled), so the AI model is not offered it. Adding it back is done in that file on the PC.",
      "name": "Web search",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "read_web_page",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"read_web_page\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can act for you, so it stays a step you take on the PC.",
+     "name": "Read one web page out loud",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -1534,6 +1588,7 @@
  "ids": [
   "cloud_model",
   "web_search",
+  "read_web_page",
   "calendar",
   "email_read",
   "email_send",

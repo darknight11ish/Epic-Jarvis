@@ -26,7 +26,8 @@ Then:
 | `npm run test:tokens` | no colour is welded into a component where a theme cannot reach it, and the `rgb(var(--hue-rgb) / a)` form actually resolves. The Python half needs no Playwright. |
 | `npm run test:ui` | (among them `face-watchdog.mjs`: the faces' GPU watchdog, the animals' dimming and fallback pose, and the "Jarvis isn't connected" ring; and `face-pace.mjs`: the animals' resolution and frame-rate choices - Lower, Balanced, High and Maximum in the spec's, Settings' and the phone's words, Maximum traced at 2x2, the pick rule (90 is 72 on a 144 Hz screen), an animal resting at 60 or 30 and at the full rate while an idle happening plays, Auto's ladder down and its climb to Maximum, and the widget's face resting at all; and `animal-options.mjs`: the animals' sleeping Zs - on standby, never while not connected, following the head, one still z under reduced motion - "Keep the animal still" from Settings' Animal options (shared with the phone) to every face page, an old per-computer "on" kept until it has reached the PC, and an older PC's local-only switch, and the serious moment reaching the floating face) the HUD window served exactly as the packaged app serves it (Tauri's header CSP with its script hashes) and actually sending a message; then the audited ship blockers, each one a bug that shipped, and the IA findings — things that were unreachable and things that were not true; and `continuity.mjs`, which holds the desktop to the phone: the same three themes and names, Ember mapped to Reactor, one set of words for the link, and the face settings slow-down only; and `learning.mjs`, the right/wrong mark on an answer and the review cards that say what their buttons do; and `task-controls.mjs` and `notes.mjs`, Pause/Resume/Stop and Logseq/Joplin/Obsidian notes believing only what the PC reports, including which note apps it is set up for; and `provenance.mjs` and `history.mjs`, chat history on the PC: every turn says where its words came from (typed, pasted, clipboard, voice) and keeps saying it, and the Brain's History tab lists, opens and deletes one conversation at a time, with the switch that waits for its approval card; and `auto-learn.mjs`, automatic learning on the Memory tab: its two switches that wait for their approval cards (one raised on the phone too), the "Saved automatically" list with Forget and Load older, and the quiet "Jarvis remembered 2 things" line; and `erase.mjs`, "Erase the words" beside every Forget (on a forgotten fact too): it asks first, sends one id, is held on a stale link, and an erased fact shows only the date it was erased; and `forget-date.mjs`, Forget's and Reword's "when did this stop being true?" box: a date with no year is the latest one already past (not 2001), a future date is refused, and a refused answer asks again instead of dropping the confirmed Forget; and `memory-profile.mjs`, "Always keep in mind": its section with "N of 1,200 characters used" and Unpin, Pin beside every Forget, one fact per tap with no question, the PC's refusal in its own words, held on a stale link and hidden under Windows Hello; and `memory-used.mjs`, temporary chat and "Used in this answer": the mode only on a PC that has it, its marker and its one line, every question sent temporary and a new conversation each way, a PC that did not confirm it said plainly, "Remember: is off", and "Used 2 memories" opening those facts with Forget and Erase - asked first, one fact per tap, held on a stale link, hidden under Windows Hello - and the Brain's "Jarvis remembered 2 things" opening the facts themselves; and `look-rules.mjs` and `look.mjs`, "Look at this" and "Watch with me": the sign's words and the "Looked at" line held to the table both apps share (`screen-cases.json`), the Jarvis bar's Watch button and strip, Stop never held on a stale link, and Settings' Never look at card (adding is instant, removing asks) |
 | `node tests/browser-engine.mjs` | the headless browser (Obscura) setting (2026-09-29): the words and every settings case held to the table both apps share (`fixtures/browser-engine-cases.json`, written by `tools/gen_browser_cases.py`), the honest stealth line, and the wiring - the one command registered and permitted for Settings only, turning it on held on a stale link and off never, and no proxy field, address field, picture or page anywhere in it. Pure node, no browser; CI runs it. |
-| `npm run test:a11y` | live regions, headings, the roving tablist, hue-only state, text scaling, and whether a disabled control is still readable in all three themes |
+| `npm run test:a11y` | live regions, headings, the roving tablist, hue-only state, text scaling, whether a disabled control is still readable in all three themes, and `palette-ui.mjs` - the command palette from the keyboard alone (a real focus trap, the arrows and `Enter`, `Escape` closing the finder and not the bar, the count announced, a gate never covered) |
+| `npm run test:palette` | the two halves that need no browser: `palette.mjs` walks every row of the command palette back to the generated menu catalogue (`menu-catalog.js`) and refuses a retyped name or a row whose place does not exist on the page it opens, and `onboarding.mjs` holds the first-run walkthrough to its shape (a handful of ordered screens, one on screen, skippable, shown once) and to what a new owner must be told - the approval card and what it does not grant, how to talk to it, where the settings are, and that it runs on this PC |
 | `node tests/rail-tabs.mjs` | the Brain rail's tabs held to the views behind them, from the text, with no browser: every view named in `brain.js`'s `VIEWS` has its `tab-<key>` button in `brain.html` and a panel that names it back, the rail's drawn order and the order the arrows, `Home` and `End` walk are the same order, exactly one tab starts in the tab order, and only the four behind "Advanced" start hidden. Written because the tenth tab (Tutorials) was named in `VIEWS` and never drawn, which sent `End` to a tab that was not there and left the whole rail with no tab stop. Pure node, no browser; CI runs it. |
 | `npm run test:themes` | every theme's contrast over a black **and** a white backdrop, every window's theme reach, and colour distinctness under three kinds of colour-blindness |
 | `node tests/animal-settings.mjs` | "Animal options" (2026-09-28): the fallback switches and words are the PC's (`fixtures/animal-cases.json`, written by `jarvis_animal.py`), "make the animal sharper" steps the same way as the PC's rule from every start, and - with Playwright - Settings' one section: every switch the PC lists (the "coming in the next update" line on the ones not built yet), ONE change per tap, turning one on held on a stale link and off never, a phone change shown at once, the sky and the per-computer sharpness and frame rate inside it, the way to the face's voice, and the Jarvis bar applying `face_tuning` to this computer only. The first part needs no browser; CI runs it. |
@@ -54,6 +55,35 @@ against whatever the user's wallpaper happens to be, so a pair can measure
 9.8:1 over black and 2.21:1 over white — that exact case was live in the CSS
 and is why sunken surfaces are opaque now. A checker that assumes a dark
 desktop would have passed it.
+
+## Running one check, and what a skip means
+
+A few suites (the ones that check a page against what the backend *really*
+sends) run Python at test time. The interpreter is named differently by
+platform — `python3` on Linux and in CI, plain `python` on Windows — so it is
+resolved in one place, `tests/lib/python.mjs`, rather than by each suite.
+`tests/lib/` is a subdirectory because CI runs every `tests/*.mjs` as a suite;
+a helper sitting at the top level would be run as a test that never prints
+anything.
+
+A check this machine cannot run is **skipped**, in these words:
+
+```
+SKIP  the daily card shows when the server offers it
+      (no Python here - python3 was not found on PATH)
+```
+
+and the count is printed before the verdict, naming each reason:
+
+```
+25 passed, 10 skipped (a skip is not a pass):
+  - no Python here - python3 was not found on PATH
+```
+
+A skip does not fail the run, and it never prints as `ok` — a suite that
+skipped work must not be readable as a green one. Do not add a bare
+`execFileSync("python3", …)` to a new suite: import `pythonFor` from
+`./lib/python.mjs` instead, and guard the check with `PY.skip(...)`.
 
 ## What the harness is not
 

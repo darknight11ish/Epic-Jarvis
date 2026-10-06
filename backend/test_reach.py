@@ -739,8 +739,36 @@ def t_both_apps_read_the_current_contract():
           "(python3 tools/gen_reach_cases.py)", r.returncode == 0, r.stdout + r.stderr)
 
 
+def t_read_web_page_row():
+    """The owner's request of 2026-10-05: a page he hands over, read out loud
+    (jarvis_readpage.py, JARVIS-API section 115). A new way out of this PC, so
+    the project's own rule - "a new way out is ONE entry here" - holds it to a
+    row, and the row has to be honest about the one step that is his."""
+    r = row(R.view(ctx(enabled=("read_web_page",), tiers={"read_web_page": "ask"})),
+            "read_web_page")
+    check("Read one web page: on, asks every time, and says only the address is sent",
+          r["state"] == "on" and r["asks"] == R.ASK_EVERY
+          and "Only the address is sent" in r["line"]
+          and "outside text" in r["line"], repr(r))
+    r = row(R.view(ctx(enabled=("read_web_page",), tiers={"read_web_page": "never"})),
+            "read_web_page")
+    check("Read one web page: blocked when the settings say never",
+          r["state"] == "blocked" and r["asks"] == R.ASK_NEVER, repr(r))
+    # The state the owner is actually in today: the tool is off until he adds
+    # its name to [tools].enabled, so the row must SAY that, with the exact
+    # line to add - an Off row with no sentence would be a dead end.
+    r = row(R.view(ctx()), "read_web_page")
+    check("Read one web page: off, and the row says the one step the owner takes",
+          r["state"] == "off" and 'add "read_web_page" to the [tools] enabled list'
+          in r["line"] and "no app can" not in r["line"].lower(), repr(r))
+    row(R.view(ctx(enabled=("read_web_page",))), "read_web_page")
+    check("Read one web page: it is a named way out, so no app may switch it on",
+          not R._tool_switchable("read_web_page"))
+
+
 if __name__ == "__main__":
-    for fn in (t_rows_and_order, t_youtube_row, t_chatbot_row, t_chatbot_api_row, t_no_secret_anywhere,
+    for fn in (t_rows_and_order, t_read_web_page_row, t_youtube_row, t_chatbot_row,
+               t_chatbot_api_row, t_no_secret_anywhere,
                t_phone_push_needs_an_owner_chosen_destination,
                t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,

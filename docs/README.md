@@ -1,26 +1,35 @@
 # The documents, and which ones are current
 
-There are **288 markdown documents** here, adding up to about **20 MB**. Neither
+There are **290 markdown documents** here, adding up to about **6.8 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
-to all day, so the count and the size both move. Both were measured on 2026-10-05
+to all day, so the count and the size both move. Both were measured on 2026-10-06
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 288 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 290 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
-  Measure-Object -Property Length -Sum).Sum                             # about 20,000,000 bytes
+  Measure-Object -Property Length -Sum).Sum                             # about 6,760,000 bytes
 ```
 
 Both lines count the documents in the subfolders too, not only the ones sitting
 directly in `docs/`. The count is the honest measure of how much is here; treat
-the size as "around 20 MB" and re-measure it rather than trusting the digits
+the size as "around 6.8 MB" and re-measure it rather than trusting the digits
 above. **Five of the documents are the ones to read**; the rest are the history of
 how Jarvis got here: audits, research, and notes that one working session left for
-another. Apart from one generated file that was deleted on 2026-10-05 (the source
-bundle, in the last table below - its contents are still in git history), nothing
-has been moved or deleted, so every old link still works. This page says which is
-which.
+another. One generated file, the source bundle, is **really gone** now: the removal
+this page had recorded before it was run was run on 2026-10-05 (see the last table
+below), and `.gitignore` carries the path so a regenerated copy cannot come back
+tracked - `docs/` is 13.5 MB smaller than it was. Apart from that one file,
+nothing had been moved or deleted before 2026-10-06, so every old link still
+worked. That changed on 2026-10-06: three more tracked things were deleted - the
+vendored telemetry package `tel/`, the stray tarball
+`evidence-dev-telemetry-2.1.3.tgz`, and the eyelid preview
+`docs/critters/eyelids-preview/`. Nothing referenced any of the four, and the last
+table on this page says what each one was. Deleting from the newest commit stops
+carrying it forward; it does not shrink a clone that already has it, and
+`git show <older-commit>:<path>` still returns the file. This page says which
+document is which.
 
 (An earlier version of this paragraph said "about ninety documents", and at some
 point it also gave a size of 720 KB for something that had grown far past that -
@@ -46,7 +55,7 @@ Also current, for one area each:
 | Document | What it is for |
 |---|---|
 | [HARDWARE-PROFILES.md](HARDWARE-PROFILES.md) | Settings for different graphics cards, one card or two. |
-| [SECOND-CARD.md](SECOND-CARD.md) | What a second graphics card will add. All built, all off until the card is installed and measured. |
+| [SECOND-CARD.md](SECOND-CARD.md) | What a second graphics card adds. All built, all off until that feature is measured. |
 | [BIG-MODEL.md](BIG-MODEL.md) | The optional slow, bigger model for jobs nobody is waiting on. |
 | [WAKE-WORD.md](WAKE-WORD.md) | "Hey Jarvis": how it works and what it needed. |
 | [APPROVAL-GAP-DESIGN.md](APPROVAL-GAP-DESIGN.md) | How the PC itself asks Windows Hello before a risky approval (step 1 is built). |
@@ -67,6 +76,7 @@ Also current, for one area each:
 | [WORK-ORDER-2026-10-05.md](WORK-ORDER-2026-10-05.md) | What the owner decided after that pass (2026-10-05): the fourteen choices, what gets fixed and in what order, what only the owner can do, and what is deliberately left out. |
 | [MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md) | **The first real measurement of the owner's own PC.** Both cards are in and working and the model runs entirely on the 12 GB card, so nothing spills onto the processor - and 16,384 tokens of context fits with room to spare. Also records the honest correction about the Ollama log: it does exist, and a search that returns nothing is not proof that a file is absent. |
 | [MEASURE-CARDS.md](MEASURE-CARDS.md) | The one-line check to run on the PC (reads only, changes nothing) and how to read what it prints: is the model on a card or partly on the processor, how much room is left, why 16,384 fits, and why the earlier advice to drop to 8,192 was wrong for this machine. |
+| [ADAPTIVE-MEMORY-DESIGN.md](ADAPTIVE-MEMORY-DESIGN.md) | Keeping recent conversation exact and compressing older turns in words instead of squeezing the whole window at the bit level (**design only, not built, not approved to build**). Its own answer is "do not build it yet": at 16K the ten turns the apps send already fit, and at 4,096 the tool list is what fills the window, not the conversation. |
 | [SETTINGS-MERGE-FINDINGS-2026-10-05.md](SETTINGS-MERGE-FINDINGS-2026-10-05.md) | Why the plan to merge the desktop Settings page from 33 cards to about 20 was **parked**, and what a correct retry must satisfy - read from the test suites, not guessed. The page on disk is the unchanged one, so the owner sees no difference. |
 
 ## Audits and research (dated - true on the day written)
@@ -123,7 +133,9 @@ them; the current documents above replace them.
 
 | Document | Why it is stale |
 |---|---|
-| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05.** It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. Git history still has it (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
+| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05, and this time the removal was really run**: `git ls-files docs/SOURCE-BUNDLE.md` lists nothing, and `.gitignore` now carries the path so a regenerated copy cannot come back tracked. It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line whenever a reviewer wants it: `py -3 tools/gen_source_bundle.py`, which is still tracked. Git history still has the file (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
+| `tel/`, `evidence-dev-telemetry-2.1.3.tgz` | **Removed 2026-10-06.** These were both the same third-party npm package, `@evidence-dev/telemetry` 2.1.3: `tel/package/` was its unpacked contents (5 files, 9,453 bytes) and the tarball was the download it came out of (3,906 bytes). Its own `index.cjs` opens a `@segment/analytics-node` connection and reports the operating system, Node version, architecture and hashed home directory, so it is a phone-home sitting in a project whose first rule is that nothing leaves the PC. Nothing in Jarvis, the desktop app, the phone app or any workflow imported it - the two words `tel/package` appear in no tracked file. `git show <older-commit>:tel/package/index.cjs` still returns it, so nothing is lost. `.gitignore` already covers `*.tgz` (added 2026-10-05); no new rule is needed for `tel/`, which a `npm install` would recreate anyway. |
+| ~~docs/critters/eyelids-preview/~~ | **Removed 2026-10-06.** Four files, 2.83 MB: two "before and after" pictures and the generator that drew them. Its own `README.md:3-4` says it is "a PREVIEW, not part of the app yet" and that "the main branch does not have it" - it did - and `README.md:14-16` says it was "not wired to the animals' poses" and that no golden file changed. The feature was built afterwards and is kept properly in [CRITTERS.md](CRITTERS.md), with its pictures in `docs/critters/eyelids/` (6.77 MB, still here). Its generator imported from `.claude/worktrees/agent-abd7d5ab573657428/`, a worktree that no longer exists, so those pictures could not be drawn again anyway. Nothing pointed at it - no test, no workflow, no document, not the CHANGELOG, which names `docs/critters/eyelids/`. Git history still has it (`git show <older-commit>:docs/critters/eyelids-preview/README.md`), so nothing is lost. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |
 | [ANDROID-FEATURE-AUDIT.md](ANDROID-FEATURE-AUDIT.md), [ANDROID-REPLY-2026-09-15.md](ANDROID-REPLY-2026-09-15.md), [ANDROID-REPLY-2026-09-15-GRADIENT.md](ANDROID-REPLY-2026-09-15-GRADIENT.md), [ANDROID-REPLY-2026-09-18-CATCHUP.md](ANDROID-REPLY-2026-09-18-CATCHUP.md), [ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md](ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md), [ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md](ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md) | Messages between the phone and desktop sessions, 15-18 September. |

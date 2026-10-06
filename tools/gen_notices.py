@@ -163,10 +163,20 @@ PLACEHOLDER = re.compile(r"\[yyyy\]|\[name of copyright owner\]|<year>|<copyrigh
 
 
 def metadata() -> dict:
+    # `encoding="utf-8", errors="replace"` is not decoration. Without it Python
+    # decodes cargo's output with the console's own code page - cp1252 on the
+    # owner's Windows machine - and a crate whose metadata carries one byte
+    # that page has no character for kills subprocess's reader thread. The
+    # thread then leaves `.stdout` as None and `json.loads(out)` dies with
+    # "the JSON object must be str, bytes or bytearray, not NoneType", which
+    # says nothing about the real cause. It is the same fault
+    # backend/run_suites.py records fixing on 2026-10-03 (test_mail_mask.py),
+    # and CI never sees it because the Ubuntu runner is already UTF-8.
     out = subprocess.run(
         ["cargo", "metadata", "--format-version", "1", "--offline", "--locked",
          "--filter-platform", TARGET],
-        cwd=TAURI, capture_output=True, text=True, check=True).stdout
+        cwd=TAURI, capture_output=True, text=True, check=True,
+        encoding="utf-8", errors="replace").stdout
     return json.loads(out)
 
 

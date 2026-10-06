@@ -85,7 +85,18 @@ ON_SCREEN = "It's on your screen."
 #: The only tools whose answers may be read aloud (owner, 2026-09-27; and
 #: read_screen, owner, 2026-09-28). Exact names, as the `step` event carries
 #: them (jarvis_agent._step_event).
-READ_ALOUD_TOOLS = ("home_read", "read_camera", "read_screen", "web_search")
+#:
+#: `read_web_page` is jarvis_readpage's own tool (2026-10-05): the name is
+#: jarvis_readpage.ACTION, served by jarvis_readpage.run. The owner's own
+#: request, "post a webpage into jarvis and it can read the content out
+#: loud". It belongs beside web_search - both are the public web the owner
+#: asked for, with the address shown on a card first - and not beside email,
+#: calendar, notes or memory. Every earlier rule still comes first: a
+#: sensitive saved fact, a private question, the router's private gate, a
+#: forgotten event stream. The owner can have it taken back off this list by
+#: saying so; it is one name here and the generated copies follow it.
+READ_ALOUD_TOOLS = ("home_read", "read_camera", "read_screen", "web_search",
+                    "read_web_page")
 
 #: Names on READ_ALOUD_TOOLS that are recorded reads, not model tools, and
 #: the module constant that defines each one (checked in build()).

@@ -135,7 +135,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -147,7 +147,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -228,7 +228,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -240,7 +240,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -321,7 +321,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -333,7 +333,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -523,7 +523,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -535,7 +535,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -909,7 +909,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -921,7 +921,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -987,7 +987,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -999,7 +999,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -1074,7 +1074,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -1086,7 +1086,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -1270,7 +1270,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -1282,7 +1282,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -1546,7 +1546,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -1558,7 +1558,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -1798,7 +1798,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -1810,7 +1810,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2180,7 +2180,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2192,7 +2192,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2404,7 +2404,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2416,7 +2416,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2588,7 +2588,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2600,7 +2600,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2657,7 +2657,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2669,7 +2669,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2726,7 +2726,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2738,7 +2738,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2873,7 +2873,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2885,7 +2885,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -2968,7 +2968,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -2980,7 +2980,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -3037,7 +3037,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -3049,7 +3049,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -3163,7 +3163,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -3175,7 +3175,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -3281,7 +3281,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -3293,7 +3293,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -3494,7 +3494,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -3506,7 +3506,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },
@@ -3733,7 +3733,7 @@
       "name": "the limited version (one graphics card)",
       "queue_default": 45,
       "queue_max": 120,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
     },
     "tier": {
@@ -3745,7 +3745,7 @@
       "name": "the limited version (one graphics card)",
       "turns_default": 5,
       "turns_max": 8,
-      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "why": "The full version is off until the second graphics card's \"Longer conversations\" lane has been measured ([chatbot] full_version in jarvis-framework.toml).",
       "words": "shorter conversations; Jarvis's own model on the card you chat on writes the follow-ups from short notes and the latest reply, and it waits while you are chatting with Jarvis, so your chat always comes first."
     }
   },

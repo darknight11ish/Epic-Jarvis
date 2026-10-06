@@ -130,6 +130,14 @@ support_offer             = "ask"
 # switches the feature off. A file without this line asks too
 # (unknown_action_tier).
 youtube_captions_read     = "ask"
+# Reading ONE web page the owner hands over, out loud (jarvis_readpage.py;
+# the owner's request of 2026-10-05, JARVIS-API section 115): ONE card per
+# address, showing it in full and raised BEFORE any fetch. Only that one
+# page's own address is fetched, never a link on it, and its words are
+# outside text. Must stay "ask": anything else and no page is fetched;
+# "never" switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+read_web_page              = "ask"
 # "Grade this better" on a quiz (jarvis_quiz_cloud.py; the owner's decision of
 # 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7): ONE card per request,
 # listing EXACTLY what leaves this PC (the quiz's questions, your answers and
@@ -323,6 +331,16 @@ second_card_combined_enable = "ask"
 # never folded into second_card_enable's own tier. Must stay "ask", the
 # same reason as above.
 second_card_third_assign = "ask"
+# WHICH CARD EVERYDAY CHAT RUNS ON (owner's decision, 2026-10-05): pinning it
+# to one card instead of leaving the choice to Ollama. Its own line - it
+# widens what Jarvis does on every answer, not only when a second-card
+# feature is on, and docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says
+# which card runs which work must always be a real, named choice, never a
+# default and never folded into another action. Turning it ON raises one
+# approval card (it sets CUDA_VISIBLE_DEVICES and OLLAMA_VULKAN for the
+# owner's own Windows user); going back to "Leave it to Ollama" is immediate
+# and needs no card. Must stay "ask", the same reason as above.
+chat_card_pin             = "ask"
 
 # Topic controls (2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md): turning a PRIVATE
 # topic (Health, Money, or one the owner marked private) back on, clearing its
@@ -558,6 +576,11 @@ complexity_threshold = 0.40
 [logging]
 enabled = true
 log_directory = "~/.openjarvis/logs/"
+# How many days of audit log to keep. After this many days a whole day's file
+# (jarvis-<date>.jsonl) is deleted, not trimmed or compressed. 0 or less keeps
+# everything. Kept by jarvis_framework.prune_logs(), which jarvis_events.py's
+# event pump calls once a day; today's file is never deleted, even if it is
+# quiet enough to look old.
 retention_days = 90
 log_every_routing_decision = true      # lane, gate, reason, complexity score
 log_every_tool_call = true
@@ -570,6 +593,9 @@ redact_private_content_in_logs = true  # log that a gate fired, never the privat
 # Not written yet: self-modification attempts, since no self-mod pipeline
 # exists to attempt anything (see pipeline_implemented above).
 # A failed log write now prints once to stderr instead of vanishing.
+# retention_days is now enforced too (2026-10-05): until then nothing called
+# prune_logs(), so the log grew with no cap - about 0.4 MB a day, ~130 MB a
+# year, for ever.
 persistence_implemented = true
 log_write_failures_are_visible = true
 

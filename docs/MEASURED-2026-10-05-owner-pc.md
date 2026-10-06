@@ -28,6 +28,28 @@ Note also that the **12 GB card is GPU 0** and holds the model, while the
 2080 SUPER is GPU 1 and runs the desktop. The documents describe the 2080 SUPER as
 the primary card; the machine has it the other way round.
 
+**Which card the monitor is on, re-read 2026-10-06.** The same `nvidia-smi`
+answers this too, in one line (`display_active` is the column):
+
+```powershell
+nvidia-smi --query-gpu=index,name,memory.total,display_active,compute_cap --format=csv
+```
+
+```
+index, name,                   memory.total [MiB], display_active, compute_cap
+0,     NVIDIA GeForce RTX 2060,       12288 MiB, Disabled,      7.5
+1,     NVIDIA GeForce RTX 2080 SUPER,  8192 MiB, Enabled,       7.5
+```
+
+**So the monitor is on the 2080 SUPER (GPU 1), not on the 12 GB card.** Two things
+follow. `docs/HARDWARE-PROFILES.md`'s generated table had this the wrong way round:
+its `two_2080s_2060_mon12` row said "monitor on the 2060". That row is now the same
+machine as `two_2080s_2060_mon8` (monitor on the 2080 SUPER), and both are made by
+`tools/gen_hardware_cases.py` from the designer's case list, so the table cannot
+drift from it again. And the case list is where the *planner* reads the monitor
+from; `jarvis_compute.primary()` (which does read `display_active`) sits in the
+second-card path, `jarvis_second_card._primary`, not in `jarvis_profiles.plan()`.
+
 ## What the model is doing
 
 ```

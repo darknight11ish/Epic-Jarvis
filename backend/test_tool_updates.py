@@ -178,7 +178,10 @@ def t_python_group_outdated_uptodate_and_unreachable(tmp_path=None):
     (d / "requirements.lock").write_text(
         "alpha==1.0.0\nbeta==2.0.0\ngamma==3.0.0\n", encoding="utf-8")
 
+    asked = []
+
     def fetch(url):
+        asked.append(url)
         if "alpha" in url:
             return {"info": {"version": "1.5.0"}}     # newer: outdated
         if "beta" in url:
@@ -201,10 +204,15 @@ def t_python_group_outdated_uptodate_and_unreachable(tmp_path=None):
     check("a package not installed here falls back to the lock's version, and says so",
           "note" not in by_name["alpha"] and "note" not in by_name["beta"])
 
-    # gamma actually IS installed, but at a version the lock never mentioned
-    # updating: still falls back correctly when installed() says None.
-    check("nothing here ever calls the network for the local package name itself",
-          True)
+    # Was `check("nothing here ever calls the network for the local package name
+    # itself", True)`: the condition was the constant True, so it printed ok
+    # whatever the report did, and nothing in this test observed the network at
+    # all (the comment above it describes a case the test never ran). What IS
+    # observable is which names the report asks about, so that is what is
+    # asserted now - once per name the lock pins, and never anything else.
+    asked_names = sorted({n for n in ("alpha", "beta", "gamma") if any(n in u for u in asked)})
+    check("only the lock's own package names are asked about over the network, once each",
+          asked_names == ["alpha", "beta", "gamma"] and len(asked) == 3, asked)
 
 
 def t_python_group_missing_lock_says_so():

@@ -62,6 +62,21 @@ object SecondCard {
      */
     const val THIRD = "third"
 
+    /**
+     * "Everyday chat runs on" (the owner's decision, 2026-10-05): its own
+     * request under the same POST route. Pinning everyday chat to ONE card
+     * sets the two Windows user settings Ollama reads at start-up
+     * (`CUDA_VISIBLE_DEVICES` and `OLLAMA_VULKAN`), so it is a capability
+     * change and raises ONE approval card (action `chat_card_pin`, tier
+     * "ask"). Going back to leaving the choice to Ollama is immediate, with
+     * no card - every loosening in this project is.
+     */
+    const val CHAT_CARD = "chat_card"
+
+    /** The two actions [postChatCardBody] may send. */
+    const val CHAT_LEAVE = "leave"
+    const val CHAT_PIN = "pin"
+
     /** The words for the main switch. The backend has no row for it. */
     const val MASTER_NAME = "Use the second graphics card"
     const val MASTER_WHAT =
@@ -74,7 +89,8 @@ object SecondCard {
     /** Where the pin command lives, since the phone does not show it. */
     const val PIN_ON_PC =
         "The command is for your PC, so it is not shown here. Run it there: " +
-            "desktop app → Settings → Second graphics card has a Copy button."
+            "desktop app → Settings → Second graphics card → \"Everyday chat runs on\" " +
+            "has a Copy button."
 
     data class Card(
         val index: Int?,
@@ -156,11 +172,65 @@ object SecondCard {
          * an already-on feature's switch runs on.
          */
         val third: ThirdCard? = null,
+        /**
+         * "Everyday chat runs on" (2026-10-05) - null from an older PC, which
+         * then shows no such section. Which graphics card runs everyday
+         * chat: Ollama's own choice by default, or one the owner pinned.
+         */
+        val chatCard: ChatCard? = null,
         /** True when extra features run in everyday Ollama on one big card. */
         val main: Boolean = false,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
+
+    /**
+     * `status()["chat_card"]` (2026-10-05). Every line about a card is read
+     * from the machine or quoted from the owner's own measurement of
+     * 2026-10-05; nothing here estimates a speed, and [suggestion] is
+     * Jarvis's own suggestion, labelled as one on screen.
+     */
+    data class ChatCard(
+        /** The card id the owner pinned, or null for "leave it to Ollama". */
+        val chosen: String?,
+        /** The pinned card's name, when the PC can see that card right now. */
+        val chosenName: String?,
+        /** Where the model really is, and the card that was read. */
+        val where: Where,
+        /** One entry per card, facts only. */
+        val cards: List<ChatFact>,
+        /** Jarvis's own suggestion, labelled as a suggestion. */
+        val suggestion: String?,
+        /** One sentence when the pin Jarvis remembers is not what Ollama is using. */
+        val problem: String,
+        /** What "Let Ollama decide" means, in the PC's own words. */
+        val leaveWords: String,
+    )
+
+    /** `chat_card["where"]`: where the everyday model is, as the PC read it. */
+    data class Where(val cardName: String?, val words: String)
+
+    /** `chat_card["cards"][]`: one card's own facts, and the measured lines. */
+    data class ChatFact(
+        val index: Int?,
+        val uuid: String?,
+        val name: String,
+        val totalMb: Int?,
+        val display: Boolean,
+        /** Read from the machine now: memory, generation, monitor, free. */
+        val facts: List<String>,
+        /** Quoted from the owner's own measurement of 2026-10-05. */
+        val measured: List<String>,
+    )
+
+    /** One choice on the plate: "Let Ollama decide", or one card. */
+    data class ChatOption(
+        /** null for [CHAT_LEAVE]. */
+        val card: String?,
+        val label: String,
+        val detail: String,
+        val selected: Boolean,
+    )
 
     /** `status()["suggest"]`: the two "suggest the bigger model" switches. */
     data class Suggest(val title: String, val detail: String, val signals: List<Signal>)
@@ -317,6 +387,35 @@ object SecondCard {
                     memoryGib = (t["memory_gib"] as? JsonPrimitive)?.doubleOrNull,
                     modelInstalled = t.bool("model_installed"),
                     why = t.str("why").orEmpty(),
+                )
+            },
+            chatCard = (obj["chat_card"] as? JsonObject)?.let { cc ->
+                val where = cc["where"] as? JsonObject
+                val cards = (cc["cards"] as? JsonArray).orEmpty().mapNotNull { el ->
+                    val c = el as? JsonObject ?: return@mapNotNull null
+                    ChatFact(
+                        index = c.int("index"),
+                        uuid = c.str("uuid"),
+                        name = c.str("name") ?: "a graphics card",
+                        totalMb = c.int("total_mb"),
+                        display = c.bool("display") == true,
+                        facts = (c["facts"] as? JsonArray).orEmpty().mapNotNull { it.asString() },
+                        measured = (c["measured"] as? JsonArray).orEmpty().mapNotNull { it.asString() },
+                    )
+                }
+                ChatCard(
+                    chosen = cc.str("chosen")?.takeIf { it.isNotBlank() },
+                    chosenName = cc.str("chosen_name"),
+                    where = Where(
+                        cardName = (where?.get("card") as? JsonObject)?.str("name"),
+                        words = where?.str("words").orEmpty(),
+                    ),
+                    cards = cards,
+                    suggestion = cc["suggestion"]?.let { s ->
+                        (s as? JsonObject)?.str("words")
+                    },
+                    problem = cc.str("problem").orEmpty(),
+                    leaveWords = cc.str("leave_words").orEmpty(),
                 )
             },
             suggest = (obj["suggest"] as? JsonObject)?.let { sug ->
@@ -681,6 +780,82 @@ object SecondCard {
         put("feature", THIRD)
         if (assign == null) put("assign", JsonNull) else put("assign", assign)
     }.toString()
+
+    /**
+     * `{"feature": "chat_card", "action": "pin"|"leave", "card": "<GPU-...>"}` -
+     * "Everyday chat runs on" (2026-10-05). Pinning names the card by the id
+     * nvidia-smi prints, never a slot number (numbers change when a card is
+     * moved). Built as JSON, never glued.
+     */
+    fun postChatCardBody(action: String, card: String?): String = buildJsonObject {
+        put("feature", CHAT_CARD)
+        put("action", action)
+        if (card == null) put("card", JsonNull) else put("card", card)
+    }.toString()
+
+    /**
+     * The choices on the "Everyday chat runs on" plate: "Let Ollama decide"
+     * (the default - Jarvis pins no card and says so) plus one per card the
+     * PC reports. Null when the PC sends no `chat_card` (an older backend),
+     * which then shows no such section at all.
+     */
+    fun chatOptions(s: Status): List<ChatOption>? {
+        val cc = s.chatCard ?: return null
+        val options = mutableListOf(
+            ChatOption(
+                card = null,
+                label = "Let Ollama decide",
+                detail = cc.leaveWords.ifBlank {
+                    "Jarvis does not pin a card, and Ollama picks one by itself."
+                },
+                selected = cc.chosen == null,
+            ),
+        )
+        for (c in cc.cards) {
+            val uuid = c.uuid ?: continue
+            val size = c.totalMb?.let { " (${(it + 512) / 1024} GB)" }.orEmpty()
+            options += ChatOption(
+                card = uuid,
+                label = "Always use the ${c.name}$size",
+                detail = "Pins everyday chat to this card. One approval card, because it " +
+                    "changes where every answer runs. " +
+                    if (c.display) "A monitor is plugged into it." else "No monitor is plugged into it.",
+                selected = cc.chosen == uuid,
+            )
+        }
+        // A pin whose card is not in this PC right now is still shown, so the
+        // owner can see what is saved and choose again.
+        if (cc.chosen != null && options.none { it.selected }) {
+            options += ChatOption(
+                card = cc.chosen,
+                label = "Always use the card you pinned (${cc.chosenName ?: cc.chosen})",
+                detail = "That card is not in this PC right now. Pinning it again will ask " +
+                    "for a card that is.",
+                selected = true,
+            )
+        }
+        return options
+    }
+
+    /** Where the model really is, the PC's own reading - never a guess. */
+    fun chatWhereLine(s: Status): String {
+        val cc = s.chatCard ?: return ""
+        return cc.where.words
+    }
+
+    /** One card's own facts, as the lines "Show the analysis" shows. */
+    fun chatFactLines(f: ChatFact): List<String> {
+        val size = f.totalMb?.let { " (${(it + 512) / 1024} GB)" }.orEmpty()
+        return listOf("${f.name}$size") + f.facts + f.measured.map { "(measured) $it" }
+    }
+
+    /** Jarvis's own suggestion, or null when the PC sends none. */
+    fun chatSuggestion(s: Status): String? =
+        s.chatCard?.suggestion?.takeIf { it.isNotBlank() }
+
+    /** The PC's own warning when the remembered pin is not what Ollama uses. */
+    fun chatProblem(s: Status): String? =
+        s.chatCard?.problem?.takeIf { it.isNotBlank() }
 
     /**
      * The path for "When to suggest the bigger model"'s one write - spelled

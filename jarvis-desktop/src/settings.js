@@ -1595,12 +1595,28 @@ const sc = {
   status: $("sc-status"),
   lane: $("sc-lane"),
   pinned: $("sc-pinned"),
+  where: $("sc-chat-where"),
+  choices: $("sc-chat-choices"),
+  analysisToggle: $("sc-analysis-toggle"),
+  analysis: $("sc-analysis"),
+  analysisCards: $("sc-analysis-cards"),
+  analysisSuggestion: $("sc-analysis-suggestion"),
+  pinProblem: $("sc-pin-problem"),
+  pinProblemWords: $("sc-pin-problem-words"),
   pin: $("sc-pin"),
   pinCommand: $("sc-pin-command"),
   pinCopy: $("sc-pin-copy"),
   pinStatus: $("sc-pin-status"),
   combined: $("sc-combined"),
   combinedStatus: $("sc-combined-status"),
+  // The owner's own choice between the two ways the cards can be used
+  // (2026-10-05). Hidden whole when the backend has no `mode`.
+  modeSection: $("sc-mode-section"),
+  modeTitle: $("sc-mode-title"),
+  modeNote: $("sc-mode-note"),
+  modeConflict: $("sc-mode-conflict"),
+  modeOptions: $("sc-mode-options"),
+  modeStatus: $("sc-mode-status"),
   thirdSection: $("sc-third-section"),
   thirdFound: $("sc-third-found"),
   third: $("sc-third"),
@@ -1632,6 +1648,25 @@ const SC_LANE = { off: "Off", starting: "Starting", running: "Running", failed: 
 const SC_POLL_MS = 5000;
 const SC_POLL_FOR_MS = 10 * 60 * 1000;
 
+/* "Everyday chat runs on" (the owner's decision, 2026-10-05)
+   ---------------------------------------------------------------------------
+   Two choices, and the line under them says where the model really is:
+
+     leave   - the default. Jarvis pins no card and says so. Immediate.
+     pin     - an explicit choice, so it raises ONE approval card
+               (action `chat_card_pin`, tier "ask"); the setting is written
+               on the PC only after the owner says yes there or on the phone.
+
+   `status.chat_card` is the backend's own shape: `chosen` (the card id, or
+   null), `chosen_name`, `where` (the measured sentence plus the card it was
+   read from), `cards` (each card's own facts, and the owner's measured
+   lines), `suggestion` (Jarvis's own, labelled as a suggestion), and
+   `problem` (a sentence when the pin Jarvis remembers is not what Ollama is
+   actually set to). A backend older than this sends no `chat_card` at all,
+   and the whole subsection hides itself - it never invents a card. */
+const SC_CHAT_LEAVE = "leave";
+const SC_CHAT_PIN = "pin";
+
 let scLast = null;
 let scReadSeq = 0;
 let scBusy = false;
@@ -1648,6 +1683,9 @@ let scPollUntil = 0;
 let scWaiting = new Set();
 /** When this page first saw each of those cards waiting, in seconds. */
 const scWaitingSince = new Map();
+/** Whether "Show the analysis" is open - kept across repaints, and false at
+ *  the start so nothing is shown until the owner asks for it. */
+let scAnalysisOpen = false;
 
 /**
  * How a switch's card ended, in words, for the second card and the big
@@ -2145,6 +2183,156 @@ async function scSuggestToggle(input) {
   await loadSecondCard();
 }
 
+/**
+ * The two choices of "Everyday chat runs on" (2026-10-05), as radio buttons:
+ * leaving it to Ollama (the default, immediate) and pinning one card (one
+ * approval card). Each card the machine reports gets its own radio, so the
+ * choice names the real card rather than a slot.
+ */
+function scChatChoices(chat) {
+  const chosen = typeof chat.chosen === "string" && chat.chosen ? chat.chosen : "";
+  const cards = (Array.isArray(chat.cards) ? chat.cards : [])
+    .filter((c) => c && typeof c.uuid === "string" && c.uuid);
+  const rows = [];
+  const row = (id, value, label, detail, checked) => {
+    const wrap = scNode("label", "toggle");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "sc-chat-card";
+    input.id = id;
+    input.value = value;
+    input.checked = checked;
+    const text = scNode("span", "", label);
+    text.append(scNode("span", "toggle-detail", detail));
+    wrap.append(input, text);
+    input.addEventListener("change", () => scChatChoose(input.value, label));
+    rows.push(wrap);
+  };
+  row("sc-chat-leave", SC_CHAT_LEAVE, "Let Ollama decide",
+    typeof chat.leave_words === "string" && chat.leave_words
+      ? chat.leave_words : "Jarvis does not pin a card, and Ollama picks one by itself.",
+    !chosen);
+  for (const card of cards) {
+    const size = scGigabytes(card.total_mb);
+    row(`sc-chat-pin-${card.index}`, card.uuid,
+      `Always use the ${card.name}${size ? ` (${size})` : ""}`,
+      "Pins everyday chat to this card. One approval card, because it changes where every "
+      + `answer runs. ${card.display === true
+        ? "A monitor is plugged into it." : "No monitor is plugged into it."}`,
+      chosen === card.uuid);
+  }
+  // A pin whose card is no longer in this PC: the choice is still shown, so
+  // the owner can see what is saved and put it back.
+  if (chosen && !cards.some((c) => c.uuid === chosen)) {
+    row("sc-chat-pin-missing", chosen,
+      `Always use the card you pinned (${chat.chosen_name || chosen})`,
+      "That card is not in this PC right now. Pinning it again will ask for a card that is.",
+      true);
+  }
+  return rows;
+}
+
+/** One card's own entry under "Show the analysis". Every line is the
+ *  backend's, read from the machine or quoted from the owner's own
+ *  measurement - this only puts them on screen. */
+function scAnalysisCard(card) {
+  const item = scNode("div", "sc-analysis-card");
+  const size = scGigabytes(card.total_mb);
+  item.append(scNode("p", "sc-gpu-name",
+    `${card.name || "A graphics card"}${size ? ` (${size})` : ""}`));
+  const list = scNode("ul", "sc-analysis-facts");
+  for (const line of (Array.isArray(card.facts) ? card.facts : [])) {
+    list.append(scNode("li", "", String(line)));
+  }
+  for (const line of (Array.isArray(card.measured) ? card.measured : [])) {
+    list.append(scNode("li", "sc-measured", String(line)));
+  }
+  item.append(list);
+  return item;
+}
+
+/** Paint the whole "Everyday chat runs on" subsection, or hide it on a
+ *  backend that does not send `chat_card` yet. */
+function scPaintChat(status) {
+  const chat = status.chat_card;
+  const have = chat && typeof chat === "object" && Array.isArray(chat.cards);
+  if (sc.choices) {
+    sc.choices.hidden = !have;
+    if (have) sc.choices.replaceChildren(...scChatChoices(chat));
+    else sc.choices.replaceChildren();
+  }
+  if (sc.analysisToggle) sc.analysisToggle.hidden = !have;
+  if (sc.analysis) sc.analysis.hidden = !have || sc.analysisOpen !== true;
+  if (sc.analysisCards) {
+    sc.analysisCards.replaceChildren(...(have
+      ? chat.cards.map(scAnalysisCard) : []));
+  }
+  if (sc.analysisSuggestion) {
+    const words = have && chat.suggestion && typeof chat.suggestion.words === "string"
+      ? chat.suggestion.words : "";
+    sc.analysisSuggestion.textContent = words;
+    sc.analysisSuggestion.hidden = !words;
+  }
+  if (!have) return;
+
+  const chosen = typeof chat.chosen === "string" && chat.chosen ? chat.chosen : "";
+  // Where the model really is - the backend's own reading, never a guess.
+  if (sc.where) {
+    sc.where.textContent = chat.where && typeof chat.where.words === "string"
+      ? chat.where.words
+      : "Jarvis could not read where the model is right now.";
+    sc.where.dataset.tone = chat.where && chat.where.card ? "ok" : "";
+  }
+  // A pin Jarvis remembers that Ollama is not actually using must never look
+  // done: the backend's own sentence says so when it is not.
+  const problem = typeof chat.problem === "string" ? chat.problem.trim() : "";
+  if (sc.pinProblem) sc.pinProblem.hidden = !problem;
+  if (sc.pinProblemWords) sc.pinProblemWords.textContent = problem;
+  const command = typeof chat.pin_command === "string" ? chat.pin_command.trim() : "";
+  sc.pin.hidden = !command;
+  sc.pinCommand.value = command;
+}
+
+/** One of the two choices was picked. Going back to "Let Ollama decide" is
+ *  immediate and needs no card; pinning a card raises one approval card. */
+async function scChatChoose(value, label) {
+  if (scBusy) {
+    await loadSecondCard();
+    return;
+  }
+  scBusy = true;
+  scRestoreFocusId = value === SC_CHAT_LEAVE ? "sc-chat-leave" : null;
+  if (sc.choices) {
+    for (const input of sc.choices.querySelectorAll("input")) input.disabled = true;
+  }
+  const pinning = value !== SC_CHAT_LEAVE;
+  report(sc.status, pinning ? `Asking to pin everyday chat to the ${label.replace(/^Always use the /, "")}…`
+    : "Going back to leaving it to Ollama…");
+  try {
+    if (pinning) {
+      const out = await invoke("set_chat_card", { action: "pin", card: value });
+      if (out && out.pending === true) {
+        report(sc.status, SC_WAITING, "ok");
+        announce(SC_WAITING);
+      } else if (out && typeof out.message === "string" && out.message) {
+        report(sc.status, out.message, "ok");
+      } else {
+        report(sc.status, "Pinned. Quit Ollama and start it again for it to take effect.", "ok");
+      }
+    } else {
+      const out = await invoke("set_chat_card", { action: "leave" });
+      report(sc.status, (out && typeof out.words === "string" && out.words)
+        || "Jarvis leaves the choice to Ollama again.", "ok");
+    }
+  } catch (error) {
+    report(sc.status, scProblemWords(error), "bad");
+    announce(sc.status.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  await loadSecondCard();
+}
+
 function scShowProblem(words) {
   scLast = null;
   sc.body.hidden = true;
@@ -2159,6 +2347,131 @@ function scShowProblem(words) {
   // coming back into view - yanks keyboard focus back to that switch from
   // wherever the owner is by then.
   scRestoreFocusId = null;
+}
+
+/* ── The owner's own choice (2026-10-05) ───────────────────────────────────
+   One decision between the two ways two graphics cards can be used, instead
+   of leaving the owner to work it out from the switches below: "One model
+   across both cards" (the split) or "Two models at once, one on each card".
+
+   BOTH CHOICES *ARE* THE SWITCHES BELOW - the split is the "combined" switch
+   - and the backend DERIVES the choice from them
+   (jarvis_second_card.current_mode), so nothing here has to keep two things
+   in step: this reads `status.mode` and writes the "combined" switch through
+   the SAME set_second_card command the switch below already uses. That is
+   also why no new Rust command was needed.
+
+   Every word comes from the backend (`status.mode`, built by
+   mode_status). An older backend with no `mode` hides this whole block,
+   exactly the way a missing `suggest` hides its own.                        */
+
+/** What picking `id` sends to the "combined" switch: the split is it, on. */
+function scModeWanted(id) {
+  return id === "split";
+}
+
+function scModeRow(option, pending) {
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = option.id;
+  // The split IS the "combined" switch, so its card waiting is read from the
+  // same `pending` list the switch's own row reads. The backend derives its
+  // own `option.pending` from exactly that list, so the two always agree -
+  // reading it here too means the choice cannot show a stale waiting state.
+  const waiting = Boolean(option.pending || (scModeWanted(option.id) && pending.has("combined")));
+  row.dataset.state = waiting ? "waiting" : option.selected ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = "sc-mode";
+  input.id = `sc-mode-${option.id}`;
+  input.checked = Boolean(option.selected);
+  // A choice already made is not a choice any more, one whose card is waiting
+  // must not be asked for twice, and one that cannot be made right now says
+  // why in the line under it.
+  input.disabled = Boolean(waiting || option.selected || option.available !== true);
+  const text = scNode("span", "", option.name || option.id);
+  text.append(scNode("span", "toggle-detail", option.detail || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `sc-mode-${option.id}-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  // Why it cannot be picked right now, then its card waiting, then what is
+  // still missing before it is really running - each the backend's own words.
+  addLine("sc-held", option.blocked);
+  addLine("sc-held sc-waiting", waiting ? SC_WAITING : "");
+  addLine("sc-why", option.hint);
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => scModePick(option.id, input));
+  return row;
+}
+
+/** One request, through the command the "combined" switch already uses. */
+async function scModePick(id, input) {
+  if (scBusy) {
+    input.checked = !input.checked;
+    return;
+  }
+  scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
+  input.disabled = true;
+  const wanted = scModeWanted(id);
+  report(sc.modeStatus, wanted
+    ? "Asking to use one model across both cards…"
+    : "Switching back to two models, one on each card…");
+  try {
+    const out = await invoke("set_second_card", { feature: "combined", enabled: wanted });
+    if (wanted && out && out.pending === true) {
+      report(sc.modeStatus, SC_WAITING, "ok");
+      announce(SC_WAITING);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.modeStatus, out.message, "ok");
+    } else {
+      report(sc.modeStatus, wanted ? "Done." : "Switched back. The switches below say what is on.",
+        "ok");
+    }
+  } catch (error) {
+    report(sc.modeStatus, scProblemWords(error), "bad");
+    announce(sc.modeStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  // The choice shows what Jarvis says, never what was clicked.
+  await loadSecondCard();
+}
+
+function scModePaint(status) {
+  if (!sc.modeSection) return;
+  const mode = status && status.mode;
+  if (!mode || !Array.isArray(mode.options) || !mode.options.length) {
+    // An older backend, or an answer that cannot be read: nothing is drawn,
+    // rather than an empty box that looks like a broken setting.
+    sc.modeSection.hidden = true;
+    return;
+  }
+  sc.modeSection.hidden = false;
+  sc.modeTitle.textContent = mode.title || "How should Jarvis use your two graphics cards?";
+  sc.modeNote.textContent = typeof mode.note === "string" ? mode.note : "";
+  const conflict = typeof mode.conflict_why === "string" ? mode.conflict_why.trim() : "";
+  sc.modeConflict.hidden = !conflict;
+  sc.modeConflict.textContent = conflict;
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
+  const pending = new Set(Array.isArray(status.pending) ? status.pending : []);
+  sc.modeOptions.replaceChildren(...mode.options.map((o) => scModeRow(o, pending)));
+  if (focused && focused.startsWith("sc-mode-") && document.getElementById(focused)) {
+    document.getElementById(focused).focus();
+  }
 }
 
 function scPaint(status) {
@@ -2217,6 +2530,18 @@ function scPaint(status) {
 
   // "When to suggest the bigger model": its own subsection, no card either way.
   scPaintSuggest(status);
+  // The owner's own choice between the two ways the cards can be used
+  // (2026-10-05): the front door to the switches below, drawn from the
+  // backend's own words. Before the one-shot focus marker is cleared, so its
+  // own block gets the same keyboard-restore as the switches.
+  scModePaint(status);
+
+  // "Everyday chat runs on" (2026-10-05): the two choices, where the model
+  // really is, and the analysis behind the choice. Hides itself on a backend
+  // that does not send `chat_card` yet. Both blocks read the backend's own
+  // words and touch disjoint elements, so the two orderings agree; this one
+  // is last because its section sits below the switches in settings.html.
+  scPaintChat(status);
   // One-shot: consumed by whichever block above matched it.
   scRestoreFocusId = null;
 
@@ -2350,6 +2675,18 @@ if (sc.pinCopy) {
     }
     report(sc.pinStatus, copied ? "Copied. Paste it into PowerShell and press Enter." : "Select it and press Ctrl+C.",
       copied ? "ok" : null);
+  });
+}
+
+// "Show the analysis" (2026-10-05): the owner's own look at what Jarvis
+// knows about each card before choosing one. Nothing here is measured by
+// this page: every line comes from the backend's `chat_card.cards`.
+if (sc.analysisToggle) {
+  sc.analysisToggle.addEventListener("click", () => {
+    scAnalysisOpen = !scAnalysisOpen;
+    sc.analysisToggle.setAttribute("aria-expanded", scAnalysisOpen ? "true" : "false");
+    sc.analysisToggle.textContent = scAnalysisOpen ? "Hide the analysis" : "Show the analysis";
+    if (sc.analysis) sc.analysis.hidden = !scAnalysisOpen;
   });
 }
 

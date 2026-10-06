@@ -11,6 +11,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -54,6 +57,10 @@ import com.jarvis.client.ui.theme.LocalChrome
  *   it back off (2026-09-28) - null means "not used". Assigning raises its
  *   own approval card (`second_card_third_assign`), the same shape as
  *   [onSet]'s own ON; unassigning is immediate, like its OFF.
+ * @param onSetChat "Everyday chat runs on" (2026-10-05): pin everyday chat
+ *   to one graphics card ([SecondCard.CHAT_PIN], a card id - one approval
+ *   card, `chat_card_pin`), or go back to leaving it to Ollama
+ *   ([SecondCard.CHAT_LEAVE], immediate).
  */
 @Composable
 internal fun SecondCardPlate(
@@ -64,6 +71,7 @@ internal fun SecondCardPlate(
     onSet: (feature: String, enabled: Boolean) -> Unit,
     onSetSuggest: (signal: String, enabled: Boolean) -> Unit,
     onSetThird: (assign: String?) -> Unit,
+    onSetChat: (action: String, card: String?) -> Unit,
     onRecheck: () -> Unit,
     onOpenApprovals: ((cardId: String?) -> Unit)?,
 ) {
@@ -162,6 +170,16 @@ internal fun SecondCardPlate(
                 Rule()
                 SuggestSwitchRow(signal, busy, canAct, onSetSuggest)
             }
+            Rule()
+        }
+
+        // "Everyday chat runs on" (2026-10-05): which card runs everyday chat
+        // - Ollama's own choice by default, or one the owner pins (one
+        // approval card). The line under the choices is where the model
+        // really is, read from the PC. Null on an older PC.
+        if (status.chatCard != null && menus.shows("settings.second-card.chat-card")) {
+            Gap(8)
+            ChatCardPlate(status, busy, canAct, onSetChat)
             Rule()
         }
 
@@ -344,6 +362,86 @@ internal fun ThirdCardRow(
         }
         SecondCard.thirdModelLine(third)?.let {
             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+    }
+}
+
+/**
+ * "Everyday chat runs on" (the owner's decision, 2026-10-05): which graphics
+ * card runs everyday chat. "Let Ollama decide" is the default - Jarvis pins
+ * no card and says so - and each card the PC reports gets its own choice.
+ * Picking a card sends [onSetChat] with [SecondCard.CHAT_PIN] and that card's
+ * id: ONE approval card, because it changes where every answer runs. Going
+ * back to "Let Ollama decide" is immediate, with no card.
+ *
+ * The line under the choices is where the model really IS, the PC's own
+ * reading of Ollama and nvidia-smi - never a guess, and never a claim about a
+ * card Jarvis did not pin. "Show the analysis" opens every fact the PC
+ * reports about each card, plus the lines quoted from the owner's own
+ * measurement of 2026-10-05; Jarvis's own suggestion is shown labelled as a
+ * suggestion, and nothing here says one card is faster than another.
+ */
+@Composable
+internal fun ChatCardPlate(
+    status: SecondCard.Status,
+    busy: String?,
+    canAct: Boolean,
+    onSetChat: (action: String, card: String?) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val options = SecondCard.chatOptions(status) ?: return
+    var analysisOpen by remember { mutableStateOf(false) }
+    val waitingHere = busy == SecondCard.CHAT_CARD
+    Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+        Kicker("Everyday chat runs on", Modifier.semantics { heading() })
+        Gap(4)
+        for (option in options) {
+            Gap(4)
+            OptionChip(
+                label = option.label,
+                isSelected = option.selected,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = canAct && busy == null && !option.selected,
+                onClick = {
+                    if (option.card == null) {
+                        onSetChat(SecondCard.CHAT_LEAVE, null)
+                    } else {
+                        onSetChat(SecondCard.CHAT_PIN, option.card)
+                    }
+                },
+            )
+            Text(option.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        Gap(6)
+        Text(
+            if (waitingHere) "Asking your PC…" else SecondCard.chatWhereLine(status),
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        SecondCard.chatProblem(status)?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
+        Gap(6)
+        Quiet(
+            if (analysisOpen) "Hide the analysis" else "Show the analysis",
+            onClick = { analysisOpen = !analysisOpen },
+        )
+        if (analysisOpen) {
+            for (card in status.chatCard?.cards.orEmpty()) {
+                Gap(6)
+                SecondCard.chatFactLines(card).forEachIndexed { at, line ->
+                    Text(
+                        line,
+                        style = if (at == 0) MaterialTheme.typography.titleSmall
+                        else MaterialTheme.typography.labelSmall,
+                        color = if (at == 0) chrome.textHi else chrome.textMid,
+                    )
+                }
+            }
+            SecondCard.chatSuggestion(status)?.let {
+                Gap(6)
+                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            }
         }
     }
 }

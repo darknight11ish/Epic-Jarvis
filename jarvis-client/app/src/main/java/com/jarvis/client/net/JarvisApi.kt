@@ -1684,6 +1684,32 @@ class JarvisApi(
         }
 
     /**
+     * "Everyday chat runs on" (2026-10-05): pin everyday chat to one graphics
+     * card, or go back to leaving it to Ollama. Pinning one card raises ONE
+     * approval card (`chat_card_pin`) and changes nothing until it is
+     * approved; [SecondCard.CHAT_LEAVE] is immediate, because it only takes
+     * the pin away. See [SecondCard.classifyPost] for which answers come back
+     * as sentences.
+     */
+    suspend fun setChatCard(action: String, card: String?): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postChatCardBody(action, card)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * Moving one of the second card's own switches onto a third, capable
      * graphics card, or moving it back off (2026-09-28). Assigning a
      * feature id raises one approval card and changes nothing until it is

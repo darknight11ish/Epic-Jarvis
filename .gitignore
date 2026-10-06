@@ -95,6 +95,15 @@ yt-out.txt
 # until 2026-10-05, in a project whose first rule is that nothing leaves the PC.
 *.tgz
 
+# The generated source bundle. It sat tracked for three weeks at 13.5 MB - a
+# snapshot of one branch, made for an outside audit, that no workflow, test or
+# script ever read. Nothing enforced it, so it went stale silently: the copy
+# deleted on 2026-10-05 was stamped with a commit on the branch `integ-obscura`,
+# which no longer exists. It is regenerable in one line whenever a reviewer
+# wants it, so it is not worth carrying: `py -3 tools/gen_source_bundle.py`.
+# The generator itself stays tracked - it is the way to produce the file.
+docs/SOURCE-BUNDLE.md
+
 # Python virtualenvs.
 .venv/
 venv/

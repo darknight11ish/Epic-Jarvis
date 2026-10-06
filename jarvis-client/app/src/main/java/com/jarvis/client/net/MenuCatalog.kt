@@ -59,6 +59,7 @@ object MenuCatalog {
         Menu("settings.second-card.study-helper", "Study helper (second card switch)", "One row inside the second graphics card.", true, true, "settings", "", "row", "group.graphics-cards", "settings.second-card", true, false, ""),
         Menu("settings.second-card.referee", "Referee suggestions (second card switch)", "One row inside the second graphics card.", true, true, "settings", "", "row", "group.graphics-cards", "settings.second-card", true, false, ""),
         Menu("settings.second-card.third-card", "Third graphics card", "The section for a third card, when one is capable.", true, true, "settings", "", "row", "group.graphics-cards", "settings.second-card", true, false, ""),
+        Menu("settings.second-card.chat-card", "Everyday chat runs on", "One row inside the second graphics card.", true, true, "settings", "", "row", "group.graphics-cards", "settings.second-card", true, false, ""),
         Menu("settings.big-model", "Big model (slow)", "One bigger model split across both cards.", true, true, "settings", "", "card", "group.graphics-cards", null, true, true, ""),
         Menu("settings.folders", "Folders Jarvis may look in", "The folders and the Notion export.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.spending", "Spending", "Spending summaries from a bank file you drop in.", true, true, "settings", "", "card", "group.finance", null, true, true, ""),

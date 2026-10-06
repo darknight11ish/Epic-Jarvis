@@ -95,13 +95,28 @@ _LINE = {"passed": re.compile(r"^ok\b"),
          "skipped": re.compile(r"^skip(ped)?(?=[ \t:]|$)", re.I),
          "failed": re.compile(r"^FAIL\b")}
 
+#: unittest's own summary, for the three suites built on it (test_rebuilt.py,
+#: test_speech.py, test_thinking.py). Without this the three of them reported as
+#: "0 passed, 0 skipped, 0 failed" - the same numbers a suite that printed
+#: nothing at all gives, which is the one shape this runner must never confuse
+#: with a pass. It matters two ways round: unittest exits 0 just as happily
+#: having run NO tests (every method renamed away, or a TestCase that stopped
+#: matching `unittest.main()`'s default), and a suite that prints nothing is
+#: exactly the class `tools/check_vacuous_checks.py` exists for one level down.
+#: unittest counts a skipped test inside "Ran N tests", so the passes are what
+#: is left after the skips and the failures, not the total on its own.
+_UNITTEST_RAN = re.compile(r"^Ran (\d+) tests? in ", re.M)
+_UNITTEST_BAD = re.compile(r"^FAILED \(([^)]*)\)", re.M)
+_UNITTEST_SKIPPED = re.compile(r"skipped=(\d+)")
+
 
 def counts(out: str) -> dict:
     """{'passed': n, 'skipped': n, 'failed': n} for one suite's output.
 
     The suite's OWN final line is believed when it has one: it knows what it
-    counted, and a `skip()` no longer lands in its "passed". Only a suite that
-    prints no summary is counted from its own lines."""
+    counted, and a `skip()` no longer lands in its "passed". A unittest suite
+    is believed through unittest's own summary. Only a suite that prints
+    neither is counted from its own lines."""
     tail = "\n".join(out.strip().splitlines()[-4:])
     got = {}
     for word, pat in _SUMMARY.items():
@@ -110,6 +125,18 @@ def counts(out: str) -> dict:
     if got["passed"] is not None and got["failed"] is not None:
         return {"passed": got["passed"], "skipped": got["skipped"] or 0,
                 "failed": got["failed"]}
+    m = _UNITTEST_RAN.search(out)
+    if m:
+        total = int(m.group(1))
+        bad = _UNITTEST_BAD.search(out)
+        failed = 0
+        if bad:
+            for _kind, number in re.findall(r"(failures|errors)=(\d+)", bad.group(1)):
+                failed += int(number)
+        skipped = _UNITTEST_SKIPPED.search(out)
+        skipped = int(skipped.group(1)) if skipped else 0
+        return {"passed": max(0, total - skipped - failed), "skipped": skipped,
+                "failed": failed}
     counted = {w: 0 for w in _LINE}
     for line in out.splitlines():
         for word, pat in _LINE.items():
@@ -212,6 +239,68 @@ def stage() -> Path:
     return d
 
 
+def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
+    """How one finished suite is reported: ("ok"|"FAIL", counts, the line, the
+    lines to echo under it). Every suite is reported, including the one that
+    printed nothing at all - which is why `stdout`/`stderr` may be None and
+    are read as empty text, never assumed to be a string. That None is not
+    hypothetical: it is what subprocess leaves behind when a suite is killed
+    by a signal, or when the spawn itself fails. Reading it as a string
+    raised TypeError at `r.stdout + r.stderr` and ended the whole sweep, so
+    the results of every suite after it were never printed.
+
+    `why` is the runner's own reason for a suite that never produced a line of
+    its own - a spawn that raised, say. The suite's counts are honestly zero,
+    so the reason is what says the suite did not run at all.
+
+    A suite that exits 0 having reported NO checks at all is the one shape this
+    runner must never call a pass. It cannot be told apart from a suite whose
+    checks all vanished - a loop over an empty list, a guard that can never be
+    true, a main() that returns before printing - and the browser suite found on
+    2026-10-05 did exactly that: it exited 0 having run nothing, and stayed
+    green. So exit 0 with every count zero is reported as failed, and the reason
+    says which shape it was.
+
+    Only exit 0 is "ok". Anything else is reported as failed - including a
+    suite the runner could not read an exit code for at all, which is why
+    the check is `code == 0` and not `code == 0 or code is None`."""
+    out = (stdout or "") + (stderr or "")
+    n = counts(out)
+    said = f"{n['passed']} passed, {n['skipped']} skipped, {n['failed']} failed"
+    silent = code == 0 and not any(n.values())
+    if silent:
+        code = "printed no checks"
+    if code == 0:
+        # The numbers are shown whenever they are not already on the suite's
+        # own last line: a suite that skipped something (its own line would
+        # have said so), or one that prints no "N passed" summary of its own -
+        # the three unittest suites, and the older harnesses counted from
+        # their own `ok` lines. Otherwise a reader sees
+        # `ok  test_speech.py  2.0s` with no idea whether 25 checks ran or
+        # none did, which is the blind spot this runner closed.
+        tail = "\n".join(out.strip().splitlines()[-4:])
+        own_summary = _SUMMARY["passed"].search(tail)
+        note = f"  {said}" if (n["skipped"] or not own_summary) else ""
+        return "ok", n, f"ok    {name:<34} {took}{note}", []
+    if not out.strip() and not why:
+        # a suite that said nothing is still reported in full: which suite,
+        # what it exited with, and that there was no output to quote.
+        said += "  (no output)"
+    line = f"FAIL  {name:<34} {took}  (exit {code})  {said}"
+    echo = [f"      {why}"] if why else []
+    if silent:
+        echo.append("      it exited 0 having printed no `ok`, `FAIL` or `skip` line "
+                    "and no summary - so nothing here proves that any check ran. A "
+                    "check that cannot fail, one level up.")
+    echo += ["      " + l for l in out.splitlines()
+             if l.startswith("FAIL") or "Traceback" in l or "failed:" in l]
+    # One GitHub annotation is built from this line, and a spawn failure
+    # carries the operating system's whole sentence. Capped so the suite's
+    # name and its exit code are never pushed out of the annotation; the full
+    # text is echoed under the line.
+    return "FAIL", n, line[:200], echo
+
+
 def main(only=()) -> int:
     """Every suite, or only the ones named (`run_suites.py test_x.py ...`)."""
     real = os.environ.get("JARVIS_BACKEND")
@@ -246,6 +335,7 @@ def main(only=()) -> int:
             print(f"skip  {s.name:<34} needs the owner's {', '.join(absent)}")
             continue
         t0 = time.time()
+        why = ""
         try:
             # errors="replace" and an explicit utf-8 decode: the child is run
             # with PYTHONIOENCODING=utf-8 (see private_state), so decoding its
@@ -258,26 +348,32 @@ def main(only=()) -> int:
             r = subprocess.run([sys.executable, str(s)], cwd=HERE, env=env,
                                capture_output=True, text=True, timeout=900,
                                encoding="utf-8", errors="replace")
-            code = r.returncode
-            out = (r.stdout or "") + (r.stderr or "")
+            code, got_out, got_err = r.returncode, r.stdout, r.stderr
         except subprocess.TimeoutExpired:
-            code, out = "timeout", ""
+            code, got_out, got_err = "timeout", "", ""
+        except OSError as exc:
+            # The child never started at all - an executable that cannot run,
+            # a path that is gone, a permission the sandbox refuses. The suite
+            # has no exit code to compare with 0, so it is FAILED and the
+            # reason is carried into the report; continuing is the point,
+            # because the suites after this one still have results worth
+            # printing.
+            code, got_out, got_err = None, "", ""
+            why = f"the suite could not be started: {exc}"
         took = f"{time.time() - t0:5.1f}s"
-        n = counts(out)
+        status, n, line, echo = suite_result(s.name, took, code, got_out, got_err, why)
         for w in ran:
             ran[w] += n[w]
-        said = f"{n['passed']} passed, {n['skipped']} skipped, {n['failed']} failed"
-        if code == 0:
+        if status == "ok":
             passed.append(s.name)
-            note = f"  {said}" if n["skipped"] else ""
-            print(f"ok    {s.name:<34} {took}{note}")
-        else:
-            failed.append(s.name)
-            print(f"FAIL  {s.name:<34} {took}  (exit {code})  {said}")
-            fail_lines = [l for l in out.splitlines() if l.startswith("FAIL") or "Traceback" in l or "failed:" in l]
-            for fl in fail_lines:
-                print("      " + fl)
-            print("\n".join("      " + line for line in out.strip().splitlines()[-40:]))
+            print(line)
+            continue
+        failed.append(s.name)
+        print(line)
+        for el in echo:
+            print(el)
+        tail = ((got_out or "") + (got_err or "")).strip().splitlines()[-40:]
+        print("\n".join("      " + l for l in tail))
     if not real:
         shutil.rmtree(backend, ignore_errors=True)
     shutil.rmtree(state, ignore_errors=True)

@@ -494,8 +494,8 @@ def t_day_rolls_over_by_this_pcs_clock():
     # cannot be simulated here at all. CI (Linux) proves this test; on the owner's
     # PC it is reported as not proven rather than as a failure (2026-10-03).
     if not hasattr(time, "tzset"):
-        check("SKIPPED (this system has no time.tzset, so another timezone cannot be "
-              "simulated; CI proves this one on Linux)", True)
+        skip("the day rolling over by this PC's clock: this system has no time.tzset, so "
+             "another timezone cannot be simulated; CI proves this one on Linux")
         return
     keep_tz = os.environ.get("TZ")
     try:
@@ -1126,8 +1126,8 @@ def t_zero_new_cards_promises_nothing():
 def t_days_are_calendar_days_across_dst():
     # See t_day_rolls_over_by_this_pcs_clock above: no time.tzset() on Windows.
     if not hasattr(time, "tzset"):
-        check("SKIPPED (this system has no time.tzset, so DST cannot be simulated; "
-              "CI proves this one on Linux)", True)
+        skip("calendar days across DST: this system has no time.tzset, so DST cannot be "
+             "simulated; CI proves this one on Linux")
         return
     keep_tz = os.environ.get("TZ")
     try:

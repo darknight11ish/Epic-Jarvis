@@ -2439,6 +2439,239 @@ html[data-state="approval"] .pulse {
   color: var(--text-faint);
 }
 
+/* --------------------------------------------------------------------------
+   The command palette (palette-ui.js, palette.js)
+   --------------------------------------------------------------------------
+   A drawer inside the bar rather than a window of its own: Alt+Space opens
+   the bar from anywhere, the bar already holds the keyboard, and a window
+   would need a capability of its own for no gain. Every colour here is a
+   token - `scripts/check-tokens.py` fails the build for a literal.
+
+   Sizes: the list is capped so the window can never grow past its 720px
+   clamp, and the stack below is capped while the palette is open so a long
+   answer cannot squeeze the rows to nothing.
+   -------------------------------------------------------------------------- */
+
+.palette-hint-row {
+  margin: 0 0 10px;
+}
+
+.palette-hint {
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  transition:
+    color 140ms var(--ease),
+    border-color 140ms var(--ease),
+    background 140ms var(--ease);
+}
+
+.palette-hint:hover,
+.palette-hint:focus-visible {
+  color: var(--text);
+  border-color: var(--border-accent);
+  background: rgb(var(--sheen-rgb) / 0.05);
+}
+
+.palette {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 12px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--surface-sunken);
+}
+
+.palette[hidden] {
+  display: none;
+}
+
+/* While the palette is open it is the surface: the primer and the card below
+   are still in the stack, and both would otherwise push the rows out of the
+   window at the 720px clamp. */
+.shell[data-palette="open"] .stack {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.palette-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.palette-title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.palette-close {
+  padding: 4px 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-ui);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.palette-close:hover,
+.palette-close:focus-visible {
+  color: var(--text);
+  border-color: var(--border-accent);
+}
+
+.palette-search {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--text-md);
+}
+
+.palette-search::placeholder {
+  color: var(--text-faint);
+}
+
+.palette-search:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+/* The count line is the screen reader's half only: the rows and the empty
+   state say the same thing on screen, and a second visible line repeating
+   them would be noise in a 44px bar. It lives OUTSIDE the panel (a live
+   region inside a `hidden` box announces nothing), so it is hidden visually
+   here rather than with the `hidden` attribute. */
+.palette-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.palette-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  max-height: 262px;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.palette-list[hidden] {
+  display: none;
+}
+
+.palette-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 9px 6px 7px;
+  border: 1px solid transparent;
+  border-left: 2px solid transparent;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+/* The selection is a left bar, a background and `aria-selected` - never hue
+   alone, and never a hard-to-see tint on a translucent window. */
+.palette-row.on,
+.palette-row:hover {
+  background: var(--surface-hover);
+  border-left-color: var(--accent);
+}
+
+.palette-row.on {
+  background: var(--surface-active);
+}
+
+.palette-row:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: -2px;
+}
+
+.palette-row-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.palette-row-icon {
+  display: inline-flex;
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--text-faint);
+}
+
+.palette-row-icon svg {
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+.palette-row-title {
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
+.palette-row-hidden {
+  padding: 1px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-chip);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.palette-row-about {
+  padding-left: 20px;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.palette-empty-title {
+  margin: 0 0 3px;
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
+.palette-empty-body {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.palette-keys {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
 /* The way out of an offline state. Mirrors `.parked` — same thin bar, same
    place in the stack — because they are the same kind of thing: a one-line
    statement of something unresolved, with the action that resolves it. */

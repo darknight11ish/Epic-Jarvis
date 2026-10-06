@@ -1,6 +1,10 @@
 # Finance: spending summaries and a retirement what-if (design, 2026-09-30)
 
-Status: **designed, not built.** Two pieces from the owner's build queue
+Status: **built** (re-checked 2026-10-05; this page called itself a design until
+the claims register re-checked it): spending summaries are
+`backend/jarvis_spending.py` + `spending.patch` (JARVIS-API section 100), and
+the retirement what-if is `backend/jarvis_retirement.py` + `retirement.patch`
+(section 103). Two pieces from the owner's build queue
 (`docs/BUILD-QUEUE-2026-09-30.md`): item 2, **spending summaries** from bank
 export files (JARVIS-API section 100), and item 5, the **retirement what-if
 calculator** (section 103; it needs item 2's number and money handling first).

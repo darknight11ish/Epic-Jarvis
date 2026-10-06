@@ -96,8 +96,13 @@ class World:
     def __init__(self, smi, *, old_driver=None, installed=("qwen3:8b", "qwen3:14b"),
                  foreign_on_port=False, lane_answers=True, spawn_now=True,
                  user_env=None, windows=False, apps="", tags_answer=True,
-                 reads_words=False):
+                 reads_words=False, ps=()):
         self.smi, self.old_driver = smi, old_driver
+        #: What the everyday Ollama says is LOADED (its own /api/ps), one
+        #: dict per model: {"name", "size", "size_vram", "context_length",
+        #: "expires_at"}. Empty means "nothing is loaded right now", which is
+        #: what every case but the observation ones means.
+        self.ps = [dict(m) for m in ps]
         # Whether this PC reads the words in a picture (jarvis_ocr.status()):
         # fixed here, so the file is the same on every machine that writes it.
         self.picture_text = ({"available": True, "engine": OCR.ENGINE, "why": ""} if reads_words
@@ -109,6 +114,10 @@ class World:
         self.apps, self.tags_answer = apps, tags_answer
         self.started, self.killed, self.http = [], [], []
         self.dir = Path(tempfile.mkdtemp(prefix="jarvis-second-card-"))
+        #: Every user setting this world "sets" (the pin's own two), so a
+        #: test can see what jarvis_second_card would have written to the
+        #: registry without any registry being touched.
+        self.user_env_writes = []
         self._saved = {}
 
     def _env(self, name):
@@ -121,6 +130,21 @@ class World:
             return self.user_env
         if name == "OLLAMA_VULKAN":
             return "0" if self.user_env else None
+        return None
+
+    def set_user_env(self, name, value):
+        """`jarvis_second_card._set_user_env`, recorded instead of written -
+        the registry is never touched by a test or a fixture."""
+        self.user_env_writes.append((name, value))
+        if isinstance(self.user_env, dict):
+            if value is None:
+                self.user_env.pop(name, None)
+            else:
+                self.user_env[name] = value
+        elif name == "CUDA_VISIBLE_DEVICES":
+            self.user_env = value
+        elif name == "OLLAMA_VULKAN":
+            self._vulkan = value
         return None
 
     def run_smi(self, args):
@@ -163,6 +187,15 @@ class World:
             return {"models": [{"name": n, "model": n} for n in self.installed]}
         if url.endswith("/api/generate"):
             return {"response": "<think></think>{\"facts\": []}"}
+        if url.endswith("/api/ps"):
+            # Ollama's own answer about what is LOADED. The everyday Ollama
+            # (11434) answers with this world's own `ps` list; a lane's own
+            # port answers "nothing loaded" unless a case says otherwise
+            # (jarvis_second_card._ps_row reads the everyday one, but the
+            # world stays honest about both).
+            if lane and not self.running(port):
+                raise OSError("connection refused")
+            return {"models": [dict(m) for m in self.ps]}
         raise OSError("not answered here")
 
     def popen(self, args, **kwargs):
@@ -177,9 +210,31 @@ class World:
         CP._cache.update(at=-1e9, cards=None, fields="")
         repl = {
             (CP, "_run_smi"): self.run_smi,
-            (SC, "_primary"): lambda cards: CP.primary(cards, configured=""),
+            # NOT `_primary`: it used to be replaced here with
+            # `CP.primary(cards, configured="")` (the monitor rule), which
+            # meant every test and every fixture skipped the real function -
+            # including the owner's own pin and, since 2026-10-06, the card
+            # the model is OBSERVED on. `_config_dir`/`_pin_path` below point
+            # the whole settings folder (and so the pin) at this world's own
+            # temporary one, so the real `_primary` is deterministic here.
             (SC, "_cfg"): lambda key, default=None: default,
+            # `[compute] primary_gpu` is read through jarvis_compute (its own
+            # `_cfg`), and a case must never depend on whichever toml the
+            # machine running it happens to have: empty means the shipped
+            # default, "leave it to Ollama".
+            (CP, "_cfg"): lambda key, default=None: default,
+            # The whole settings folder, pointed at this world's own
+            # temporary one: nothing in a case may read (or write) whatever
+            # settings folder the machine running it happens to have - the
+            # owner's own "which card" choice lives in there too.
+            (SC, "_config_dir"): lambda: self.dir,
             (SC, "_state_path"): lambda: self.dir / "second-card.json",
+            # The owner's choice of card for everyday chat (2026-10-05) lives
+            # in its own file in the settings folder, so both are pointed at
+            # this world's own temporary folder: a fixture must never depend
+            # on whose settings folder the machine running it happens to have.
+            (SC, "_pin_path"): lambda: self.dir / "chat-card.json",
+            (SC, "_set_user_env"): self.set_user_env,
             (SC, "_log_path"): lambda role="second": self.dir / (
                 "second-card-ollama.log" if role in ("second", "combined")
                 else f"second-card-{role}-ollama.log"),
@@ -231,6 +286,12 @@ class World:
         if master_card is not None:
             data["master_card"] = master_card
         (self.dir / "second-card.json").write_text(json.dumps(data), encoding="utf-8")
+
+    def pin(self, card_uuid):
+        """Write the owner's "everyday chat runs on this card" choice the way
+        `_write_pin` does, so a test can start from a pinned PC."""
+        (self.dir / "chat-card.json").write_text(
+            json.dumps({"card": card_uuid, "set_at": 1_800_000_000}), encoding="utf-8")
 
     def __enter__(self):
         return self.install()

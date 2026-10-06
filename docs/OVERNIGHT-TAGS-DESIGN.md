@@ -1,6 +1,8 @@
 # Overnight suggested tags, and a "new section here" marker: design (2026-09-30)
 
-Status: **backend built and tested (2026-09-30); both apps still to build.** (Was: designed, not built.) Queue item 6 (overnight tags, JARVIS-API section
+Status: **built** (re-checked 2026-10-05: backend and both apps, JARVIS-API
+section 104; this page called itself a design until the claims register
+re-checked it). Queue item 6 (overnight tags, JARVIS-API section
 104) and the marker half of queue item 8 (section 106, shared with the Galaxy
 panel in `docs/GALAXY-PANEL-DESIGN.md`). Both build on chat tags
 (`docs/CHAT-TAGS-DESIGN.md`, section 99, item 1) and cannot start until those

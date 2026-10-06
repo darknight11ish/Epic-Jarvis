@@ -5,7 +5,8 @@
     "home_read",
     "read_camera",
     "read_screen",
-    "web_search"
+    "web_search",
+    "read_web_page"
   ],
   "cases": [
     {
@@ -287,6 +288,34 @@
           "phase": "tool_finished",
           "ok": true,
           "tool": "web_search"
+        }
+      ],
+      "stream": "live",
+      "read": true
+    },
+    {
+      "name": "the tool read_web_page ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "read_web_page"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "read_web_page"
         }
       ],
       "stream": "live",

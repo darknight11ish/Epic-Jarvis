@@ -1069,6 +1069,14 @@ $PATCHES = @(
     # SHIPPED below); without it, or on any error, the banner says so and the routes are
     # simply not there.
     'tutorials.patch'
+    # "Read this page out loud" (the owner's request of 2026-10-05; JARVIS-API section 115):
+    # ONE approval card per address the owner hands over, raised BEFORE any fetch, then ONE
+    # plain GET of that one page and its words read out as outside text. Two hunks in
+    # jarvis_gate.py - the action name in _NO_RULE_FROM_DENIAL and its own risk row - whose
+    # context is quiz-cloud.patch's own added lines, so it goes after quiz-cloud. It needs
+    # jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below); without
+    # them the tool is simply not offered to the model and the gate row is never used.
+    'readpage.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1308,6 +1316,8 @@ $SHIPPED = @(
     'jarvis_youtube.py'          # youtube.patch: ONE card per YouTube link (youtube_captions_read), then the caption text only is fetched (youtube-transcript-api) and quizzed on as outside text; breaks YouTube's terms, may be blocked; never video or audio
     # --- "Grade this better" (2026-09-30, quiz-cloud.patch) ---
     'jarvis_quiz_cloud.py'       # quiz-cloud.patch: ONE card per request (quiz_cloud_grade) listing exactly what leaves the PC, then one message to the cheapest set-up cloud service (jarvis_chatbot_api.py); never for a private quiz or after a crisis answer
+    # --- "Read this page out loud" (2026-10-05, readpage.patch) ---
+    'jarvis_readpage.py'         # readpage.patch: the model's read_web_page tool - ONE card per address (read_web_page, tier ask, risky: the PC contacts that one site), then ONE plain GET and the words a reader would see, handed back as outside text; never a link on the page, never a second page, no new dependency
     # --- "Show or hide menus" (2026-09-30, no patch) ---
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
@@ -2767,6 +2777,45 @@ Say ""
 # own location, so both roots are right at once.
 $env:JARVIS_BACKEND = (Resolve-Path -LiteralPath $BackendPath).Path
 
+# WHAT A FAILING SUITE'S REASON LOOKS LIKE. This used to keep the LAST 25 LINES
+# and nothing else, and that is what cost the owner a diagnosis on 2026-10-05.
+#
+# test_gate_push.py printed six sections. The failing check is in the second
+# one, so its `FAIL` line and the detail beside it were lines 7 and 8 of the
+# 54 the suite printed. Only the last 25 lines were shown, and the two sections
+# that ran LAST - both of them entirely passing - filled every one of them. The
+# log showed a section header, eighteen `ok` lines and nothing else: the
+# assertion, the detail and any traceback were gone, and the failure survived
+# only as the bare name in "failed: a redacted body reaches the broker
+# unchanged".
+#
+# A check that DIES is worse than one that fails. The suite catches it and
+# prints the traceback WHERE THE CHECK RAN - in the middle of the output, never
+# the end - so a tail-only view hides exactly the thing a person needs to read.
+#
+# So `ok` lines are the only kind dropped: they are the one kind that carries
+# no reason, and a suite prints them by the hundred. Every other line stays,
+# tracebacks included, which is the whole promise. If that is still enormous
+# the middle is cut - and the cut says so, so a clipped traceback is never
+# mistaken for a whole one.
+function Show-SuiteFailure($out) {
+    $lines = @("$out" -split "`r?`n")
+    $kept = @($lines | Where-Object { $_ -notmatch '^[ \t]*ok[ \t]' })
+    $hidden = $lines.Count - $kept.Count
+    $note = "      ($hidden passing line(s) hidden - every other line of this suite is below)"
+    if (@($kept | Where-Object { $_.Trim() }).Count -eq 0) {
+        # Non-zero exit, and nothing but passing checks (or nothing at all):
+        # it stopped before it could say why. Say that, rather than printing a
+        # blank block that reads like the harness losing the output.
+        return "$note`n      (and there is no other line: it stopped before it could say what went wrong)"
+    }
+    if ($kept.Count -gt 200) {
+        $cut = $kept.Count - 200
+        $kept = @($kept[0..79]) + @("... $cut line(s) cut here ...") + @($kept[($kept.Count - 120)..($kept.Count - 1)])
+    }
+    $note + "`n" + (($kept | ForEach-Object { "      $_" }) -join "`n")
+}
+
 $tests = @(Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name)
 $pass = 0; $fail = @()
 # A suite that exits 0 is not necessarily a suite that tested anything: many
@@ -2849,7 +2898,10 @@ if ($fail.Count -gt 0) {
     Say ""
     foreach ($f in $fail) {
         Say "===== $($f.Name) =====" Yellow
-        Say ($f.Output -split "`n" | Select-Object -Last 25 | Out-String)
+        # Not the last 25 lines: see Show-SuiteFailure above for what that
+        # cost, and why the reason is usually in the MIDDLE of a suite's
+        # output rather than the end of it.
+        Say (Show-SuiteFailure $f.Output)
     }
     Say "Send the block above back. A failing suite here is a real finding." Cyan
     Say ""

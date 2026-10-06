@@ -29,8 +29,10 @@ docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
     flexible conversations, the driver model on the second card's "Longer
     conversations" lane). One card: the limited version (shorter
     conversations, sharing the main card, waiting while the owner chats).
-    The full version stays off until the second card is installed AND
-    measured.
+    The full version stays off until the second card is installed AND its
+    lane has been measured - the card being installed is not the same thing
+    as the lane being measured (corrected 2026-10-05: the card IS installed
+    on the owner's PC, and the lane has still never been run).
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3), in this file's words
     plan()      Checks the chatbot, the goal and the limits, picks the
@@ -832,8 +834,13 @@ def choose_tier(deps: Optional[Deps] = None) -> Tier:
                     why="The second graphics card's \"Longer conversations\" lane is running.")
     url, model = d.main_lane()
     if not on:
-        why = ("The full version is off until the second graphics card is installed and "
-               "measured ([chatbot] full_version in jarvis-framework.toml).")
+        # 2026-10-05: this used to say the second card is not installed. On
+        # the owner's PC it IS installed - what has never been measured is
+        # the "Longer conversations" LANE the full version runs on, and that
+        # is what actually keeps this off (docs/MEASURED-2026-10-05-owner-pc.md).
+        why = ("The full version is off until the second graphics card's \"Longer "
+               "conversations\" lane has been measured ([chatbot] full_version in "
+               "jarvis-framework.toml).")
     else:
         why = ("The full version is switched on, but the second graphics card's \"Longer "
                "conversations\" lane is not running, so the limited version runs.")

@@ -631,12 +631,15 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
 /// Label of the first-run walkthrough.
 pub const ONBOARDING_LABEL: &str = "onboarding";
 
-/// Opens the first-run walkthrough: three plain-language screens covering the
-/// tray icon, an approval, and memory — the three things DESKTOP-BUILD's own
-/// support notes said a new owner asks about first.
+/// Opens the first-run walkthrough: plain-language screens covering what
+/// Jarvis is and that it runs on this PC, the tray icon, an approval, memory,
+/// how to talk to it and where the settings live - the things DESKTOP-BUILD's
+/// own support notes and the 2026-10-05 UI audit said a new owner asks about
+/// first (`docs/UI-AUDIT-2026-10-05.md` section 5 and its "what I would
+/// change" row 3).
 ///
 /// Called at most once per install, from the end of `setup()` in `lib.rs`,
-/// gated on `commands::onboarding_seen`. Fixed size and not resizable: three
+/// gated on `commands::onboarding_seen`. Fixed size and not resizable: five
 /// short screens of plain text do not need a resize handle, and giving it one
 /// invites a half-width window that wraps mid-sentence.
 pub fn show_onboarding(app: &AppHandle) -> Result<(), String> {

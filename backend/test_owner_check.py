@@ -53,6 +53,7 @@ import jarvis_owner_check as OC  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 CASES = REPO / "jarvis-desktop" / "tests" / "fixtures" / "risky-approval-cases.json"
 RULES_RS = REPO / "jarvis-desktop" / "src-tauri" / "src" / "lock" / "rules.rs"
 SECURITY_KT = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
@@ -91,6 +92,15 @@ def _block(src, marker):
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("(on Windows the real check runs;
+    skipped)", True) - a condition of the constant True, so it printed as a
+    pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def _case_rows() -> dict:
@@ -185,13 +195,20 @@ def t_this_pc_is_told_from_another_device_by_the_connection():
     no = [("100.101.102.103", "100.64.0.5"),    # the phone over Tailscale
           ("192.168.1.44", "192.168.1.20"),     # another device at home
           ("fe80::1%eth0", "fe80::2%eth0")]
+    wrong = []
     for peer, local in yes:
         if not OC.from_this_pc(peer, local, own=own):
+            wrong.append(f"{peer!r} -> {local!r} should count as this PC")
             check(f"{peer!r} -> {local!r} counts as this PC", False)
     for peer, local in no:
         if OC.from_this_pc(peer, local, own=own):
+            wrong.append(f"{peer!r} -> {local!r} should count as another device")
             check(f"{peer!r} -> {local!r} counts as another device", False)
-    check("the rule, all cases", True)
+    # Was `check("the rule, all cases", True)`: the condition was the constant
+    # True, so it printed ok even on a run where one of the cases above had
+    # just printed FAIL - a summary that could not fail. It now asserts the
+    # same thing the per-case reports say, so the two cannot disagree.
+    check("the rule, all cases", not wrong, "; ".join(wrong))
     check("this PC's own addresses are read without raising",
           isinstance(OC.own_addresses(), frozenset))
 
@@ -293,7 +310,8 @@ def t_off_windows_there_is_no_windows_hello_so_it_fails_closed():
     OC.set_verifier(None)
     got = OC.approve_check({"id": "r4"}, peer="127.0.0.1", pending=lambda: [row], own=())
     if sys.platform == "win32":
-        check("(on Windows the real check runs; skipped)", True)
+        skip("off Windows there is no Windows Hello so a risky approval fails closed: on "
+             "Windows the real check runs instead")
         return
     check("no stand-in, not Windows: refused as not set up",
           got and got[0] == 403 and got[1]["owner_check"] == "not_set_up", got)
@@ -627,7 +645,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

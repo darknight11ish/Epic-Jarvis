@@ -2,7 +2,13 @@ name: Jarvis client
 
 on:
   workflow_dispatch:
+  # main only, plus every pull request into main (below). This workflow had no
+  # pull_request trigger at all, so a branch push built the branch; it now
+  # builds the merge instead, which is the tree that actually lands. Nothing
+  # reaches the owner from here: the APK publish step is `github.ref ==
+  # 'refs/heads/main'`, so a pull request run builds, tests and smokes only.
   push:
+    branches: [main]
     paths:
       - "jarvis-client/**"
       # The shared debug key this module is now signed with.
@@ -17,12 +23,31 @@ on:
       - "jarvis-desktop/tests/fixtures/**"
       # The one version number both apps and the backend share.
       - "VERSION"
+  # The same file list as the push above, on purpose: this list is what decides
+  # whether the workflow reports at all, so a pull request that touches none of
+  # these files is skipped here exactly as its push would have been skipped
+  # before. No check is left waiting for a run that never starts that was not
+  # already in that state.
+  pull_request:
+    branches: [main]
+    paths:
+      - "jarvis-client/**"
+      - "keystore/**"
+      - ".github/workflows/jarvis-client.yml"
+      - "backend/**"
+      - "jarvis-desktop/src/**"
+      - "jarvis-desktop/src-tauri/src/**"
+      - "jarvis-desktop/tests/fixtures/**"
+      - "VERSION"
 
 # Read only by default. Only the `smoke` job, which publishes the APK after
 # it has passed, gets write access.
 permissions:
   contents: read
 
+# a second push to the same pull request cancels the first: github.ref is
+# refs/pull/<n>/merge there, one value for the whole pull request, and
+# refs/heads/main for the post-merge push, so the two never cancel each other.
 concurrency:
   group: jarvis-client-${{ github.ref }}
   cancel-in-progress: true
@@ -1150,13 +1175,89 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Install the system image
+      # ONE library, before the emulator is used: libpulse.so.0, from the
+      # libpulse0 package.
+      #
+      # WHAT WENT WRONG. Run of 2026-10-06 06:50 UTC (PR #61) was red here:
+      #
+      #   ##[error]The Android emulator could not be installed:
+      #   /usr/local/lib/android/sdk/emulator/emulator exists but does not run.
+      #   Nothing was rendered and no screenshots exist.
+      #   /usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/qemu-system-x86_64:
+      #   error while loading shared libraries: libpulse.so.0: cannot open
+      #   shared object file: No such file or directory
+      #
+      # so the download had finished and the binary could not START. That is not
+      # the corrupt-download flake the retry below answers, and the retry cannot
+      # cure it: retrying a download that already succeeded gives the same
+      # binary. The library is what was missing, and now the script's own
+      # post-install assertion - which runs `emulator -version` and refuses to
+      # call a binary that will not answer "installed" - is what said so plainly
+      # instead of leaving a missing-artifact warning to be misread as the
+      # cause. That assertion stays exactly as it is.
+      #
+      # WHY libpulse0 AND NOT A LIST. libpulse.so.0 is a DIRECT dependency of
+      # the emulator's qemu-system-x86_64: the dynamic loader named it, by name,
+      # as the only library it could not open (one missing library makes the
+      # loader stop and report that one), so it is the one library proved
+      # absent. libpulse0 is the Ubuntu package that provides exactly that file.
+      # The X11 and GL libraries the emulator also links against are pulled in
+      # on this image by xvfb and the preinstalled browsers, and the job has
+      # rendered all twenty-five faces with them on commit 04ea68c7
+      # (run 37398385830), which is the evidence that they are already there.
+      # Adding a guessed superset would hide that reading and make a future
+      # failure of the same shape harder to find, not easier.
+      #
+      # WHY IT IS HERE, at the top of the job. The install step below ends by
+      # RUNNING `emulator -version`, and the photograph step starts the emulator
+      # for real. This step is above both, so nothing executes the binary before
+      # the library is on disk.
+      #
+      # WHAT IT CANNOT DO. Nothing here can run an Android emulator, so only a
+      # real CI run proves the emulator now starts. If some OTHER library is
+      # missing too, the result is unchanged from today: the install step fails
+      # by name and prints the loader's own line, which is where the next name
+      # will come from.
+      #
+      # This image does not carry libpulse0 today, and although a
+      # `libpulse0 is already the newest version` run is a cheap no-op, this is
+      # a stable package name rather than a pinned version, so - unlike a pinned
+      # emulator build - it cannot be withdrawn out from under the job.
+      - name: Install the library the emulator needs to run
         working-directory: .
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "system-images;android-34;default;x86_64" \
-                               "platforms;android-34" "platform-tools" "emulator"
+          sudo apt-get update
+          # --no-install-recommends: libpulse0 is the shared library, nothing
+          # here wants the PulseAudio daemon that a plain install also pulls in.
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends libpulse0
+
+      # The emulator download is the one part of this job that is GitHub's and
+      # Google's rather than this project's, and on 2026-10-04 it failed on its
+      # own: run 6ace099c died at "21% Downloading emulator-linux_x64-164" with
+      # "Error reading Zip content from a SeekableByteChannel", before a line of
+      # this repository was compiled - and the SAME COMMIT passed on a re-run.
+      # That is a corrupt download, not a bug.
+      #
+      # So the install is retried: three attempts, clearing the half-written
+      # download between them, because sdkmanager resumes into the same bad
+      # bytes. The script then refuses to report success unless
+      # emulator/emulator is really there and really runs. A retry that
+      # swallowed a genuine emulator failure would be worse than the flake -
+      # this job exists to render real screenshots in a real browser.
+      #
+      # Deliberately NOT pinned to an emulator build number. When Google
+      # withdraws a pinned revision, sdkmanager answers "Failed to find
+      # package" and the job is red for good until somebody edits it by hand.
+      #
+      # The `set -euo pipefail` and `yes | sdkmanager --licenses` that used to
+      # be here now live in the script, which also reports the failure in words
+      # a reader can act on. The smoke job above still installs inline; this
+      # retry is here because this is the job that was broken by the flake.
+      - name: Install the system image and the emulator
+        working-directory: .
+        run: |
+          sh scripts/install-android-emulator.sh
 
       - name: Compile the app and the test
         run: |
@@ -1192,6 +1293,16 @@ jobs:
             echo "Face photographs pulled off the device: ${shots:-0} (artifact: jarvis-client-face-shots)"
             if ! kill -0 "$EMU" 2>/dev/null; then
               echo "::warning::The emulator process died during the photographs."
+            fi
+            # Said out loud, once, when there is nothing to upload. Without
+            # this the log's last word on a run that rendered nothing is
+            # `No files were found with the provided path`, which reads like an
+            # artifact-path typo - the shape of the 2026-10-04 flake, where the
+            # real cause (a corrupt emulator download) was four minutes above it.
+            # It names the two things that leave no photographs, and the line
+            # above still says whether the emulator process itself died.
+            if [ "${shots:-0}" -eq 0 ]; then
+              echo "::error::No face photographs were produced: ${RUNNER_TEMP}/jarvis-face-shots holds no .png files, so there is nothing to upload. Either the emulator could not be installed or started (see the 'Install the system image and the emulator' step and the emulator log above), or FaceShotTest failed on the device. This run rendered nothing."
             fi
             # What the test itself wrote down, face by face. FaceShotTest
             # saves it after every face, so a run that stalls still says

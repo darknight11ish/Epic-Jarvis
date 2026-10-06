@@ -45,9 +45,10 @@ def check(name, ok, detail=""):
 
 
 def t_the_list_is_real_and_only_reads():
-    check("the list is web_search, home_read, read_screen and read_camera, nothing else",
+    check("the list is web_search, home_read, read_screen, read_camera and read_web_page, "
+          "nothing else",
           sorted(G.READ_ALOUD_TOOLS) == ["home_read", "read_camera", "read_screen",
-                                         "web_search"],
+                                         "read_web_page", "web_search"],
           G.READ_ALOUD_TOOLS)
     for name in G.READ_ALOUD_TOOLS:
         if name in G.RECORDED_READS:
@@ -79,6 +80,18 @@ def t_the_list_is_real_and_only_reads():
                     "append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
                     "coming_up"):
         check(f"{private} is not on it", private not in G.READ_ALOUD_TOOLS)
+    # The owner's request of 2026-10-05: a page he hands over is read out
+    # loud. It is a real tool, and it only reads.
+    import jarvis_agent as _A
+    check("read_web_page is on it, and is a real tool the model can call",
+          "read_web_page" in G.READ_ALOUD_TOOLS and "read_web_page" in _A.TOOLS)
+    check("... it writes nothing and reads no memory",
+          "read_web_page" not in _A.NOTE_WRITES
+          and "read_web_page" not in _A._NOT_READING)
+    # ... but it is still a way out of this PC, so it runs only on a person's
+    # own yes - which is what makes being read aloud safe to allow here.
+    check("... and it still needs a person's yes (NEEDS_A_PERSON)",
+          "read_web_page" in _A.NEEDS_A_PERSON)
 
 
 def t_the_step_event_carries_the_real_name():

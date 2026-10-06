@@ -231,6 +231,48 @@
         </div>
       </div>
 
+      <!-- ── The command palette (palette-ui.js) ──────────────────────────
+           A drawer inside the bar rather than a window of its own: the bar is
+           the app's front door (Alt+Space), it already holds the keyboard, and
+           a new window would need a new capability for no gain. It sits inside
+           #shell so the bar's own height measurement (syncWindowHeight) and the
+           window-memory restore both keep working, and its list is capped in
+           CSS so it can never push the window past the 720px clamp.
+
+           One tab stop inside it (the search field) plus its rows, trapped:
+           palette-ui.js's keydown runs in the capture phase, so Escape closes
+           the palette instead of hiding the whole bar. -->
+      <section class="palette" id="palette" role="dialog" aria-modal="true"
+               aria-labelledby="palette-title" hidden>
+        <div class="palette-head">
+          <h2 class="palette-title" id="palette-title">Find anything</h2>
+          <button class="palette-close" id="palette-close" type="button"
+                  aria-label="Close the finder">Close</button>
+        </div>
+        <label class="sr-only" for="palette-search">Search what Jarvis can do</label>
+        <input id="palette-search" class="palette-search" type="text"
+               autocomplete="off" autocapitalize="off" autocorrect="off"
+               spellcheck="false" role="combobox" aria-expanded="false"
+               aria-controls="palette-list" aria-autocomplete="list"
+               placeholder="Type a few letters — a screen, a setting, an action…" />
+        <!-- The screen reader's half lives just BELOW this panel, not in it:
+             a region inside a `hidden` box is hidden itself. -->
+        <ul class="palette-list" id="palette-list" role="listbox"
+            aria-labelledby="palette-title"></ul>
+        <div class="palette-empty" id="palette-empty" hidden>
+          <p class="palette-empty-title" id="palette-empty-title"></p>
+          <p class="palette-empty-body" id="palette-empty-body"></p>
+        </div>
+        <p class="palette-keys" aria-hidden="true">↑ ↓ to move · Enter to open · Esc to close</p>
+      </section>
+      <!-- The screen reader's half, OUTSIDE the panel on purpose: a live
+           region inside a `hidden` box is itself hidden, and a region written
+           while hidden announces nothing - exactly the bug tests/a11y.mjs
+           opens with. This one is always in the tree and sr-only, so the
+           count is heard the moment the palette opens. -->
+      <p class="sr-only" id="palette-status" role="status"
+         aria-live="polite" aria-atomic="true"></p>
+
       <!-- ── Attachment strip (screen capture / clipboard ingest) ───────── -->
       <!-- Everything below the input row scrolls together, so the stack can
            never grow past the window's 720px clamp and hide the Approve and
@@ -413,6 +455,12 @@
         <section class="primer" id="primer" aria-label="What you can do here">
           <h2 class="sr-only">What you can do here</h2>
           <div id="sayable-list"></div>
+          <!-- The command palette's way in (palette-ui.js, built from the menu
+               catalogue). A button, so Tab reaches it; typing "/" in an empty
+               box does the same thing. Hidden while a gate is waiting - the
+               card is the top surface then - which palette-ui.js refuses to
+               open over rather than hiding. -->
+          <p class="palette-hint-row" id="palette-hint"></p>
           <!-- "Earlier chats" (the chat audit, 2026-09-28): the Brain's
                History, where "Continue this chat" carries one on here; and,
                after Esc ended a chat, where it went (main.js closeCard). -->

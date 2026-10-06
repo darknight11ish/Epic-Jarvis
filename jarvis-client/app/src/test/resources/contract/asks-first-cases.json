@@ -458,6 +458,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -722,6 +731,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -1524,6 +1542,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -1788,6 +1815,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -2586,6 +2622,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -2849,6 +2894,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -3642,6 +3696,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -3905,6 +3968,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -4698,6 +4770,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -4961,6 +5042,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -5767,6 +5857,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -6031,6 +6130,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -6829,6 +6937,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -7092,6 +7209,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",

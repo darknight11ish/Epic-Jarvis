@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-chat-card"
+description = "Enables the set_chat_card command without any pre-configured scope."
+commands.allow = ["set_chat_card"]
+
+[[permission]]
+identifier = "deny-set-chat-card"
+description = "Denies the set_chat_card command without any pre-configured scope."
+commands.deny = ["set_chat_card"]

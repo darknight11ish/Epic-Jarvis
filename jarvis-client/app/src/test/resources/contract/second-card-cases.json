@@ -3,6 +3,66 @@
   "cases": {
     "capable_off": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -30,7 +90,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           },
           {
             "compute_cap": 7.5,
@@ -167,6 +227,39 @@
       },
       "last": null,
       "main_ollama_pinned": false,
+      "mode": {
+        "chosen": false,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "",
+        "mode": "",
+        "name": "",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "Nothing is set up on the second card yet. Turn on the main switch below, then the switches you want the other card to run.",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": false,
@@ -216,6 +309,66 @@
     },
     "capable_pending": {
       "active": true,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -243,7 +396,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           },
           {
             "compute_cap": 7.5,
@@ -380,6 +533,39 @@
       },
       "last": null,
       "main_ollama_pinned": true,
+      "mode": {
+        "chosen": false,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "",
+        "mode": "",
+        "name": "",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "The main switch is on, but none of the switches below is, so nothing is running on the second card yet.",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [
         "long_context"
       ],
@@ -431,6 +617,47 @@
     },
     "card_missing_but_enabled": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: there is only one card (NVIDIA GeForce RTX 2080 SUPER), so there is nothing to pin."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -458,7 +685,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           }
         ],
         "primary": {
@@ -578,6 +805,39 @@
       },
       "last": null,
       "main_ollama_pinned": null,
+      "mode": {
+        "chosen": true,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+        "mode": "concurrent",
+        "name": "Two models at once, one on each card",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": false,
+            "blocked": "Not yet - needs two graphics cards; only one is here.",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": false,
+            "blocked": "Not yet - only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": true
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": false,
@@ -630,6 +890,66 @@
     },
     "combined_running": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": true,
         "available": true,
@@ -657,7 +977,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           },
           {
             "compute_cap": 7.5,
@@ -794,6 +1114,39 @@
       },
       "last": null,
       "main_ollama_pinned": true,
+      "mode": {
+        "chosen": true,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+        "mode": "split",
+        "name": "One model across both cards",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": true
+          },
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": false,
@@ -843,6 +1196,63 @@
     },
     "not_capable_old_card": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 6.1,
+            "display": false,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 6.1 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 8,010 MiB."
+            ],
+            "free_mb": 8010,
+            "index": 1,
+            "measured": [],
+            "name": "NVIDIA GeForce GTX 1080",
+            "total_mb": 8192,
+            "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2080 SUPER has the most memory (8,192 MiB) and no monitor taking part of it, so it is the roomy one. Jarvis cannot say which is faster - no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -870,7 +1280,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           },
           {
             "compute_cap": 6.1,
@@ -1001,6 +1411,39 @@
       },
       "last": null,
       "main_ollama_pinned": false,
+      "mode": {
+        "chosen": false,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "",
+        "mode": "",
+        "name": "",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": false,
+            "blocked": "Not yet - needs two graphics cards; only one is here.",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": false,
+            "blocked": "Not yet - the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": false,
@@ -1050,6 +1493,47 @@
     },
     "one_card": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: there is only one card (NVIDIA GeForce RTX 2080 SUPER), so there is nothing to pin."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -1077,7 +1561,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           }
         ],
         "primary": {
@@ -1197,6 +1681,39 @@
       },
       "last": null,
       "main_ollama_pinned": null,
+      "mode": {
+        "chosen": false,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "",
+        "mode": "",
+        "name": "",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": false,
+            "blocked": "Not yet - needs two graphics cards; only one is here.",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": false,
+            "blocked": "Not yet - only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": false,
@@ -1246,6 +1763,47 @@
     },
     "one_card_reads_words": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: there is only one card (NVIDIA GeForce RTX 2080 SUPER), so there is nothing to pin."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -1273,7 +1831,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           }
         ],
         "primary": {
@@ -1393,6 +1951,39 @@
       },
       "last": null,
       "main_ollama_pinned": null,
+      "mode": {
+        "chosen": false,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "",
+        "mode": "",
+        "name": "",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": false,
+            "blocked": "Not yet - needs two graphics cards; only one is here.",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": false,
+            "blocked": "Not yet - only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": true,
@@ -1442,6 +2033,66 @@
     },
     "running_long_context": {
       "active": true,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -1469,7 +2120,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis ASSUMES everyday chat is here: your settings point at this card (a monitor is plugged into it), but you have not pinned a card and Jarvis cannot see which card the model is on, so this is where it plans, not something it read - open \"Everyday chat runs on\" to see what it can read"
           },
           {
             "compute_cap": 7.5,
@@ -1606,6 +2257,39 @@
       },
       "last": null,
       "main_ollama_pinned": true,
+      "mode": {
+        "chosen": true,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+        "mode": "concurrent",
+        "name": "Two models at once, one on each card",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": false,
+            "blocked": "Turn \"Longer conversations\" off first: one model across both cards needs both cards to itself.",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": true
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
       "pending": [],
       "picture_text": {
         "available": false,

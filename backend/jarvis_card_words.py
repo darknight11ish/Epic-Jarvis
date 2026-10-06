@@ -105,6 +105,10 @@ TITLES = {
     # --- news feeds and "tell me when this page changes" (2026-09-27)
     "news_read": "read a news feed you added",
     "page_read": "fetch a web page you're watching",
+    # jarvis_readpage.py (2026-10-05): ONE card per address the owner hands
+    # over, then that one page's words are read out. Its own name, not
+    # "page_read" above: that one is the watch's per-look fetch.
+    "read_web_page": "read a web page out loud",
     # --- GitHub watches in "tell me when" (2026-09-28)
     "github_read": "check GitHub for a \"tell me when\"",
     # --- models and graphics cards
@@ -117,6 +121,9 @@ TITLES = {
     "second_card_browser_enable": "turn on browser control, which works real web pages",
     "second_card_combined_enable": "run one bigger model across both graphics cards",
     "second_card_third_assign": "move a second-card feature onto a third graphics card",
+    # Which card everyday chat runs on (owner's decision, 2026-10-05): one
+    # approval card to pin it, immediate to go back to leaving it to Ollama.
+    "chat_card_pin": "pin everyday chat to one graphics card",
     "screen_picture_enable": "let it read pictures of your screen (slow, uses your main chip)",
     "obscura_enable": "read web pages with a browser that has no window (Obscura)",
     "browser_form_submit": "send a form you were shown on a website",

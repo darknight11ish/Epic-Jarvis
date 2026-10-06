@@ -961,6 +961,31 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, assigned: null, pending: false,
                      message: "The third card is not running anything." };
           }
+          // commands.rs set_chat_card (2026-10-05): pinning everyday chat to
+          // one graphics card, or going back to leaving it to Ollama. What
+          // jarvis_second_card.handle_pin does to status()'s "chat_card"
+          // key: pinning puts "chat_card" in `pending` (a card is up, nothing
+          // written yet); leaving clears the choice at once, with no card.
+          case "set_chat_card": {
+            const sc = window.__secondCard;
+            sc.changes.push({ feature: "chat_card", action: args.action, card: args.card ?? null });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const cc = st.chat_card || {};
+            if (args.action === "pin") {
+              if (!st.pending.includes("chat_card")) st.pending.push("chat_card");
+              return { ok: true, chosen: null, pending: true,
+                       message: "Approve the card on your PC or phone to pin everyday chat. "
+                         + "Nothing changes until you do." };
+            }
+            cc.chosen = null;
+            cc.chosen_name = null;
+            cc.problem = "";
+            st.pending = st.pending.filter((p) => p !== "chat_card");
+            return { ok: true, pending: false, chosen: null,
+                     words: "Jarvis leaves the choice to Ollama, and which card the model "
+                       + "lands on is Ollama's own choice." };
+          }
           // "When to suggest the bigger model" - no card either way, so this
           // just flips the one signal in the same status object.
           case "set_second_card_suggest": {

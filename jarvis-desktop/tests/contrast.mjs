@@ -12,6 +12,7 @@
  * A pair passes only if it passes on both — that is what "it works wherever the
  * user put the window" means.
  */
+import { pathToFileURL } from "node:url";
 import * as K from "./uikit.mjs";
 
 const srgb = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; };
@@ -112,7 +113,17 @@ export function check(fgText, bgText, min) {
 }
 
 // ---- self-test: the arithmetic must be right before it judges anything ----
-if (import.meta.url === `file://${process.argv[1]}`) {
+//
+// "Was this file run directly, or imported?" - asked the one way that works
+// on Windows. `import.meta.url` is ALWAYS a forward-slash file URL
+// (`file:///C:/…`), while `process.argv[1]` keeps the backslashes Windows
+// hands it (`C:\…`), so comparing them as strings against a hand-built
+// `file://${process.argv[1]}` could never be true here. The whole self-test
+// below - the arithmetic, the translucent-surface pair, the backdrop control -
+// was skipped in silence on Windows and exited 0, while CI on Linux, which
+// has no backslashes to disagree about, ran it and stayed green. `pathToFileURL`
+// does the encoding both sides agree on.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const eq = (got, want, what) => {
     const ok = Math.abs(got - want) < 0.02;
     console.log(`${ok ? "ok  " : "FAIL"}  ${what}: ${got} (expected ${want})`);

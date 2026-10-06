@@ -6,8 +6,17 @@
 name: CI
 
 on:
+  # main only, and that is the whole fix for running twice per commit: a branch
+  # push started this workflow on refs/heads/<branch>, and the same commit's
+  # pull request started it again on refs/pull/<n>/merge - two different refs,
+  # so the concurrency group below could never collapse them, and every check
+  # name appeared twice in the pull request's list (measured 2026-10-06: of the
+  # last 100 runs, 42 were that duplicate pull_request half of a commit whose
+  # push half ran too). A branch with no pull request now runs nothing; a draft
+  # pull request is enough to get a check, and the merge into main is checked
+  # again by the push below.
   push:
-    branches: ["**"]
+    branches: [main]
     # A push that changes ONLY these files runs nothing: no test reads them
     # (checked 2026-09-26 - the suites read docs/*.md, backend/README.md and
     # CHANGELOG.md, so those are NOT listed). Every changed file must be on
@@ -15,14 +24,18 @@ on:
     paths-ignore:
       - "CLAUDE.md"
       - "README.md"
-  # Pull requests into main only (every other branch is already checked by
-  # its push). No path filter here, so a required check on a pull request
-  # always reports instead of waiting for a run that never starts.
+  # Proposed changes run here, once. No path filter, so a required check on a
+  # pull request always reports instead of waiting for a run that never starts
+  # (the filter above is safe on the push because main is merged by hand, after
+  # the pull request was already checked).
   pull_request:
     branches: [main]
 
-# A newer push to the same branch (or pull request) stops the older run: its
-# result would be out of date before it finished.
+# A newer push to the same place stops the older run: its result would be out
+# of date before it finished. github.ref is refs/pull/<n>/merge for a pull
+# request and refs/heads/main for the push, so those two never cancel each
+# other - and with the push trigger on main only, one commit no longer produces
+# two of them to begin with.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -80,10 +93,22 @@ jobs:
         with:
           node-version: "22"
       # No bundler and no test framework: the pages are plain ES modules, so a
-      # parse check is what there is. It would have caught nothing in this
-      # repo's history — the frontend bugs were behavioural — but it is the
-      # floor, and the markdown suite below is the part that matters.
-      - run: for f in src/*.js; do node --check "$f"; done
+      # parse check is what there is. It is the floor, and it had to be made to
+      # hold: on 2026-10-06 a `settings.js` that could not be parsed at all - a
+      # template literal opened with a backtick and closed with a quote - went
+      # through this step, because `node --check` parses a bare `.js` file as
+      # CommonJS and sloppy CommonJS accepted the stray backtick as a string
+      # terminator further down the line. The page loads it with
+      # type="module", and the browser dropped the WHOLE file: every panel on
+      # Settings stopped, and two desktop suites were red or hung because of
+      # it. So each page is copied to a `.mjs` first - node always parses that
+      # as a module - and checked there.
+      - run: |
+          tmp="$(mktemp -d)"
+          for f in src/*.js; do
+            cp "$f" "$tmp/$(basename "$f").mjs"
+            node --check "$tmp/$(basename "$f").mjs"
+          done
         shell: bash
       - run: node scripts/markdown-test.mjs
       - run: python3 scripts/check-tokens.py
@@ -148,7 +173,17 @@ jobs:
       # lock is hash-checked, this line is not - so at least the version is fixed,
       # and a new release cannot change what CI tests overnight). Update these
       # together with the lock. Supply-chain audit, 2026-09-30.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1
+      #
+      # pyyaml is here for backend/test_ci_emulator_install.py, which parses
+      # .github/workflows/jarvis-client.yml to prove the emulator retry is
+      # really wired into the face-shots job. Without it that suite's `import
+      # yaml` fails and its whole wiring half SKIPS by name - including the
+      # checks that the install step still runs scripts/install-android-emulator.sh
+      # and that the script is saved with LF endings. A skipped check is not a
+      # passing one, and this half was silently never running on the one job
+      # (Ubuntu) whose shell the script actually is. Version from
+      # requirements.lock, like the four above.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3
       - name: Backend suites (the ones that need no file from the owner's PC)
         # The FAILING SUITE NAMES are the useful part of a red run, and they
         # were only in a thirteen-minute log - which needs a signed-in browser
@@ -443,7 +478,11 @@ jobs:
       # "No module named 'tzdata'" and test_screen_win.py fails with "The
       # 'uiautomation' package is missing"; with them both pass. On Ubuntu both
       # suites pass without either, so the gap was invisible to CI.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29
+      #
+      # pyyaml, for the same reason as the Ubuntu job above: without it
+      # backend/test_ci_emulator_install.py's wiring half SKIPS by name here
+      # too. One version, from requirements.lock.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29 pyyaml==6.0.3
       - name: Backend suites that need no file from the owner's PC, on Windows
         # One step, not two: an environment variable set in one step does not
         # reach the next one.
@@ -1030,12 +1069,19 @@ jobs:
         run: |
           cargo fetch --locked
           python3 ../../tools/gen_notices.py --check
-      # The structural guards (2026-10-05). Each one asserts a rule the code
-      # cannot state about itself, in the shape `check-tokens.py` and
-      # `tools/check_command_acl.py` already use: a plain list of violations and
-      # a non-zero exit only when there really is one. They read the repository
-      # rather than this crate, so each is called by its path from here.
+      # ---------------------------------------------------------------------
+      # The repo's own scanners.
       #
+      # Each step below is one small script under tools/ that reads the
+      # repository itself - not this crate - and prints a plain list of
+      # violations, exiting non-zero only when there really is one. That is the
+      # same shape `check_parity.py` and `check_command_acl.py` use in the
+      # backend job, which calls them by path for the same reason.
+      #
+      # They live together as one block so the whole set is visible in one
+      # place and a new one has an obvious home. Each still carries the reason
+      # it exists.
+      # ---------------------------------------------------------------------
       # Every media clip this app plays is a `data:` URI, and `media-src` said
       # `'self' blob:` - so the browser refused every one of them and Jarvis
       # spoke nothing at all, with no error anywhere and no failing test. The
@@ -1080,13 +1126,51 @@ jobs:
       # test_backup.py (runs 37349552106 and 37369387182) - and none of it
       # reproduced on the owner's PC, where the tick is about 0.5 ms. All three
       # were fixed with `tempfile.mkdtemp`, which asks the filesystem for a free
-      # name. This is what keeps the next one from being found the same way: the
-      # same shape as `check_command_acl.py` and `check_parity.py`, which the
-      # backend job runs - a plain list of violations and a non-zero exit only
-      # when there really is one. It reads the repository rather than this
-      # crate, so it is called by its path from here.
+      # name. This is what keeps the next one from being found the same way.
       - name: No path is named from a clock and created without exist_ok
         run: python3 ../../tools/check_same_tick_paths.py
+      # The tutorials are data, so nothing compiles them and nothing reads them.
+      # Each step ends with a `where` line naming the button, card or screen to
+      # use, and an agent writing the last sixteen of them invented three button
+      # labels in its first draft (it caught them itself) and described two
+      # screens that do not exist at all (the phone's "Timeline", and "tap to
+      # talk" on the phone). A tutorial that sends the owner to a control the app
+      # does not have is confident, user-facing and wrong, and every other check
+      # in this file passes it. This one reads the real
+      # backend/jarvis_tutorials.py and matches each breadcrumb in a `where`
+      # line against the names the two apps really define - exactly, with no
+      # substring search and no fuzzy match, because a guard that cries wolf is
+      # worse than none. The lines that are wrong today are recorded in
+      # KNOWN_DRIFT with a reason each (the file is owned by another pull
+      # request); a name NOT recorded there exits 1, and a recorded one that
+      # stops being reported is itself a failure, so the list cannot quietly
+      # absorb a real finding.
+      - name: A tutorial names only screens and buttons that exist
+        run: python3 ../../tools/check_tutorial_places.py
+      # A suite check that cannot fail hides a real defect indefinitely, and it
+      # is worse than a failing one: it is counted as a PASS. On 2026-10-05 this
+      # repository fixed 153 `check("SKIP - <reason>", True)` sites; the same
+      # shape was back on 2026-10-06, 24 more in 14 files, and two summary
+      # lines (`check("... every one of them stays a card", True)`) that
+      # printed ok on a run where the loop above had just printed FAIL. The
+      # suite's own words are the evidence: if it says it could not run the
+      # check here, the answer is a real `skip(why)`, counted separately and
+      # never as a pass. This reads every backend/test_*.py and
+      # backend/eval_*.py and fails on a fake skip, on a string used as the
+      # condition, and on a harness whose condition has a default.
+      - name: No suite check can pass while checking nothing
+        run: python3 ../../tools/check_vacuous_checks.py
+      # What this project says about itself in prose was checked by nobody, and
+      # on 2026-10-05 five false statements reached the owner that way - the
+      # worst of them CLAUDE.md's "not yet built" queue, which still listed
+      # tap-to-talk on the phone eight days after it was built (eabca34d).
+      # docs/CLAIMS.tsv is one row per claim with a check a machine runs, and
+      # this fails in BOTH directions: a `built` row whose check stopped
+      # passing, and an `open` row whose gap has CLOSED, which means the
+      # register is stale rather than the code. Without that second half the
+      # register rots exactly like the prose it replaced.
+      - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
+        run: python3 ../../tools/check_claims.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility

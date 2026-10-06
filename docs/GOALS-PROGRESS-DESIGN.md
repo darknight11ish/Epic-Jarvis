@@ -2,12 +2,14 @@
 
 Status: **parts A and B: backend built 2026-09-30 (JARVIS-API §101), screens
 next, from the "Slice contract (frozen)" at the end of this file; part C:
-backend built 2026-09-30 (JARVIS-API §105), screens next, from the "Progress
+backend and both apps built 2026-09-30 (JARVIS-API §105), from the "Progress
 contract (frozen)" at the very end.** The owner ticked three things on 2026-09-30
 (build queue items 3 and 7, `docs/BUILD-QUEUE-2026-09-30.md`): (A) goal steps
 that are locked until the steps or numbers they depend on are done, (B) a
 finish-time range on the benchmark chart, (C) an activity heatmap and a
-balance chart of the owner's own choosing. Nothing here is built. Section 11
+balance chart of the owner's own choosing. All three are in the backend
+(`backend/jarvis_goals.py`); re-checked 2026-10-05, when the claims register
+found this page still saying nothing here was built. Section 11
 lists what I did not check, and section 10 is the questions for the owner.
 
 ## In short

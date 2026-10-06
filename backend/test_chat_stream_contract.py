@@ -57,18 +57,60 @@ def check(name, cond, detail=""):
 
 
 def _normalise(body: bytes) -> str:
-    """Time-based ids and timestamps fixed, and a run of keepalives (how many
-    depends on timing) made one - so the fixture is the same on every run."""
+    """Everything the PC sends that depends on WHEN, not on WHAT, taken out -
+    so the fixture is the same on every run and on every machine.
+
+    Three things depend on timing:
+
+    * the keepalive count - the heartbeat sends one every KEEPALIVE_SECONDS of
+      silence, so a slow machine sends more;
+    * whether "thinking" or "working" was ever said (it takes STATUS_DELAY_
+      SECONDS of waiting, and "approval" is the one the cases are about);
+    * which of those two lines the heartbeat got out FIRST. Its thread runs
+      beside the turn's, so a keepalive can land before the "approval" line
+      instead of after it. Both orders mean the same thing to an app.
+
+    That last one is why the two lines cannot simply be filtered one after
+    the other: which of them comes first is the scheduler's business, not the
+    product's, and both orders mean the same thing to an app.
+
+    So: a keepalive's COUNT and its PLACE among the other lines are both
+    timing, and become one keepalive on its own at the front. "thinking" and
+    "working" are timing too, and become keepalives. The kept status words
+    ("approval", then the outcome) stay exactly as they were, in order, so
+    what the cases are really about is still pinned. Only whole comment lines
+    are ever touched - the bytes an app reads as words are untouched.
+
+    Measured on this PC: one run in about 160 put the keepalive first, and the
+    old code then produced a DIFFERENT document for that same run - the whole
+    fixture going stale on CI, on all three files below, with every per-case
+    check still passing (they read the body, not its bytes).
+    """
     s = body.decode("utf-8")
     s = re.sub(r'"id":"chatcmpl-jarvis-\d+"', '"id":"chatcmpl-jarvis-0"', s)
     s = re.sub(r'"created":\d+', '"created":1790000000', s)
-    # "thinking" and "working" appear only if this machine is slow enough
-    # that a step outlasts STATUS_DELAY - timing, not behaviour. "approval"
-    # is the one the cases are about, and is kept.
-    s = re.sub(r": jarvis-status (thinking|working)\n\n", "", s)
-    s = re.sub(r"(: keepalive\n\n)+", ": keepalive\n\n", s)
-    s = re.sub(r"^\n+", "\n", s)
-    return s
+    # A keepalive really arrives as ": keepalive\n\n" - `_Out.send` writes it
+    # in one piece - but the ending is not part of what the fixture pins (an
+    # app treats any line that does not start with "data:" as filler), so a
+    # bare one is read the same rather than being a second shape.
+    s = re.sub(r"^[^\S\n]*: (?:keepalive|jarvis-status (?:thinking|working))[^\S\n]*$",
+               ": keepalive", s, flags=re.M)
+    lines = s.split("\n")
+    kept = [ln for ln in lines if ln != ": keepalive"]
+    keepalive = ": keepalive\n\n" if len(kept) != len(lines) else ""
+    out: list = []
+    for ln in kept:                      # one blank line, at most, between lines
+        if ln == "" and out and out[-1] == "":
+            continue
+        # ... and one BEFORE a kept status line, which had one either from the
+        # wire or from the keepalive that was just taken off that spot.
+        if ln.startswith(": jarvis-status ") and out and out[-1] != "":
+            out.append("")
+        out.append(ln)
+    while out and out[0] == "":          # and none at the front
+        out.pop(0)
+    body_ends_blank = s.endswith("\n\n")
+    return keepalive + "\n".join(out) + ("\n" if (body_ends_blank and out) else "")
 
 
 def _gate(wait):
@@ -289,6 +331,67 @@ def document(cases, routes=None) -> str:
     }, indent=2, ensure_ascii=False) + "\n"
 
 
+def t_the_fixture_cannot_depend_on_which_line_the_heartbeat_got_out_first():
+    """The fixture is a byte comparison, so it pins the ORDER of what the PC
+    sends - and two of those lines are written by a thread that runs beside
+    the turn's. A keepalive may therefore land before the ": jarvis-status
+    approval" line instead of after it; measured on this PC, about one turn in
+    160.
+
+    What the contract intends, and why: both orders mean the same thing to the
+    apps - a comment line the app writes off as filler, then the one line that
+    is a real signal. Which came first is a fact about the operating system's
+    scheduler, not about the product, so it must not be able to change the
+    stored document. If it can, the fixture goes stale on a loaded runner while
+    every per-case check still passes (they read the body, never its bytes) -
+    which is exactly what "stale or missing" on the runner, and green
+    everywhere else, looks like.
+
+    The real shapes are built here rather than hoped for from timing. Nothing
+    is loosened: the words, the error, the status words and the ORDER of the
+    kept status lines are all still pinned."""
+    # The shape the stored fixture holds, as the case it is about: the same
+    # turn with its one keepalive, and only its comment lines moved about.
+    stored = json.loads(COPIES[2].read_text(encoding="utf-8"))
+    fixture_body = next(c["body"] for c in stored["cases"]
+                        if c["name"] == "local turn with a tool and an approval card")
+    canonical = _normalise(fixture_body.encode("utf-8"))
+    approval = ": jarvis-status approval\n\n"
+    assert canonical.count(approval) == 1, canonical
+    head, tail = canonical.split(approval, 1)
+    assert head == ": keepalive\n\n", repr(head)
+    for kind, slow in (
+            ("before the approval line", approval + ": keepalive\n\n" + tail),
+            ("after the approval line, and one before",
+             "\n\n" + approval + ": keepalive\n\n" + tail)):
+        check(f"the fixture is the same document with a keepalive {kind}",
+              _normalise(slow.encode("utf-8")) == canonical,
+              repr(_normalise(slow.encode("utf-8"))[:90]))
+    check("every case in the stored fixture is already in that canonical shape",
+          all(_normalise(c["body"].encode("utf-8")) == c["body"] for c in stored["cases"]))
+
+    # 3. The same shapes without the producer, so the rule is stated once and
+    #    plainly: one keepalive, a bare one, and one with no blank line after
+    #    it all come out as one keepalive; a "thinking"/"working" line is
+    #    timing too and goes the same way; an "approval" line is kept,
+    #    whichever side of a keepalive it lands on.
+    stamped = ": keepalive\n\n"
+    with_card = ": keepalive\n\n: jarvis-status approval\n\n"
+    shapes = [": keepalive\n\n",
+              ": keepalive\n\n: keepalive\n\n: keepalive\n\n",
+              ": keepalive\n",
+              ": keepalive",
+              ": keepalive\n\n: jarvis-status thinking\n\n: keepalive\n\n",
+              ": jarvis-status working\n\n: keepalive\n\n",
+              ": jarvis-status approval\n\n: keepalive\n\n",
+              ": keepalive\n\n: jarvis-status approval\n\n",
+              ": keepalive\n\n: jarvis-status approval\n\n: keepalive\n\n"]
+    for shape in shapes:
+        got = _normalise(shape.encode("utf-8"))
+        want = with_card if ": jarvis-status approval" in shape else stamped
+        check(f"one keepalive stamped the same from {shape!r}", got == want, repr(got))
+
+
 def t_the_producer_does_what_each_case_says():
     """Before anything is written, read each body back the simplest way - so
     a wrong expectation fails HERE, not only in three apps' tests."""
@@ -337,7 +440,8 @@ def t_both_copies_are_what_the_producer_makes_today():
 
 
 if __name__ == "__main__":
-    for fn in (t_the_producer_does_what_each_case_says,
+    for fn in (t_the_fixture_cannot_depend_on_which_line_the_heartbeat_got_out_first,
+               t_the_producer_does_what_each_case_says,
                t_both_copies_are_what_the_producer_makes_today):
         print(f"\n--- {fn.__name__} ---")
         try:

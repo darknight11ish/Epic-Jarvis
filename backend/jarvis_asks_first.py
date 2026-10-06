@@ -317,7 +317,7 @@ HARD_LIMITS = frozenset({
     LOOSEN_ACTION, "stop_asking_before_every_web_search", "web_search_enable", "learning_enable",
     "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
-    "second_card_third_assign", "screen_picture_enable", "obscura_enable",
+    "second_card_third_assign", "chat_card_pin", "screen_picture_enable", "obscura_enable",
     "big_model_enable", "custom_voice",
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
@@ -329,6 +329,7 @@ HARD_LIMITS = frozenset({
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+    "read_web_page",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -339,7 +340,8 @@ MUST_ASK = frozenset({
     "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
     "search_the_web", "stop_asking_before_every_web_search", "web_search_enable", "schedule_repeat",
     "models_create", "second_card_enable", "second_card_browser_enable",
-    "second_card_combined_enable", "second_card_third_assign", "screen_picture_enable",
+    "second_card_combined_enable", "second_card_third_assign", "chat_card_pin",
+    "screen_picture_enable",
     "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
@@ -348,6 +350,7 @@ MUST_ASK = frozenset({
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+    "read_web_page",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -374,7 +377,7 @@ GROUPS = (
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",
-                      "news_read", "page_read", "github_read", "chatbot_session",
+                      "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
@@ -386,6 +389,7 @@ GROUPS = (
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",
                                       "second_card_combined_enable", "second_card_third_assign",
+                                      "chat_card_pin",
                                       "screen_picture_enable", "big_model_enable"]),
     # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
     # page promises every action, and starting Live is one (the review of
@@ -1666,7 +1670,7 @@ LOCKDOWN_ACTIONS = frozenset({
     # sending, saving and tidying email
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
-    "news_read", "page_read", "github_read", "youtube_captions_read", "quiz_cloud_grade",
+    "news_read", "page_read", "read_web_page", "github_read", "youtube_captions_read", "quiz_cloud_grade",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

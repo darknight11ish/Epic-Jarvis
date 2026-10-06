@@ -256,6 +256,431 @@ CATALOGUE = (
         ),
     },
     {
+        "id": "when-something-is-wrong",
+        "version": 1,
+        "section": "both",
+        "title": "When something is wrong",
+        "why": "The three things you will see, and what to do about each one.",
+        "minutes": 2,
+        "steps": (
+            {"title": "An error is a still mark, not a mood",
+             "body": "When something fails, the face shows a thin ring with a "
+                     "gap at the bottom and stops moving. It is drawn on "
+                     "purpose to look different from the waiting-on-you clock "
+                     "and the not-connected ring, so you can tell at a glance "
+                     "which of the three you are looking at.",
+             "where": "The HUD, or the phone's Home screen"},
+            {"title": "\"Jarvis isn't connected\"",
+             "body": "This means the PC's Jarvis is not answering. Usually the "
+                     "app is closed, the PC is asleep, or the model is still "
+                     "loading. The tray icon says the same thing, and the "
+                     "phone's connection line says it too.",
+             "where": "The tray icon, and Brain → About"},
+            {"title": "The model is slow, or asleep",
+             "body": "While the model loads, the simple things keep working: "
+                     "timers, one-off reminders and alarms are answered without "
+                     "it. Everything else waits, and says so, rather than "
+                     "guessing at an answer.",
+             "where": "Nothing to change - just ask for the timer"},
+            {"title": "Stopping Jarvis mid-action",
+             "body": "One key halts anything Jarvis is doing on the screen, "
+                     "before its next step. Steps already done stay done, so it "
+                     "stops rather than undoes. Pick your own key in Settings; "
+                     "it is off until you do.",
+             "where": "Settings → Shortcuts → Stop everything"},
+            {"title": "If you say something about self-harm",
+             "body": "Jarvis answers with the crisis helplines - 988 and 911 in "
+                     "the United States - in its plain voice, not the animal "
+                     "voice. It does not learn from that turn, does not count "
+                     "it, and does not keep it in the chat thread.",
+             "where": "Nothing to change - this is how it is built"},
+        ),
+    },
+    {
+        "id": "brain",
+        "version": 1,
+        "section": "pc",
+        "title": "Brain, the one settings place",
+        "why": "Where every switch, list and report lives, and how to find one.",
+        "minutes": 2,
+        "steps": (
+            {"title": "It is a set of pages, not a list of switches",
+             "body": "Brain is one window with a row of pages down the side: "
+                     "Memory, History, Model, Work, Projects, Tutorials, "
+                     "Galaxy, Now, Trust and Watch. Each page is about one "
+                     "subject, so nothing is buried under anything else.",
+             "where": "Brain, from the tray or the Jarvis bar"},
+            {"title": "Where your memory lives",
+             "body": "The Memory page holds what Jarvis has learned: the facts "
+                     "it saved on its own, the ones pinned to every answer, the "
+                     "ones still waiting for your yes, and the wiki it builds "
+                     "from your notes. Each one can be forgotten from its own "
+                     "row.",
+             "where": "Brain → Memory"},
+            {"title": "Where your rules live",
+             "body": "\"What asks first\" is the page listing every action and "
+                     "whether it asks you first. It is the rulebook: if you "
+                     "wonder why Jarvis asked, or want it to ask more often, "
+                     "that page is the answer.",
+             "where": "Brain → What asks first"},
+            {"title": "Where the work lives",
+             "body": "The Work page holds focus sessions, timers, reminders and "
+                     "alarms, Today's cards, goals, background jobs, the undo "
+                     "shelf, and what Jarvis did lately. Projects has its own "
+                     "page beside it.",
+             "where": "Brain → Work"},
+            {"title": "The settings window is separate",
+             "body": "Ordinary settings - voice, hardware, backups, folders, "
+                     "security - are in the Settings window, not in Brain. "
+                     "\"Show or hide menus\" in Settings also lists every one by "
+                     "name, which is the quickest way to find one.",
+             "where": "Settings, and Settings → Show or hide menus"},
+        ),
+    },
+    {
+        "id": "focus-sessions",
+        "version": 1,
+        "section": "pc",
+        "title": "Focus sessions",
+        "why": "A timer plus Quiet, and the one thing it watches - and never keeps.",
+        "minutes": 2,
+        "steps": (
+            {"title": "It is a timer plus Quiet",
+             "body": "A focus session is a countdown while Jarvis stays quiet. "
+                     "It is off until you start one, and it ends when the "
+                     "countdown does or when you stop it.",
+             "where": "Brain → Work → Focus session"},
+            {"title": "What it watches - and what it never stores",
+             "body": "On this PC only, Jarvis notices which app or site is in "
+                     "front and names a drift out loud - \"Instagram can wait\" "
+                     "- on this PC's speakers. It keeps counts, never the name "
+                     "of what it saw, and nothing about it leaves the PC.",
+             "where": "Brain → Work → Focus session, while one runs"},
+            {"title": "The controls during a session",
+             "body": "Pause and Resume stop and restart the countdown. \"+10 "
+                     "minutes\" extends it. Stop ends it. Snooze and \"I'm doing "
+                     "research\" are there for the moments when the drift is "
+                     "not really a drift.",
+             "where": "Brain → Work → Focus session, and the small desktop counter"},
+            {"title": "Saying it out loud instead",
+             "body": "You can start, pause, extend and stop a focus session by "
+                     "voice, the same as by the buttons. Like everything else, "
+                     "your voice can start things but never approves anything.",
+             "where": "Just say \"start a focus session for 25 minutes\""},
+            {"title": "How it ends",
+             "body": "When the countdown finishes, Jarvis shows a report card of "
+                     "the session and then goes back to normal. The card is a "
+                     "plain summary, not a score, and there is no streak line.",
+             "where": "Brain → Work → Focus session, at the end"},
+        ),
+    },
+    {
+        "id": "timers-reminders",
+        "version": 1,
+        "section": "pc",
+        "title": "Timers, reminders and the schedule",
+        "why": "What goes off, what it costs you, and what needs no card at all.",
+        "minutes": 2,
+        "steps": (
+            {"title": "One list, called Coming up",
+             "body": "Every timer, reminder, alarm and repeating job lives on "
+                     "one page, in time order, with the next time each one will "
+                     "go off. \"Just went off\" shows the ones from the last "
+                     "hour, with Snooze.",
+             "where": "Brain → Work → Coming up"},
+            {"title": "Most of it needs no card",
+             "body": "A plain timer, a one-off reminder, an alarm and the "
+                     "standby schedule take effect at once - no approval card. "
+                     "Only your own words can set one, and deleting one is "
+                     "instant. That is why they do not need to ask.",
+             "where": "Just ask for one"},
+            {"title": "What still asks once",
+             "body": "Two things read something outside this PC and so keep "
+                     "their one card: the morning briefing and \"tell me when\", "
+                     "because both read your email or your calendar. The card "
+                     "shows what will be read.",
+             "where": "Brain → Work → Coming up → Tell me when"},
+            {"title": "A late alarm does not pretend",
+             "body": "If the phone or this PC hears about an alarm more than ten "
+                     "minutes late - it was out of reach, or restarted - it shows "
+                     "a silent notification saying when it was missed instead of "
+                     "ringing as if it were happening now.",
+             "where": "The phone's notifications, and the PC's own"},
+            {"title": "The standby schedule is not the same as Standby",
+             "body": "The schedule puts Jarvis on standby at a set time and "
+                     "wakes it in the morning - but only if the schedule was "
+                     "what put it there. If you chose Standby yourself, it stays "
+                     "on until you choose Active.",
+             "where": "Brain → Work → Coming up → Standby schedule"},
+        ),
+    },
+    {
+        "id": "projects",
+        "version": 1,
+        "section": "pc",
+        "title": "Projects, goals and benchmarks",
+        "why": "One place for what you are working on and the numbers you track.",
+        "minutes": 3,
+        "steps": (
+            {"title": "What a project is",
+             "body": "A project has a name, its own instructions, its own files "
+                     "and chats, and the numbers you want to watch. A coding "
+                     "project tracks test and speed scores; a life project "
+                     "tracks numbers you type in yourself, like a 5k time.",
+             "where": "Brain → Projects"},
+            {"title": "Benchmarks are the numbers it keeps",
+             "body": "A benchmark is one number tracked over time, shown as a "
+                     "chart. Log a new one and the chart adds a point. A number "
+                     "you mark private is never read aloud: logging it says only "
+                     "\"Logged.\"",
+             "where": "Brain → Projects → a project → its benchmarks"},
+            {"title": "Goals are the plans",
+             "body": "A goal is a plan you edit, with a weekly check-in. Goals "
+                     "are their own page, and a project can use them rather than "
+                     "keeping a second set of plans of its own.",
+             "where": "Brain → Work → Goals"},
+            {"title": "The Shareable switch, off by default",
+             "body": "A project can be marked Shareable, and only then may a "
+                     "short piece of its files go to a web search or the chatbot "
+                     "driver - shown word for word on a card first. Health and "
+                     "money numbers, memory, email and credentials never go, "
+                     "even then.",
+             "where": "Brain → Projects → a project → Shareable"},
+            {"title": "What is ready, and what is still coming",
+             "body": "Projects, goals, benchmarks, charts and running tests all "
+                     "work today. Jarvis writing code by itself is still "
+                     "coming: it waits for the second graphics card to be "
+                     "measured, so do not expect that half yet.",
+             "where": "Brain → Projects, and Settings → Second graphics card"},
+        ),
+    },
+    {
+        "id": "notes-and-wiki",
+        "version": 1,
+        "section": "pc",
+        "title": "Notes and the wiki",
+        "why": "Where a quick note goes, and what the wiki builds from your files.",
+        "minutes": 2,
+        "steps": (
+            {"title": "The three note apps",
+             "body": "Jarvis can file a note into Logseq, Joplin or Obsidian - "
+                     "whichever you already use. Each one is set up once, and the "
+                     "small note buttons in the Jarvis bar pick between them.",
+             "where": "The widget's note buttons, and Settings → Accounts"},
+            {"title": "When a note asks first",
+             "body": "In a turn where Jarvis has read an email, a web page, a "
+                     "file or other tool output - or the conversation is marked "
+                     "as having read outside text - writing a note raises an "
+                     "approval card. Otherwise the note is filed straight away.",
+             "where": "The card, in the Jarvis bar"},
+            {"title": "The wiki reads one folder",
+             "body": "Drop .md or .txt files into Jarvis Wiki/Sources inside your "
+                     "Obsidian vault. The wiki page lists each one and turns it "
+                     "into linked pages in Jarvis Wiki/Pages. Each document is "
+                     "one job with its own card before anything is written.",
+             "where": "Brain → Memory → Wiki"},
+            {"title": "What the wiki needs to run",
+             "body": "Building the wiki uses the model on the second graphics "
+                     "card. The wiki page says plainly, in the PC's own words, "
+                     "whether it can run right now and why not, rather than "
+                     "failing quietly.",
+             "where": "Brain → Memory → Wiki, the state line at the top"},
+        ),
+    },
+    {
+        "id": "documents-and-search",
+        "version": 1,
+        "section": "pc",
+        "title": "Documents, folders and search",
+        "why": "Which folders Jarvis may read, and what it does with them.",
+        "minutes": 2,
+        "steps": (
+            {"title": "You choose the folders",
+             "body": "Jarvis cannot see your disk. It only reads the folders you "
+                     "add here, one at a time, and adding one raises a single "
+                     "approval card. Removing a folder is instant.",
+             "where": "Settings → Folders Jarvis may look in"},
+            {"title": "Asking about a document",
+             "body": "Once a folder is added you can ask about what is in it - a "
+                     "PDF, a Word file, a text file - and Jarvis reads it to "
+                     "answer. What it reads is outside text, so it is never "
+                     "learned from as a fact.",
+             "where": "Type your question in the Jarvis bar"},
+            {"title": "Bringing in a Notion export",
+             "body": "The same page takes the .zip Notion makes. Jarvis unzips "
+                     "it into a new folder inside a folder you choose, and the "
+                     "pages land as Markdown and CSV you can ask about. No card "
+                     "is needed: you picked the file and the folder yourself.",
+             "where": "Settings → Folders Jarvis may look in → the .zip button"},
+            {"title": "A note written after reading asks first",
+             "body": "Because imported notes are outside text, any note Jarvis "
+                     "writes after reading them waits for your yes on a card. "
+                     "That is the same rule as for email and web pages, not a "
+                     "fault in the import.",
+             "where": "The card, in the Jarvis bar"},
+        ),
+    },
+    {
+        "id": "screens-and-pictures",
+        "version": 1,
+        "section": "pc",
+        "title": "Screens and pictures",
+        "why": "Two ways to show Jarvis your screen, and what is kept afterwards.",
+        "minutes": 3,
+        "steps": (
+            {"title": "\"Look at this\" is one look",
+             "body": "\"Look at this\" takes a single look at your screen when "
+                     "you ask, and answers your question about it. Nothing is "
+                     "saved. On the PC it is a key you pick; on the phone it is "
+                     "the assistant gesture.",
+             "where": "Settings → Shortcuts → Look at this"},
+            {"title": "\"Watch with me\" is a session",
+             "body": "\"Watch with me\" is a live session you start and stop. "
+                     "While it runs, a visible \"Jarvis is watching\" sign sits "
+                     "in the Jarvis bar the whole time, and the sign goes away "
+                     "when you stop.",
+             "where": "The Jarvis bar, and Settings → Look at this and Watch with me"},
+            {"title": "Where it pauses and what it skips",
+             "body": "It pauses on password fields, and it skips the apps you "
+                     "have excluded - banking, for instance. You choose that "
+                     "list here. Nothing it sees is saved.",
+             "where": "Settings → Look at this and Watch with me → the lists"},
+            {"title": "What is kept, and what is not",
+             "body": "Your question and Jarvis's answer are kept in your chat "
+                     "history like any chat. The picture and the screen's own "
+                     "words never are. What it sees counts as outside text, so "
+                     "it is never learned from as a fact.",
+             "where": "History, for the answer; Brain → Memory for the facts"},
+            {"title": "Reading pictures, and picture mode",
+             "body": "Reading the words on a screenshot works today and needs "
+                     "Windows' own text recognition; if that is missing, Jarvis "
+                     "says so instead of guessing. Picture mode is a slow "
+                     "picture reader on the processor, meant for a PC with one "
+                     "graphics card, and it is off by default. The fuller picture "
+                     "understanding is still coming, and waits for the second "
+                     "card to be measured.",
+             "where": "Settings → Look at this and Watch with me → Picture mode"},
+        ),
+    },
+    {
+        "id": "home-calendar-email",
+        "version": 1,
+        "section": "pc",
+        "title": "Home, calendar and email",
+        "why": "What Jarvis may read for you, and the one thing that always asks.",
+        "minutes": 3,
+        "steps": (
+            {"title": "Your calendar, read-only",
+             "body": "Jarvis reads Google Calendar through its private link - the "
+                     "\"Secret address in iCal format\". It is read-only, it is "
+                     "set on this PC only, and the link is kept as carefully as "
+                     "a password.",
+             "where": "Settings → Accounts"},
+            {"title": "Your home, through your own Home Assistant",
+             "body": "Home status comes from your own Home Assistant on your own "
+                     "network. Plain unscrambled http:// is allowed only inside "
+                     "your own networks - this PC, your home addresses and "
+                     ".local names, Tailscale and NordVPN Meshnet - and refused "
+                     "to anything on the open internet.",
+             "where": "Settings → What Jarvis can reach"},
+            {"title": "Reading email, and sending it",
+             "body": "Reading email is one of the tools you can switch on here, "
+                     "each with a card. Sending is separate and always asks: one "
+                     "card per email, showing the exact recipients, subject and "
+                     "full text, with no \"always allow\".",
+             "where": "Settings → What Jarvis can reach, and Settings → Sending email"},
+            {"title": "The card says when it read something",
+             "body": "If a turn has read an email, a page or a file, the approval "
+                     "card says so in plain words. That is how you know a "
+                     "decision was shaped by outside text rather than by what "
+                     "you just said.",
+             "where": "Any approval card"},
+            {"title": "The morning briefing",
+             "body": "The briefing shows the number of new emails and who they "
+                     "are from, with a setting to show the count only. Its "
+                     "weather can come from your own Home Assistant, so nothing "
+                     "leaves the house to tell you whether to take a coat.",
+             "where": "Brain → Work → Morning briefing"},
+        ),
+    },
+    {
+        "id": "faces",
+        "version": 1,
+        "section": "pc",
+        "title": "The faces",
+        "why": "Choosing how Jarvis looks, and what the expressions mean.",
+        "minutes": 2,
+        "steps": (
+            {"title": "Four animals and a robot",
+             "body": "You can pick a red panda, a pygmy owl, a sea otter, a "
+                     "monkey, or a small robot. Each is drawn by the app from "
+                     "its own parts - nothing is downloaded - and each sits in "
+                     "the HUD, the widget and the phone.",
+             "where": "Settings → Appearance → Faces"},
+            {"title": "What the expressions mean",
+             "body": "The face shows the state: listening, thinking, waiting on "
+                     "you, asleep, an error, or not connected. An error is a "
+                     "still mark with a gap at the bottom. A hollow ring means "
+                     "not connected, and rising Zs mean standby.",
+             "where": "The HUD, and Settings → Appearance"},
+            {"title": "A voice for each face, if you want one",
+             "body": "The first time you pick an animal it asks once whether to "
+                     "use that animal's own voice. A face never changes your "
+                     "voice by itself, and the question is remembered per face.",
+             "where": "Settings → Appearance, and Settings → Jarvis's voice"},
+            {"title": "Animal options in one place",
+             "body": "Still, sun and moon, weather and its source, and the small "
+                     "idle moments all live in Animal options. Look-and-behaviour "
+                     "choices are shared between the PC and the phone; sharpness "
+                     "and frame rate are per device.",
+             "where": "Settings → Animal options"},
+            {"title": "Serious moments stay plain",
+             "body": "An approval gets an attentive look, not a wave. An error "
+                     "gets a still, concerned mark. A crisis-help answer uses a "
+                     "neutral pose and Jarvis's plain voice, never the animal "
+                     "voice.",
+             "where": "Nothing to change - this is how it behaves"},
+        ),
+    },
+    {
+        "id": "backups",
+        "version": 1,
+        "section": "pc",
+        "title": "Backups and recovery",
+        "why": "One locked file, one recovery code, and what losing it means.",
+        "minutes": 3,
+        "steps": (
+            {"title": "One locked backup file",
+             "body": "A backup is a single locked file holding your memory and "
+                     "chat history. You choose the folder it goes into with "
+                     "\"Choose a folder…\", and a cloud-synced folder such as a "
+                     "NordLocker one is fine. Jarvis keeps only the last few.",
+             "where": "Settings → Backups"},
+            {"title": "The recovery code is shown once",
+             "body": "When a backup is made, Jarvis shows you a recovery code "
+                     "once. Write it down or save it somewhere safe there and "
+                     "then. Jarvis keeps no copy of it.",
+             "where": "Settings → Backups, when you make one"},
+            {"title": "What a lost code means",
+             "body": "If you lose the code, that backup is useless and nobody can "
+                     "open it - including Jarvis. That is the point of the code, "
+                     "and the page says so plainly rather than letting you find "
+                     "out later.",
+             "where": "Settings → Backups"},
+            {"title": "Restoring, and the preview",
+             "body": "Restoring takes the code and a preview first, so you can "
+                     "see what is in the file before anything is put back. The "
+                     "restore itself is one card, like any other change.",
+             "where": "Settings → Backups → Restore"},
+            {"title": "A limit worth knowing",
+             "body": "Erased facts stay in older backups until those backups age "
+                     "out. The delete dialogs say this too. It is a real limit, "
+                     "not a bug, and it is better to know it before you rely on "
+                     "an erase.",
+             "where": "Settings → Backups, and Brain → Memory"},
+        ),
+    },
+    {
         "id": "pc-at-a-glance",
         "version": 1,
         "section": "pc",
@@ -288,6 +713,202 @@ CATALOGUE = (
                      "faces and the backups live in one place. If you cannot find "
                      "something, it is almost certainly in here.",
              "where": "Brain, from the tray or the bar"},
+        ),
+    },
+    {
+        "id": "phone-talking",
+        "version": 1,
+        "section": "phone",
+        "title": "Talking on the phone",
+        "why": "How to speak, how to stop, and where the words are worked out.",
+        "minutes": 2,
+        "steps": (
+            {"title": "Hold the button and speak",
+             "body": "Press and hold the talk button on Home, speak, and let go. "
+                     "While the button is down the microphone is open; when it is "
+                     "not, it is not. That is deliberate on a phone, which "
+                     "travels into pockets, cars and other people's houses.",
+             "where": "The talk button on the phone's Home screen"},
+            {"title": "Slide away to cancel",
+             "body": "A hold is easy to start by accident, and once the PC has "
+                     "checked a clip it cannot be unsent. So sliding your finger "
+                     "off the button before you let go throws the recording away "
+                     "without sending it.",
+             "where": "The talk button on the phone's Home screen"},
+            {"title": "The words are worked out on the PC",
+             "body": "Your voice is sent to this PC, where the voice check runs "
+                     "and the model makes the words. The phone never turns speech "
+                     "into text itself, and it never keeps the model or your "
+                     "memory.",
+             "where": "Nothing to change - this is how it is built"},
+            {"title": "Stopping it",
+             "body": "There is a Stop control while an answer is coming, and "
+                     "ending a Live session stops that. Nothing is ever approved "
+                     "by voice, on the phone or anywhere else.",
+             "where": "The phone's Home screen, and Settings → Stop everything"},
+            {"title": "It still needs the link",
+             "body": "The phone reaches the PC over Tailscale or NordVPN Meshnet "
+                     "only, so if the link is down the phone says so plainly "
+                     "instead of pretending to send anything. A home Wi-Fi "
+                     "address is refused on purpose.",
+             "where": "The connection line on the phone's Home screen"},
+        ),
+    },
+    {
+        "id": "phone-approvals",
+        "version": 1,
+        "section": "phone",
+        "title": "Approval cards on the phone",
+        "why": "Deciding a card here, and the two ways to decide it.",
+        "minutes": 2,
+        "steps": (
+            {"title": "The card comes to Home",
+             "body": "When Jarvis needs your yes, the card appears on the phone's "
+                     "Home screen, over the conversation. It names the action, "
+                     "what it will touch, and whether the turn had read "
+                     "something outside this PC.",
+             "where": "The phone's Home screen"},
+            {"title": "Buttons, or a swipe",
+             "body": "Every card can be decided with its own Approve and Deny "
+                     "buttons. Swiping is a setting, on by default, that lets a "
+                     "swipe decide instead. Turn it off and every card is decided "
+                     "with buttons only.",
+             "where": "Settings → Security → Swipe to approve or deny"},
+            {"title": "The fingerprint for risky ones",
+             "body": "A risky approval - one that loosens a rule or cannot be "
+                     "undone - needs your screen lock as well. On a phone with no "
+                     "screen lock set up, Jarvis refuses it and tells you how to "
+                     "set one, rather than letting it through.",
+             "where": "Settings → Security"},
+            {"title": "Nothing is decided for you",
+             "body": "Jarvis never approves anything by itself, and a card is "
+                     "never approved by voice - a recording of your voice must not "
+                     "be able to decide something. If the link to the PC is old, "
+                     "acting is blocked until it is fresh again.",
+             "where": "Any approval card, and the stale-link warning"},
+            {"title": "Turning the swipe setting back on",
+             "body": "Turning swiping off is instant. Turning it back on asks for "
+                     "your fingerprint or PIN, because it is the looser of the "
+                     "two. That is the same shape as every other loosening.",
+             "where": "Settings → Security → Swipe to approve or deny"},
+        ),
+    },
+    {
+        "id": "phone-notifications",
+        "version": 1,
+        "section": "phone",
+        "title": "Notifications and alerts",
+        "why": "What rings, what waits quietly, and where each switch is.",
+        "minutes": 2,
+        "steps": (
+            {"title": "An approval arrives as a notification",
+             "body": "When a card is raised while you are not looking at the "
+                     "phone, Jarvis sends a notification for it. Tapping the "
+                     "notification opens the card, so you can decide from there.",
+             "where": "The phone's notification shade"},
+            {"title": "Urgent alerts keep ringing",
+             "body": "\"Tell me when\" can watch for one thing you name - a "
+                     "sender's email, a device change. A match only ever "
+                     "notifies. An urgent one is a notification that keeps "
+                     "ringing until you have seen it.",
+             "where": "Brain → Work → Coming up → Tell me when"},
+            {"title": "A late alarm does not pretend",
+             "body": "If the phone hears about an alarm more than ten minutes "
+                     "late, it does not ring as though it were happening now. It "
+                     "shows a silent notification saying when it was missed.",
+             "where": "The phone's notifications"},
+            {"title": "Showing them on a watch",
+             "body": "By default every notification stays on the phone, even if "
+                     "you have a smartwatch. A setting lets them all show on a "
+                     "compatible watch; turning it on raises a card, and turning "
+                     "it off is instant.",
+             "where": "Settings → Smartwatch notifications"},
+            {"title": "Letting Jarvis read your notifications",
+             "body": "This is a separate setting, off by default. You choose "
+                     "which apps it may read - never banking - one-time codes are "
+                     "hidden before anything reaches the model, and it never "
+                     "replies or sends. Text messages are never read.",
+             "where": "Settings → Phone notifications"},
+        ),
+    },
+    {
+        "id": "phone-stays-on-pc",
+        "version": 1,
+        "section": "phone",
+        "title": "What stays on the PC",
+        "why": "What the phone deliberately does not do, and why that is the point.",
+        "minutes": 2,
+        "steps": (
+            {"title": "The phone is a window, not a second Jarvis",
+             "body": "The assistant, the model and everything it remembers live "
+                     "on this PC. The phone shows you them and sends your words "
+                     "there. Nothing on the phone keeps a copy of your memory.",
+             "where": "Nothing to change - this is how it is built"},
+            {"title": "Speech-to-text stays on the PC",
+             "body": "The phone never turns your speech into text itself. It "
+                     "sends the clip to the PC, where the voice check runs and "
+                     "the model works out the words. A client is not allowed to "
+                     "do that step.",
+             "where": "Nothing to change - this is how it is built"},
+            {"title": "Your voice print stays on the PC",
+             "body": "Training your voice and checking a clip against it happen "
+                     "on the PC. The phone holds no voice print, so losing the "
+                     "phone does not hand anyone your voice.",
+             "where": "Settings → Voice, and the PC's Brain → Voice"},
+            {"title": "Screenshots are blocked when they should be",
+             "body": "While App lock is on, or while \"Hide memory lists and chat "
+                     "history\" is on, the phone blocks screenshots. That is why "
+                     "it can look blank in a screen recorder rather than showing "
+                     "your facts.",
+             "where": "Settings → Security"},
+            {"title": "Nothing leaves your own devices",
+             "body": "The phone talks to the PC over Tailscale or NordVPN "
+                     "Meshnet, both private networks between your own devices. "
+                     "Nothing here opens a public tunnel, and there is no setting "
+                     "that would.",
+             "where": "Settings → Connection"},
+        ),
+    },
+    {
+        "id": "phone-live",
+        "version": 1,
+        "section": "phone",
+        "title": "Live on the phone",
+        "why": "The back-and-forth conversation, the tile, and how to end it.",
+        "minutes": 2,
+        "steps": (
+            {"title": "What Live is",
+             "body": "Live is a back-and-forth voice conversation: you speak, "
+                     "Jarvis answers, and you can talk over it without saying a "
+                     "wake word between turns. You start it and you end it. It "
+                     "is not full duplex, so Jarvis listens for a beat after you "
+                     "stop - about a fifth of a second, or up to three seconds "
+                     "when the sentence only paused.",
+             "where": "The Live button on the phone's Home screen"},
+            {"title": "The Quick Settings tile",
+             "body": "A tile in the phone's quick panel starts Live and ends it, "
+                     "and shows how many minutes are left. Where you put it is "
+                     "this phone's own choice.",
+             "where": "Settings → Quick Settings tiles"},
+            {"title": "The headset button",
+             "body": "With a Bluetooth headset, pressing its button stops Jarvis "
+                     "talking, and holding it turns the microphone off or on. It "
+                     "never approves anything. On some phones holding it opens "
+                     "the phone's own assistant instead - Mic off is on the Live "
+                     "screen and in the notification too.",
+             "where": "The Live screen, and its notification"},
+            {"title": "The controls on the Live screen",
+             "body": "End Live stops the session. Stop talking stops the current "
+                     "answer without ending it. Mic off and Mic on control the "
+                     "microphone, \"20 more minutes\" extends the session, and a "
+                     "card waiting pauses Live until you decide it.",
+             "where": "The Live screen"},
+            {"title": "Ending, and coming back",
+             "body": "After Live ends, a notification offers Resume for ten "
+                     "minutes, so a session ended by accident is one tap away. If "
+                     "Temporary is on, the Live screen says plainly that the "
+                     "session will not be kept in History.",
+             "where": "The notification \"Jarvis Live ended\", and the Live screen"},
         ),
     },
     {

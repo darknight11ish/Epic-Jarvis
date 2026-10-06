@@ -6,6 +6,32 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The phone's face photographs job was red because the runner had no sound
+  library, not because anything here was broken (2026-10-06).** The job that
+  renders the animal faces downloads Android's emulator and starts it. The
+  download finished; the program would not start. The runner's own error said
+  why: `libpulse.so.0: cannot open shared object file` - a sound library the
+  emulator needs simply was not installed on the machine. So the job now
+  installs `libpulse0` (the Ubuntu package that provides that one file) before
+  it touches the emulator, and nothing else: the check that caught this - "the
+  emulator exists but does not run" - is kept exactly as it was, and it still
+  fails the step rather than reporting success. No test was weakened, no step
+  removed, and the job still only renders; it cannot block a merge. Only a real
+  run on GitHub can prove the emulator now starts.
+
+- **Past approvals get their own screen on the phone.** The read-only list you
+  asked for on 2026-09-27 was built and drawn inside the Inbox, and the
+  approvals audit of 2026-09-30 found the one thing wrong with it: "It is only
+  reachable via Inbox". The Inbox keeps its ACTIVITY row, which now opens a
+  screen of its own (`jarvis-client/.../ui/screens/ApprovalsScreen.kt`) with
+  the same fields the PC's Activity pane shows - what each card was, Approved /
+  Denied / Timed out, when, and which device - and the same four filters.
+  Nothing on it decides anything: no approve, deny, cancel, clear or re-open,
+  no new permission, and no new way out of the PC. While "Hide memory lists and
+  chat history" is on, the list hides behind the same Show as the phone's other
+  history surfaces. With nothing decided yet it says "Nothing decided yet.",
+  the PC's own words.
+
 - **A full audit pass, recorded 2026-10-04 23:44 PDT (2026-10-05 06:44 UTC).**
   Twelve of fourteen read-only passes are complete and written up as five
   documents, indexed by `docs/AUDIT-PASS-2026-10-05.md`: a whole-project feature

@@ -601,9 +601,15 @@ def t_the_patch_and_the_lists():
     # tag-suggest.patch, youtube.patch and quiz-cloud.patch (2026-09-30) go after it.
     # gate-action-name.patch (2026-10-03) goes after those: it rewrites one line
     # inside jarvis_gate.py's action_for_tool() and touches no list referee.patch's
-    # hunks anchor on.
+    # hunks anchor on. readpage.patch (2026-10-05) goes after those too, for the
+    # same reason as gate-action-name: its two hunks are in jarvis_gate.py,
+    # anchored on quiz-cloud.patch's own added lines, and they add to the same
+    # two lists rather than rewriting any line referee.patch's hunks anchor on.
+    # The checks below are what really says so - the stacked jarvis_gate.py has
+    # to build with referee.patch's own hunks applied to real context, and its
+    # risk line has to still read as it did.
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
-             "gate-action-name.patch", "tutorials.patch"}
+             "gate-action-name.patch", "tutorials.patch", "readpage.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

@@ -26,16 +26,21 @@
  *   AND in the Rust.
  */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
+import { pythonFor } from "./lib/python.mjs";
 import * as VT from "../src/voice-training.js";
 import * as W from "../src/voice-settings.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
+const BACKEND_DIR = join(HERE, "..", "..", "backend");
+// The interpreter is resolved once, `python3` else `python` (see
+// tests/lib/python.mjs), and declared here rather than beside its first use so
+// the `check` wrapper below can count skips against it.
+const PY = pythonFor(BACKEND_DIR);
 const T = K.TRAINING;
 const S = T.statuses;
 const A = (name) => K.TRAINING.answer(T.enroll[name]);
@@ -54,8 +59,11 @@ const { base, close } = await K.serve();
 const browser = await K.launch();
 const fails = [];
 const check = async (name, fn) => {
-  try { await fn(); console.log(`ok    ${name}`); }
-  catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
+  try { await fn(); PY.noteRan(); console.log(`ok    ${name}`); }
+  catch (e) {
+    if (PY.caught(name, e)) return; // counted and printed as a skip, not a pass or a failure
+    fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`);
+  }
 };
 const VIEW = { width: 760, height: 2400 };
 const open = (status, extra = {}) =>
@@ -1041,7 +1049,11 @@ await check("the small model is said plainly, with a link that opens in the real
 // three real WAV clips with the voice-ID model stood in by fixed scores
 // (the scoring is the model's job; the reply's shape and words, the
 // suggestion and the counting are the module's).
-const BACKEND_DIR = join(HERE, "..", "..", "backend");
+//
+// This is the top-level call that used to throw `spawnSync python3 ENOENT`
+// straight out of the module - not out of a `check()` - and kill the run at
+// check 34, so checks 34 to 51 had never executed on Windows. With the
+// interpreter resolved above they either run or say SKIP.
 function realCalibrate(got) {
   const code = [
     "import sys, json, io, wave, base64, struct, math",
@@ -1055,8 +1067,7 @@ function realCalibrate(got) {
     "code, body = E.calibrate({'mode': 'calibrate', 'mic': 'desktop', 'clips': [clip(), clip(), clip()]}, score=lambda pcm, mic: got)",
     "body['http'] = code; print(json.dumps(body))",
   ].join("\n");
-  return JSON.parse(execFileSync("python3", ["-c", code],
-    { cwd: BACKEND_DIR, encoding: "utf8", env: { ...process.env, JARVIS_NO_EMBED: "1" } }));
+  return PY.run(code, { env: { ...process.env, JARVIS_NO_EMBED: "1" } });
 }
 const APART = realCalibrate({ ok: true, scores: [0.21, 0.33, 0.28], threshold: 0.35,
   owner_scores: [0.62, 0.7, 0.66], print: "desktop", strictness: "very_strict",
@@ -1074,6 +1085,7 @@ const THRESHOLD_UP = { ok: true, pending: true, threshold: 0.47, model: "strong"
   message: "Approve the card on your PC or phone to use the new setting. Nothing changes until you do." };
 
 await check("the \"someone else\" check in words, from the PC's real answers", async () => {
+  if (!APART) return PY.skip("the \"someone else\" check in words, from the PC's real answers");
   assert.equal(APART.http, 200);
   const a = VT.checkResult(APART);
   assert.equal(a.text, "Good: none of their 3 clips would pass as you now. A stricter setting, 0.47 (now 0.35), would turn them away and still let you in.");
@@ -1108,6 +1120,7 @@ const othersPage = (status, extra = {}) =>
   open(status, { vt: { check: APART, threshold: THRESHOLD_UP }, ...extra });
 
 await check("someone else reads 3 sentences; the PC compares; the stricter bar is ONE card", async () => {
+  if (!APART) return PY.skip("someone else reads 3 sentences; the PC compares; the stricter bar is ONE card");
   const page = await othersPage(S.strong_ready);
   await click(page, "vt-others", "Start the check");
   await readAll(page, "vt-others", 3);
@@ -1130,6 +1143,7 @@ await check("someone else reads 3 sentences; the PC compares; the stricter bar i
 });
 
 await check("on a stale link the check still runs, but the stricter bar's card is held", async () => {
+  if (!APART) return PY.skip("on a stale link the check still runs, but the stricter bar's card is held");
   const page = await othersPage(S.strong_ready, { link: { stale: true } });
   await click(page, "vt-others", "Start the check");
   await readAll(page, "vt-others", 3);
@@ -1145,6 +1159,7 @@ await check("on a stale link the check still runs, but the stricter bar's card i
 });
 
 await check("an older PC is not offered the check at all", async () => {
+  if (!APART) return PY.skip("an older PC is not offered the check at all");
   const old = JSON.parse(JSON.stringify(S.strong_ready));
   delete old.gate.training.calibrate;
   const page = await othersPage(old);
@@ -1228,5 +1243,6 @@ await check("CONTROL: push-to-talk and \"hey Jarvis\" listening refuse while Set
 
 await browser.close();
 close();
+console.log(PY.summary());
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nVoice training on this PC holds");
 process.exit(fails.length ? 1 : 0);

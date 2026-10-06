@@ -186,7 +186,7 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `voice` | Fanned out verbatim | Ignored (`JarvisRuntime.kt:690`) |
 | `job` | Fanned out verbatim | Falls through to "unhandled" |
 | `proposal` | Re-reads the review queue when the Brain shows it (`brain.js` `onEvent`, section `memory_pending`); the HUD page re-reads its "N memory cards waiting" pointer | Re-reads the review queue (`JarvisRuntime.onEvent` -> `refreshMemoryQueue`) |
-| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen` or `read_camera` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
+| `step` | Rendered in Brain → Now (the tab was "Live" until 2026-09-28; `brain.js`, `stepText`); counted for the private-answer rule (`private-speech.js` `createToolWatch`) | Counted for the private-answer rule: `tool_started` / `tool_finished` mean a tool ran while an answer was written, and a private one unless `tool` is `web_search`, `home_read`, `read_screen`, `read_camera` or `read_web_page` (§16, §62, §63; `voice/PrivateAloud.kt`, `JarvisRuntime.onEvent`) |
 | `voices` | Re-reads `/api/voice/voices` while Settings shows Jarvis's voice (`voice-panel.js`) | Re-reads the custom voices once the Voices screen has asked for them (`JarvisRuntime.onEvent`) |
 | `appearance` | Re-reads `/api/appearance` and repaints the tray, every window and the HUD (`stream.rs` → `appearance::refresh_from_server`; before 2026-09-23 it did nothing, so a phone change arrived only on reopen). Since 2026-09-28 it also rings when an animal switch changes (`{"part": "animal", "animal": {...}}`, §93); the document then carries the new `animal` values, and every window keeps them for its face frames (`jarvis-link.js`, `animal-shared.js`) | Re-reads the shared document (`JarvisRuntime.refreshAppearance`), `animal` included (`AppearanceStore.animal`) |
 | `sky` | **Since 2026-09-28** (`jarvis_sky.py`, §89): `{"changed": true}` only - never the town, a position or the weather - on every change that lands (and a card raised or answered). Fanned out; `sky-feed.js` (Settings, the Widget, the floating face) and Settings' own section read `GET /api/sky` again at once | Reads `GET /api/sky` again (`JarvisRuntime.onEvent` -> `sky()`), so the face and Appearance show it now |
@@ -1716,7 +1716,7 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
+| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first") - since 2026-10-05 the refusal NAMES the switches to turn off ("... and \"Pictures\" and \"Wiki builder\" are on. Turn them off first, then pick this again."), so a client shows `error` as it is; **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
@@ -1744,6 +1744,15 @@ none: both apps behave as before.
  "pending": [ids],           switches with a card waiting ("master" and "combined" included)
  "lane": {"state": "off"|"starting"|"running"|"failed", "why": str},
  "main_ollama_pinned": true|false|null, "pin_note": str, "pin_command": str|null,
+ "chat_card": {"chosen": "GPU-..."|null, "chosen_name": str|null,
+               "where": {"pinned": "GPU-..."|null, "card": {"index","name","uuid"}|null,
+                         "model": str|null, "model_loaded": bool,
+                         "on_card_percent": int|null, "context": int|null,
+                         "used_mb": int|null, "words": str},
+               "cards": [{"index", "uuid", "name", "total_mb", "free_mb", "compute_cap",
+                          "display": bool, "facts": [str], "measured": [str]}],
+               "suggestion": {"name": str|null, "words": str},
+               "pin_command": str|null, "problem": str, "leave_words": str},
  "features": [{"id", "name", "what", "enabled", "active", "available", "needs": [ids],
                "model", "model_installed": bool|null, "memory_gib": float|null, "why"}],
  "last": {"feature", "outcome", "why", "at"} | null,
@@ -1751,7 +1760,14 @@ none: both apps behave as before.
               "capable": bool, "capable_why": str,   is there a SECOND capable card too
               "conflict": bool,                      a feature above is genuinely on
               "active": bool, "available": bool,
-              "model", "context": int|null, "memory_gib": float|null, "why"}}
+              "model", "context": int|null, "memory_gib": float|null, "why"},
+ "mode": {"mode": "split"|"concurrent"|"",         the owner's own choice (2026-10-05)
+          "name": str, "chosen": bool, "detail": str, "title": str, "note": str,
+          "preset": bool,                            a hardware preset runs the lanes on one card
+          "conflict": bool, "conflict_why": str,
+          "options": [{"id": "split"|"concurrent", "name", "detail",
+                       "selected": bool, "available": bool,
+                       "blocked": str, "hint": str, "pending": bool}]}}
 ```
 
 `last` (2026-09-24) is how the most recent approval card for any of these
@@ -1771,10 +1787,82 @@ model installed). Show `why` as the line under each switch - it always says,
 in words, what is missing. A switch whose card has gone stays `enabled` with
 `active: false`: show it as on-but-waiting, never flip it off.
 
+**The owner's own choice - `mode` (added 2026-10-05).** The owner asked to be
+given a choice between the two ways his two cards can be used, rather than
+working it out from the switches: **`split`** (one bigger model spread across
+both cards) and **`concurrent`** (two different models at once, one on each
+card). Both ways already existed - `split` IS the `combined` switch above,
+`concurrent` IS every other switch here - and so did the rule that they cannot
+both run. What this key adds is the choice itself, in one place and in plain
+words.
+
+**It is DERIVED from the switches and never stored.** There is no `mode`
+field in `second-card.json`; `jarvis_second_card.current_mode()` reads the
+answer back off `combined` and `features`, so the choice and the switches
+cannot disagree. `""` is a real third answer - neither way is set up yet, or
+the two have somehow both been saved on (a hand-edited file, or a machine
+that died between two writes), which is reported as `conflict: true` with a
+sentence in `conflict_why` naming both sides, and in which NEITHER lane runs.
+`preset` is true while a chosen hardware preset runs the extra features
+inside the everyday copy of Ollama on one card: then the two-card choice does
+not apply and `mode` is `""`.
+
+Draw `title` and `note` once above the two `options`, then each option's
+`name`, `detail`, `blocked` and `hint` as they are - they are plain sentences,
+written on the PC. `selected` is what the switches currently say;
+`available` is whether picking it would do anything now; `pending` is its
+card waiting unanswered; `blocked` says why it cannot be picked. **A client
+never needs a new write for this**: picking `split` is `POST
+{"feature": "combined", "enabled": true}` and picking `concurrent` is
+`{"feature": "combined", "enabled": false}` - the same switch, so the same
+approval card (`second_card_combined_enable`, tier `ask`) and the same
+immediate OFF. An older PC sends no `mode` at all: show nothing extra, never
+a blank row.
+
 `pin_command` is one PowerShell line (Windows PowerShell 5.1-safe) that keeps
 the owner's everyday Ollama on the main card; show it with a copy button and
 `pin_note` above it, on the desktop. The phone shows `pin_note` only (the
 command is run on the PC).
+
+**"Everyday chat runs on" - `chat_card` (added 2026-10-05; the owner's
+decision: "Leave it to Ollama - whatever it picks, and set `primary_gpu`
+explicitly only if you want a say. I also want an option to choose through
+Jarvis based on an analysis.").** Which graphics card runs everyday chat.
+`chosen` is the card id the owner pinned, or `null` - the default, and what
+"leave it to Ollama" reads as.
+
+**Nothing in `chat_card` is invented.** `where` is the machine's own answer:
+`ollama ps` (`on_card_percent` is `size_vram` against `size`, and
+`model_loaded` says whether anything is loaded at all) and `nvidia-smi`
+(`card` is the card the model's own process is on, by id; `used_mb` its
+memory). When neither can say - nothing loaded, or a driver that does not
+name the process - `card` is `null` and `words` says Jarvis cannot tell,
+rather than naming a card. `cards[].facts` are `nvidia-smi`'s own numbers
+(memory, compute capability, the monitor, free memory right now);
+`cards[].measured` are sentences QUOTED from
+`MEASURED-2026-10-05-owner-pc.md`, matched to a card by its name and its
+memory, and empty for a card the owner never measured. `suggestion.words`
+begins "Jarvis's suggestion:" and may use only those memory numbers - no
+route here may claim one card is faster than another, because no speed
+comparison of these cards has been measured. `problem` is a sentence when the
+pin Jarvis remembers is not what Ollama is actually set to (checked by
+reading the same `CUDA_VISIBLE_DEVICES`/`OLLAMA_VULKAN` user settings
+`pin_command` writes), and `""` when it is; a pin that is only remembered
+must never be reported as done.
+
+**Turning the pin on asks first.** `POST /api/second-card` with
+`{"feature": "chat_card", "action": "pin", "card": "GPU-..."}` (the id
+`nvidia-smi -L` prints, or a plain number) raises ONE approval card - action
+`chat_card_pin`, tier `ask`, its own `pending` row, 409 while one waits, 503
+when the tier is not `ask`, 400 for a card that is not in this PC - and
+changes nothing until a person says yes. On approval, Jarvis sets
+`CUDA_VISIBLE_DEVICES` to that card's id and `OLLAMA_VULKAN` to `0` for the
+owner's own Windows user (the same pair `pin_command` and
+`jarvis_profiles.settings_for` already produce) and remembers the choice in
+`chat-card.json` in the settings folder - **never** in
+`jarvis-framework.toml`, which no route may write. `{"action": "leave"}` is
+immediate, with no card: both settings are removed and the choice is
+forgotten, the same loosening direction as every other switch here.
 
 **A third graphics card - the data-model reshape only (added 2026-09-28,
 `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`).** That research found `_detect()`
@@ -1983,10 +2071,12 @@ Qwen 3 14B Q4_K_M, q8_0 KV @ 32K:
 main card" rule the long-context lane already follows. `COMBINED_MIN_TOTAL_MB`
 (18,432 MiB) is the floor below which this arithmetic no longer clears with
 margin; below it `combined`'s `capable` is false and `capable_why` says so.
-**Nothing above is measured**: the second card is not installed. The
-approval card and `combined.why` both say plainly that real speed is
-unmeasured, and `docs/MODEL-TOPOLOGY.md`/`HARDWARE-PROFILES.md` carry the
-same figure with the same caveat.
+**The cards are installed and measured** (2026-10-05,
+`docs/MEASURED-2026-10-05-owner-pc.md`), so the figures above are the plan:
+**nothing above is measured** - no lane that splits one model across both
+cards has been run. The approval card and `combined.why` both say plainly that
+real speed is unmeasured, and `docs/MODEL-TOPOLOGY.md` and
+`HARDWARE-PROFILES.md` carry the same figure with the same caveat.
 
 *Both apps* show it in the same place as the five switches above (not a
 separate screen): the desktop's Settings → "Second graphics card" gets a
@@ -8152,10 +8242,10 @@ Read-only. There is no button here, no link, and no way to reopen or
 re-decide a past card - it answers "did I turn that on?", nothing more.
 Placed next to the Undo shelf on both apps: desktop Brain -> Work,
 `#activity` (`jarvis-desktop/src/brain.js` `renderActivity`,
-`brain.html`); phone Inbox, the "ACTIVITY" section
+`brain.html`); phone, its own "Past approvals" screen
 (`jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/
-InboxScreen.kt`), fed by `JarvisRuntime.pastApprovals` /
-`JarvisApi.gateHistoryRead`.
+ApprovalsScreen.kt`, opened from the Inbox's own ACTIVITY row), fed by
+`JarvisRuntime.pastApprovals` / `JarvisApi.gateHistoryRead`.
 
 Both readers ask for the `history` key **by name**, never by the positional
 fallback `parseListBody`/the desktop's `refresh_pending` use for `pending` -
@@ -8175,9 +8265,17 @@ read `decodePendingRows` already uses for `pending`.
   tool to learn.
 - **Phone**: `JarvisApi.gateHistoryRead()` calls the same `GET /api/pending`
   with `unwrap = listOf("history")`, decoded by `decodeGateHistoryRows`
-  (`net/GateHistory.kt`) into `GateHistoryItem`s, fetched alongside the
-  Inbox's other three lists in `JarvisRuntime.refreshInbox()` and rendered
-  in `InboxScreen`'s new "ACTIVITY" section, newest decided first.
+  (`net/GateHistory.kt`) into `GateHistoryItem`s, and rendered on the
+  "Past approvals" screen (`ui/screens/ApprovalsScreen.kt`), newest decided
+  first. The screen reads it by itself, when it opens and on Refresh
+  (`JarvisRuntime.refreshPastApprovals`, which reads the one list and not the
+  Inbox's other three); the Inbox still reads it too, so its own ACTIVITY row
+  and the screen can never disagree. The four filter chips and the row fields
+  are the desktop's own (`net/PastApprovals.kt`, held to them by
+  `PastApprovalsTest.kt`). While "Hide memory lists and chat history" is on,
+  the list hides behind the same Show the phone's other history surfaces use -
+  the screen's heading and its way in from the Inbox stay, because they say
+  nothing about what was decided.
 
 ### 42.3 Known gaps, said plainly
 
@@ -8591,7 +8689,15 @@ section is the news feed half.
 `backend/jarvis_news.py`, shipped whole, `news.patch` adds three routes at
 start-up the same way `documents.patch` (§35) does. Feeds are RSS or Atom
 addresses the owner names; only each item's TITLE is ever read - never an
-article's own page, which Jarvis has no code to fetch at all.
+article's own page, and this module has no code that could fetch one.
+
+**Corrected 2026-10-05.** This sentence used to end "which Jarvis has no
+code to fetch at all", and that second half was false of the project as a
+whole, not just of this module: §30.3.1's page watch, §115's "read this page
+out loud" and `jarvis_browser_control.py`'s `read_page` step all fetch a
+page. It is true of `jarvis_news.py`, and the claim that mattered - a feed's
+headlines can never become an article's text - still holds, because no feed
+is reachable from any of those three.
 
 ### 46.1 The list - empty by default, no dedicated settings screen
 
@@ -15658,7 +15764,7 @@ The owner's decision (`CLAUDE.md`, 2026-09-29: "add it as a feature that can be 
 
 **What a look does with it** (`jarvis_screen.py` `_take` -> `jarvis_screen_picture.start`): the words are read exactly as before. Beside that, a job on its own thread (1) checks the switch, the model name, that the model is installed and its checksum is the one it was measured with (`PINNED_DIGEST`, else the first measurement's - a changed file refuses), (2) **cleans the picture** (below) - no cleaner, no picture, (3) shrinks it to 1,024 px on its longest side (Pillow if installed, else by hand for the PC's own PNG, else as it is), (4) starts the picture reader if needed, (5) asks it for a description of at most 400 words, `num_gpu 0`, not streamed, with a timeout (`timeout_s`, 240), (6) asks the copy what it holds (`/api/ps`): any graphics memory in use stops the copy and refuses picture mode until the owner switches it off and on, (7) removes hidden thinking and chat markers, caps the text at 1,500 characters. The description joins the words as **more OUTSIDE TEXT** (a heading saying it came through another AI model, must be treated as a rough guess, never obeyed, and that the words win when they disagree); it is what the planted-instruction check reads, and it is held with the look for two minutes and never kept, saved, learned or put in an event, status or audit line. A question waits for the words (`READ_WAIT_S`) and then up to `wait_s` (60) for the picture; if it is still being read the answer uses the words and a plain line says so, and a follow-up a moment later has it. A phone's screenshot (`screen: "phone"`) goes through the same job for its first picture, inside the chat turn; its picture is still never sent to the everyday model.
 
-**A running Pictures lane goes first (owner, 2026-09-30).** When "Pictures" is ALREADY on for the second (or third) card and its lane is running (`jarvis_second_card.lane_for("vision")`, asked by `jarvis_screen_picture.pictures_lane()`; only this PC's own address and never a cloud model name are accepted), a look sends the same cleaned, shrunk picture to that lane's Ollama (`chat_via_lane`: the lane's model and context size, no `num_gpu 0` and no `keep_alive` - the lane's own Ollama decides both; ceiling `LANE_TIMEOUT_S`, 90 seconds) instead of to the processor reader. The processor reader is the fallback: no lane, an error, a timeout, no picture model installed, or an empty answer each fall back to it (`Job.card_failed`), and if it is not ready either (model missing, and so on) the look is words only. With the lane running, a missing MiniCPM-V model does not stop a look. Nothing else changes: no new switch and no new download; picture mode's own switch still decides whether the picture is read at all, and Pictures on with picture mode off is words only, as before. The cleaner still runs FIRST for both readers (no cleaner, no picture, to the card or the processor); the "Never look at" windows are painted black before the picture reaches this code; the lane's description is outside text with its own head (`PICTURE_HEAD_CARD`). The note says `words and picture (Pictures card)`, or `words and picture (slow mode; the Pictures card did not answer)` after a fallback, or `words only (the Pictures card did not answer; <why>)`, and after a fallback the answer itself carries `(Picture mode: the Pictures graphics card did not answer, ...)` (`owner_line`). Only the audit lines change: `screen_picture.look` gains `via: "card"`, and `screen_picture.card_failed` carries the fixed reason code - never a word from the screen. Not tried against a real card or a real qwen2.5vl:7b (nothing ran on Windows, no second card is installed yet).
+**A running Pictures lane goes first (owner, 2026-09-30).** When "Pictures" is ALREADY on for the second (or third) card and its lane is running (`jarvis_second_card.lane_for("vision")`, asked by `jarvis_screen_picture.pictures_lane()`; only this PC's own address and never a cloud model name are accepted), a look sends the same cleaned, shrunk picture to that lane's Ollama (`chat_via_lane`: the lane's model and context size, no `num_gpu 0` and no `keep_alive` - the lane's own Ollama decides both; ceiling `LANE_TIMEOUT_S`, 90 seconds) instead of to the processor reader. The processor reader is the fallback: no lane, an error, a timeout, no picture model installed, or an empty answer each fall back to it (`Job.card_failed`), and if it is not ready either (model missing, and so on) the look is words only. With the lane running, a missing MiniCPM-V model does not stop a look. Nothing else changes: no new switch and no new download; picture mode's own switch still decides whether the picture is read at all, and Pictures on with picture mode off is words only, as before. The cleaner still runs FIRST for both readers (no cleaner, no picture, to the card or the processor); the "Never look at" windows are painted black before the picture reaches this code; the lane's description is outside text with its own head (`PICTURE_HEAD_CARD`). The note says `words and picture (Pictures card)`, or `words and picture (slow mode; the Pictures card did not answer)` after a fallback, or `words only (the Pictures card did not answer; <why>)`, and after a fallback the answer itself carries `(Picture mode: the Pictures graphics card did not answer, ...)` (`owner_line`). Only the audit lines change: `screen_picture.look` gains `via: "card"`, and `screen_picture.card_failed` carries the fixed reason code - never a word from the screen. Not tried against a real card or a real qwen2.5vl:7b (nothing ran on Windows, and no second-card lane has used a real card yet).
 
 **Never silent.** When the picture was not used, the note shown with the answer says `Looked at: <program> window · words only (<why>)` (and while it is still being read, `words and picture when ready (slow mode)`), the everyday model is told, in one plain line, to say so, **and code writes one plain sentence into the answer itself** - `(Picture mode: <why> This answer uses the words only.)`, put there by `jarvis_agent.py` (`tell_owner`, from `with_screen`'s `info["picture_said"]`) - so the owner is told even if the model does not pass it on. The reasons (`WHY_WORDS`, one fixed sentence each, the same for both apps' tests): the model is not installed; Ollama could not be asked; Ollama was not found; the reader could not start; no cleaner; the cleaner failed; too slow; an error; nothing to say; the reader was on the graphics card; the model's file changed since it was measured; a cloud model name; picture reading was turned off; a newer look replaced this one. With the switch off, nothing changes: the note says `words only` and no job exists.
 
@@ -16867,7 +16973,7 @@ In `memory.db`: `topics`, `fact_topics` (fact id, topic id, second topic id, how
 ## 108. Second-card switches: Study helper and Referee suggestions (added 2026-09-30; backend and both apps built)
 
 The owner's decisions of 2026-09-30: a sixth and a seventh switch in the second graphics card's list,
-both **built switched off** until the 12 GB card is installed and measured (`CLAUDE.md`; the rule every
+both **built switched off** until that feature is measured (`CLAUDE.md`; the rule every
 second-card switch follows). No new route: both are rows of `GET /api/second-card` and are turned on and
 off with the existing `POST /api/second-card`. `backend/jarvis_second_card.py`, `backend/jarvis_referee.py`,
 `backend/referee.patch`, `backend/test_second_card.py`, `backend/test_referee.py`.
@@ -16988,7 +17094,7 @@ line is `("yes", "local", ...)`, so it is not a risky approval (no Windows Hello
   change summary, but no goal step can follow a task yet - only a number - so there is nothing to compare.
   It waits for the second card and for that link.
 * The bigger local model (`qwen3:14b`, "One bigger model on both cards") for the quiz's marking: not built.
-* Nothing here has run on the real second card, which is not installed. The 7.69 GB figure on the study
+* Nothing here has run on the real second card, which is installed but has no lane switched on. The 7.69 GB figure on the study
   card is the same arithmetic as "Longer conversations" and is not measured.
 * The quiz's grader has not been run on the second card's model; until it has, marks made there stay
   "Jarvis's guess".
@@ -17172,3 +17278,150 @@ The owner asked (2026-10-05) for a skippable comprehensive intro tutorial and a 
 `tutorials.patch` is ONE hunk in `jarvis_hud.py`, an install block right after `retirement.patch`'s own, so it applies after it. It wraps `Handler` before the main socket, like spending and retirement above, and the banner says so. `jarvis_tutorials.py` is in `_where.SHIPPED` and in `scripts/apply-patches.ps1`'s shipped list, so the patcher copies it to the owner's PC; without it, or on any error, the banner says the tutorials are off and the routes are simply not there. The feature adds **no** gate action and no tier line: it acts on nothing, so there is nothing to ask about.
 
 Tests: `backend/test_tutorials.py` (the catalogue's shape, both sections, resume after quitting, finished once, reversible skips, a changed tutorial re-offered, every bad input answered with a status, exactly one file written, and no gate, tool, socket or subprocess import at all).
+
+---
+
+## 115. Read one web page out loud (added 2026-10-05)
+
+The owner asked (2026-10-05): "does jarvis have the ability for me to post a
+webpage into jarvis and it can read the content out loud?" Four things in
+this tree already fetched an address, and **none of them reads a page's
+words**:
+
+* `jarvis_news.py` (§46) keeps feed item TITLES only - "headlines only,
+  never the article text" is its own wording.
+* `jarvis_tellme.py`'s `page` source (§30.3.1) keeps a SHA-256 fingerprint of
+  a watched page's visible words. The words themselves are "never read out,
+  kept, or shown", and no function there can return them.
+* `jarvis_browser_control.py`'s `read_page` step CAN turn a page into text,
+  but that tool ships **disabled** on purpose: it needs Playwright installed
+  and the second graphics card's "Browser control" lane measured, and it is
+  built for working a page one approved step at a time.
+* `jarvis_youtube.py` (§112) reads a YouTube video's caption text by link -
+  for a quiz, never read aloud, and for YouTube only.
+
+`jarvis_readpage.py` is the missing piece, and it is deliberately small.
+
+### 115.1 The door is a model tool, not a route
+
+`read_web_page` is a tool in `jarvis_agent.TOOLS` - the shape `web_search`
+and `send_email` already have. That is the point: the gate **waits** for the
+card while the turn is open (`jarvis_agent._one_call`), so the page's words
+come back inside the same turn and the answer that reads them out is an
+ordinary answer, which is what lets every existing read-aloud rule apply
+with nothing new written for them. A route would have needed a screen in
+both apps to poll a request id - a bigger build for the same thing.
+
+The name is **`read_web_page`**, not `read_page`: `jarvis_browser_control.py`
+already calls one of its own plan steps `read_page`, and §30.3.1's watch asks
+the gate as `page_read`. One name for this feature, and it is neither.
+
+| | |
+|---|---|
+| **Tool** | `read_web_page` (`url` required, `offset` optional) |
+| **Gate action** | `read_web_page` - tier **`ask` only**, a **risky** approval (Windows Hello on the PC, a screen lock on the phone) |
+| **Risk row** | `readpage.patch`: `("no", "outbound", ...)` in `jarvis_gate._RISK`, and the action in `_NO_RULE_FROM_DENIAL` (a denial proposes no standing rule - it answered one card) |
+| **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
+| **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
+| **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
+| **Off until switched on** | add `"read_web_page"` to `[tools].enabled` in `jarvis-framework.toml`, like every tool but `web_search` (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+
+### 115.2 One card, then one plain GET
+
+The card is raised **before any fetch**. It shows the address in full and
+says plainly: the PC will fetch that one address once; only the address is
+sent; the site will see this PC's address and it cannot be taken back; what
+the page says is a stranger's words; one card covers one address; if you did
+not ask for this address, say no.
+
+Before the card, and with **no network beyond one DNS lookup**:
+
+* `jarvis_readpage.check_url` checks the address's SHAPE - `http://` or
+  `https://`, at most 500 characters, no control characters, and no
+  name-and-password in it (a card must never carry a credential).
+* `jarvis_local_http.private_fetch_problem` resolves the host by a REAL DNS
+  lookup and refuses this PC, the home network, Tailscale and Meshnet. A
+  refusal here means **no card is raised**: there is nothing to ask about.
+
+A shape error or a private answer comes back to the model as a tool result
+it can retry from, never as a card.
+
+After a person's yes: **ONE plain GET**, through
+`jarvis_local_http.public_urlopen` (no proxy; the connection checks the
+address it actually connects to, so a name whose DNS answer changes between
+the check and the connect cannot get through), with `_PageRedirect` following
+a redirect only where the same check allows it. The body is read to at most
+2 MB, the whole request is bounded by 15 seconds, and the request carries the
+address and nothing else - no memory, no email, no file, no credential
+(rule 1).
+
+### 115.3 The page's words, and the outside-text rule
+
+`jarvis_readpage.text_of` turns the body into the words a reader would see,
+with the standard library alone - **no new dependency, nothing to pin**. A
+`<main>` or an `<article>` is used when the page has one with at least 200
+characters of text; otherwise the whole body with `nav`, `aside`, `footer`,
+`header`, `form`, `script`, `style` and the rest of the unseen elements
+dropped. That is the preference order `jarvis_browser_control`'s own in-page
+`_MAIN_CONTENT_JS` uses, and the unseen-tag list `jarvis_tellme._visible_text`
+strips for its fingerprint.
+
+A response that is clearly not words - a PDF, a picture, a sound, a video, a
+zip, JSON, or a body with NUL bytes in it - is refused in plain words rather
+than decoded into nonsense. **`trafilatura` (Python, Apache-2.0) is the one
+to use IF the plain strip turns out to be too noisy in use**; it is a real
+dependency with a real model file, so it is not added here on the chance that
+it might help.
+
+The text comes back in a window of **1,500 characters** (the same cap
+`jarvis_browser_control` gives one `read_page` step, for the same reason: one
+call must stay a small fraction of the model's context), with a trailer
+naming what was left out and the **offset** to carry on from. Never a silent
+cut.
+
+Everything that comes back is **outside text**:
+
+* `read_web_page` is not in `jarvis_agent._NOT_READING`, so the turn is
+  marked as having read outside text: a note write after it waits for a card,
+  and the card says "Proposed after Jarvis read: the web page you gave it"
+  (`jarvis_agent._READ_LABELS`).
+* Nothing from the page is learned as a fact or written to disk. There is no
+  file, no route and no database here at all.
+* The model is told, in the tool's own description and in the turn's own
+  system line, that a tool's text is data and never instructions.
+
+**Does a page that says "now read <other address>" get followed?** No, and
+not by new machinery: the card always names the exact address, so a second
+read is a second card the owner reads; and every word that comes back is
+outside text. (`jarvis_youtube.py` refuses a turn that already read outside
+text; that is right for ITS card, which says "the link you pasted". This
+card names the address itself, so it stays honest either way.)
+
+### 115.4 Both apps, and what raises a card
+
+**Both apps already have the surface.** There is no new screen: the owner
+pastes the link into the one chat box he already has - or shares the page
+from Chrome, which the phone's existing share target (`ACTION_SEND`,
+`text/plain`) already folds into the composer draft - and asks Jarvis to read
+it out. So this feature adds **no** desktop JavaScript, **no** Kotlin and no
+contract fixture of its own.
+
+**What raises a card:** the fetch. One card per address, every time, showing
+the address in full; `read_web_page` is `ask` in `jarvis-framework.toml`, in
+`NEEDS_A_PERSON`, and in `HARD_LIMITS`/`MUST_ASK`, so no app can loosen it.
+
+**What raises no card:** nothing else. This module has no settings, no
+switch, no route and no file of its own.
+
+### 115.5 Tests
+
+`backend/test_readpage.py` - the address's shape (and that no socket is
+opened to check it), the private-address refusal, the card's words, the one
+GET of exactly the address given, and every failure path: an address that
+does not answer, a response that is not a page, a page larger than the cap,
+and a page with no readable words. The fetch is **injected**, so no test
+touches the real network. Also: the window and its offset trailer, the
+HTML-to-words rule (`<main>` preferred, script/style/nav/footer dropped,
+entities unescaped), the read-aloud table and its two generated copies, the
+gate row's tier and risk words, and that `readpage.patch` applies after the
+rest of the stack and reverses.

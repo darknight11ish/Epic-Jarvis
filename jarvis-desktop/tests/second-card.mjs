@@ -66,6 +66,17 @@ const section = (page) => page.evaluate(() => {
     status: $("sc-status").innerText,
     lane: $("sc-lane").innerText,
     pinned: $("sc-pinned").innerText,
+    chatWhere: $("sc-chat-where").innerText,
+    chatChoices: [...document.querySelectorAll("#sc-chat-choices input[type=radio]")]
+      .map((input) => ({ value: input.value, checked: input.checked, disabled: input.disabled,
+                         text: input.closest("label").innerText })),
+    analysisToggle: $("sc-analysis-toggle")?.innerText ?? "",
+    analysisHidden: $("sc-analysis")?.hidden ?? true,
+    analysisCards: [...document.querySelectorAll("#sc-analysis-cards .sc-analysis-card")]
+      .map((d) => d.innerText),
+    analysisSuggestion: $("sc-analysis-suggestion")?.innerText ?? "",
+    pinProblemHidden: $("sc-pin-problem")?.hidden ?? true,
+    pinProblem: $("sc-pin-problem-words")?.innerText ?? "",
     pinHidden: $("sc-pin").hidden,
     pinCommand: $("sc-pin-command").value,
     pinReadOnly: $("sc-pin-command").readOnly,
@@ -86,10 +97,35 @@ const section = (page) => page.evaluate(() => {
     thirdMoveDisabled: $("sc-third-move")?.disabled ?? null,
     thirdText: $("sc-third")?.innerText ?? "",
     thirdStatus: $("sc-third-status").innerText,
+    // The owner's own choice between the two ways the cards can be used
+    // (2026-10-05), from the backend's status().mode.
+    modeSectionHidden: $("sc-mode-section").hidden,
+    modeTitle: $("sc-mode-title").innerText,
+    modeNote: $("sc-mode-note").innerText,
+    modeConflictHidden: $("sc-mode-conflict").hidden,
+    modeConflict: $("sc-mode-conflict").innerText,
+    modeRows: [...document.querySelectorAll("#sc-mode-options .sc-switch")].map((row) => {
+      const input = row.querySelector("input[type=radio]");
+      return {
+        id: row.dataset.id,
+        state: row.dataset.state,
+        checked: input.checked,
+        disabled: input.disabled,
+        group: input.name,
+        text: row.innerText,
+        describedBy: input.getAttribute("aria-describedby") || "",
+      };
+    }),
+    modeStatus: $("sc-mode-status").innerText,
+    // The older "combined" switch below, which is the SAME setting as the
+    // choice's "split" - read so the two can be checked against each other.
+    combinedChecked: $("sc-switch-combined")?.checked ?? null,
+    combinedDisabled: $("sc-switch-combined")?.disabled ?? null,
   };
 });
 const suggestRow = (s, id) => s.suggestRows.find((r) => r.id === id);
 const row = (s, id) => s.rows.find((r) => r.id === id);
+const modeRow = (s, id) => s.modeRows.find((r) => r.id === id);
 const noRaw = (text) => {
   assert.doesNotMatch(text, /[{}]|HTTP \d|"available"|null|undefined|\[object/,
     `raw data on the page: ${text}`);
@@ -105,7 +141,17 @@ await check("one card (today's PC): found in words, every switch shown and none 
   assert.match(s.found, /Only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\./);
   assert.equal(s.cards.length, 1);
   assert.match(s.cards[0], /NVIDIA GeForce RTX 2080 SUPER \(8 GB\)/);
-  assert.match(s.cards[0], /The one chat runs on\. Everyday chat runs here: a monitor is plugged into it\./);
+  // 2026-10-05, and again 2026-10-06: no longer "everyday chat runs here",
+  // and no longer "Jarvis's own settings are made for this card" either. With
+  // nothing pinned and nothing the machine will name, Jarvis still has to pick
+  // one card to PLAN around - so the PC's own sentence says exactly that, in
+  // the backend's words: it ASSUMES, and this is where it plans, not something
+  // it read (jarvis_second_card.py, the 2026-10-06 "true to its reporting"
+  // change; test_second_card.py's t_planning_uses_the_card_the_model_is_on
+  // asserts the same two halves on the phone's side of the contract).
+  assert.match(s.cards[0],
+    /The one chat runs on\. Jarvis ASSUMES everyday chat is here: your settings point at this card/);
+  assert.match(s.cards[0], /so this is where it plans, not something it read/);
   assert.equal(s.blockedHidden, false);
   assert.match(s.blocked, /8 GB or more\): only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\. /);
   // The master switch and all seven features, in the backend's order.
@@ -126,8 +172,7 @@ await check("one card (today's PC): found in words, every switch shown and none 
   // No pin command with one card; the note says why.
   assert.equal(s.pinHidden, true);
   assert.match(s.pinned, /Only one graphics card, so there is nothing to keep apart yet\./);
-  assert.match(s.lane, /^Off\. No capable second card/);
-  noRaw(s.all);
+  assert.match(s.lane, /^Off\. No capable second card/);  noRaw(s.all);
 });
 
 await check("an old second card: listed as not used, with the backend's reason", async () => {
@@ -253,9 +298,105 @@ await check("the pin command: exactly the backend's line, read-only, with Copy a
   assert.equal(s.pinReadOnly, true);
   assert.equal(copy, "Copy");
   assert.match(said, /Copied|Ctrl\+C/);
-  assert.match(s.all, /sets one Windows setting for your user account/);
+  assert.match(s.all, /sets two Windows settings for your user account/);
   assert.match(s.all, /Nothing is written to any file/);
   assert.match(s.pinned, /The everyday Ollama is not pinned/);
+});
+
+/* ── "Everyday chat runs on" (2026-10-05) ──────────────────────────────── */
+
+await check("the two choices, where the model really is, and the analysis - the backend's own words", async () => {
+  const page = await open({ status: SC.capable_off });
+  const s = await section(page);
+  // "Show the analysis" is closed until it is asked for.
+  assert.equal(s.analysisHidden, true);
+  assert.equal(s.analysisToggle, "Show the analysis");
+  await page.locator("#sc-analysis-toggle").click();
+  await page.waitForTimeout(100);
+  const opened = await section(page);
+  await page.close();
+  // One choice per card, plus "Let Ollama decide" - which is the one ticked.
+  assert.deepEqual(s.chatChoices.map((c) => c.value),
+    ["leave", SC.capable_off.chat_card.cards[0].uuid, SC.capable_off.chat_card.cards[1].uuid]);
+  assert.equal(s.chatChoices.filter((c) => c.checked).length, 1);
+  assert.equal(s.chatChoices[0].checked, true);
+  assert.match(s.chatChoices[0].text, /Let Ollama decide/);
+  assert.match(s.chatChoices[0].text, /Ollama's own choice/);
+  assert.match(s.chatChoices[1].text, /Always use the NVIDIA GeForce RTX 2080 SUPER \(8 GB\)/);
+  assert.match(s.chatChoices[1].text, /One approval card/);
+  // The line under them is the PC's reading, not a guess.
+  assert.equal(s.chatWhere, SC.capable_off.chat_card.where.words);
+  // Nothing claimed done that is not: the PC sends problem "" here.
+  assert.equal(s.pinProblemHidden, true);
+  // The analysis is every fact the PC reports, and the measured lines.
+  assert.equal(opened.analysisHidden, false);
+  assert.equal(opened.analysisToggle, "Hide the analysis");
+  assert.equal(opened.analysisCards.length, SC.capable_off.chat_card.cards.length);
+  for (const card of SC.capable_off.chat_card.cards) {
+    const shown = opened.analysisCards.find((t) => t.includes(card.name));
+    assert.ok(shown, `${card.name} is missing from the analysis`);
+    for (const line of card.facts) assert.ok(shown.includes(line), `${card.name}: ${line}`);
+    for (const line of card.measured) assert.ok(shown.includes(line), `${card.name}: ${line}`);
+  }
+  assert.equal(opened.analysisSuggestion, SC.capable_off.chat_card.suggestion.words);
+  assert.match(opened.analysisSuggestion, /^Jarvis's suggestion:/);
+  // Measured or silent: no speed claim anywhere on the page.
+  assert.doesNotMatch(opened.all, /\d+ GB\/s|tokens per second|tok\/s|is faster than/);
+});
+
+await check("picking a card sends ONE pin request for that card's id, and nothing turns on by itself", async () => {
+  const page = await open({ status: SC.capable_off });
+  const card = SC.capable_off.chat_card.cards[1];
+  await page.locator(`#sc-chat-pin-${card.index}`).click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  const calls = await page.evaluate(() => window.__calls.map(([c]) => c));
+  await page.close();
+  assert.deepEqual(s.changes, [{ feature: "chat_card", action: "pin", card: card.uuid }]);
+  assert.ok(!calls.includes("decide_approval"), "the page answered its own card");
+  assert.match(s.status, /Waiting for your approval/);
+  // Shown as the PC last reported: still "leave", never the card just picked.
+  assert.equal(s.chatChoices[0].checked, true);
+});
+
+await check("going back to Ollama's own choice is immediate and needs no card", async () => {
+  const pinned = {
+    ...SC.capable_off,
+    chat_card: {
+      ...SC.capable_off.chat_card,
+      chosen: SC.capable_off.chat_card.cards[1].uuid,
+      chosen_name: SC.capable_off.chat_card.cards[1].name,
+      problem: "",
+    },
+  };
+  const page = await open({ status: pinned });
+  await page.locator("#sc-chat-leave").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  await page.close();
+  assert.deepEqual(s.changes, [{ feature: "chat_card", action: "leave", card: null }]);
+  assert.match(s.chatChoices.find((c) => c.value === "leave").text, /Let Ollama decide/);
+  assert.match(s.status, /Ollama/);
+});
+
+await check("a pin Ollama is not using is said plainly, never shown as done", async () => {
+  const pinned = {
+    ...SC.capable_off,
+    chat_card: {
+      ...SC.capable_off.chat_card,
+      chosen: SC.capable_off.chat_card.cards[1].uuid,
+      chosen_name: SC.capable_off.chat_card.cards[1].name,
+      problem: "Ollama does not have this pin yet: quit Ollama and start it again after "
+        + "Jarvis sets it, or run the line below yourself.",
+      pin_command: SC.capable_off.pin_command,
+    },
+  };
+  const page = await open({ status: pinned });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.pinProblemHidden, false);
+  assert.match(s.pinProblem, /does not have this pin yet/);
+  assert.equal(s.pinHidden, false);
 });
 
 /* ── Switching ─────────────────────────────────────────────────────────── */
@@ -294,6 +435,111 @@ await check("a card already waiting: that switch says so, and the others stay us
   assert.equal(row(s, "vision").disabled, false, "Pictures cannot be asked for while another card waits");
   assert.equal(row(s, "browser_control").disabled, true);
   assert.match(row(s, "browser_control").text, /Needs Longer conversations on first/);
+});
+
+/* ── The owner's own choice (2026-10-05) ───────────────────────────────────
+ * status().mode: one decision between the two ways two cards can be used,
+ * rather than leaving the owner to work it out from the switches. Both
+ * choices ARE the switches below - the split is the "combined" switch - and
+ * the PC DERIVES the choice from them, so nothing on this page keeps two
+ * things in step: it reads the backend's own words and writes the "combined"
+ * switch through the SAME set_second_card the switch below uses. */
+
+await check("the choice is offered, in the backend's own words, and a one-card PC can pick neither", async () => {
+  const page = await open({ status: SC.one_card });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.modeSectionHidden, false, "the choice is hidden on a real answer");
+  assert.match(s.modeTitle, /How should Jarvis use your two graphics cards\?/);
+  assert.match(s.modeNote, /cannot both run at once/);
+  assert.equal(s.modeConflictHidden, true);
+  assert.deepEqual(s.modeRows.map((r) => r.id), ["split", "concurrent"]);
+  for (const o of SC.one_card.mode.options) {
+    const r = modeRow(s, o.id);
+    assert.ok(r.text.includes(o.name), `${o.id}: the backend's name is not shown`);
+    assert.ok(r.text.includes(o.detail), `${o.id}: the tradeoff is not shown`);
+    assert.equal(r.checked, false, `${o.id} is shown as chosen with nothing switched on`);
+    assert.equal(r.group, "sc-mode", `${o.id} is not one of one choice`);
+  }
+  // One card: the split cannot be picked, and says the backend's own reason.
+  const split = modeRow(s, "split");
+  assert.equal(split.disabled, true, "the split can be picked with only one card");
+  assert.match(split.text, /Not yet - needs two graphics cards/);
+  // ... and neither can the other way. The backend sends NO hint here on
+  // purpose (`concurrent_hint = ""` while there is no capable second card):
+  // "turn on the main switch below" would be advice that cannot work with one
+  // card. What it sends is the blocked line, naming the card it found.
+  const concurrent = modeRow(s, "concurrent");
+  assert.equal(concurrent.disabled, true, "two models at once can be picked with only one card");
+  assert.match(concurrent.text, /Not yet - only one graphics card found/);
+  noRaw(s.all);
+});
+
+await check("a capable second card with nothing switched on: the other way says what is still missing and can be picked", async () => {
+  const page = await open({ status: SC.capable_off });
+  const s = await section(page);
+  await page.close();
+  const concurrent = modeRow(s, "concurrent");
+  assert.equal(concurrent.disabled, false, "the other way cannot be picked while the split is off");
+  assert.match(concurrent.text, /Nothing is set up on the second card yet/);
+  assert.match(concurrent.text, /Turn on the main switch below/);
+  assert.equal(modeRow(s, "split").disabled, false, "the split cannot be picked on a capable pair");
+  noRaw(s.all);
+});
+
+await check("picking the split sends ONE request through the combined switch, and waits for its card", async () => {
+  const page = await open({ status: SC.capable_off });
+  await page.locator("#sc-mode-split").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  const calls = await page.evaluate(() => window.__calls.map(([c]) => c));
+  await page.close();
+  assert.deepEqual(s.changes, [{ feature: "combined", enabled: true }]);
+  assert.ok(!calls.includes("decide_approval"), "the page answered its own card");
+  const split = modeRow(s, "split");
+  assert.equal(split.checked, false, "shown as chosen before the card was approved");
+  assert.equal(split.disabled, true, "a second card could be raised for the same choice");
+  assert.equal(split.state, "waiting");
+  assert.match(split.text, /Waiting for your approval/);
+  assert.match(s.modeStatus, /Waiting for your approval/);
+});
+
+await check("the split in force: it shows as the chosen way, and the switches agree", async () => {
+  const page = await open({ status: SC.combined_running });
+  const s = await section(page);
+  await page.close();
+  assert.equal(modeRow(s, "split").checked, true, "the way in force is not shown as chosen");
+  assert.equal(modeRow(s, "split").disabled, true);
+  assert.equal(modeRow(s, "split").state, "on");
+  assert.equal(modeRow(s, "concurrent").checked, false);
+  assert.equal(s.modeConflictHidden, true);
+  // The switch below is the same setting, so it must say the same thing -
+  // never one saying on while the other says off.
+  assert.equal(s.combinedChecked, true, "the combined switch disagrees with the choice");
+  assert.match(s.all, /This is the same setting as "One model across both cards"/);
+});
+
+await check("picking the other way switches the split off at once, and raises no card", async () => {
+  const page = await open({ status: SC.combined_running });
+  await page.locator("#sc-mode-concurrent").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  const calls = await page.evaluate(() => window.__calls.map(([c]) => c));
+  await page.close();
+  assert.deepEqual(s.changes, [{ feature: "combined", enabled: false }]);
+  assert.ok(!calls.includes("decide_approval"), "turning a way OFF raised a card");
+  assert.match(s.modeStatus, /is off/);
+});
+
+await check("an older backend that sends no mode hides the whole choice, and the switches still work", async () => {
+  const older = JSON.parse(JSON.stringify(SC.capable_off));
+  delete older.mode;
+  const page = await open({ status: older });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.modeSectionHidden, true, "the choice is drawn from a backend that has none");
+  assert.equal(s.bodyHidden, false, "the rest of the section was hidden with it");
+  assert.equal(row(s, "master").disabled, false, "the switches stopped working");
 });
 
 /* ── A third graphics card (2026-09-28) ───────────────────────────────────
@@ -409,7 +655,6 @@ await check("when the approval queue changes, the page re-reads and shows what t
   assert.match(s.lane, /^Running\. Running on 127\.0\.0\.1:11435 \(this PC only\)/);
   assert.match(s.pinned, /Ollama is set to use only the NVIDIA GeForce RTX 2080 SUPER/);
 });
-
 await check("a denied card: the switch is still off, and the page says it was not turned on", async () => {
   const page = await open({ status: SC.capable_pending });
   await page.evaluate((next) => {
@@ -776,7 +1021,7 @@ await check("CONTROL: only the settings window may read or change the second car
   const toml = read("src-tauri/permissions/surfaces.toml");
   const sets = toml.split("[[set]]").slice(1);
   for (const perm of ["allow-get-second-card", "allow-set-second-card", "allow-set-second-card-suggest",
-                      "allow-set-third-card"]) {
+                      "allow-set-third-card", "allow-set-chat-card"]) {
     const holders = sets.filter((s) => s.includes(`"${perm}"`))
       .map((s) => s.match(/identifier = "([^"]+)"/)[1]);
     assert.deepEqual(holders, ["settings-surface"], `${perm} is held by ${holders}`);
@@ -789,7 +1034,8 @@ await check("CONTROL: only the settings window may read or change the second car
   }
   const build = read("src-tauri/build.rs");
   const lib = read("src-tauri/src/lib.rs");
-  for (const cmd of ["get_second_card", "set_second_card", "set_second_card_suggest", "set_third_card"]) {
+  for (const cmd of ["get_second_card", "set_second_card", "set_second_card_suggest", "set_third_card",
+                     "set_chat_card"]) {
     assert.ok(build.includes(`"${cmd}"`), `${cmd} is not in build.rs, so no window can call it`);
     assert.ok(lib.includes(`commands::${cmd},`), `${cmd} is not registered`);
     const gen = read(`src-tauri/permissions/autogenerated/${cmd}.toml`);

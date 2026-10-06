@@ -1,11 +1,16 @@
 # What runs on the GPU, and how much context it gets
 
-RTX 2080 Super, 8 GB, Turing sm75. Ryzen 9 3900X. Windows 11.
+RTX 2060 12 GB (no monitor; holds the everyday model) and RTX 2080 Super,
+8 GB (the monitor; runs the desktop), both Turing sm75. Ryzen 9 3900X.
+Windows 11.
 
-**Coming soon:** an RTX 2060 12 GB as a second card. Everything below the
-next heading was worked out for the 2080 Super alone; see
-[The planned second card](#the-planned-second-card-rtx-2060-12-gb) for what
-changes.
+**Both cards are installed and measured** (2026-10-05,
+[MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)): an RTX
+2060 12 GB with no monitor, which holds the everyday model, and the RTX 2080
+Super 8 GB, which has the monitor and runs the desktop. Everything below the
+next heading was worked out for the 2080 Super alone, before the second card
+went in; see [The planned second card](#the-planned-second-card-rtx-2060-12-gb)
+for what changes and for what is really measured.
 
 Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.
@@ -38,8 +43,9 @@ offers three setups made at the owner's 0.75 GB gap. Choosing one is what
 applies the 0.75 GB (as `LLAMA_ARG_FIT_TARGET=768` in its one command);
 until then the 1 GB default above stands. Its **Measure** button does the
 check this page's "Then verify" section asks for (how much of the model is
-on the card, and llama.cpp's own `offloaded N/M layers` line). Nothing on
-this page has been rewritten from measured numbers yet, because none exist.
+on the card, and llama.cpp's own `offloaded N/M layers` line). Only the pair's
+own measurement has been written into this page (2026-10-05, "The planned
+second card" below); nothing else here has been rewritten from measurement.
 
 ---
 
@@ -472,7 +478,16 @@ be the **bigger or longer-context lane, not the fast one**.
   slowly. The 8B at 32K has twice the room. (With the 1 GB gap llama.cpp
   keeps free, HARDWARE-PROFILES.md section 3 also puts the 14B at 16K
   slightly over 12 GB.) Measure on the real card before changing this.
-- Keep the everyday 8B chat on the 2080 Super, where it is fastest.
+- Keep the everyday 8B chat on one card, chosen by Ollama unless you pin one
+  (**corrected 2026-10-05**). This line used to read "keep it on the 2080
+  Super, where it is fastest". The machine says otherwise: the model is on
+  the **12 GB 2060**, which is GPU 0, and the 2080 SUPER is GPU 1 and runs
+  the desktop (`MEASURED-2026-10-05-owner-pc.md`). No speed comparison
+  between these two cards has been measured on this PC, so this page does
+  not make one. With `[compute] primary_gpu` empty, Jarvis does not pin a
+  card at all and leaves the choice to Ollama; the Hardware screen's
+  "Everyday chat runs on" setting is where you pin one, and it reports which
+  card the model is really on rather than assuming one.
 - Use the 2060 as the "second, larger-context lane" that
   `backend/jarvis_browser_control.py` says it is waiting for, and for any
   other long-context job. Browser control still stays switched off until that
@@ -487,10 +502,10 @@ be the **bigger or longer-context lane, not the fast one**.
   not by its speed**, so with this pair most of the model lands on the
   bigger-but-slower 2060, and generation runs close to *its* pace, not
   merely "the slower card's pace for its share" as this line used to say.
-  Not measured: the second card is not installed.
+  Not measured: the card is installed, but no split lane has been run on it.
 
 **Two more users of that lane (2026-09-30, `docs/JARVIS-API.md` section 108, both
-built OFF until the card is installed and measured).** "Study helper" sends the quiz's
+built OFF until that lane is measured).** "Study helper" sends the quiz's
 question-writing and marking to the same `qwen3:8b` at 32K lane (nothing extra to fit: it is
 the model "Longer conversations" already loads; not measured). "Referee suggestions" loads
 **no model** today - it compares logged numbers with targets in code and raises a "tick it?"
@@ -549,7 +564,8 @@ OFF the main card. Pictures is refused when a monitor is on the card (6.45 >
 lane). 16 GB (room 14.64) and 24 GB (room 22.64) get the same qwen3:8b at
 32K plan as a 12 GB card; qwen3:14b at 32K (8.42 + 2.66 + 0.30 + 0.33 = 11.71
 GiB) would fit them but is not switched on (see docs/SECOND-CARD.md).
-Nothing here is measured: the extra card is not installed yet.
+Nothing here is measured: the extra card is installed, but no extra-card lane
+has been run.
 
 **Before and after installing:**
 
