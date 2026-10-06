@@ -37,6 +37,7 @@ did not exist, and a picture turn went to a text-only model unread.
 import base64
 import copy
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -345,8 +346,18 @@ def t_the_apps_are_told():
     st = SC._picture_text()
     check("GET /api/second-card carries picture_text: available, the engine, and why not",
           set(st) == {"available", "engine", "why"} and st["engine"] == OCR.ENGINE)
-    check("... here (not Windows): not available, and it says why",
-          st["available"] is False and st["why"] == OCR.NOT_WINDOWS)
+    # jarvis_ocr.status() is unavailable off Windows, and on Windows only when
+    # both PowerShell and the pywinrt packages are missing. The assertion below
+    # used to demand the off-Windows answer on every machine, so it could only
+    # ever pass on CI; on the owner's PC picture_text is available and says so
+    # (2026-10-03). The pass-through itself is what matters either way.
+    if os.name == "nt":
+        check("on Windows picture_text answers jarvis_ocr's own status",
+              st["available"] is OCR.status()["available"]
+              and st["why"] == OCR.status()["why"], st)
+    else:
+        check("... here (not Windows): not available, and it says why",
+              st["available"] is False and st["why"] == OCR.NOT_WINDOWS)
     fixture = json.loads((HERE.parent / "jarvis-desktop" / "tests" / "fixtures"
                           / "second-card-cases.json").read_text(encoding="utf-8"))["cases"]
     check("the apps' shared file has a case where the PC reads the words",

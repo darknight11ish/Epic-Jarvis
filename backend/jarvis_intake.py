@@ -1210,13 +1210,28 @@ def semantic_ready(store) -> bool:
 
 
 def near_duplicate(text: str, f: dict, store) -> bool:
-    """Should this proposal be dropped as a near-duplicate? Counted if so."""
+    """Should this proposal be dropped as a near-duplicate? Counted if so.
+
+    DATES ASIDE, the way _repeats_of() below has always compared. This used
+    to compare `shape(text)` raw, and learned_text() adds "(as of <date>)" to
+    a fact from a conversation more than two days old - so the machine's own
+    date counted as a word. Measured 2026-10-04 against this suite's own
+    fixture (backend/test_memory_intake.py): the same sentence re-proposed on
+    a later pass was no longer a near-duplicate of the kept fact, so the
+    PLAIN duplicate reached the queue, and then propose()'s in-pass `have`
+    set - which matches on text - dropped the CORRECTION that carried the
+    same words in the same batch (a correction is exempt from this check, but
+    not from `have`). The owner got a duplicate card and no correction. The
+    owner's own dates are untouched by this: an absolute date they said stays
+    in `shape`'s number set, and a relative one in its date-word set.
+    """
     global _near_dropped, _near_last
     if isinstance(f, dict) and (f.get("replaces") or f.get(TARGET_KEY)):
         return False                              # never drop a correction
     if not semantic_ready(store):
         return False                              # wait for the real embedder
-    key = shape(text)
+    want = undated(text)
+    key = shape(want)
     if len(key[0]) < 2:
         return False                              # too little to compare
     others = []
@@ -1234,7 +1249,8 @@ def near_duplicate(text: str, f: dict, store) -> bool:
         others += [r[0] for r in c.execute(
             "SELECT text FROM proposals WHERE state IN ('pending','rejected')")]
     low = _norm(text)
-    same = [o for o in others if isinstance(o, str) and _norm(o) != low and shape(o) == key]
+    same = [o for o in others if isinstance(o, str) and _norm(o) != low
+            and shape(undated(o)) == key]
     if not same:
         return False
     vecs = store.embedder.embed([text] + same[:10])

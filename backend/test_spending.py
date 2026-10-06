@@ -64,6 +64,35 @@ import jarvis_spending as SP  # noqa: E402
 sys.path.insert(0, str(REPO / "tools"))
 import gen_private_aloud_cases as G  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `after[i:i + 200]` counted characters from the install call and hoped the
+    two guards were inside the next 200 of them - a promise about how long the
+    call stays, which had to be re-tuned by hand when it grew (2026-10-03).
+    The call ends where the indentation comes back to its own level, however
+    many lines it grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
 SKIPPED = []
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-spending-"))
@@ -1281,8 +1310,11 @@ def t_the_patch_and_the_lists():
               r.returncode == 0 and r2.returncode == 0 and back, (r.stderr, r2.stderr))
         i = after.find("jarvis_spending.install(Handler")
         k = after.find("_loopback_companion(bind, HUD_PORT, Handler)\n    print(")
+        call = _block(after, "jarvis_spending.install(Handler")
+        check("the install call is still there to check", bool(call))
         check("installed before anything listens, with the server's own checks",
-              -1 < i < k and "origin_ok=_origin_ok" in after[i:i + 200] and "token_ok=_token_ok" in after[i:i + 200])
+              -1 < i < k and "origin_ok=_origin_ok" in call
+              and "token_ok=_token_ok" in call)
     finally:
         shutil.rmtree(d, ignore_errors=True)
     import _where

@@ -23,6 +23,7 @@ No network, no model.
 """
 from __future__ import annotations
 
+import gc
 import sys
 import time
 from pathlib import Path
@@ -55,7 +56,21 @@ class _Sched:
         return getattr(self.inner, name)
 
     def close(self):
-        self.tmp.cleanup()
+        # Stop the loop first, then let the database handle be collected: a live
+        # scheduler can still hold schedule.json open, and Windows refuses to
+        # delete a file another handle holds (POSIX does not care, which is why
+        # this only ever bit on the owner's PC - 2026-10-03). What is left is a
+        # disposable temp folder, so not removing it now is not a failure of the
+        # thing under test.
+        try:
+            self.inner.stop()
+        except Exception:
+            pass
+        gc.collect()
+        try:
+            self.tmp.cleanup()
+        except OSError:
+            pass
 
 
 PHRASINGS = (

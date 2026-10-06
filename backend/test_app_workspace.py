@@ -288,8 +288,16 @@ def main():
         # --- git missing is its own kind of error ---------------------------
         check("GitUnavailable is a WorkspaceError, so old callers still catch it",
               issubclass(W.GitUnavailable, W.WorkspaceError))
-        real_env = W.git_env
-        W.git_env = lambda: {"PATH": "/nonexistent"}
+        # Windows' CreateProcess searches well beyond PATH (the application
+        # directory, the current directory, the system directories), so emptying
+        # the environment did NOT hide git there: _git ran, raised nothing, and
+        # this check read "None". Make the absence explicit instead - the thing
+        # under test is the FileNotFoundError -> GitUnavailable mapping, which is
+        # the same on every platform (2026-10-03).
+        def _no_git(*_a, **_k):
+            raise FileNotFoundError("git")
+        real_run = W.subprocess.run
+        W.subprocess.run = _no_git
         try:
             try:
                 W._git(["status"], proj)
@@ -299,7 +307,7 @@ def main():
             except Exception as exc:  # pragma: no cover
                 gone = "wrong error: " + type(exc).__name__
         finally:
-            W.git_env = real_env
+            W.subprocess.run = real_run
         check("git not on the path: a GitUnavailable naming git.scm",
               gone is not None and "git is not installed" in gone, repr(gone))
     except Exception:

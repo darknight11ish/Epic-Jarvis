@@ -39,6 +39,7 @@ the app workspace's own tests). `app_words` holds the sentences both apps
 must say the same way and the PC sends (how a merge ended), kept apart from
 `words` on purpose: `words` is compared key for key with each app's own list.
 """
+import itertools
 import json
 import os
 import sys
@@ -200,14 +201,19 @@ class _Ids:
         return f"{self.n:032x}"
 
 
+_STORES = itertools.count()
+
+
 def _store():
     P._reset_for_tests()
     A._reset_for_tests()
     P._new_id = _Ids()
     P.check_folder = lambda path, allowed=None: str(path)
-    path = _CONF / "projects.db"
-    if path.exists():
-        path.unlink()
+    # A fresh file for each store, never unlink-and-reuse: Windows refuses to
+    # delete a file sqlite still holds open (POSIX does not care), so the old
+    # `if path.exists(): path.unlink()` raised WinError 32 on the owner's PC and
+    # the whole generator crashed (2026-10-03).
+    path = _CONF / f"projects-{next(_STORES)}.db"
     return P.Projects(path, clock=lambda: AT)
 
 
@@ -714,6 +720,23 @@ def render() -> str:
     return json.dumps(cases(), indent=1, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def _first_difference(fresh: str, have: str) -> str:
+    """The first line where a fresh run and the committed file disagree.
+
+    The check exists to catch a fixture that has drifted, and "out of date" is
+    only half of that: WHICH value moved is the useful half, and it was left in
+    the CI log - which is not always readable from a terminal (2026-10-04). One
+    line, so it fits in a CI annotation too.
+    """
+    a, b = fresh.splitlines(), have.splitlines()
+    for i, (x, y) in enumerate(zip(a, b), 1):
+        if x != y:
+            return f"line {i}: fresh {x.strip()[:160]!r} vs file {y.strip()[:160]!r}"
+    if len(a) != len(b):
+        return f"{len(a)} lines fresh vs {len(b)} in the file"
+    return "the same lines; only the ending or the length differs"
+
+
 def main(argv) -> int:
     if shutil.which("git") is None:
         print("git is not installed here, and the app answers in this file come from a real "
@@ -724,18 +747,23 @@ def main(argv) -> int:
         stale = []
         for path in COPIES:
             have = path.read_text(encoding="utf-8") if path.is_file() else ""
-            if have.replace("\r\n", "\n") != text:
-                stale.append(path)
-        for path in stale:
+            have = have.replace("\r\n", "\n")
+            if have != text:
+                stale.append((path, have))
+        for path, have in stale:
             print(f"{path.relative_to(ROOT)} is out of date: run "
                   f"python3 tools/gen_projects_cases.py")
+            print("    " + _first_difference(text, have))
         if stale:
             return 1
         print("projects-cases.json matches the producer (desktop and phone copies).")
         return 0
     for path in COPIES:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # newline="\n": without it this writes CRLF on Windows and LF elsewhere.
+        # The two committed files were CRLF because of exactly that; they are
+        # LF now, like every other fixture here (.gitattributes: LF everywhere).
+        path.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {path.relative_to(ROOT)}")
     return 0
 

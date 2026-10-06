@@ -91,37 +91,53 @@ class Vault:
         if wiki:
             src = self.wiki / W.SOURCES_DIR
             src.mkdir(parents=True)
+            # newline="\n" on every file written here. Without it these are
+            # CRLF on Windows and LF on CI, and the module keeps a SHA-256 of
+            # what it read (and the fixture records the answers that come from
+            # it), so the same contract file could not be right on both
+            # platforms at once (2026-10-04). Pinning the endings is what the
+            # 2026-10-03 note below was working around one hash at a time.
             (src / "spring-meeting.md").write_text(
                 "# Spring meeting\n\nMargaret Hale was elected chair. The society will now "
-                "meet every two weeks.\n", encoding="utf-8")
+                "meet every two weeks.\n", encoding="utf-8", newline="\n")
             (src / "seed-list.txt").write_text("Beans, peas, two kinds of kale.\n",
-                                               encoding="utf-8")
+                                               encoding="utf-8", newline="\n")
             (src / "planting-dates.md").write_text("Sow broad beans in late October.\n",
-                                                   encoding="utf-8")
+                                                   encoding="utf-8", newline="\n")
             (src / "plot-map.pdf").write_bytes(b"%PDF-1.4 not read yet")
-            (src / "old-minutes.md").write_text("x " * 40000, encoding="utf-8")
+            (src / "old-minutes.md").write_text("x " * 40000, encoding="utf-8",
+                                                newline="\n")
             pages = self.wiki / W.PAGES_DIR
             pages.mkdir()
             (pages / "Allotment Society.md").write_text(
-                '---\nsources: ["seed-list.txt"]\n---\n\nMeets monthly.\n', encoding="utf-8")
+                '---\nsources: ["seed-list.txt"]\n---\n\nMeets monthly.\n', encoding="utf-8",
+                newline="\n")
             (self.wiki / W.INDEX_NAME).write_text(
                 "# Jarvis Wiki\n\n- [[Allotment Society]] - the allotment society\n",
-                encoding="utf-8")
+                encoding="utf-8", newline="\n")
         self._env = os.environ.get("JARVIS_OBSIDIAN_VAULT")
         os.environ["JARVIS_OBSIDIAN_VAULT"] = str(self.dir)
 
     def add_seed_list(self):
         """seed-list.txt added to the wiki earlier and unchanged since;
         planting-dates.md added earlier and edited since."""
-        sha = W._sha((self.wiki / W.SOURCES_DIR / "seed-list.txt").read_bytes())
+        raw = (self.wiki / W.SOURCES_DIR / "seed-list.txt").read_bytes()
+        # The hash the module itself computes when it reads the file back: its
+        # TEXT with the line endings normalised, never the raw bytes. Seeding the
+        # cache from the raw bytes meant a seed file saved with Windows line
+        # endings (write_text does that here) hashed one way in this cache and
+        # the other way when read, so this generator quietly produced a fixture
+        # with no "in_wiki" case at all and the apps' shared file lost that state
+        # (2026-10-03).
+        sha = W._sha(raw.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n").encode("utf-8"))
         (self.wiki / W.CACHE_NAME).write_text(json.dumps(
             {"version": 1, "sources": {
                 "seed-list.txt": {"sha256": sha, "added": "2026-09-20", "pages": []},
                 "planting-dates.md": {"sha256": "0" * 64, "added": "2026-09-21",
-                                      "pages": []}}}), encoding="utf-8")
+                                      "pages": []}}}), encoding="utf-8", newline="\n")
         (self.wiki / W.LOG_NAME).write_text(
             "## [2026-09-20] ingest | seed-list.txt\n\n- created [[Allotment Society]]\n",
-            encoding="utf-8")
+            encoding="utf-8", newline="\n")
 
     def close(self):
         if self._env is None:
@@ -131,15 +147,34 @@ class Vault:
         shutil.rmtree(self.dir, ignore_errors=True)
 
 
+def _folders_posix(node):
+    """Every `folder` value gets forward slashes, wherever it sits.
+
+    The same answers are written for the desktop and the phone, and CI is Linux
+    while the owner's PC is Windows: `os.path.realpath` gives "Vault\\Jarvis
+    Wiki" here and "Vault/Jarvis Wiki" there, so one contract file could not be
+    right on both. Only a top-level `folder` was normalised before, so the
+    nested one (inside `status`) kept its backslash and CI reported this file as
+    out of date (2026-10-04).
+    """
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "folder" and isinstance(value, str):
+                node[key] = value.replace("\\", "/")
+            else:
+                _folders_posix(value)
+    elif isinstance(node, list):
+        for value in node:
+            _folders_posix(value)
+    return node
+
+
 def _fix(obj, vault: Vault):
     """The made-up vault's real folder, shown as SHOWN_VAULT."""
     real = os.path.realpath(str(vault.dir))
     text = json.dumps(obj)
     text = text.replace(json.dumps(real)[1:-1], SHOWN_VAULT)
-    out = json.loads(text)
-    if isinstance(out, dict) and isinstance(out.get("folder"), str):
-        out["folder"] = out["folder"].replace("\\", "/")
-    return out
+    return _folders_posix(json.loads(text))
 
 
 def _off_why() -> str:
@@ -240,8 +275,8 @@ def cases() -> dict:
         def job_failed(v):
             # The source changes while its card is up, so the write is refused.
             def gate(a, d, p):
-                (v.wiki / W.SOURCES_DIR / "spring-meeting.md").write_text("edited\n",
-                                                                         encoding="utf-8")
+                (v.wiki / W.SOURCES_DIR / "spring-meeting.md").write_text(
+                    "edited\n", encoding="utf-8", newline="\n")
                 return Verdict(True, "approved")
             return job(gate)(v)
         run("job_failed", job_failed)
@@ -274,13 +309,32 @@ def render() -> str:
     return json.dumps(body, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
+def _first_difference(fresh: str, have: str) -> str:
+    """The first line where a fresh run and the committed file disagree.
+
+    The check exists to catch a fixture that has drifted, and "out of date" is
+    only half of that: WHICH value moved is the useful half, and it was left in
+    the CI log - which is not always readable from a terminal (2026-10-04). One
+    line, so it fits in a CI annotation too.
+    """
+    a, b = fresh.splitlines(), have.splitlines()
+    for i, (x, y) in enumerate(zip(a, b), 1):
+        if x != y:
+            return f"line {i}: fresh {x.strip()[:160]!r} vs file {y.strip()[:160]!r}"
+    if len(a) != len(b):
+        return f"{len(a)} lines fresh vs {len(b)} in the file"
+    return "the same lines; only the ending or the length differs"
+
+
 def main(argv) -> int:
     text = render()
     if "--check" in argv:
         have = FIXTURE.read_text(encoding="utf-8") if FIXTURE.is_file() else ""
-        if have.replace("\r\n", "\n") != text:
+        have = have.replace("\r\n", "\n")
+        if have != text:
             print(f"{FIXTURE.relative_to(ROOT)} is out of date: run "
                   f"python3 tools/gen_wiki_cases.py")
+            print("    " + _first_difference(text, have))
             return 1
         print("wiki-cases.json matches the producer.")
         return 0

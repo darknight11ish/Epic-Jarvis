@@ -391,9 +391,15 @@ def t_the_stacked_chat_turn_calls_it():
         sys.modules["jarvis_past"] = real
     check("without jarvis_past.py: the old search, no old facts",
           ns["hits"] == st.search("Where did I live before?", k=5), texts(ns["hits"]))
+    # The old form was `after = hud[hud.find("# past-recall.patch"):]` and
+    # then a 3000-character window over it. The window is a promise about how
+    # far down the file the labelled text sits; the question is whether the
+    # labelled text reaches the FACTS block at all, so the whole remainder
+    # after the patch's marker is searched - no cap to grow past.
     after = hud[hud.find("# past-recall.patch"):]
+    check("the past-recall block is still in the patched file", bool(after.strip()))
     check("the labelled text is what reaches the FACTS block (chosen_facts reads h['text'])",
-          '"text": h["text"]' in after[:3000])
+          '"text": h["text"]' in after)
 
 
 def t_the_patch_applies_forwards_and_backwards():

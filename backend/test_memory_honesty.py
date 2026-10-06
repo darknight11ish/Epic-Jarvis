@@ -216,7 +216,12 @@ def t_switching_learning_on_starts_the_learner():
     check("switching it on STARTS the learner - no restart needed",
           L._thread is not None and L._thread.is_alive())
     L.offer(CONVO, origin="owner")
-    ran = _wait(lambda: len(fake.calls) >= 1)
+    # A generous wait: the pass reaches jarvis_intake.propose, which touches the
+    # real memory store, and on a machine that has never run it that means
+    # loading - and, the first time, downloading - the embedding model. That
+    # took about 20 seconds here; the old 1.5-second wait timed out and reported
+    # a working learner as broken (2026-10-03).
+    ran = _wait(lambda: len(fake.calls) >= 1, seconds=90)
     L.stop()
     check("and a conversation after that is actually read", ran, repr(fake.calls))
     ns2 = learner_ns(src, learning_on=True)

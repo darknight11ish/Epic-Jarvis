@@ -161,8 +161,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -187,14 +187,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "not loaded yet - it starts loading with the first question"
         ],
@@ -213,8 +205,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -239,14 +231,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "still loading - answers keep the old order until it is ready"
         ],
@@ -265,8 +249,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -291,14 +275,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "on - used for 0 answers"
         ],
@@ -317,8 +293,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -344,14 +320,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "on - used for 12 answers; too slow once, so that answer kept the old order"
         ],
@@ -370,8 +338,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -397,14 +365,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "on - used for 1 answer; too slow 4 times, so those answers kept the old order"
         ],
@@ -423,8 +383,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -449,14 +409,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "off - ImportError: fastembed is not installed or has no re-ranker"
         ],
@@ -475,8 +427,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -501,14 +453,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "off - RuntimeError: the re-ranking model could not be loaded"
         ],
@@ -527,8 +471,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1,
         "reranker": {
@@ -553,14 +497,6 @@
           "hash-v1 (matches words only until the real embedding model has downloaded)"
         ],
         [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
-        ],
-        [
           "Answer ordering (re-ranker)",
           "off - not switched on until the memory self-test on this PC shows it helps; the memory scoreboard page (docs/MEMORY-SCOREBOARD.md) says how to switch it on"
         ],
@@ -579,8 +515,8 @@
         "retired": 1,
         "embedder": "hash-v1",
         "semantic": false,
-        "vector_search": false,
-        "unembedded": 4,
+        "vector_search": true,
+        "unembedded": 0,
         "erased": 0,
         "entities": 1
       },
@@ -596,14 +532,6 @@
         [
           "Embedding",
           "hash-v1 (matches words only until the real embedding model has downloaded)"
-        ],
-        [
-          "Search by meaning",
-          "off - facts are found by keyword"
-        ],
-        [
-          "Waiting to be indexed",
-          "4"
         ]
       ]
     },
