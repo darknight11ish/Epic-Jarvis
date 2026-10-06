@@ -2083,10 +2083,13 @@ class MemoryStore:
             they would replace, and any queue row holding exactly these
             words (a card still waiting with them is turned down - keeping
             it would keep the words). See _erase_copies().
-          * then the file itself: word search is compacted ('optimize'),
-            with secure_delete on, so the freed pages are zeroed rather than
-            left holding the old text, and the write-ahead log (the -wal
-            file) is checkpointed and truncated to nothing.
+          * then the file itself: word search is compacted ('optimize'), and
+            the whole file is rebuilt (VACUUM), so the words are gone from
+            memory.db rather than merely unreachable, and the write-ahead log
+            (the -wal file) is checkpointed and truncated to nothing. The
+            VACUUM is not belt-and-braces: secure_delete does not cover a row
+            overwritten in place, and the leftovers it leaves are exactly the
+            words this action promises to destroy. See _scrub_file().
 
         Works on a current fact AND on one already forgotten (retired), so
         the owner can erase something forgotten earlier. Erasing an erased
@@ -4038,39 +4041,73 @@ def _erase_copies(c, fid: int, old_text: str, now: float) -> int:
 def _scrub_file(c) -> bool:
     """Make the erased words really gone from the file, not only unreachable.
 
-    SQLite does not overwrite what it frees, and FTS5 does not even free a
-    deleted entry at once - it adds a "deleted" marker and keeps the old
-    words in its index until the index is merged. So, on the connection
-    that erased (which has secure_delete on, so freed pages are zeroed):
-    merge the word index ('optimize'), then copy the write-ahead log into
-    the file and truncate the log to nothing. Measured in
-    backend/test_memory_erase.py by reading memory.db and memory.db-wal as
-    raw bytes.
+    SQLite does not overwrite what it frees, and it does not always free at
+    all. Measured on this suite's own fixture (2026-10-04, three findings,
+    each from reading memory.db as raw bytes):
 
-    Returns whether the log was emptied. False when another connection was
-    in the middle of reading and the log could not be truncated after a few
-    tries - the old words may then stay in memory.db-wal until the next
-    checkpoint. The caller says so.
+      * FTS5 does not drop a deleted entry at once - it adds a "deleted"
+        marker and keeps the old stemmed words in its index pages until the
+        index is merged. 'optimize' merges it.
+      * `PRAGMA secure_delete=ON` covers a cell that is DROPPED, but not a
+        row overwritten in place: when a fact's text and meta are updated on
+        a page that is already full, SQLite writes the new, shorter cell over
+        the old one and leaves the tail of the old cell exactly where it was
+        (btreeOverwriteCell). On an 80-row fixture that left the whole
+        sentence, the meta and the message hash in page 2's free space, and
+        secure_delete never touched them - 2 hits after erase. The same
+        fixture with only four rows left 0: the page still had room, so
+        SQLite moved the cell instead of overwriting it.
+      * The -wal file is not where those leftovers live. It holds the newest
+        page images; the words are in memory.db's own current image, so
+        checkpointing the log is not enough by itself.
+
+    So, on the connection that erased (which has secure_delete on, so the
+    cells and pages it does free are zeroed): merge the word index
+    ('optimize'), then VACUUM - which rebuilds the file from the rows that
+    survive, dropping every byte no live row needs - and then copy the
+    write-ahead log into the rebuilt file and truncate the log to nothing.
+    The checkpoint MUST come after the VACUUM: measured, a VACUUM with no
+    checkpoint behind it writes the rebuilt file into memory.db-wal and
+    leaves memory.db byte-for-byte as it was (same size, same 2 hits), which
+    is why the old order - checkpoint first - never removed them.
+
+    VACUUM rewrites the whole file, so it needs room for a copy in the temp
+    folder and a database no one else is writing. On the owner's own 172 KB
+    memory.db that measured 0.02 s; it is paid once per erased row, and
+    erasing is a deliberate, rare action by the owner.
+
+    Returns whether the file can be called clean: true only when the VACUUM
+    and the checkpoint both worked. False when another part of Jarvis was
+    reading, or the file could not be rebuilt (no room in the temp folder, a
+    database another program still holds) - an older copy may then stay in
+    memory.db or memory.db-wal until the next erase. The caller says so; it
+    never claims the words are gone when they are not.
     """
     try:
         c.execute("INSERT INTO facts_fts(facts_fts) VALUES('optimize')")
     except sqlite3.Error:
         pass
-    # A TRUNCATE checkpoint waits on a reader through the busy handler, which
-    # _connect() sets to 30 seconds - five tries would hold the erase (and
-    # _LOCK, and the owner's button) for two and a half minutes. Short waits
-    # here, about two seconds in all; the caller says when it did not work.
+    # A VACUUM waits on another connection through the busy handler, which
+    # _connect() sets to 30 seconds, and a TRUNCATE checkpoint does the same;
+    # five tries of that would hold the erase (and _LOCK, and the owner's
+    # button) for two and a half minutes. Short waits here, about two seconds
+    # in all; the caller says when it did not work.
     try:
         c.execute("PRAGMA busy_timeout=200")
     except sqlite3.Error:
         pass
+    vacuumed = True
+    try:
+        c.execute("VACUUM")
+    except sqlite3.Error:
+        vacuumed = False
     for attempt in range(5):
         try:
             busy = c.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()[0]
         except sqlite3.Error:
             busy = 1
         if not busy:
-            return True
+            return vacuumed
         time.sleep(0.1 * (attempt + 1))
     return False
 
@@ -4116,8 +4153,9 @@ def handle_erase(body) -> tuple:
                       " was deleted.")
     if not out["file_clean"]:
         note += (" Another part of Jarvis was reading the memory file at that "
-                 "moment, so an older copy may stay in memory.db-wal until the "
-                 "file is next tidied.")
+                 "moment, so it could not be rebuilt: an older copy of these "
+                 "words may stay in memory.db or memory.db-wal until the fact "
+                 "is erased again.")
     return 200, {"ok": True, **out, "note": note}
 
 

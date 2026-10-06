@@ -23,6 +23,7 @@ module's own header for what that leaves unverified.
 """
 from __future__ import annotations
 
+import os
 import socket
 import struct
 import sys
@@ -197,8 +198,17 @@ def t_built():
     r = W.readers()
     check("the three readers jarvis_screen.Screen is built from",
           set(r) == {"front_reader", "capture", "ui_text"} and all(callable(v) for v in r.values()))
-    check("off Windows nothing is available, and it says why",
-          W.available() is False and "not Windows" in W.unavailable_why())
+    # `available()` is Windows AND the `uiautomation` package, so this suite is
+    # meaningful both ways: on the owner's PC it proves the readers really are
+    # there, and on CI (Linux) that they are absent and say why. It used to
+    # assert the off-Windows answer on every machine, so it could only ever pass
+    # off Windows (2026-10-03).
+    if os.name == "nt":
+        check("on Windows the screen readers are available",
+              W.available() is True and W.unavailable_why() == "", W.unavailable_why())
+    else:
+        check("off Windows nothing is available, and it says why",
+              W.available() is False and "not Windows" in W.unavailable_why())
     check("off Windows the capture and the text reader give nothing, quietly",
           W.capture({"hwnd": 5}, False) is None and W.ui_text({"hwnd": 5}) == [])
 

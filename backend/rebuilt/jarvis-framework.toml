@@ -474,6 +474,12 @@ app_merge_change          = "ask"
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES
 # ------------------------------------------------------------------------
+# Reading phone notifications (jarvis_phone_notifications.py, the owner's
+# decision of 2026-09-26): off by default, turning it on is one approval
+# card, turning it off is immediate. Named here explicitly - audit 05,
+# 2026-10-04 - because until then it had no line at all and quietly took
+# unknown_action_tier ("ask"). The value is the one it already resolved to.
+phone_notifications_read = "ask"
 [self_modification]
 enabled = true
 # All must pass before a change is even offered to you for approval. Any

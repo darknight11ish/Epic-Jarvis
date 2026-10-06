@@ -30,6 +30,7 @@ phrases things." What is proven here, on what really goes to the model:
 
     python3 test_manner.py
 """
+import gc
 import json
 import os
 import re
@@ -55,6 +56,19 @@ SKIPPED = []
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def _cleanup(tmp) -> None:
+    """Drop a TemporaryDirectory, tolerating Windows' refusal to delete a file
+    another handle still holds. schedule.json's sqlite handle is released when
+    the connection is collected, and a caught traceback can keep it alive until
+    then. Nothing here is about the behaviour under test, so a temp folder that
+    cannot be removed this moment is not a failure (2026-10-03)."""
+    gc.collect()
+    try:
+        tmp.cleanup()
+    except OSError:
+        pass
 
 
 def skip(why):
@@ -91,7 +105,7 @@ class Folder:
             os.environ.pop("OPENJARVIS_CONFIG_DIR", None)
         else:
             os.environ["OPENJARVIS_CONFIG_DIR"] = self.saved
-        self.tmp.cleanup()
+        _cleanup(self.tmp)
 
 
 def turn(messages, *, manner="warm", request=None, waking=None, out=None, opener=None,
@@ -437,7 +451,7 @@ def t_quick_answers_follow_the_setting():
             sched = None
         if sched is None:
             check("the scheduler can be made for this test (skipped: no Scheduler)", True)
-            tmp.cleanup()
+            _cleanup(tmp)
             return
         body = {"messages": [{"role": "user", "content": "set a timer for 10 minutes",
                               "provenance": "typed"}], "stream": True}
@@ -446,7 +460,7 @@ def t_quick_answers_follow_the_setting():
             M.handle_set({"manner": "plain"})
             plain = Q.answer_turn(body, sched=sched, now=time.time())
         finally:
-            tmp.cleanup()
+            _cleanup(tmp)
         check("warm (the default): the warm wording", warm is not None
               and warm.reply == "Got it - timer set for 10 minutes.", warm and warm.reply)
         check("plain: the plain wording", plain is not None
@@ -563,7 +577,7 @@ def t_from_now_on_applies_at_once_no_card_and_can_be_undone_by_saying_the_other(
         sched, tmp = _quick_sched()
         if sched is None:
             skip("no Scheduler")
-            tmp.cleanup()
+            _cleanup(tmp)
             return
         try:
             check("sanity: warm by default", M.current() == "warm")
@@ -585,7 +599,7 @@ def t_from_now_on_applies_at_once_no_card_and_can_be_undone_by_saying_the_other(
             check("saying the other one undoes it, the same way",
                   back is not None and M.current() == "warm", back and back.reply)
         finally:
-            tmp.cleanup()
+            _cleanup(tmp)
 
 
 def t_from_now_on_unmapped_tail_says_so_honestly():
@@ -593,7 +607,7 @@ def t_from_now_on_unmapped_tail_says_so_honestly():
         sched, tmp = _quick_sched()
         if sched is None:
             skip("no Scheduler")
-            tmp.cleanup()
+            _cleanup(tmp)
             return
         try:
             before = M.current()
@@ -602,7 +616,7 @@ def t_from_now_on_unmapped_tail_says_so_honestly():
                   res is not None and res.reply == Q.FROM_NOW_ON_UNMAPPED
                   and M.current() == before, res and res.reply)
         finally:
-            tmp.cleanup()
+            _cleanup(tmp)
 
 
 def t_from_now_on_temporary_chat_stays_in_that_chat_only():
@@ -610,7 +624,7 @@ def t_from_now_on_temporary_chat_stays_in_that_chat_only():
         sched, tmp = _quick_sched()
         if sched is None:
             skip("no Scheduler")
-            tmp.cleanup()
+            _cleanup(tmp)
             return
         try:
             check("sanity: warm by default, persisted", M.current() == "warm")
@@ -631,7 +645,7 @@ def t_from_now_on_temporary_chat_stays_in_that_chat_only():
                   other is not None and other.reply == "Got it - timer set for 5 minutes.",
                   other and other.reply)
         finally:
-            tmp.cleanup()
+            _cleanup(tmp)
 
 
 def t_from_now_on_in_a_game_stays_in_the_chat_even_after_the_window_slides():
@@ -646,7 +660,7 @@ def t_from_now_on_in_a_game_stays_in_the_chat_even_after_the_window_slides():
         sched, tmp = _quick_sched()
         if sched is None:
             skip("no Scheduler")
-            tmp.cleanup()
+            _cleanup(tmp)
             return
         try:
             cid = "conv-game-quick-1"
@@ -675,7 +689,7 @@ def t_from_now_on_in_a_game_stays_in_the_chat_even_after_the_window_slides():
                   res is not None and "for this chat" not in res.reply, res and res.reply)
         finally:
             JI.forget_games_for_tests()
-            tmp.cleanup()
+            _cleanup(tmp)
 
 
 def t_from_now_on_temporary_chat_needs_a_real_conversation_id():
@@ -683,7 +697,7 @@ def t_from_now_on_temporary_chat_needs_a_real_conversation_id():
         sched, tmp = _quick_sched()
         if sched is None:
             skip("no Scheduler")
-            tmp.cleanup()
+            _cleanup(tmp)
             return
         try:
             body = {"messages": [{"role": "user", "content": "from now on, be more plain",
@@ -693,7 +707,7 @@ def t_from_now_on_temporary_chat_needs_a_real_conversation_id():
                   res is not None and res.reply == Q.FROM_NOW_ON_NO_CONVERSATION
                   and M.current() == "warm", res and res.reply)
         finally:
-            tmp.cleanup()
+            _cleanup(tmp)
 
 
 def t_from_now_on_never_from_outside_text_or_a_shared_message():

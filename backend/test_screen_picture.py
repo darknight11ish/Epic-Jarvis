@@ -39,6 +39,7 @@ import base64
 import json
 import os
 import re
+import socket
 import sys
 import tempfile
 import threading
@@ -1124,12 +1125,21 @@ def t_a_model_that_does_not_know_think_is_asked_again_without_it():
         except SP.LaneError as exc:
             err = exc
         check("any other error is 'error'", err.code == "error")
-        SP.LANE.port = 1          # nothing listens there
+        # A port nothing listens on. This used to be port 1, but Windows filters
+        # that connect and it times out rather than being refused - which the
+        # module correctly reports as "slow", not "error" (2026-10-03). Ask the
+        # OS for a port it has just told us is free instead.
+        probe = socket.socket()
+        probe.bind(("127.0.0.1", 0))
+        SP.LANE.port = probe.getsockname()[1]
+        probe.close()
+        err = None
         try:
-            SP.chat_once(None, timeout=2)
+            SP.chat_once(None, timeout=5)
         except SP.LaneError as exc:
             err = exc
-        check("a reader that is not there is 'error', never a crash", err.code == "error")
+        check("a reader that is not there is 'error', never a crash",
+              err is not None and err.code == "error", err)
     finally:
         end_real_http_world(stub)
 

@@ -298,7 +298,12 @@ def t_hygiene():
           all(x in src for x in ("winrt.windows.media.ocr", "winrt.windows.graphics.imaging",
                                   "winrt.windows.storage.streams", "winrt.windows.foundation",
                                   "winrt.windows.foundation.collections", "winrt.windows.globalization")))
-    check("off Windows the in-process reader is simply not there", J.winrt_usable() is False)
+    # The pywinrt packages are pinned Windows-only (`; sys_platform == "win32"`),
+    # so this is a platform fact rather than a bug: present on the owner's PC,
+    # absent on CI. It used to assert the off-Windows answer everywhere, so it
+    # could only ever pass off Windows (2026-10-03).
+    check("the in-process reader is there exactly when this is Windows",
+          J.winrt_usable() == (os.name == "nt"), J.winrt_usable())
     import inspect
     check("the writer lets go of the picture's stream before Windows reads it (no closing it under us)",
           "detach_stream" in inspect.getsource(J._winrt_read))

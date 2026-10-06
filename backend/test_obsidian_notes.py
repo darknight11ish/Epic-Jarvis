@@ -104,7 +104,13 @@ def clear_env():
 def vault(settings=None, name=None) -> Path:
     """A fresh vault, set as THE vault. `settings` becomes daily-notes.json."""
     clear_env()
-    v = _TMP / (name or f"vault{time.time_ns()}")
+    # tempfile.mkdtemp, not `f"vault{time.time_ns()}"`: on Windows
+    # time.time_ns() only moves on the system timer tick, so two vaults asked
+    # for inside one tick get the same folder and the second
+    # `mkdir(parents=True)` dies with `FileExistsError: [WinError 183] ...
+    # vault<ns>\.obsidian` - what the Windows CI runner reported on
+    # 2026-10-05 (PR #47). mkdtemp asks the filesystem for a free name.
+    v = (_TMP / name) if name else Path(tempfile.mkdtemp(dir=_TMP, prefix="vault"))
     (v / ".obsidian").mkdir(parents=True)
     if settings is not None:
         (v / ".obsidian" / "daily-notes.json").write_text(
@@ -502,7 +508,10 @@ def t_the_router_keeps_notes_questions_local():
 # ---- 6. which targets are set up ---------------------------------------------
 
 def _graph():
-    g = _TMP / f"graph{time.time_ns()}"
+    # mkdtemp, for the same reason as vault() above: a name from
+    # time.time_ns() can repeat inside one Windows timer tick, and then the
+    # second call here finds `graph<ns>` already made.
+    g = Path(tempfile.mkdtemp(dir=_TMP, prefix="graph"))
     (g / "journals").mkdir(parents=True)
     return g
 

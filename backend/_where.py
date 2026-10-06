@@ -286,6 +286,10 @@ SHIPPED = (
     # using the graphics card - read-only, answered without the model;
     # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
     "jarvis_pc_help.py",
+    # Tutorials and the FAQ (owner, 2026-10-05; docs/TUTORIALS-DESIGN.md): one
+    # catalogue and the owner's reading progress, read by both apps -
+    # GET /api/tutorials, POST /api/tutorials/progress, GET /api/faq
+    "jarvis_tutorials.py",
     # "Smarter answers" (2026-09-28): the "I've done it" check at the end of
     # an answer; jarvis_agent.py calls it, and the tool test shares its
     # pattern - no patch

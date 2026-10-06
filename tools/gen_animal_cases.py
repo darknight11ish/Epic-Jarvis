@@ -78,7 +78,10 @@ def main(argv) -> int:
         return 0
     for p in (DESKTOP, PHONE):
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        # newline="\n": without it, Python's text mode writes CRLF on Windows
+        # and LF anywhere else, so the file this tool writes is not the same on
+        # every machine. The repository is LF everywhere (.gitattributes).
+        p.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {p.relative_to(ROOT)}")
     return 0
 
