@@ -1,6 +1,6 @@
 # The claims register: one row per thing this project says about itself, with a
 # check a machine runs. Read by tools/check_claims.py - that script's docstring
-# says what a row means, what the five check kinds are, and why this fails in
+# says what a row means, what the six check kinds are, and why this fails in
 # both directions (a `built` claim that stopped holding, and an `open` gap that
 # closed and left the row stale).
 #
@@ -12,13 +12,25 @@
 #   greps for the thing that does not exist yet, and a row about stale prose
 #   carries an `absent` for the sentence that should be gone.
 #   source is where the claim came from - file and line - so the original can
-#   be read. Every line number was right when this register was written
-#   (2026-10-05, the commit after the prose corrections below).
+#   be read. Every line number was right when its row was written, and the
+#   sources in buckets C and D were re-read after the prose corrections below
+#   moved them (2026-10-05).
 #
 # Bucket A is CLAUDE.md's "Owner decisions recorded, not yet built" queue
 # (CLAUDE.md:1812-1849), the list that misled a reader twice. Bucket B is
 # build-status sentences already written down in docs/audit-reports-*/ and
 # docs/*AUDIT*.md.
+#
+# Bucket C is the rest of the documentation tree, swept on 2026-10-05 because
+# the first register only covered A and B: the design docs' own "Status:" lines,
+# the READMEs, the studio agents' brief (.claude/agents/JARVIS-TODAY.md), the
+# living documents (ARCHITECTURE.md, JARVIS-API.md, CHANGELOG.md, VERSION), the
+# build queue and the handoffs. Bucket D is the other direction of wrongness -
+# a sentence claiming something IS done when it is not - and its first row is
+# `no-file:`, the kind added for it: docs/README.md records the source bundle as
+# removed on 2026-10-05 while the file is still in the tree and still tracked.
+# A missing file could not be written down with `file:` (which asserts the
+# opposite) or with `absent:` (which needs the path to exist first).
 A01	the desktop app has a Notifications settings screen (CLAUDE.md's queue item 1, first half)	grep:jarvis-desktop/src/settings.html:id="notifications"	built	CLAUDE.md:1816
 A02	that screen has one switch per notification kind (alarms, reminders, briefing, handoff)	grep:jarvis-desktop/src/settings.html:notif-handoff-row	built	CLAUDE.md:1815
 A03	that screen has a "Send test notification" button	grep:jarvis-desktop/src/settings.html:notif-send-test	built	CLAUDE.md:1815
@@ -77,3 +89,61 @@ B17	the shipped-module suite passes (a 2026-09-29 audit ran it: 486 pass)	test:b
 B18	the phone's shader budget is still the 60,000 the eyelids decision recorded	number:CLAUDE.md:tools/shader_size.py:60,000	built	CLAUDE.md:998
 B19	the second card's floor is still the 7,680 MiB the owner's decision recorded	number:docs/SECOND-CARD.md:backend/jarvis_second_card.py:7,680	built	docs/SECOND-CARD.md:26
 B20	the audit's "tap-to-talk is not built" is settled: the phone's VoiceButton no longer documents the opposite of the code ninety lines below it	absent:jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/VoiceButton.kt:Hold rather than tap-to-start/tap-to-stop	open	docs/audit-reports-2026-09-29-30/43-audit-a696f0b6.md:16
+C01	the chat-tags design page no longer calls the built feature a design	absent:docs/CHAT-TAGS-DESIGN.md:designed, not built	built	docs/CHAT-TAGS-DESIGN.md:3
+C02	chat tags are built - the tag registry lives in the chat log	grep:backend/jarvis_chat_log.py:TAG_STARTERS	built	docs/JARVIS-API.md:15910
+C03	the review-decks page no longer says nothing here is built	absent:docs/QUIZ-DECKS-DESIGN.md:Nothing here is built	built	docs/QUIZ-DECKS-DESIGN.md:3
+C04	review decks are shipped as their own module	file:backend/jarvis_decks.py	built	docs/QUIZ-DECKS-DESIGN.md:3
+C05	the finance page no longer calls two built features a design	absent:docs/FINANCE-DESIGN.md:designed, not built	built	docs/FINANCE-DESIGN.md:3
+C06	spending summaries are built	file:backend/jarvis_spending.py	built	docs/FINANCE-DESIGN.md:3
+C07	the retirement what-if is built	file:backend/jarvis_retirement.py	built	docs/FINANCE-DESIGN.md:6
+C08	the Galaxy panel page no longer calls the built panel a design	absent:docs/GALAXY-PANEL-DESIGN.md:designed, not built	built	docs/GALAXY-PANEL-DESIGN.md:3
+C09	the Galaxy "facts behind this dot" panel is drawn on the desktop	grep:jarvis-desktop/src:Facts behind this dot	built	docs/GALAXY-PANEL-DESIGN.md:3
+C10	the study page no longer calls its built slices a design	absent:docs/STUDY-FROM-TEXT-DESIGN.md:designed, not built	built	docs/STUDY-FROM-TEXT-DESIGN.md:3
+C11	"Quiz me on a text" is built	file:backend/jarvis_quiz.py	built	docs/STUDY-FROM-TEXT-DESIGN.md:4
+C12	the overnight-tags page no longer says the apps are still to build	absent:docs/OVERNIGHT-TAGS-DESIGN.md:both apps still to build	built	docs/OVERNIGHT-TAGS-DESIGN.md:3
+C13	overnight suggested tags are built in both apps	grep:docs/JARVIS-API.md:## 104. Overnight suggested tags (added 2026-09-30; backend and both apps built)	built	docs/OVERNIGHT-TAGS-DESIGN.md:3
+C14	the goals page no longer says nothing here is built	absent:docs/GOALS-PROGRESS-DESIGN.md:Nothing here is built	built	docs/GOALS-PROGRESS-DESIGN.md:11
+C15	the goals backend is in this tree	file:backend/jarvis_goals.py	built	docs/GOALS-PROGRESS-DESIGN.md:3
+C16	the appearance proposal no longer says the phone does not implement the route	absent:docs/APPEARANCE-SYNC-PROPOSAL.md:implements this yet	built	docs/APPEARANCE-SYNC-PROPOSAL.md:3
+C17	the phone reads and writes /api/appearance	grep:jarvis-client/app/src/main/java/com/jarvis/client/data/AppearanceStore.kt:/api/appearance	built	docs/APPEARANCE-SYNC-PROPOSAL.md:5
+C18	ARCHITECTURE.md no longer says the apps' side of the wellbeing event is unbuilt	absent:docs/ARCHITECTURE.md:not built yet - JARVIS-API §38.1	built	docs/ARCHITECTURE.md:1699
+C19	the desktop holds the serious pose from the wellbeing event	grep:jarvis-desktop/src/jarvis-link.js:noteWellbeing	built	docs/ARCHITECTURE.md:1699
+C20	the phone README no longer offers the home network as a way in	absent:jarvis-client/README.md:or the home network	built	jarvis-client/README.md:16
+C21	the phone README no longer lists the home network among the addresses it accepts	absent:jarvis-client/README.md:home network, Tailscale	built	jarvis-client/README.md:75
+C22	the phone refuses a home-network address at the cleartext step	grep:jarvis-client/app/src/main/java/com/jarvis/client/data/PhoneAddress.kt:not by a number or a home-network name	built	docs/FEATURE-REVIEW-2026-10-04.md:537
+C23	CLAUDE.md no longer says none of jarvis-android's endpoints exist on the backend	absent:CLAUDE.md:endpoints exist on the backend	built	CLAUDE.md:86
+C24	one jarvis-android endpoint path does exist in the tree, unwired	grep:server/jarvis_mobile_ws.py:PATH = "/api/mobile/ws"	built	docs/FEATURE-REVIEW-2026-10-04.md:544
+C25	jarvis-android asks for exactly that path	grep:jarvis-android/app/src/main/java/com/jarvis/assistant/data/JarvisSettings.kt:WS_PATH = "/api/mobile/ws"	built	docs/FEATURE-REVIEW-2026-10-04.md:544
+C26	CLAUDE.md's "start here" handoff is the newest one	grep:CLAUDE.md:docs/HANDOFF-2026-10-04-audit-pass.md	built	docs/FEATURE-REVIEW-2026-10-04.md:535
+C27	the agent brief no longer says the second card is being added	absent:.claude/agents/JARVIS-TODAY.md:A second card is being added	built	.claude/agents/JARVIS-TODAY.md:18
+C28	the two cards are installed and measured	grep:docs/SECOND-CARD.md:The cards are now installed and	built	.claude/agents/JARVIS-TODAY.md:18
+C29	the agent brief no longer lists blended voices as not built	absent:.claude/agents/JARVIS-TODAY.md:only); blended voices	built	.claude/agents/JARVIS-TODAY.md:222
+C30	the blended voices are built and tested	file:backend/test_blend_voices.py	built	.claude/agents/JARVIS-TODAY.md:222
+C31	the agent brief no longer times the mouths for Kokoro v0.19 only	absent:.claude/agents/JARVIS-TODAY.md:built for v0.19	built	.claude/agents/JARVIS-TODAY.md:222
+C32	the mouth timing module covers Kokoro v1.0 too	grep:backend/jarvis_mouth.py:KOKORO v1.0 TOO	built	.claude/agents/JARVIS-TODAY.md:222
+C33	the agent brief no longer calls Goals and the plan card unmerged	absent:.claude/agents/JARVIS-TODAY.md:not merged yet	built	.claude/agents/JARVIS-TODAY.md:147
+C34	the plan card module is in this tree	file:backend/jarvis_plan.py	built	.claude/agents/JARVIS-TODAY.md:150
+C35	the third-card lane is in this tree too	grep:backend/jarvis_second_card.py:second_card_third_assign	built	.claude/agents/JARVIS-TODAY.md:190
+C36	reading phone notifications is in this tree too	grep:jarvis-client:CapturedNotification	built	.claude/agents/JARVIS-TODAY.md:196
+C37	JARVIS-API section 106's heading says what the section holds, not only the button's words	absent:docs/JARVIS-API.md:## 106. New section here	open	docs/FEATURE-REVIEW-2026-10-04.md:541
+C38	JARVIS-API section 111 is written, as the GitHub-tools design reserved it	grep:docs/JARVIS-API.md:## 111.	open	docs/GITHUB-TOOLS-DESIGN.md:7
+C39	the desktop YouTube screens are built	file:jarvis-desktop/src-tauri/src/brain/youtube.rs	built	docs/FEATURE-REVIEW-2026-10-04.md:542
+C40	the desktop cloud-grade screens are built	file:jarvis-desktop/src-tauri/src/brain/quiz_cloud.rs	built	docs/FEATURE-REVIEW-2026-10-04.md:542
+C41	the build queue no longer says the desktop YouTube screens are not built	absent:docs/BUILD-QUEUE-2026-09-30.md:desktop YouTube screens not built	open	docs/FEATURE-REVIEW-2026-10-04.md:542
+C42	the build queue no longer says the cloud-grade screens are not built	absent:docs/BUILD-QUEUE-2026-09-30.md:cloud-grade phone + desktop screens not built	open	docs/FEATURE-REVIEW-2026-10-04.md:542
+C43	the build queue no longer says menu visibility's backend and desktop are not done	absent:docs/BUILD-QUEUE-2026-09-30.md:backend and desktop not done	open	docs/FEATURE-REVIEW-2026-10-04.md:542
+C44	the 2026-09-30 handoff no longer says the desktop YouTube quiz is not built	absent:docs/HANDOFF-2026-09-30.md:**desktop not built**	open	docs/HANDOFF-2026-09-30.md:40
+C45	the 2026-09-30 handoff no longer says the cloud-grade grade has no app screens	absent:docs/HANDOFF-2026-09-30.md:no app screens yet	open	docs/HANDOFF-2026-09-30.md:41
+C46	ARCHITECTURE section 10's checked date is no longer two weeks behind the tree	absent:docs/ARCHITECTURE.md:against the repository on 2026-09-24	open	docs/FEATURE-REVIEW-2026-10-04.md:543
+C47	CHANGELOG.md has an entry for the 2026-09-30 features	grep:CHANGELOG.md:menu visibility	open	docs/FEATURE-REVIEW-2026-10-04.md:540
+C48	VERSION names something newer than 0.2.0, the 26 September version	absent:VERSION:0.2.0	open	docs/FEATURE-REVIEW-2026-10-04.md:540
+C49	the docs index covers the current load-bearing documents	grep:docs/README.md:BUILD-QUEUE-2026-09-30	open	docs/FEATURE-REVIEW-2026-10-04.md:534
+C50	the docs index mentions the audit-reports directory at all	grep:docs/README.md:audit-reports-2026-09-29-30	open	docs/FEATURE-REVIEW-2026-10-04.md:534
+C51	"Things you can say" is built in the desktop's empty Jarvis bar	grep:jarvis-desktop/src/sayable.js:Things you can say	built	docs/EASE-OF-USE-AUDIT-2026-09-27.md:29
+C52	the ease-of-use audit no longer calls the built "Things you can say" list not built	absent:docs/EASE-OF-USE-AUDIT-2026-09-27.md:I116 "Things you can say", I28 speaking speed	open	docs/EASE-OF-USE-AUDIT-2026-09-27.md:144
+C53	the documents page prints the command that measures its own count	grep:docs/README.md:Get-ChildItem docs -Recurse -Filter *.md	built	docs/README.md:10
+C54	the phone holds the neutral animal pose on the wellbeing event	no definite check: the phone reads the crisis help line from the X-Jarvis-Route header under the same word "wellbeing" (jarvis-client/.../net/Wellbeing.kt), so a grep for it cannot tell the event from the header, and the register will not invent the marker the phone would use; ARCHITECTURE.md:1699 now says the phone's half is still to build	unverifiable	docs/ARCHITECTURE.md:1699
+D01	the source bundle really is gone from the tree, as the documents page recorded	no-file:docs/SOURCE-BUNDLE.md	open	docs/README.md:127
+D02	the source bundle is still in the tree, so that removal was never run	file:docs/SOURCE-BUNDLE.md	built	docs/README.md:127
+D03	the documents page no longer claims the source bundle was removed while it is present	absent:docs/README.md:Removed 2026-10-05	built	docs/README.md:127
+D04	the documents page no longer counts an un-run removal as nothing moved or deleted	absent:docs/README.md:has been moved or deleted	built	docs/README.md:20

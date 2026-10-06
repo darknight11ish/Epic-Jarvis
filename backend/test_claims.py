@@ -134,7 +134,7 @@ def t_the_vocabulary_is_actually_used():
     kinds = {row["check"].split(":", 1)[0] for row in
              data_rows(REGISTER.read_text(encoding="utf-8"))
              if row["state"] != "unverifiable"}
-    for kind in ("file", "grep", "absent", "test", "number"):
+    for kind in ("file", "no-file", "grep", "absent", "test", "number"):
         check(f"the register uses a `{kind}:` row", kind in kinds, sorted(kinds))
 
 
