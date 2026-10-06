@@ -2216,7 +2216,7 @@ function scChatChoices(chat) {
     const size = scGigabytes(card.total_mb);
     row(`sc-chat-pin-${card.index}`, card.uuid,
       `Always use the ${card.name}${size ? ` (${size})` : ""}`,
-      `Pins everyday chat to this card. One approval card, because it changes where every "
+      "Pins everyday chat to this card. One approval card, because it changes where every "
       + `answer runs. ${card.display === true
         ? "A monitor is plugged into it." : "No monitor is plugged into it."}`,
       chosen === card.uuid);

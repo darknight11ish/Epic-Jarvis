@@ -141,11 +141,17 @@ await check("one card (today's PC): found in words, every switch shown and none 
   assert.match(s.found, /Only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\./);
   assert.equal(s.cards.length, 1);
   assert.match(s.cards[0], /NVIDIA GeForce RTX 2080 SUPER \(8 GB\)/);
-  // 2026-10-05: no longer "everyday chat runs here". With nothing pinned,
-  // Jarvis must not say which card chat is on - the PC's own sentence says
-  // only what the settings are made for.
-  assert.match(s.cards[0], /The one chat runs on\. Jarvis's own settings are made for this card/);
-  assert.match(s.cards[0], /you have not pinned a card, so Jarvis cannot say everyday chat is on it/);
+  // 2026-10-05, and again 2026-10-06: no longer "everyday chat runs here",
+  // and no longer "Jarvis's own settings are made for this card" either. With
+  // nothing pinned and nothing the machine will name, Jarvis still has to pick
+  // one card to PLAN around - so the PC's own sentence says exactly that, in
+  // the backend's words: it ASSUMES, and this is where it plans, not something
+  // it read (jarvis_second_card.py, the 2026-10-06 "true to its reporting"
+  // change; test_second_card.py's t_planning_uses_the_card_the_model_is_on
+  // asserts the same two halves on the phone's side of the contract).
+  assert.match(s.cards[0],
+    /The one chat runs on\. Jarvis ASSUMES everyday chat is here: your settings point at this card/);
+  assert.match(s.cards[0], /so this is where it plans, not something it read/);
   assert.equal(s.blockedHidden, false);
   assert.match(s.blocked, /8 GB or more\): only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\. /);
   // The master switch and all seven features, in the backend's order.
