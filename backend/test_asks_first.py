@@ -898,11 +898,12 @@ def t_writing_the_tools_table():
           'enabled = ["calendar_read"]' in out2, out2)
     check("removing a tool not present is a no-op",
           AF.rewrite_tools(toml_with_tools, "home_read", False) == toml_with_tools)
-    try:
-        AF.rewrite_tools(SAMPLE, "calendar_read", True)  # no [tools] header at all
-        check("no [tools] header: refused", False)
-    except AF.TierFileError:
-        check("no [tools] header: refused", True)
+    created = AF.rewrite_tools(SAMPLE, "calendar_read", True, seed=["web_search"])
+    check("no [tools] header: the table is created, seeded with what is in use",
+          "[tools]" in created and 'enabled = ["calendar_read", "web_search"]' in created,
+          created)
+    check("  ...and removing from a table that does not exist changes nothing",
+          AF.rewrite_tools(SAMPLE, "calendar_read", False) == SAMPLE)
     two_tables = toml_with_tools + "\n[tools]\nenabled = []\n"
     try:
         AF.rewrite_tools(two_tables, "calendar_read", True)

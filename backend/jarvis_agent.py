@@ -4374,6 +4374,38 @@ def _web_search_switched_off() -> bool:
         return False
 
 
+def enabled_tools_for_turn(legacy: Optional[dict] = None) -> set:
+    """Which tools this turn may offer: `[tools].enabled` from the owner's own
+    settings file (`jarvis-framework.toml`), falling back to the inherited
+    `config.toml` list only while the settings file names nothing.
+
+    WHY ONE SOURCE (2026-10-06 audit). Two files answered "which tools are
+    on". `jarvis_asks_first` - the PC's own switch, one card plus Windows
+    Hello - reads and writes `jarvis-framework.toml`, and every other module
+    that asks (the briefing, email, notes, home, reach, tell-me) reads it
+    too. This turn's offer was built from `~/.openjarvis/config.toml`, the
+    inherited OpenJarvis template's list, in which 24 of 27 names are not
+    tools here. So turning a reading tool on changed a file the turn never
+    read, and the switch could not do the one thing it promises.
+
+    The settings file wins as soon as it names anything; the template list is
+    the fallback, so an owner who has never used a switch sees exactly what
+    they saw before. Never raises - a config that cannot be read means no
+    tools, the same fail-closed answer ``offered_tools`` gives."""
+    try:
+        import jarvis_framework as _fw
+        section = (_fw.load_framework() or {}).get("tools") or {}
+        got = section.get("enabled")
+        if got:
+            return {str(n) for n in got}
+    except Exception:
+        pass
+    try:
+        return {str(n) for n in (((legacy or {}).get("tools") or {}).get("enabled") or [])}
+    except Exception:
+        return set()
+
+
 def offered_tools(enabled_tools) -> list:
     """The tool names a turn actually offers the model: the ones in
     `enabled_tools` that are real tools here, in TOOLS order. `None` means

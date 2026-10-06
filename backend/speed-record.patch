@@ -39,7 +39,7 @@
          # handed to a cloud provider is exactly the leak rule 1 forbids, and
 @@ -2850,13 +2868,20 @@
                          messages, lane, ollama_url=OLLAMA_URL,
-                         enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
+                         enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg),
                          stream_out=lambda chunk: (self.wfile.write(chunk),
 -                                                   self.wfile.flush()),
 +                                                   self.wfile.flush(),
