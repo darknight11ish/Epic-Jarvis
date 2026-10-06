@@ -48,9 +48,16 @@ and a row about stale prose carries an `absent` for the wrong sentence. When
 somebody fixes that prose the `absent` starts passing, and rule 2 above tells
 the next reader to flip the row.
 
-THE FIVE KINDS, each with a definite answer:
+THE SIX KINDS, each with a definite answer:
 
   * `file:<path>` - this file exists (repo-relative, `/` separators);
+  * `no-file:<path>` - this file is NOT there. `file:`'s mirror, and it was
+    added on 2026-10-05 for a real claim the first register could not write
+    down: `docs/README.md` records `docs/SOURCE-BUNDLE.md` as "Removed
+    2026-10-05" while the file is still in the tree, tracked. `absent:` cannot
+    carry that row, because it needs the path to exist in order to look inside
+    it - so a claim that something was deleted had no kind at all, and a
+    finding with no kind is a finding that gets dropped;
   * `grep:<path>:<pattern>` - this text is present. `<path>` may be a
     file or a directory (then every text file under it is read);
   * `absent:<path>:<pattern>` - this text is NOT present;
@@ -89,8 +96,8 @@ REGISTER = REPO / "docs" / "CLAIMS.tsv"
 #: guessed at, because a register whose shape is uncertain cannot be checked.
 COLUMNS = ("id", "claim", "check", "state", "source")
 
-#: The five kinds a `check` may be, each with a definite answer.
-KINDS = ("file", "grep", "absent", "test", "number")
+#: The six kinds a `check` may be, each with a definite answer.
+KINDS = ("file", "no-file", "grep", "absent", "test", "number")
 
 #: The three states a row may carry.
 STATES = ("built", "open", "unverifiable")
@@ -192,6 +199,20 @@ def check_file(where: str):
     return False, f"{where} does not exist"
 
 
+def check_no_file(where: str):
+    """The mirror of `check_file`: this file (or directory) is gone.
+
+    `exists()` rather than `is_file()` on purpose - a claim that something was
+    removed is not satisfied by leaving an empty directory of the same name in
+    its place. Nothing here confirms the removal was *wanted*; that is the
+    claim's business, not this check's.
+    """
+    path = REPO / where
+    if path.exists():
+        return False, f"{where} is still there"
+    return True, f"{where} is gone"
+
+
 def check_grep(where: str, pattern: str, want: bool):
     found, why = search(pattern, where)
     if why:
@@ -270,6 +291,10 @@ def parse_check(check: str):
         if not rest.strip():
             return None, None, "file: names no path"
         return kind, (rest.strip(),), ""
+    if kind == "no-file":
+        if not rest.strip():
+            return None, None, "no-file: names no path"
+        return kind, (rest.strip(),), ""
     if kind in ("grep", "absent"):
         where, sep, pattern = rest.partition(":")
         if not sep or not where.strip() or not pattern:
@@ -294,6 +319,8 @@ def run_row(row: dict):
         return None, why
     if kind == "file":
         return check_file(*args)
+    if kind == "no-file":
+        return check_no_file(*args)
     if kind == "grep":
         return check_grep(args[0], args[1], True)
     if kind == "absent":

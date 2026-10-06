@@ -261,6 +261,28 @@ def t_an_empty_register_is_not_a_pass():
           "checked nothing" in out, out)
 
 
+def t_a_no_file_row_answers_both_ways():
+    """`no-file:` is `file:`'s mirror, added 2026-10-05 for a real claim the
+    first register could not write down: `docs/README.md` records the source
+    bundle as removed while the file is still tracked. The test proves both
+    answers on throwaway registers, and that removing the kind breaks it: an
+    unknown kind exits 1 with the vocabulary in the message, so the "gone"
+    case below would fail rather than pass quietly.
+    """
+    path = register_with(
+        "X10\tthis file was supposed to be deleted and was\t"
+        "no-file:docs/no-such-file-in-this-repo.md\tbuilt\tCLAUDE.md:1\n")
+    code, out = run(str(path))
+    check("a `no-file:` row for a file that really is gone exits 0", code == 0, out)
+    path = register_with(
+        "X11\tthis file was supposed to be deleted and was not\t"
+        "no-file:backend/jarvis_tidy.py\tbuilt\tCLAUDE.md:1\n")
+    code, out = run(str(path))
+    check("a `no-file:` row for a file that is still there exits 1", code == 1, out)
+    check("... and says the file is still there",
+          "is still there" in out, out)
+
+
 def t_a_missing_register_is_not_a_pass():
     code, out = run(str(REPO / "docs" / "no-such-register.tsv"))
     check("a register that is not there exits 1", code == 1, out)
@@ -301,6 +323,7 @@ if __name__ == "__main__":
                t_an_open_row_whose_gap_closed_fails,
                t_an_open_row_that_is_still_open_is_green,
                t_a_row_with_too_few_columns_is_refused,
+               t_a_no_file_row_answers_both_ways,
                t_a_check_kind_nobody_knows_is_refused,
                t_an_unknown_state_is_refused,
                t_a_duplicated_id_is_refused,
