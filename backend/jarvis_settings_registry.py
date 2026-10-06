@@ -156,6 +156,12 @@ class Section:
 #: the id it is reached BY on this list, kept the same as the desktop's
 #: nearest equivalent so one spoken phrase works on both apps.
 SECTIONS: tuple = (
+    # "Set up Jarvis" (2026-10-06): the first-run card at the top of the
+    # desktop Settings screen, holding the five choices that matter on a
+    # first run. Desktop only - the phone has no such page, so OpenPlace.kt
+    # lists it PC-only and the phone answers "only on your PC".
+    Section("first-run", ("set up jarvis", "first run setup", "the setup page",
+                          "getting started with jarvis"), app="desktop"),
     Section("connection", ("connection", "the connection settings", "where jarvis is running")),
     # Paired devices (docs/PAIRING-DESIGN.md section 7.2): a card on both apps
     # (settings.html id="devices"; the phone's item(key = "devices")).
