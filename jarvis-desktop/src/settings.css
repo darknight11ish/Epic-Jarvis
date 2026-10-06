@@ -768,6 +768,47 @@ select:focus-visible {
 }
 
 /* --------------------------------------------------------------------------
+   Set up Jarvis (the owner's approved option 8A, 2026-10-06). Built from the
+   page's own pieces - `.note`, `.toggle`, `.row`, `.status` - so there is no
+   second switch style and no colour literal: only the spacing between the
+   rows is new. A row that cannot be read says so in its own `.status` line
+   rather than vanishing, which is the rule the second-card section set.
+   -------------------------------------------------------------------------- */
+
+.fr-rows {
+  margin: 0 0 14px;
+}
+
+.fr-row {
+  padding: 12px 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.fr-row:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* The heading and the one-sentence explanation sit closer together than a
+   card's, because five of these are stacked in one card. */
+.fr-row .subhead {
+  margin-bottom: 2px;
+}
+
+.fr-row .note {
+  margin-bottom: 6px;
+}
+
+/* The radios and switches of one row, indented under its own words. */
+.fr-controls .fr-choices {
+  padding-left: 2px;
+}
+
+.fr-controls .toggle:last-child {
+  margin-bottom: 4px;
+}
+
+/* --------------------------------------------------------------------------
    Second graphics card. Built from the same pieces as the rest of the page:
    `.toggle` rows for the switches, `.note` words, `.status` results. A switch
    that cannot be turned on yet stays on screen, disabled, with its reason
