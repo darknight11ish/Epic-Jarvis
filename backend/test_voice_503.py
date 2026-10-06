@@ -85,28 +85,111 @@ def t_the_say_fallback_is_conditional():
           "isnetworkconnectionrequired" in txt.replace(" ", ""), txt)
 
 
+def _route_node(src, marker):
+    """The innermost statement of jarvis_hud.py that `marker` is part of.
+
+    The route checks below used to be `i = src.index(marker); src[i:i + 2000]`.
+    A window like that is a promise about how many characters away the next
+    route is; every edit above it moves the code the window was written for
+    out of view, and the check then reads whatever slid in. The AST node
+    travels with the edit.
+    """
+    off = src.find(marker)
+    if off < 0:
+        return None
+    line = src.count("\n", 0, off) + 1
+    best = None
+    for n in ast.walk(ast.parse(src)):
+        if not isinstance(n, ast.stmt):
+            continue
+        end = n.end_lineno or n.lineno
+        if not (n.lineno <= line <= end):
+            continue
+        if best is None or (n.lineno, -end) > (best.lineno,
+                                               -(best.end_lineno or best.lineno)):
+            best = n
+    return best
+
+
+def _route_block(src, marker):
+    """That statement's own source - what a fixed window used to hold."""
+    node = _route_node(src, marker)
+    return ast.get_source_segment(src, node) if node is not None else ""
+
+
+def _voice_guards(src):
+    """Every `/api/voice/...` route that answers "there is no speech module",
+    with the `fallback_ok` it passes - read off the tree.
+
+    The old check counted `_no_speech` calls in the file: exactly five, three
+    with fallback_ok=False and two with True. A count says nothing about WHICH
+    route got which answer - a sixth route added, or two routes swapping their
+    flags, both had to be caught by hand (2026-10-03). This names them.
+    """
+    out = {}
+    for n in ast.walk(ast.parse(src)):
+        if not isinstance(n, ast.If):
+            continue
+        named = [c.value for c in ast.walk(n.test)
+                 if isinstance(c, ast.Constant) and isinstance(c.value, str)
+                 and c.value.startswith("/api/voice/")]
+        if not named:
+            continue
+        for call in ast.walk(n):
+            if isinstance(call, ast.Call) and getattr(call.func, "id", "") == "_no_speech":
+                kw = {k.arg: k.value for k in call.keywords}
+                if "fallback_ok" in kw:
+                    out[named[0]] = getattr(kw["fallback_ok"], "value", None)
+    return out
+
+
+def _imports_of(src, name):
+    """Every `import <name>` in the file, and whether a `try:` wraps it.
+
+    The wake route's check used to read `src[i:i + 900]` for `try:` in the 40
+    characters before the import. This asks the tree, so the guard is found
+    wherever it sits and however the import is spelled.
+    """
+    found = []
+
+    def walk(node, in_try):
+        for child in ast.iter_child_nodes(node):
+            if isinstance(child, ast.Try):
+                walk(child, True)
+                continue
+            if isinstance(child, ast.Import) and any(a.name == name
+                                                     for a in child.names):
+                found.append((child.lineno, in_try))
+            walk(child, in_try)
+
+    walk(ast.parse(src), False)
+    return found
+
+
 def t_each_route_answers_for_itself():
     """CONTROL. Reading speech and speaking text are opposite directions."""
     src = SRC.read_text(encoding="utf-8")
-    tree = ast.parse(src)
 
-    calls = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_no_speech":
-            kw = {k.arg: k.value for k in n.keywords}
-            ok = kw.get("fallback_ok")
-            calls.append((n.lineno, getattr(ok, "value", None)))
-    check("every voice route routes through _no_speech", len(calls) == 4,
-          f"found {len(calls)} call sites: {calls}")
-    check("three of the four refuse a client fallback",
-          sum(1 for _, v in calls if v is False) == 3, repr(calls))
-    check("exactly one allows it - saying text the client already holds",
-          sum(1 for _, v in calls if v is True) == 1, repr(calls))
+    # Which route may offer the client's own fallback is the whole point of
+    # the field, so it is pinned per route rather than counted.
+    want = {
+        "/api/voice/wake": False,       # it listens
+        "/api/voice/status": False,     # the read that says the path is down
+        "/api/voice/utterance": False,  # it listens
+        "/api/voice/say": True,         # it speaks text the client already holds
+        "/api/voice/moment": True,      # same, the "One moment." clip
+    }
+    have = _voice_guards(src)
+    check("every voice route that can find no speech module says so through "
+          "_no_speech, with the right answer for its direction",
+          have == want,
+          f"missing {sorted(set(want) - set(have))}, "
+          f"extra {sorted(set(have) - set(want))}, "
+          f"wrong {[k for k in want if k in have and have[k] != want[k]]}")
 
     # The utterance route is the one that must never say yes.
-    i = src.index('route == "/api/voice/utterance"')
-    j = src.index('route == "/api/voice/say"')
-    utt = src[i:j]
+    utt = _route_block(src, 'route == "/api/voice/utterance"')
+    check("the utterance route is still there to check", bool(utt))
     check("the utterance route refuses local speech-to-text in words",
           "do NOT recognise this yourself" in utt,
           "a client that guessed would move the privacy boundary")
@@ -117,17 +200,19 @@ def t_nothing_returns_500_for_a_missing_module():
     """CONTROL on the regression."""
     src = SRC.read_text(encoding="utf-8")
     for route in ("/api/voice/utterance", "/api/voice/say"):
-        i = src.index(f'route == "{route}"')
-        seg = src[i:i + 2000]
+        seg = _route_block(src, f'route == "{route}"')
+        check(f"{route} is still there to check", bool(seg))
         head = seg[:seg.index("_no_speech")] if "_no_speech" in seg else seg
         check(f"{route} reaches _no_speech before any 500",
               "_no_speech" in seg and "500" not in head,
               "a missing module still surfaces as a server error")
-    i = src.index('route == "/api/voice/wake"')
-    seg = src[i:i + 900]
+    # Every import of jarvis_speech in the file must sit inside a try:, not
+    # just the one the old 900-character window happened to reach.
+    imports = _imports_of(src, "jarvis_speech")
     check("/api/voice/wake no longer imports without a guard",
-          "try:" in seg[:seg.index("import jarvis_speech")][-40:],
-          "the bare import is back")
+          bool(imports) and all(guarded for _, guarded in imports),
+          f"a bare `import jarvis_speech` is back, at "
+          f"{[ln for ln, guarded in imports if not guarded]}")
 
 
 if __name__ == "__main__":

@@ -59,6 +59,7 @@ pub mod talk_type;
 pub mod token_store;
 pub mod tool_updates;
 pub mod tray;
+pub mod tutorials;
 pub mod update;
 pub mod vision;
 pub mod voice;
@@ -1015,6 +1016,9 @@ pub fn run() {
             hardware::hardware_step,
             hardware::measure_hardware,
             hardware::get_pc_help,
+            tutorials::get_tutorials,
+            tutorials::mark_tutorial,
+            tutorials::get_faq,
             web_search::get_web_search,
             web_search::set_web_search,
             web_search::test_web_search,

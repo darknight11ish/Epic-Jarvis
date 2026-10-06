@@ -38,6 +38,78 @@ def check(name, cond, detail=""):
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
 
 
+def _stmt(src, marker):
+    """The innermost statement of `src` that `marker` is part of, or None.
+
+    This is what the route checks below read instead of a fixed window
+    (`i = src.index(marker); src[i:i + 900]`). A window is a promise about how
+    many characters away the next thing is, so any edit above it - a comment,
+    a blank line, a longer local name - slides the code the window was written
+    for out of view, and the check then reports on whatever moved in. This
+    suite's own 1100-character sleep_time window did exactly that on
+    2026-10-03: the block grew and two real lines read as missing. The AST node
+    the marker opens travels with the edit, so the same assertion survives a
+    refactor.
+
+    None means the marker is gone. Every caller turns that into a red check -
+    a marker that disappears must never read as "nothing to look at".
+    """
+    off = src.find(marker)
+    if off < 0:
+        return None
+    line = src.count("\n", 0, off) + 1          # the marker's line, 1-based
+    best = None
+    for n in ast.walk(ast.parse(src)):
+        if not isinstance(n, ast.stmt):
+            continue
+        end = n.end_lineno or n.lineno
+        if not (n.lineno <= line <= end):
+            continue                            # does not span the marker
+        if best is None or (n.lineno, -end) > (best.lineno,
+                                               -(best.end_lineno or best.lineno)):
+            best = n                            # innermost: latest start, then shortest
+    return best
+
+
+def _block(src, marker):
+    """The source of that statement - what the fixed windows used to hold."""
+    node = _stmt(src, marker)
+    return ast.get_source_segment(src, node) if node is not None else ""
+
+
+def _strings_in_test(src, marker):
+    """Every string constant in the marker statement's own condition.
+
+    A whitelist is checked by reading the `in (...)` it actually is, rather
+    than by looking for the name within N characters of the branch: the old
+    `"/api/memory/sleep_time" in src[i:][:200]` was a question about layout.
+    It lists no strings, or names the branch differently, for a condition
+    built out of a constant, so a red check there means "read this by hand".
+    """
+    node = _stmt(src, marker)
+    test = getattr(node, "test", None)
+    if test is None:
+        return set()
+    return {n.value for n in ast.walk(test)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+
+
+def _after(src, branch, guard):
+    """The part of `branch`'s body that follows the statement holding `guard`.
+
+    The edit path has no `if` of its own - it is the code that falls through
+    after the forget branch, marked only by a `# /api/memory/edit` comment.
+    A comment is not a boundary the tree knows about; a body position is.
+    """
+    node = _stmt(src, branch)
+    body = getattr(node, "body", [])
+    for i, st in enumerate(body):
+        if guard in (ast.get_source_segment(src, st) or ""):
+            return "\n".join(ast.get_source_segment(src, s) or ""
+                             for s in body[i + 1:])
+    return ""
+
+
 def lift(*names, **extra):
     """Named top-level functions out of jarvis_hud.py, run in isolation."""
     tree = ast.parse(SRC.read_text(encoding="utf-8"))
@@ -106,12 +178,15 @@ def t_qs_int():
 
 # ---- the routes, as source assertions -----------------------------------
 # The handler cannot be executed without standing up the whole server, so
-# these read the tree. They are controls on shape, not on behaviour.
+# these read the tree. They are controls on shape, not on behaviour. The
+# shape is found with ast (`_block`) rather than by character offset, so a
+# refactor that moves the route cannot quietly move it out of the assertion.
 
 def t_one_id_at_a_time():
     src = SRC.read_text(encoding="utf-8")
-    i = src.index('route in ("/api/memory/forget"')
-    block = src[i:src.index('if route == "/api/memory/decide":', i)]
+    block = _block(src, 'if route in ("/api/memory/forget"')
+    check("the write routes are still there to check", bool(block),
+          "the /api/memory/forget, /edit, /learning branch is gone from jarvis_hud.py")
     check("the write routes demand an integer id",
           'isinstance(body.get("id"), int)' in block)
     check("there is no list form anywhere in them",
@@ -136,8 +211,8 @@ def t_backdated_corrections_are_reachable():
     routes always retired at "now". These pin that a caller finally can.
     """
     src = SRC.read_text(encoding="utf-8")
-    i = src.index('route in ("/api/memory/forget"')
-    block = src[i:src.index('if route == "/api/memory/decide":', i)]
+    block = _block(src, 'if route in ("/api/memory/forget"')
+    check("the write routes are still there to check", bool(block))
 
     check("forget accepts an optional valid_to",
           'valid_to = body.get("valid_to")' in block)
@@ -154,13 +229,15 @@ def t_backdated_corrections_are_reachable():
     # the real date call retire() with it before adding", jarvis_memory.py)
     # only works if retire() actually runs BEFORE add_fact() in the edit
     # branch - the other order silently retires at "now" regardless of what
-    # the caller sent.
-    edit_i = block.index('# /api/memory/edit')
-    edit_block = block[edit_i:]
-    retire_at = edit_block.index('st.retire(body["id"], valid_to=valid_to)')
-    add_at = edit_block.index('add_fact(text, source="edited"')
+    # the caller sent. The edit path is the write-routes body after the
+    # edit-only guard, taken from the tree, so nothing here is an offset.
+    edit_block = _after(src, 'if route in ("/api/memory/forget"',
+                        'text == str(fact.get("text") or "") and valid_to is None')
+    check("the edit branch is still there to check", bool(edit_block))
+    retire_at = edit_block.find('st.retire(body["id"], valid_to=valid_to)')
+    add_at = edit_block.find('add_fact(text, source="edited"')
     check("a backdated edit retires the old fact BEFORE superseding it",
-          retire_at < add_at,
+          -1 < retire_at < add_at,
           "add()'s same-fact supersede path only backdates correctly when "
           "retire(valid_to=...) has already run")
 
@@ -172,8 +249,8 @@ def t_backdated_corrections_are_reachable():
 
 def t_reads_are_honest():
     src = SRC.read_text(encoding="utf-8")
-    i = src.index('if path == "/api/memory/facts":')
-    block = src[i:src.index('if path == "/api/memory/status":', i)]
+    block = _block(src, 'if path == "/api/memory/facts":')
+    check("the facts list is still there to check", bool(block))
     check("the facts list includes retired rows",
           "ORDER BY valid_from DESC" in block and "WHERE valid_to IS NULL" not in block,
           "hiding retired facts makes a superseded fact look deleted")
@@ -187,8 +264,8 @@ def t_reads_are_honest():
 def t_sleep_time_offer():
     """The overnight-memory card, and its two backend-facing actions."""
     src = SRC.read_text(encoding="utf-8")
-    i = src.index('if path == "/api/memory/pending":')
-    block = src[i:src.index('if path == "/api/memory/facts":', i)]
+    block = _block(src, 'if path == "/api/memory/pending":')
+    check("the pending route is still there to check", bool(block))
     check("the pending route carries the daily card",
           "jarvis_sleep.reminder_card()" in block)
     check("the card rides inside setup, not a second top-level key",
@@ -196,8 +273,11 @@ def t_sleep_time_offer():
           "a client already reading setup for one thing should not have to "
           "read a second field for a related one")
 
-    j = src.index('route == "/api/memory/sleep_time"')
-    route_block = src[j:j + 1100]
+    # The sleep_time ACTION is a branch of the write-routes statement, not a
+    # route of its own - so the block is that branch, found by its own marker.
+    # The old form was a 1100-character window, which the block outgrew.
+    route_block = _block(src, 'if route == "/api/memory/sleep_time"')
+    check("the sleep_time action is still there to check", bool(route_block))
     check("the enable action calls set_enabled", "jarvis_sleep.set_enabled(" in route_block)
     check("the stop-asking action calls set_remind", "jarvis_sleep.set_remind(" in route_block)
     check("a body with neither key is refused, not silently accepted",
@@ -206,22 +286,26 @@ def t_sleep_time_offer():
     check("a write that failed to persist is reported as a failure, not 200",
           "200 if out.get(\"ok\") else 500" in route_block)
     check("sleep_time is in the shared write whitelist",
-          '"/api/memory/sleep_time"' in src[src.index('route in ("/api/memory/forget"'):][:200])
+          "/api/memory/sleep_time"
+          in _strings_in_test(src, 'if route in ("/api/memory/forget"'),
+          "the write-routes branch no longer lists /api/memory/sleep_time - "
+          "if its condition is no longer a literal `in (...)`, read it by hand")
 
 
 def t_it_is_reachable():
     """CONTROL. A route nothing can call is the defect this project keeps
     producing, so check both whitelists actually name them."""
     src = SRC.read_text(encoding="utf-8")
-    getw = src[src.index('if path in ("/api/memory/pending"'):][:400]
+    getw = _block(src, 'if path in ("/api/memory/pending"')
+    check("the GET memory whitelist is still there to check", bool(getw))
     for r in ("/api/memory/facts", "/api/memory/export"):
         check(f"GET {r} is in the read whitelist", r in getw, getw[:200])
     check("the three write routes share one guarded branch",
           all(r in src for r in ('"/api/memory/forget"', '"/api/memory/edit"',
                                  '"/api/memory/learning"')))
-    # Every one of them must be behind both checks.
-    i = src.index('route in ("/api/memory/forget"')
-    block = src[i:i + 900]
+    # Every one of them must be behind both checks. The branch is the whole
+    # write-routes statement, whatever it has grown to.
+    block = _block(src, 'if route in ("/api/memory/forget"')
     check("they check the origin", "_origin_ok(self)" in block)
     check("they check the token", "_token_ok(self)" in block)
 

@@ -143,7 +143,19 @@ TMPDIRS = []
 
 
 def tmpdir() -> Path:
-    d = Path(tempfile.mkdtemp(prefix="jarvis-outcomes-"))
+    # .resolve(), so the throwaway folders are named the LONG way.
+    # tempfile.mkdtemp uses %TEMP% as given, and a GitHub Windows runner's is
+    # C:\Users\RUNNER~1\AppData\Local\Temp - an 8.3 short name. This suite
+    # hands that path to the script as -BackendPath, and PowerShell does not
+    # agree with itself about it: `Push-Location -LiteralPath <short>` makes
+    # (Get-Location).Path the LONG form, while
+    # (Resolve-Path -LiteralPath <short>).Path gives it back SHORT (measured
+    # on this PC, 2026-10-05). The mid-way-failure check below compares those
+    # two, so with a short-named TEMP it never matched, the simulated failure
+    # never happened, and four checks failed on the runner while the same
+    # code passes here. Resolving first removes the spelling from the
+    # question - the folder is the same folder either way.
+    d = Path(tempfile.mkdtemp(prefix="jarvis-outcomes-")).resolve()
     TMPDIRS.append(d)
     return d
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-quiz-cloud-info"
+description = "Enables the brain_quiz_cloud_info command without any pre-configured scope."
+commands.allow = ["brain_quiz_cloud_info"]
+
+[[permission]]
+identifier = "deny-brain-quiz-cloud-info"
+description = "Denies the brain_quiz_cloud_info command without any pre-configured scope."
+commands.deny = ["brain_quiz_cloud_info"]

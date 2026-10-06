@@ -47,6 +47,35 @@ FAILED, PASSED = [], []
 SKIPPED = []
 
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `w = out[i:i + 1200]` counted characters from the route header and hoped
+    the origin check, the token check and the handler call were inside the
+    next 1200 of them - a promise about how long the route stays, which has to
+    be re-measured by hand whenever it grows (2026-10-03). The block ends
+    where the indentation comes back to the marker's own level.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch
+    rehearsal, so it is not a parseable module and ast cannot be used on it;
+    indentation is the structure that is available, and unlike a character
+    count it is the same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 class FakeOllama:
     """The everyday Ollama: what /api/ps lists, and what was asked."""
 
@@ -468,8 +497,8 @@ def t_the_patch():
         return skip(out)
     check("power-mode.patch applies after note-capture.patch, and reverts", ok is True, out)
     if ok:
-        i = out.index('if route == "/api/power":')
-        w = out[i:i + 1200]
+        w = _block(out, 'if route == "/api/power":')
+        check("the /api/power route is still there to check", bool(w))
         check("POST /api/power checks origin and token", "_origin_ok(self)" in w and "_token_ok(self)" in w)
         check("and hands it to jarvis_power_switch", "jarvis_power_switch.handle_post" in w)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")

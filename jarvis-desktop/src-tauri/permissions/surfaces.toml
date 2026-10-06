@@ -1414,3 +1414,18 @@ permissions = ["allow-open-faces"]
 identifier = "onboarding-surface"
 description = "Mark the first-run walkthrough as seen and close it. Opens at most once."
 permissions = ["allow-finish-onboarding"]
+
+
+# Tutorials and the FAQ (the owner's request of 2026-10-05; src/tutorials.rs,
+# backend jarvis_tutorials.py; JARVIS-API.md section 114). One catalogue for both
+# apps and the owner's reading progress, kept on the PC. Marking progress acts on
+# nothing: no approval card, and NOT held while the event stream is stale - a
+# sentence the owner has already read should not have to wait for it.
+[[set]]
+identifier = "brain-tutorials"
+description = "Read the tutorials and the FAQ, and record where the owner has read to, so quitting a tutorial and coming back continues where it was left."
+permissions = [
+  "allow-get-tutorials",
+  "allow-mark-tutorial",
+  "allow-get-faq",
+]
