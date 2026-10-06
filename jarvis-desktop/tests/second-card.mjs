@@ -349,7 +349,25 @@ await check("the choice is offered, in the backend's own words, and a one-card P
   const split = modeRow(s, "split");
   assert.equal(split.disabled, true, "the split can be picked with only one card");
   assert.match(split.text, /Not yet - needs two graphics cards/);
-  assert.match(modeRow(s, "concurrent").text, /Nothing is set up on the second card yet/);
+  // ... and neither can the other way. The backend sends NO hint here on
+  // purpose (`concurrent_hint = ""` while there is no capable second card):
+  // "turn on the main switch below" would be advice that cannot work with one
+  // card. What it sends is the blocked line, naming the card it found.
+  const concurrent = modeRow(s, "concurrent");
+  assert.equal(concurrent.disabled, true, "two models at once can be picked with only one card");
+  assert.match(concurrent.text, /Not yet - only one graphics card found/);
+  noRaw(s.all);
+});
+
+await check("a capable second card with nothing switched on: the other way says what is still missing and can be picked", async () => {
+  const page = await open({ status: SC.capable_off });
+  const s = await section(page);
+  await page.close();
+  const concurrent = modeRow(s, "concurrent");
+  assert.equal(concurrent.disabled, false, "the other way cannot be picked while the split is off");
+  assert.match(concurrent.text, /Nothing is set up on the second card yet/);
+  assert.match(concurrent.text, /Turn on the main switch below/);
+  assert.equal(modeRow(s, "split").disabled, false, "the split cannot be picked on a capable pair");
   noRaw(s.all);
 });
 

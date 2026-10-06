@@ -378,7 +378,12 @@ def t_no_new_approval_action_was_added():
     for action in ("second_card_mode", "second_card_split", "second_card_card_mode"):
         check(f"no gate action called {action} exists",
               action not in AF.HARD_LIMITS and action not in AF.MUST_ASK)
-    toml = (BACKEND / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
+    # HERE, not BACKEND: this asserts what THIS repository ships, and
+    # backend/run_suites.py stages the shipped modules flattened (no rebuilt/
+    # sub-folder), so BACKEND/rebuilt is only ever there in repo mode. The
+    # two suites that already read this file - test_hardware.py:739 and
+    # test_second_card.py:1713 - both use HERE for the same reason.
+    toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     actions = sorted(set(re.findall(r"^(second_card_[a-z_]+)\s*=", toml, re.M)))
     check("the toml still has exactly the four second-card approval actions",
           actions == ["second_card_browser_enable", "second_card_combined_enable",
