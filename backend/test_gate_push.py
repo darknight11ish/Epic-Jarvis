@@ -73,9 +73,25 @@ SECRETS = ["password", "/home/mario", "dr.okafor@clinic.example", "Lucia", "pean
 
 
 def captured(body, *, tainted=False):
-    """Run _push with the network and the latch stubbed, return what was sent."""
+    """Run _push with the network, the latch and the destination stubbed.
+
+    THE DESTINATION IS NOT OPTIONAL, and leaving it out is a bug this file
+    already had. `_push` returns before it opens anything unless BOTH
+    NTFY_TOPIC and NTFY_SERVER are set - that is the whole point of
+    t_the_push_has_no_default_destination below, added 2026-10-05 in
+    gate-push.patch. This stub set only the topic, so on a PC with no
+    JARVIS_NTFY_SERVER in the environment (which is every PC that followed the
+    setup notes) _push sent nothing and `got == [body]` failed on an empty
+    list. The redaction path was fine; the stand-in was stale.
+
+    On the owner's 2026-10-05 run that read as the redaction having broken:
+    the failure is two sections above the two control sections that pass, and
+    apply-patches.ps1 printed only the last 25 lines, so the one line that
+    explained it was never shown. Both halves of that are fixed - this the
+    same day (show-suite-failure, scripts/apply-patches.ps1).
+    """
     sent = []
-    real_open, real_topic, real_taint = None, G.NTFY_TOPIC, G.taint_active
+    real_open, real_topic, real_taint, real_server = None, G.NTFY_TOPIC, G.taint_active, G.NTFY_SERVER
     import urllib.request
     real_open = urllib.request.urlopen
 
@@ -85,6 +101,10 @@ def captured(body, *, tainted=False):
 
     urllib.request.urlopen = lambda req, timeout=None: Fake(req)
     G.NTFY_TOPIC = "jarvis-test-topic"
+    # Both, or _push returns and this measures nothing. Not left to the
+    # environment: on the owner's PC JARVIS_NTFY_SERVER is unset, and the
+    # check has to behave the same wherever it runs.
+    G.NTFY_SERVER = "https://ntfy.example"
     G.taint_active = lambda: tainted
     try:
         G._push("Jarvis wants to: send_email", body)
@@ -94,6 +114,7 @@ def captured(body, *, tainted=False):
     finally:
         urllib.request.urlopen = real_open
         G.NTFY_TOPIC = real_topic
+        G.NTFY_SERVER = real_server
         G.taint_active = real_taint
     return [r.data.decode("utf-8", "replace") for r in sent]
 
@@ -114,6 +135,19 @@ def t_push_sends_only_what_it_was_given():
         return skip(_NO_MODULE)
     body = json.dumps(G._redact(SENSITIVE))
     got = captured(body)
+    # The CONTROL first, and it is not decoration. An empty list here is not
+    # "the redaction changed the body": it is _push returning at its own guard
+    # before any network call - which is what a missing destination in the
+    # stub looked like, and what the failure below should say rather than
+    # "[]" if it ever happens again.
+    check("CONTROL: the push was attempted at all, so the two checks below "
+          "are about a body and not about nothing",
+          len(got) == 1,
+          f"sent {len(got)} message(s). The stub set NTFY_TOPIC='jarvis-test-topic', "
+          f"NTFY_SERVER='https://ntfy.example' and tainted=False: _push returns "
+          f"before the network unless BOTH settings are set and the conversation "
+          f"is not latched local, so an empty list means one of those, not a "
+          f"changed body.")
     check("a redacted body reaches the broker unchanged", got == [body], f"{got}")
     leaked = [s for s in SECRETS if any(s in g for g in got)]
     check("nothing sensitive is on the wire", not leaked, f"leaked: {leaked}")
