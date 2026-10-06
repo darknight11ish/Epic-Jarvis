@@ -20,12 +20,13 @@ how Jarvis got here: audits, research, and notes that one working session left f
 another. Apart from one generated file that was deleted on 2026-10-05 (the source
 bundle, in the last table below - its contents are still in git history), nothing
 had been moved or deleted before 2026-10-06, so every old link still worked. That
-changed on 2026-10-06: two more tracked things were deleted - the vendored
-telemetry package `tel/` and the stray tarball `evidence-dev-telemetry-2.1.3.tgz`.
-Nothing referenced either, and the last table on this page says what each one was.
-Deleting from the newest commit stops carrying it forward; it does not shrink a
-clone that already has it, and `git show <older-commit>:<path>` still returns the
-file. This page says which document is which.
+changed on 2026-10-06: three more tracked things were deleted - the vendored
+telemetry package `tel/`, the stray tarball `evidence-dev-telemetry-2.1.3.tgz`,
+and the eyelid preview `docs/critters/eyelids-preview/`. Nothing referenced any
+of the four, and the last table on this page says what each one was. Deleting
+from the newest commit stops carrying it forward; it does not shrink a clone that
+already has it, and `git show <older-commit>:<path>` still returns the file. This
+page says which document is which.
 
 (An earlier version of this paragraph said "about ninety documents", and at some
 point it also gave a size of 720 KB for something that had grown far past that -
@@ -130,6 +131,7 @@ them; the current documents above replace them.
 |---|---|
 | ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05.** It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. Git history still has it (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
 | `tel/`, `evidence-dev-telemetry-2.1.3.tgz` | **Removed 2026-10-06.** These were both the same third-party npm package, `@evidence-dev/telemetry` 2.1.3: `tel/package/` was its unpacked contents (5 files, 9,453 bytes) and the tarball was the download it came out of (3,906 bytes). Its own `index.cjs` opens a `@segment/analytics-node` connection and reports the operating system, Node version, architecture and hashed home directory, so it is a phone-home sitting in a project whose first rule is that nothing leaves the PC. Nothing in Jarvis, the desktop app, the phone app or any workflow imported it - the two words `tel/package` appear in no tracked file. `git show <older-commit>:tel/package/index.cjs` still returns it, so nothing is lost. `.gitignore` already covers `*.tgz` (added 2026-10-05); no new rule is needed for `tel/`, which a `npm install` would recreate anyway. |
+| ~~docs/critters/eyelids-preview/~~ | **Removed 2026-10-06.** Four files, 2.83 MB: two "before and after" pictures and the generator that drew them. Its own `README.md:3-4` says it is "a PREVIEW, not part of the app yet" and that "the main branch does not have it" - it did - and `README.md:14-16` says it was "not wired to the animals' poses" and that no golden file changed. The feature was built afterwards and is kept properly in [CRITTERS.md](CRITTERS.md), with its pictures in `docs/critters/eyelids/` (6.77 MB, still here). Its generator imported from `.claude/worktrees/agent-abd7d5ab573657428/`, a worktree that no longer exists, so those pictures could not be drawn again anyway. Nothing pointed at it - no test, no workflow, no document, not the CHANGELOG, which names `docs/critters/eyelids/`. Git history still has it (`git show <older-commit>:docs/critters/eyelids-preview/README.md`), so nothing is lost. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |
 | [ANDROID-FEATURE-AUDIT.md](ANDROID-FEATURE-AUDIT.md), [ANDROID-REPLY-2026-09-15.md](ANDROID-REPLY-2026-09-15.md), [ANDROID-REPLY-2026-09-15-GRADIENT.md](ANDROID-REPLY-2026-09-15-GRADIENT.md), [ANDROID-REPLY-2026-09-18-CATCHUP.md](ANDROID-REPLY-2026-09-18-CATCHUP.md), [ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md](ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md), [ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md](ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md) | Messages between the phone and desktop sessions, 15-18 September. |
