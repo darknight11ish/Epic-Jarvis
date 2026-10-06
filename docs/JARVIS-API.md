@@ -8152,10 +8152,10 @@ Read-only. There is no button here, no link, and no way to reopen or
 re-decide a past card - it answers "did I turn that on?", nothing more.
 Placed next to the Undo shelf on both apps: desktop Brain -> Work,
 `#activity` (`jarvis-desktop/src/brain.js` `renderActivity`,
-`brain.html`); phone Inbox, the "ACTIVITY" section
+`brain.html`); phone, its own "Past approvals" screen
 (`jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/
-InboxScreen.kt`), fed by `JarvisRuntime.pastApprovals` /
-`JarvisApi.gateHistoryRead`.
+ApprovalsScreen.kt`, opened from the Inbox's own ACTIVITY row), fed by
+`JarvisRuntime.pastApprovals` / `JarvisApi.gateHistoryRead`.
 
 Both readers ask for the `history` key **by name**, never by the positional
 fallback `parseListBody`/the desktop's `refresh_pending` use for `pending` -
@@ -8175,9 +8175,17 @@ read `decodePendingRows` already uses for `pending`.
   tool to learn.
 - **Phone**: `JarvisApi.gateHistoryRead()` calls the same `GET /api/pending`
   with `unwrap = listOf("history")`, decoded by `decodeGateHistoryRows`
-  (`net/GateHistory.kt`) into `GateHistoryItem`s, fetched alongside the
-  Inbox's other three lists in `JarvisRuntime.refreshInbox()` and rendered
-  in `InboxScreen`'s new "ACTIVITY" section, newest decided first.
+  (`net/GateHistory.kt`) into `GateHistoryItem`s, and rendered on the
+  "Past approvals" screen (`ui/screens/ApprovalsScreen.kt`), newest decided
+  first. The screen reads it by itself, when it opens and on Refresh
+  (`JarvisRuntime.refreshPastApprovals`, which reads the one list and not the
+  Inbox's other three); the Inbox still reads it too, so its own ACTIVITY row
+  and the screen can never disagree. The four filter chips and the row fields
+  are the desktop's own (`net/PastApprovals.kt`, held to them by
+  `PastApprovalsTest.kt`). While "Hide memory lists and chat history" is on,
+  the list hides behind the same Show the phone's other history surfaces use -
+  the screen's heading and its way in from the Inbox stay, because they say
+  nothing about what was decided.
 
 ### 42.3 Known gaps, said plainly
 

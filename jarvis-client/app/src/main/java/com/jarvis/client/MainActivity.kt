@@ -85,6 +85,7 @@ import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.approval.CardWaitingLine
 import com.jarvis.client.ui.rememberNavState
 import com.jarvis.client.ui.screens.AppearanceScreen
+import com.jarvis.client.ui.screens.ApprovalsScreen
 import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
@@ -2229,6 +2230,14 @@ class MainActivity : FragmentActivity() {
                             undo = undo,
                             jobs = jobs,
                             pastApprovals = pastApprovals,
+                            // "Past approvals" (ui/screens/ApprovalsScreen.kt):
+                            // the rows moved to their own screen, reachable from
+                            // here - the approvals audit of 2026-09-30 found
+                            // this list was "only reachable via Inbox", and its
+                            // own screen is what lets it hide under "Hide memory
+                            // lists and chat history" like the other history
+                            // surfaces.
+                            onOpenApprovals = { nav.go(Screen.APPROVALS) },
                             onOpenApproval = { id ->
                                 // Carries the id now. It used to be dropped, so a
                                 // digest row with three approvals waiting took you
@@ -2250,6 +2259,31 @@ class MainActivity : FragmentActivity() {
                             notice = notice,
                             onDismissNotice = { JarvisRuntime.clearNotice() },
                             onRetry = { scope.launch { JarvisRuntime.refreshInbox() } },
+                        )
+                    }
+
+                    Screen.APPROVALS -> {
+                        // "Past approvals" - read-only (the owner's decision of
+                        // 2026-09-27). The screen reads the list itself, when it
+                        // opens, when Show confirms and on Refresh, so it fetches
+                        // the one list it draws rather than the Inbox's four.
+                        // Nothing here decides a card: there is no approve, deny,
+                        // cancel, clear or re-open anywhere on it.
+                        ApprovalsScreen(
+                            link = link,
+                            stale = stale,
+                            items = pastApprovals,
+                            read = inboxRead.activity,
+                            fetchedAtMs = inboxRead.fetchedAtMs,
+                            refreshing = inboxRead.refreshing,
+                            onRead = { scope.launch { JarvisRuntime.refreshPastApprovals() } },
+                            notice = notice,
+                            onDismissNotice = { JarvisRuntime.clearNotice() },
+                            onBack = { nav.back() },
+                            modifier = root,
+                            privateHidden = privateHidden,
+                            onShowPrivate = ::showPrivateLists,
+                            showPrivateBusy = ownerCheckBusy.value,
                         )
                     }
 
