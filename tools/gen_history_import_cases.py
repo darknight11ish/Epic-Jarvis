@@ -81,7 +81,9 @@ def main() -> int:
         print("history-import-cases.json is up to date.")
         return 0
     DESKTOP.parent.mkdir(parents=True, exist_ok=True)
-    DESKTOP.write_text(want, encoding="utf-8")
+    # newline="\n": without it this writes CRLF on Windows and LF elsewhere
+    # (the repository is LF everywhere - .gitattributes).
+    DESKTOP.write_text(want, encoding="utf-8", newline="\n")
     print(f"wrote {DESKTOP.relative_to(ROOT)}")
     return 0
 

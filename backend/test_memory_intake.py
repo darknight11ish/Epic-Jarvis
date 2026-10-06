@@ -124,7 +124,8 @@ def fresh(embedder=None):
             X._init(c)
         else:
             c.execute("CREATE TABLE IF NOT EXISTS proposals (id INTEGER PRIMARY KEY,"
-                      " text TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending')")
+                      " text TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',"
+                      " created REAL NOT NULL DEFAULT 0)")
     I._near_dropped = 0
     I._remember_last = None
     if X is not None:
@@ -133,8 +134,14 @@ def fresh(embedder=None):
 
 
 def queue_card(store, text, state="pending"):
+    # `created` is NOT NULL in the real proposals table (jarvis_extract._init),
+    # so it has to be given. This helper only ever reached the test's own
+    # three-column stand-in in CI, where jarvis_extract.py is not in the
+    # repository; against the owner's backend the real table rejected the insert
+    # and took the whole test down with it (2026-10-03).
     with store._connect() as c:
-        c.execute("INSERT INTO proposals (text, state) VALUES (?, ?)", (text, state))
+        c.execute("INSERT INTO proposals (text, state, created) VALUES (?, ?, ?)",
+                  (text, state, time.time()))
 
 
 # ==========================================================================
@@ -451,7 +458,7 @@ def t_propose_anchors_dates_and_drops_near_duplicates():
     if not _needs_x("propose() anchors dates and drops near-duplicates"):
         return
     s = fresh(SameEmbedder())
-    s.add_fact("Mario is vegetarian.")
+    old = s.add_fact("Mario is vegetarian.")
     with I.conversation_at(WED):
         X.propose([{"role": "user", "content": "x"}], llm=_stub([
             {"text": "Started the new job yesterday", "confidence": 0.9},
@@ -460,10 +467,25 @@ def t_propose_anchors_dates_and_drops_near_duplicates():
             {"text": "Mario is a vegetarian", "confidence": 0.9, "replaces": "Mario is vegetarian."}]),
             source="conversation")
     texts = [p["text"] for p in X.pending()]
+    # Every fact queued out of a conversation more than two days old carries
+    # the "(as of <date>)" learned_text() adds (the memory dates group,
+    # 2026-09-28), so the word comparisons below are on undated() - the words
+    # without the date the store itself put on the end. Comparing the raw
+    # text made these three read as failures while the product was worse than
+    # they knew: see the correction check below (measured 2026-10-04).
+    said = [I.undated(t) for t in texts]
     check("the date went in at learning time", "Started the new job yesterday (2026-09-22)" in texts, repr(texts))
-    check("the near-duplicate was not queued", texts.count("Mario is a vegetarian") == 1, repr(texts))
-    check("the one with a 'not' was", "Mario is not a vegetarian" in texts)
-    check("the correction was, word for word", any(p.get("replaces") for p in X.pending()))
+    check("the near-duplicate was not queued", said.count("mario is a vegetarian") == 1, repr(texts))
+    check("the one with a 'not' was", "mario is not a vegetarian" in said, repr(texts))
+    # NOT just "some card carries a replaces string". A plain duplicate of the
+    # same words queued first used to take this slot - propose()'s in-pass
+    # `have` set matches on text - and the correction was dropped, so the
+    # owner saw a duplicate card and no correction. The correction card must
+    # exist AND name the fact it would retire.
+    cards = [p for p in X.pending() if p.get("replaces")]
+    check("the correction was, word for word, and names the fact it would retire",
+          len(cards) == 1 and cards[0]["replaces"] == "Mario is vegetarian."
+          and cards[0].get("replaces_id") == old, repr(X.pending()))
     st = X.setup_status()
     check("setup_status counts the drop", st.get("near_duplicates_dropped") == 1, repr(st))
     check("and says the check is running", st.get("near_duplicate_check") == "on", repr(st))
@@ -540,7 +562,7 @@ def t_numbered_correction_end_to_end():
     s.add_fact("Mario drives a 1998 Volvo")
     I.propose(X, convo, _stub([{"text": "Mario drives an electric car", "confidence": 0.9,
                                 "replaces": 42}]), when=WED, store=s)
-    row = [p for p in X.pending() if p["text"] == "Mario drives an electric car"]
+    row = [p for p in X.pending() if I.undated(p["text"]) == "mario drives an electric car"]
     check("a number off the list queues a plain fact that retires nothing",
           bool(row) and row[0].get("replaces_id") is None, repr(row))
 

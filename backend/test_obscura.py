@@ -90,6 +90,15 @@ class Clock:
         return self.t
 
 
+def no_watch(drv, gen):
+    """No background watchdog at all: the test drives `Driver.tick()` itself
+    with its own clock, so whether the program is stopped cannot depend on a
+    thread being scheduled inside the test's own real-time window.
+    `t_the_watchdog_thread_itself_runs` puts the real starter back and proves
+    the thread runs."""
+    return
+
+
 def driver(mode="", log=None, clock=None, verify=False):
     env_log = str(log) if log else ""
     real_env = OB.child_env
@@ -103,7 +112,10 @@ def driver(mode="", log=None, clock=None, verify=False):
     d = OB.Driver(clock=clock or time.monotonic,
                   command_fn=lambda: [sys.executable, str(FAKE), "--stealth", "mcp"],
                   verify=verify)
-    d._restore = lambda: setattr(OB, "child_env", real_env)
+
+    def restore():
+        OB.child_env = real_env
+    d._restore = restore
     return d
 
 
@@ -446,38 +458,47 @@ def t_the_start_gate_keeps_it_off():
 
 def t_a_program_nobody_uses():
     fresh()
-    real = OB.WATCH_POLL_S
-    OB.WATCH_POLL_S = 0.05
+    real_watch = OB.WATCH_THREAD
     clock = Clock()
+    # The watchdog's own tick, driven by this test with its own clock: whether
+    # the program is stopped then depends on nothing but the clock. Waiting for
+    # the background thread to wake up instead is what made this check flaky on
+    # a busy runner - the thread can be seconds late, past any deadline the
+    # test sets for it.
+    OB.WATCH_THREAD = no_watch
     d = driver(clock=clock)
     try:
         d.call("browser_navigate", {"url": "https://example.test/"})
         proc = d.proc
         check("running after a call", d.alive())
         clock.t += OB.IDLE_MAX_S + 1
-        deadline = time.monotonic() + 5
-        while d.alive() and time.monotonic() < deadline:
-            time.sleep(0.05)
+        d.tick()
         check("the watchdog stops an idle program ON ITS OWN, with no further call",
               not d.alive() and proc.poll() is not None and d.last_stop_why == "idle", d.last_stop_why)
         got = d.call("browser_snapshot", {})
         check("the next call after that starts a fresh program on a blank page, no refusal",
               d.alive() and "URL: about:blank" in got["text"], got["text"][:40])
         proc = d.proc
-        clock.t += OB.SESSION_MAX_S + 1
-        deadline = time.monotonic() + 5
-        while d.alive() and time.monotonic() < deadline:
-            time.sleep(0.05)
+        # Used every couple of minutes right up to the limit (never idle for
+        # IDLE_MAX_S), so only the SESSION limit can be the reason here - the
+        # same shape the session limit has in real use.
+        for _ in range(4):
+            clock.t += OB.IDLE_MAX_S - 30
+            d.call("browser_snapshot", {})
+        check("... and it is still running, because it was used all along", d.alive())
+        clock.t += OB.IDLE_MAX_S - 30
+        d.tick()
         check("the watchdog stops a program at the session limit too",
-              not d.alive() and proc.poll() is not None and d.last_stop_why in ("time limit", "idle"),
+              not d.alive() and proc.poll() is not None and d.last_stop_why == "time limit",
               d.last_stop_why)
     finally:
         d.stop("t")
         d._restore()
-        OB.WATCH_POLL_S = real
     # The owner comes back after 11 minutes and the watchdog has not run (a slow
-    # poll): the call itself replaces the program quietly.
+    # poll): the call itself replaces the program quietly. No watchdog thread
+    # either - `_check_limits` is what this part is about.
     clock = Clock()
+    OB.WATCH_THREAD = no_watch
     d = driver(clock=clock)
     try:
         d.call("browser_navigate", {"url": "https://example.test/"})
@@ -491,6 +512,54 @@ def t_a_program_nobody_uses():
     finally:
         d.stop("t")
         d._restore()
+        OB.WATCH_THREAD = real_watch
+
+
+def t_the_watchdog_thread_itself_runs():
+    """`tick()` is what the checks above drive, so prove the real thread is
+    started with the program and calls it with nobody asking.
+
+    What is watched is the thread CALLING the watchdog's own `tick()`, not the
+    program's death: `last_stop_why` is set only after the program is killed,
+    so reading it is a race against the kill (this check failed 8 runs in 40
+    that way). Stopping is proved deterministically by `d.tick()` in
+    `t_a_program_nobody_uses`; this proves the other half - that the watcher
+    runs and looks, on its own.
+
+    The idle limit is one HOUR, so nothing here can be stopped part-way and a
+    slow machine cannot turn this into a race; the wait is only there so a
+    watchdog that never ticks fails rather than hangs."""
+    fresh()
+    real_poll = OB.WATCH_POLL_S
+    real_idle = OB.IDLE_MAX_S
+    real_tick = OB.Driver.tick
+    looked = []
+    OB.WATCH_POLL_S = 0.02
+    OB.IDLE_MAX_S = 3600.0
+
+    def counting_tick(self, gen=None):
+        looked.append(time.monotonic())
+        return real_tick(self, gen)
+    OB.Driver.tick = counting_tick
+    d = driver()
+    try:
+        d.call("browser_navigate", {"url": "https://example.test/"})
+        check("the program is running and nothing has asked for it", d.alive())
+        check("... so this is the real starter, not a stand-in",
+              OB.WATCH_THREAD is OB._watch_thread)
+        check("the watchdog thread is started with the program",
+              any(t.name == "jarvis-obscura-watchdog" and t.is_alive() for t in threading.enumerate()))
+        deadline = time.monotonic() + 30
+        while not looked and time.monotonic() < deadline:
+            time.sleep(0.02)
+        check("... and the thread looks at the clock on its own, with no call and no tick from this test",
+              bool(looked) and d.alive(), len(looked))
+    finally:
+        d.stop("t")
+        d._restore()
+        OB.Driver.tick = real_tick
+        OB.WATCH_POLL_S = real_poll
+        OB.IDLE_MAX_S = real_idle
 
 
 def t_asking_for_the_state_never_waits():

@@ -121,6 +121,17 @@ def fresh():
     return d
 
 
+class Clock:
+    """A clock the test moves by hand, so a time limit is reached by the clock
+    and never by waiting for one. The same shape test_obscura.py uses."""
+
+    def __init__(self, t=1000.0):
+        self.t = t
+
+    def __call__(self):
+        return self.t
+
+
 def install_program():
     """A pretend Obscura file, checked, so the driver's own checks pass."""
     exe = OB.exe_path()
@@ -131,9 +142,10 @@ def install_program():
     return exe
 
 
-def rig(mode="", *, on=True, installed=True, log=None):
+def rig(mode="", *, on=True, installed=True, log=None, clock=None):
     """Settings folder, a checked program file, the switch, and the engine wired
-    to the stand-in program."""
+    to the stand-in program. `clock` puts the driver's own limits on a clock the
+    test moves, instead of real elapsed time."""
     fresh()
     if installed:
         install_program()
@@ -146,7 +158,8 @@ def rig(mode="", *, on=True, installed=True, log=None):
         e["FAKE_MODE"], e["FAKE_LOG"] = mode, env_log
         return e
     OB.child_env = env
-    d = OB.Driver(command_fn=lambda: [sys.executable, str(FAKE), "--stealth", "mcp"], verify=False)
+    d = OB.Driver(clock=clock or time.monotonic,
+                  command_fn=lambda: [sys.executable, str(FAKE), "--stealth", "mcp"], verify=False)
     E.HEADLESS._driver = d
     return d
 
@@ -1308,20 +1321,26 @@ def t_a_page_can_hide_words_in_it_but_they_do_not_reach_the_model():
 
 def t_the_program_does_not_outlive_its_idle_time_after_a_plan():
     log = _TMP / "log-idle.jsonl"
-    d = rig(log=log)
-    real = (OB.IDLE_MAX_S, OB.WATCH_POLL_S)
-    OB.IDLE_MAX_S, OB.WATCH_POLL_S = 0.6, 0.05
+    clock = Clock()
+    real_idle = OB.IDLE_MAX_S
+    # The driver is given the test's own clock, so the idle limit is reached by
+    # moving the clock and then letting the watchdog take its look - never by
+    # sleeping and hoping a background thread wakes up inside a real-time
+    # deadline, which is what made this check flaky on a busy runner. It also
+    # means the limit cannot be reached by the PLAN taking a while on a slow
+    # machine: the clock stands still until this test moves it.
+    OB.IDLE_MAX_S = 0.6
+    d = rig(log=log, clock=clock)
     try:
         p, out = run_plan("read", [dict(NAV)])
         check("a plan ran", out["ok"] is True)
         check("straight after it the page is still open, so a following plan can click on it", d.alive())
-        deadline = time.monotonic() + 8
-        while d.alive() and time.monotonic() < deadline:
-            time.sleep(0.05)
+        clock.t += OB.IDLE_MAX_S + 1
+        d.tick()                                   # the watchdog's own look
         check("left alone for the idle time, the program is stopped by the watchdog with no further call",
               not d.alive() and d.last_stop_why == "idle", d.last_stop_why)
     finally:
-        OB.IDLE_MAX_S, OB.WATCH_POLL_S = real
+        OB.IDLE_MAX_S = real_idle
         d.stop("t")
 
 

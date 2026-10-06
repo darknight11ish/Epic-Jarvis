@@ -505,7 +505,14 @@ def t_a_kind_on_the_one_scheduler():
 
 
 def t_it_goes_off_is_built_without_a_model_and_rings_ready():
-    use_tz("Europe/London")
+    # The times below are London's, and the events are written in UTC. Windows
+    # has no time.tzset(), so TZ cannot be set and this PC renders them in its
+    # own zone: 09:30 came out as 01:30 and the check read as a bug. CI (Linux)
+    # proves it; here it is reported as not proven (2026-10-03).
+    if not use_tz("Europe/London"):
+        check("SKIPPED (this system has no time.tzset, so the PC's timezone cannot be "
+              "set to Europe/London; CI proves this one on Linux)", True)
+        return
     B.forget()
     w = World(local(2026, 9, 25, 6, 0), name="fire")
     S._SCHED = w.s
@@ -578,7 +585,13 @@ def t_missed_while_off_says_late():
 
 
 def t_calendar_lines():
-    use_tz("Europe/London")
+    # See t_it_goes_off_is_built_without_a_model_and_rings_ready above: the
+    # expected clock times are London's, and there is no time.tzset() on Windows
+    # (2026-10-03).
+    if not use_tz("Europe/London"):
+        check("SKIPPED (this system has no time.tzset, so the PC's timezone cannot be "
+              "set to Europe/London; CI proves this one on Linux)", True)
+        return
     now = local(2026, 9, 25, 7, 0)
     xml = calendar_xml(("Stand-up", "", "20260911T080000Z", "RRULE:FREQ=WEEKLY\n"),
                        ("Mum's birthday", ";VALUE=DATE", "20260925"),

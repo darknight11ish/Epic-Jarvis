@@ -47,6 +47,35 @@ sys.modules["jarvis_framework"] = fw
 import jarvis_note_capture as NC  # noqa: E402
 import jarvis_notes as N  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `window = out[i:i + 1200]` counted characters from the route header and
+    hoped the origin check, the token check and the handler call were inside
+    the next 1200 of them - a promise about how long the route stays, which
+    has to be re-measured by hand whenever it grows (2026-10-03). The block
+    ends where the indentation comes back to the marker's own level.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch
+    rehearsal, so it is not a parseable module and ast cannot be used on it;
+    indentation is the structure that is available, and unlike a character
+    count it is the same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
 SKIPPED = []
 TOKEN = "s3cr3t+tok/en=="
@@ -85,7 +114,16 @@ class Verdict:
 
 
 def graph():
-    g = _TMP / f"graph{time.time_ns()}"
+    # tempfile.mkdtemp, not `_TMP / f"graph{time.time_ns()}"`. On Windows
+    # time.time_ns() is GetSystemTimeAsFileTime: 100-ns units, but the value
+    # only moves on the system timer tick (15.6 ms by default; about 0.5 ms on
+    # this PC, because desktop programs ask Windows for a finer timer). Two
+    # calls inside one tick return the SAME number, so the second one asks for
+    # a folder the first one already made and `mkdir(parents=True)` dies with
+    # `FileExistsError: [WinError 183] ... graph<ns>\logseq` - which is what
+    # the Windows CI runner reported on 2026-10-05 (PR #47). mkdtemp asks the
+    # filesystem for a free name instead, so it cannot collide on any machine.
+    g = Path(tempfile.mkdtemp(dir=_TMP, prefix="graph"))
     (g / "logseq").mkdir(parents=True)
     (g / "journals").mkdir()
     os.environ[NC.LOGSEQ_GRAPH_ENV] = str(g)
@@ -430,8 +468,8 @@ def t_the_patch():
         return skip(out)
     check("note-capture.patch applies after task-control.patch, and reverts", ok is True, out)
     if ok:
-        i = out.index('if route == "/api/notes/capture":')
-        window = out[i:i + 1200]
+        window = _block(out, 'if route == "/api/notes/capture":')
+        check("the notes/capture route is still there to check", bool(window))
         check("POST /api/notes/capture checks origin and token",
               "_origin_ok(self)" in window and "_token_ok(self)" in window)
         check("and hands the body to jarvis_note_capture", "jarvis_note_capture.handle_post" in window)

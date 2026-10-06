@@ -17,7 +17,7 @@ No pytest, no network, no model. Real sqlite stores in a temp dir.
    cannot know "Mario lives in Lisbon" was true eighteen months ago. Worth
    more here than to Khoj, because this store retires rather than deletes.
 """
-import sys, tempfile, time, traceback, types
+import ast, sys, tempfile, time, traceback, types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -136,20 +136,52 @@ def t_recalled_facts_carry_a_date():
         check("the helper exists", False, f"no {HUD}")
         return
     src = HUD.read_text(encoding="utf-8")
-    check("the helper exists", "def _dated_fact(" in src)
-    check("and the prompt uses it", "_dated_fact(f) for f in chosen_facts" in src)
-    check("and `created` is carried through the search path",
-          '"created": h.get("created")' in src,
+    tree = ast.parse(src)
+    funcs = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+
+    # `"def _dated_fact(" in src` was a question about spelling. This is the
+    # function itself, and the object it defines is what the checks below run.
+    check("the helper exists", "_dated_fact" in funcs)
+    if "_dated_fact" not in funcs:
+        return
+
+    # The prompt must still STAMP each recalled fact. Asking the source text
+    # for one of two exact spellings of the line was a question about how the
+    # line happens to be written; this asks the tree for the comprehension
+    # that calls _dated_fact() over chosen_facts, whatever the line looks like
+    # around it (`_al_line(...)` wraps it since memory-profile.patch).
+    stamps = [n for n in ast.walk(tree)
+              if isinstance(n, (ast.ListComp, ast.GeneratorExp, ast.SetComp))
+              and any(isinstance(g.iter, ast.Name) and g.iter.id == "chosen_facts"
+                      for g in n.generators)
+              and any(isinstance(c, ast.Call)
+                      and getattr(c.func, "id", None) == "_dated_fact"
+                      for c in ast.walk(n.elt))]
+    check("and the prompt uses it", bool(stamps),
+          "the recalled-facts block no longer stamps each fact with its date")
+
+    # `created` must survive the search path that builds chosen_facts. Every
+    # dict in the module that claims a "created" key, whatever the spacing.
+    created = [n for n in ast.walk(tree) if isinstance(n, ast.Dict) and any(
+        isinstance(k, ast.Constant) and k.value == "created"
+        and isinstance(v, ast.Call) and getattr(v.func, "attr", None) == "get"
+        and any(isinstance(a, ast.Constant) and a.value == "created" for a in v.args)
+        for k, v in zip(n.keys, n.values))]
+    check("and `created` is carried through the search path", bool(created),
           "chosen_facts used to drop every column but text and id")
+
+    # The sentence itself is the product's own wording, so there is nothing
+    # structural to check - it is the data, and it is checked as data.
     check("and the block says what the date MEANS",
           "when Jarvis was told" in src,
           "an unexplained date invites the model to read it as when it became true")
 
-    # Execute the helper rather than only grepping it.
+    # Execute the helper rather than only reading it. Lifted by node, not by
+    # `src.index("def _dated_fact(") : src.index("def _models_view()")` - the
+    # window form silently swept up (or missed) whatever sat between them.
     ns = {"time": time}
-    start = src.index("def _dated_fact(")
-    end = src.index("def _models_view()")
-    exec(compile(src[start:end], "<helper>", "exec"), ns)
+    exec(compile(ast.Module(body=[funcs["_dated_fact"]], type_ignores=[]),
+                 "<dated_fact>", "exec"), ns)
     dated = ns["_dated_fact"]
 
     when = time.time() - 400 * 86400

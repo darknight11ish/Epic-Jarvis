@@ -595,8 +595,14 @@ def t_quick_phrases():
     SC.ENGINE = SC.Screen(ocr=lambda b: {"ok": False})
     try:
         got = Q.run(Q.match("watch with me"), None, 0.0, peer="127.0.0.1")
+        # The sentence comes from not_built_words(), which reads the REAL
+        # platform: off Windows it names the reason ("... is off on this PC. This
+        # is not Windows."), and on the owner's PC - where the readers are
+        # present, so the stand-in engine above is the only thing missing - it is
+        # NOT_BUILT. Asserting the off-Windows wording could only ever pass off
+        # Windows (2026-10-03).
         check("with no Windows readers it says why instead of starting",
-              "off on this PC" in got.reply or "not built" in got.reply, got.reply)
+              got.reply in (SC.not_built_words(), SC.NOT_BUILT), got.reply)
     finally:
         SC.ENGINE = SC_REAL
 

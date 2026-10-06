@@ -162,11 +162,23 @@ def cases() -> dict:
 
 
 def _relative(obj, base: str = ""):
-    """The machine's own folder in a path becomes a Windows path the same everywhere."""
+    """The machine's own folder in a path becomes a Windows path the same everywhere.
+
+    BOTH spellings of that folder are replaced: the one handed in, and its
+    os.path.realpath - the long form of an 8.3 short name. `_listed` below
+    saves os.path.realpath(...), and a GitHub Windows runner's TEMP is
+    C:\\Users\\RUNNER~1\\AppData\\Local\\Temp, whose realpath is
+    C:\\Users\\runneradmin\\AppData\\Local\\Temp. Searching only for the short
+    spelling therefore matched nothing, the runner's own folder went into the
+    fixture, and `--check` said STALE on every run (measured 2026-10-05, PR
+    #47; this PC reproduces it by pointing TEMP at a short-named folder).
+    """
     if not base:
         return obj
     text = json.dumps(obj, ensure_ascii=False)
-    text = text.replace(json.dumps(base + os.sep)[1:-1], "C:\\\\Users\\\\owner\\\\Bank\\\\")
+    # Longest first, so the long spelling is not half-replaced by a shorter one.
+    for one in sorted({base, os.path.realpath(base)}, key=len, reverse=True):
+        text = text.replace(json.dumps(one + os.sep)[1:-1], "C:\\\\Users\\\\owner\\\\Bank\\\\")
     return json.loads(text)
 
 
@@ -187,7 +199,9 @@ def main(argv) -> int:
         return 0
     for c in COPIES:
         c.parent.mkdir(parents=True, exist_ok=True)
-        c.write_text(text, encoding="utf-8")
+        # newline="\n": without it this writes CRLF on Windows and LF elsewhere
+        # (the repository is LF everywhere - .gitattributes).
+        c.write_text(text, encoding="utf-8", newline="\n")
         print("wrote", c.relative_to(ROOT))
     return 0
 

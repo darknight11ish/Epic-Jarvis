@@ -31,6 +31,25 @@ const WATCH = () => {
   window.__regionCount = regions.length;
 };
 
+/** The rail's own visible order, as the DOM has it: the first or last tab id.
+ *  Asked for rather than hard-coded, so the check is about the pattern and
+ *  not about how many tabs the rail happens to have this month. */
+const railEnd = (page, wantFirst) => page.evaluate((first) => {
+  const tabs = [...document.querySelectorAll('#rail-nav [role="tab"]')]
+    .filter((t) => !t.closest("li").hidden);
+  if (!tabs.length) return null;
+  return (first ? tabs[0] : tabs[tabs.length - 1]).id;
+}, wantFirst);
+
+/** Where the focus is, which tab is selected, and which single tab is still
+ *  in the document's tab order - the three halves of the roving pattern. */
+const rovingState = (page) => page.evaluate(() => ({
+  focused: document.activeElement.id,
+  selected: document.querySelector('[aria-selected="true"]')?.id,
+  tab0: [...document.querySelectorAll('#rail-nav [role="tab"]')]
+    .filter((t) => t.tabIndex === 0).map((t) => t.id),
+}));
+
 await check("no live region is hidden when it is written", async () => {
   const page = await K.open(browser, base, "index.html",
     { pending: [], attention: K.ATTENTION_CLEAR }, { width: 750, height: 800 });
@@ -186,7 +205,7 @@ await check("the rail is one tab stop, and the arrows move inside it", async () 
 
   // Galaxy/Live/Trust/Watch sit behind "Advanced" now (the rail trim) and
   // are `hidden` - and therefore unfocusable - until it is opened. Arrowing
-  // among only the three everyday tabs is covered by visibleTabOrder()'s own
+  // among only the everyday tabs is covered by visibleTabOrder()'s own
   // "cycles only what's on the rail" contract; this test is about the roving
   // tabindex itself, so open Advanced first to reach the tab it needs.
   await page.locator("#rail-advanced-toggle").click();
@@ -208,10 +227,31 @@ await check("the rail is one tab stop, and the arrows move inside it", async () 
   assert.equal(after.selected, "tab-now", "selection did not follow focus");
   assert.equal(after.tab0, 1, "the roving tabindex did not rove");
 
+  // End must reach the LAST tab on the rail, whatever that is. This used to
+  // say "tab-watch", and the rail's tenth tab (Tutorials) is what naming it
+  // cost: the check went red for a rail that had gained a member, not for a
+  // behaviour that had been lost. Ask the rail's own DOM which tab is last
+  // instead, so an eleventh tab cannot break this again.
+  const ends = { first: await railEnd(page, true), last: await railEnd(page, false) };
   await page.keyboard.press("End");
   await page.waitForTimeout(200);
-  assert.equal(await page.evaluate(() => document.activeElement.id), "tab-watch",
-    "End did not reach the last tab");
+  const afterEnd = await rovingState(page);
+  assert.equal(afterEnd.focused, ends.last,
+    `End did not reach the last tab on the rail (${ends.last})`);
+  assert.equal(afterEnd.selected, ends.last, "End moved the focus without the selection");
+  assert.deepEqual(afterEnd.tab0, [ends.last],
+    "the one tab stop must be the tab End landed on");
+
+  // Home is the other end of the same contract, and the rail's handler
+  // implements it as well.
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(200);
+  const afterHome = await rovingState(page);
+  assert.equal(afterHome.focused, ends.first,
+    `Home did not reach the first tab on the rail (${ends.first})`);
+  assert.equal(afterHome.selected, ends.first, "Home moved the focus without the selection");
+  assert.deepEqual(afterHome.tab0, [ends.first],
+    "the one tab stop must be the tab Home landed on");
   await page.close();
 });
 

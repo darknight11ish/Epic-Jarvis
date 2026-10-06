@@ -34,6 +34,27 @@ for p in (BACKEND, BACKEND / "rebuilt"):
 
 import jarvis_search as WS  # noqa: E402
 
+# The audit log is NOT part of the fixture, and the settings cases below audit.
+# The settings file that is found ships
+# `[logging].log_directory = "~/.openjarvis/logs/"`, and jarvis_framework's
+# log_dir() honours that OVER OPENJARVIS_CONFIG_DIR - so a run appended
+# "web_search.ask_every_time" / "web_search.enabled" lines to the OWNER'S own
+# log even with the config folder pointed at a temporary one (measured
+# 2026-10-04). Point it at a scratch folder, the same way
+# backend/run_suites.py does and for the same reason.
+import jarvis_framework as FW  # noqa: E402
+_ORIG_LOAD_FRAMEWORK = FW.load_framework
+_GEN_LOG_DIR = str(Path(tempfile.gettempdir()) / "jarvis-gen-audit-logs")
+
+
+def _load_framework_with_scratch_log(*a, **k):
+    cfg = _ORIG_LOAD_FRAMEWORK(*a, **k)
+    cfg.setdefault("logging", {})["log_directory"] = _GEN_LOG_DIR
+    return cfg
+
+
+FW.load_framework = _load_framework_with_scratch_log
+
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "web-search-cases.json"
 PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
          / "web-search-cases.json")
