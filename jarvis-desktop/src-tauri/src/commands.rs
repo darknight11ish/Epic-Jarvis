@@ -3742,6 +3742,81 @@ pub async fn set_third_card(
     second_card_change_answer(status, &body)
 }
 
+/// "Which card everyday chat runs on" - the owner's own choice, and the one
+/// route that changes it (2026-10-05).
+///
+/// The card NAME is the `GPU-...` id nvidia-smi prints, never a slot number:
+/// numbers can change when a card is moved, and the backend pins a card by
+/// its id (`jarvis_second_card._card_by`). A name that is not one of this
+/// PC's cards is refused by the backend with its own sentence; this only
+/// keeps anything that is obviously not an id from being sent at all.
+pub(crate) fn chat_card_id(card: &str) -> Result<&str, String> {
+    let want = card.trim();
+    if want.is_empty() || want.len() > 64 || !want.starts_with("GPU-")
+        || !want.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return Err("That is not one of this PC's graphics cards.".to_string());
+    }
+    Ok(want)
+}
+
+/// Everyday chat on one card, or back to leaving it to Ollama: `POST
+/// /api/second-card` with `{"feature": "chat_card", "action": ..., "card": ...}`.
+///
+/// `action: "pin"` raises ONE approval card (action `chat_card_pin`, tier
+/// `ask`) and changes nothing until a person says yes on the PC or the phone;
+/// the answer says `pending: true` while it waits. `action: "leave"` is
+/// immediate and needs no card, because it only takes the pin away - the same
+/// one-direction hold as every other switch here: pinning is held while the
+/// event stream is stale (rule 4), leaving it to Ollama always goes through.
+/// Settings window only, like [`get_second_card`].
+#[tauri::command]
+pub async fn set_chat_card(
+    app: AppHandle,
+    action: String,
+    card: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let leaving = match action.trim() {
+        "leave" => true,
+        "pin" => false,
+        _ => {
+            return Err(
+                "That is not one of the two choices for which card everyday chat runs on."
+                    .to_string(),
+            )
+        }
+    };
+    let card = match card.as_deref() {
+        Some(id) if !leaving => Some(chat_card_id(id)?.to_string()),
+        _ => None,
+    };
+    if !leaving && card.is_none() {
+        return Err("Choose a graphics card to pin everyday chat to.".to_string());
+    }
+    if !leaving && app.state::<crate::stream::StreamState>().link().stale {
+        return Err(
+            "The connection to Jarvis is catching up, so a card cannot be pinned until \
+             it does. Going back to leaving it to Ollama still works."
+                .to_string(),
+        );
+    }
+    let base = jarvis_base(&app);
+    let response = jarvis_client(Some(CAPTURE_TIMEOUT))?
+        .post(format!("{base}{SECOND_CARD_PATH}"))
+        .headers(jarvis_headers(&app)?)
+        .json(&serde_json::json!({
+            "feature": "chat_card",
+            "action": if leaving { "leave" } else { "pin" },
+            "card": card,
+        }))
+        .send()
+        .await
+        .map_err(|e| second_card_unreachable(&e, &base))?;
+    let status = response.status().as_u16();
+    let body = response.text().await.unwrap_or_default();
+    second_card_change_answer(status, &body)
+}
+
 /// "When to suggest the bigger model"'s one write - spelled out as its own
 /// literal constant, not built from [`SECOND_CARD_PATH`] by concatenation,
 /// so `tools/check_parity.py` (which finds a route by its literal `/api/...`

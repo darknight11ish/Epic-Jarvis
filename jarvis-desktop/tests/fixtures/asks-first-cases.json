@@ -733,6 +733,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
+      },
+      {
        "action": "screen_picture_enable",
        "fixed": false,
        "id": "screen_picture_enable",
@@ -1808,6 +1817,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
+      },
+      {
        "action": "screen_picture_enable",
        "fixed": false,
        "id": "screen_picture_enable",
@@ -2878,6 +2896,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
+      },
+      {
        "action": "screen_picture_enable",
        "fixed": false,
        "id": "screen_picture_enable",
@@ -3943,6 +3970,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
+      },
+      {
        "action": "screen_picture_enable",
        "fixed": false,
        "id": "screen_picture_enable",
@@ -5006,6 +5042,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",
@@ -6087,6 +6132,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
+      },
+      {
        "action": "screen_picture_enable",
        "fixed": false,
        "id": "screen_picture_enable",
@@ -7155,6 +7209,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "chat_card_pin",
+       "fixed": false,
+       "id": "chat_card_pin",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Pin everyday chat to one graphics card"
       },
       {
        "action": "screen_picture_enable",

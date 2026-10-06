@@ -115,11 +115,15 @@ never touches a graphics card. That is on purpose:
   goes wrong. **It is a heavy job for a beginner.** Do it only if the
   processor-only speed Jarvis measures is really not enough.
 - **If you ever do turn it on**, Jarvis uses the **second** card only - never
-  the 2080 Super, which runs everyday chat - and only when Jarvis sees a
-  capable second card whose own features are not running. Otherwise it
-  refuses and says why. One more warning from colibri's own measurements
-  (`docs/qwen36-cuda-tier.md`): Qwen3.6 with one 8 GB card peaked at 40 GB of
-  memory, more than your PC has.
+  the card everyday chat is on - and only when Jarvis sees a capable second
+  card whose own features are not running. Otherwise it refuses and says why.
+  (**Corrected 2026-10-05:** this used to say "never the 2080 Super, which
+  runs everyday chat". The machine has it the other way round - the model is
+  on the 12 GB 2060 and the 2080 SUPER runs the desktop
+  (`MEASURED-2026-10-05-owner-pc.md`) - so the rule is stated by what the
+  card is doing, not by its name.) One more warning from colibri's own
+  measurements (`docs/qwen36-cuda-tier.md`): Qwen3.6 with one 8 GB card
+  peaked at 40 GB of memory, more than your PC has.
 
 ---
 

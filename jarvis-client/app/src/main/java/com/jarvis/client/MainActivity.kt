@@ -2464,6 +2464,25 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            // "Everyday chat runs on" (2026-10-05): pinning
+                            // everyday chat to one card, or going back to
+                            // leaving it to Ollama. Marked busy under
+                            // SecondCard.CHAT_CARD, the same way onSetThirdCard
+                            // uses SecondCard.THIRD - there is no single switch
+                            // this request is about.
+                            onSetChatCard = { action, card ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = SecondCard.CHAT_CARD
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice = JarvisRuntime.setChatCard(action, card)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
                             // "When to suggest the bigger model" (2026-09-27):
                             // no card either way, so this only ever re-reads
                             // the plate afterwards - never touches approvals.

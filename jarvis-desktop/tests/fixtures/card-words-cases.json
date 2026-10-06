@@ -59,6 +59,10 @@
       "title": "Jarvis wants to change one of its settings"
     },
     {
+      "action": "chat_card_pin",
+      "title": "Jarvis wants to pin everyday chat to one graphics card"
+    },
+    {
       "action": "chat_tag_suggest",
       "title": "Jarvis wants to file one chat under a tag it suggests"
     },

@@ -1595,6 +1595,14 @@ const sc = {
   status: $("sc-status"),
   lane: $("sc-lane"),
   pinned: $("sc-pinned"),
+  where: $("sc-chat-where"),
+  choices: $("sc-chat-choices"),
+  analysisToggle: $("sc-analysis-toggle"),
+  analysis: $("sc-analysis"),
+  analysisCards: $("sc-analysis-cards"),
+  analysisSuggestion: $("sc-analysis-suggestion"),
+  pinProblem: $("sc-pin-problem"),
+  pinProblemWords: $("sc-pin-problem-words"),
   pin: $("sc-pin"),
   pinCommand: $("sc-pin-command"),
   pinCopy: $("sc-pin-copy"),
@@ -1640,6 +1648,25 @@ const SC_LANE = { off: "Off", starting: "Starting", running: "Running", failed: 
 const SC_POLL_MS = 5000;
 const SC_POLL_FOR_MS = 10 * 60 * 1000;
 
+/* "Everyday chat runs on" (the owner's decision, 2026-10-05)
+   ---------------------------------------------------------------------------
+   Two choices, and the line under them says where the model really is:
+
+     leave   - the default. Jarvis pins no card and says so. Immediate.
+     pin     - an explicit choice, so it raises ONE approval card
+               (action `chat_card_pin`, tier "ask"); the setting is written
+               on the PC only after the owner says yes there or on the phone.
+
+   `status.chat_card` is the backend's own shape: `chosen` (the card id, or
+   null), `chosen_name`, `where` (the measured sentence plus the card it was
+   read from), `cards` (each card's own facts, and the owner's measured
+   lines), `suggestion` (Jarvis's own, labelled as a suggestion), and
+   `problem` (a sentence when the pin Jarvis remembers is not what Ollama is
+   actually set to). A backend older than this sends no `chat_card` at all,
+   and the whole subsection hides itself - it never invents a card. */
+const SC_CHAT_LEAVE = "leave";
+const SC_CHAT_PIN = "pin";
+
 let scLast = null;
 let scReadSeq = 0;
 let scBusy = false;
@@ -1656,6 +1683,9 @@ let scPollUntil = 0;
 let scWaiting = new Set();
 /** When this page first saw each of those cards waiting, in seconds. */
 const scWaitingSince = new Map();
+/** Whether "Show the analysis" is open - kept across repaints, and false at
+ *  the start so nothing is shown until the owner asks for it. */
+let scAnalysisOpen = false;
 
 /**
  * How a switch's card ended, in words, for the second card and the big
@@ -2153,6 +2183,156 @@ async function scSuggestToggle(input) {
   await loadSecondCard();
 }
 
+/**
+ * The two choices of "Everyday chat runs on" (2026-10-05), as radio buttons:
+ * leaving it to Ollama (the default, immediate) and pinning one card (one
+ * approval card). Each card the machine reports gets its own radio, so the
+ * choice names the real card rather than a slot.
+ */
+function scChatChoices(chat) {
+  const chosen = typeof chat.chosen === "string" && chat.chosen ? chat.chosen : "";
+  const cards = (Array.isArray(chat.cards) ? chat.cards : [])
+    .filter((c) => c && typeof c.uuid === "string" && c.uuid);
+  const rows = [];
+  const row = (id, value, label, detail, checked) => {
+    const wrap = scNode("label", "toggle");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "sc-chat-card";
+    input.id = id;
+    input.value = value;
+    input.checked = checked;
+    const text = scNode("span", "", label);
+    text.append(scNode("span", "toggle-detail", detail));
+    wrap.append(input, text);
+    input.addEventListener("change", () => scChatChoose(input.value, label));
+    rows.push(wrap);
+  };
+  row("sc-chat-leave", SC_CHAT_LEAVE, "Let Ollama decide",
+    typeof chat.leave_words === "string" && chat.leave_words
+      ? chat.leave_words : "Jarvis does not pin a card, and Ollama picks one by itself.",
+    !chosen);
+  for (const card of cards) {
+    const size = scGigabytes(card.total_mb);
+    row(`sc-chat-pin-${card.index}`, card.uuid,
+      `Always use the ${card.name}${size ? ` (${size})` : ""}`,
+      `Pins everyday chat to this card. One approval card, because it changes where every "
+      + `answer runs. ${card.display === true
+        ? "A monitor is plugged into it." : "No monitor is plugged into it."}`,
+      chosen === card.uuid);
+  }
+  // A pin whose card is no longer in this PC: the choice is still shown, so
+  // the owner can see what is saved and put it back.
+  if (chosen && !cards.some((c) => c.uuid === chosen)) {
+    row("sc-chat-pin-missing", chosen,
+      `Always use the card you pinned (${chat.chosen_name || chosen})`,
+      "That card is not in this PC right now. Pinning it again will ask for a card that is.",
+      true);
+  }
+  return rows;
+}
+
+/** One card's own entry under "Show the analysis". Every line is the
+ *  backend's, read from the machine or quoted from the owner's own
+ *  measurement - this only puts them on screen. */
+function scAnalysisCard(card) {
+  const item = scNode("div", "sc-analysis-card");
+  const size = scGigabytes(card.total_mb);
+  item.append(scNode("p", "sc-gpu-name",
+    `${card.name || "A graphics card"}${size ? ` (${size})` : ""}`));
+  const list = scNode("ul", "sc-analysis-facts");
+  for (const line of (Array.isArray(card.facts) ? card.facts : [])) {
+    list.append(scNode("li", "", String(line)));
+  }
+  for (const line of (Array.isArray(card.measured) ? card.measured : [])) {
+    list.append(scNode("li", "sc-measured", String(line)));
+  }
+  item.append(list);
+  return item;
+}
+
+/** Paint the whole "Everyday chat runs on" subsection, or hide it on a
+ *  backend that does not send `chat_card` yet. */
+function scPaintChat(status) {
+  const chat = status.chat_card;
+  const have = chat && typeof chat === "object" && Array.isArray(chat.cards);
+  if (sc.choices) {
+    sc.choices.hidden = !have;
+    if (have) sc.choices.replaceChildren(...scChatChoices(chat));
+    else sc.choices.replaceChildren();
+  }
+  if (sc.analysisToggle) sc.analysisToggle.hidden = !have;
+  if (sc.analysis) sc.analysis.hidden = !have || sc.analysisOpen !== true;
+  if (sc.analysisCards) {
+    sc.analysisCards.replaceChildren(...(have
+      ? chat.cards.map(scAnalysisCard) : []));
+  }
+  if (sc.analysisSuggestion) {
+    const words = have && chat.suggestion && typeof chat.suggestion.words === "string"
+      ? chat.suggestion.words : "";
+    sc.analysisSuggestion.textContent = words;
+    sc.analysisSuggestion.hidden = !words;
+  }
+  if (!have) return;
+
+  const chosen = typeof chat.chosen === "string" && chat.chosen ? chat.chosen : "";
+  // Where the model really is - the backend's own reading, never a guess.
+  if (sc.where) {
+    sc.where.textContent = chat.where && typeof chat.where.words === "string"
+      ? chat.where.words
+      : "Jarvis could not read where the model is right now.";
+    sc.where.dataset.tone = chat.where && chat.where.card ? "ok" : "";
+  }
+  // A pin Jarvis remembers that Ollama is not actually using must never look
+  // done: the backend's own sentence says so when it is not.
+  const problem = typeof chat.problem === "string" ? chat.problem.trim() : "";
+  if (sc.pinProblem) sc.pinProblem.hidden = !problem;
+  if (sc.pinProblemWords) sc.pinProblemWords.textContent = problem;
+  const command = typeof chat.pin_command === "string" ? chat.pin_command.trim() : "";
+  sc.pin.hidden = !command;
+  sc.pinCommand.value = command;
+}
+
+/** One of the two choices was picked. Going back to "Let Ollama decide" is
+ *  immediate and needs no card; pinning a card raises one approval card. */
+async function scChatChoose(value, label) {
+  if (scBusy) {
+    await loadSecondCard();
+    return;
+  }
+  scBusy = true;
+  scRestoreFocusId = value === SC_CHAT_LEAVE ? "sc-chat-leave" : null;
+  if (sc.choices) {
+    for (const input of sc.choices.querySelectorAll("input")) input.disabled = true;
+  }
+  const pinning = value !== SC_CHAT_LEAVE;
+  report(sc.status, pinning ? `Asking to pin everyday chat to the ${label.replace(/^Always use the /, "")}…`
+    : "Going back to leaving it to Ollama…");
+  try {
+    if (pinning) {
+      const out = await invoke("set_chat_card", { action: "pin", card: value });
+      if (out && out.pending === true) {
+        report(sc.status, SC_WAITING, "ok");
+        announce(SC_WAITING);
+      } else if (out && typeof out.message === "string" && out.message) {
+        report(sc.status, out.message, "ok");
+      } else {
+        report(sc.status, "Pinned. Quit Ollama and start it again for it to take effect.", "ok");
+      }
+    } else {
+      const out = await invoke("set_chat_card", { action: "leave" });
+      report(sc.status, (out && typeof out.words === "string" && out.words)
+        || "Jarvis leaves the choice to Ollama again.", "ok");
+    }
+  } catch (error) {
+    report(sc.status, scProblemWords(error), "bad");
+    announce(sc.status.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  await loadSecondCard();
+}
+
 function scShowProblem(words) {
   scLast = null;
   sc.body.hidden = true;
@@ -2355,6 +2535,13 @@ function scPaint(status) {
   // backend's own words. Before the one-shot focus marker is cleared, so its
   // own block gets the same keyboard-restore as the switches.
   scModePaint(status);
+
+  // "Everyday chat runs on" (2026-10-05): the two choices, where the model
+  // really is, and the analysis behind the choice. Hides itself on a backend
+  // that does not send `chat_card` yet. Both blocks read the backend's own
+  // words and touch disjoint elements, so the two orderings agree; this one
+  // is last because its section sits below the switches in settings.html.
+  scPaintChat(status);
   // One-shot: consumed by whichever block above matched it.
   scRestoreFocusId = null;
 
@@ -2488,6 +2675,18 @@ if (sc.pinCopy) {
     }
     report(sc.pinStatus, copied ? "Copied. Paste it into PowerShell and press Enter." : "Select it and press Ctrl+C.",
       copied ? "ok" : null);
+  });
+}
+
+// "Show the analysis" (2026-10-05): the owner's own look at what Jarvis
+// knows about each card before choosing one. Nothing here is measured by
+// this page: every line comes from the backend's `chat_card.cards`.
+if (sc.analysisToggle) {
+  sc.analysisToggle.addEventListener("click", () => {
+    scAnalysisOpen = !scAnalysisOpen;
+    sc.analysisToggle.setAttribute("aria-expanded", scAnalysisOpen ? "true" : "false");
+    sc.analysisToggle.textContent = scAnalysisOpen ? "Hide the analysis" : "Show the analysis";
+    if (sc.analysis) sc.analysis.hidden = !scAnalysisOpen;
   });
 }
 

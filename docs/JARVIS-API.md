@@ -1744,6 +1744,15 @@ none: both apps behave as before.
  "pending": [ids],           switches with a card waiting ("master" and "combined" included)
  "lane": {"state": "off"|"starting"|"running"|"failed", "why": str},
  "main_ollama_pinned": true|false|null, "pin_note": str, "pin_command": str|null,
+ "chat_card": {"chosen": "GPU-..."|null, "chosen_name": str|null,
+               "where": {"pinned": "GPU-..."|null, "card": {"index","name","uuid"}|null,
+                         "model": str|null, "model_loaded": bool,
+                         "on_card_percent": int|null, "context": int|null,
+                         "used_mb": int|null, "words": str},
+               "cards": [{"index", "uuid", "name", "total_mb", "free_mb", "compute_cap",
+                          "display": bool, "facts": [str], "measured": [str]}],
+               "suggestion": {"name": str|null, "words": str},
+               "pin_command": str|null, "problem": str, "leave_words": str},
  "features": [{"id", "name", "what", "enabled", "active", "available", "needs": [ids],
                "model", "model_installed": bool|null, "memory_gib": float|null, "why"}],
  "last": {"feature", "outcome", "why", "at"} | null,
@@ -1814,6 +1823,46 @@ a blank row.
 the owner's everyday Ollama on the main card; show it with a copy button and
 `pin_note` above it, on the desktop. The phone shows `pin_note` only (the
 command is run on the PC).
+
+**"Everyday chat runs on" - `chat_card` (added 2026-10-05; the owner's
+decision: "Leave it to Ollama - whatever it picks, and set `primary_gpu`
+explicitly only if you want a say. I also want an option to choose through
+Jarvis based on an analysis.").** Which graphics card runs everyday chat.
+`chosen` is the card id the owner pinned, or `null` - the default, and what
+"leave it to Ollama" reads as.
+
+**Nothing in `chat_card` is invented.** `where` is the machine's own answer:
+`ollama ps` (`on_card_percent` is `size_vram` against `size`, and
+`model_loaded` says whether anything is loaded at all) and `nvidia-smi`
+(`card` is the card the model's own process is on, by id; `used_mb` its
+memory). When neither can say - nothing loaded, or a driver that does not
+name the process - `card` is `null` and `words` says Jarvis cannot tell,
+rather than naming a card. `cards[].facts` are `nvidia-smi`'s own numbers
+(memory, compute capability, the monitor, free memory right now);
+`cards[].measured` are sentences QUOTED from
+`MEASURED-2026-10-05-owner-pc.md`, matched to a card by its name and its
+memory, and empty for a card the owner never measured. `suggestion.words`
+begins "Jarvis's suggestion:" and may use only those memory numbers - no
+route here may claim one card is faster than another, because no speed
+comparison of these cards has been measured. `problem` is a sentence when the
+pin Jarvis remembers is not what Ollama is actually set to (checked by
+reading the same `CUDA_VISIBLE_DEVICES`/`OLLAMA_VULKAN` user settings
+`pin_command` writes), and `""` when it is; a pin that is only remembered
+must never be reported as done.
+
+**Turning the pin on asks first.** `POST /api/second-card` with
+`{"feature": "chat_card", "action": "pin", "card": "GPU-..."}` (the id
+`nvidia-smi -L` prints, or a plain number) raises ONE approval card - action
+`chat_card_pin`, tier `ask`, its own `pending` row, 409 while one waits, 503
+when the tier is not `ask`, 400 for a card that is not in this PC - and
+changes nothing until a person says yes. On approval, Jarvis sets
+`CUDA_VISIBLE_DEVICES` to that card's id and `OLLAMA_VULKAN` to `0` for the
+owner's own Windows user (the same pair `pin_command` and
+`jarvis_profiles.settings_for` already produce) and remembers the choice in
+`chat-card.json` in the settings folder - **never** in
+`jarvis-framework.toml`, which no route may write. `{"action": "leave"}` is
+immediate, with no card: both settings are removed and the choice is
+forgotten, the same loosening direction as every other switch here.
 
 **A third graphics card - the data-model reshape only (added 2026-09-28,
 `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`).** That research found `_detect()`
