@@ -254,6 +254,18 @@ ships; the suites that need your own `jarvis_hud.py`, `jarvis_gate.py` or
 `jarvis_extract.py` are skipped there, by name, so your PC is the only place
 those run.
 
+**When a suite fails there, the whole reason is printed.** It used to print
+the last 25 lines of that suite and nothing else, and on 2026-10-05 that cost
+a diagnosis: `test_gate_push.py` failed one check out of 36 in its *second*
+section, both sections that ran last were entirely green, and the log showed a
+section header and eighteen `ok` lines — no assertion, no detail, no
+traceback, in a 36 KB log. A check that *dies* is worse: the suite prints the
+traceback where the check ran, in the middle of its output. So `ok` lines are
+now the only ones dropped, and a line says how many were hidden; a block that
+was too big to print whole says where it was cut. `test_apply_outcomes.py`'s
+`t_a_failing_suites_reason_is_printed` holds that, with a suite whose `FAIL`
+line is followed by 40 passing ones and a suite whose check dies.
+
 ## Apply them
 
 One command, from the folder this repository is cloned into
@@ -714,6 +726,17 @@ machine (the rest print a plain `skip` there, and the summary counts them):
 a topic alone sends nothing, a server alone sends nothing, both together send
 to the server the owner named — and the check is watched failing against the
 old `"https://ntfy.sh"` line, so it cannot pass on any text at all.
+
+**Found 2026-10-05, on the owner's own run: this suite failed one check, and
+the failure was the test's, not the product's.** `captured()` — the stand-in
+under `t_push_sends_only_what_it_was_given` — stubbed `NTFY_TOPIC` but never
+`NTFY_SERVER`, so `_push` returned at the new guard before it opened anything
+and the check compared `[]` with the body it expected. Nothing was sent, so
+nothing could leak; the fix above is what made it fail, and the redaction path
+it was testing was working the whole time. It now stubs both settings, and a
+CONTROL check says plainly whether a push was attempted at all — so the next
+time that guard changes, the failure reads "sent 0 message(s), _push returns
+unless both settings are set" instead of `[]`.
 
 
 ---

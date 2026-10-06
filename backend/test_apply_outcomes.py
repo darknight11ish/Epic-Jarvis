@@ -139,6 +139,40 @@ SKIP_SUITE = "print('ok    a real check')\nprint('ok    SKIP - no such package h
 SKIP_SUMMARY_SUITE = "print('1 passed, 0 failed, 3 skipped')\n"
 FAIL_SUITE = "print('FAIL  a check')\nraise SystemExit(1)\n"
 
+# A failing suite whose REASON is near the TOP, with far more passing lines
+# after it than the old tail-only view kept. This is the exact shape that hid
+# the owner's 2026-10-05 test_gate_push.py failure: the `FAIL` line and its
+# detail were line 8 of 38, the two sections that ran last were entirely
+# green, and the log showed a section header, eighteen `ok` lines and no
+# reason at all. The old rule here was `Select-Object -Last 25`.
+BURIED_FAIL_SUITE = (
+    "print('--- t_the_thing ---')\n"
+    "print('FAIL  the reason is right here')\n"
+    "print('        and so is the detail that explains it: got []')\n"
+    + "".join(f"print('ok    passing check {i}')\n" for i in range(40))
+    + "print('40 passed, 1 failed')\n"
+    "print('failed: t_the_thing')\n"
+    "raise SystemExit(1)\n"
+)
+
+# A check that DIES rather than failing: the suite catches it and prints the
+# traceback WHERE THE CHECK RAN, in the middle of its output. A tail-only view
+# hides exactly the line a person needs, so this must survive too.
+DIES_SUITE = (
+    "import traceback\n"
+    "def t_dies():\n"
+    "    raise ValueError('the exact reason a check died')\n"
+    "print('--- t_dies ---')\n"
+    + "".join(f"print('ok    passing check {i}')\n" for i in range(40))
+    + "try:\n"
+    "    t_dies()\n"
+    "except Exception:\n"
+    "    traceback.print_exc()\n"
+    "print('0 passed, 0 failed')\n"
+    "print('failed: t_dies')\n"
+    "raise SystemExit(1)\n"
+)
+
 TMPDIRS = []
 
 
@@ -408,6 +442,55 @@ def t_mini_test_suites_summary():
           out[-700:])
 
 
+def t_a_failing_suites_reason_is_printed():
+    """The reason survives, wherever in the suite it was printed.
+
+    Found 2026-10-05 by the owner's own patch run. Its test_gate_push.py failed
+    one check out of 36, in the second of six sections, and this script printed
+    only the last 25 lines of that suite: a section header and eighteen
+    passing checks. The name in the summary - "failed: a redacted body reaches
+    the broker unchanged" - was the only clue left, with no assertion, no
+    detail and no traceback anywhere in a 36 KB log. The old rule was
+    `Select-Object -Last 25`, and it hid the answer on the one run that needed
+    it.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "r", suites={"test_buried.py": BURIED_FAIL_SUITE,
+                                        "test_dies.py": DIES_SUITE})
+    be = tmp / "be"
+    build_backend(be)
+    code, out = run(root / "scripts" / "apply-patches.ps1", be, "-SkipPackages")
+    check("a suite whose FAIL line is followed by 40 passing ones: still exit 1",
+          code == 1, out[-500:])
+    check("... its FAIL line is printed, though it was line 2 of 44",
+          "the reason is right here" in out, out[-1500:])
+    check("... and the detail under it, which is the whole explanation",
+          "and so is the detail that explains it: got []" in out, out[-1500:])
+    check("... and the reader is told that passing lines were hidden, so a "
+          "clipped block is never mistaken for a whole one",
+          "passing line(s) hidden" in out, out[-1500:])
+    check("a check that DIES: the traceback is printed, not just its name",
+          "Traceback (most recent call last)" in out
+          and "ValueError: the exact reason a check died" in out
+          and "in t_dies" in out, out[-2000:])
+    check("... and it is not printed as a passing suite",
+          "patched and proven" not in out, out[-800:])
+    # The CONTROL: the passing lines really were there, and the block says how
+    # many it hid - so "the reason was printed" is not passing because the
+    # suite was tiny or because the harness printed everything anyway.
+    m = re.search(r"\((\d+) passing line\(s\) hidden", out)
+    check("CONTROL: the block reports the passing lines it hid (40 of them per "
+          "suite), so the old rule really did have green lines to show instead",
+          bool(m) and int(m.group(1)) >= 40, out[-900:])
+    # And an ordinary short failure still reads normally.
+    root2 = mini_repo(tmp / "r2", suites={"test_bad.py": FAIL_SUITE})
+    be2 = tmp / "be2"
+    build_backend(be2)
+    code2, out2 = run(root2 / "scripts" / "apply-patches.ps1", be2, "-SkipPackages")
+    check("a short failing suite is unchanged: exit 1, named, and its FAIL line shown",
+          code2 == 1 and "FAIL  a check" in out2 and "test_bad.py" in out2, out2[-900:])
+
+
 def t_mini_problems_end_red():
     tmp = tmpdir()
     # a shipped module missing from the repository
@@ -475,7 +558,8 @@ def main():
     for fn in (t_real_script_crlf_missing_files, t_real_script_rehearsal_fails,
                t_mini_success_and_endings, t_mini_fixendings_success, t_mini_locked_file,
                t_mini_midway_failure_restore, t_mini_running_jarvis, t_mini_inside_outer_repo,
-               t_mini_test_suites_summary, t_mini_problems_end_red,
+               t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
+               t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
                t_mini_revert_ends_plainly):
         try:
