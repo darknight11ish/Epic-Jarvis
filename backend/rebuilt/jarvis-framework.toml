@@ -130,6 +130,14 @@ support_offer             = "ask"
 # switches the feature off. A file without this line asks too
 # (unknown_action_tier).
 youtube_captions_read     = "ask"
+# Reading ONE web page the owner hands over, out loud (jarvis_readpage.py;
+# the owner's request of 2026-10-05, JARVIS-API section 115): ONE card per
+# address, showing it in full and raised BEFORE any fetch. Only that one
+# page's own address is fetched, never a link on it, and its words are
+# outside text. Must stay "ask": anything else and no page is fetched;
+# "never" switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+read_web_page              = "ask"
 # "Grade this better" on a quiz (jarvis_quiz_cloud.py; the owner's decision of
 # 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7): ONE card per request,
 # listing EXACTLY what leaves this PC (the quiz's questions, your answers and

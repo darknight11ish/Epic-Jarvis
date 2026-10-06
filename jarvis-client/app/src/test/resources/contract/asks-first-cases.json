@@ -458,6 +458,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -1524,6 +1533,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -2586,6 +2604,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -3642,6 +3669,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -4696,6 +4732,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
       },
       {
        "action": "github_read",
@@ -5767,6 +5812,15 @@
        "title": "Fetch a web page you're watching"
       },
       {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
+      },
+      {
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
@@ -6827,6 +6881,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
+      },
+      {
+       "action": "read_web_page",
+       "fixed": false,
+       "id": "read_web_page",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Read a web page out loud"
       },
       {
        "action": "github_read",

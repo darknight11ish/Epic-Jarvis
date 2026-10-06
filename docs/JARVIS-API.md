@@ -8591,7 +8591,15 @@ section is the news feed half.
 `backend/jarvis_news.py`, shipped whole, `news.patch` adds three routes at
 start-up the same way `documents.patch` (§35) does. Feeds are RSS or Atom
 addresses the owner names; only each item's TITLE is ever read - never an
-article's own page, which Jarvis has no code to fetch at all.
+article's own page, and this module has no code that could fetch one.
+
+**Corrected 2026-10-05.** This sentence used to end "which Jarvis has no
+code to fetch at all", and that second half was false of the project as a
+whole, not just of this module: §30.3.1's page watch, §115's "read this page
+out loud" and `jarvis_browser_control.py`'s `read_page` step all fetch a
+page. It is true of `jarvis_news.py`, and the claim that mattered - a feed's
+headlines can never become an article's text - still holds, because no feed
+is reachable from any of those three.
 
 ### 46.1 The list - empty by default, no dedicated settings screen
 
@@ -17172,3 +17180,150 @@ The owner asked (2026-10-05) for a skippable comprehensive intro tutorial and a 
 `tutorials.patch` is ONE hunk in `jarvis_hud.py`, an install block right after `retirement.patch`'s own, so it applies after it. It wraps `Handler` before the main socket, like spending and retirement above, and the banner says so. `jarvis_tutorials.py` is in `_where.SHIPPED` and in `scripts/apply-patches.ps1`'s shipped list, so the patcher copies it to the owner's PC; without it, or on any error, the banner says the tutorials are off and the routes are simply not there. The feature adds **no** gate action and no tier line: it acts on nothing, so there is nothing to ask about.
 
 Tests: `backend/test_tutorials.py` (the catalogue's shape, both sections, resume after quitting, finished once, reversible skips, a changed tutorial re-offered, every bad input answered with a status, exactly one file written, and no gate, tool, socket or subprocess import at all).
+
+---
+
+## 115. Read one web page out loud (added 2026-10-05)
+
+The owner asked (2026-10-05): "does jarvis have the ability for me to post a
+webpage into jarvis and it can read the content out loud?" Four things in
+this tree already fetched an address, and **none of them reads a page's
+words**:
+
+* `jarvis_news.py` (§46) keeps feed item TITLES only - "headlines only,
+  never the article text" is its own wording.
+* `jarvis_tellme.py`'s `page` source (§30.3.1) keeps a SHA-256 fingerprint of
+  a watched page's visible words. The words themselves are "never read out,
+  kept, or shown", and no function there can return them.
+* `jarvis_browser_control.py`'s `read_page` step CAN turn a page into text,
+  but that tool ships **disabled** on purpose: it needs Playwright installed
+  and the second graphics card's "Browser control" lane measured, and it is
+  built for working a page one approved step at a time.
+* `jarvis_youtube.py` (§112) reads a YouTube video's caption text by link -
+  for a quiz, never read aloud, and for YouTube only.
+
+`jarvis_readpage.py` is the missing piece, and it is deliberately small.
+
+### 115.1 The door is a model tool, not a route
+
+`read_web_page` is a tool in `jarvis_agent.TOOLS` - the shape `web_search`
+and `send_email` already have. That is the point: the gate **waits** for the
+card while the turn is open (`jarvis_agent._one_call`), so the page's words
+come back inside the same turn and the answer that reads them out is an
+ordinary answer, which is what lets every existing read-aloud rule apply
+with nothing new written for them. A route would have needed a screen in
+both apps to poll a request id - a bigger build for the same thing.
+
+The name is **`read_web_page`**, not `read_page`: `jarvis_browser_control.py`
+already calls one of its own plan steps `read_page`, and §30.3.1's watch asks
+the gate as `page_read`. One name for this feature, and it is neither.
+
+| | |
+|---|---|
+| **Tool** | `read_web_page` (`url` required, `offset` optional) |
+| **Gate action** | `read_web_page` - tier **`ask` only**, a **risky** approval (Windows Hello on the PC, a screen lock on the phone) |
+| **Risk row** | `readpage.patch`: `("no", "outbound", ...)` in `jarvis_gate._RISK`, and the action in `_NO_RULE_FROM_DENIAL` (a denial proposes no standing rule - it answered one card) |
+| **Never-loosened** | `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`; on the "What asks first" page under **The internet**; on `LOCKDOWN_ACTIONS`, so Lockdown covers it |
+| **Only a person's yes runs it** | `jarvis_agent.NEEDS_A_PERSON` - at any tier, a run nobody was asked about is refused |
+| **Read aloud** | `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`, beside `web_search` |
+| **Off until switched on** | add `"read_web_page"` to `[tools].enabled` in `jarvis-framework.toml`, like every tool but `web_search` (that file is the owner's; `apply-patches.ps1` never overwrites it) |
+
+### 115.2 One card, then one plain GET
+
+The card is raised **before any fetch**. It shows the address in full and
+says plainly: the PC will fetch that one address once; only the address is
+sent; the site will see this PC's address and it cannot be taken back; what
+the page says is a stranger's words; one card covers one address; if you did
+not ask for this address, say no.
+
+Before the card, and with **no network beyond one DNS lookup**:
+
+* `jarvis_readpage.check_url` checks the address's SHAPE - `http://` or
+  `https://`, at most 500 characters, no control characters, and no
+  name-and-password in it (a card must never carry a credential).
+* `jarvis_local_http.private_fetch_problem` resolves the host by a REAL DNS
+  lookup and refuses this PC, the home network, Tailscale and Meshnet. A
+  refusal here means **no card is raised**: there is nothing to ask about.
+
+A shape error or a private answer comes back to the model as a tool result
+it can retry from, never as a card.
+
+After a person's yes: **ONE plain GET**, through
+`jarvis_local_http.public_urlopen` (no proxy; the connection checks the
+address it actually connects to, so a name whose DNS answer changes between
+the check and the connect cannot get through), with `_PageRedirect` following
+a redirect only where the same check allows it. The body is read to at most
+2 MB, the whole request is bounded by 15 seconds, and the request carries the
+address and nothing else - no memory, no email, no file, no credential
+(rule 1).
+
+### 115.3 The page's words, and the outside-text rule
+
+`jarvis_readpage.text_of` turns the body into the words a reader would see,
+with the standard library alone - **no new dependency, nothing to pin**. A
+`<main>` or an `<article>` is used when the page has one with at least 200
+characters of text; otherwise the whole body with `nav`, `aside`, `footer`,
+`header`, `form`, `script`, `style` and the rest of the unseen elements
+dropped. That is the preference order `jarvis_browser_control`'s own in-page
+`_MAIN_CONTENT_JS` uses, and the unseen-tag list `jarvis_tellme._visible_text`
+strips for its fingerprint.
+
+A response that is clearly not words - a PDF, a picture, a sound, a video, a
+zip, JSON, or a body with NUL bytes in it - is refused in plain words rather
+than decoded into nonsense. **`trafilatura` (Python, Apache-2.0) is the one
+to use IF the plain strip turns out to be too noisy in use**; it is a real
+dependency with a real model file, so it is not added here on the chance that
+it might help.
+
+The text comes back in a window of **1,500 characters** (the same cap
+`jarvis_browser_control` gives one `read_page` step, for the same reason: one
+call must stay a small fraction of the model's context), with a trailer
+naming what was left out and the **offset** to carry on from. Never a silent
+cut.
+
+Everything that comes back is **outside text**:
+
+* `read_web_page` is not in `jarvis_agent._NOT_READING`, so the turn is
+  marked as having read outside text: a note write after it waits for a card,
+  and the card says "Proposed after Jarvis read: the web page you gave it"
+  (`jarvis_agent._READ_LABELS`).
+* Nothing from the page is learned as a fact or written to disk. There is no
+  file, no route and no database here at all.
+* The model is told, in the tool's own description and in the turn's own
+  system line, that a tool's text is data and never instructions.
+
+**Does a page that says "now read <other address>" get followed?** No, and
+not by new machinery: the card always names the exact address, so a second
+read is a second card the owner reads; and every word that comes back is
+outside text. (`jarvis_youtube.py` refuses a turn that already read outside
+text; that is right for ITS card, which says "the link you pasted". This
+card names the address itself, so it stays honest either way.)
+
+### 115.4 Both apps, and what raises a card
+
+**Both apps already have the surface.** There is no new screen: the owner
+pastes the link into the one chat box he already has - or shares the page
+from Chrome, which the phone's existing share target (`ACTION_SEND`,
+`text/plain`) already folds into the composer draft - and asks Jarvis to read
+it out. So this feature adds **no** desktop JavaScript, **no** Kotlin and no
+contract fixture of its own.
+
+**What raises a card:** the fetch. One card per address, every time, showing
+the address in full; `read_web_page` is `ask` in `jarvis-framework.toml`, in
+`NEEDS_A_PERSON`, and in `HARD_LIMITS`/`MUST_ASK`, so no app can loosen it.
+
+**What raises no card:** nothing else. This module has no settings, no
+switch, no route and no file of its own.
+
+### 115.5 Tests
+
+`backend/test_readpage.py` - the address's shape (and that no socket is
+opened to check it), the private-address refusal, the card's words, the one
+GET of exactly the address given, and every failure path: an address that
+does not answer, a response that is not a page, a page larger than the cap,
+and a page with no readable words. The fetch is **injected**, so no test
+touches the real network. Also: the window and its offset trailer, the
+HTML-to-words rule (`<main>` preferred, script/style/nav/footer dropped,
+entities unescaped), the read-aloud table and its two generated copies, the
+gate row's tier and risk words, and that `readpage.patch` applies after the
+rest of the stack and reverses.

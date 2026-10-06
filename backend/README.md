@@ -179,6 +179,7 @@ on a throwaway copy instead.
 | `referee.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Referee suggestions" and "Study helper"** (the owner's decisions of 2026-09-30; `docs/JARVIS-API.md` section 108, `docs/STUDY-FROM-TEXT-DESIGN.md` section 13). Two more switches on the second graphics card, both built OFF until the card is installed and measured. THREE hunks: in `jarvis_gate.py` the new action `referee_tick` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `topics.patch`'s own last lines, so it goes after it); in `jarvis_hud.py` ONE block right after `topics.patch`'s, which installs the quiet hourly "This looks done - tick it?" look and hands the quiz its model call (`jarvis_second_card.wire_study()`), so the quiz uses the second card while "Study helper" is on. It adds no route and no tool. Needs `jarvis_referee.py` (and the rebuilt `jarvis-framework.toml`'s `referee_tick = "ask"` line). Both switches are rows in `GET /api/second-card`; turning either on is the ordinary second-card card. Referee suggestions only proposes: the owner's tap ticks a goal step. See "Referee suggestions and Study helper", at the very end. |
 | `tag-suggest.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Suggest tags overnight"** (the owner's decision of 2026-09-30; `docs/JARVIS-API.md` section 104, `docs/OVERNIGHT-TAGS-DESIGN.md`; up to 3 cards a night). TWO gate hunks: `chat_tags_suggest_on` and `chat_tag_suggest` join the "acts only on tier ask" set and get their `_RISK` lines (right after `referee.patch`'s own, so it goes after it); ONE `jarvis_hud.py` block right after `referee.patch`'s that keeps the quiet hourly `tag_suggest` look on the one scheduler in step with the switch. It adds no tool; the routes `GET`/`POST /api/history/tags/suggest` and `POST /api/history/mark` are named in `chat-history.patch` and answered by `jarvis_chat_log.py`. Needs `jarvis_tag_suggest.py` (and the rebuilt `jarvis-framework.toml`'s two `ask` lines). Off by default; turning it on is one card; each suggested tag is one more card and is filed only on a tap. The local model reads only the owner's own first six messages of an untagged, ordinary chat that never read outside text (ARCHITECTURE section 5). Tests: `test_tag_suggest.py`, `test_chat_marks.py` (the "New section here" divider, JARVIS-API section 106, is in `jarvis_chat_log.py` and `chat-history.patch`). |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
+| `readpage.patch` | `jarvis_gate.py` | **"Read one web page out loud"** (the owner's request of 2026-10-05: "does jarvis have the ability for me to post a webpage into jarvis and it can read the content out loud?"; `docs/JARVIS-API.md` section 115). TWO hunks in `jarvis_gate.py` only - no route and no `jarvis_hud.py` block at all, because the door is a MODEL TOOL (`read_web_page`), not a route: `read_web_page` joins the "acts only on tier ask" set and gets its `_RISK` line (`"no", "outbound"` - the PC contacts that one website and the request cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone). Its context is `quiz-cloud.patch`'s own added lines, so it goes after it - last, like every new patch. Needs `jarvis_readpage.py` and `jarvis_agent.py` copied in (both are in `apply-patches.ps1`'s shipped list); without them the tool is simply not offered to the model and the gate row is never used. The tool is **off until `"read_web_page"` is added to `[tools].enabled`** in `jarvis-framework.toml`, like every tool but `web_search`. Tests: `backend/test_readpage.py`. See "Read one web page out loud", at the very end. |
 
 ## All but two of the patches apply, and that is correct
 
@@ -18437,3 +18438,164 @@ python3 tools/gen_second_card_cases.py --check
 python3 tools/gen_asks_first_cases.py --check
 python3 tools/gen_card_words_cases.py --check
 ```
+
+---
+
+# Read one web page out loud: `jarvis_readpage.py`, `readpage.patch` (2026-10-05)
+
+The owner asked, in his own words: "does jarvis have the ability for me to post
+a webpage into jarvis and it can read the content out loud?" (`docs/JARVIS-API.md`
+section 115). **It did not.** Four things already fetched an address, and none
+of them read a page's words: `jarvis_news.py` keeps feed item TITLES only,
+`jarvis_tellme.py`'s `page` source keeps a SHA-256 fingerprint and never
+returns the words, `jarvis_browser_control.py`'s `read_page` step ships
+disabled (Playwright plus the second card's Browser-control lane), and
+`jarvis_youtube.py` reads caption text for a quiz, never aloud.
+
+## The door is a model tool, not a route
+
+`read_web_page` is a tool in `jarvis_agent.TOOLS`, the shape `web_search` and
+`send_email` already have. That is deliberate, and it is why `readpage.patch`
+touches **only** `jarvis_gate.py`: `jarvis_agent._one_call` waits for the
+approval card while the turn is still open, so the page's words come back
+INSIDE that turn and the answer that reads them out is an ordinary answer -
+which is exactly what lets every existing read-aloud rule apply with nothing
+new written for them. A route would have needed a screen in both apps to poll a
+request id, for the same result.
+
+The name is `read_web_page`, not `read_page`: `jarvis_browser_control.py`
+already calls one of its own plan steps `read_page`, and `jarvis_tellme.py`'s
+watch asks the gate as `page_read`. `jarvis_readpage.ACTION` is the tool's own
+name, so the gate's action, the tier line, the asks-first row and the card's
+words all use one string.
+
+## What leaves the PC, and what comes back
+
+**One plain GET of exactly the address on the card.** The request carries the
+address and nothing else - no memory, no email, no file, no credential, no
+body (rule 1). `test_readpage.py` reads the built `urllib.request.Request`
+itself to prove that: no `Authorization`, no `Cookie`, no header but the
+tool's own, and `data is None`.
+
+Before the card, with no network beyond one DNS lookup: the address's shape
+(`http`/`https` only, no control characters, no name-and-password in it), then
+`jarvis_local_http.private_fetch_problem`, which refuses this PC, the home
+network, Tailscale and Meshnet by a REAL lookup. A refusal there means **no
+card is raised** - there is nothing to ask about - and it reaches the model as
+a tool result it can retry from.
+
+After a person's yes: `jarvis_local_http.public_urlopen` (no proxy, and the
+connection re-checks the address it actually connects to, so a name whose DNS
+answer changes between the check and the connect cannot get through) with
+`_PageRedirect` following a redirect only where the same check allows it. The
+body is read to at most 2 MB, the whole request is bounded by 15 seconds, and
+what comes back is the words a reader would see, in a 1,500-character window
+with a trailer naming the offset to carry on from.
+
+Everything that comes back is **outside text**: `read_web_page` is not in
+`jarvis_agent._NOT_READING`, so the turn is marked as having read outside text,
+a note write after it waits for a card, nothing from it is learned, and the
+card says "Proposed after Jarvis read: the web page you gave it".
+
+**Where the address itself is written down, said plainly:** it is on the card,
+so it is also on the gate's own pending-approval row while the card waits
+(`jarvis_gate.check` stores the card's `prompt`, capped at 500 characters) -
+true of every tool in this project and not new here. The audit log holds
+outcomes and counts rather than the prompt, the apps' read-only Activity list
+keeps a title and a decision, and `jarvis_readpage.py` writes no file of its
+own.
+
+## No new dependency
+
+`jarvis_readpage.text_of` strips the page with the standard library alone. A
+`<main>` or an `<article>` with at least 200 characters is preferred; else the
+whole body with `nav`, `aside`, `footer`, `header`, `form`, `script`, `style`
+and the rest dropped - the preference order `jarvis_browser_control`'s own
+in-page `_MAIN_CONTENT_JS` uses, and the unseen-tag list
+`jarvis_tellme._visible_text` strips for its fingerprint. A response that is
+clearly not words (a PDF, a picture, a sound, a video, a zip, JSON, a body with
+NUL bytes) is refused in plain words rather than decoded into nonsense.
+
+**`trafilatura` (Python, Apache-2.0) is the one to reach for IF the plain strip
+proves too noisy in real use** - a real dependency with a real model file, so
+it was not added on the chance that it might help. The tradeoff is written down
+in the module's own docstring so the next person does not have to rediscover it.
+
+## It asks every time, and no app can loosen it
+
+One card per address, showing the address in full, raised BEFORE any fetch.
+`read_web_page` is `ask` in `rebuilt/jarvis-framework.toml`, in
+`jarvis_gate._RISK` as `("no", "outbound", ...)` (a risky approval: Windows
+Hello on the PC, a screen lock on the phone), in `jarvis_asks_first.HARD_LIMITS`
+and `MUST_ASK`, on the "What asks first" page under **The internet**, on
+`LOCKDOWN_ACTIONS`, and in `jarvis_agent.NEEDS_A_PERSON` - so at any tier, a
+run nobody was asked about is refused. `readpage.patch` also puts the action in
+`_NO_RULE_FROM_DENIAL`: answering one card with a "no" proposes no standing
+memory rule.
+
+## Off until the owner switches it on
+
+Like every tool but `web_search`, the model is only offered a tool named in
+`[tools].enabled` (`jarvis_agent.offered_tools`), and `apply-patches.ps1` never
+overwrites `jarvis-framework.toml` because it holds decisions only the owner
+makes. So the last step is his, one line in that file:
+
+```toml
+[tools]
+enabled = ["web_search", "read_web_page"]
+```
+
+With the short tool list on (`[tools] short_list = true`, off by default) the
+tool sits in its own `more_tools` group, `read_web_page`, rather than the core.
+That costs `more_tools` 23 tokens of its own budget (298 -> 321), so
+`test_short_tool_list.py`'s pin moved 300 -> 325 on 2026-10-05 with the reason
+written beside it: the core would have added all 289 tokens of the tool's own
+description to every turn, and folding it into an existing group would have
+made that group's one-line summary tell the model something untrue.
+
+## Read aloud
+
+`read_web_page` is on `tools/gen_private_aloud_cases.py`'s `READ_ALOUD_TOOLS`,
+beside `web_search` - both are the public web the owner asked for, with the
+address shown on a card first - and both generated copies of that table were
+regenerated. Every EARLIER rule still comes first (a sensitive saved fact, a
+question the PC marked private, the router's private gate, remembered facts
+with memory kept on screen, a dropped or stale event stream), which
+`test_readpage.py` proves on the generator's own `may_read` function rather
+than on rows the table happens not to carry for this tool.
+
+**One thing a reader might not expect, said plainly:** under "Only trust the
+talk button", a "hey Jarvis" turn still reads a page answer aloud. That is not
+new behaviour and not special to this tool - the stricter setting acts through
+the three `*_aloud` fields, and this tool is on the web's side of them, exactly
+as `web_search` already is (the table's own row: "hey Jarvis under 'Only trust
+the talk button': web_search only (the screen setting does not touch it)").
+Nothing new was written for it, which is the point.
+
+## Both apps, and no new screen
+
+The surface is the chat box both apps already have: paste the link and ask, or
+share the page from Chrome, which the phone's existing share target
+(`ACTION_SEND`, `text/plain`) already folds into the composer draft. So this
+feature adds **no** desktop JavaScript, **no** Kotlin, and no fixture of its
+own - only the two regenerated contract tables, which both apps' existing tests
+already read.
+
+## Test it
+
+```
+python3 backend/test_readpage.py
+python3 backend/test_private_aloud.py
+python3 backend/test_short_tool_list.py
+python3 backend/test_tool_text.py
+python3 tools/gen_private_aloud_cases.py --check
+python3 tools/gen_asks_first_cases.py --check
+python3 tools/gen_card_words_cases.py --check
+```
+
+`test_readpage.py` never touches the real network: every fetch is injected, and
+the two places that would otherwise resolve a name are replaced for the length
+of the check that needs them. It proves the failure paths the owner's question
+turns on - an address that does not answer, a response that is not a page, a
+page larger than the cap, and a page with no readable words - and it proves the
+patch applies after the rest of the stack and reverses.

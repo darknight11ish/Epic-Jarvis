@@ -329,6 +329,7 @@ HARD_LIMITS = frozenset({
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+    "read_web_page",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -348,6 +349,7 @@ MUST_ASK = frozenset({
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+    "read_web_page",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -374,7 +376,7 @@ GROUPS = (
                       "control_browser", "browser_form_submit", "obscura_enable",
                       "post_to_external_service",
                       "open_public_tunnel",
-                      "news_read", "page_read", "github_read", "chatbot_session",
+                      "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
                       "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
@@ -1666,7 +1668,7 @@ LOCKDOWN_ACTIONS = frozenset({
     # sending, saving and tidying email
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
-    "news_read", "page_read", "github_read", "youtube_captions_read", "quiz_cloud_grade",
+    "news_read", "page_read", "read_web_page", "github_read", "youtube_captions_read", "quiz_cloud_grade",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

@@ -282,9 +282,19 @@ def t_what_it_saves():
     check("the short list is well under half of the full one", short * 2 < full)
     check("the short list stays small (pinned: at most 1,450 tokens)", short <= 1450,
           str(short))
-    check("more_tools itself stays small (at most 300 tokens)",
+    # Pinned 300 -> 325 on 2026-10-05, and here is exactly why, because a pin
+    # is a decision: `read_web_page` (jarvis_readpage.py, JARVIS-API section
+    # 115) is a way out with a 289-token description of its own, so it must
+    # live in a group rather than the core - and its own group costs more_tools
+    # 23 tokens (298 -> 321: the group's name and its one-line "what it is
+    # for", in the description and in the enum). The cost is paid only with
+    # `[tools] short_list = true`, which ships OFF, and it is the smallest of
+    # the three ways to place the tool: the core would have added all 289 to
+    # every turn, and folding it into an existing group would have made that
+    # group's own one line tell the model something untrue.
+    check("more_tools itself stays small (at most 325 tokens)",
           AG.estimate_tokens(AG.more_tools_schema(AG.more_tools_groups(every, short=True)))
-          <= 300)
+          <= 325)
 
 
 if __name__ == "__main__":

@@ -1069,6 +1069,14 @@ $PATCHES = @(
     # SHIPPED below); without it, or on any error, the banner says so and the routes are
     # simply not there.
     'tutorials.patch'
+    # "Read this page out loud" (the owner's request of 2026-10-05; JARVIS-API section 115):
+    # ONE approval card per address the owner hands over, raised BEFORE any fetch, then ONE
+    # plain GET of that one page and its words read out as outside text. Two hunks in
+    # jarvis_gate.py - the action name in _NO_RULE_FROM_DENIAL and its own risk row - whose
+    # context is quiz-cloud.patch's own added lines, so it goes after quiz-cloud. It needs
+    # jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below); without
+    # them the tool is simply not offered to the model and the gate row is never used.
+    'readpage.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1308,6 +1316,8 @@ $SHIPPED = @(
     'jarvis_youtube.py'          # youtube.patch: ONE card per YouTube link (youtube_captions_read), then the caption text only is fetched (youtube-transcript-api) and quizzed on as outside text; breaks YouTube's terms, may be blocked; never video or audio
     # --- "Grade this better" (2026-09-30, quiz-cloud.patch) ---
     'jarvis_quiz_cloud.py'       # quiz-cloud.patch: ONE card per request (quiz_cloud_grade) listing exactly what leaves the PC, then one message to the cheapest set-up cloud service (jarvis_chatbot_api.py); never for a private quiz or after a crisis answer
+    # --- "Read this page out loud" (2026-10-05, readpage.patch) ---
+    'jarvis_readpage.py'         # readpage.patch: the model's read_web_page tool - ONE card per address (read_web_page, tier ask, risky: the PC contacts that one site), then ONE plain GET and the words a reader would see, handed back as outside text; never a link on the page, never a second page, no new dependency
     # --- "Show or hide menus" (2026-09-30, no patch) ---
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
