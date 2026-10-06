@@ -1199,12 +1199,23 @@ def fingerprint_of(cfg: ServerConfig, cwd: str) -> str:
     return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
+def _shown(arg: str) -> str:
+    """One command-line argument, as a person would see it typed.
+
+    NOT json.dumps(): that escapes every backslash, so on Windows the approval
+    card showed "C:\\\\Users\\\\..." - a string that is not the command that
+    would run, and the command is exactly what the owner is being asked to
+    check before saying yes. Quote only when the argument would not survive a
+    space or a quote (2026-10-03)."""
+    return f'"{arg}"' if any(ch in arg for ch in ' "') else arg
+
+
 def describe_start(p: StartPlan) -> str:
     lines = [f"Jarvis wants to start a plug-in program on this PC: \"{p.server}\" (an MCP "
              f"server).",
              "", "It will run exactly this command:"]
-    lines += [f"    {json.dumps(a, ensure_ascii=True)}" for a in p.argv]
-    lines += ["", f"In this folder: {json.dumps(p.cwd, ensure_ascii=True)}"]
+    lines += [f"    {_shown(a)}" for a in p.argv]
+    lines += ["", f"In this folder: {_shown(p.cwd)}"]
     if p.env_sources:
         lines.append("With these settings passed in (values are not shown here):")
         lines += [f"    {k}: {src}" for k, src in p.env_sources]
@@ -1238,7 +1249,7 @@ def describe_call(p: CallPlan, cfg: ServerConfig) -> str:
              "", "It will send exactly these arguments, in full:", pretty, "",
              f"(argument fingerprint {p.args_sha[:16]})", "",
              "The program that receives them: "
-             + " ".join(json.dumps(a, ensure_ascii=True) for a in (cfg.command, *cfg.args)),
+             + " ".join(_shown(a) for a in (cfg.command, *cfg.args)),
              "", "What this means: the program does whatever this tool does with these "
              "arguments, with your Windows account's permissions. Whatever it sends back "
              "is treated as untrusted text."]

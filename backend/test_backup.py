@@ -69,7 +69,28 @@ import jarvis_card_words as W  # noqa: E402
 import jarvis_framework as fw  # noqa: E402
 
 FAILED, PASSED = [], []
-TMP = Path(tempfile.mkdtemp(prefix="jarvis-backup-"))
+
+
+def _scratch_root() -> Path:
+    """A disposable folder the REAL jarvis_documents.check_folder() accepts.
+
+    The OS temp folder is not one on Windows: it lives under AppData, and Jarvis
+    refuses any folder under AppData on purpose (it holds keys and browser
+    data). Every check here that reaches the real check_folder() was failing
+    there for a reason that has nothing to do with backups, so ask first and
+    fall back to a folder beside the user's home where temp is refused
+    (2026-10-03). The root is removed in main() either way.
+    """
+    root = Path(tempfile.mkdtemp(prefix="jarvis-backup-"))
+    try:
+        D.check_folder(str(root))
+        return root
+    except ValueError:
+        shutil.rmtree(root, ignore_errors=True)
+    return Path(tempfile.mkdtemp(prefix=".jarvis-backup-tests-", dir=str(Path.home())))
+
+
+TMP = _scratch_root()
 
 
 def check(name, cond, detail=""):
@@ -106,9 +127,24 @@ def sync_spawn(fn):
 
 def fresh_conf() -> Path:
     """A new, empty settings folder, with the real jarvis_documents.py and
-    jarvis_backup.py both reading it, and a folder for backups beside it."""
-    conf = TMP / f"conf-{time.time_ns()}"
-    conf.mkdir()
+    jarvis_backup.py both reading it, and a folder for backups beside it.
+
+    Named by tempfile.mkdtemp, not `TMP / f"conf-{time.time_ns()}"`: on Windows
+    time.time_ns() only moves on the system timer tick (GetSystemTimeAsFileTime
+    in 100-ns units), so two calls inside one tick hand back the same name and
+    the mkdir() that follows the second one dies with `FileExistsError:
+    [WinError 183]` - measured on this PC at 155 of 400 calls (2026-10-05).
+    That is what the Windows runner reported on 2026-10-05 (run 37369387182,
+    job backend-windows), in four checks at once:
+    t_backup_now_is_this_pc_only_no_card_needs_a_folder and the three below it
+    each died in fresh_conf() before their own first check ran - two of them on
+    its `conf.mkdir()` line and two on its `backups.mkdir()` line - which is
+    why the job showed 123 passed, 4 failed where Ubuntu showed 127 passed.
+    mkdtemp asks the filesystem for a free name, and
+    jarvis_documents.check_folder() accepts TMP itself (it is either the OS
+    temp folder or a folder beside the user's home - see _scratch_root above).
+    """
+    conf = Path(tempfile.mkdtemp(dir=str(TMP), prefix="conf-"))
     B._config_dir = lambda: conf
     D._config_dir = lambda: conf
     fw.CONFIG_DIR = conf
@@ -121,8 +157,7 @@ def fresh_conf() -> Path:
     empty = _scratch_dir("backend")
     B._source_dir = lambda: empty
     B._reset_for_tests()
-    backups = TMP / f"backups-{time.time_ns()}"
-    backups.mkdir()
+    backups = Path(tempfile.mkdtemp(dir=str(TMP), prefix="backups-"))
     return conf, backups
 
 
@@ -893,9 +928,15 @@ class FakeHandler:
 def t_restore_never_writes_outside_its_own_folders():
     """Security/privacy audit, 2026-09-27: restore joined whatever name the
     archive held, so "db/../../x" landed outside the settings folder.
-    build_archive never writes such a name; this is the second lock."""
+    build_archive never writes such a name; this is the second lock.
+
+    The watch folder is mkdtemp's, not `escaped-{time.time_ns()}`: a name from
+    the Windows timer tick can be the one the previous call already took (see
+    fresh_conf above), and a name that already exists would decide the
+    assertion below rather than restore's own guard."""
     conf, _backups = fresh_conf()
-    outside = conf.parent / f"escaped-{time.time_ns()}"
+    outside = Path(tempfile.mkdtemp(dir=str(TMP), prefix="escaped-"))
+    before = sorted(os.listdir(conf.parent))
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as zf:
         zf.writestr(f"db/../{outside.name}", b"x")
@@ -908,8 +949,9 @@ def t_restore_never_writes_outside_its_own_folders():
         zf.writestr("notes/folder/fine.md", b"ok")
         zf.writestr("manifest.json", "{}")
     applied = B._apply_restore(buf.getvalue())
-    check("no name wrote outside the settings folder", not outside.exists(),
-          str(outside))
+    check("no name wrote outside the settings folder", os.listdir(outside) == []
+          and sorted(os.listdir(conf.parent)) == before,
+          (sorted(os.listdir(outside)), sorted(os.listdir(conf.parent))))
     check("each bad name was skipped and counted", applied.get("skipped") == 6, applied)
     check("ordinary names still restore",
           (conf / "fine.json").is_file() and (conf / "notes" / "folder" / "fine.md").is_file()

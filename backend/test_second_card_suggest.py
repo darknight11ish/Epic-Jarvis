@@ -51,6 +51,89 @@ import jarvis_second_card as SC  # noqa: E402
 import jarvis_backoff as BO  # noqa: E402
 import gen_second_card_cases as G  # noqa: E402
 
+def _block_at(src, at):
+    """From the start of `at`'s line, to where the indentation returns to it.
+
+    `after[i:i + 1800]` counted characters from the route header and hoped
+    everything the check names was inside the next 1800 of them - a promise
+    about how long the route stays, which had to be re-tuned by hand when it
+    grew (2026-10-03). This ends where the indentation comes back to the
+    marker's own level, however long the block grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    lines = src[src.rfind("\n", 0, at) + 1:].split("\n")
+    indent = len(lines[0]) - len(lines[0].lstrip())
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def _block(src, marker):
+    at = src.find(marker)
+    return _block_at(src, at) if at >= 0 else ""
+
+
+def _enclosing_block_at(src, at):
+    """The block of the nearest line ABOVE `at` that opens one, by indentation.
+
+    `after[at:at + 700]` measured FORWARD a fixed 700 characters from the new
+    lines to the route's closing return. The question - "is the route's own
+    return still the last thing in it" - is answered by walking up to what
+    encloses the new lines and taking that block whole, however long it grew.
+    """
+    lines = src.split("\n")
+    n = src.count("\n", 0, at)
+    indent = len(lines[n]) - len(lines[n].lstrip())
+    for i in range(n - 1, -1, -1):
+        if not lines[i].strip():
+            continue
+        if (len(lines[i]) - len(lines[i].lstrip())) >= indent:
+            continue
+        return _block_at(src, sum(len(l) + 1 for l in lines[:i]))
+    return ""
+
+
+def _try_at(src, at):
+    """The whole `try:`/`except` statement that contains `at`, or "".
+
+    `after[at:at + 200]` looked FORWARD a fixed 200 characters for an
+    `except`; whether the note is safely wrapped is a question about what
+    ENCLOSES it, so this walks back up the indentation to the nearest `try:`
+    and returns that statement whole - handlers included, since `except` sits
+    at the `try`'s own indent.
+    """
+    lines = src.split("\n")
+    n = src.count("\n", 0, at)
+    indent = len(lines[n]) - len(lines[n].lstrip())
+    for i in range(n - 1, -1, -1):
+        if not lines[i].strip():
+            continue
+        ind = len(lines[i]) - len(lines[i].lstrip())
+        if ind >= indent:
+            continue
+        if lines[i].strip() != "try:":
+            return ""                     # some other block opens at this level
+        out = [lines[i]]
+        for line in lines[i + 1:]:
+            st = line.strip()
+            if not st:
+                out.append(line)
+                continue
+            if (len(line) - len(line.lstrip())) <= ind and not st.startswith(
+                    ("except", "else", "finally")):
+                break
+            out.append(line)
+        return "\n".join(out)
+    return ""
+
+
 FAILED, PASSED = [], []
 
 
@@ -713,16 +796,25 @@ def t_the_patch():
           and "isinstance(cid, str) and cid" in after
           and 'jarvis_agent.note_correction(cid, turn_id=out.get("turn_id"))' in after
           and "except Exception:\n                    pass" in after, after)
-    cid_at = after.index('cid = body.get(')
+    # An older client (no conversation_id) must be untouched: whatever the new
+    # lines are, the route still ENDS the same way. The old form measured the
+    # character distance to the return (`- cid_at < 700`); the route block the
+    # new lines live in ends where it ends, and the return is its last
+    # statement - a stronger claim than "within 700 characters".
+    cid_at = after.index("cid = body.get(")
+    route = _enclosing_block_at(after, cid_at)
+    check("the new conversation-id lines are still there to check", bool(route))
+    last = [l for l in route.splitlines() if l.strip()]
     check("an older client (no conversation_id) is untouched: the route still ends "
           "the same way, right after the new lines",
-          after.index('return self._send(code, out)', cid_at) - cid_at < 700, after[cid_at:cid_at + 700])
+          bool(last) and "return self._send(code, out)" in last[-1],
+          "\n".join(last[-3:]))
     # Bug audit 2026-09-27, finding #2: this route did not exist in any
     # patch at all, so both apps' "when to suggest the bigger model"
     # switches could not work. Checked against the reconstructed file
     # itself, not just this test's own copy of the intended text.
-    i = after.index('if route == "/api/second-card/suggest":')
-    w = after[i:i + 1800]
+    w = _block(after, 'if route == "/api/second-card/suggest":')
+    check("the suggest route is still there to check", bool(w))
     check("POST /api/second-card/suggest checks origin and token, and hands the body over",
           "_origin_ok(self)" in w and "_token_ok(self)" in w
           and "jarvis_second_card.handle_suggest_post(body)" in w, w)
@@ -735,9 +827,14 @@ def t_the_patch():
     tid_at = after.index('route_header["turn_id"] = jarvis_feedback.record_turn(')
     flag_at = after.index('if route_header.get("wellbeing") == "crisis":', tid_at)
     note_at = after.index('jarvis_agent.note_crisis_turn(route_header.get("turn_id"))', flag_at)
+    # "right after it is made" is a claim about what wraps the call, not about
+    # how many characters it sits past the flag - so the flag's own block is
+    # the boundary, taken by indentation.
+    flag_block = _block_at(after, flag_at)
+    check("the crisis flag's block is still there to check", bool(flag_block))
     check("a crisis turn's id is noted right after it is made, only on wellbeing's flag, "
           "before either branch sends its header",
-          note_at - flag_at < 200
+          'jarvis_agent.note_crisis_turn(route_header.get("turn_id"))' in flag_block
           and note_at < after.index("if use_tools:", tid_at)
           and note_at < after.index('self.send_header("X-Jarvis-Route"', tid_at),
           after[tid_at:tid_at + 1400])
@@ -745,15 +842,22 @@ def t_the_patch():
           0 <= after.find('route_header["wellbeing"] = "crisis"') < tid_at)
     turn_at = after.index("_turn = jarvis_agent.run_local_turn(")
     agent_flag_at = after.index('if _turn.get("crisis"):', turn_at)
+    agent_flag_block = _block_at(after, agent_flag_at)
     check("...and again after the turn, on jarvis_agent's own crisis check",
-          0 < after.index('jarvis_agent.note_crisis_turn(route_header.get("turn_id"))',
-                          agent_flag_at) - agent_flag_at < 200
+          0 < after.find('jarvis_agent.note_crisis_turn(route_header.get("turn_id"))',
+                         agent_flag_at) - agent_flag_at
+          and 'jarvis_agent.note_crisis_turn(route_header.get("turn_id"))' in agent_flag_block
           and agent_flag_at < after.index("except (BrokenPipeError", turn_at))
-    for at in (note_at, after.index("jarvis_agent.note_crisis_turn(", agent_flag_at)):
-        tail = after[at:at + 200]
+    NOTE = 'jarvis_agent.note_crisis_turn('
+    notes, at = [], after.find(NOTE)
+    while at != -1:
+        notes.append(at)
+        at = after.find(NOTE, at + 1)
+    check("both crisis notes are still there to check", len(notes) == 2, repr(len(notes)))
+    for at in notes:
+        wrapped = _try_at(after, at)
         check("that note can never be the reason an answer fails (inside try/except)",
-              "except Exception:" in tail and "pass" in tail
-              and after.rfind("try:", 0, at) > at - 120, tail)
+              "except Exception:" in wrapped and "pass" in wrapped, wrapped[-200:])
     check("jarvis_agent really has what the patch calls",
           callable(getattr(AG, "note_crisis_turn", None)))
     import _where

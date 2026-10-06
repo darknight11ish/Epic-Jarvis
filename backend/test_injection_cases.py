@@ -116,9 +116,33 @@ class Verdict:
 
 class Gate:
     """Reads at `auto`, as the owner's config has them; everything else is a
-    card, recorded, and denied - nothing that could act ever runs."""
-    READS = {"jarvis_email_read_run", "jarvis_notes_search_run", "jarvis_calendar_read_run",
-             "file_read", "calculator", "memory_search"}
+    card, recorded, and denied - nothing that could act ever runs.
+
+    TWO SETS OF NAMES, because the product passes one of two things depending
+    on the machine it is on:
+
+      * on the owner's PC, jarvis_agent resolves the tool's lookup name through
+        `jarvis_gate.action_for_tool()` and hands the checker the RESOLVED
+        action ("email_read") - that is 2026-10-03's fix;
+      * in a CI or repository run there is no `jarvis_gate.py` to resolve with
+        (it is not in this repository), so `jarvis_agent`'s
+        `except Exception: pass` leaves the tool's own lookup name in place
+        ("jarvis_email_read_run").
+
+    Accepting both keeps every check below measuring the TURN - markers,
+    labels, what a card names - on a machine of either shape. It is not
+    permission for the product to stop resolving: which name really arrived is
+    asserted by `t_the_gate_is_handed_the_resolved_action_name`, which runs
+    only where the table exists.
+    """
+    #: What arrives on the owner's PC, where the table lives.
+    READS_RESOLVED = {"email_read", "notes_search", "calendar_read",
+                      "read_files_readonly", "calculator", "memory_search"}
+    #: What arrives where there is no table to resolve with (CI, this repo).
+    READS_LOOKUP = {"jarvis_email_read_run", "jarvis_notes_search_run",
+                    "jarvis_calendar_read_run", "file_read", "calculator",
+                    "memory_search"}
+    READS = READS_RESOLVED | READS_LOOKUP
 
     def __init__(self):
         self.cards = []
@@ -328,7 +352,12 @@ def t_agentdojo_attacks_cards_name_their_source():
             if not (SHAPED in note and READ_EMAIL in note and CAME_FROM in note):
                 problems.append(f"{tname}: note card does not name its source: {note[-300:]!r}")
             if piece:
-                shell = cards.get("shell_exec", "")
+                # The gate is called with the RESOLVED action name, never the
+                # tool's own name: jarvis_gate's table maps the shell tool to
+                # "run_shell_on_host". Looking the card up under "shell_exec"
+                # found nothing, so a card that named the address perfectly well
+                # looked as if it had named nothing (2026-10-03).
+                shell = cards.get("shell_exec") or cards.get("run_shell_on_host", "")
                 if f"\u201c{piece}\u201d {CAME_FROM}" not in shell:
                     problems.append(f"{tname}: shell card does not name {piece}: {shell[-300:]!r}")
             if PLANTED in note:
@@ -798,6 +827,41 @@ def t_an_unreadable_tool_call_is_asked_again_once():
           repr(len(payloads)))
 
 
+def t_the_gate_is_handed_the_resolved_action_name():
+    """2026-10-03's fix, and the reason Gate carries two sets of names.
+
+    jarvis_agent resolves the tool's lookup name through
+    `jarvis_gate.action_for_tool()` and hands the checker THAT. Without
+    jarvis_gate.py - a CI or repository run - there is no table, the lookup
+    name arrives instead, and the checks above still run because they accept
+    both. This is the one that would go red if the resolution quietly stopped
+    happening on the owner's PC, so it is proved there and SKIPPED, with its
+    reason, where it cannot be.
+    """
+    from _where import missing as _missing
+    if _missing("jarvis_gate.py"):
+        return check("SKIP - no jarvis_gate.py here, so no table can turn "
+                     "'jarvis_email_read_run' into an action name; the owner's own "
+                     "run proves this", True)
+    try:
+        import jarvis_gate
+        want, _known = jarvis_gate.action_for_tool("jarvis_email_read_run", {})
+    except Exception as exc:
+        return check(f"SKIP - jarvis_gate.action_for_tool could not be asked "
+                     f"({type(exc).__name__}: {exc})", True)
+    seen = []
+
+    class Recording(Gate):
+        def __call__(self, action, detail, prompt):
+            seen.append(action)
+            return super().__call__(action, detail, prompt)
+
+    with Tools(inbox="Nothing important here.") as _:
+        turn([said(call(1, "email_check", {})), answer()], gate=Recording())
+    check("the gate is handed the RESOLVED action name, never the tool's own",
+          want in seen and "jarvis_email_read_run" not in seen, (want, seen))
+
+
 if __name__ == "__main__":
     for fn in (t_chat_markers_are_stripped_until_none_remain,
                t_every_tool_result_is_labelled_and_the_turn_says_so_once,
@@ -809,6 +873,7 @@ if __name__ == "__main__":
                t_taint_and_pasted_words_are_named_on_cards,
                t_note_writes_after_outside_text_wait_for_a_yes,
                t_the_shipped_config_asks_for_note_writes_after_outside_text,
+               t_the_gate_is_handed_the_resolved_action_name,
                t_broken_arguments_raise_no_card_and_get_one_retry,
                t_a_second_broken_call_ends_it_with_a_plain_line,
                t_an_unreadable_tool_call_is_asked_again_once):

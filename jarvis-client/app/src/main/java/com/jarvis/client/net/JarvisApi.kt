@@ -2236,6 +2236,24 @@ class JarvisApi(
     suspend fun pcHelp(): ApiResult<JsonObject> = probe(PcHelp.PATH)
 
     /**
+     * `GET /api/tutorials` (section 114) - one catalogue for both apps and
+     * where the owner has read to ([Tutorials.parse]). Reads only: a 404 is an
+     * older backend, and nothing here is held on a stale link.
+     */
+    suspend fun tutorials(): ApiResult<JsonObject> = probe(Tutorials.PATH)
+
+    /** `GET /api/faq` (section 114) - the questions and answers, in the PC's own order. */
+    suspend fun faq(): ApiResult<JsonObject> = probe(Tutorials.FAQ_PATH)
+
+    /**
+     * `POST /api/tutorials/progress` (section 114) - record where the owner has
+     * read to. NO card and NOT held while the event stream is stale: it is the
+     * owner marking their own reading and it acts on nothing.
+     */
+    suspend fun markTutorial(bodyJson: String): ApiResult<JsonObject> =
+        postForJob(Tutorials.PROGRESS_PATH, bodyJson)
+
+    /**
      * One of the hardware POSTs: choosing a setup ([Hardware.APPLY_PATH]),
      * measuring ([Hardware.MEASURE_PATH]), or ONE step of the chosen setup -
      * a route read from the PC's own answer, one of [Hardware.STEP_ROUTES]

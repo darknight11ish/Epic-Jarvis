@@ -403,7 +403,9 @@ def main() -> int:
         return 1 if bad else 0
     for p, text in targets:
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        # newline="\n": without it the .json, .kt and .js below come out CRLF on
+        # Windows and LF elsewhere (the repository is LF everywhere).
+        p.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {p.relative_to(ROOT)}")
     return 0
 
