@@ -923,14 +923,30 @@ def _primary(cards: list) -> tuple:
     """(the card Jarvis treats as the everyday chat card, the sentence saying
     which rule chose it).
 
-    `[compute] primary_gpu` still wins, then the owner's own pin (the
-    "Everyday chat runs on" setting, 2026-10-05), then - unchanged, for
-    PLANNING only - jarvis_compute.primary's own fallback: the card a monitor
-    is plugged into, else nvidia-smi's first. The fallback is a layout
-    decision, never a claim about where the model is: with nothing pinned,
-    the reporting says where the model really is instead (see
-    `where_chat_runs`), because on this PC the monitor card and the card
-    holding the model are different cards."""
+    FOUR RULES, in this order, and the sentence says which one was used:
+
+    1. `[compute] primary_gpu` in the owner's toml - his own hand-set
+       override. Read first wherever it is set, and nothing here writes it
+       back (`_state_path`'s own comment).
+    2. the owner's own pin (the "Everyday chat runs on" setting,
+       2026-10-05), when nvidia-smi still sees that card;
+    3. THE CARD THE MODEL IS OBSERVED ON - `_observed_card_in`, the same one
+       reading of `ollama ps` and nvidia-smi that `where_chat_runs` reports
+       with. This is the 2026-10-06 fix: with nothing pinned, this used to
+       skip straight to the monitor rule, so planning worked around one card
+       while the reporting named the other;
+    4. the old fallback, UNCHANGED as the fallback: the card a monitor is
+       plugged into, else nvidia-smi's first (`jarvis_compute.primary`).
+       `_detect` is what says, in the owner's own reading, that this card is
+       an ASSUMPTION and not a reading - with nothing pinned and nothing
+       observed Jarvis cannot tell, and a plan still needs one card to be
+       about. That is the whole point of that wording: "cannot tell" must
+       not come out as a silent guess.
+
+    Never raises, never invents a card, and a card named by only one of
+    rules 3 and 4 reads as exactly that. The sentence this returns is about
+    the RULE, so `_detect` can tell an observation (rule 3) from the owner's
+    own choice (rules 1 and 2) and from the assumption (rule 4)."""
     if compute is None:
         return (cards[0], "it is the first card") if cards else (None, "no card")
     if not str(compute._cfg("primary_gpu", "") or "").strip():
@@ -940,9 +956,19 @@ def _primary(cards: list) -> tuple:
                         if (getattr(d, "uuid", "") or "").lower() == want.lower()), None)
             if hit is not None:
                 return hit, "you pinned this card (the \"Everyday chat runs on\" setting)"
-            return compute.primary(cards), (
-                f"you pinned a card (id {want}) that nvidia-smi does not see now, so "
-                f"the everyday card is only an estimate")
+            # The pinned card is not in the PC any more. `compute.primary`
+            # answers (card, sentence) and MUST be unpacked here: returning it
+            # whole made this a ((card, sentence), sentence) tuple, which blew
+            # up in `_detect` on `prim.uuid` (found 2026-10-06, by the test for
+            # exactly this branch - a scenario that became reachable once a pin
+            # was checked before the observation).
+            est, _ = compute.primary(cards)
+            return est, (f"you pinned a card (id {want}) that nvidia-smi does not see now, so "
+                         f"the everyday card is only an estimate")
+        seen = _observed_card_in(cards)
+        if seen is not None:
+            return seen, ("Jarvis read the model on this card from Ollama and nvidia-smi, and "
+                          "you have not pinned a card")
     return compute.primary(cards)
 
 
@@ -1530,6 +1556,45 @@ def _free_mb(cards: list) -> dict:
     return out
 
 
+def _observed_card(cards: list) -> Optional[dict]:
+    """Which card the MODEL's own process is on right now, read from the
+    machine (nvidia-smi's process list) - or None when Jarvis cannot tell.
+
+    None covers every way of not knowing, and they are all said as "cannot
+    tell" by the callers, never turned into a guess: nothing is loaded, the
+    driver does not name the program using a card (some Windows drivers do
+    not - docs/MEASURE-CARDS.md section 2), no card could be read, or this
+    module's own lanes are the only model processes (they run on another
+    card BY DESIGN and are excluded by `_model_process`).
+
+    THE ONE READER of that fact. `where_chat_runs` reports with it and
+    `_primary` PLANS with it, so the card Jarvis plans around and the card
+    it reports are the same reading of the same machine, taken once per
+    caller (2026-10-06: planning used to fall back to the monitor card while
+    reporting named the card the model was really on, so Jarvis could say
+    "Ollama has the model on the 2060" in one breath and plan around "the
+    main card is busy with chat" in another).
+    """
+    proc = _model_process(list(cards or []))
+    if proc is None or not proc.get("uuid"):
+        return None
+    return {"index": proc["index"], "name": proc["name"], "uuid": proc["uuid"],
+            "used_mb": proc.get("used_mb")}
+
+
+def _observed_card_in(cards: list) -> Optional[object]:
+    """`_observed_card`, as the Device object in `cards` - the same card,
+    with its memory, its free memory and its monitor, so a PLANNING caller
+    gets the card itself and not only its name. None when Jarvis cannot
+    tell (see `_observed_card`)."""
+    got = _observed_card(cards)
+    if got is None:
+        return None
+    want = str(got["uuid"]).lower()
+    return next((c for c in cards
+                 if (getattr(c, "uuid", "") or "").lower() == want), None)
+
+
 def where_chat_runs(det: Optional[dict] = None) -> dict:
     """Where everyday chat actually is, in plain words and as facts. Never
     raises, and never guesses a card: with nothing pinned and nothing
@@ -1546,13 +1611,13 @@ def where_chat_runs(det: Optional[dict] = None) -> dict:
     cards = list(det.get("cards") or [])
     pin = _read_pin()
     row = _ps_row()
-    proc = _model_process(_cards(False))
-    card = None
-    if proc is not None and proc.get("uuid"):
-        card = {"index": proc["index"], "name": proc["name"], "uuid": proc["uuid"]}
+    # The same one reader planning uses (`_observed_card`), so the card the
+    # plan assumes and the card this reports can never be two different
+    # readings of the machine.
+    card = _observed_card(_cards(False))
     out = {"pinned": pin, "card": card, "model_loaded": row is not None,
            "model": (row or {}).get("model"), "on_card_percent": (row or {}).get("on_card_percent"),
-           "context": (row or {}).get("context"), "used_mb": (proc or {}).get("used_mb")}
+           "context": (row or {}).get("context"), "used_mb": (card or {}).get("used_mb")}
     if not cards:
         out["words"] = ("No graphics card could be read, so Jarvis cannot say where chat runs.")
         return out
@@ -2005,6 +2070,26 @@ def _detect(fresh: bool) -> dict:
                 "primary": None, "second": None, "cards": [], "_second": None,
                 "_lanes": [], "_third": None}
     prim, rule = _primary(cards)
+    # Where the model really is, read from the machine - never inferred from
+    # which card a monitor is plugged into (2026-10-05). ONE read, and it is
+    # taken BEFORE the roles below because `_primary` plans with the same
+    # card (2026-10-06): the primary row IS the card the model is on, when
+    # the machine names one, so the plan and the report cannot disagree.
+    det_rows = [{"index": c.index, "uuid": c.uuid or None, "name": c.name,
+                 "total_mb": c.total_mb, "free_mb": c.free_mb,
+                 "compute_cap": c.compute_cap, "display_active": c.display_active}
+                for c in cards]
+    seen = where_chat_runs({"cards": det_rows})
+    seen_card = (seen.get("card") or {}).get("uuid") or ""
+    pinned_here = bool(seen.get("pinned"))
+    # Is the card `_primary` chose for PLANNING the card the model was
+    # OBSERVED on? `_primary` says which rule it used, in its own sentence,
+    # so the test is on the rule and not only on the card: a card named by
+    # `[compute] primary_gpu` or by the owner's pin is his choice, and must
+    # never be described as a reading (that is the whole 2026-10-06 rule).
+    planning_is_observed = bool(seen_card and rule.startswith("Jarvis read the model")
+                                and getattr(prim, "uuid", "")
+                                and str(prim.uuid).lower() == seen_card.lower())
     rows, candidates, reasons = [], [], []
     for c in sorted(cards, key=lambda d: d.index):
         if c is prim:
@@ -2025,26 +2110,29 @@ def _detect(fresh: bool) -> dict:
     # only what is kept internally for a card beyond the first two.
     lanes = sorted(candidates, key=lambda d: (-d.total_mb, d.index))
     second = lanes[0] if lanes else None
-    # Where the model really is, read from the machine - never inferred from
-    # which card a monitor is plugged into (2026-10-05). One read, used for
-    # every row below.
     other_name = second.name if second is not None else "the second card"
-    det_rows = [{"index": c.index, "uuid": c.uuid or None, "name": c.name,
-                 "total_mb": c.total_mb, "free_mb": c.free_mb,
-                 "compute_cap": c.compute_cap, "display_active": c.display_active}
-                for c in cards]
-    seen = where_chat_runs({"cards": det_rows})
-    seen_card = (seen.get("card") or {}).get("uuid") or ""
-    pinned_here = bool(seen.get("pinned"))
+    # The owner's own pin, when he has one (see `_primary`'s own rules).
+    pinned_id = str(seen.get("pinned") or "")
     for c in sorted(cards, key=lambda d: d.index):
         if c is prim:
-            if pinned_here and (c.uuid or "").lower() == str(seen.get("pinned")).lower():
+            if pinned_here and (c.uuid or "").lower() == pinned_id.lower():
                 role = "primary"
                 why = f"everyday chat runs here: {rule}"
-            elif seen_card and (c.uuid or "").lower() == seen_card.lower():
+            elif planning_is_observed and (c.uuid or "").lower() == seen_card.lower():
                 role = "primary"
-                why = ("everyday chat runs here now: Jarvis did not pin a card, and it read "
-                       "this card from Ollama and nvidia-smi")
+                why = ("everyday chat runs here now: Jarvis read this card from Ollama and "
+                       "nvidia-smi, and it did not pin one")
+            elif pinned_here:
+                # He pinned a card, nvidia-smi does not see it now, and the
+                # model was not read anywhere: this is the card the monitor
+                # rule falls back to, so the plan has somewhere to sit. A pin
+                # he made is never called an observation, and the fact that
+                # his card is not in this PC now is said.
+                role = "primary"
+                why = (f"Jarvis ASSUMES everyday chat is here: you pinned the other card "
+                       f"(id {pinned_id}), nvidia-smi does not see that card now, and Jarvis "
+                       f"cannot see the model, so this is where it plans until your card is back "
+                       f"- open \"Everyday chat runs on\" to see what it can read")
             elif seen_card:
                 # The model IS on another card, read from the machine. This
                 # one is only where Jarvis's own settings WOULD go; saying
@@ -2062,11 +2150,23 @@ def _detect(fresh: bool) -> dict:
                 # say the model is on it: on this PC the monitor card and the
                 # card holding the model were different cards
                 # (docs/MEASURED-2026-10-05-owner-pc.md). The words here are
-                # the ones the owner reads, and they say only what is known.
+                # the ones the owner reads, and they say only what is known -
+                # and they say ASSUMES, plainly, because a plan needs a card
+                # and that card is a guess, not a reading (2026-10-06). "I
+                # cannot tell" must never come out as a silent guess.
                 role = "primary"
-                why = (f"Jarvis's own settings are made for this card ({rule}), but you have "
-                       f"not pinned a card, so Jarvis cannot say everyday chat is on it - open "
-                       f"\"Everyday chat runs on\" to read which card it is really on")
+                why = (f"Jarvis ASSUMES everyday chat is here: your settings point at this card "
+                       f"({rule}), but you have not pinned a card and Jarvis cannot see which "
+                       f"card the model is on, so this is where it plans, not something it read "
+                       f"- open \"Everyday chat runs on\" to see what it can read")
+        elif pinned_here and (c.uuid or "").lower() == pinned_id.lower():
+            # His pinned card, with nothing loaded on it: the plan is still
+            # built around it (`_primary` rule 2), and it is not "where the
+            # model is" - that is said, not implied.
+            role = "primary"
+            why = ("you pinned everyday chat to this card, so Jarvis plans around it, but it "
+                   "cannot see the model on it now - it may not be loaded, or Ollama may not "
+                   "have restarted since you set the pin")
         elif c is second:
             role, why = "second", "the second-card features would run here"
             if c.display_active:
@@ -3739,8 +3839,17 @@ def _main_pin(det: dict) -> tuple:
             return True, (f"Ollama is set to use only the {prim.get('name')} "
                           f"(CUDA_VISIBLE_DEVICES in your user settings). If you set it "
                           f"just now, quit Ollama and start it again.")
+        # The setting and the reading disagree. Both are named: "the pin is
+        # pointing somewhere else" is only half of what he needs to know. The
+        # card comes from the primary ROW's own words, which `_detect` wrote
+        # from the one observation it took - never a second look at the
+        # machine here (2026-10-06).
+        where = next((c.get("name") for c in cards
+                      if c.get("uuid") == prim.get("uuid")
+                      and "read this card from Ollama" in str(c.get("why") or "")), None)
+        on = f", and the model was read on the {where}" if where else ""
         return False, (f"CUDA_VISIBLE_DEVICES in your user settings is {val.strip()!r}, "
-                       f"which is not the {prim.get('name')}'s id. Run the command below.")
+                       f"which is not the {prim.get('name')}'s id{on}. Run the command below.")
     if _ON_WINDOWS:
         return False, ("The everyday Ollama is not pinned: it can see both cards and may put "
                        "models on the second one. Run the command below once, then restart "

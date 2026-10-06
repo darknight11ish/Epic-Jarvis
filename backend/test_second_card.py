@@ -1385,8 +1385,12 @@ def t_main_ollama_pin():
     apps = f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n"
     with G.World(G.SMI["2080s_2060"], windows=True, apps=apps, user_env=G.U_2080S):
         st = SC.status()
-    check("the everyday Ollama seen on the second card: false, says so",
-          st["main_ollama_pinned"] is False and "using the NVIDIA GeForce RTX 2060" in st["pin_note"])
+    check("the everyday Ollama seen on a card other than the settings' own: false, and the "
+          "note names both cards",
+          st["main_ollama_pinned"] is False
+          and G.U_2080S[:30] in st["pin_note"]
+          and "the model was read on the NVIDIA GeForce RTX 2060" in st["pin_note"],
+          st["pin_note"])
     with G.World(G.SMI["2080s_2060"], windows=True, user_env=G.U_2080S):
         st = SC.status()
     check("pinned to the main card in the user settings: true", st["main_ollama_pinned"] is True)
@@ -1512,14 +1516,20 @@ def t_the_chat_card_setting():
           seen["pinned"] is None and (seen["card"] or {}).get("uuid") == G.U_2060
           and "RTX 2060" in seen["words"], seen)
     check("... and nothing claims the monitor card is running chat",
-          "everyday chat is not on this card" in next(
+          next(c for c in st["detected"]["cards"] if c["uuid"] == G.U_2080S)["role"] == "second"
+          and "everyday chat runs here" not in next(
               c for c in st["detected"]["cards"] if c["uuid"] == G.U_2080S)["why"])
     check("... and the report is where the reading is: the model, its card "
           "and that Jarvis did not pin it",
           "RTX 2060" in seen["words"] and "did not pin" in seen["words"], seen)
-    check("... and the monitor card says the model is on the other card, "
-          "not that chat runs there",
-          "RTX 2060" in next(
+    check("... and the PLANNED card is the card the model was read on, not the "
+          "monitor card: the everyday card moving to the other card",
+          st["detected"]["primary"]["uuid"] == G.U_2060
+          and (st["detected"]["second"] or {}).get("uuid") == G.U_2080S,
+          (st["detected"]["primary"], st["detected"].get("second")))
+    check("... and the row that WAS the planning card says the model is on the "
+          "other card, not that chat runs there",
+          "the second-card features would run here" in next(
               c for c in st["detected"]["cards"] if c["uuid"] == G.U_2080S)["why"])
     with G.World(G.SMI["2080s_2060"], windows=True) as w:
         st = SC.status()
@@ -1659,6 +1669,146 @@ def t_the_chat_card_pin_asks_first():
         code, out = SC.handle_post({"feature": "chat_card", "action": "leave"})
     check("POST /api/second-card reaches it: feature chat_card",
           code == 200 and out["chosen"] is None, out)
+
+
+def t_planning_uses_the_card_the_model_is_on():
+    """The owner's decision, 2026-10-06 (option B: "true to its reporting").
+
+    THE INCONSISTENCY THIS CLOSES. `where_chat_runs` reports where the model
+    really is; the PLANNING rule (`_primary`) used to skip that reading and
+    fall back to the card a monitor is plugged into. On this PC those are two
+    different cards (the 12 GB 2060 holds the model, the 8 GB 2080 SUPER runs
+    the desktop), so Jarvis could say "Ollama has the model on the 2060" in
+    one breath and plan around "the main card is busy with chat" in another.
+
+    What this proves, each with the real `_primary` (nothing stubbed over it -
+    that stub is what let the two drift apart unnoticed):
+
+      - an observed card is PLANNED around (`primary`), and the monitor card
+        becomes the card the second-card features would run on;
+      - when Jarvis cannot tell, the monitor-card rule still applies, it is
+        still the planning card, and the words say ASSUMES rather than
+        reporting it as something read;
+      - when nothing observes anything, the old rule is exactly what it was.
+
+    Every case below is the OBSERVED reading only - no speed is claimed
+    anywhere in it, the same standard the fixture check applies."""
+    load = f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n"
+
+    # 1. The model is observed on the card with NO monitor. Planning follows
+    #    the reading, not the monitor rule.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load) as w:
+        det = SC.detect(fresh=True)
+        st = SC.status()
+    check("observed: the card the model is on is the card Jarvis plans around",
+          (det["primary"] or {}).get("uuid") == G.U_2060
+          and (det["second"] or {}).get("uuid") == G.U_2080S,
+          (det.get("primary"), det.get("second")))
+    check("observed: the monitor card is now the card the extra features would use",
+          next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["role"] == "second"
+          and "the second-card features would run here" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+    check("observed: the primary row says it was READ, and from where",
+          "read this card from Ollama and nvidia-smi" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2060)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2060)["why"])
+    check("observed: no assumption is claimed anywhere, and no speed either",
+          "ASSUMES" not in " ".join(c["why"] for c in det["cards"])
+          and not _claims_speed(json.dumps(
+              {"cards": det["cards"], "primary": det["primary"],
+               "second": det["second"], "why": det["why"]})))
+    check("observed: the plan and the report name the same card",
+          st["chat_card"]["where"]["card"]["uuid"] == st["detected"]["primary"]["uuid"])
+
+    # 2. A model is LOADED (Ollama says so) but nvidia-smi does not name the
+    #    program using a card, which some Windows drivers do not
+    #    (docs/MEASURE-CARDS.md section 2). `where_chat_runs` says it cannot
+    #    tell; planning must fall back AND say it is assuming.
+    loaded = {"name": "qwen3:8b", "size": 7_000_000_000, "size_vram": 6_000_000_000,
+              "context_length": 4096}
+    with G.World(G.SMI["2080s_2060"], windows=True, ps=[loaded]) as w:
+        det = SC.detect(fresh=True)
+        seen = SC.where_chat_runs({"cards": det["cards"]})
+    check("cannot tell: a model IS loaded, and the reading still names no card",
+          seen["model_loaded"] is True and seen["card"] is None
+          and "cannot say which card it is on" in seen["words"], seen)
+    check("cannot tell: the fallback rule still picks one card to plan around",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and (det["second"] or {}).get("uuid") == G.U_2060,
+          (det.get("primary"), det.get("second")))
+    why = next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"]
+    check("cannot tell: the plan says plainly that it is ASSUMING",
+          why.startswith("Jarvis ASSUMES everyday chat is here")
+          and "you have not pinned a card" in why
+          and "not something it read" in why, why)
+    check("cannot tell: it never claims the model was seen on that card",
+          "everyday chat runs here now" not in why
+          and "read this card from Ollama" not in why, why)
+    check("cannot tell: the monitor rule is exactly what chose it",
+          "a monitor is plugged into it" in why, why)
+    check("cannot tell: no speed claim in the assuming words either",
+          not _claims_speed(why))
+
+    # 3. With nothing else to go on the old rule is unchanged: the monitor
+    #    card, still the planning card, still named as the monitor rule.
+    with G.World(G.SMI["2060_first"], windows=True) as w:
+        det = SC.detect(fresh=True)
+    check("nothing known: the monitor card is still the planning card",
+          (det["primary"] or {}).get("uuid") == G.U_2080S,
+          det.get("primary"))
+    check("nothing known: and the reason still names the monitor rule",
+          "a monitor is plugged into it" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+
+    # 4. No monitor seen anywhere: nvidia-smi's first card, as before.
+    nodisp = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6120, 7.5, Disabled\n" \
+             f"1, {G.U_2060}, NVIDIA GeForce RTX 2060, 12288, 12030, 7.5, Disabled\n"
+    with G.World(nodisp, windows=True) as w:
+        det = SC.detect(fresh=True)
+    check("no monitor seen: still nvidia-smi's first card",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and "first card" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+
+    # 5. A card the owner pinned is HIS choice, never described as a reading,
+    #    even when the model is observed on the other card.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load) as w:
+        w.pin(G.U_2080S)
+        det = SC.detect(fresh=True)
+    check("pinned: the pin wins over the reading, and is called the pin",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and "you pinned this card" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+    check("pinned: the card the model is really on is not silently called the plan",
+          "read this card from Ollama and nvidia-smi" not in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2060)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2060)["why"])
+
+    # 6. Nothing overrides `[compute] primary_gpu`, and it is never a reading.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load) as w:
+        with mock.patch.object(CP, "_cfg",
+                               lambda k, d=None: G.U_2080S if k == "primary_gpu" else d):
+            det = SC.detect(fresh=True)
+    check("primary_gpu set: his own override still decides, and is named as the setting",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and "primary_gpu" in next(
+              c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"],
+          next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"])
+
+    # 7. He pinned a card that is not in the PC any more, and nothing is
+    #    observed: that is an assumption too, and it is said as one.
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        w.pin(G.U_2080TI)                       # never a card in this PC
+        det = SC.detect(fresh=True)
+    why = next(c for c in det["cards"] if c["uuid"] == G.U_2080S)["why"]
+    check("a pin whose card is gone: the monitor rule plans, and says it is ASSUMING",
+          (det["primary"] or {}).get("uuid") == G.U_2080S
+          and why.startswith("Jarvis ASSUMES everyday chat is here")
+          and "you pinned the other card" in why
+          and "nvidia-smi does not see that card now" in why, why)
+    check("a pin whose card is gone: no speed claim, and never called a reading",
+          not _claims_speed(why) and "read this card from Ollama" not in why, why)
 
 
 # ------------------------------------------------------------- the hooks --

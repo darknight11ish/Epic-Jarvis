@@ -1864,6 +1864,34 @@ notification, card, quick-access and coverage audits (one pull request):
 - **The Undo shelf, Activity list and 10-minute Undo windows are separate today**;
   the Activity list keeps only the title, decision, time and device.
 
+Decided 2026-10-06: **"Let Jarvis Desktop start and stop Jarvis" is deliberately
+instant - no approval card.** The owner considered giving the switch a card and
+chose to leave it as it is, and this entry is the record that the choice was
+deliberate rather than an oversight:
+- **It can only run one program he typed in himself.** The desktop starts
+  exactly the **Program** and **Arguments** saved in that same Settings box
+  and nothing else (`jarvis-desktop/src-tauri/src/sidecar.rs`:
+  `Command::new(config.program.trim())` then `command.args(&config.args)`,
+  with the whole `BackendConfig` written by the owner's own Save). There is
+  no way to make it run a program he did not name.
+- **It takes no power over his data.** Starting or stopping the backend does
+  not read, move, send or delete a file, and nothing leaves the PC.
+- **It opens no way out of the PC.** It is not a new named way out
+  (`docs/ARCHITECTURE.md` section 4) and it reaches nothing on the network.
+- So the card an approval would raise would ask him to confirm the exact
+  thing he just typed and pressed Save on. Switching it **off** is instant,
+  like every other narrowing change in this project; switching it **on** is
+  the only direction that changes anything, and it still needs his own Save.
+- The switch is **off by default** (`read_supervise`, ".unwrap_or(false)",
+  "§5, and the reason is a person's terminal"): a Jarvis he started himself
+  in PowerShell is never adopted and never stopped.
+- The desktop build brief's own section 5 (`DESKTOP-BUILD.md`, "Supervising
+  the backend - and the orphan problem") is why it is built carefully rather
+  than not at all: ask `POST /api/shutdown` first, kill the process tree (not
+  the process) only if that does not go, attach to a backend already
+  listening instead of spawning a second one, and keep it a setting, default
+  off.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

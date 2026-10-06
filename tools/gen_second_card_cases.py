@@ -96,8 +96,13 @@ class World:
     def __init__(self, smi, *, old_driver=None, installed=("qwen3:8b", "qwen3:14b"),
                  foreign_on_port=False, lane_answers=True, spawn_now=True,
                  user_env=None, windows=False, apps="", tags_answer=True,
-                 reads_words=False):
+                 reads_words=False, ps=()):
         self.smi, self.old_driver = smi, old_driver
+        #: What the everyday Ollama says is LOADED (its own /api/ps), one
+        #: dict per model: {"name", "size", "size_vram", "context_length",
+        #: "expires_at"}. Empty means "nothing is loaded right now", which is
+        #: what every case but the observation ones means.
+        self.ps = [dict(m) for m in ps]
         # Whether this PC reads the words in a picture (jarvis_ocr.status()):
         # fixed here, so the file is the same on every machine that writes it.
         self.picture_text = ({"available": True, "engine": OCR.ENGINE, "why": ""} if reads_words
@@ -182,6 +187,15 @@ class World:
             return {"models": [{"name": n, "model": n} for n in self.installed]}
         if url.endswith("/api/generate"):
             return {"response": "<think></think>{\"facts\": []}"}
+        if url.endswith("/api/ps"):
+            # Ollama's own answer about what is LOADED. The everyday Ollama
+            # (11434) answers with this world's own `ps` list; a lane's own
+            # port answers "nothing loaded" unless a case says otherwise
+            # (jarvis_second_card._ps_row reads the everyday one, but the
+            # world stays honest about both).
+            if lane and not self.running(port):
+                raise OSError("connection refused")
+            return {"models": [dict(m) for m in self.ps]}
         raise OSError("not answered here")
 
     def popen(self, args, **kwargs):
@@ -196,8 +210,19 @@ class World:
         CP._cache.update(at=-1e9, cards=None, fields="")
         repl = {
             (CP, "_run_smi"): self.run_smi,
-            (SC, "_primary"): lambda cards: CP.primary(cards, configured=""),
+            # NOT `_primary`: it used to be replaced here with
+            # `CP.primary(cards, configured="")` (the monitor rule), which
+            # meant every test and every fixture skipped the real function -
+            # including the owner's own pin and, since 2026-10-06, the card
+            # the model is OBSERVED on. `_config_dir`/`_pin_path` below point
+            # the whole settings folder (and so the pin) at this world's own
+            # temporary one, so the real `_primary` is deterministic here.
             (SC, "_cfg"): lambda key, default=None: default,
+            # `[compute] primary_gpu` is read through jarvis_compute (its own
+            # `_cfg`), and a case must never depend on whichever toml the
+            # machine running it happens to have: empty means the shipped
+            # default, "leave it to Ollama".
+            (CP, "_cfg"): lambda key, default=None: default,
             # The whole settings folder, pointed at this world's own
             # temporary one: nothing in a case may read (or write) whatever
             # settings folder the machine running it happens to have - the
