@@ -821,6 +821,21 @@ def named_places(where: str):
 # ---------------------------------------------------------------------------
 
 def main() -> int:
+    # This check ECHOES the `where` line it is complaining about, and the
+    # tutorials write a real arrow character (U+2192) in exactly those lines.
+    # A Windows console defaults to cp1252, which cannot encode it, so printing
+    # a finding raised UnicodeEncodeError and the check died with a traceback
+    # instead of reporting it - exit 1 on the owner's own machine for a check
+    # that had found nothing. It is the same class of bug
+    # backend/run_suites.py fixes for its children by setting
+    # PYTHONIOENCODING=utf-8 (2026-10-03, test_mail_mask.py); here the check IS
+    # the process, so it sets its own streams. A character the console cannot
+    # draw is replaced rather than fatal - the finding still prints.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            pass
     verbose = "-v" in sys.argv
     catalogue = CATALOGUE_PY
     if "--catalogue" in sys.argv:
