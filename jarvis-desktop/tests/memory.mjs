@@ -15,29 +15,34 @@
  * switch renders what the server ANSWERED, not what the button asked for.
  */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as K from "./uikit.mjs";
+import { pythonFor } from "./lib/python.mjs";
 import { FORGOTTEN, forgetQuestion } from "../src/auto-learn.js";
 
 // Real backend output, produced by the real Python modules in backend/ at
 // test time, so what the pane is tested against is what the backend sends -
 // not a fixture that agrees with the pane because the same hand wrote both.
-const BACKEND_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "backend");
-const read = (p) => readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", p), "utf8");
-function realPython(code) {
-  return JSON.parse(execFileSync("python3", ["-c", code],
-    { cwd: BACKEND_DIR, encoding: "utf8", env: { ...process.env, JARVIS_NO_EMBED: "1" } }));
-}
+const HERE = dirname(fileURLToPath(import.meta.url));
+const BACKEND_DIR = join(HERE, "..", "..", "backend");
+const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
+// The interpreter is resolved once (`python3`, else `python`; see
+// tests/lib/python.mjs). Every check that needs it says SKIP in its own words
+// rather than letting a missing `python3` throw out of the check and end the
+// run - which is what used to happen here at check 15, hiding checks 15 to 28.
+const PY = pythonFor(BACKEND_DIR);
 
 const { base, close } = await K.serve();
 const browser = await K.launch();
 const fails = [];
 const check = async (name, fn) => {
-  try { await fn(); console.log(`ok    ${name}`); }
-  catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
+  try { await fn(); PY.noteRan(); console.log(`ok    ${name}`); }
+  catch (e) {
+    if (PY.caught(name, e)) return; // counted and printed as a skip, not a pass or a failure
+    fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`);
+  }
 };
 
 const SIZE = { width: 1180, height: 820 };
@@ -272,36 +277,48 @@ await check("a refused write surfaces rather than looking like success", async (
 // The REAL card, from the real jarvis_sleep.reminder_card() - not a copy of
 // it. It used to be a hand-made fixture here, which is how the pane could
 // promise "Jarvis will tidy its memory overnight" about a pass nobody built.
-const OFFER = realPython(
-  "import sys, json; sys.path.insert(0, 'rebuilt'); import jarvis_sleep as S\n"
-  + "S._cfg = lambda k, d=None: {'enabled': False, 'remind': True}.get(k, d)\n"
-  + "S._seen.clear(); print(json.dumps(S.reminder_card()))");
-const TITLE = new RegExp(OFFER.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+// Asked for once, on first use, so that a machine with no interpreter still
+// runs the rest of this suite instead of dying here.
+let OFFER;
+const offer = () => {
+  if (OFFER === undefined) {
+    OFFER = PY.run(
+      "import sys, json; sys.path.insert(0, 'rebuilt'); import jarvis_sleep as S\n"
+      + "S._cfg = lambda k, d=None: {'enabled': False, 'remind': True}.get(k, d)\n"
+      + "S._seen.clear(); print(json.dumps(S.reminder_card()))",
+      { env: { ...process.env, JARVIS_NO_EMBED: "1" } });
+  }
+  return OFFER;
+};
+const TITLE = () => new RegExp(offer().title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
 
 const withOffer = (extra = {}) => ({
   brain: { ...K.BRAIN, memory_pending: {
     ...K.BRAIN.memory_pending,
-    setup: { ...K.BRAIN.memory_pending.setup, sleep_time_offer: OFFER },
+    setup: { ...K.BRAIN.memory_pending.setup, sleep_time_offer: offer() },
   } },
   ...extra,
 });
 
 await check("the daily card shows when the server offers it", async () => {
+  if (!PY.have) return PY.skip("the daily card shows when the server offers it");
   const page = await memoryTab(withOffer());
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.match(text, TITLE, `said "${text}"`);
+  assert.match(text, TITLE(), `said "${text}"`);
 });
 
 await check("nothing offers it when the server sends none", async () => {
+  if (!PY.have) return PY.skip("nothing offers it when the server sends none");
   const page = await memoryTab();
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.doesNotMatch(text, TITLE,
+  assert.doesNotMatch(text, TITLE(),
     "the default fixture carries no offer, so nothing should show one");
 });
 
 await check("Enable sends {enabled: true} and stops offering", async () => {
+  if (!PY.have) return PY.skip("Enable sends {enabled: true} and stops offering");
   const page = await memoryTab(withOffer());
   await page.getByRole("button", { name: "Enable", exact: true }).click();
   await page.waitForTimeout(300);
@@ -311,11 +328,12 @@ await check("Enable sends {enabled: true} and stops offering", async () => {
   assert.equal(sent.length, 1);
   assert.equal(sent[0].cmd, "brain_memory_sleep_time");
   assert.equal(sent[0].enabled, true);
-  assert.doesNotMatch(stillThere, TITLE,
+  assert.doesNotMatch(stillThere, TITLE(),
     "the card outlived the decision it was asking about");
 });
 
 await check("Stop asking sends {remind: false} and stops offering", async () => {
+  if (!PY.have) return PY.skip("Stop asking sends {remind: false} and stops offering");
   const page = await memoryTab(withOffer());
   await page.getByRole("button", { name: "Stop asking" }).click();
   await page.waitForTimeout(300);
@@ -330,6 +348,7 @@ await check("Not now dismisses and tells the PC {notNow: true} - nothing else", 
   // Since 2026-09-25 (jarvis_backoff.py) "not now" is a real answer: the PC
   // keeps the offer quiet for a day, then a week, then a month. It sends no
   // enabled and no remind - it changes no setting.
+  if (!PY.have) return PY.skip("Not now dismisses and tells the PC {notNow: true} - nothing else");
   const page = await memoryTab(withOffer());
   await page.getByRole("button", { name: "Not now" }).click();
   await page.waitForTimeout(200);
@@ -341,19 +360,20 @@ await check("Not now dismisses and tells the PC {notNow: true} - nothing else", 
   assert.equal(sent[0].notNow, true);
   assert.equal(sent[0].enabled, undefined);
   assert.equal(sent[0].remind, undefined);
-  assert.doesNotMatch(text, TITLE);
+  assert.doesNotMatch(text, TITLE());
 });
 
 await check("a failed Enable leaves the card in place, not dismissed", async () => {
   // Dismissing before the write is known to have landed would cost the
   // owner their only way to turn this on until tomorrow's offer, over
   // nothing worse than a network hiccup.
+  if (!PY.have) return PY.skip("a failed Enable leaves the card in place, not dismissed");
   const page = await memoryTab(withOffer({ memoryRefuses: "memory layer not importable" }));
   await page.getByRole("button", { name: "Enable", exact: true }).click();
   await page.waitForTimeout(300);
   const text = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.match(text, TITLE,
+  assert.match(text, TITLE(),
     "a refused write must not look like a handled decision");
 });
 
@@ -363,6 +383,7 @@ await check("the card survives an unrelated write refreshing the pane", async ()
   // by nulling the fixture, standing in for the server's own once-a-day
   // drop-off) must still show the card the owner already saw. Without a
   // client-side cache it would vanish before they had a chance to read it.
+  if (!PY.have) return PY.skip("the card survives an unrelated write refreshing the pane");
   const page = await memoryTab(withOffer());
   const beforeText = await page.locator("#memory-learning").innerText();
   await page.evaluate(() => { window.__brain.memory_pending.setup.sleep_time_offer = null; });
@@ -371,12 +392,15 @@ await check("the card survives an unrelated write refreshing the pane", async ()
   await page.waitForTimeout(300);
   const afterText = await page.locator("#memory-learning").innerText();
   await page.close();
-  assert.match(beforeText, TITLE);
-  assert.match(afterText, TITLE,
+  assert.match(beforeText, TITLE());
+  assert.match(afterText, TITLE(),
     "the offer disappeared once the server stopped resending it, though the owner never dismissed it");
 });
 
 await check("Enable says what the tidy does: it asks with cards and changes nothing by itself", async () => {
+  // The card itself is the real backend's (jarvis_sleep.reminder_card()), so
+  // this one needs the same interpreter the offer does.
+  if (!PY.have) return PY.skip("Enable says what the tidy does: it asks with cards and changes nothing by itself");
   const page = await memoryTab(withOffer());
   const card = await page.locator("#memory-learning").innerText();
   await page.getByRole("button", { name: "Enable", exact: true }).click();
@@ -416,7 +440,7 @@ await check("once on, the tidy turns off in one tap, at once", async () => {
 /* ── Real backend output, read by the pane ───────────────────────────────── */
 
 // MemoryStore.status() from the real rebuilt store, in a scratch folder.
-const STATUS = realPython(
+const STATUS = PY.run(
   "import sys, json, tempfile, pathlib, types\n"
   + "fw = types.ModuleType('jarvis_framework'); fw.CONFIG_DIR = pathlib.Path(tempfile.mkdtemp())\n"
   + "fw.load_framework = lambda: {}; sys.modules['jarvis_framework'] = fw\n"
@@ -424,9 +448,11 @@ const STATUS = realPython(
   + "st = M.MemoryStore(path=pathlib.Path(tempfile.mkdtemp()) / 'memory.db', embedder=M.HashEmbedder())\n"
   + "a = st.add('The owner lives in York', source='user')\n"
   + "st.add('The owner lives in Leeds', source='extracted', supersedes=a)\n"
-  + "print(json.dumps(st.status()))");
+  + "print(json.dumps(st.status()))",
+  { env: { ...process.env, JARVIS_NO_EMBED: "1" } });
 
 await check("the Model tab's memory card shows what the real store reports", async () => {
+  if (!STATUS) return PY.skip("the Model tab's memory card shows what the real store reports");
   const memory = { available: true, ...STATUS, sleep_time: { enabled: false, remind: true } };
   const page = await K.open(browser, base, "brain.html", { brain: { ...K.BRAIN, memory } }, SIZE);
   await page.locator("#tab-faculties").click();
@@ -444,7 +470,7 @@ await check("the Model tab's memory card shows what the real store reports", asy
 // pending() rows: the columns memory-intake.patch SELECTs, through the real
 // jarvis_intake.annotate(). Card 2 has the model's words in `replaces` but no
 // `replaces_id`, and jarvis_extract._accept() retires only by id.
-const PENDING = realPython(
+const PENDING = PY.run(
   "import sys, json; import jarvis_intake as I\n"
   + "rows = [dict(id=61, text='I live in Leeds', replaces='lives in York', replaces_id=12,\n"
   + "             replaces_text='The owner lives in York', confidence=0.8, source='conversation', created=1790000000),\n"
@@ -453,6 +479,7 @@ const PENDING = realPython(
   + "print(json.dumps(I.annotate(rows)))");
 
 await check("'would replace' only on a card that really replaces a fact", async () => {
+  if (!PENDING) return PY.skip("'would replace' only on a card that really replaces a fact");
   const page = await memoryTab({ brain: { ...K.BRAIN,
     memory_pending: { available: true, pending: PENDING, setup: {} } } });
   const rows = page.locator("#memory-proposals .row-item");
@@ -604,5 +631,6 @@ await check("CONTROL: no page threw while any of this ran", async () => {
 
 await browser.close();
 close();
+console.log(PY.summary());
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe memory pane holds");
 process.exit(fails.length ? 1 : 0);

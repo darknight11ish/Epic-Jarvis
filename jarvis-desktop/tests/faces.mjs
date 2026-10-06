@@ -14,17 +14,28 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
+import { pythonFor, toolOnPath } from "./lib/python.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "..");
 const read = (p) => readFileSync(join(ROOT, p), "utf8");
 
+/** The generators behind the animals live in the repository's own `tools/`
+ *  and are Python; resolve `python3`/`python` once, and skip loudly where
+ *  neither exists (tests/lib/python.mjs). */
+const PY = pythonFor(join(ROOT, "..", "backend"));
+/** Measured once: the shader-size check needs this tool as well as Python. */
+const HAVE_GLSLANG = toolOnPath("glslangValidator");
+
 const { base, close } = await K.serve();
 const browser = await K.launch();
 const fails = [];
 const check = async (name, fn) => {
-  try { await fn(); console.log(`ok    ${name}`); }
-  catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
+  try { await fn(); PY.noteRan(); console.log(`ok    ${name}`); }
+  catch (e) {
+    if (PY.caught(name, e)) return; // counted and printed as a skip, not a pass or a failure
+    fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`);
+  }
 };
 
 const open = () => K.open(browser, base, "faces.html", {}, { width: 1300, height: 950 });
@@ -49,9 +60,21 @@ await check("the window binds every state the spec defines", async () => {
 await check("the generated spec script matches the JSON it came from", async () => {
   // Regenerate and compare. If this fails, someone edited the generated file
   // or changed the JSON without re-running the generator.
-  const before = read("src/faces-spec.js");
-  execFileSync("python3", [join(ROOT, "scripts", "build-faces-spec.py")], { cwd: ROOT });
-  assert.equal(read("src/faces-spec.js"), before,
+  //
+  // Line endings are normalised before comparing, and that is not a weakening:
+  // the question is whether the generated CONTENT still matches, and which
+  // newline the platform writes is not content. Python opens the output in
+  // text mode, so on Windows this generator rewrites the file with CRLF while
+  // the committed copy holds LF - identical text, 2421 bytes apart. Comparing
+  // raw strings therefore passed only once the file had already been rewritten
+  // (the second run of the day), and failed on a freshly checked-out tree; it
+  // also left the working copy showing as modified every time. On Linux, which
+  // is where CI compares it, both sides are LF and this changes nothing.
+  if (!PY.have) return PY.skip("the generated spec script matches the JSON it came from");
+  const lf = (text) => text.replace(/\r\n/g, "\n");
+  const before = lf(read("src/faces-spec.js"));
+  execFileSync(PY.cmd, [join(ROOT, "scripts", "build-faces-spec.py")], { cwd: ROOT });
+  assert.equal(lf(read("src/faces-spec.js")), before,
     "src/faces-spec.js is out of date — run `npm run faces:spec`");
 });
 
@@ -618,8 +641,9 @@ await check("the animals' generated shaders, phone copies and pose fixture are u
   // One .sksl source feeds both apps, and the phone's pose maths is checked
   // against answers this page's critter-pose.js gave. If this fails, someone
   // edited a generated file, or changed the source without re-running it.
+  if (!PY.have) return PY.skip("the animals' generated shaders, phone copies and pose fixture are up to date");
   try {
-    execFileSync("python3", [join(ROOT, "..", "tools", "gen_critters.py"), "--check"],
+    execFileSync(PY.cmd, [join(ROOT, "..", "tools", "gen_critters.py"), "--check"],
       { cwd: join(ROOT, ".."), stdio: "pipe" });
   } catch (e) {
     assert.fail(String(e.stdout || e.message));
@@ -635,14 +659,14 @@ await check("every animal's shader is within the size Android's compiler accepts
   // same check; the frontend job, which runs this file, does not have it -
   // so without it this says so and stops, rather than failing a job whose
   // real check lives elsewhere.
-  try {
-    execFileSync("glslangValidator", ["--version"], { stdio: "pipe" });
-  } catch {
-    console.log("      (skipped: glslangValidator is not installed - CI's backend job runs this check)");
-    return;
+  if (!HAVE_GLSLANG || !PY.have) {
+    return PY.skip("every animal's shader is within the size Android's compiler accepts",
+      !HAVE_GLSLANG
+        ? "no glslangValidator here - CI's backend job runs this check"
+        : "no Python here - CI's backend job runs this check");
   }
   try {
-    execFileSync("python3", [join(ROOT, "..", "tools", "shader_size.py"), "--check"],
+    execFileSync(PY.cmd, [join(ROOT, "..", "tools", "shader_size.py"), "--check"],
       { cwd: join(ROOT, ".."), stdio: "pipe" });
   } catch (e) {
     assert.fail(String(e.stdout || "") + String(e.stderr || e.message));
@@ -898,5 +922,6 @@ await check("the Widget's face slows to 10 redraws a second under reduced motion
 
 await browser.close();
 close();
+console.log(PY.summary());
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nthe faces window holds");
 process.exit(fails.length ? 1 : 0);

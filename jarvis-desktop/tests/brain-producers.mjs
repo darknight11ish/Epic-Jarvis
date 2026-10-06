@@ -16,38 +16,24 @@
  *
  * The compute plan and the speed block are not hand-written here: they are
  * made by running the REAL backend modules (backend/rebuilt/jarvis_compute.py,
- * backend/jarvis_speed.py) with python3, so a renamed key on either side
- * fails this test. It skips those two, loudly, when python3 is missing.
+ * backend/jarvis_speed.py) with Python, so a renamed key on either side fails
+ * this test. It skips those two, loudly, when no Python interpreter is here.
  */
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
+import { pythonFor } from "./lib/python.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const BACKEND = join(HERE, "..", "..", "backend");
 
-/** Runs python3 with `code`, the backend (and its rebuilt modules) importable. */
-function python(code) {
-  try {
-    const out = execFileSync("python3", ["-c", code], {
-      cwd: BACKEND,
-      env: { ...process.env, PYTHONPATH: [join(BACKEND, "rebuilt"), BACKEND].join(":"),
-             OPENJARVIS_CONFIG_DIR: mkdtempSync(join(tmpdir(), "jarvis-brain-test-")) },
-      encoding: "utf8",
-    });
-    return JSON.parse(out);
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw error;
-  }
-}
+/** The interpreter both producers need, resolved once (`python3`, else
+ *  `python` - see tests/lib/python.mjs). */
+const PY = pythonFor(BACKEND);
 
 // jarvis_compute.plan() with two cards, the owner's planned setup.
-const PLAN = python(`
+const PLAN = PY.run(`
 import json
 from unittest import mock
 import jarvis_compute as C
@@ -59,7 +45,7 @@ with mock.patch.object(C, "devices", return_value=cards):
 
 // jarvis_speed.view() over a log of real-shaped rows: 30 answers, the last 10
 // slower, then one model switch.
-const SPEED = python(`
+const SPEED = PY.run(`
 import json, os, tempfile
 from pathlib import Path
 import jarvis_speed as S
@@ -81,8 +67,11 @@ const { base, close } = await K.serve();
 const browser = await K.launch();
 const fails = [];
 const check = async (name, fn) => {
-  try { await fn(); console.log(`ok    ${name}`); }
-  catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
+  try { await fn(); PY.noteRan(); console.log(`ok    ${name}`); }
+  catch (e) {
+    if (PY.caught(name, e)) return; // counted and printed as a skip, not a pass or a failure
+    fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`);
+  }
 };
 const SIZE = { width: 1180, height: 900 };
 
@@ -96,7 +85,7 @@ async function tab(id, brain) {
 /* ── Compute ─────────────────────────────────────────────────────────────── */
 
 await check("Compute shows the real plan, not 'No compute plan reported'", async () => {
-  if (!PLAN) return console.log("      SKIP - python3 is not installed");
+  if (!PLAN) return PY.skip("Compute shows the real plan, not 'No compute plan reported'");
   const page = await tab("faculties", { compute: PLAN });
   const text = await page.locator("#compute").innerText();
   await page.close();
@@ -113,7 +102,7 @@ await check("Compute shows the real plan, not 'No compute plan reported'", async
 });
 
 await check("CONTROL: a plan with no card measured says it is a guess", async () => {
-  if (!PLAN) return console.log("      SKIP - python3 is not installed");
+  if (!PLAN) return PY.skip("CONTROL: a plan with no card measured says it is a guess");
   const guess = { ...PLAN, devices: [], simulated: true, total_mb: 0, text_on: "cpu" };
   const page = await tab("faculties", { compute: guess });
   const text = await page.locator("#compute").innerText();
@@ -127,7 +116,7 @@ await check("CONTROL: a plan with no card measured says it is a guess", async ()
 const MODELS = { ...K.BRAIN.models, speed: SPEED };
 
 await check("Models shows how fast recent answers were, from the real speed block", async () => {
-  if (!SPEED) return console.log("      SKIP - python3 is not installed");
+  if (!SPEED) return PY.skip("Models shows how fast recent answers were, from the real speed block");
   const page = await tab("faculties", { models: MODELS });
   const text = await page.locator("#models").innerText();
   await page.close();
@@ -323,5 +312,6 @@ await check("undo rows and jobs in the phone's field names still read", async ()
 
 await browser.close();
 close();
+console.log(PY.summary());
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}` : "\nBrain reads what the backend sends");
 process.exit(fails.length ? 1 : 0);
