@@ -55,6 +55,35 @@ against whatever the user's wallpaper happens to be, so a pair can measure
 and is why sunken surfaces are opaque now. A checker that assumes a dark
 desktop would have passed it.
 
+## Running one check, and what a skip means
+
+A few suites (the ones that check a page against what the backend *really*
+sends) run Python at test time. The interpreter is named differently by
+platform — `python3` on Linux and in CI, plain `python` on Windows — so it is
+resolved in one place, `tests/lib/python.mjs`, rather than by each suite.
+`tests/lib/` is a subdirectory because CI runs every `tests/*.mjs` as a suite;
+a helper sitting at the top level would be run as a test that never prints
+anything.
+
+A check this machine cannot run is **skipped**, in these words:
+
+```
+SKIP  the daily card shows when the server offers it
+      (no Python here - python3 was not found on PATH)
+```
+
+and the count is printed before the verdict, naming each reason:
+
+```
+25 passed, 10 skipped (a skip is not a pass):
+  - no Python here - python3 was not found on PATH
+```
+
+A skip does not fail the run, and it never prints as `ok` — a suite that
+skipped work must not be readable as a green one. Do not add a bare
+`execFileSync("python3", …)` to a new suite: import `pythonFor` from
+`./lib/python.mjs` instead, and guard the check with `PY.skip(...)`.
+
 ## What the harness is not
 
 `tests/uikit.mjs` stubs the Tauri bridge with payloads copied from what the

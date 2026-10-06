@@ -18,8 +18,7 @@
  *   phone has no such page (deep config editing stays off it).
  */
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { LABEL, readAccountSecrets, SECRETS, statusLine } from "../src/account-secrets.js";
@@ -28,6 +27,34 @@ import * as K from "./uikit.mjs";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
 const readRepo = (p) => readFileSync(join(HERE, "..", "..", p), "utf8");
+
+/**
+ * Every file under `dirs` (relative to the repo root) whose text matches
+ * `pattern`.
+ *
+ * This used to shell out to `grep -rl`, which does not exist on Windows - so
+ * the check could only ever FAIL there, printing "'grep' is not recognized",
+ * and never took the honest "this machine cannot run it" route. Node reads
+ * the files itself; no Unix tool is required, on any platform.
+ */
+function filesMatching(dirs, pattern, exts = /\.(kt|kts|java|xml|json|md|txt|toml|gradle|pro|properties)$/) {
+  const hits = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name === ".git" || entry.name === "build" || entry.name === ".gradle") continue;
+        walk(full);
+      } else if (exts.test(entry.name)) {
+        let text;
+        try { text = readFileSync(full, "utf8"); } catch { continue; } // unreadable is not a match
+        if (pattern.test(text)) hits.push(full);
+      }
+    }
+  };
+  for (const d of dirs) walk(d);
+  return hits;
+}
 
 const fails = [];
 const check = async (name, fn) => {
@@ -211,13 +238,11 @@ await check("CONTROL: there is no such page for the phone", async () => {
   // there is no Kotlin file for this feature to begin with (one-sided on
   // purpose: deep config editing stays off the phone, CLAUDE.md).
   const repoRoot = join(HERE, "..", "..");
-  const hits = execSync(
-    "grep -rl " +
-      "'account_secret\\|Jarvis Backend/IMAP\\|Jarvis Backend/Calendar iCal\\|Jarvis Backend/Home Assistant' " +
-      "jarvis-client jarvis-android 2>/dev/null || true",
-    { cwd: repoRoot, encoding: "utf8" }
-  );
-  assert.equal(hits.trim(), "", `the phone app references account secrets: ${hits}`);
+  const hits = filesMatching(
+    [join(repoRoot, "jarvis-client"), join(repoRoot, "jarvis-android")],
+    /account_secret|Jarvis Backend\/IMAP|Jarvis Backend\/Calendar iCal|Jarvis Backend\/Home Assistant/
+  ).map((p) => p.slice(repoRoot.length + 1));
+  assert.deepEqual(hits, [], `the phone app references account secrets: ${hits.join(", ")}`);
 });
 
 if (fails.length) {
