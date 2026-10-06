@@ -7418,9 +7418,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # default, and off entirely without a readable card: the module answers
     # `{}` and writes nothing. Never the reason a turn fails.
     try:
-        import jarvis_energy
-        jarvis_energy.record(estimate_tokens([{"role": "assistant", "content": final_answer}]),
-                             max(0.0, time.monotonic() - _turn_started))
+        if not out.gone:
+            # Only a turn somebody was still reading: a client that went away
+            # never got an answer, so there is no answer to price.
+            import jarvis_energy
+            jarvis_energy.record(estimate_tokens([{"role": "assistant", "content": final_answer}]),
+                                 max(0.0, time.monotonic() - _turn_started))
     except Exception:
         pass
     return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds,
