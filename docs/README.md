@@ -19,8 +19,13 @@ above. **Five of the documents are the ones to read**; the rest are the history 
 how Jarvis got here: audits, research, and notes that one working session left for
 another. Apart from one generated file that was deleted on 2026-10-05 (the source
 bundle, in the last table below - its contents are still in git history), nothing
-has been moved or deleted, so every old link still works. This page says which is
-which.
+had been moved or deleted before 2026-10-06, so every old link still worked. That
+changed on 2026-10-06: two more tracked things were deleted - the vendored
+telemetry package `tel/` and the stray tarball `evidence-dev-telemetry-2.1.3.tgz`.
+Nothing referenced either, and the last table on this page says what each one was.
+Deleting from the newest commit stops carrying it forward; it does not shrink a
+clone that already has it, and `git show <older-commit>:<path>` still returns the
+file. This page says which document is which.
 
 (An earlier version of this paragraph said "about ninety documents", and at some
 point it also gave a size of 720 KB for something that had grown far past that -
@@ -124,6 +129,7 @@ them; the current documents above replace them.
 | Document | Why it is stale |
 |---|---|
 | ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05.** It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. Git history still has it (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
+| `tel/`, `evidence-dev-telemetry-2.1.3.tgz` | **Removed 2026-10-06.** These were both the same third-party npm package, `@evidence-dev/telemetry` 2.1.3: `tel/package/` was its unpacked contents (5 files, 9,453 bytes) and the tarball was the download it came out of (3,906 bytes). Its own `index.cjs` opens a `@segment/analytics-node` connection and reports the operating system, Node version, architecture and hashed home directory, so it is a phone-home sitting in a project whose first rule is that nothing leaves the PC. Nothing in Jarvis, the desktop app, the phone app or any workflow imported it - the two words `tel/package` appear in no tracked file. `git show <older-commit>:tel/package/index.cjs` still returns it, so nothing is lost. `.gitignore` already covers `*.tgz` (added 2026-10-05); no new rule is needed for `tel/`, which a `npm install` would recreate anyway. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |
 | [ANDROID-FEATURE-AUDIT.md](ANDROID-FEATURE-AUDIT.md), [ANDROID-REPLY-2026-09-15.md](ANDROID-REPLY-2026-09-15.md), [ANDROID-REPLY-2026-09-15-GRADIENT.md](ANDROID-REPLY-2026-09-15-GRADIENT.md), [ANDROID-REPLY-2026-09-18-CATCHUP.md](ANDROID-REPLY-2026-09-18-CATCHUP.md), [ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md](ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md), [ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md](ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md) | Messages between the phone and desktop sessions, 15-18 September. |
