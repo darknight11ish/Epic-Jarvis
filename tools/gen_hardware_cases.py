@@ -311,25 +311,6 @@ class Verdict:
         self.request_id, self.reason = "r1", ""
 
 
-class _WindowsOS:
-    """`os`, but saying "nt".
-
-    jarvis_hardware reads `os.name` itself in the registry answer - "used",
-    else "not on Windows" off Windows and "not read" on Windows with nothing
-    read - and the World fakes the registry text without faking the platform,
-    so the same file could not be right on Windows and on CI: the committed
-    copes said "not read" and a Linux run said "not on Windows" (2026-10-04).
-    The contract is what the desktop is told on the owner's PC, so the platform
-    is pinned here the same way nvidia-smi's output is, and the generator's own
-    Windows-only paths are the ones the World has already replaced.
-    """
-
-    name = "nt"
-
-    def __getattr__(self, attr):
-        return getattr(os, attr)
-
-
 class World:
     """Everything outside jarvis_hardware, replaced. Used by this tool and by
     backend/test_hardware.py."""
@@ -390,7 +371,6 @@ class World:
             (H, "_read_log"): lambda: self.log,
             (H, "_read_lane_log"): lambda: None,
             (H, "_reg_text"): lambda: self.reg,
-            (H, "os"): _WindowsOS(),
             (H, "_user_env"): lambda name: self.user_env.get(name),
             (H, "_on_windows"): lambda: self.windows,
             (H, "_http_json"): self.http_json,

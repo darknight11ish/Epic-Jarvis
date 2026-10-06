@@ -260,15 +260,6 @@ class World:
         self.patches.append(mock.patch.object(V, "strong_embedder", lambda *a: strong))
         for p in self.patches:
             p.start()
-        # The cards, for the whole run and not only for the two better-voice
-        # cases below that name their own pair: jarvis_second_card reads the
-        # real nvidia-smi, so without this the `better_voice` answers come from
-        # whatever cards the machine writing the file happens to have (a 12 GB
-        # 2060 answers very differently from a machine with no nvidia-smi at
-        # all), and the file is not what its _about says - "the same on every
-        # machine". An empty answer is the one this file has always carried,
-        # and it is what a machine with no NVIDIA card reading produces.
-        self.cards = SCG.World("", windows=True).install()
         S.reload_engines()
         E._reset_for_tests()
         S._reset_wake_for_tests()
@@ -306,7 +297,6 @@ class World:
         return {"code": code, "body": out}
 
     def __exit__(self, *a):
-        self.cards.remove()
         for p in reversed(self.patches):
             p.stop()
         S._reset_wake_for_tests()
