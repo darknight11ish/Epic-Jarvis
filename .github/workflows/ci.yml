@@ -519,6 +519,12 @@ jobs:
             'test_app_workspace.py',
             'test_apply_line_endings.py',
             'test_apply_outcomes.py',
+            # Two runs of apply-patches.ps1 in the same second. Added 2026-10-06
+            # with the fix: the run named its rehearsal folder from a
+            # seconds-resolution clock in the shared temp folder, and the second
+            # run deleted the first run's folder mid-apply. Windows-only because
+            # it drives the real script under pwsh; prints `skip` without one.
+            'test_apply_run_isolation.py',
             # Back in the list on 2026-10-05: 677844d6 pinned
             # `-c core.autocrlf=false -c core.eol=lf` on the one `git apply`
             # in scripts/apply-patches.ps1 that writes files, which is what
@@ -1127,6 +1133,18 @@ jobs:
       # reproduced on the owner's PC, where the tick is about 0.5 ms. All three
       # were fixed with `tempfile.mkdtemp`, which asks the filesystem for a free
       # name. This is what keeps the next one from being found the same way.
+      #
+      # The same rule now reads `*.ps1`, because the owner's update script had
+      # it in a worse form: `scripts/apply-patches.ps1` named its rehearsal
+      # folder from `Get-Date -Format 'yyyy-MM-dd-HHmmss'` in the shared temp
+      # folder and opened on that path with `Remove-Item -Recurse -Force`, so a
+      # second run in the same second did not fail to create a folder - it
+      # DELETED the first run's folder while the first run was applying patches
+      # in it. Measured 2026-10-06 (the run ended "because it is being used by
+      # another process"), fixed with a GUID in the name, and
+      # backend/test_apply_run_isolation.py is the behaviour regression. The
+      # check reads PowerShell line by line, in the two shapes a person writes,
+      # and skips comments; `-v` prints the files it read.
       - name: No path is named from a clock and created without exist_ok
         run: python3 ../../tools/check_same_tick_paths.py
       # The tutorials are data, so nothing compiles them and nothing reads them.

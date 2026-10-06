@@ -77,6 +77,47 @@ WHAT IT DELIBERATELY DOES NOT FLAG, and why that is the point of the check:
     inventing a violation. That is the one shape this check can miss, and it is
     written down rather than papered over.
 
+THE POWERSHELL HALF, and why it is not the same bug. `scripts/apply-patches.ps1`
+- the one script the owner runs by hand after every merge - named its throwaway
+folders from the clock the same way, in one variable:
+
+    $Stamp     = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
+    Remove-Item -LiteralPath $rehearsal -Recurse -Force
+
+Two runs started in the same second therefore did not merely fail to create one
+folder: the second run DELETED the first run's folder out from under it while the
+first run was still applying patches in it. Measured on this script, 2026-10-06,
+with a doubled clock forcing both runs into one second: one run ended
+`jarvis-rehearsal-2026-01-01-000000' because it is being used by another
+process`, and both runs wrote one transcript file. A run that loses its rehearsal
+half-way is the one step that can leave the owner's install half-patched.
+`backend/test_apply_run_isolation.py` is the behaviour regression; this is the
+guard that catches the next one by reading, before anyone runs it.
+
+So a `.ps1` file is read LINE BY LINE - not parsed. PowerShell is not Python, and
+a half-parser pretending to be one would be worse than a documented narrow rule.
+The rule is the same two parts:
+
+  1. a variable assigned from a coarse clock (`Get-Date`, `[datetime]::Now`,
+     `[datetime]::UtcNow`, `[datetime]::Today`), or from another variable that
+     was, so `$Stamp` then `$rehearsal = ...$Stamp...` is caught as well as a
+     one-liner. A GUID (`[guid]::NewGuid()`, `GetRandomFileName`), `$PID`, or
+     `Get-Random` in the same expression really does make the name unique and
+     clears it. A MILLISECOND FORMAT DOES NOT: `Get-Date -Format '...fff'` reads
+     the same tick-coarse clock the Python half documents above.
+  2. and a line that CREATES or DELETES a path - `New-Item`, `mkdir`/`md`,
+     `[IO.Directory]::CreateDirectory`, `Remove-Item`, `Start-Transcript` -
+     naming such a variable, with no unique token on that line.
+
+  Deliberately not flagged, for the same kind of reason as the list above: a
+  full-line comment (a comment creates and deletes nothing - the fix for the
+  script above is explained in one); a clock used as a LABEL or in a message
+  (`Say "copied to _jarvis-backup-$Stamp"`); a name that came in as a function
+  PARAMETER, the same written-down blind spot the Python half has; and a FIXED
+  name in a shared temp folder, which has no clock in it - a different bug, and
+  not one this check can see.
+
 The output is a plain list, and the exit code is non-zero only when there is a
 real violation - so a red run means something to fix, not something to read
 past. `-v` adds the clock-named files that were examined and are safe, with the
@@ -85,6 +126,7 @@ names it decided on, so a wrong decision is visible rather than mysterious.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 import warnings
@@ -407,6 +449,63 @@ def patch_findings(text: str) -> list[tuple[int, str]]:
 
 
 # ---------------------------------------------------------------------------
+#   `*.ps1` - the scripts the owner runs by hand
+# ---------------------------------------------------------------------------
+
+#: PowerShell commands that CREATE or DELETE a path. `Remove-Item` is the one
+#: that makes this half worse than the Python half: the second caller does not
+#: fail to create, it deletes the first caller's folder.
+PS_PATH_COMMANDS = re.compile(
+    r"\b(new-item|remove-item|mkdir|md|start-transcript)\b"
+    r"|\[io\.directory\]::createdirectory", re.I)
+#: A call that is a coarse clock in PowerShell. `Get-Date` reads the same system
+#: clock `time.time_ns()` does - the tool's own numbers above are why a
+#: millisecond format string is NOT accepted as a uniqueness token below.
+PS_CLOCKS = re.compile(r"get-date|\[datetime\]::(now|utcnow|today)", re.I)
+#: What really does make a name unique, whatever the clock says. `$PID` is in
+#: here even though a process id outlives nothing: it is genuinely unique among
+#: the runs that could collide, so flagging it would be this check crying wolf.
+PS_UNIQUE = re.compile(
+    r"newguid|\[guid\]|getrandomfilename|mkdtemp|\$pid\b|\$random\b|get-random"
+    r"|new-temporaryfile", re.I)
+#: `$Name = ...`, the only binding this line-based read follows. `$env:X = ` is
+#: not a name in a path and is left alone.
+PS_ASSIGN = re.compile(r"^\s*\$(?P<name>[A-Za-z_]\w*)\s*=(?!=)")
+PS_VAR = re.compile(r"\$(?P<name>[A-Za-z_]\w*)")
+
+
+def ps1_findings(text: str) -> list[tuple[int, str]]:
+    """The same rule for the repository's `*.ps1`, read line by line.
+
+    Statements are read in SOURCE ORDER, like the Python half: a name is
+    clock-named from the line that assigns it a clock until the line that
+    assigns it something else. A full-line comment is skipped - it cannot create
+    or delete anything, and the script's own explanation of this very bug must
+    not be reported as the bug."""
+    out: list[tuple[int, str]] = []
+    live: set[str] = set()
+    for number, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        names = {m.group("name").lower() for m in PS_VAR.finditer(line)}
+        # A `$env:TEMP` or an automatic variable is not a name this walk binds,
+        # and `$PID` is a token rather than a name from a clock.
+        clock = bool(PS_CLOCKS.search(line)) or bool(names & live)
+        unique = bool(PS_UNIQUE.search(line))
+        if clock and not unique and PS_PATH_COMMANDS.search(line):
+            out.append((number, line))
+        assigned = PS_ASSIGN.match(raw)
+        if assigned:
+            name = assigned.group("name").lower()
+            if clock and not unique:
+                live.add(name)
+            else:
+                live.discard(name)
+    return out
+
+
+# ---------------------------------------------------------------------------
 #   The run
 # ---------------------------------------------------------------------------
 
@@ -418,9 +517,11 @@ def _rel(path: Path) -> str:
 
 
 def repo_files(ignored: set[str]) -> list[Path]:
-    """Every `*.py` and `*.patch` this repository carries, in a stable order."""
+    """Every `*.py`, `*.patch` and `*.ps1` this repository carries, in a stable
+    order. `.ps1` because the scripts the owner runs by hand are where this cost
+    the most (`ps1_findings` above has the measured collision)."""
     kept = []
-    for pattern in ("*.py", "*.patch"):
+    for pattern in ("*.py", "*.patch", "*.ps1"):
         for path in sorted(REPO.rglob(pattern)):
             if not path.is_file():
                 continue
@@ -460,6 +561,10 @@ def main() -> int:
             for line, what in patch_findings(text):
                 problems.append((_rel(path), line, what))
             continue
+        if path.suffix == ".ps1":
+            for line, what in ps1_findings(text):
+                problems.append((_rel(path), line, what))
+            continue
         try:
             found, safe = scan(text)
         except SyntaxError as err:
@@ -476,17 +581,19 @@ def main() -> int:
 
     if why:
         print(f"::warning::git could not list the paths it ignores ({why}), so "
-              f"NOTHING was skipped - every *.py and *.patch in this checkout was "
-              f"read, including any scratch copy of a backend file that no clone "
-              f"carries. Fix the checkout rather than this check.")
+              f"NOTHING was skipped - every *.py, *.patch and *.ps1 in this "
+              f"checkout was read, including any scratch copy of a backend file "
+              f"that no clone carries. Fix the checkout rather than this check.")
 
     if problems:
         print("::error::a filesystem path is named from a clock and then created "
-              "without exist_ok. Two calls inside one timer tick (Windows, about "
-              "15.6 ms) return the same name, so the second creation raises "
-              "FileExistsError [WinError 183] - or quietly shares the first "
-              "caller's folder. Name it with tempfile.mkdtemp, or pass "
-              "exist_ok=True where sharing is genuinely what is meant:")
+              "(or deleted) as if that name were unique. Two calls inside one timer "
+              "tick (Windows, about 15.6 ms) return the same name, so the second "
+              "creation raises FileExistsError [WinError 183], the second run "
+              "quietly shares the first caller's folder - or, in a `Remove-Item`, "
+              "deletes it. In Python name it with tempfile.mkdtemp, or pass "
+              "exist_ok=True where sharing is genuinely what is meant; in "
+              "PowerShell put [guid]::NewGuid() in the name:")
         for name, line, what in sorted(problems):
             print(f"  {name}:{line}  {what}")
     if unreadable:
@@ -498,14 +605,16 @@ def main() -> int:
     if problems or unreadable:
         return 1
 
-    print(f"{read} Python and patch file(s) read; no filesystem path is named from "
-          f"a coarse clock and created without exist_ok.")
-    print("A name from time.time_ns()/time.strftime()/datetime.now() is not unique: "
-          "on Windows those only move on the system timer tick (about 15.6 ms; "
-          "measured on the owner's PC, 399 of 399 consecutive time.time_ns() calls "
-          "were identical, and one throwaway name asked for twice in a row came out "
-          "the same 200 times out of 200). tempfile.mkdtemp asks the filesystem for "
-          "a free name instead, which is what every suite fixed for this now uses.")
+    print(f"{read} Python, patch and PowerShell file(s) read; no filesystem path is "
+          f"named from a coarse clock and then created or deleted as if that name "
+          f"were unique.")
+    print("A name from time.time_ns()/time.strftime()/datetime.now()/Get-Date is not "
+          "unique: on Windows those only move on the system timer tick (about "
+          "15.6 ms; measured on the owner's PC, 399 of 399 consecutive "
+          "time.time_ns() calls were identical, and one throwaway name asked for "
+          "twice in a row came out the same 200 times out of 200). tempfile.mkdtemp "
+          "or [guid]::NewGuid() asks for a name from nothing instead, which is what "
+          "every fixed site now uses.")
     if verbose:
         if safe_clocks:
             print("  clock-named paths this checkout creates, and creates safely "
@@ -514,8 +623,8 @@ def main() -> int:
             for name, line, what in sorted(safe_clocks):
                 print(f"    {name}:{line}  {what}")
         else:
-            print("  no file in this checkout creates a path named from a clock at "
-                  "all - every clock read is used as a value or a label.")
+            print("  no Python file in this checkout creates a path named from a "
+                  "clock at all - every clock read is used as a value or a label.")
     return 0
 
 

@@ -1354,7 +1354,38 @@ $REBUILT_SUPERSEDES = @{
 
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
-$Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+
+# one name per RUN, not one name per second.
+#
+# `yyyy-MM-dd-HHmmss` on its own is not unique. Two runs started in the same
+# second computed the SAME name for the rehearsal folder, the LF copies of the
+# patches, the backup folders and the test state folder - and the second run's
+# Reset-Rehearsal opens with `Remove-Item -Recurse -Force` on that path, so it
+# deleted the first run's folder while the first run was still applying patches
+# in it. That is how a run ends up half-patched. (Two runs in one second also
+# shared one transcript file.) Proven on this repository's own script
+# 2026-10-06; backend/test_apply_run_isolation.py is the regression.
+#
+# So the readable stamp stays in front - a backup folder is still recognisable
+# and still sorts by time - and a GUID is appended for the uniqueness:
+# `2026-10-06-120000-8f3a2b1c`. Nothing else in this script may name a shared
+# folder from `Get-Date` alone again; use this.
+#
+# Why not the other two candidates:
+#   * a millisecond component is not enough on Windows. `Get-Date` reads the
+#     same system clock `time.time_ns()` does, and that value only moves on the
+#     system timer tick - about 15.6 ms - so two runs inside one tick come back
+#     with the same milliseconds. tools/check_same_tick_paths.py has the
+#     measured numbers (399 of 399 consecutive reads identical).
+#   * a process id is unique only while that process lives, and these names
+#     outlive the run that made them - a backup folder or a transcript file is
+#     read long after it has gone.
+# `[guid]::NewGuid()` asks for a name from nothing, which is what
+# `tempfile.mkdtemp` does for the Python suites, and needs no dependency
+# beyond the .NET this script already uses for its temp path. Eight hex
+# characters is 4 billion names - far more than two runs on one PC need - and
+# keeps the folder names short enough to print.
+$Stamp      = "$(Get-Date -Format 'yyyy-MM-dd-HHmmss')-$([guid]::NewGuid().ToString('n').Substring(0, 8))"
 
 # The list above is hand-ordered because the order matters, which means it can
 # fall behind the directory - and it did: event-allowlist.patch was written,
