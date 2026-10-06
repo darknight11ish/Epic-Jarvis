@@ -1071,6 +1071,22 @@ jobs:
       # it. This is the other half.
       - name: Every command a page calls is granted to its window
         run: python3 ../../tools/check_invoke_grants.py
+      # A throwaway folder named from a clock, then created without `exist_ok`.
+      # On Windows `time.time_ns()` is `GetSystemTimeAsFileTime`: 100-nanosecond
+      # units, but the value only moves on the system timer tick, so two calls
+      # inside one tick return the SAME number and the second `mkdir` dies with
+      # `FileExistsError [WinError 183]`. That one line has now broken three
+      # Windows CI suites - test_note_capture.py, test_obsidian_notes.py and
+      # test_backup.py (runs 37349552106 and 37369387182) - and none of it
+      # reproduced on the owner's PC, where the tick is about 0.5 ms. All three
+      # were fixed with `tempfile.mkdtemp`, which asks the filesystem for a free
+      # name. This is what keeps the next one from being found the same way: the
+      # same shape as `check_command_acl.py` and `check_parity.py`, which the
+      # backend job runs - a plain list of violations and a non-zero exit only
+      # when there really is one. It reads the repository rather than this
+      # crate, so it is called by its path from here.
+      - name: No path is named from a clock and created without exist_ok
+        run: python3 ../../tools/check_same_tick_paths.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility

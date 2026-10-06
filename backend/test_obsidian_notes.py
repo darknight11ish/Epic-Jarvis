@@ -209,14 +209,20 @@ def t_no_vault_no_write_and_never_created():
     check("a vault folder that does not exist: refused", "there is no folder" in p.reason_empty)
     check("and run() does not create it",
           NC.run(p, approved=True)["ok"] is False and not missing.exists())
-    plain = _TMP / f"plain{time.time_ns()}"
-    plain.mkdir()
+    # mkdtemp, not `_TMP / f"plain{time.time_ns()}"`: on Windows the clock only
+    # moves on the system timer tick, so the same name can come back twice and
+    # `plain.mkdir()` then dies with FileExistsError [WinError 183] - the bug
+    # vault() above was fixed for. mkdtemp asks the filesystem for a free name.
+    plain = Path(tempfile.mkdtemp(dir=_TMP, prefix="plain"))
     os.environ[N.OBSIDIAN_VAULT_ENV] = str(plain)
     check("a folder with no .obsidian inside is not a vault",
           ".obsidian" in NC.plan("obsidian", "x", now=DAY).reason_empty)
     check("and nothing was made in it", list(plain.iterdir()) == [])
     clear_env()
-    v = _TMP / f"cfgvault{time.time_ns()}"
+    # mkdtemp for the same reason as `plain`, just above: a name from
+    # time.time_ns() can repeat inside one Windows timer tick, and the second
+    # `mkdir(parents=True)` would find `cfgvault<ns>\.obsidian` already made.
+    v = Path(tempfile.mkdtemp(dir=_TMP, prefix="cfgvault"))
     (v / ".obsidian").mkdir(parents=True)
     CONFIG["notes"] = {"obsidian": {"vault_directory": str(v)}}
     check("[notes.obsidian] vault_directory in the config is read",
@@ -259,8 +265,10 @@ def t_appends_and_never_overwrites():
 
 
 def t_links_out_of_the_vault_are_refused():
-    outside = _TMP / f"outside{time.time_ns()}"
-    outside.mkdir()
+    # mkdtemp for the same reason as vault(): this folder must be FRESH, and a
+    # name from time.time_ns() is not - two calls inside one Windows timer tick
+    # are the same name, and `outside.mkdir()` would die with WinError 183.
+    outside = Path(tempfile.mkdtemp(dir=_TMP, prefix="outside"))
     v = vault({"folder": "Daily"})
     try:
         (v / "Daily").symlink_to(outside, target_is_directory=True)
@@ -412,8 +420,11 @@ def t_vault_is_preferred_and_the_rest_still_work():
 
 def t_vault_search_skips_links_out_and_respects_caps():
     v = make_search_vault()
-    outside = _TMP / f"out{time.time_ns()}"
-    outside.mkdir()
+    # mkdtemp, not `_TMP / f"out{time.time_ns()}"`: this folder must be fresh,
+    # and on Windows the clock only moves on the system timer tick - so a
+    # second call inside one tick asks for the same folder and `mkdir()` dies
+    # with FileExistsError [WinError 183].
+    outside = Path(tempfile.mkdtemp(dir=_TMP, prefix="out"))
     (outside / "budget leak.md").write_text("budget outside the vault")
     try:
         (v / "linked").symlink_to(outside, target_is_directory=True)
