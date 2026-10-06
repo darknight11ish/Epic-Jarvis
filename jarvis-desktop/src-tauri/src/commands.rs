@@ -3752,7 +3752,9 @@ pub async fn set_third_card(
 /// keeps anything that is obviously not an id from being sent at all.
 pub(crate) fn chat_card_id(card: &str) -> Result<&str, String> {
     let want = card.trim();
-    if want.is_empty() || want.len() > 64 || !want.starts_with("GPU-")
+    if want.is_empty()
+        || want.len() > 64
+        || !want.starts_with("GPU-")
         || !want.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
     {
         return Err("That is not one of this PC's graphics cards.".to_string());
