@@ -76,7 +76,7 @@ B04	docs/JARVIS-API.md no longer says the second graphics card is not installed	
 B05	the two graphics cards are installed and measured (2026-10-05)	grep:docs/SECOND-CARD.md:The cards are now installed and	built	docs/FEATURE-REVIEW-2026-10-04.md:44
 B06	CLAUDE.md no longer says the owner is *adding* the RTX 2060	absent:CLAUDE.md:The owner is adding an RTX 2060	built	docs/FEATURE-REVIEW-2026-10-04.md:92
 B07	MODEL-TOPOLOGY.md no longer says the RTX 2060 is "Coming soon"	absent:docs/MODEL-TOPOLOGY.md:Coming soon:	built	docs/MODEL-TOPOLOGY.md:5
-B08	the desktop Settings no longer tells the owner the extra card is not installed yet (a product string, not a doc - reported, not fixed here)	absent:jarvis-desktop/src/settings.html:extra card is not installed yet	open	docs/audit-reports-2026-09-29-30/34-build-a3667614.md:17
+B08	the desktop Settings no longer tells the owner the extra card is not installed yet (the line now says the lane has never been run, which is true with or without the card)	absent:jarvis-desktop/src/settings.html:extra card is not installed yet	built	docs/audit-reports-2026-09-29-30/34-build-a3667614.md:17
 B09	the overnight memory tidy is built, cards only (a 2026-09-27 audit said there was no tidy to test)	file:backend/jarvis_tidy.py	built	docs/BACKGROUND-WORK-AUDIT-2026-09-27.md:79
 B10	screen reading ("Look at this" / "Watch with me") is built, not "correctly not built"	file:backend/jarvis_screen_win.py	built	docs/audit-reports-2026-09-29-30/05-audit-ad1de788.md:87
 B11	picture mode (the slow processor picture reader, off by default) is built	file:backend/jarvis_screen_picture.py	built	docs/audit-reports-2026-09-29-30/15-audit-af9505b3.md:99
