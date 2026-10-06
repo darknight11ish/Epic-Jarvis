@@ -83,12 +83,12 @@ switch, off until the owner turns it on. `docs/MODEL-TOPOLOGY.md` has the number
 - `jarvis-client/` - the Android app (Jetpack Compose) that actually talks to
   the backend, over the real API (`docs/`'s `JARVIS-API.md`).
 - `jarvis-android/` - an older Android app, kept for reference. It speaks a
-  WebSocket protocol invented before `JARVIS-API.md` existed, and none of its
-  endpoints exist on the backend, so it cannot talk to Jarvis at all. Its
-  safe, self-contained parts (the approval widget, a quick-link widget) have
-  already been adapted into `jarvis-client`; its duplex audio streaming was
-  deliberately **not** ported, because `jarvis-client`'s own voice-print gate
-  needs a complete recorded clip to check, and streaming would undermine
+  WebSocket protocol invented before `JARVIS-API.md` existed, and its one
+  endpoint is not wired into the backend, so it cannot talk to Jarvis at all.
+  Its safe, self-contained parts (the approval widget, a quick-link widget)
+  have already been adapted into `jarvis-client`; its duplex audio streaming
+  was deliberately **not** ported, because `jarvis-client`'s own voice-print
+  gate needs a complete recorded clip to check, and streaming would undermine
   that. See the module's own README before assuming anything else in it is
   safe to copy over verbatim.
 
@@ -2028,9 +2028,10 @@ the next version, and every version goes on GitHub.
 
 ## Where everything is written down
 
-- `docs/HANDOFF-2026-09-30.md` — **start here in a new conversation**: where things
-  stand after PR #39, the owner's decisions, the whole queue in order, every known
-  unfixed finding, and how the work has been run.
+- `docs/HANDOFF-2026-10-04-audit-pass.md` — **start here in a new conversation**:
+  the 2026-10-04 audit pass and its work order (the newest handoff, checked
+  2026-10-05). Then `docs/HANDOFF-2026-09-30.md` (where things stood after
+  PR #39) and `docs/HANDOFF-2026-10-04-test-suite-fixes.md`.
 - `docs/ARCHITECTURE.md` — **read first.** The invariants, the one permission
   model every feature must use, memory, events, and what does not exist yet.
 - `docs/MODEL-TOPOLOGY.md` — what runs on the graphics card and why.

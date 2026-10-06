@@ -17,9 +17,10 @@ directly in `docs/`. The count is the honest measure of how much is here; treat
 the size as "around 20 MB" and re-measure it rather than trusting the digits
 above. **Five of the documents are the ones to read**; the rest are the history of
 how Jarvis got here: audits, research, and notes that one working session left for
-another. Apart from one generated file that was deleted on 2026-10-05 (the source
-bundle, in the last table below - its contents are still in git history), nothing
-has been moved or deleted, so every old link still works. This page says which is
+another. One generated file, the source bundle, was recorded as deleted on
+2026-10-05 and is still in the tree (see the last table below): the removal was
+written down before it was run, so every old link still works, and the bundle's
+fate is the one open item on this page. This page says which is
 which.
 
 (An earlier version of this paragraph said "about ninety documents", and at some
@@ -123,7 +124,7 @@ them; the current documents above replace them.
 
 | Document | Why it is stale |
 |---|---|
-| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05.** It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. Git history still has it (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
+| SOURCE-BUNDLE.md | **Still in the tree, checked 2026-10-05.** Its removal was recorded here as done and was never run, so this is the one row in this table whose document has not gone away; `docs/FEATURE-REVIEW-2026-10-04.md` section B1 item 5 asks for the removal. `git ls-files docs/SOURCE-BUNDLE.md` still lists it. It is 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` is this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |
 | [ANDROID-FEATURE-AUDIT.md](ANDROID-FEATURE-AUDIT.md), [ANDROID-REPLY-2026-09-15.md](ANDROID-REPLY-2026-09-15.md), [ANDROID-REPLY-2026-09-15-GRADIENT.md](ANDROID-REPLY-2026-09-15-GRADIENT.md), [ANDROID-REPLY-2026-09-18-CATCHUP.md](ANDROID-REPLY-2026-09-18-CATCHUP.md), [ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md](ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md), [ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md](ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md) | Messages between the phone and desktop sessions, 15-18 September. |

@@ -15,12 +15,13 @@ it, say so in your report.
 - **One card works fully.** Today that is an RTX 2080 Super, 8 GB, Turing
   (compute capability 7.5: no FP8, no bf16 tensor cores, no FlashAttention
   2). The chat model, and nothing else big, lives on it.
-- **A second card is being added:** an RTX 2060, 12 GB. It is the "second
+- **A second card is installed and measured:** an RTX 2060, 12 GB (2026-10-05).
+  It is the "second
   lane" - long conversations, pictures, the learner, voice copying, and
   anything that needs a bigger or second model. Features MAY require two
   cards, as long as they say so and a one-card PC still works without them.
-  Nothing that depends on the second card is switched on until it is
-  installed and measured (`docs/SECOND-CARD.md`, `docs/MODEL-TOPOLOGY.md`,
+  A lane is switched on only as its own measurement justifies it
+  (`docs/SECOND-CARD.md`, `docs/MODEL-TOPOLOGY.md`,
   `docs/BIG-MODEL.md`, `docs/HARDWARE-PROFILES.md`).
 - Processor: Ryzen 3900X, 12 cores, mostly idle while the card thinks.
   Windows 11. Ollama runs the models.
@@ -143,11 +144,12 @@ and Parakeet Realtime EOU (speech-to-text before the voice check),
 full-duplex voice models (skip the voice check and cards), GPL audio tools
 (Rubber Band, Pedalboard, Praat, SoX).
 
-## Built on other branches, not merged yet (check before building)
+## Built on other branches, or merged since (check before building)
 
 - **Goals** (backend, phone and desktop screens) and **"one card, several
-  steps" - the plan card, built and switched off** - on
-  `claude/jarvis-continuation-03kls1`.
+  steps" - the plan card, built and switched off** - were on
+  `claude/jarvis-continuation-03kls1` and are in this tree now
+  (`backend/jarvis_goals.py`, `backend/jarvis_plan.py`).
 - **Three animal faces and "voice follows the face"** - merged into `main`
   (PR #20) and into this branch. The owner's 2026-09-28 decision (offer the
   voice once, switch off by default, the otter not on "Sky") was NOT applied
@@ -184,14 +186,15 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   JARVIS-API §36): before any model sees one, secrets are painted solid black;
   nothing to hide - it goes on untouched; one that cannot be checked is
   withheld and the answer says so.
-- **Third graphics card: its own lane, off by default** - on
-  `claude/jarvis-continuation-03kls1` (2026-09-28, 5cc47a9c): a third
+- **Third graphics card: its own lane, off by default** - in this tree now
+  (`backend/jarvis_second_card.py`; 2026-09-28, 5cc47a9c): a third
   NVIDIA card is detected, and one of the five second-card features can be
   moved onto it with its own approval card (`second_card_third_assign`); a
   third copy of Ollama on its own port. The owner asked that session for
   it; research here still plans for one or two cards unless told otherwise.
 - **Reading phone notifications (the safe version)** - built on
-  `claude/jarvis-continuation-03kls1` (638464b1: backend switch + phone).
+  `claude/jarvis-continuation-03kls1` (638464b1: backend switch + phone), and in
+  this tree now (`jarvis-client`'s `CapturedNotification` reader).
 - **The plan card is wired into the tool list** there too (7675da4d,
   `propose_plan`, gate `run_plan`), still switched off until a passing
   `tool_eval_results.json` exists.
@@ -215,11 +218,12 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 
 ## Decided but not built yet (don't propose these as new)
 
-The animals' mouths timed by Kokoro v1.0 itself (built for v0.19
-only); blended voices; the
-12 GB card's long-context lane; the memory re-ranker bake-off; the
-feasibility audit's small items. (Talk-to-type, the Today page, the
-overnight tidy, review cards only, QR pairing with per-device keys and Goals are
+The 12 GB card's long-context lane; the memory re-ranker bake-off; the
+feasibility audit's small items. (The animals' mouths timed by Kokoro v1.0
+itself and the blended voices Ashby and Clara are built - `backend/jarvis_mouth.py`,
+`backend/test_blend_voices.py`, JARVIS-API §94.7; talk-to-type, the Today page, the
+overnight tidy, review cards only, QR pairing with per-device keys, Goals and the
+three animal faces are
 built and on main; the plan card is built and switched off until its
 safety test passes.) The owner's full list of
 decisions is in `CLAUDE.md`.

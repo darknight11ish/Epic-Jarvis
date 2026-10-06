@@ -1695,8 +1695,9 @@ line, as sound, from the PC itself (the phone is refused it). JARVIS-API
 false}` - one boolean, never a word - `jarvis_wellbeing.py`; added
 2026-09-28 (the owner's "At serious moments the animals drop the cute
 gestures"). The animal faces hold a neutral pose while it is true; the
-PC's spoken sound turns plain by itself (no app change). The apps' side is
-not built yet - JARVIS-API §38.1 says what each must read.)
+PC's spoken sound turns plain by itself (no app change). The desktop reads it
+and holds the serious pose (`noteWellbeing`, `jarvis-desktop/src/jarvis-link.js`);
+the phone's side of it is still to build - JARVIS-API §38.1 says what each must read.)
 
 **Every event is a doorbell.** Count, ids, and what is needed to route —
 never content. That includes `activity`'s sentence: while Jarvis drives a

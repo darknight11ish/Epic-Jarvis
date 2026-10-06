@@ -13,7 +13,8 @@ Kotlin, Jetpack Compose, Material 3. `compileSdk` 36, `targetSdk` 36,
 ## What it does
 
 Talks to the real backend over the real API (`docs/JARVIS-API.md`), reached
-over Tailscale, NordVPN Meshnet, or the home network - never a public
+over Tailscale or NordVPN Meshnet - never the home network (Android refuses
+this app plain http:// to it) and never a public
 tunnel (`docs/ARCHITECTURE.md`, rule 2). Chat, voice ("Hey Jarvis" and
 push-to-talk), approvals, the Brain (memory, history, settings), the
 floating avatar (Bubble/Overlay mode), notifications, and a home-screen
@@ -70,8 +71,10 @@ started that exact file, and only from `main`.
 
 The app pairs with one Jarvis backend at a time (QR code, with a short
 typed code as a backup), confirmed by an approval card on the PC first.
-The address it's given must be on the owner's own networks - this PC, the
-home network, Tailscale, or NordVPN Meshnet; anything on the open internet,
+The address it's given must be on the owner's own networks - this PC,
+Tailscale, or NordVPN Meshnet. A home-network address is on them, but Android
+refuses this app plain http:// to it, so the phone asks for the Tailscale or
+NordVPN name instead (`data/PhoneAddress.kt`); anything on the open internet,
 a public tunnel included, is refused with a plain message rather than
 silently falling back to a different address. `docs/INSTALL.md` part 3 has
 the exact steps.

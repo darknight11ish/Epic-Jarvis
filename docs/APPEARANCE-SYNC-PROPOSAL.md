@@ -1,9 +1,12 @@
 # Proposal: one route so the phone and the desktop look the same
 
-**Status:** proposal. Nothing in `jarvis-client` implements this yet, and nothing
-will until the backend does. Written because the alternative — inventing the
-endpoint client-side and hoping — is exactly how `jarvis-android` ended up
-speaking a protocol no server implements.
+**Status: built** (re-checked 2026-10-05: `backend/appearance.patch` serves
+`/api/appearance`, and the phone reads and writes it through
+`jarvis-client/app/src/main/java/com/jarvis/client/data/AppearanceStore.kt`,
+gated on the `appearance` capability, per `docs/APPEARANCE-API.md`). This began
+as a proposal because the alternative — inventing the endpoint client-side and
+hoping — is exactly how `jarvis-android` ended up speaking a protocol no server
+implements.
 
 ## The problem
 
