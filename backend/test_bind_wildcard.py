@@ -203,16 +203,36 @@ def t_the_table_is_true_and_every_wildcard_is_refused():
                   f"an every-interface address", wild(spelling) is False)
             continue
         if real is None:
+            # This machine cannot bind the spelling at all, so here it is not a
+            # way to reach every interface - and the product is right to say so:
+            # its rule is "ask the resolver", never "match a list of strings".
+            # Windows resolves none of "0", "00", "0x0", "0.0" or
+            # "000.000.000.000"; the checks below used to demand Linux's
+            # resolver on every machine (2026-10-03). The skip is counted on its
+            # own, never as a pass; the two checks after it still hold here, and
+            # they are the ones that prove the guard invents nothing when there
+            # is no listener to refuse.
             skip(f"this machine cannot bind {spelling!r} to ask the OS")
-        else:
-            check(f"the OS really binds every interface for {spelling!r}", real is True)
+            check(f"_binds_every_interface({spelling!r}) is False - nothing here binds it",
+                  wild(spelling) is False, spelling)
+            result, said = _quiet(refuse, spelling)
+            check(f"and the backend does not refuse {spelling!r}: the bind fails on its own",
+                  result is None, said)
+            continue
+        check(f"the OS really binds every interface for {spelling!r}", real is True)
         check(f"_binds_every_interface({spelling!r}) is True", wild(spelling) is True)
         try:
             _, said = _quiet(refuse, spelling)
             check(f"the backend refuses to start on {spelling!r}", False, said)
         except SystemExit as exc:
             check(f"the backend refuses to start on {spelling!r}, exit code 2", exc.code == 2)
-    check("the OS was asked about at least the IPv4 spellings", asked >= 8, f"asked {asked}")
+    # How many spellings the OS can answer for is the platform's business (a
+    # Linux resolver reads all eleven, Windows' reads the four written out in
+    # full). What has to hold everywhere is that the spelled-out ones are caught.
+    check("the OS was asked about at least one spelling", asked >= 1, f"asked {asked}")
+    for spelling in ("0.0.0.0", "::"):
+        check(f"the spelled-out any-interface address {spelling!r} is refused",
+              wild(spelling) is True)
 
 
 def t_ordinary_addresses_still_start():
@@ -237,13 +257,16 @@ def t_no_second_listener_for_any_wildcard_spelling():
             # could not open on it at all (Windows - see
             # _os_binds_every_interface). A companion on 127.0.0.1 is then the
             # only listener there is, not a second one, and this check has
-            # nothing to say about it.
+            # nothing to say about it. It is a skip, counted on its own, never a
+            # pass.
             skip(f"this machine cannot bind {bind!r} at all, so there is no wildcard to cover")
             continue
         result, said = _quiet(fn, bind, 1, Echo)
         check(f"bind {bind!r} gets no second listener", result is None, said)
     # These three never reach the resolver: the companion covers loopback
-    # itself, and "" is every interface whatever the OS's parser says.
+    # itself, and "" is every interface whatever the OS's parser says. They are
+    # asked unconditionally - the skip above applies only to a table spelling
+    # this machine cannot bind.
     for bind in ("", "127.0.0.1", "localhost"):
         result, said = _quiet(fn, bind, 1, Echo)
         check(f"bind {bind!r} gets no second listener", result is None, said)

@@ -170,8 +170,14 @@ def t_a_denial_proposes_a_constraint_never_writes_one():
     box = {}
 
     def ask():
-        box["v"] = G.check("send_email", {"to": "someone"},
-                           prompt="send an email", timeout=20.0)
+        # NOT send_email: the owner later put that (and draft_email, tidy_inbox,
+        # restore_backup, every *_enable switch) in _NO_RULE_FROM_DENIAL - "send
+        # email, one card per email, never an 'always allow'" - so denying it
+        # correctly proposes nothing and this test measured the wrong thing
+        # (2026-10-03). control_computer is a risky action that still offers a
+        # standing rule, which is what the denial path is about.
+        box["v"] = G.check("control_computer", {"goal": "open the browser"},
+                           prompt="use the mouse and keyboard", timeout=20.0)
     t = threading.Thread(target=ask, daemon=True)
     t.start()
     rid = None
@@ -193,7 +199,7 @@ def t_a_denial_proposes_a_constraint_never_writes_one():
               calls[0]["kwargs"].get("source") == "gate_denial", calls[0]["kwargs"])
         text = calls[0]["turns"][0]["content"]
         check("the candidate constraint names the denied action",
-              "send email" in text, text)
+              "control computer" in text, text)
         check("this module has no direct write path - only propose exists on the stub",
               not hasattr(stub, "add_fact") and not hasattr(stub, "_accept"))
 

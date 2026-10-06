@@ -1,0 +1,18 @@
+{
+  "extraPaths": [
+    ".",
+    "rebuilt",
+    "../../../Claude/Open jarvis files/Desktop program"
+  ],
+  "typeCheckingMode": "basic",
+  "reportPrivateUsage": "none",
+  "reportMissingModuleSource": "none",
+  "reportPossiblyUnboundVariable": "error",
+  "reportOptionalMemberAccess": "warning",
+  "exclude": [
+    "**/__pycache__",
+    "**/patch-history/**",
+    "**/fixtures/**",
+    "**/node_modules/**"
+  ]
+}

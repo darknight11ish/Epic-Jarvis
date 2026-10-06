@@ -56,10 +56,24 @@ JARVIS = {"exe": r"C:\Apps\jarvis-desktop.exe", "title": "Jarvis", "cls": "x"}
 MADE_UP = ("qwertwork", "zorbleflix")
 
 
+def _pin_reader() -> None:
+    """`probe_available()` answered the way the owner's PC answers it.
+
+    The desktop's "watching" answer comes straight from it, and it is a
+    platform fact: the pywinrt packages are Windows-only, so it is True on the
+    owner's PC and False on CI. Left alone, one contract file cannot be right on
+    both - the committed copy says true everywhere and a Linux run said false
+    (2026-10-04). The fixture describes the app on the PC the owner runs, so it
+    is pinned here, the way this file's clock is pinned to T0.
+    """
+    F.probe_available = lambda: True
+
+
 class _World:
     def __init__(self, name):
         self.t = T0
         self.front = None
+        _pin_reader()
         self.s = S.Scheduler(_TMP / f"{name}.db", clock=lambda: self.t, spawn=lambda fn: fn(),
                              publish=lambda k, d: None)
         none = lambda: (_ for _ in ()).throw(RuntimeError("none"))  # noqa: E731
@@ -129,13 +143,33 @@ def render() -> str:
     return text
 
 
+def _first_difference(fresh: str, have: str) -> str:
+    """The first line where a fresh run and the committed file disagree.
+
+    The check exists to catch a fixture that has drifted, and "out of date" is
+    only half of that: WHICH value moved is the useful half, and it was left in
+    the CI log - which is not always readable from a terminal (2026-10-04). One
+    line, so it fits in a CI annotation too.
+    """
+    a, b = fresh.splitlines(), have.splitlines()
+    for i, (x, y) in enumerate(zip(a, b), 1):
+        if x != y:
+            return f"line {i}: fresh {x.strip()[:160]!r} vs file {y.strip()[:160]!r}"
+    if len(a) != len(b):
+        return f"{len(a)} lines fresh vs {len(b)} in the file"
+    return "the same lines; only the ending or the length differs"
+
+
 def main() -> int:
     text = render()
     if "--check" in sys.argv:
-        bad = [str(p.relative_to(ROOT)) for p in COPIES
-               if not p.is_file() or p.read_text(encoding="utf-8") != text]
-        if bad:
-            print("out of date (run python3 tools/gen_focus_cases.py): " + ", ".join(bad))
+        copies = [(str(p.relative_to(ROOT)), p.read_text(encoding="utf-8") if p.is_file() else "")
+                  for p in COPIES]
+        wrong = [(name, have) for name, have in copies if have != text]
+        if wrong:
+            for name, have in wrong:
+                print("out of date (run python3 tools/gen_focus_cases.py): " + name)
+                print("    " + _first_difference(text, have))
             return 1
         print("focus cases: both copies up to date")
         return 0

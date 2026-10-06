@@ -208,7 +208,15 @@ CORPUS = [
 
 
 def t_off_topic_queries_inject_nothing():
-    s, d = fresh()
+    # The floor's own logic, measured with the deterministic embedder, the same
+    # way the rest of this file pins it. Left on the default, this test chose
+    # the REAL embedding model wherever one is installed, and bge-small scores
+    # unrelated short texts around 0.87-0.99 cosine distance against a floor of
+    # 1.0 - so the outcome depended on whether a model happened to be on the
+    # machine (CI has none) rather than on the floor. That real-model separation
+    # is a tuning question for backend/eval_memory.py, not something this test
+    # can settle (2026-10-03).
+    s, d = fresh(M.HashEmbedder())
     for t in CORPUS:
         s.add_fact(t)
     for q in ("explain how a python decorator works",

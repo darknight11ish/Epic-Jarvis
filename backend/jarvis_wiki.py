@@ -408,6 +408,21 @@ def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _content_sha(data: bytes) -> str:
+    """How a source file is remembered: the hash of its TEXT with the line
+    endings normalised - the same string read_source() keeps in `s.text`.
+
+    ONE function for both places that hash a source (reading it, and checking it
+    has not changed since the card was made). Hashing the raw bytes instead
+    means a file saved with Windows line endings (Notepad, Word, anything)
+    hashes one way and is compared against a cache entry hashed the other: it
+    reads as "changed" forever, every later look re-reads the whole file and
+    spends a model call on identical pages - and a card made from it is refused
+    the moment it is approved. Both halves were wrong; tested by the CRLF cases
+    in test_wiki.py (2026-10-03)."""
+    return _sha(data.decode("utf-8-sig").replace("\r\n", "\n").replace("\r", "\n").encode("utf-8"))
+
+
 def estimate_tokens(text: str) -> int:
     return (len(text.encode("utf-8")) + BYTES_PER_TOKEN - 1) // BYTES_PER_TOKEN
 
@@ -484,8 +499,17 @@ def read_source(w: Where, name: str, *, num_ctx: int, index_tokens: int,
     except UnicodeDecodeError:
         s.state, s.why = "unreadable", "it is not UTF-8 text (save it as UTF-8 and try again)"
         return s
-    s.sha256 = _sha(data)
+    # Normalise the line endings FIRST, then hash THE NORMALISED BYTES - the
+    # same thing s.text holds, through the one helper. It used to hash the raw
+    # bytes and normalise the text afterwards, so the hash and the text
+    # disagreed about \r\n: a source saved with Windows line endings (Notepad,
+    # Word, anything) hashed one way and was compared against a cache entry
+    # hashed the other, so it was never recognised as unchanged. It read as
+    # "changed" forever, and every later look at that page re-read the whole
+    # file and spent a model call on it to produce identical pages. Tested by
+    # the CRLF case in test_wiki.py, 2026-10-03.
     s.text = text.replace("\r\n", "\n").replace("\r", "\n")
+    s.sha256 = _content_sha(data)
     if not s.text.strip():
         s.state, s.why = "unreadable", "it is empty"
         return s
@@ -1247,9 +1271,11 @@ def run(p: Plan, *, approved: bool = False) -> dict:
             raise Refused("the wiki folder is not where it was when the card was made")
         s = w.sub(SOURCES_DIR, p.source)
         try:
-            now_sha = _sha(Path(os.path.realpath(str(s))).read_bytes())
+            now_sha = _content_sha(Path(os.path.realpath(str(s))).read_bytes())
         except OSError:
             raise Refused(f'"{p.source}" is not in Sources any more')
+        except UnicodeDecodeError:
+            raise Refused(f'"{p.source}" is not UTF-8 text any more')
         if now_sha != p.source_sha:
             raise Refused(f'"{p.source}" changed after the card was made')
         # Every check before the first write.

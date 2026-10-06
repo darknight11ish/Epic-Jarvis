@@ -203,6 +203,60 @@ def _exit_hook_is_registered() -> bool:
     return r.returncode == 0 and "LEFT []" in r.stdout
 
 
+# BOTH SIDES KEPT (merge of origin/main into next-two-failures). The two
+# branches found the same SIGABRT - "terminate called without an active
+# exception", once in four Ubuntu runs, after every check had passed - and
+# fixed it at the two ends that both needed fixing, so neither fix replaces
+# the other:
+#
+#   * origin/main stops what THIS SUITE started, in `_stop_what_this_suite_started`
+#     below, called from __main__. It is the narrower, suite-level fix, and it
+#     is deliberately still here.
+#   * this branch fixes the module that actually starts the threads:
+#     jarvis_schedule now stops its own loop and its after-start jobs at exit
+#     (`_on_exit`, registered with atexit). `t_the_threads_it_starts_are_stopped_before_the_process_ends`
+#     above is what proves it, including that the hook is the one the process
+#     really runs.
+#
+# The suite-level fix alone leaves the next suite that starts a scheduler free
+# to abort the same way; the module-level fix alone would be untested here.
+# Running both is safe and strictly safer: `Scheduler.stop()` only sets an
+# Event, wakes the loop and joins a thread that has already gone.
+def _stop_what_this_suite_started() -> None:
+    """Shut the ONE scheduler down again, and wait for it, before this process
+    exits.
+
+    `t_the_fast_path` calls jarvis_quick.answer(), which reaches
+    jarvis_schedule.get() - and get() STARTS the scheduler's singleton loop
+    on a daemon thread that never returns (it waits TICK_MAX = 30 s between
+    ticks), plus two one-shot "after start" threads it fires on the first
+    start. This suite used to leave all three alive at interpreter teardown,
+    which is the abort CI reported once in four runs on this file:
+
+        terminate called without an active exception   (exit -6, SIGABRT)
+
+    A daemon thread does not keep the process alive, but the C runtime it is
+    standing in when finalization begins does abort the process. Windows
+    happens to survive it; Linux does not, which is why this passed here and
+    on the owner's PC and failed on the Ubuntu job. Stop-and-join is already
+    in test_briefing.py (twice) and test_tidy.py for the same reason. Joining
+    them here is the honest fix: shut down what this suite started, rather
+    than hide the crash."""
+    try:
+        import jarvis_schedule as S
+        if S._SCHED is not None:
+            S._SCHED.stop()
+    except Exception as exc:                       # pragma: no cover - belt and braces
+        print(f"note: the scheduler could not be stopped ({type(exc).__name__}: {exc})")
+    # The one-shot starters (jarvis_schedule.after_start) are milliseconds of
+    # work, but they hold the SQLite handle the scheduler opened, so they get
+    # the same courtesy: a bounded join, never a bare exit underneath them.
+    for t in list(threading.enumerate()):
+        if t is not threading.main_thread() and t.name in (
+                "jarvis-schedule", "jarvis-schedule-after-start"):
+            t.join(5.0)
+
+
 if __name__ == "__main__":
     for fn in (t_one_event_with_no_words, t_stop, t_honest_about_which_phone, t_the_fast_path,
                t_never_a_card_by_construction,
@@ -213,6 +267,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
+    _stop_what_this_suite_started()
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))

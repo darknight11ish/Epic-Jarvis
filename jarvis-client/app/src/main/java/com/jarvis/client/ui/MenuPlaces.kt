@@ -72,6 +72,7 @@ object MenuPlaces {
         "models" to "brain.model.models",
         "hardware" to "settings.hardware",
         "pc-help" to "brain.model.pc-help",
+        "tutorials" to "brain.model.tutorials",
         "second-card" to "settings.second-card",
         "big-model" to "settings.big-model",
         "deep-questions" to "brain.memory.deep",
