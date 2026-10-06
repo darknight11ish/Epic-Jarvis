@@ -1087,6 +1087,24 @@ jobs:
       # crate, so it is called by its path from here.
       - name: No path is named from a clock and created without exist_ok
         run: python3 ../../tools/check_same_tick_paths.py
+      # The tutorials are data, so nothing compiles them and nothing reads them.
+      # Each step ends with a `where` line naming the button, card or screen to
+      # use, and an agent writing the last sixteen of them invented three button
+      # labels in its first draft (it caught them itself) and described two
+      # screens that do not exist at all (the phone's "Timeline", and "tap to
+      # talk" on the phone). A tutorial that sends the owner to a control the app
+      # does not have is confident, user-facing and wrong, and every other check
+      # in this file passes it. This one reads the real
+      # backend/jarvis_tutorials.py and matches each breadcrumb in a `where`
+      # line against the names the two apps really define - exactly, with no
+      # substring search and no fuzzy match, because a guard that cries wolf is
+      # worse than none. The lines that are wrong today are recorded in
+      # KNOWN_DRIFT with a reason each (the file is owned by another pull
+      # request); a name NOT recorded there exits 1, and a recorded one that
+      # stops being reported is itself a failure, so the list cannot quietly
+      # absorb a real finding.
+      - name: A tutorial names only screens and buttons that exist
+        run: python3 ../../tools/check_tutorial_places.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
