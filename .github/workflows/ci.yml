@@ -93,10 +93,22 @@ jobs:
         with:
           node-version: "22"
       # No bundler and no test framework: the pages are plain ES modules, so a
-      # parse check is what there is. It would have caught nothing in this
-      # repo's history — the frontend bugs were behavioural — but it is the
-      # floor, and the markdown suite below is the part that matters.
-      - run: for f in src/*.js; do node --check "$f"; done
+      # parse check is what there is. It is the floor, and it had to be made to
+      # hold: on 2026-10-06 a `settings.js` that could not be parsed at all - a
+      # template literal opened with a backtick and closed with a quote - went
+      # through this step, because `node --check` parses a bare `.js` file as
+      # CommonJS and sloppy CommonJS accepted the stray backtick as a string
+      # terminator further down the line. The page loads it with
+      # type="module", and the browser dropped the WHOLE file: every panel on
+      # Settings stopped, and two desktop suites were red or hung because of
+      # it. So each page is copied to a `.mjs` first - node always parses that
+      # as a module - and checked there.
+      - run: |
+          tmp="$(mktemp -d)"
+          for f in src/*.js; do
+            cp "$f" "$tmp/$(basename "$f").mjs"
+            node --check "$tmp/$(basename "$f").mjs"
+          done
         shell: bash
       - run: node scripts/markdown-test.mjs
       - run: python3 scripts/check-tokens.py
