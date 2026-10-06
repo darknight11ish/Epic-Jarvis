@@ -222,13 +222,18 @@ same blob) - it reached `main` through PR #47's own version of the commit.
 
 ## Conflict map against the POST-#79 world
 
-Simulated, no writes, no checkout:
+Simulated, no writes, no checkout, against `origin/integration/backlog`:
 
 ```
 $ git merge-tree --write-tree origin/integration/backlog origin/audit-pass-2026-10-05
 7fa967a06b2b009a9ba68735213d7a04d2049ce4
-... 19 conflicted files ...
+... conflicts ...
 ```
+
+The map below was run twice during this review: once at `1345b65d` (the head
+quoted in the brief) and again after the branch moved to `b8b24cc3`. **Both give
+the same 16 conflicted files and the same merged tree `7fa967a0`**, so nothing
+here depends on which of those two the owner merges.
 
 **16 conflicted files post-#79, against 4 pre-#79.**
 
