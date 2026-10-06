@@ -18,8 +18,8 @@ changes there until one is, one approval card at a time.
 ## The short version
 
 **What it is for.** Today Jarvis is hand-tuned for one card, the RTX 2080
-Super (8 GB), and the second-card features are hand-tuned for one planned
-card, the RTX 2060 12 GB. This design makes Jarvis work out a sensible setup
+Super (8 GB), and the second-card features are hand-tuned for one extra card,
+the RTX 2060 12 GB. This design makes Jarvis work out a sensible setup
 for **any single 8 GB card, and any pair of cards up to 24 GB in total**,
 and offer it to you as three choices in plain words:
 
