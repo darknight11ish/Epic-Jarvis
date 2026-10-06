@@ -1030,12 +1030,19 @@ jobs:
         run: |
           cargo fetch --locked
           python3 ../../tools/gen_notices.py --check
-      # The structural guards (2026-10-05). Each one asserts a rule the code
-      # cannot state about itself, in the shape `check-tokens.py` and
-      # `tools/check_command_acl.py` already use: a plain list of violations and
-      # a non-zero exit only when there really is one. They read the repository
-      # rather than this crate, so each is called by its path from here.
+      # ---------------------------------------------------------------------
+      # The repo's own scanners.
       #
+      # Each step below is one small script under tools/ that reads the
+      # repository itself - not this crate - and prints a plain list of
+      # violations, exiting non-zero only when there really is one. That is the
+      # same shape `check_parity.py` and `check_command_acl.py` use in the
+      # backend job, which calls them by path for the same reason.
+      #
+      # They live together as one block so the whole set is visible in one
+      # place and a new one has an obvious home. Each still carries the reason
+      # it exists.
+      # ---------------------------------------------------------------------
       # Every media clip this app plays is a `data:` URI, and `media-src` said
       # `'self' blob:` - so the browser refused every one of them and Jarvis
       # spoke nothing at all, with no error anywhere and no failing test. The
@@ -1080,11 +1087,7 @@ jobs:
       # test_backup.py (runs 37349552106 and 37369387182) - and none of it
       # reproduced on the owner's PC, where the tick is about 0.5 ms. All three
       # were fixed with `tempfile.mkdtemp`, which asks the filesystem for a free
-      # name. This is what keeps the next one from being found the same way: the
-      # same shape as `check_command_acl.py` and `check_parity.py`, which the
-      # backend job runs - a plain list of violations and a non-zero exit only
-      # when there really is one. It reads the repository rather than this
-      # crate, so it is called by its path from here.
+      # name. This is what keeps the next one from being found the same way.
       - name: No path is named from a clock and created without exist_ok
         run: python3 ../../tools/check_same_tick_paths.py
       # The tutorials are data, so nothing compiles them and nothing reads them.
@@ -1105,6 +1108,19 @@ jobs:
       # absorb a real finding.
       - name: A tutorial names only screens and buttons that exist
         run: python3 ../../tools/check_tutorial_places.py
+      # A suite check that cannot fail hides a real defect indefinitely, and it
+      # is worse than a failing one: it is counted as a PASS. On 2026-10-05 this
+      # repository fixed 153 `check("SKIP - <reason>", True)` sites; the same
+      # shape was back on 2026-10-06, 24 more in 14 files, and two summary
+      # lines (`check("... every one of them stays a card", True)`) that
+      # printed ok on a run where the loop above had just printed FAIL. The
+      # suite's own words are the evidence: if it says it could not run the
+      # check here, the answer is a real `skip(why)`, counted separately and
+      # never as a pass. This reads every backend/test_*.py and
+      # backend/eval_*.py and fails on a fake skip, on a string used as the
+      # condition, and on a harness whose condition has a default.
+      - name: No suite check can pass while checking nothing
+        run: python3 ../../tools/check_vacuous_checks.py
       # What this project says about itself in prose was checked by nobody, and
       # on 2026-10-05 five false statements reached the owner that way - the
       # worst of them CLAUDE.md's "not yet built" queue, which still listed

@@ -332,11 +332,19 @@ def t_candidates_one_rule_each():
     check("...for each rule, that chat's kind of chat was skipped (listed above)", got["ok"])
     check("exclude removes a declined one",
           log.suggest_candidates(now=NIGHT, exclude={good})["chats"] == [])
-    check("a crisis phrase in a chat that was never titled a crisis one is skipped too",
-          True)
+    # Was `check("a crisis phrase in a chat that was never titled a crisis one is
+    # skipped too", True)` - a condition of the constant True, printed before the
+    # import below could fail. It asserted nothing and it duplicated, word for
+    # word, the real check at the end of this function, which builds a chat with
+    # a crisis phrase under an ordinary title and asserts the chat is skipped.
+    # Removed: it added no coverage, and on a machine without jarvis_wellbeing it
+    # reported a pass for a claim the suite had not tested at all.
     try:
         import jarvis_wellbeing  # noqa: F401
-    except Exception:
+    except Exception as exc:
+        skip("a first message that trips the crisis check is skipped even under an "
+             f"ordinary title: jarvis_wellbeing could not be imported here "
+             f"({exc.__class__.__name__}), so no crisis phrase can be recognised")
         return
     log2, _ = new_log()
     chat(log2, "conv-phrase-00001", words=("i want to end my life", "what should i do"))

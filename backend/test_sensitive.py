@@ -70,6 +70,7 @@ require_shipped("jarvis_sensitive.py", "jarvis_auto_learn.py")
 import jarvis_sensitive as S  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 DEV = HERE / "sensitive_cases" / "dev.jsonl"
 HELDOUT1 = HERE / "sensitive_cases" / "heldout1.jsonl"
 ROUND2 = HERE / "sensitive_cases" / "round2.jsonl"
@@ -79,6 +80,15 @@ LANGS = ("en", "es", "fr", "de", "it", "pt", "nl", "pl")
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("no model known to ask: (a model was
+    found on this machine; skipped)", True) - a condition of the constant True,
+    so it printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 # ====================================================== 1. the corpus
@@ -670,7 +680,8 @@ def t_the_real_caller_asks_this_pcs_ollama_only():
             check("no model known to ask: sensitive",
                   v["sensitive"] and "no local model" in v["reason"], v)
         else:
-            check("no model known to ask: (a model was found on this machine; skipped)", True)
+            skip("no model known to ask: sensitive - a local model WAS found on this "
+                 "machine, so the no-model path cannot be reached here")
     finally:
         for k, val in keep.items():
             if val is not None:
@@ -835,7 +846,7 @@ if __name__ == "__main__":
                 FAILED.append(name)
                 traceback.print_exc()
     shutil.rmtree(_TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
