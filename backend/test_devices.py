@@ -524,13 +524,17 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # inside jarvis_gate.py's action_for_tool() and leaves
                                 # devices.patch's register_approval_key lines alone.
                                 "gate-action-name.patch",
-                                # readpage.patch (2026-10-05) touches jarvis_gate.py
-                                # only - the action name in _NO_RULE_FROM_DENIAL and its
-                                # own risk row - in hunks anchored on quiz-cloud.patch's
-                                # own added lines, so it too leaves devices.patch's
-                                # register_approval_key lines alone. The
-                                # later_rewriting() condition on the next line is what
-                                # really says so; this set is only the shortlist.
+                                # readpage.patch (2026-10-05) adds read_web_page to the
+                                # SAME two gate lists devices.patch adds pair_device and
+                                # unretire_shared_key to, so this shortlist alone could
+                                # not say it is safe. What does: its two hunks are
+                                # anchored on quiz-cloud.patch's own added lines - after
+                                # devices.patch's - it rewrites nothing devices.patch
+                                # wrote, and the name it adds sits in
+                                # _NO_RULE_FROM_DENIAL beside its own risk row, not on
+                                # devices.patch's register_approval_key lines. The
+                                # later_rewriting() condition after this set is what
+                                # really proves that half; this set is only the shortlist.
                                 "readpage.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

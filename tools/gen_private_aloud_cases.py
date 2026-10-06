@@ -86,7 +86,8 @@ ON_SCREEN = "It's on your screen."
 #: read_screen, owner, 2026-09-28). Exact names, as the `step` event carries
 #: them (jarvis_agent._step_event).
 #:
-#: `read_page` is jarvis_readpage.read_web_page (2026-10-05): the owner's own
+#: `read_web_page` is jarvis_readpage's own tool (2026-10-05): the name is
+#: jarvis_readpage.ACTION, served by jarvis_readpage.run. The owner's own
 #: request, "post a webpage into jarvis and it can read the content out
 #: loud". It belongs beside web_search - both are the public web the owner
 #: asked for, with the address shown on a card first - and not beside email,

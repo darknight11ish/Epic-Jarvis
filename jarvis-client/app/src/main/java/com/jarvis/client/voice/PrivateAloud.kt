@@ -106,16 +106,19 @@ object PrivateAloud {
      * answer of 2026-09-28; a read the PC records, not a model tool) - and
      * `read_camera`, an answer about what the camera sees in Jarvis Live (the
      * owner's answer of 2026-09-28; off until the 12 GB card passes the photo
-     * test) - and `read_web_page`, an answer about a page the owner handed
-     * over (the owner's request of 2026-10-05: "post a webpage into jarvis and
-     * it can read the content out loud"). It sits beside `web_search` because
-     * both are the public web the owner asked for, with the address shown on a
-     * card first; a sensitive saved fact, a private question and a stale or
-     * dropped stream all still keep the answer on screen. Exact names, as the
-     * `step` event carries them. The desktop's `READ_ALOUD_TOOLS`
-     * (private-speech.js) and the shared table (private-aloud-cases.json) are
-     * checked against this list by PrivateAloudContractTest, so a name added
-     * to one of the three alone fails a test.
+     * test) - and `read_web_page`, one page the owner handed over (the
+     * owner's request of 2026-10-05, "post a webpage into jarvis and it can
+     * read the content out loud"). It sits beside `web_search` rather than
+     * beside email, calendar, notes or memory: both are the public web the
+     * owner asked for, and the page's address is shown on a card before
+     * anything is fetched. Every earlier rule still comes first - a sensitive
+     * saved fact, a private question, the router's private gate, a forgotten
+     * event stream - and a stale or dropped stream keeps the answer on screen
+     * too. Exact names, as the `step` event carries them. The desktop's
+     * `READ_ALOUD_TOOLS` (private-speech.js) and the shared table
+     * (private-aloud-cases.json) are checked against this list by
+     * PrivateAloudContractTest, so a name added to one of the three alone
+     * fails a test.
      */
     val READ_ALOUD_TOOLS: Set<String> =
         setOf("home_read", "read_camera", "read_screen", "web_search", "read_web_page")
