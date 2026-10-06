@@ -1640,3 +1640,19 @@ star_floor = 25        # ...but never fewer than this many
 # for the reasons its own row of backend/README.md gives.
 [tools]
 enabled = ["web_search"]
+
+# ------------------------------------------------------------------------
+# ENERGY - what one answer cost the graphics card (jarvis_energy.py)
+# ------------------------------------------------------------------------
+# OFF, and left off. Turned on, Jarvis reads the card's own power draw through
+# nvidia-smi while it writes an answer and puts one row per answer in
+# energy.jsonl beside speed.jsonl: watts, joules, joules per token. Numbers
+# only - never a prompt, an answer or a word of a fact - and nothing leaves
+# this PC. Reading the card costs a little power of its own, which is why
+# nobody measures anything until they ask for it.
+#
+# `JARVIS_ENERGY=1` in the environment turns it on for one run without
+# editing this file. On a PC without an NVIDIA card, nothing happens either
+# way and `jarvis_energy.status()["why"]` says so in one sentence.
+[energy]
+enabled = false

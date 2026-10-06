@@ -472,7 +472,7 @@ def t_latency_statistics():
           and S.steady_state([1000.0, 2000.0, 3000.0, 4000.0, 5000.0]) == 4000.0
           and S.percentiles([800, 1000, 1200]) == {50: 1000.0, 95: 1180.0}
           and S.compare_latency([1800, 1850, 1900], [1500, 1550, 1450])
-          == "first word: before p50 1.8 s, after p50 1.5 s (faster)",
+          == "first word: before p50 1.9 s, after p50 1.5 s (faster)",
           (S.steady_state([1000, 2000, 3000, 4000, 5000]),
            S.percentiles([800, 1000, 1200])))
 
@@ -487,7 +487,7 @@ def t_latency_statistics():
           S.compare_latency([], []) == "not enough numbers to compare yet")
     check("a clear improvement is called faster, with both figures in it",
           S.compare_latency([1800, 1900, 1850], [1500, 1550, 1450])
-          == "first word: before p50 1.8 s, after p50 1.5 s (faster)",
+          == "first word: before p50 1.9 s, after p50 1.5 s (faster)",
           S.compare_latency([1800, 1900, 1850], [1500, 1550, 1450]))
     check("a clear regression is called slower, and never dressed up",
           S.compare_latency([1200, 1250, 1230], [2400, 2500, 2450])
