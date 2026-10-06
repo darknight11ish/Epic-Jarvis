@@ -76,3 +76,4 @@ B16	the prompt-injection detector (Prompt Guard 2 or the Apache-licensed one) is
 B17	the shipped-module suite passes (a 2026-09-29 audit ran it: 486 pass)	test:backend/test_shipped_modules.py	built	docs/audit-reports-2026-09-29-30/46-audit-ad9d7ce2.md:12
 B18	the phone's shader budget is still the 60,000 the eyelids decision recorded	number:CLAUDE.md:tools/shader_size.py:60,000	built	CLAUDE.md:998
 B19	the second card's floor is still the 7,680 MiB the owner's decision recorded	number:docs/SECOND-CARD.md:backend/jarvis_second_card.py:7,680	built	docs/SECOND-CARD.md:26
+B20	the audit's "tap-to-talk is not built" is settled: the phone's VoiceButton no longer documents the opposite of the code ninety lines below it	absent:jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/VoiceButton.kt:Hold rather than tap-to-start/tap-to-stop	open	docs/audit-reports-2026-09-29-30/43-audit-a696f0b6.md:16
