@@ -1071,11 +1071,14 @@ $PATCHES = @(
     'tutorials.patch'
     # "Read this page out loud" (the owner's request of 2026-10-05; JARVIS-API section 115):
     # ONE approval card per address the owner hands over, raised BEFORE any fetch, then ONE
-    # plain GET of that one page and its words read out as outside text. Two hunks in
-    # jarvis_gate.py - the action name in _NO_RULE_FROM_DENIAL and its own risk row - whose
-    # context is quiz-cloud.patch's own added lines, so it goes after quiz-cloud. It needs
-    # jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below); without
-    # them the tool is simply not offered to the model and the gate row is never used.
+    # plain GET of that one page and its words read out as outside text. THREE hunks in
+    # jarvis_gate.py: the action name in _NO_RULE_FROM_DENIAL, its own risk row, and its
+    # _TOOL_ACTIONS line (2026-10-06 - without the third, action_for_tool() fell through to
+    # "unclassified_tool" and the card the owner was shown was never the one this tool
+    # raises). The first two hunks' context is quiz-cloud.patch's own added lines, so it goes
+    # after quiz-cloud; the third sits right after inbox-tidy.patch's own _TOOL_ACTIONS line.
+    # It needs jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below);
+    # without them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
 )
 
@@ -2649,7 +2652,39 @@ if ($py) {
 # ask first, which tools are on, where the notes live. Overwriting it would
 # undo them without a word. So: if the backend would find no settings file
 # at all, this repository's copy is put beside jarvis_hud.py. If there is
-# one, it is left exactly as it is and the differences are printed.
+# one, EVERY LINE OF IT IS KEPT, and the differences are printed below.
+#
+# THE ONE EXCEPTION, AND WHY IT HAS TO BE ONE (found 2026-10-06)
+#
+# A patch adds an ACTION, and that action's tier is a line in [autonomy.tiers].
+# A line is something a fresh install gets and an existing file never did -
+# and this step used to print the difference and stop there. So a new action
+# arrived WITHOUT its tier line, the gate resolved it through
+# unknown_action_tier ("ask" - fail-safe, but not the tier it was written
+# for), and two suites on the owner's PC failed with
+# "every action in the repository's shipped [autonomy.tiers] has a line in
+# the live one" - four red checks on a repository that was entirely correct.
+# The tests were right. The config had simply never caught up.
+#
+# So the missing TIER lines are added now, by backend\_apply_toml_tiers.py,
+# which is deliberately the least it can do:
+#
+#   * only keys that are MISSING, only inside [autonomy.tiers];
+#   * the SHIPPED value, spelled out - never "auto" unless the shipped file
+#     says "auto", so nothing can be loosened: a missing tier is already
+#     "ask", and the only other shipped value ("never", "notify") is
+#     stricter, not looser;
+#   * a key that is already in the file is never touched, whatever it says -
+#     an owner may always choose to be asked more, and a live value that is
+#     LOOSER than the shipped one stays tools/sync-framework-tiers.py's
+#     decision to report, not this script's to make;
+#   * it refuses to write at all unless the result parses, every added line
+#     reads back, every existing tier is unchanged and no other section moved;
+#   * it keeps a dated copy of the file first, and prints its path.
+#
+# Anything else the two files disagree about ([tools].enabled, a notes
+# folder, which voice) is still only printed: those are the owner's own
+# choices, and nothing here can know which of the two values he meant.
 #
 # Looked for where rebuilt\jarvis_framework.py's config_path() looks, in the
 # same order, so "the one in use" here is the one the backend reads.
@@ -2683,8 +2718,9 @@ if (-not (Test-Path -LiteralPath $cfgSrc)) {
     if ($mine -eq $ours) {
         Ok "$CONFIG_NAME - yours ($cfgInUse) is the same as this repository's."
     } else {
-        Say "  note  $CONFIG_NAME - yours is kept, untouched: $cfgInUse" Cyan
+        Say "  note  $CONFIG_NAME - yours is kept: $cfgInUse" Cyan
         Say "        It differs from this repository's copy ($cfgSrc)." Cyan
+        $missingCount = 0
         if ($py) {
             $prevEap = $ErrorActionPreference
             $ErrorActionPreference = 'Continue'
@@ -2694,14 +2730,91 @@ if (-not (Test-Path -LiteralPath $cfgSrc)) {
                 $ErrorActionPreference = $prevEap
             }
             $shown = 0
+            $missingCount = 0
             foreach ($line in $diffOut) {
                 if ($shown -ge 60) { Say "        ... and more. Run it yourself for the whole list:" Cyan; break }
                 Say "        $line"
                 $shown++
             }
+            # `_config_diff.py`'s own summary line: "In this repository's copy
+            # but NOT in yours (23)." Used for one honest sentence at the end -
+            # a difference nobody is told about is how this whole step failed
+            # the owner on 2026-10-06.
+            foreach ($line in @($diffOut)) {
+                if ($line -match 'NOT in yours \((\d+)\)') { $missingCount = [int]$Matches[1] }
+            }
         }
-        Say "        Nothing is changed for you. To see the whole difference any time:" Cyan
+        Say "        Every line of yours is kept. Anything below that is only in this" Cyan
+        Say "        repository's copy stays yours to add - except the [autonomy.tiers]" Cyan
+        Say "        lines, which are added for you now (shown in full):" Cyan
+        # See the top of this step. Only ever ADDS missing tier lines, with the
+        # shipped value, and refuses to write anything unless the result parses
+        # and every other line is unchanged.
+        $tierMerger = Join-Path $PatchDir '_apply_toml_tiers.py'
+        if ($py -and (Test-Path -LiteralPath $tierMerger)) {
+            $prevEap = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try {
+                $tierOut = @(& $py.Exe $tierMerger --apply $cfgInUse 2>&1)
+                $tierMerged = ($LASTEXITCODE -eq 0)
+            } finally {
+                $ErrorActionPreference = $prevEap
+            }
+            foreach ($line in $tierOut) { Say "        $line" }
+            # What is still missing, read back from the REAL file every run:
+            # the script says what it did, and this does not take its word.
+            $stillMissing = @()
+            $checker = "import sys, tomllib`n" +
+                       "cfg = tomllib.loads(open(sys.argv[1], encoding='utf-8-sig').read())`n" +
+                       "tiers = (cfg.get('autonomy') or {}).get('tiers') or {}`n" +
+                       "sys.exit(0 if sys.argv[2] in tiers else 1)"
+            foreach ($line in @($diffOut)) {
+                if ($line -match '^\s*\[autonomy\.tiers\]\s+([a-z][a-z0-9_]*)\s*=') {
+                    $key = $Matches[1]
+                    $prevEap = $ErrorActionPreference
+                    $ErrorActionPreference = 'Continue'
+                    try {
+                        $null = @(& $py.Exe -c $checker $cfgInUse $key 2>&1)
+                        if ($LASTEXITCODE -ne 0) { $stillMissing += $key }
+                    } finally {
+                        $ErrorActionPreference = $prevEap
+                    }
+                }
+            }
+            if ($tierMerged -and $stillMissing.Count -eq 0) {
+                if ("$tierOut" -match 'Nothing to add') {
+                    Ok "$CONFIG_NAME - no [autonomy.tiers] line was missing."
+                } else {
+                    Ok "$CONFIG_NAME - the missing [autonomy.tiers] lines are now in your file (a copy from before is kept beside it)."
+                    $script:State.Changed = $true
+                }
+            } elseif ($stillMissing.Count -gt 0) {
+                Bad "$CONFIG_NAME - these tier lines are STILL missing from $cfgInUse`: $($stillMissing -join ', ')"
+                Say "        The actions they name resolve to unknown_action_tier instead, and the" Cyan
+                Say "        gate-name suites fail on this. Add them by hand, or run:" Cyan
+                Say "          py -3 `"$tierMerger`" --apply `"$cfgInUse`"" Cyan
+                Add-Problem "$CONFIG_NAME is missing the [autonomy.tiers] line(s) $($stillMissing -join ', '), so those actions take unknown_action_tier instead of their own tier. Add them to $cfgInUse by hand, or run: py -3 `"$tierMerger`" --apply `"$cfgInUse`""
+            } else {
+                Warn "the missing [autonomy.tiers] lines could not be added to $CONFIG_NAME."
+                Say "        Your backend is patched and running; until those lines are there" Cyan
+                Say "        those actions take 'ask' (unknown_action_tier) instead of their own" Cyan
+                Say "        tier, and the gate-name suites will say so. Run this, then restart" Cyan
+                Say "        the backend:" Cyan
+                Say "          py -3 `"$tierMerger`" --apply `"$cfgInUse`"" Cyan
+                Add-Note "$CONFIG_NAME is missing [autonomy.tiers] line(s) that this repository's copy has; the update did NOT add them, so those actions take unknown_action_tier ('ask') instead of their own tier. To add them: py -3 `"$tierMerger`" --apply `"$cfgInUse`""
+            }
+        } elseif (-not (Test-Path -LiteralPath $tierMerger)) {
+            Warn "'$tierMerger' is missing from this repository, so the missing [autonomy.tiers] lines were not added."
+            Say "        Get a fresh copy (git pull) and run again, or add them by hand:" Cyan
+            Say "          py -3 `"$tierMerger`" --apply `"$cfgInUse`"" Cyan
+            Add-Note "backend\_apply_toml_tiers.py is missing from this repository, so the [autonomy.tiers] lines a new patch needs were NOT added to $cfgInUse; the actions they name take unknown_action_tier ('ask') instead. Get a fresh copy (git pull) and run again."
+        }
+        Say "        To see the whole difference any time:" Cyan
         Say "          py -3 `"$(Join-Path $PatchDir '_config_diff.py')`" `"$cfgInUse`" `"$cfgSrc`"" Cyan
+        if ($missingCount -gt 0) {
+            Say "        $missingCount setting(s) this repository has and yours does not - the tier" Cyan
+            Say "        lines above were added for you; everything else is yours to add." Cyan
+        }
     }
 }
 

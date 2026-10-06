@@ -57,6 +57,7 @@ What it proves:
 from __future__ import annotations
 
 import ast
+import re
 import shutil
 import subprocess
 import sys
@@ -569,6 +570,34 @@ def t_the_patch_applies_after_the_rest_and_reverses():
               '"read_web_page",  # jarvis_readpage.py' in after)
         check("... and its risk row, outbound and risky",
               '"read_web_page": ("no", "outbound",' in after)
+        # Found on the owner's PC, 2026-10-06: the first version of this patch
+        # gave the action its risk row and its place in the "acts only on tier
+        # ask" set, and NOT its _TOOL_ACTIONS line. action_for_tool() therefore
+        # fell through to "unclassified_tool" - the gate's fail-closed answer,
+        # so nothing ran unasked, but the card the owner was shown was never
+        # the one this tool raises, and test_agent.py and test_gate_names.py
+        # both failed on his install ("read_web_page -> lookup 'read_web_page'
+        # -> unclassified_tool"). The tool's own name IS its action name
+        # (jarvis_agent.Tool's default when gate_lookup_name is omitted), so
+        # the entry is the self-map every neighbour of the same shape has.
+        check("... and its _TOOL_ACTIONS line, mapping the tool to its own action",
+              '"read_web_page": "read_web_page",' in after)
+        # The line has to be IN that dict, not merely somewhere in the file:
+        # an entry outside it resolves nothing. The owner's `jarvis_gate.py`
+        # is not in this repository (backend/README.md says why), so the
+        # stand-in above holds only the patches' hunks - it has the table's
+        # ENTRIES and not its opening line. What can be read is the patch's
+        # own hunk: the entry must be added into the region whose context
+        # lines are the ones the other patches write into `_TOOL_ACTIONS`.
+        # (Measured: a regex for `^_TOOL_ACTIONS = {` finds nothing in the
+        # stand-in, so a check that leaned on it would be a check that always
+        # fails - worse than no check.)
+        patch = (HERE / "readpage.patch").read_text(encoding="utf-8")
+        hunks = [h for h in patch.split("\n@@ ")[1:]
+                 if '"read_web_page": "read_web_page",' in h]
+        check("... inside the _TOOL_ACTIONS table itself (test setup)",
+              len(hunks) == 1 and '"tidy_inbox": "tidy_inbox",' in hunks[0],
+              "the entry is in the file but not added inside the tool table")
         check("... and the row says the one page, never a link on it, and outside text",
               "never a link on it" in after and "outside text" in after)
         r2 = subprocess.run(["git", "apply", "-R", "--include", "jarvis_gate.py",
