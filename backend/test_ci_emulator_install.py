@@ -27,6 +27,14 @@ them apart:
      calls fixes nothing. The workflow is parsed with yaml.safe_load, so a
      broken edit fails here rather than on GitHub.
 
+     The same half covers the 2026-10-06 incident that followed this one: the
+     emulator downloaded and then could not RUN, because libpulse.so.0 was
+     absent from the runner. The fix for that is an apt step, and what makes
+     it a fix rather than decoration is its ORDER - before the step that runs
+     `emulator -version` and before the step that starts the emulator - so
+     that is what is checked, along with the assertion that caught it still
+     being in the helper.
+
   2. That the retry behaviour itself is right - run for real, against stub
      installers, through the project's own check() harness:
        * attempt 1 fails, attempt 2 succeeds             -> exit 0, both tried
@@ -278,6 +286,67 @@ def t_the_install_step_runs_the_retry_helper():
               b"\r\n" not in raw, detail="the file contains CRLF")
         check("the helper starts with a #!/bin/sh shebang",
               raw.startswith(b"#!/bin/sh\n"), detail=raw[:40])
+
+
+def t_the_library_the_emulator_needs_is_installed_before_it_is_used():
+    """The 2026-10-06 failure, and the half of its fix that lives in YAML.
+
+    PR #61's face-shots job downloaded the emulator fine and then could not RUN
+    it:
+
+        qemu-system-x86_64: error while loading shared libraries:
+        libpulse.so.0: cannot open shared object file: No such file or directory
+
+    so the retry below cannot answer it - a download that already succeeded
+    gives the same binary. The library has to be installed on the runner.
+
+    This is the wiring half, in the same spirit as the install-step check above:
+    an apt line in a workflow proves nothing unless it is before the step that
+    RUNS the binary, and the install step runs `emulator -version` itself
+    (that is the assertion that caught the incident). So the check that matters
+    is order.
+    """
+    if yaml is None:
+        skip("the emulator's missing library is installed before it is used",
+             "PyYAML is not installed here")
+        return
+    wf = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+    steps = wf["jobs"]["face-shots"]["steps"]
+    names = [str(s.get("name", "")) for s in steps]
+
+    def index_of(pred):
+        return next((i for i, s in enumerate(steps) if pred(s)), None)
+
+    apt = index_of(lambda s: "libpulse0" in str(s.get("run", "")))
+    check("a step installs libpulse0 (the library that was missing)", apt is not None,
+          detail=names)
+    if apt is None:
+        return
+    body = str(steps[apt].get("run", ""))
+    check("that step is a real apt install, not a comment about one",
+          "apt-get install" in body and "libpulse0" in body, detail=body)
+
+    # Order is the whole point. The install step verifies the binary by RUNNING
+    # it, and the photograph step starts it for real; a library installed after
+    # either one is a library installed too late.
+    install = index_of(lambda s: str(s.get("name", "")).startswith("Install the system image"))
+    shots = index_of(lambda s: s.get("name") == "Photograph every face")
+    check("the install-the-system-image step is still in the job", install is not None,
+          detail=names)
+    check("the photographs step is still in the job", shots is not None, detail=names)
+    if install is None or shots is None:
+        return
+    check("libpulse0 is installed BEFORE the step that runs `emulator -version`",
+          apt < install, detail=f"apt at {apt}, install step at {install}")
+    check("libpulse0 is installed BEFORE the emulator is started for photographs",
+          apt < shots, detail=f"apt at {apt}, photographs at {shots}")
+
+    # And the assertion that caught the incident is still the thing that runs
+    # the binary, still in the helper, still refusing to call it installed.
+    helper = HELPER.read_text(encoding="utf-8") if HELPER.is_file() else ""
+    check("the helper still proves the emulator runs before claiming success",
+          "-version" in helper and "exists but does not run" in helper,
+          detail="the retry must not be weakened into a presence check")
 
 
 def t_the_job_still_says_why_when_there_are_no_screenshots():

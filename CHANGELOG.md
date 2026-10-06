@@ -6,6 +6,18 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The phone's face photographs job was red because the runner had no sound
+  library, not because anything here was broken (2026-10-06).** The job that
+  renders the animal faces downloads Android's emulator and starts it. The
+  download finished; the program would not start. The runner's own error said
+  why: `libpulse.so.0: cannot open shared object file` - a sound library the
+  emulator needs simply was not installed on the machine. So the job now
+  installs `libpulse0` (the Ubuntu package that provides that one file) before
+  it touches the emulator, and nothing else: the check that caught this - "the
+  emulator exists but does not run" - is kept exactly as it was, and it still
+  fails the step rather than reporting success. No test was weakened, no step
+  removed, and the job still only renders; it cannot block a merge. Only a real
+  run on GitHub can prove the emulator now starts.
 - **A full audit pass, recorded 2026-10-04 23:44 PDT (2026-10-05 06:44 UTC).**
   Twelve of fourteen read-only passes are complete and written up as five
   documents, indexed by `docs/AUDIT-PASS-2026-10-05.md`: a whole-project feature
