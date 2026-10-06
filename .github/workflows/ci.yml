@@ -1071,6 +1071,17 @@ jobs:
       # it. This is the other half.
       - name: Every command a page calls is granted to its window
         run: python3 ../../tools/check_invoke_grants.py
+      # What this project says about itself in prose was checked by nobody, and
+      # on 2026-10-05 five false statements reached the owner that way - the
+      # worst of them CLAUDE.md's "not yet built" queue, which still listed
+      # tap-to-talk on the phone eight days after it was built (eabca34d).
+      # docs/CLAIMS.tsv is one row per claim with a check a machine runs, and
+      # this fails in BOTH directions: a `built` row whose check stopped
+      # passing, and an `open` row whose gap has CLOSED, which means the
+      # register is stale rather than the code. Without that second half the
+      # register rots exactly like the prose it replaced.
+      - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
+        run: python3 ../../tools/check_claims.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
