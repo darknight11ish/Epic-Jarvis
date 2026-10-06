@@ -1385,7 +1385,13 @@ def pin_problem(card_uuid: str) -> str:
     only remembers but has not applied (or that someone changed) must never
     be reported as done. None (not Windows) reads as "cannot tell", never as
     "done"."""
-    if os.name != "nt":
+    # `_ON_WINDOWS`, never a second look at `os.name`: that constant is the
+    # module's own platform answer and the one thing a test replaces, so a
+    # case can present a Windows PC on any machine. Asking `os.name` here
+    # instead made CI's Linux answer "cannot check this" - losing the pin's
+    # real sentence ("does not have this pin yet", "Vulkan is still on"),
+    # which the owner's own Windows PC still gets (2026-10-06).
+    if not _ON_WINDOWS:
         return "Jarvis cannot check this on a PC that is not Windows."
     val = _user_env(PIN_ENV[0])
     if val is None:
