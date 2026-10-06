@@ -46,7 +46,7 @@ Also current, for one area each:
 | Document | What it is for |
 |---|---|
 | [HARDWARE-PROFILES.md](HARDWARE-PROFILES.md) | Settings for different graphics cards, one card or two. |
-| [SECOND-CARD.md](SECOND-CARD.md) | What a second graphics card will add. All built, all off until the card is installed and measured. |
+| [SECOND-CARD.md](SECOND-CARD.md) | What a second graphics card adds. All built, all off until that feature is measured. |
 | [BIG-MODEL.md](BIG-MODEL.md) | The optional slow, bigger model for jobs nobody is waiting on. |
 | [WAKE-WORD.md](WAKE-WORD.md) | "Hey Jarvis": how it works and what it needed. |
 | [APPROVAL-GAP-DESIGN.md](APPROVAL-GAP-DESIGN.md) | How the PC itself asks Windows Hello before a risky approval (step 1 is built). |

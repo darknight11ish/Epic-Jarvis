@@ -70,10 +70,14 @@ desktop, an 8B model in Ollama on the same machine, a Tauri 2 desktop shell
 around it, and an Android companion reachable over Tailscale or NordVPN
 Meshnet (both private device-to-device networks, never a public tunnel).
 
-Hardware: an RTX 2080 Super (8 GB) today. **The owner is adding an RTX 2060
-12 GB as a second card** - plan features with that second, larger-context
-lane in mind, but do not switch anything on that depends on it until it is
-installed and measured. `docs/MODEL-TOPOLOGY.md` has the numbers.
+Hardware: both cards are installed and measured (2026-10-05): an RTX 2080
+Super 8 GB with the monitor, running the desktop, and an RTX 2060 12 GB with
+none, holding the everyday model. Both are Turing (compute 7.5), so both
+clear the cache and flash-attention floor. **The second card is installed but
+its features are not measured** - plan features with that second,
+larger-context lane in mind, but do not switch a feature on until *that
+feature* is measured (`docs/MEASURED-2026-10-05-owner-pc.md`;
+`docs/MODEL-TOPOLOGY.md` has the numbers).
 
 - `jarvis-desktop/` - the Tauri desktop app. Rust in `src-tauri/`, the windows
   in `src/`.
