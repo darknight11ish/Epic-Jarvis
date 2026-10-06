@@ -94,7 +94,27 @@ PII_KINDS = ("card", "crypto", "iban", "email", "ip", "ssn")
 MAX_SCAN_CHARS = 25_000
 #: Seconds the whole check may take before it gives up (fail closed). The clock
 #: is looked at between every rule AND every so many matches inside a rule.
-BUDGET_S = 6.0
+#:
+#: Was 6.0. That is only about three times what the check really costs, and
+#: "three times" is not headroom on a machine this code does not control.
+#: Measured 2026-10-06 on the owner's PC, on the 5,101 characters a phone
+#: screenshot carries in test_screen_turn.py's t_the_phone(): 1.89-2.01 s over
+#: five runs, i.e. 3.0-3.2x the old 6.0 s. The owner's PC is the FAST case - a
+#: busy Windows runner is the slow one, and there this check crossed 6.0 s, gave
+#: up, and turned a correct two-line "unchecked" answer into a red backend-windows
+#: job on three unrelated PRs (#58, #59, #65). (Spelled "PRs" on purpose:
+#: t_hygiene in test_secrets.py scans this file for the bare name of the
+#: Python HTTP library, and a comment must not be able to trip a source
+#: check.)
+#:
+#: 15.0 is about eight times the measured 1.9 s, so it still gives up on the
+#: thing it exists for - a pathological page, or a regular expression that never
+#: comes back - while leaving room for a machine several times slower than the
+#: owner's. It stays a REAL timeout: this deadline is the only thing between a
+#: screen full of unchecked words and the model being told to read it out, so it
+#: is raised, never removed, and MAX_SCAN_CHARS above still refuses what cannot
+#: be checked in reasonable time at all.
+BUDGET_S = 15.0
 #: How far a box is grown past the reader's tight word rectangle, in pixels
 #: (plus a tenth of its height), so an edge of a letter is never left out.
 PAD_PX = 3

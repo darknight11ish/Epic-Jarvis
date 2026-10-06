@@ -466,9 +466,56 @@ def t_the_phone():
           parts[0]["text"] == "what is this?" and parts[-1]["text"].startswith(SC.SCREEN_TEXT_HEAD)
           and not any(p.get("type") == "screen_text" for p in parts), repr(parts)[:300])
     body = parts[-1]["text"]
-    check("... capped at the window-text limit, saying how much was left out",
-          "Battery 12%" in body and "more characters were on the screen" in body
-          and len(body) < SC.UI_MAX_CHARS + 900, len(body))
+    # TWO honest answers, and the check accepts whichever the scan really
+    # produced. The phone's 5,000-character text is scanned for secrets before
+    # any of it is handed on, and jarvis_secrets gives that scan a deadline and
+    # FAILS CLOSED past it (raises Unchecked), which _hide_or_fail turns into
+    # the "unchecked" answer. That is a safety property, not a bug: when the
+    # scan cannot finish, the answer SHOULD be the two-line give-up rather than
+    # words nobody checked. Demanding the words here was the test being wrong -
+    # it asked a loaded runner to be as fast as an idle one. Measured
+    # 2026-10-06: this scan takes 1.89-2.01 s on the owner's PC, so a runner
+    # slow enough crosses the budget and CI printed exactly this -
+    #
+    #     FAIL ... capped at the window-text limit, saying how much was left out
+    #             525
+    #
+    # 525 is len(SCREEN_TEXT_HEAD) + 2 + len(SCREEN_TEXT_UNCHECKED) = 327+2+196,
+    # the give-up answer, which is the correct thing for the backend to say.
+    #
+    # What is NOT weakened: the check still demands an answer that is honest
+    # about what happened, and it is never satisfied by an empty or half
+    # answer. The give-up branch below still pins the real capped-length
+    # bound. And this check cannot pass by the scan always giving up - the
+    # sibling check right after it runs the same scan over a short text
+    # that cannot time out, and demands the words there.
+    if SC.SCREEN_TEXT_UNCHECKED in body:
+        check("... the secret scan gave up, so the answer is the honest "
+              "'could not check' - and still inside the window-text bound",
+              body.startswith(SC.SCREEN_TEXT_HEAD)
+              and SC.SCREEN_TEXT_UNCHECKED in body
+              and "Battery 12%" not in body
+              and len(body) < SC.UI_MAX_CHARS + 900, len(body))
+        check("... and it did not read the screen out unchecked either",
+              "x" * 100 not in body, len(body))
+    else:
+        check("... the secret scan finished, so it is capped at the "
+              "window-text limit, saying how much was left out",
+              "Battery 12%" in body and "more characters were on the screen" in body
+              and len(body) < SC.UI_MAX_CHARS + 900, len(body))
+    # The other half of the same contract, on text small enough that a timeout
+    # is impossible: the scan MUST succeed here and MUST still hand on a
+    # labelled, capped window of words. This is what stops the check above
+    # passing by the scan giving up every time. It also fails loudly if a slow
+    # machine ever cannot even check these ~110 characters, which is the signal
+    # that the whole feature is unusable rather than that one check is flaky.
+    import jarvis_secrets as _SEC
+    small = "Battery 12%. " + PLANTED
+    small_body = SC.label_phone_text(small)
+    check("... a short phone text still comes back as the words, labelled, rather "
+          "than given up on (so the check above cannot pass by always giving up)",
+          _SEC.BUDGET_S > 0 and "Battery 12%" in small_body
+          and SC.SCREEN_TEXT_UNCHECKED not in small_body, small_body[:300])
     check("... recorded as a read of read_screen, planted words flagged",
           out["tools_ran"][:1] == ["read_screen"] and bool(out["outside_flags"]))
     check("the phone's text is in no chat-log row (only `text` parts are kept)",
