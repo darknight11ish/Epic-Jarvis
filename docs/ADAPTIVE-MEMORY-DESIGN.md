@@ -239,10 +239,13 @@ be careful.
    model output at all**, only opaque ids, counts and dates
    (`docs/JARVIS-API.md:16562`).
 2. **A summary is never read aloud as though it were your own words.** Voice is
-   already gated on where the answer's material came from
-   (`CLAUDE.md`, 2026-09-27: answers that used email, calendar, notes, documents
-   or memory stay on screen). A summary is *about* your words but is not them;
-   an answer that leans on one belongs in the "kept on screen" list.
+   already gated on where the answer's material came from — the owner's
+   decision of 2026-09-27 (`CLAUDE.md:525-530`): answers that used web search,
+   weather or home status are read aloud, and *"answers that used email,
+   calendar, notes, documents, memory, or any tool not on that short list stay
+   on screen."* A summary is *about* your words but is not them; an answer that
+   leans on one belongs in the "stays on screen" list, and saying so is a
+   one-line change to that list rather than a new rule.
 3. **You can always tell what was compressed.** The conversation shows where the
    exact turns stop and the summary begins. There is no mode in which Jarvis
    quietly speaks for words it has compressed.
