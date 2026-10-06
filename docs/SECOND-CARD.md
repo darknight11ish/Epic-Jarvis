@@ -55,6 +55,62 @@ disagree:** the model is running on the 12 GB card, which `nvidia-smi` calls
 the model is really on from `scripts\measure-cards.ps1` rather than from the
 rule above.
 
+## The choice: two ways to use your cards, pick one
+
+*(Added 2026-10-05, because you asked for it.)* At the top of Settings →
+**Second graphics card** (and above the second-card plate in the phone's
+Brain) there is now **one choice, in plain words**, instead of leaving you to
+work it out from the switches:
+
+- **One model across both cards** (`split`) - Jarvis loads one bigger model
+  and spreads it across both cards, so you get a model neither card could hold
+  on its own. It is **slower per word**, because every word has to cross from
+  one card to the other and back, and it needs **both cards to itself**, so
+  none of the switches below can be on at the same time.
+- **Two models at once, one on each card** (`concurrent`) - your everyday
+  model stays on your main card and a second, different model runs on the
+  other card. Each one runs at its own full speed and the two work at the same
+  time; that is what the switches below set up. The catch is size - each model
+  still has to fit on its own card.
+
+**They cannot both run, and the screen will not let you think they can.**
+Picking the first one while any switch below is on is refused, and the refusal
+tells you **exactly which switches to turn off** by name (it used to say "the
+second-card features", which left you to find them). Picking the second one
+just turns the first one off, straight away and with no approval card -
+turning something off never needs one.
+
+**Picking "one model across both cards" asks you first.** It raises the same
+approval card the "One bigger model on both cards" switch already raises
+(`second_card_combined_enable`), because it is the same decision: nothing runs
+until you say yes on that card. Its own row is still lower down the page -
+**it is the same setting, and either control moves both.**
+
+**There is nothing to keep in step.** Jarvis does not save "which one you
+picked" anywhere. It works the answer out from the switches themselves every
+time it reads them, so the choice and the switches cannot disagree. This is
+deliberate: a saved "mode" beside the switches would be a second thing to keep
+in step, and the one mistake that would matter - the file saying "split" while
+the switches say the other - is exactly the mistake a second stored field
+invites.
+
+**The spread setting, plainly.** For one model to cross both cards, Ollama has
+to be told to use every card it can see. That is one setting
+(`OLLAMA_SCHED_SPREAD=1`), and **Jarvis sets it on the copy of Ollama it
+starts for this** - you do not set it, and your everyday Ollama is not changed
+at all. Your everyday Ollama stays pinned to your main card by the one command
+in "The one command to run" below, exactly as before. **You never need to
+restart Ollama for this**: the copy that carries the setting is started fresh
+when you pick this way, and stopped when you pick the other.
+
+**Worth knowing before you pick it, and calculated rather than measured.**
+Ollama divides the model between the cards by how much **free** memory each
+one has, so if your everyday model is still loaded on a card, that card has
+less room than this plan expects. On your PC today your everyday model is held
+on the 12 GB card for as long as Ollama runs, with no time limit set. Nothing
+unloads it for you. If "one model across both cards" turns out slower than
+expected, or will not fit, that is the first thing to look at.
+
 ## The seven switches
 
 (Five since 2026-09-24; **Study helper** and **Referee suggestions** joined on 2026-09-30, both off.

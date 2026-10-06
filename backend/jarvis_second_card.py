@@ -80,6 +80,19 @@ the same day it was found; this file's own words had claimed the gap
 longer than it was actually still open, caught by re-reading the real
 caller list rather than trusting this comment).
 
+THE OWNER'S OWN CHOICE (2026-10-05). Asked to be given a choice between the
+two ways two cards can be used - "split" (one bigger model across both) and
+"concurrent" (two models at once, one per card) - rather than working it out
+from the switches. Both ways already existed and the rule that they cannot
+both run already existed; what this adds is the choice itself, as
+`status()["mode"]`. THE CHOICE IS DERIVED, NEVER STORED (current_mode reads
+it off "combined" and "features"), so the choice and the switches cannot
+disagree, and picking one needs no new approval action: split IS the
+"combined" switch, so it raises that switch's own existing card
+(COMBINED_ACTION), and concurrent only turns it off, which is immediate.
+See the section on the choice beside MODE_SPLIT/MODE_DETAIL below, and
+docs/SECOND-CARD.md for the owner's own guide.
+
 SUGGESTING "COMBINED" (2026-09-27, the owner's "Both, with a setting"
 answer to being asked directly). jarvis_agent.py notices two signs, each
 per conversation
@@ -700,6 +713,76 @@ COMBINED_MIN_TOTAL_MB = 18432
 #: "chosen", which still says what to do without naming the wrong thing.
 _PRESET_NAMES = {"fast": "Fastest answers", "smart": "Smartest answers",
                  "features": "Most features"}
+
+
+# --------------------------------------------------------------------------
+#   The owner's own choice: how the two cards are shared (2026-10-05)
+# --------------------------------------------------------------------------
+#
+# THE OWNER ASKED FOR ONE CHOICE. On 2026-10-05 he asked to be given a choice
+# between the two ways his two graphics cards can be used, rather than working
+# it out from the switches: "split" (one bigger model spread across both
+# cards) or "concurrent" (two different models at once, one on each card).
+#
+# BOTH WAYS ALREADY EXISTED, AND SO DID THE RULE THAT THEY CANNOT BOTH RUN.
+# "split" is the "combined" switch above (COMBINED_MODEL, OLLAMA_SCHED_SPREAD=1
+# on a third Ollama that can see both cards). "concurrent" is every other
+# switch here - the everyday Ollama on the main card, and this module's own
+# second lane pinned to the other card by its id (lane_env). The two are
+# already mutually exclusive, in code: _combined_wanted refuses to run while a
+# per-card feature is on, _wanted refuses while "combined" is on, and each
+# direction's request_change answers 409. What was missing was not a
+# mechanism. It was the CHOICE - one place, in plain words, that says which of
+# the two the owner is getting and what each one costs him.
+#
+# THE CHOICE IS NEVER STORED, AND THAT IS THE GUARD. current_mode() reads the
+# choice back off the switches that already exist. There is no "mode" field in
+# second-card.json. A second stored field beside "combined" and "features"
+# would be a second thing to keep in step with them, and the one disagreement
+# that matters - the file saying "split" while the switches say "concurrent" -
+# is exactly the disagreement a second field invites. Derived, it cannot
+# happen: the choice and the switches are the same fact, read two ways.
+#
+# NOTHING NEW IS STARTED BY PICKING ONE. Choosing "split" raises the SAME
+# approval card the "combined" switch already raises (COMBINED_ACTION,
+# second_card_combined_enable) - the decision is identical, so it reuses that
+# action and its own words rather than inventing a second name for one thing
+# (the reasoning THIRD_ACTION's comment gives for the one case where a
+# genuinely different card DID need its own action). Choosing "concurrent"
+# only turns "combined" off, which is immediate because it only narrows what
+# runs. No new Ollama, no new port, no new environment variable, and nothing
+# added to the gate tables.
+MODE_SPLIT = "split"
+MODE_CONCURRENT = "concurrent"
+#: The name of each way, and the plain words for what it costs. Read from ONE
+#: place so the desktop, the phone and the docs cannot drift apart.
+MODE_NAME = {
+    MODE_SPLIT: "One model across both cards",
+    MODE_CONCURRENT: "Two models at once, one on each card",
+}
+MODE_DETAIL = {
+    MODE_SPLIT: (
+        "Jarvis loads ONE bigger model and spreads it across both cards, so you get "
+        "a model neither card could hold on its own. The cost is speed: every word "
+        "has to cross from one card to the other and back, so it runs at roughly the "
+        "slower card's pace. It needs BOTH cards to itself, so none of the switches "
+        "below can be on at the same time. Worth knowing: Ollama divides the model by "
+        "how much memory is free on each card, so if your everyday model is still "
+        "loaded, that card has less room than this plan expects."),
+    MODE_CONCURRENT: (
+        "Jarvis keeps your everyday model on your main card and runs a second, "
+        "different model on the other card. Each one runs at its own full speed and "
+        "the two can work at the same time - that is what the switches below set up, "
+        "and each one needs the main switch on. The cost is size: each model still "
+        "has to fit on its own card, so neither can be bigger than that card."),
+}
+#: The heading and the one shared sentence both apps show above the two
+#: choices. Plain words, and it says plainly that this is one decision.
+MODE_TITLE = "How should Jarvis use your two graphics cards?"
+MODE_NOTE = (
+    "Two ways to use both cards. They cannot both run at once, because each one "
+    "wants the whole of at least one card - picking one is the whole decision, so "
+    "there is nothing to keep in step by hand.")
 
 
 # --------------------------------------------------------------------------
@@ -2290,11 +2373,62 @@ def _reconcile(sw: dict, det: dict) -> None:
         _LANE.state, _LANE.why = "failed", f"unexpected error ({type(exc).__name__})"
 
 
+def conflict_ids(sw: dict) -> list:
+    """Which of FEATURE_IDS are genuinely on *and* clash with "One bigger
+    model on both cards" - the same test _combined_conflict answers yes/no
+    to, listed instead of merely counted (2026-10-05).
+
+    Its own function so that test is written down ONCE: _combined_conflict
+    below is now this function's answer read as a boolean, and the refusal
+    the owner sees can NAME the switches to turn off ("turn off Pictures
+    first") instead of telling him to go and find them. In FEATURE_IDS order,
+    which is the order both apps show. "Referee suggestions" loads no model,
+    so it never holds a card and never clashes - _model_free.
+
+    `master` off means no feature is really running (every feature needs it),
+    so nothing clashes: the same reading _combined_conflict has always had."""
+    if not sw.get("master"):
+        return []
+    return [f for f in FEATURE_IDS if sw["features"].get(f) and not _model_free(f)]
+
+
 def _combined_conflict(sw: dict) -> bool:
     """Is a per-card feature genuinely on, so "One bigger model on both
     cards" must not run (it needs both cards to itself)?"""
-    return bool(sw["master"] and any(sw["features"].get(f) for f in FEATURE_IDS
-                                     if not _model_free(f)))
+    return bool(conflict_ids(sw))
+
+
+def current_mode(sw: dict, det: Optional[dict] = None) -> str:
+    """Which of the two ways the owner has set up, read straight off the
+    switches - NEVER stored (see this file's own section on the choice).
+
+    MODE_SPLIT       the "combined" switch is on: one model across both cards.
+    MODE_CONCURRENT  the main switch is on and at least one per-card feature
+                     is on: two different models, one on each card.
+    ""               neither is set up, so nothing is using the second card
+                     yet. A real state, and the honest one to report: every
+                     switch here starts off, and "two models at once" is not
+                     what is happening just because "split" is also not on.
+
+    Both saved on at once (a hand-edited file, or a machine that died between
+    two writes) is reported as "" - a contradiction, not a choice - and
+    mode_status() says so in words. It is also safe: _combined_wanted and
+    _wanted refuse each other, so NEITHER lane is started in that state, and
+    the cards are left free rather than fought over.
+
+    `det` is optional and answers one more case: while a chosen hardware
+    preset runs the extra features INSIDE the everyday copy of Ollama, on one
+    card (det["_main"], jarvis_hardware's own preset screen), that is neither
+    of these two ways, so the answer is "". "combined" is asked first and is
+    not affected: a preset does not stop it starting its own both-cards
+    Ollama, so if it is on, that is what is really happening."""
+    if sw.get("combined"):
+        return "" if conflict_ids(sw) else MODE_SPLIT
+    if det is not None and det.get("_main"):
+        return ""
+    if sw.get("master") and any(sw["features"].get(f) and not _model_free(f) for f in FEATURE_IDS):
+        return MODE_CONCURRENT
+    return ""
 
 
 def _combined_wanted(sw: dict, det: dict) -> bool:
@@ -3051,6 +3185,13 @@ def status() -> dict:
         # apps show it as its own row, next to "features", in the same
         # Hardware screen.
         "combined": _combined_status(sw, det, pending),
+        # The owner's own choice between the two ways his two cards can be
+        # used, in one place and in plain words (2026-10-05). DERIVED from
+        # "combined" and "features" - there is no stored mode - so the choice
+        # and the switches cannot disagree. Both choices are the switches
+        # above; this key only says which one the owner is getting and what
+        # each one costs. Purely additive: every key above is unchanged.
+        "mode": mode_status(sw, det, pending),
         # A third capable card, and which of the five features (if any) is
         # moved onto it (2026-09-28) - see the module docstring's "A THIRD
         # CARD'S OWN LANE" section. Purely additive: every key above is
@@ -3080,10 +3221,12 @@ def _combined_status(sw: dict, det: dict, pending: list) -> dict:
                f"once both cards are back." if enabled
                else f"Needs two capable graphics cards: {capable_why}.")
     elif conflict:
-        why = ("On, but a second-card feature (Longer conversations, Pictures, Learning in "
-               "the background, Browser control, Wiki builder or Study helper) is on too, "
-               "and this mode "
-               "needs both cards to itself. Turn the other one off first."
+        # Name the switches that clash (2026-10-05), for the same reason the
+        # 409 above does: the owner should not have to hunt for them.
+        ids = conflict_ids(sw)
+        one = len(ids) == 1
+        why = (f"On, but {_names(ids)} {'is' if one else 'are'} on too, and this mode needs "
+               f"both cards to itself. Turn {'it' if one else 'them'} off first."
                if enabled else "Off.")
     elif not enabled:
         why = "Off. A card to turn it on is waiting for your answer." if "combined" in pending \
@@ -3108,6 +3251,94 @@ def _combined_status(sw: dict, det: dict, pending: list) -> dict:
             "conflict": conflict, "active": active,
             "available": bool(active and running and installed is True),
             "model": model, "context": ctx, "memory_gib": gib, "why": why}
+
+
+def mode_status(sw: dict, det: dict, pending: list) -> dict:
+    """status()'s "mode" key (2026-10-05): the owner's own choice between the
+    two ways his two graphics cards can be used, in one place and in plain
+    words. See this file's own section on the choice for why it is DERIVED
+    rather than stored, and why picking "split" reuses the "combined" switch's
+    own approval card instead of raising a second kind of card for one
+    decision.
+
+    Purely additive: every other key status() returns is unchanged, both
+    choices ARE the switches that already exist, and an app that does not read
+    this key keeps working exactly as it did before.
+
+    Each option row carries enough for a picker to be drawn without guessing:
+    `selected` (this is what the switches currently say), `available` (picking
+    it would do something right now), `blocked` (why it cannot be picked, in
+    the backend's own words), `hint` (nothing wrong, but worth knowing) and
+    `pending` (its approval card is up and unanswered)."""
+    now = current_mode(sw, det)
+    ids = conflict_ids(sw)
+    ok, capable_why = _combined_capable(det)
+    preset = bool(det.get("_main"))
+    # Saved on but refused by the other side: not a choice at all, and neither
+    # lane runs (current_mode says why). Said plainly, never hidden.
+    if sw.get("combined") and ids:
+        one = len(ids) == 1
+        conflict_why = (f"\"{COMBINED_NAME}\" is saved on and so "
+                        f"{'is' if one else 'are'} {_names(ids)}, and they cannot both run - "
+                        f"Jarvis is running neither. Turn one of the two sides off.")
+    else:
+        conflict_why = ""
+    # Why the split cannot be picked right now.
+    if not ok:
+        split_blocked = f"Not yet - {capable_why}."
+    elif ids:
+        split_blocked = (f"Turn {_names(ids)} off first: one model across both cards needs both "
+                         f"cards to itself.")
+    else:
+        split_blocked = ""
+    # Picking "concurrent" only ever stops splitting, so there is nothing to
+    # refuse - but it is NOT what runs while a chosen hardware preset keeps
+    # the extra features inside the everyday Ollama on one card, and it cannot
+    # run at all without a capable second card. Both said plainly.
+    if preset:
+        concurrent_blocked = (
+            f"Not now - a hardware preset is chosen on the Hardware screen, and it runs the "
+            f"extra features inside your everyday copy of Ollama on one card. Choose "
+            f"\"No preset\" there to use both cards this way.")
+    elif not det.get("capable"):
+        concurrent_blocked = f"Not yet - {det.get('why') or 'no capable second card.'}"
+    else:
+        concurrent_blocked = ""
+    # What is still missing before two models are actually running. Not shown
+    # while splitting: then the honest reason is that split has both cards.
+    features_on = [f for f in FEATURE_IDS
+                   if sw["features"].get(f) and not _model_free(f)]
+    if now == MODE_SPLIT or preset or not det.get("capable"):
+        concurrent_hint = ""
+    elif not sw.get("master"):
+        concurrent_hint = ("Nothing is set up on the second card yet. Turn on the main switch "
+                           "below, then the switches you want the other card to run.")
+    elif not features_on:
+        concurrent_hint = ("The main switch is on, but none of the switches below is, so "
+                           "nothing is running on the second card yet.")
+    else:
+        concurrent_hint = ""
+    options = [
+        {"id": MODE_SPLIT, "name": MODE_NAME[MODE_SPLIT], "detail": MODE_DETAIL[MODE_SPLIT],
+         "selected": now == MODE_SPLIT, "available": bool(ok and not ids),
+         "blocked": split_blocked, "hint": "",
+         # The same card the "combined" switch raises, so a picker can wait
+         # and report it exactly as that switch already does.
+         "pending": "combined" in pending},
+        {"id": MODE_CONCURRENT, "name": MODE_NAME[MODE_CONCURRENT],
+         "detail": MODE_DETAIL[MODE_CONCURRENT],
+         "selected": now == MODE_CONCURRENT,
+         "available": bool(det.get("capable")) and not preset,
+         "blocked": concurrent_blocked, "hint": concurrent_hint, "pending": False},
+    ]
+    note = MODE_NOTE
+    if preset:
+        note = (f"{MODE_NOTE} Right now a hardware preset is chosen on the Hardware screen, so "
+                f"the extra features run inside your everyday copy of Ollama instead.")
+    return {"mode": now, "name": MODE_NAME.get(now, ""), "chosen": bool(now),
+            "detail": MODE_DETAIL.get(now, ""), "title": MODE_TITLE, "note": note,
+            "preset": preset, "conflict": bool(sw.get("combined") and ids),
+            "conflict_why": conflict_why, "options": options}
 
 
 def _third_status(sw: dict, det: dict, pending: list) -> dict:
@@ -3889,9 +4120,14 @@ def _request_change_combined(enabled: bool, gate: Callable, tier_of: Callable,
             return 409, {"error": f"a card to turn on {label} is already waiting - "
                                   f"approve or deny that one"}
     if _combined_conflict(sw):
-        return 409, {"error": (f"{label} needs both cards to itself: turn off the second-card "
-                               f"features that are on now first (Brain, Hardware), then ask "
-                               f"again.")}
+        # Name them (2026-10-05). This used to say "turn off the second-card
+        # features that are on now", which left the owner to work out which of
+        # seven switches it meant; the switches it means are known here.
+        ids = conflict_ids(sw)
+        one = len(ids) == 1
+        return 409, {"error": (f"{label} needs both cards to itself, and "
+                               f"{_names(ids)} {'is' if one else 'are'} on. Turn "
+                               f"{'it' if one else 'them'} off first, then pick this again.")}
     det = detect(fresh=True)
     ok, why = _combined_capable(det)
     if not ok:

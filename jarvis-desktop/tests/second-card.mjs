@@ -86,10 +86,35 @@ const section = (page) => page.evaluate(() => {
     thirdMoveDisabled: $("sc-third-move")?.disabled ?? null,
     thirdText: $("sc-third")?.innerText ?? "",
     thirdStatus: $("sc-third-status").innerText,
+    // The owner's own choice between the two ways the cards can be used
+    // (2026-10-05), from the backend's status().mode.
+    modeSectionHidden: $("sc-mode-section").hidden,
+    modeTitle: $("sc-mode-title").innerText,
+    modeNote: $("sc-mode-note").innerText,
+    modeConflictHidden: $("sc-mode-conflict").hidden,
+    modeConflict: $("sc-mode-conflict").innerText,
+    modeRows: [...document.querySelectorAll("#sc-mode-options .sc-switch")].map((row) => {
+      const input = row.querySelector("input[type=radio]");
+      return {
+        id: row.dataset.id,
+        state: row.dataset.state,
+        checked: input.checked,
+        disabled: input.disabled,
+        group: input.name,
+        text: row.innerText,
+        describedBy: input.getAttribute("aria-describedby") || "",
+      };
+    }),
+    modeStatus: $("sc-mode-status").innerText,
+    // The older "combined" switch below, which is the SAME setting as the
+    // choice's "split" - read so the two can be checked against each other.
+    combinedChecked: $("sc-switch-combined")?.checked ?? null,
+    combinedDisabled: $("sc-switch-combined")?.disabled ?? null,
   };
 });
 const suggestRow = (s, id) => s.suggestRows.find((r) => r.id === id);
 const row = (s, id) => s.rows.find((r) => r.id === id);
+const modeRow = (s, id) => s.modeRows.find((r) => r.id === id);
 const noRaw = (text) => {
   assert.doesNotMatch(text, /[{}]|HTTP \d|"available"|null|undefined|\[object/,
     `raw data on the page: ${text}`);
@@ -294,6 +319,111 @@ await check("a card already waiting: that switch says so, and the others stay us
   assert.equal(row(s, "vision").disabled, false, "Pictures cannot be asked for while another card waits");
   assert.equal(row(s, "browser_control").disabled, true);
   assert.match(row(s, "browser_control").text, /Needs Longer conversations on first/);
+});
+
+/* ── The owner's own choice (2026-10-05) ───────────────────────────────────
+ * status().mode: one decision between the two ways two cards can be used,
+ * rather than leaving the owner to work it out from the switches. Both
+ * choices ARE the switches below - the split is the "combined" switch - and
+ * the PC DERIVES the choice from them, so nothing on this page keeps two
+ * things in step: it reads the backend's own words and writes the "combined"
+ * switch through the SAME set_second_card the switch below uses. */
+
+await check("the choice is offered, in the backend's own words, and a one-card PC can pick neither", async () => {
+  const page = await open({ status: SC.one_card });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.modeSectionHidden, false, "the choice is hidden on a real answer");
+  assert.match(s.modeTitle, /How should Jarvis use your two graphics cards\?/);
+  assert.match(s.modeNote, /cannot both run at once/);
+  assert.equal(s.modeConflictHidden, true);
+  assert.deepEqual(s.modeRows.map((r) => r.id), ["split", "concurrent"]);
+  for (const o of SC.one_card.mode.options) {
+    const r = modeRow(s, o.id);
+    assert.ok(r.text.includes(o.name), `${o.id}: the backend's name is not shown`);
+    assert.ok(r.text.includes(o.detail), `${o.id}: the tradeoff is not shown`);
+    assert.equal(r.checked, false, `${o.id} is shown as chosen with nothing switched on`);
+    assert.equal(r.group, "sc-mode", `${o.id} is not one of one choice`);
+  }
+  // One card: the split cannot be picked, and says the backend's own reason.
+  const split = modeRow(s, "split");
+  assert.equal(split.disabled, true, "the split can be picked with only one card");
+  assert.match(split.text, /Not yet - needs two graphics cards/);
+  // ... and neither can the other way. The backend sends NO hint here on
+  // purpose (`concurrent_hint = ""` while there is no capable second card):
+  // "turn on the main switch below" would be advice that cannot work with one
+  // card. What it sends is the blocked line, naming the card it found.
+  const concurrent = modeRow(s, "concurrent");
+  assert.equal(concurrent.disabled, true, "two models at once can be picked with only one card");
+  assert.match(concurrent.text, /Not yet - only one graphics card found/);
+  noRaw(s.all);
+});
+
+await check("a capable second card with nothing switched on: the other way says what is still missing and can be picked", async () => {
+  const page = await open({ status: SC.capable_off });
+  const s = await section(page);
+  await page.close();
+  const concurrent = modeRow(s, "concurrent");
+  assert.equal(concurrent.disabled, false, "the other way cannot be picked while the split is off");
+  assert.match(concurrent.text, /Nothing is set up on the second card yet/);
+  assert.match(concurrent.text, /Turn on the main switch below/);
+  assert.equal(modeRow(s, "split").disabled, false, "the split cannot be picked on a capable pair");
+  noRaw(s.all);
+});
+
+await check("picking the split sends ONE request through the combined switch, and waits for its card", async () => {
+  const page = await open({ status: SC.capable_off });
+  await page.locator("#sc-mode-split").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  const calls = await page.evaluate(() => window.__calls.map(([c]) => c));
+  await page.close();
+  assert.deepEqual(s.changes, [{ feature: "combined", enabled: true }]);
+  assert.ok(!calls.includes("decide_approval"), "the page answered its own card");
+  const split = modeRow(s, "split");
+  assert.equal(split.checked, false, "shown as chosen before the card was approved");
+  assert.equal(split.disabled, true, "a second card could be raised for the same choice");
+  assert.equal(split.state, "waiting");
+  assert.match(split.text, /Waiting for your approval/);
+  assert.match(s.modeStatus, /Waiting for your approval/);
+});
+
+await check("the split in force: it shows as the chosen way, and the switches agree", async () => {
+  const page = await open({ status: SC.combined_running });
+  const s = await section(page);
+  await page.close();
+  assert.equal(modeRow(s, "split").checked, true, "the way in force is not shown as chosen");
+  assert.equal(modeRow(s, "split").disabled, true);
+  assert.equal(modeRow(s, "split").state, "on");
+  assert.equal(modeRow(s, "concurrent").checked, false);
+  assert.equal(s.modeConflictHidden, true);
+  // The switch below is the same setting, so it must say the same thing -
+  // never one saying on while the other says off.
+  assert.equal(s.combinedChecked, true, "the combined switch disagrees with the choice");
+  assert.match(s.all, /This is the same setting as "One model across both cards"/);
+});
+
+await check("picking the other way switches the split off at once, and raises no card", async () => {
+  const page = await open({ status: SC.combined_running });
+  await page.locator("#sc-mode-concurrent").click();
+  await page.waitForTimeout(300);
+  const s = await section(page);
+  const calls = await page.evaluate(() => window.__calls.map(([c]) => c));
+  await page.close();
+  assert.deepEqual(s.changes, [{ feature: "combined", enabled: false }]);
+  assert.ok(!calls.includes("decide_approval"), "turning a way OFF raised a card");
+  assert.match(s.modeStatus, /is off/);
+});
+
+await check("an older backend that sends no mode hides the whole choice, and the switches still work", async () => {
+  const older = JSON.parse(JSON.stringify(SC.capable_off));
+  delete older.mode;
+  const page = await open({ status: older });
+  const s = await section(page);
+  await page.close();
+  assert.equal(s.modeSectionHidden, true, "the choice is drawn from a backend that has none");
+  assert.equal(s.bodyHidden, false, "the rest of the section was hidden with it");
+  assert.equal(row(s, "master").disabled, false, "the switches stopped working");
 });
 
 /* ── A third graphics card (2026-09-28) ───────────────────────────────────

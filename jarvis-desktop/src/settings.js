@@ -1601,6 +1601,14 @@ const sc = {
   pinStatus: $("sc-pin-status"),
   combined: $("sc-combined"),
   combinedStatus: $("sc-combined-status"),
+  // The owner's own choice between the two ways the cards can be used
+  // (2026-10-05). Hidden whole when the backend has no `mode`.
+  modeSection: $("sc-mode-section"),
+  modeTitle: $("sc-mode-title"),
+  modeNote: $("sc-mode-note"),
+  modeConflict: $("sc-mode-conflict"),
+  modeOptions: $("sc-mode-options"),
+  modeStatus: $("sc-mode-status"),
   thirdSection: $("sc-third-section"),
   thirdFound: $("sc-third-found"),
   third: $("sc-third"),
@@ -2161,6 +2169,131 @@ function scShowProblem(words) {
   scRestoreFocusId = null;
 }
 
+/* ── The owner's own choice (2026-10-05) ───────────────────────────────────
+   One decision between the two ways two graphics cards can be used, instead
+   of leaving the owner to work it out from the switches below: "One model
+   across both cards" (the split) or "Two models at once, one on each card".
+
+   BOTH CHOICES *ARE* THE SWITCHES BELOW - the split is the "combined" switch
+   - and the backend DERIVES the choice from them
+   (jarvis_second_card.current_mode), so nothing here has to keep two things
+   in step: this reads `status.mode` and writes the "combined" switch through
+   the SAME set_second_card command the switch below already uses. That is
+   also why no new Rust command was needed.
+
+   Every word comes from the backend (`status.mode`, built by
+   mode_status). An older backend with no `mode` hides this whole block,
+   exactly the way a missing `suggest` hides its own.                        */
+
+/** What picking `id` sends to the "combined" switch: the split is it, on. */
+function scModeWanted(id) {
+  return id === "split";
+}
+
+function scModeRow(option, pending) {
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = option.id;
+  // The split IS the "combined" switch, so its card waiting is read from the
+  // same `pending` list the switch's own row reads. The backend derives its
+  // own `option.pending` from exactly that list, so the two always agree -
+  // reading it here too means the choice cannot show a stale waiting state.
+  const waiting = Boolean(option.pending || (scModeWanted(option.id) && pending.has("combined")));
+  row.dataset.state = waiting ? "waiting" : option.selected ? "on" : "off";
+
+  const label = scNode("label", "toggle");
+  const input = document.createElement("input");
+  input.type = "radio";
+  input.name = "sc-mode";
+  input.id = `sc-mode-${option.id}`;
+  input.checked = Boolean(option.selected);
+  // A choice already made is not a choice any more, one whose card is waiting
+  // must not be asked for twice, and one that cannot be made right now says
+  // why in the line under it.
+  input.disabled = Boolean(waiting || option.selected || option.available !== true);
+  const text = scNode("span", "", option.name || option.id);
+  text.append(scNode("span", "toggle-detail", option.detail || ""));
+  label.append(input, text);
+  row.append(label);
+
+  const lines = scNode("div", "sc-lines");
+  const describedBy = [];
+  const addLine = (className, words) => {
+    if (!words) return;
+    const line = scNode("p", className, words);
+    line.id = `sc-mode-${option.id}-${className.split(" ").pop()}`;
+    describedBy.push(line.id);
+    lines.append(line);
+  };
+  // Why it cannot be picked right now, then its card waiting, then what is
+  // still missing before it is really running - each the backend's own words.
+  addLine("sc-held", option.blocked);
+  addLine("sc-held sc-waiting", waiting ? SC_WAITING : "");
+  addLine("sc-why", option.hint);
+  if (describedBy.length) input.setAttribute("aria-describedby", describedBy.join(" "));
+  row.append(lines);
+
+  input.addEventListener("change", () => scModePick(option.id, input));
+  return row;
+}
+
+/** One request, through the command the "combined" switch already uses. */
+async function scModePick(id, input) {
+  if (scBusy) {
+    input.checked = !input.checked;
+    return;
+  }
+  scBusy = true;
+  // Before disabling blurs it: see `scRestoreFocusId`.
+  scRestoreFocusId = input.id;
+  input.disabled = true;
+  const wanted = scModeWanted(id);
+  report(sc.modeStatus, wanted
+    ? "Asking to use one model across both cards…"
+    : "Switching back to two models, one on each card…");
+  try {
+    const out = await invoke("set_second_card", { feature: "combined", enabled: wanted });
+    if (wanted && out && out.pending === true) {
+      report(sc.modeStatus, SC_WAITING, "ok");
+      announce(SC_WAITING);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.modeStatus, out.message, "ok");
+    } else {
+      report(sc.modeStatus, wanted ? "Done." : "Switched back. The switches below say what is on.",
+        "ok");
+    }
+  } catch (error) {
+    report(sc.modeStatus, scProblemWords(error), "bad");
+    announce(sc.modeStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  // The choice shows what Jarvis says, never what was clicked.
+  await loadSecondCard();
+}
+
+function scModePaint(status) {
+  if (!sc.modeSection) return;
+  const mode = status && status.mode;
+  if (!mode || !Array.isArray(mode.options) || !mode.options.length) {
+    // An older backend, or an answer that cannot be read: nothing is drawn,
+    // rather than an empty box that looks like a broken setting.
+    sc.modeSection.hidden = true;
+    return;
+  }
+  sc.modeSection.hidden = false;
+  sc.modeTitle.textContent = mode.title || "How should Jarvis use your two graphics cards?";
+  sc.modeNote.textContent = typeof mode.note === "string" ? mode.note : "";
+  const conflict = typeof mode.conflict_why === "string" ? mode.conflict_why.trim() : "";
+  sc.modeConflict.hidden = !conflict;
+  sc.modeConflict.textContent = conflict;
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
+  const pending = new Set(Array.isArray(status.pending) ? status.pending : []);
+  sc.modeOptions.replaceChildren(...mode.options.map((o) => scModeRow(o, pending)));
+  if (focused && focused.startsWith("sc-mode-") && document.getElementById(focused)) {
+    document.getElementById(focused).focus();
+  }
+}
+
 function scPaint(status) {
   const previous = scLast;
   scLast = status;
@@ -2217,6 +2350,11 @@ function scPaint(status) {
 
   // "When to suggest the bigger model": its own subsection, no card either way.
   scPaintSuggest(status);
+  // The owner's own choice between the two ways the cards can be used
+  // (2026-10-05): the front door to the switches below, drawn from the
+  // backend's own words. Before the one-shot focus marker is cleared, so its
+  // own block gets the same keyboard-restore as the switches.
+  scModePaint(status);
   // One-shot: consumed by whichever block above matched it.
   scRestoreFocusId = null;
 
