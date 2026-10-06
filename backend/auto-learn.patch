@@ -90,7 +90,7 @@
          unreachable = []
  
          def _ask(prompt: str):
-@@ -720,7 +764,23 @@
+@@ -720,7 +764,30 @@
              return True
          self._last = seen
          if out:
@@ -99,18 +99,25 @@
 +            # card only when it passes every check in jarvis_auto_learn.py
 +            # (the owner's own words, seen live by this PC, on a local
 +            # model, nothing sensitive unless allowed); the rest stay cards,
-+            # each with its reason. Never the reason a pass fails.
++            # each with its reason.
++            _auto, _why = {}, ""
 +            try:
 +                import jarvis_auto_learn
 +                _auto = jarvis_auto_learn.after_pass(
 +                    out, convo, conversation_id=said_cid, model=model,
 +                    ollama=jarvis_extract.OLLAMA, learning_on=learning_enabled())
-+            except Exception:
-+                _auto = {}
++                _why = str((_auto or {}).get("error") or "")
++            except Exception as _exc:
++                _auto, _why = {}, type(_exc).__name__
 +            _saved = len((_auto or {}).get("saved") or [])
 +            if _saved:
 +                print(f"  memory     {_saved} fact(s) saved automatically")
-+            if len(out) > _saved:
++            if _why:
++                # Honest errors: a pass that raised did NOT leave its
++                # proposals waiting for review (2026-10-06).
++                print(f"  memory     the learning pass failed ({_why}) - nothing was "
++                      f"saved or carded for it")
++            elif len(out) > _saved:
 +                print(f"  memory     {len(out) - _saved} proposal(s) waiting for review")
          return True
  

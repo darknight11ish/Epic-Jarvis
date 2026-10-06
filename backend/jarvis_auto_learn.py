@@ -478,6 +478,111 @@ def _reset_for_tests() -> None:
         _HUSH.clear()
 
 
+# --------------------------------------------------------------------------
+#   Counters: what the learner has actually done
+# --------------------------------------------------------------------------
+#
+# WHY (2026-10-06 audit). The live store on the owner's PC held ZERO facts and
+# nothing anywhere said so: `/api/memory/learning` reported settings and a
+# pending count of 0, which reads as "all caught up" rather than "nothing has
+# ever been learned". Two failure modes were indistinguishable from success:
+# a pass that saved nothing, and a pass that raised (the exception was caught
+# and its `error` key read by nobody).
+#
+# These counters are numbers only - never a fact's words - kept in one small
+# file in the config folder. Saving is best effort: a read-only folder must
+# not break learning.
+
+def stats_path() -> Path:
+    return _config_dir() / "learning-stats.json"
+
+
+def _stats_read() -> dict:
+    out = {"passes": 0, "saved": 0, "carded": 0, "failed": 0,
+           "last_pass_at": None, "last_error": None, "last_error_at": None,
+           "last_saved_at": None}
+    try:
+        raw = json.loads(stats_path().read_text(encoding="utf-8"))
+    except Exception:
+        return out
+    if isinstance(raw, dict):
+        for k in out:
+            if k in raw:
+                out[k] = raw[k]
+    return out
+
+
+def _stats_write(d: dict) -> None:
+    p = stats_path()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        os.replace(tmp, p)
+    except Exception:
+        # Never let bookkeeping break the thing it is counting.
+        pass
+
+
+def note_pass(*, saved: int = 0, carded: int = 0, at: Optional[float] = None) -> dict:
+    """One learning pass finished. Records what it produced."""
+    d = _stats_read()
+    d["passes"] = int(d.get("passes") or 0) + 1
+    d["saved"] = int(d.get("saved") or 0) + max(0, int(saved))
+    d["carded"] = int(d.get("carded") or 0) + max(0, int(carded))
+    now = time.time() if at is None else at
+    d["last_pass_at"] = now
+    if saved:
+        d["last_saved_at"] = now
+    _stats_write(d)
+    return d
+
+
+def note_failure(where: str, exc: BaseException, *, at: Optional[float] = None) -> dict:
+    """A learning pass RAISED. One audit line, one counter, and the lesson is
+    carried on the next status read - so a broken loop cannot look like a
+    quiet one."""
+    d = _stats_read()
+    d["failed"] = int(d.get("failed") or 0) + 1
+    now = time.time() if at is None else at
+    d["last_error"] = f"{where}: {type(exc).__name__}"
+    d["last_error_at"] = now
+    _stats_write(d)
+    try:
+        _audit("learning.failed", {"where": str(where), "kind": type(exc).__name__})
+    except Exception:
+        pass
+    return d
+
+
+def note_saved(n: int, *, at: Optional[float] = None) -> dict:
+    """`n` facts were saved outside a full pass (a "Remember: ..."). Counted,
+    so the total is the truth about how much Jarvis has learned."""
+    d = _stats_read()
+    d["saved"] = int(d.get("saved") or 0) + max(0, int(n))
+    d["last_saved_at"] = time.time() if at is None else at
+    _stats_write(d)
+    return d
+
+
+def stats() -> dict:
+    """The counters, plus the one plain sentence a screen should show. Numbers
+    only - ids, kinds and times, never a fact's words."""
+    d = _stats_read()
+    out = dict(d)
+    if not d.get("passes"):
+        out["note"] = ("No learning pass has run yet, so Jarvis has not had the chance "
+                       "to save anything.")
+    elif not d.get("saved"):
+        out["note"] = (f"{d['passes']} learning pass(es) have run and saved nothing yet; "
+                       f"{d['carded']} fact(s) are waiting on cards.")
+    else:
+        out["note"] = f"{d['saved']} fact(s) saved so far, over {d['passes']} pass(es)."
+    if d.get("last_error"):
+        out["note"] += f" The last pass failed ({d['last_error']})."
+    return out
+
+
 def learning_status(learning_on: Optional[bool] = None, floor: Optional[bool] = None) -> dict:
     """GET /api/memory/learning's body. `learning_on` is the backend's own
     learning_enabled(); None when the caller does not know it."""
@@ -487,6 +592,17 @@ def learning_status(learning_on: Optional[bool] = None, floor: Optional[bool] = 
            "auto_waiting": a["waiting"], "sensitive_waiting": s["waiting"],
            "auto_last": a["last"], "sensitive_last": s["last"],
            "why": st["why"]}
+    # What the learner has actually done (2026-10-06). `facts_total` is the
+    # number of facts in use right now: the one number that makes "0 facts"
+    # visible on a screen instead of inferable from a pending count of 0.
+    try:
+        out["counters"] = stats()
+    except Exception:
+        pass
+    try:
+        out["facts_total"] = len(_store().current_facts())
+    except Exception:
+        pass
     if learning_on is not None:
         out["enabled"] = bool(learning_on)
         out["auto_active"] = bool(learning_on) and st["auto"]
@@ -1977,8 +2093,15 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
         if result["saved"]:
             publish(result["saved"])
             _entity_model_pass(result["saved"], ollama, model)
+        # Counters, so a pass that saves nothing is visible as such rather
+        # than as "no news" (2026-10-06).
+        note_pass(saved=len(result["saved"]), carded=len(result["cards"]))
     except Exception as exc:
         result["error"] = type(exc).__name__
+        # One audit line and one counter. Before this, the exception was kept
+        # in a key no caller read, and the caller then printed "N proposal(s)
+        # waiting for review" - which was not necessarily true.
+        note_failure("after_pass", exc)
     finally:
         # Every turn this pass read - with or without proposals - so a
         # Forget or Erase afterwards knows which turns are already learned
@@ -2121,8 +2244,10 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
         except Exception:
             pass
         publish(result["saved"])
+        note_saved(len(result["saved"]))
     except Exception as exc:
         result["error"] = type(exc).__name__
+        note_failure("after_remember", exc)
     return result
 
 
