@@ -70,10 +70,10 @@ desktop, an 8B model in Ollama on the same machine, a Tauri 2 desktop shell
 around it, and an Android companion reachable over Tailscale or NordVPN
 Meshnet (both private device-to-device networks, never a public tunnel).
 
-Hardware: an RTX 2080 Super (8 GB) today. **The owner is adding an RTX 2060
-12 GB as a second card** - plan features with that second, larger-context
-lane in mind, but do not switch anything on that depends on it until it is
-installed and measured. `docs/MODEL-TOPOLOGY.md` has the numbers.
+Hardware: an RTX 2080 Super (8 GB) and an RTX 2060 12 GB. **Both are installed
+and measured** (2026-10-05, `docs/MEASURED-2026-10-05-owner-pc.md`); the 2060 is
+the second, larger-context lane. Every feature that uses it keeps its own
+switch, off until the owner turns it on. `docs/MODEL-TOPOLOGY.md` has the numbers.
 
 - `jarvis-desktop/` - the Tauri desktop app. Rust in `src-tauri/`, the windows
   in `src/`.
@@ -1809,32 +1809,44 @@ notification, card, quick-access and coverage audits (one pull request):
   the real files only afterwards; the end is a green, yellow or red summary with
   an exit code; a half-patched backend gets a one-line restore; a running Jarvis
   stops the run (`-Force` overrides). Not run on real PowerShell 5.1.
-- **Owner decisions recorded, not yet built (queue, in this order):** (1) a
-  notification settings screen in both apps (per kind: on/off, style, Test
-  button, quiet hours that never silence urgent alerts or approvals); urgent
-  alerts break through Do Not Disturb / Focus Assist where the system allows,
-  with a note, and a late urgent alert follows the silent "Missed" rule; reminders
-  and briefings get their own phone channel; (2) tap-to-talk on the phone; (3)
-  quick access: "current task with Stop" and "approvals waiting" as widget
-  sources, "graphics memory per card" and "tokens per second" as fixed widget
-  sources (marked not measured), edit a saved widget, per-widget transparency,
-  accent, high contrast and a live preview, and "Pin to home screen" for any
-  Brain section or chat; (4) card experience: after any approve one line says
-  which Undo exists; past approvals show one non-sensitive summary line; setup
-  cards in plain words; pinned Approve/Deny on long phone cards; a quiet
-  reminder when a routine card has under 60 s left; (5) a suggestion line in
-  Brain > Model for a 16-32 GB first card ("your card can hold the 14B at 32K"),
-  and a 16 GB or larger first card counts as capable for Pictures, Wiki and
-  Browser without a preset (each still off until approved); (6) per-model
-  thinking levels - Off, Quick, Deep or Auto, set separately for the everyday
-  model and each lane's model, only levels the model supports, default Off,
-  voice answers stay fast, no card to change; (7) multi-model work: failover to
-  the main card when a lane fails, a checker (bigger model reviews tool plans and
-  code only) and local compare, each off by default and measured first, plus a
-  per-lane measured log; (8) test hardening (a per-patch "reads original text"
-  ratchet, skips no longer count as passes); (9) "Restore to before" for an app
-  merge (with the app builder, after the 12 GB card); (10) a stale-area check
-  after every big merge.
+- **Owner decisions recorded, not yet built (queue, in this order). A 2026-10-05
+  pass marked every item that is now built; the marks are the record, so read
+  them before trusting any line below.** (1) a notification settings screen in
+  both apps (per kind: on/off, style, Test button, quiet hours that never
+  silence urgent alerts or approvals) - **the desktop screen is built 2026-09-30**
+  (`settings.html` "Notifications", `notifications.rs`); **the phone's own screen
+  is still open**; urgent alerts break through Do Not Disturb / Focus Assist
+  where the system allows, with a note - **built 2026-09-30** (`winrt_toast.rs`'s
+  `scenario="alarm"`) - and a late urgent alert follows the silent "Missed" rule
+  - **built** on the PC (`brain/schedule.rs`) and on the phone
+  (`JarvisRuntime.kt`); reminders and briefings get their own phone channel -
+  **built** (`strings.xml`'s `channel_schedule_desc`); (2) tap-to-talk on the
+  phone - **built 2026-10-01** (`eabca34d`); (3) quick access: "current task with
+  Stop" and "approvals waiting" as widget sources, "graphics memory per card" and
+  "tokens per second" as fixed widget sources (marked not measured), edit a saved
+  widget, per-widget transparency, accent, high contrast and a live preview
+  (**the preview is built 2026-09-30**, `widget-board.js`), and "Pin to home
+  screen" for any Brain section or chat; (4) card experience: after any approve
+  one line says which Undo exists - **built 2026-09-30 in both apps** (`main.js`'s
+  `desktopUndoNotice`, `JarvisRuntime.kt`'s `undoNoticeFor`); past approvals show
+  one non-sensitive summary line - **built 2026-09-26** (`9d1dddab`); setup cards
+  in plain words; pinned Approve/Deny on long phone cards; a quiet reminder when a
+  routine card has under 60 s left; (5) a suggestion line in Brain > Model for a
+  16-32 GB first card ("your card can hold the 14B at 32K") - **built 2026-09-30**
+  (`brain.js`), and a 16 GB or larger first card counts as capable for Pictures,
+  Wiki and Browser without a preset (each still off until approved) - **built
+  2026-09-30** (`jarvis_second_card.py`); (6) per-model thinking levels - Off,
+  Quick, Deep or Auto, set separately for the everyday model and each lane's
+  model, only levels the model supports, default Off, voice answers stay fast, no
+  card to change - **built 2026-10-01** (Section 5.5, `jarvis_thinking.py`);
+  (7) multi-model work: failover to the main card when a lane fails, a checker
+  (bigger model reviews tool plans and code only) and local compare (**local
+  compare built**, `jarvis_chatbot_compare.py`), each off by default and measured
+  first, plus a per-lane measured log; (8) test hardening (a per-patch "reads
+  original text" ratchet, skips no longer count as passes - **the skip half is
+  built**, `run_suites.py`); (9) "Restore to before" for an app merge (with the
+  app builder, after the 12 GB card); (10) a stale-area check after every big
+  merge.
 - **Rejected this session (ideas only):** Xinference, LocalAI, GPUStack, Triton,
   a llama-server supervisor, screenpipe (stays rejected), Outlines, STORM, MCP
   filesystem/git servers, Zebar, yasb, tauri-plugin-decorum, json-to-compose

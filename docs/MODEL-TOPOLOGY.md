@@ -1,11 +1,11 @@
 # What runs on the GPU, and how much context it gets
 
-RTX 2080 Super, 8 GB, Turing sm75. Ryzen 9 3900X. Windows 11.
+RTX 2080 Super, 8 GB, Turing sm75, and an RTX 2060 12 GB. Ryzen 9 3900X. Windows 11.
 
-**Coming soon:** an RTX 2060 12 GB as a second card. Everything below the
-next heading was worked out for the 2080 Super alone; see
-[The planned second card](#the-planned-second-card-rtx-2060-12-gb) for what
-changes.
+**Both cards are installed and measured** (2026-10-05,
+[MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)). Everything below
+[The planned second card](#the-planned-second-card-rtx-2060-12-gb) was worked out
+before the second card went in, so read that page for what is really measured.
 
 Read this if you are about to change models, change context length, or wonder
 why a long conversation gets strange.
