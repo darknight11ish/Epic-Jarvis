@@ -4144,37 +4144,44 @@ class _TurnWatch:
             result = {k: v for k, v in result.items() if k != "_retirement_result"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
-            # "The conversation has read outside text" is a PROPERTY of the
-            # turn from the moment a tool reads - not a flag that only some
-            # refusals remember to test (2026-10-06 audit, finding 4: reading
-            # set `read`, never `tainted`, so a future refusal that tested
-            # only `tainted` would be bypassable in the very turn that did the
-            # reading). Only ever stricter: nothing is allowed BECAUSE of it.
+            # `read` IS THE THIS-TURN SIGNAL. `tainted` IS THE CONVERSATION'S.
             #
-            # A NOTE WRITE IS NOT A READ (fixed 2026-10-06). A note writer's
-            # own result is Jarvis's confirmation of what it wrote - the rule
-            # note_needs_a_person() states below, where the
-            # `any(n not in NOTE_WRITES ...)` clause exists for exactly this,
-            # and the same rule is in that function's own docstring. Tainting
-            # here defeated that clause: the second note of a clean turn was
-            # asked as `write_notes_after_outside_text`, a card that blames
-            # Jarvis's own earlier note for outside text that never arrived
-            # (test_injection_cases.py, "clean turn, two notes: both saved, no
-            # card"). It also stopped a plan whose later step is a note, which
-            # asked that step's card under the wrong action name and was
-            # refused (test_agent_plan_wiring.py, the three "chain:" checks).
-            # Real reads - email, files, the web, notes read back, screen,
-            # memory - are untouched and still taint the turn.
-            # AND NEITHER IS THE OWNER'S OWN SPENDING TABLE. _spending_refusal()
-            # makes the same exemption in `read` - "any(n != SPENDING_TOOL for n
-            # in watch.read)" - for the same reason, and the blanket taint
-            # defeated it too: one `my_spending` call (its own `files` action, or
-            # the first table) made every later call in that turn report
-            # SPENDING_OUTSIDE instead of the one-table rule, and made a second
-            # table's card blame "outside text" that never arrived
-            # (test_spending.py, four checks).
-            if name not in NOTE_WRITES and name != SPENDING_TOOL:
-                self.tainted = True
+            # 8105c342 also set `tainted = True` here, for every tool, to close
+            # audit finding 4 ("reading set `read`, never `tainted`, so a future
+            # refusal that tested only `tainted` would be bypassable in the very
+            # turn that did the reading"). That was the wrong place for it: this
+            # is the per-tool record, and three rules in this file already exempt
+            # a tool's OWN earlier call in the same turn - each testing `tainted`
+            # BEFORE that exemption, so one call defeated it:
+            #
+            #   * note_needs_a_person(): `self.tainted or any(n not in
+            #     NOTE_WRITES for n in self.read)`. A note write's own
+            #     confirmation tainted the turn, so the SECOND note of a clean
+            #     turn went to the gate as `write_notes_after_outside_text`
+            #     (test_injection_cases.py), and a plan whose later step is a
+            #     note was refused under that wrong action name
+            #     (test_agent_plan_wiring.py).
+            #   * _spending_refusal(): `any(n != SPENDING_TOOL for n in
+            #     watch.read)`. One `my_spending` call - its own `files` action,
+            #     or the first table - made every later call in the turn report
+            #     SPENDING_OUTSIDE instead of the one-table rule
+            #     (test_spending.py, four checks).
+            #   * _form_review_refusal(): `other_reads = any(n !=
+            #     "browser_control" for n in watch.read)`, the owner's
+            #     2026-09-30 rule that the form page Jarvis itself opened is not
+            #     outside text for it.
+            #
+            # It also made the card LIE: `tainted`'s own sentence is "Earlier in
+            # this conversation Jarvis read text from outside", and the two-notes
+            # card said exactly that when nothing outside had been read at all.
+            #
+            # Finding 4 stays closed without it. Every refusal in this file tests
+            # `read` as well as `tainted` - `watch.read or watch.tainted`,
+            # `any(n != ... for n in watch.read)`, `self.read or self.tainted` -
+            # and `read` is set for exactly the same tools, one line above. So a
+            # genuine outside read (email, files, the web, notes read back, the
+            # screen, memory) still makes a note ask and still refuses a bank file
+            # in the very turn that did the reading.
             if name == "browser_control":
                 self.browser_hosts |= _hosts_of_browser_result(result)
             pieces = _strings_in(result, [])

@@ -129,6 +129,9 @@ NOT_SHIPPED = {
     "_fake_imap.py": "test plumbing: an in-memory IMAP server for the inbox-tidy suite and "
                      "tools/gen_inbox_tidy_cases.py",
     "_config_diff.py": "run by apply-patches.ps1 from this repository",
+    "_apply_toml_tiers.py": "run by apply-patches.ps1 from this repository, to add the "
+                            "[autonomy.tiers] lines a new patch needs to the owner's "
+                            "existing settings file (2026-10-06)",
     "run_suites.py": "CI's test runner",
     "selftest.py": "run from this repository against the backend",
     "eval_memory.py": "the memory self-test, run from this repository on a scratch store",

@@ -179,7 +179,7 @@ on a throwaway copy instead.
 | `referee.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Referee suggestions" and "Study helper"** (the owner's decisions of 2026-09-30; `docs/JARVIS-API.md` section 108, `docs/STUDY-FROM-TEXT-DESIGN.md` section 13). Two more switches on the second graphics card, both built OFF until the card is installed and measured. THREE hunks: in `jarvis_gate.py` the new action `referee_tick` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `topics.patch`'s own last lines, so it goes after it); in `jarvis_hud.py` ONE block right after `topics.patch`'s, which installs the quiet hourly "This looks done - tick it?" look and hands the quiz its model call (`jarvis_second_card.wire_study()`), so the quiz uses the second card while "Study helper" is on. It adds no route and no tool. Needs `jarvis_referee.py` (and the rebuilt `jarvis-framework.toml`'s `referee_tick = "ask"` line). Both switches are rows in `GET /api/second-card`; turning either on is the ordinary second-card card. Referee suggestions only proposes: the owner's tap ticks a goal step. See "Referee suggestions and Study helper", at the very end. |
 | `tag-suggest.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Suggest tags overnight"** (the owner's decision of 2026-09-30; `docs/JARVIS-API.md` section 104, `docs/OVERNIGHT-TAGS-DESIGN.md`; up to 3 cards a night). TWO gate hunks: `chat_tags_suggest_on` and `chat_tag_suggest` join the "acts only on tier ask" set and get their `_RISK` lines (right after `referee.patch`'s own, so it goes after it); ONE `jarvis_hud.py` block right after `referee.patch`'s that keeps the quiet hourly `tag_suggest` look on the one scheduler in step with the switch. It adds no tool; the routes `GET`/`POST /api/history/tags/suggest` and `POST /api/history/mark` are named in `chat-history.patch` and answered by `jarvis_chat_log.py`. Needs `jarvis_tag_suggest.py` (and the rebuilt `jarvis-framework.toml`'s two `ask` lines). Off by default; turning it on is one card; each suggested tag is one more card and is filed only on a tap. The local model reads only the owner's own first six messages of an untagged, ordinary chat that never read outside text (ARCHITECTURE section 5). Tests: `test_tag_suggest.py`, `test_chat_marks.py` (the "New section here" divider, JARVIS-API section 106, is in `jarvis_chat_log.py` and `chat-history.patch`). |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
-| `readpage.patch` | `jarvis_gate.py` | **"Read one web page out loud"** (the owner's request of 2026-10-05: "does jarvis have the ability for me to post a webpage into jarvis and it can read the content out loud?"; `docs/JARVIS-API.md` section 115). TWO hunks in `jarvis_gate.py` only - no route and no `jarvis_hud.py` block at all, because the door is a MODEL TOOL (`read_web_page`), not a route: `read_web_page` joins the "acts only on tier ask" set and gets its `_RISK` line (`"no", "outbound"` - the PC contacts that one website and the request cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone). Its context is `quiz-cloud.patch`'s own added lines, so it goes after it - last, like every new patch. Needs `jarvis_readpage.py` and `jarvis_agent.py` copied in (both are in `apply-patches.ps1`'s shipped list); without them the tool is simply not offered to the model and the gate row is never used. The tool is **off until `"read_web_page"` is added to `[tools].enabled`** in `jarvis-framework.toml`, like every tool but `web_search`. Tests: `backend/test_readpage.py`. See "Read one web page out loud", at the very end. |
+| `readpage.patch` | `jarvis_gate.py` | **"Read one web page out loud"** (the owner's request of 2026-10-05: "does jarvis have the ability for me to post a webpage into jarvis and it can read the content out loud?"; `docs/JARVIS-API.md` section 115). THREE hunks in `jarvis_gate.py` only - no route and no `jarvis_hud.py` block at all, because the door is a MODEL TOOL (`read_web_page`), not a route: `read_web_page` joins the "acts only on tier ask" set, gets its `_RISK` line (`"no", "outbound"` - the PC contacts that one website and the request cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and its `_TOOL_ACTIONS` line (the third hunk, added 2026-10-06 - without it `action_for_tool()` fell through to `unclassified_tool`, so the card the owner was shown was never the one this tool raises; found on the owner's own PC, see below). Its context is `quiz-cloud.patch`'s own added lines and `inbox-tidy.patch`'s own `_TOOL_ACTIONS` line, so it goes after both - last, like every new patch. Needs `jarvis_readpage.py` and `jarvis_agent.py` copied in (both are in `apply-patches.ps1`'s shipped list); without them the tool is simply not offered to the model and the gate row is never used. The tool is **off until `"read_web_page"` is added to `[tools].enabled`** in `jarvis-framework.toml`, like every tool but `web_search`. Tests: `backend/test_readpage.py`. See "Read one web page out loud", at the very end. |
 
 ## All but two of the patches apply, and that is correct
 
@@ -18566,8 +18566,47 @@ Hello on the PC, a screen lock on the phone), in `jarvis_asks_first.HARD_LIMITS`
 and `MUST_ASK`, on the "What asks first" page under **The internet**, on
 `LOCKDOWN_ACTIONS`, and in `jarvis_agent.NEEDS_A_PERSON` - so at any tier, a
 run nobody was asked about is refused. `readpage.patch` also puts the action in
-`_NO_RULE_FROM_DENIAL`: answering one card with a "no" proposes no standing
-memory rule.
+`_NO_RULE_FROM_DENIAL` (answering one card with a "no" proposes no standing
+memory rule) and in `jarvis_gate._TOOL_ACTIONS` as `"read_web_page":
+"read_web_page"`.
+
+**The `_TOOL_ACTIONS` line was missing until 2026-10-06, and that is worth
+knowing about.** The first version of the patch gave the action its risk row
+and its place in the "acts only on tier ask" set and nothing else, so
+`action_for_tool("read_web_page")` fell through to `unclassified_tool` - the
+gate's fail-closed answer, which resolves to `ask`, so nothing ever ran
+unasked. It was still wrong: the card the owner was shown was not the one this
+tool raises, and two suites say so by name (`test_agent.py`:
+"jarvis_gate._TOOL_ACTIONS has an entry for read_web_page's lookup name", and
+`test_gate_names.py`: "every tool jarvis_agent offers resolves to a real
+action, not unclassified_tool"). Both were red on the owner's PC the first
+time these modules met the gates they are patched into - which is exactly what
+those two suites exist for. The tool's own name IS its action name
+(`jarvis_agent.Tool`'s default when `gate_lookup_name` is omitted), so the
+entry is the plain self-map every neighbour of that shape already has.
+
+## The tier line reaches an existing settings file (2026-10-06)
+
+The `[autonomy.tiers]` line for a new action used to reach a FRESH install
+only. `apply-patches.ps1` never overwrote `jarvis-framework.toml` - rightly,
+it holds decisions only the owner makes - and all it did about the difference
+was print it. So `read_web_page = "ask"` and `chat_card_pin = "ask"` were in
+this repository's copy and in nobody's existing file, and two more checks went
+red on the owner's PC ("every action in the repository's shipped
+[autonomy.tiers] has a line in the live one": 80 live tier lines, 82 shipped).
+A missing tier is not unsafe - it takes `unknown_action_tier`, "ask" - but the
+feature cannot work as written, and the update ended `DONE WITH PROBLEMS`.
+
+The patcher now adds the missing tier lines itself, through
+`backend/_apply_toml_tiers.py`, which is deliberately the least it can do: only
+keys that are missing, only inside `[autonomy.tiers]`, always the shipped
+value (never looser than the "ask" the action already resolved to), never a key
+that is already there whatever it says, a dated copy of the file first, and no
+write at all unless the result parses and every other line is unchanged.
+Everything else the two files disagree about - `[tools].enabled`, a notes
+folder, which voice - is still only printed. `tools/sync-framework-tiers.py`
+stays what it was: the thing a person runs when a live value is LOOSER than
+the shipped one, which is a decision, not a merge.
 
 ## Off until the owner switches it on
 

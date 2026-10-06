@@ -81,6 +81,7 @@ note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 quiz.patch	quiz/663f61e.patch	663f61e22e0f4ce76ab4c24d278b1d07bd2c293f	2026-09-30T05:12:04Z	WIP: Quiz me on a text (Slice A), builders still working
+readpage.patch	readpage/f84ce5d.patch	f84ce5d435e0e326e1a9b84d19b697bc063e487b	2026-10-05T20:54:36-07:00	He could not hand Jarvis a web page and hear it read out, so build exactly that one thing
 referee.patch	referee/05d8c1d.patch	05d8c1dcfdaeaed82f9dff682dda8bb8e1bff921	2026-09-30T08:13:18Z	Topic controls: phone side (Topics.kt compiled and 27 tests run locally; Compose unverified)
 schedule.patch	schedule/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58Z	Open or adjust any setting by voice or chat
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33Z	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
