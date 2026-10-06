@@ -1814,7 +1814,9 @@ notification, card, quick-access and coverage audits (one pull request):
   button, quiet hours that never silence urgent alerts or approvals); urgent
   alerts break through Do Not Disturb / Focus Assist where the system allows,
   with a note, and a late urgent alert follows the silent "Missed" rule; reminders
-  and briefings get their own phone channel; (2) tap-to-talk on the phone; (3)
+  and briefings get their own phone channel; (2) tap-to-talk on the phone —
+  **Built 2026-10-01 (commit `eabca34d`)**: a tap starts the clip, a second
+  tap or the Smart Turn pause sends it, and hold-to-talk still works; (3)
   quick access: "current task with Stop" and "approvals waiting" as widget
   sources, "graphics memory per card" and "tokens per second" as fixed widget
   sources (marked not measured), edit a saved widget, per-widget transparency,

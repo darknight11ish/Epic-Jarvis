@@ -42,16 +42,19 @@ import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalRadii
 
 /**
- * Hold to talk. Slide away to cancel.
+ * Tap to talk; tap again, or wait for the Smart Turn pause, to send. A hold
+ * still works — keep it down, speak, let go to send. Slide away to cancel.
  *
- * Hold rather than tap-to-start/tap-to-stop, and that is a privacy decision
- * rather than an idiom: while the button is down the microphone is open, and
- * when it is not, it is not. There is no state in which the app is listening
- * and the owner has to remember that it is. A phone travels — pocket, car,
- * other people's houses — which is the same reason the wake word ships off.
+ * Tapping starts a recording that outlives the tap, so the old guarantee is
+ * spent: the microphone is no longer open only while a finger is down. What
+ * replaces it is the visible recording state until the clip goes, the Stop
+ * path that sends early, and the time limit that closes the microphone
+ * whether or not the owner remembers it is open.
  *
- * Sliding away cancels because a hold is easy to start by accident and an
- * utterance cannot be unsent once the desktop has verified it.
+ * The pause ends the clip by itself (the on-phone Smart Turn model, else the
+ * old fixed second of quiet). Sliding away cancels because a tap is easy to
+ * start by accident and an utterance cannot be unsent once the desktop has
+ * verified it.
  */
 @Composable
 fun VoiceButton(
