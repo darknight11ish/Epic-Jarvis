@@ -518,8 +518,12 @@ def t_the_hunk_comes_before_every_token_ok():
                                 "screen-picture.patch", "browser-engine.patch",
                                 "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",
-                                "progress.patch", "topics.patch", "referee.patch",
-                                "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch"}
+                                "progress.patch", "tutorials.patch", "topics.patch", "referee.patch",
+                                "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
+                                # gate-action-name.patch (2026-10-03) rewrites one line
+                                # inside jarvis_gate.py's action_for_tool() and leaves
+                                # devices.patch's register_approval_key lines alone.
+                                "gate-action-name.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

@@ -265,7 +265,9 @@ def main(argv) -> int:
         return 0
     for path in COPIES:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
+        # newline="\n": without it this writes CRLF on Windows and LF elsewhere
+        # (the repository is LF everywhere - .gitattributes).
+        path.write_text(text, encoding="utf-8", newline="\n")
         print(f"wrote {path.relative_to(ROOT)}")
     return 0
 

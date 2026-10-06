@@ -38,6 +38,14 @@ FIXTURE = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "voice-status-cases.j
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+# The fixture is the SHARED contract between the backend and both apps, so it
+# must not depend on the machine that generated it. The owner's own
+# jarvis-framework.toml sets [voice] stt_engine, the cases below print that
+# value, and backend/run_suites.py points JARVIS_FRAMEWORK_TOML at a copy of the
+# owner's file - so the committed fixture differed from machine to machine and
+# test_voice_contract.py failed under the suite runner while passing when run by
+# hand (2026-10-03). Pin the settings file this repository ships instead.
+os.environ["JARVIS_FRAMEWORK_TOML"] = str(BACKEND / "rebuilt" / "jarvis-framework.toml")
 
 import jarvis_speech as S  # noqa: E402
 import jarvis_turn as T  # noqa: E402
@@ -45,6 +53,27 @@ import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import jarvis_voice_flow as F  # noqa: E402
+
+# The audit log is NOT part of the fixture, and the cases below drive the real
+# routes, which audit. The settings file pinned above ships
+# `[logging].log_directory = "~/.openjarvis/logs/"`, and jarvis_framework's
+# log_dir() honours that OVER the config folder - so a run appended
+# "voice.training.staged" / "voice.wake_word.off" lines to the OWNER'S own
+# log even with OPENJARVIS_CONFIG_DIR pointing at a temporary folder
+# (measured 2026-10-04). Point it at a scratch folder instead, the same way
+# backend/run_suites.py does and for the same reason.
+import jarvis_framework as FW  # noqa: E402
+_ORIG_LOAD_FRAMEWORK = FW.load_framework
+_GEN_LOG_DIR = str(Path(tempfile.gettempdir()) / "jarvis-gen-audit-logs")
+
+
+def _load_framework_with_scratch_log(*a, **k):
+    cfg = _ORIG_LOAD_FRAMEWORK(*a, **k)
+    cfg.setdefault("logging", {})["log_directory"] = _GEN_LOG_DIR
+    return cfg
+
+
+FW.load_framework = _load_framework_with_scratch_log
 
 #: The fixed values the changing ones are replaced with (see the docstring).
 FIXED_TIME = 1790000000.0

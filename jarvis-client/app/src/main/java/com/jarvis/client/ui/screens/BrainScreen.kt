@@ -893,6 +893,14 @@ fun BrainScreen(
             // "PC help" (docs/JARVIS-API.md section 84): five plain answers
             // about the PC, read-only, asked only on "Check now"
             // (PcHelpPlate.kt), so this is its only line.
+            // "Tutorials" (docs/JARVIS-API.md section 114, TutorialsPlate.kt): one
+            // catalogue for both apps, reading progress kept on the PC, no card.
+            if (menus.shows("brain.model.tutorials")) item(key = "tutorials") {
+                MenuFrame(menus, "brain.model.tutorials") {
+                    TutorialsSection()
+                }
+            }
+
             if (menus.shows("brain.model.pc-help")) item(key = "pc-help") {
                 MenuFrame(menus, "brain.model.pc-help") {
                     PcHelpSection()

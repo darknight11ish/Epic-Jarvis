@@ -14245,8 +14245,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -14258,7 +14258,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -14539,8 +14539,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -14552,7 +14552,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -14833,8 +14833,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -14846,7 +14846,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -15463,8 +15463,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -15476,7 +15476,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -15757,8 +15757,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -15770,7 +15770,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -16051,8 +16051,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -16064,7 +16064,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -16350,8 +16350,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -16363,7 +16363,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -16969,8 +16969,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -16982,7 +16982,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -17593,8 +17593,8 @@
       "active_name": "Grandpa",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -17606,7 +17606,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -17916,8 +17916,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -17929,7 +17929,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -18210,8 +18210,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -18223,7 +18223,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -18520,8 +18520,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -18533,7 +18533,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -18840,8 +18840,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -18853,7 +18853,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -19155,8 +19155,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -19168,7 +19168,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {
@@ -19475,8 +19475,8 @@
       "active_name": "Built-in voice",
       "available": true,
       "better_voice": {
-        "can_turn_on": false,
-        "card": null,
+        "can_turn_on": true,
+        "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
         "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
@@ -19488,7 +19488,7 @@
         "pending": false,
         "state": "off",
         "state_why": "not running - it starts when Jarvis speaks in a custom voice",
-        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+        "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
         "f5": {

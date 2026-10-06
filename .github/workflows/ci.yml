@@ -150,7 +150,45 @@ jobs:
       # together with the lock. Supply-chain audit, 2026-09-30.
       - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1
       - name: Backend suites (the ones that need no file from the owner's PC)
-        run: python backend/run_suites.py
+        # The FAILING SUITE NAMES are the useful part of a red run, and they
+        # were only in a thirteen-minute log - which needs a signed-in browser
+        # to read, so a failure here could not be diagnosed from a terminal
+        # (2026-10-04). They now also go to this run's Summary, and each one
+        # becomes an ::error:: annotation, which the checks API serves to
+        # anyone. The step still fails exactly as it did.
+        #
+        # `set +e` around the run is deliberate: GitHub runs this script under
+        # `bash -e`, so the failing pipeline aborted the step before a single
+        # annotation was written - which is what the first version of this step
+        # did.
+        run: |
+          set +e
+          python backend/run_suites.py 2>&1 | tee "$RUNNER_TEMP/backend-suites.txt"
+          status=${PIPESTATUS[0]}
+          set -e
+          fails=$(grep -E '^FAIL ' "$RUNNER_TEMP/backend-suites.txt" || true)
+          if [ -n "$fails" ]; then
+            # One annotation per failing suite, carrying that suite's OWN FAIL
+            # lines: the failing checks are the useful part, and an annotation
+            # can be read through the public checks API - no log, no browser.
+            # Each suite is re-run on its own through run_suites.py, so it gets
+            # the same staged backend the sweep gave it.
+            while IFS= read -r line; do
+              name=$(echo "$line" | awk '{print $2}')
+              [ -n "$name" ] || continue
+              detail=$(python "backend/run_suites.py" "$name" 2>&1 \
+                       | grep -A6 -E '^      FAIL ' | head -40 | tr '\n' '|' | cut -c1-1200)
+              echo "::error title=Failing backend suite: $name::$detail"
+            done <<< "$fails"
+          fi
+          {
+            echo "### Backend suites (Ubuntu)"
+            echo ""
+            echo '```'
+            grep -E '^(FAIL |skip |[0-9]+ passed)' "$RUNNER_TEMP/backend-suites.txt" | head -80 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
       # Desktop and phone call the same backend; a route one calls and the
       # other does not has to be a recorded decision (tools/check_parity.py).
       - name: Desktop / phone parity
