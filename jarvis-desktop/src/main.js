@@ -216,6 +216,11 @@ import { createAnswerMemory, createTemporaryToggle } from "./answer-memory.js";
 import { CARD_KICKER, cardTitle, createCardVoice, isCardLine } from "./card-words.js";
 import { HeavyGate, isHeavy } from "./heavy-approve.js";
 import { buildSayableList } from "./sayable.js";
+// The command palette (docs/UI-AUDIT-2026-10-05.md section 2.4, "what I would
+// change" row 4): the list and the search live in palette.js, which is pure,
+// and every name in it comes from the generated menu catalogue.
+import { HINT_LABEL, WORDS as PALETTE_WORDS } from "./palette.js";
+import { buildPaletteHint, close as closePalette, isOpen as paletteOpen, mountPalette, openPalette } from "./palette-ui.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
@@ -231,6 +236,7 @@ import { DEVICE_CHANGES, stepTuning } from "./animal-shared.js";
 import { loadFaceTuning, saveFaceTuning } from "./face-tuning.js";
 import {
   apply as applyMenuVisibility,
+  isHidden,
   loadState as loadMenuState,
   parseRoute as parseMenuRoute,
   saveState as saveMenuState,
@@ -1009,6 +1015,18 @@ function renderSayableList() {
 }
 
 /**
+ * The bar's own way into the palette, beside "Things you can say": a button
+ * because it does something on click, and a keyboard user reaches it with
+ * Tab. Typing "/" in an empty box does the same thing (palette-ui.js), so
+ * the hint is the discoverable half and the key is the fast one.
+ */
+function renderPaletteHint() {
+  const host = document.getElementById("palette-hint");
+  if (!host) return;
+  host.replaceChildren(buildPaletteHint(() => openPalette()));
+}
+
+/**
  * The primer is the window's empty state: visible when nothing else in the
  * stack is, gone the instant anything is.
  *
@@ -1636,9 +1654,57 @@ function openBrainFromRoute(route) {
   invoke("open_fix_place", { place: "brain" });
 }
 
+/**
+ * The command palette's way of opening one row (palette-ui.js calls this with
+ * what palette.js's own placeFor() worked out). It is the SAME two navigation
+ * mechanisms the bar already uses - "open <a settings section>" writes the
+ * place Settings reads, and "earlier chats"/"forget a time frame" writes the
+ * place the Brain reads - so the palette adds no command, no grant and no new
+ * way for anything to happen. Nothing is changed by opening a place: the
+ * owner still makes every change by hand.
+ *
+ * Returns the line to say about it, or "" when there is nothing to add.
+ */
+function openPlaceFromPalette(place) {
+  if (!place || !place.window) return "";
+  if (place.window === "settings") {
+    if (!place.place) return "";
+    try {
+      localStorage.setItem(
+        SETTINGS_PLACE_KEY,
+        JSON.stringify({ place: place.place, at: Date.now() }),
+      );
+    } catch {
+      /* no storage: Settings opens at the top, and the row's own name said where */
+    }
+    invoke("open_fix_place", { place: "settings" });
+    return "";
+  }
+  if (place.window === "brain") {
+    const left = { place: place.place, at: Date.now() };
+    try {
+      localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify(left));
+    } catch {
+      /* no storage: the Brain opens where it was, and the row's own name said where */
+    }
+    // The Brain removes the key the moment it reads it (takeAnyPlace); if it
+    // never opens, the place is not left lying about - gone in a minute.
+    setTimeout(() => {
+      try {
+        const now = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
+        if (now && now.at === left.at) localStorage.removeItem(BRAIN_PLACE_KEY);
+      } catch {
+        /* nothing to clear */
+      }
+    }, 65_000);
+    invoke("open_fix_place", { place: "brain" });
+    return "";
+  }
+  return "";
+}
+
 /** Paints the three health dots in the card footer. */
-function applyHealth(report) {
-  if (!report || !Array.isArray(report.services)) return;
+function applyHealth(report) {  if (!report || !Array.isArray(report.services)) return;
 
   for (const service of report.services) {
     const dot = dom.services.querySelector(`[data-service="${service.id}"]`);
@@ -5246,6 +5312,21 @@ followTheme();
 // bigger anywhere in the app. The window re-measures after each step.
 followZoom(() => syncWindowHeight());
 renderSayableList();
+// The command palette (palette-ui.js): built from the menu catalogue, opened
+// with "/" in an empty box or the "Find" button, closed with Escape. It never
+// opens over a waiting gate - that card is the top surface then, and covering
+// it would hide the one thing the app stops for.
+mountPalette({
+  openPlace: openPlaceFromPalette,
+  canOpen: () => !state.approval,
+  // "Show or hide menus" is cosmetic (nothing is turned off), so a hidden menu
+  // is still listed - the palette is a way to reach one that was tidied away.
+  // The row says "hidden", read from the same stored set the Settings card
+  // reads, so the two can never disagree.
+  isHidden: (id) => isHidden(loadMenuState(), id),
+  onClose: () => syncWindowHeight(),
+});
+renderPaletteHint();
 syncTaskControls();
 startVoice(dom.root);
 // Subscribed before the link starts, so the first state it reports counts.

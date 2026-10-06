@@ -603,6 +603,12 @@ pub async fn open_faces(app: AppHandle) -> Result<(), String> {
 /// `onboarding-v1.completed` marker. Version 2 (2026-09-24) corrected the
 /// memory screen: version 1 said Jarvis only remembered what you approved,
 /// and Jarvis now learns automatically by default.
+///
+/// The 2026-10-05 walkthrough added two screens ON THE END (how to talk to
+/// it, and where the settings are) and left the memory screen at version 2's
+/// number and wording, so this stays 2 on purpose: the owner's rule is that
+/// the walkthrough is shown once and never again, and a new owner gets all
+/// five screens because they have no marker at all.
 pub const ONBOARDING_VERSION: u64 = 2;
 
 /// The store key holding the version of the walkthrough the owner last
