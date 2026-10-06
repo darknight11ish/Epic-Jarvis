@@ -110,13 +110,24 @@ PLAN_CASES = (
     ("two_2080s_2080ti", "RTX 2080 SUPER + RTX 2080 Ti (11 GB, the faster), monitor on the 8",
      [_card("a", "RTX 2080 SUPER", 8, True, uuid=U_2080S),
       _card("b", "RTX 2080 Ti", 11, False, uuid=U_2080TI)]),
+    # nvidia-smi on the owner's PC, re-read 2026-10-06: index 0 is the 2060 with its
+    # display DISABLED, index 1 is the 2080 SUPER with the display ENABLED, so the
+    # monitor is on the 2080 SUPER. Both rows below now say that. The second one used
+    # to put the monitor on the 2060 - the two cards the wrong way round, the same
+    # slip docs/MEASURED-2026-10-05-owner-pc.md records - which made the generated
+    # table describe a machine the owner does not have.
     ("two_2080s_2060_mon8", "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - "
-                            "the planned pair",
+                            "the owner's machine",
      [_card("a", "RTX 2080 SUPER", 8, True, uuid=U_2080S),
       _card("b", "RTX 2060", 12, False, uuid=U_2060)]),
-    ("two_2080s_2060_mon12", "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2060",
-     [_card("a", "RTX 2080 SUPER", 8, False, uuid=U_2080S),
-      _card("b", "RTX 2060", 12, True, uuid=U_2060)]),
+    # The same pair again, standing in for the design's own "8 + 12 GB, monitor on
+    # the 12" row (section 4.4). A second case, not a second machine: a monitor cable
+    # can be moved, and this id has carried this arrangement since it was written.
+    # The row above is the owner's machine, and says so.
+    ("two_2080s_2060_mon12", "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - "
+                            "the design's 'monitor on the 12' row, not a second machine",
+     [_card("a", "RTX 2080 SUPER", 8, True, uuid=U_2080S),
+      _card("b", "RTX 2060", 12, False, uuid=U_2060)]),
     ("two_8_16_mon8", "8 + 16 GB, monitor on the 8",
      [_card("a", "8 GB card", 8, True, uuid=U_A, speed=496.0),
       _card("b", "16 GB card", 16, False, uuid=U_B, speed=448.0)]),

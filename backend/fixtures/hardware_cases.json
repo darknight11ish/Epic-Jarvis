@@ -2329,7 +2329,7 @@
     {
      "compute": "7.5",
      "key": "a",
-     "monitor": false,
+     "monitor": true,
      "name": "RTX 2080 SUPER",
      "route": "CUDA",
      "speed_gbs": null,
@@ -2340,7 +2340,7 @@
     {
      "compute": "7.5",
      "key": "b",
-     "monitor": true,
+     "monitor": false,
      "name": "RTX 2060",
      "route": "CUDA",
      "speed_gbs": null,
@@ -2353,20 +2353,20 @@
     "fast": {
      "bars": [
       {
-       "blocks": "█████████████░░░",
+       "blocks": "██████████████░░",
        "card": "a",
-       "fixed_gib": 1.68,
+       "fixed_gib": 2.18,
        "models_gib": 4.94,
        "total_gib": 8.0,
-       "used_gib": 6.62
+       "used_gib": 7.12
       },
       {
        "blocks": "███████████░░░░░",
        "card": "b",
-       "fixed_gib": 2.18,
+       "fixed_gib": 1.68,
        "models_gib": 6.39,
        "total_gib": 12.0,
-       "used_gib": 8.57
+       "used_gib": 8.07
       }
      ],
      "best_effort": false,
@@ -2423,38 +2423,38 @@
     "features": {
      "bars": [
       {
-       "blocks": "████████████████",
+       "blocks": "███████████████░",
        "card": "a",
-       "fixed_gib": 1.68,
-       "models_gib": 6.17,
+       "fixed_gib": 2.18,
+       "models_gib": 5.57,
        "total_gib": 8.0,
-       "used_gib": 7.85
+       "used_gib": 7.75
       },
       {
-       "blocks": "█████████████░░░",
+       "blocks": "████████████████",
        "card": "b",
-       "fixed_gib": 2.18,
-       "models_gib": 7.36,
+       "fixed_gib": 1.68,
+       "models_gib": 10.1,
        "total_gib": 12.0,
-       "used_gib": 9.54
+       "used_gib": 11.78
       }
      ],
      "best_effort": false,
      "chat": {
       "card": "a",
-      "context": 16384,
+      "context": 8192,
       "format": "q8_0",
       "mode": "own",
       "model": "qwen3:8b",
-      "need_gib": 6.17
+      "need_gib": 5.57
      },
      "long": {
       "card": "b",
-      "context": 32768,
+      "context": 16384,
       "format": "q8_0",
       "mode": "turns",
-      "model": "qwen3:8b",
-      "need_gib": 7.36
+      "model": "qwen3:14b",
+      "need_gib": 10.1
      },
      "notes": [
       "Chat runs on the RTX 2080 SUPER (its memory is faster (496 against 336 GB/s, the published figures)).",
@@ -2499,30 +2499,30 @@
     "smart": {
      "bars": [
       {
-       "blocks": "█████████████░░░",
+       "blocks": "██████████████░░",
        "card": "a",
-       "fixed_gib": 1.68,
+       "fixed_gib": 2.18,
        "models_gib": 4.94,
        "total_gib": 8.0,
-       "used_gib": 6.62
+       "used_gib": 7.12
       },
       {
-       "blocks": "███████████████░",
+       "blocks": "████████████████",
        "card": "b",
-       "fixed_gib": 2.18,
-       "models_gib": 9.44,
+       "fixed_gib": 1.68,
+       "models_gib": 10.1,
        "total_gib": 12.0,
-       "used_gib": 11.62
+       "used_gib": 11.78
       }
      ],
      "best_effort": false,
      "chat": {
       "card": "b",
-      "context": 8192,
+      "context": 16384,
       "format": "q8_0",
       "mode": "own",
       "model": "qwen3:14b",
-      "need_gib": 9.44
+      "need_gib": 10.1
      },
      "long": {
       "card": "a",
@@ -2575,7 +2575,7 @@
    },
    "recommended": "features",
    "recommended_why": "It keeps an 8B everyday model on the RTX 2080 SUPER and adds what fits beside it.",
-   "title": "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2060"
+   "title": "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the design's 'monitor on the 12' row, not a second machine"
   },
   "two_2080s_2060_mon8": {
    "cards": [
@@ -2828,7 +2828,7 @@
    },
    "recommended": "features",
    "recommended_why": "It keeps an 8B everyday model on the RTX 2080 SUPER and adds what fits beside it.",
-   "title": "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the planned pair"
+   "title": "RTX 2080 SUPER + RTX 2060 12 GB, monitor on the 2080 SUPER - the owner's machine"
   },
   "two_2080s_2080ti": {
    "cards": [
