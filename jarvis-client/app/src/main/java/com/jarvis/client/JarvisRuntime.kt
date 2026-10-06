@@ -3062,7 +3062,7 @@ object JarvisRuntime {
         try {
             when (val result = api.gateHistoryRead()) {
                 is ApiResult.Ok -> {
-                    _pastApprovals.value = result.items
+                    _pastApprovals.value = result.value.items
                     _absent.value = _absent.value - INBOX_ACTIVITY_KEY
                     _inboxRead.update {
                         it.copy(
@@ -8106,14 +8106,14 @@ object JarvisRuntime {
 
     private const val TAG = "JarvisRuntime"
 
+    /** The one key [refreshPastApprovals] owns, inside [INBOX_KEYS]. */
+    private const val INBOX_ACTIVITY_KEY = "activity"
+
     /**
      * The server sends `: keepalive` every ~20s. Three missed is a dead
      * connection the socket has not noticed; below that a single late frame on
      * a dozing radio would flap the indicator for no reason.
      */
-    /** The one key [refreshPastApprovals] owns, inside [INBOX_KEYS]. */
-    private const val INBOX_ACTIVITY_KEY = "activity"
-
     /** The keys refreshInbox owns; it must not touch the rest of the set. */
     private val INBOX_KEYS = setOf("digest", "undo", "jobs", INBOX_ACTIVITY_KEY)
 
