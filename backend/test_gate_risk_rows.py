@@ -16,7 +16,7 @@ that impossible to do here, both measured on 2026-10-06:
     check can have.
 
 So this test proves what can be proved from a checkout alone, and says plainly
-what it cannot: that the owner's own `jarvis_gate.py` holds the removed line
+what it cannot: that the owner's own `jarvis_gate.py` holds the removed lines
 byte for byte. Only `scripts/apply-patches.ps1`'s dry run on a copy proves
 that, exactly as the README says for every patch here.
 """
@@ -35,6 +35,16 @@ PS1 = HERE.parent / "scripts" / "apply-patches.ps1"
 STALE = '    "draft_email":         ("yes", "local", "a draft is not a sent message"),'
 KEPT = ('"draft_email": ("yes", "outbound", "saves the draft shown on the card to your '
         'own Drafts folder')
+#: The SECOND stale row this patch removes (2026-10-06), and why it counts.
+#: `create_joplin_note` is held twice as well: this placeholder, which
+#: `create_logseq_page` carries verbatim right beside it, and
+#: note-capture.patch's informative row. Both copies rate the write
+#: ("yes", "local"), so no safety decision turns on which one survives - unlike
+#: draft_email - but they are NOT identical values, the placeholder is the dead
+#: copy (Python keeps the last key), and a cleanup that kept it would leave the
+#: uninformative sentence on the card. test_gate_risk_words.py's duplicate scan
+#: is what caught it.
+STALE_JOPLIN = '    "create_joplin_note":     ("yes", "local", "delete it and it is gone"),'
 
 checks: list = []
 
@@ -79,24 +89,27 @@ def t_the_hunk_is_well_formed():
     check("the header's counts match the hunk's own lines",
           (old, new) == (counted_old, counted_new),
           f"header {old}/{new}, lines {counted_old}/{counted_new}")
-    check("it removes one line and adds none", counted_old - counted_new == 1)
-    check("the only removed line is the stale draft_email row",
-          f"-{STALE}" in body, [l for l in hunk if l.startswith("-")])
+    check("it removes two lines and adds none", counted_old - counted_new == 2)
+    check("the removed lines are the two stale rows and nothing else",
+          sorted(l for l in hunk if l.startswith("-"))
+          == sorted(["-" + STALE, "-" + STALE_JOPLIN]),
+          [l for l in hunk if l.startswith("-")])
     check("nothing is added to _RISK by this patch",
           not [l for l in hunk if l.startswith("+")])
 
 
 def t_no_other_patch_touches_that_line():
-    """The row must be the owner's own, untouched by the stack: if another
-    patch added or removed it, this patch would be racing that one."""
+    """The rows must be the owner's own, untouched by the stack: if another
+    patch added or removed one, this patch would be racing that one."""
     others = []
     for p in sorted(HERE.glob("*.patch")):
         if p.name == PATCH.name:
             continue
         for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
-            if line[:1] in ("+", "-") and "a draft is not a sent message" in line:
+            if line[:1] in ("+", "-") and ("a draft is not a sent message" in line
+                                           or "delete it and it is gone" in line):
                 others.append(f"{p.name}: {line[:60]}")
-    check("no other patch adds or removes that line", not others, others)
+    check("no other patch adds or removes those rows", not others, others)
 
 
 def t_the_kept_row_is_the_better_one():

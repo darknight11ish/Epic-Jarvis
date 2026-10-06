@@ -80,7 +80,16 @@ GAP = "# gap"
 #: prints the same note.)
 RATCHET = {
     "jarvis_hud.py": 45,
-    "jarvis_gate.py": 22,
+    #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
+    #: one new patch this walk adds for this file, and its single hunk's context
+    #: is text only the owner's PC holds: the short `"delete it and it is gone"`
+    #: rows of `_RISK`, which no other patch in `order()` writes (checked by
+    #: searching every patch for those sentences - `gate-risk-rows.patch` is the
+    #: only match). So the hunk is MATERIALISED honestly, not drifted, and the
+    #: pin moves with it. The note above already records that this stack reads
+    #: 20 for this file against the old pin of 22 - the pin was loose either way.
+    #: 23 is what the walk measures now. A ratchet: it may still only go down.
+    "jarvis_gate.py": 23,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

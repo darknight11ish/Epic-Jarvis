@@ -4150,7 +4150,31 @@ class _TurnWatch:
             # set `read`, never `tainted`, so a future refusal that tested
             # only `tainted` would be bypassable in the very turn that did the
             # reading). Only ever stricter: nothing is allowed BECAUSE of it.
-            self.tainted = True
+            #
+            # A NOTE WRITE IS NOT A READ (fixed 2026-10-06). A note writer's
+            # own result is Jarvis's confirmation of what it wrote - the rule
+            # note_needs_a_person() states below, where the
+            # `any(n not in NOTE_WRITES ...)` clause exists for exactly this,
+            # and the same rule is in that function's own docstring. Tainting
+            # here defeated that clause: the second note of a clean turn was
+            # asked as `write_notes_after_outside_text`, a card that blames
+            # Jarvis's own earlier note for outside text that never arrived
+            # (test_injection_cases.py, "clean turn, two notes: both saved, no
+            # card"). It also stopped a plan whose later step is a note, which
+            # asked that step's card under the wrong action name and was
+            # refused (test_agent_plan_wiring.py, the three "chain:" checks).
+            # Real reads - email, files, the web, notes read back, screen,
+            # memory - are untouched and still taint the turn.
+            # AND NEITHER IS THE OWNER'S OWN SPENDING TABLE. _spending_refusal()
+            # makes the same exemption in `read` - "any(n != SPENDING_TOOL for n
+            # in watch.read)" - for the same reason, and the blanket taint
+            # defeated it too: one `my_spending` call (its own `files` action, or
+            # the first table) made every later call in that turn report
+            # SPENDING_OUTSIDE instead of the one-table rule, and made a second
+            # table's card blame "outside text" that never arrived
+            # (test_spending.py, four checks).
+            if name not in NOTE_WRITES and name != SPENDING_TOOL:
+                self.tainted = True
             if name == "browser_control":
                 self.browser_hosts |= _hosts_of_browser_result(result)
             pieces = _strings_in(result, [])

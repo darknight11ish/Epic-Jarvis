@@ -26,6 +26,7 @@ controls on the source, because this module must never be able to send
 anything anywhere.
 """
 import atexit
+import contextlib
 import os
 import shutil
 import sys
@@ -201,8 +202,32 @@ def t_the_reading_is_read_from_the_cards_own_csv():
           seen[-1])
 
 
+@contextlib.contextmanager
+def _a_card():
+    """`available()` is a property of the HOST, not of the arithmetic.
+
+    `t_the_arithmetic_is_exactly_right` hands its readings in through a fake
+    `run`, so it must not also depend on nvidia-smi being on this machine's
+    PATH: on CI's ubuntu-latest runner there is no NVIDIA driver, so
+    `available()` is False and `record()` returns `{}` at its own guard
+    before any arithmetic runs - every check in that function then fails for
+    a reason that has nothing to do with what it is proving (2026-10-06; the
+    two functions below already stub it this way, for this exact reason).
+
+    NOT a loosened check: every assertion in the function is unchanged, and
+    the "there is no nvidia-smi at all" contract keeps its own checks in
+    `t_a_missing_nvidia_smi_is_a_plain_sentence`.
+    """
+    real = E.available
+    E.available = lambda: True
+    try:
+        yield
+    finally:
+        E.available = real
+
+
 def t_the_arithmetic_is_exactly_right():
-    with Switched(True):
+    with _a_card(), Switched(True):
         log = tmplog()
         seen = []
 

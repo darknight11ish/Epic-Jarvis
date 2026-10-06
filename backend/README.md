@@ -18640,24 +18640,36 @@ patch applies after the rest of the stack and reverses.
 
 # `gate-risk-rows.patch`
 
-**The gate's risk table held `draft_email` twice.** The owner's own original line
-rated a draft `("yes", "local", "a draft is not a sent message")`; `draft-email.patch`
-adds its own row rated `("yes", "outbound", "saves the draft ... to your own Drafts
-folder")`. Python keeps the **last** of two equal dict keys, so outbound won - but
-only by luck of ordering, because the two copies had already collapsed into one key
-in the file. The natural cleanup (deleting the later line) would have made an email
-draft **swipe-approvable**, which is wrong: saving a draft goes to the mail server.
+**The gate's risk table held two of its keys twice.** Python keeps the **last** of
+two equal dict keys, so which sentence the owner is shown is decided by nothing but
+the order the two copies happen to sit in - and the copy that loses is dead code a
+reader can edit for ever without a test noticing.
 
-This patch removes the stale original line and adds nothing, so there is one row,
-the right one, on any reading of the file. It handles the only one of the four
-duplicated `_RISK` keys (`draft_email`, `send_email`, `append_logseq_journal`,
-`create_joplin_note`) where the two copies disagree; the other three carry identical
-values and are deliberately left alone, in one patch rather than four.
+`draft_email` is the one where the two copies disagree about *safety*. The owner's
+own original line rated a draft `("yes", "local", "a draft is not a sent message")`;
+`draft-email.patch` adds its own row rated `("yes", "outbound", "saves the draft ...
+to your own Drafts folder")`. The natural cleanup (deleting the later line) would
+have made an email draft **swipe-approvable**, which is wrong: saving a draft goes
+to the mail server.
+
+`create_joplin_note` is the other, and it was found by this pass's own duplicate
+scan (`test_gate_risk_words.py`), not by hand. The owner's original line is the
+placeholder `("yes", "local", "delete it and it is gone")` - the exact sentence
+`create_logseq_page` already carries beside it - and `note-capture.patch` adds
+`("yes", "local", "creates one new note in Joplin on this PC; no existing note is
+changed")`. Both copies rate the write the same, so no safety decision turns on
+which one survives; but they are **not** identical values, and a cleanup that kept
+the placeholder would leave the uninformative sentence on the card.
+
+This patch removes both stale original lines and adds nothing, so each key has one
+row, the right one, on any reading of the file. The remaining two duplicated `_RISK`
+keys (`send_email`, `append_logseq_journal`) carry genuinely identical values and are
+deliberately left alone, in one patch rather than two.
 
 **Tested by `test_gate_risk_rows.py`**, which proves from a checkout alone that the
-patch is registered last, that its single hunk is well formed, that it removes that
-one line and adds none, that no other patch touches it, and - when the verified copy
-of the owner's own `jarvis_gate.py` is present under `dshwork/` - that every line the
-hunk needs is in that file verbatim. What no test in a checkout can prove is the
-apply itself: **`scripts/apply-patches.ps1`'s dry run is what proves it**, as for
+patch is registered last, that its single hunk is well formed, that it removes those
+two lines and adds none, that no other patch touches them, and - when the verified
+copy of the owner's own `jarvis_gate.py` is present under `dshwork/` - that every
+line the hunk needs is in that file verbatim. What no test in a checkout can prove is
+the apply itself: **`scripts/apply-patches.ps1`'s dry run is what proves it**, as for
 every patch here.
