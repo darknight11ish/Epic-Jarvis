@@ -117,6 +117,9 @@ TITLES = {
     "second_card_browser_enable": "turn on browser control, which works real web pages",
     "second_card_combined_enable": "run one bigger model across both graphics cards",
     "second_card_third_assign": "move a second-card feature onto a third graphics card",
+    # Which card everyday chat runs on (owner's decision, 2026-10-05): one
+    # approval card to pin it, immediate to go back to leaving it to Ollama.
+    "chat_card_pin": "pin everyday chat to one graphics card",
     "screen_picture_enable": "let it read pictures of your screen (slow, uses your main chip)",
     "obscura_enable": "read web pages with a browser that has no window (Obscura)",
     "browser_form_submit": "send a form you were shown on a website",

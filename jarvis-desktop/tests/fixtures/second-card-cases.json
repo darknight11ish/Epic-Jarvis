@@ -3,6 +3,66 @@
   "cases": {
     "capable_off": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -30,7 +90,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           },
           {
             "compute_cap": 7.5,
@@ -216,6 +276,66 @@
     },
     "capable_pending": {
       "active": true,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -243,7 +363,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           },
           {
             "compute_cap": 7.5,
@@ -431,6 +551,47 @@
     },
     "card_missing_but_enabled": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: there is only one card (NVIDIA GeForce RTX 2080 SUPER), so there is nothing to pin."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -458,7 +619,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           }
         ],
         "primary": {
@@ -630,6 +791,66 @@
     },
     "combined_running": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": true,
         "available": true,
@@ -657,7 +878,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           },
           {
             "compute_cap": 7.5,
@@ -843,6 +1064,63 @@
     },
     "not_capable_old_card": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 6.1,
+            "display": false,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 6.1 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 8,010 MiB."
+            ],
+            "free_mb": 8010,
+            "index": 1,
+            "measured": [],
+            "name": "NVIDIA GeForce GTX 1080",
+            "total_mb": 8192,
+            "uuid": "GPU-0a9d3b72-e4c1-4a6f-b85e-7c2d1f9e4b36"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2080 SUPER has the most memory (8,192 MiB) and no monitor taking part of it, so it is the roomy one. Jarvis cannot say which is faster - no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -870,7 +1148,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           },
           {
             "compute_cap": 6.1,
@@ -1050,6 +1328,47 @@
     },
     "one_card": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: there is only one card (NVIDIA GeForce RTX 2080 SUPER), so there is nothing to pin."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -1077,7 +1396,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           }
         ],
         "primary": {
@@ -1246,6 +1565,47 @@
     },
     "one_card_reads_words": {
       "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "words": "Jarvis's suggestion: there is only one card (NVIDIA GeForce RTX 2080 SUPER), so there is nothing to pin."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -1273,7 +1633,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           }
         ],
         "primary": {
@@ -1442,6 +1802,66 @@
     },
     "running_long_context": {
       "active": true,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": null,
+          "context": null,
+          "model": null,
+          "model_loaded": false,
+          "on_card_percent": null,
+          "pinned": null,
+          "used_mb": null,
+          "words": "Jarvis leaves the choice to Ollama. Nothing is loaded right now, so there is nothing to read - ask again while Jarvis is answering."
+        }
+      },
       "combined": {
         "active": false,
         "available": false,
@@ -1469,7 +1889,7 @@
             "role": "primary",
             "total_mb": 8192,
             "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
-            "why": "everyday chat runs here: a monitor is plugged into it"
+            "why": "Jarvis's own settings are made for this card (a monitor is plugged into it), but you have not pinned a card, so Jarvis cannot say everyday chat is on it - open \"Everyday chat runs on\" to read which card it is really on"
           },
           {
             "compute_cap": 7.5,

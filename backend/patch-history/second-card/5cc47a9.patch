@@ -112,7 +112,7 @@
                          # jarvis_ui_control.py/jarvis_android_control.py's
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -315,6 +315,40 @@
+@@ -315,6 +315,31 @@
      "append_logseq_journal": ("yes", "local", "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed"),
      "create_joplin_note":    ("yes", "local", "creates one new note in Joplin on this PC; no existing note is changed"),
      "append_obsidian_daily": ("yes", "local", "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed"),
@@ -133,15 +133,6 @@
 +    # stops when the last is off. Without this line the action would be read as
 +    # "unknown", and the notice would say it might leave the machine.
 +    "second_card_enable": ("yes", "local", "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off"),
-+    # second-card.patch (jarvis_second_card.py): "Everyday chat runs on",
-+    # the owner's decision of 2026-10-05. Pinning chat to ONE card sets two
-+    # settings for the owner's own Windows user (CUDA_VISIBLE_DEVICES to that
-+    # card's id, OLLAMA_VULKAN to 0), so the everyday Ollama uses that card
-+    # and cannot fall back to the other one. Its own action, not
-+    # second_card_enable: it names a SPECIFIC physical card, and it changes
-+    # where EVERY answer runs, not only the second card's own features.
-+    # Nothing leaves this PC and no file is written.
-+    "chat_card_pin": ("yes", "local", "changes which graphics card your everyday Ollama uses, by setting CUDA_VISIBLE_DEVICES and OLLAMA_VULKAN for your own Windows user; nothing leaves this PC and no file is written"),
 +    # second-card.patch (jarvis_second_card.py): moving one of the second
 +    # card's own features onto a THIRD graphics card, alongside the second
 +    # card's own lane - never instead of it. A fourth copy of Ollama on THIS

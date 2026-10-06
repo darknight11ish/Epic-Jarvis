@@ -109,6 +109,10 @@ class World:
         self.apps, self.tags_answer = apps, tags_answer
         self.started, self.killed, self.http = [], [], []
         self.dir = Path(tempfile.mkdtemp(prefix="jarvis-second-card-"))
+        #: Every user setting this world "sets" (the pin's own two), so a
+        #: test can see what jarvis_second_card would have written to the
+        #: registry without any registry being touched.
+        self.user_env_writes = []
         self._saved = {}
 
     def _env(self, name):
@@ -121,6 +125,21 @@ class World:
             return self.user_env
         if name == "OLLAMA_VULKAN":
             return "0" if self.user_env else None
+        return None
+
+    def set_user_env(self, name, value):
+        """`jarvis_second_card._set_user_env`, recorded instead of written -
+        the registry is never touched by a test or a fixture."""
+        self.user_env_writes.append((name, value))
+        if isinstance(self.user_env, dict):
+            if value is None:
+                self.user_env.pop(name, None)
+            else:
+                self.user_env[name] = value
+        elif name == "CUDA_VISIBLE_DEVICES":
+            self.user_env = value
+        elif name == "OLLAMA_VULKAN":
+            self._vulkan = value
         return None
 
     def run_smi(self, args):
@@ -179,7 +198,18 @@ class World:
             (CP, "_run_smi"): self.run_smi,
             (SC, "_primary"): lambda cards: CP.primary(cards, configured=""),
             (SC, "_cfg"): lambda key, default=None: default,
+            # The whole settings folder, pointed at this world's own
+            # temporary one: nothing in a case may read (or write) whatever
+            # settings folder the machine running it happens to have - the
+            # owner's own "which card" choice lives in there too.
+            (SC, "_config_dir"): lambda: self.dir,
             (SC, "_state_path"): lambda: self.dir / "second-card.json",
+            # The owner's choice of card for everyday chat (2026-10-05) lives
+            # in its own file in the settings folder, so both are pointed at
+            # this world's own temporary folder: a fixture must never depend
+            # on whose settings folder the machine running it happens to have.
+            (SC, "_pin_path"): lambda: self.dir / "chat-card.json",
+            (SC, "_set_user_env"): self.set_user_env,
             (SC, "_log_path"): lambda role="second": self.dir / (
                 "second-card-ollama.log" if role in ("second", "combined")
                 else f"second-card-{role}-ollama.log"),
@@ -231,6 +261,12 @@ class World:
         if master_card is not None:
             data["master_card"] = master_card
         (self.dir / "second-card.json").write_text(json.dumps(data), encoding="utf-8")
+
+    def pin(self, card_uuid):
+        """Write the owner's "everyday chat runs on this card" choice the way
+        `_write_pin` does, so a test can start from a pinned PC."""
+        (self.dir / "chat-card.json").write_text(
+            json.dumps({"card": card_uuid, "set_at": 1_800_000_000}), encoding="utf-8")
 
     def __enter__(self):
         return self.install()

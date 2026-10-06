@@ -1007,6 +1007,7 @@ pub fn run() {
             commands::get_second_card,
             commands::set_second_card,
             commands::set_third_card,
+            commands::set_chat_card,
             commands::set_second_card_suggest,
             commands::get_backend_capabilities,
             commands::get_big_model,

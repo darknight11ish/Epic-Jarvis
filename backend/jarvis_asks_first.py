@@ -317,7 +317,7 @@ HARD_LIMITS = frozenset({
     LOOSEN_ACTION, "stop_asking_before_every_web_search", "web_search_enable", "learning_enable",
     "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
-    "second_card_third_assign", "screen_picture_enable", "obscura_enable",
+    "second_card_third_assign", "chat_card_pin", "screen_picture_enable", "obscura_enable",
     "big_model_enable", "custom_voice",
     "better_voice_enable", "download_model", "switch_model", "models_create",
     "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
@@ -339,7 +339,8 @@ MUST_ASK = frozenset({
     "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
     "search_the_web", "stop_asking_before_every_web_search", "web_search_enable", "schedule_repeat",
     "models_create", "second_card_enable", "second_card_browser_enable",
-    "second_card_combined_enable", "second_card_third_assign", "screen_picture_enable",
+    "second_card_combined_enable", "second_card_third_assign", "chat_card_pin",
+    "screen_picture_enable",
     "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
@@ -386,6 +387,7 @@ GROUPS = (
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",
                                       "second_card_combined_enable", "second_card_third_assign",
+                                      "chat_card_pin",
                                       "screen_picture_enable", "big_model_enable"]),
     # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
     # page promises every action, and starting Live is one (the review of

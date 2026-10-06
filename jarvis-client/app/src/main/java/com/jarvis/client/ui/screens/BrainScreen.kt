@@ -220,6 +220,13 @@ fun BrainScreen(
      * feature id raises an approval card; null unassigns at once.
      */
     onSetThirdCard: (assign: String?) -> Unit = {},
+    /**
+     * "Everyday chat runs on" (2026-10-05) -
+     * [com.jarvis.client.JarvisRuntime.setChatCard]. Pinning one card
+     * ([SecondCard.CHAT_PIN]) raises an approval card; leaving it to Ollama
+     * ([SecondCard.CHAT_LEAVE]) is immediate.
+     */
+    onSetChatCard: (action: String, card: String?) -> Unit = { _, _ -> },
     onRecheckSecondCard: () -> Unit = {},
     /**
      * Re-read the board every this many milliseconds while the screen is
@@ -920,6 +927,7 @@ fun BrainScreen(
                             onSet = onSetSecondCard,
                             onSetSuggest = onSetSecondCardSuggest,
                             onSetThird = onSetThirdCard,
+                            onSetChat = onSetChatCard,
                             onRecheck = onRecheckSecondCard,
                             onOpenApprovals = onOpenApprovals,
                         )

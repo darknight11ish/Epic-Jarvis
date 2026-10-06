@@ -6008,8 +6008,17 @@ code does.
 - **Detection.** `nvidia-smi` via `jarvis_compute.query_cards()` (cached 30 s;
   an older driver without `compute_cap` is asked again without it, and the
   generation looked up by name). The main card is chosen by one rule, shared
-  with `jarvis_compute.plan()`: `[compute] primary_gpu`, else the card with a
-  monitor, else index 0. A second card is capable at compute capability 7.5
+  with `jarvis_compute.plan()`: `[compute] primary_gpu`, else the owner's own
+  pin (**"Everyday chat runs on", 2026-10-05** - `chat-card.json` in the
+  settings folder, set through the `chat_card_pin` approval card; the toml
+  itself is never written), else the card with a
+  monitor, else index 0. **That last fallback is a LAYOUT decision, never a
+  claim about where the model is** (2026-10-05): with nothing pinned and no
+  model observed, the card's own `why` says only that Jarvis's settings are
+  made for it. `where_chat_runs()` reports instead what the machine says -
+  `ollama ps` for the model and its on-card percentage, and `nvidia-smi` for
+  the card the model's process is on - and says plainly when it cannot tell.
+  A second card is capable at compute capability 7.5
   or more and 10,240 MiB or more, and with a card id. Every other card gets a
   reason in words. **2026-09-28, a third card (data-model reshape only,
   `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`):** `_detect()` now also keeps
@@ -6123,7 +6132,11 @@ under `[autonomy.tiers]` — since 2026-09-27, `second_card_combined_enable
 = "ask"` beside it (also listed in `jarvis_card_words.TITLES`,
 `jarvis_asks_first.py`'s `HARD_LIMITS`/`MUST_ASK`/`GROUPS`, and
 `gate-outcome.patch`'s `_NO_RULE_FROM_DENIAL`, the same four places every
-always-`ask` second-card action already had to be in). Your own toml is
+always-`ask` second-card action already had to be in) — plus, since
+2026-10-05, `chat_card_pin = "ask"` for "Everyday chat runs on", its own
+action because it names a specific physical card and changes where EVERY
+answer runs, not only the second card's own features. `status()` also gained
+`chat_card` (see docs/JARVIS-API.md section 12). Your own toml is
 never edited: `apply-patches.ps1` prints the difference. Without the tier
 line the unknown-action default, `ask`, applies, which is correct.
 

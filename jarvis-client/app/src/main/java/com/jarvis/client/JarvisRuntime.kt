@@ -1850,6 +1850,22 @@ object JarvisRuntime {
     }
 
     /**
+     * "Everyday chat runs on" (2026-10-05): pin everyday chat to one graphics
+     * card, or go back to leaving it to Ollama. Pinning ([SecondCard.CHAT_PIN]
+     * with a card id) raises one approval card - the card should appear in
+     * this phone's approvals too, the same as [setSecondCard]'s own ON -
+     * and changes nothing until it is approved. [SecondCard.CHAT_LEAVE] is
+     * immediate.
+     */
+    suspend fun setChatCard(action: String, card: String?): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setChatCard(action, card)
+        if (action == SecondCard.CHAT_PIN && result is ApiResult.Ok) refreshPending()
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
+    /**
      * Moving one of the second card's own switches onto a third, capable
      * graphics card, or moving it back off (2026-09-28). `assign` a feature
      * id raises one approval card (the card should appear in this phone's

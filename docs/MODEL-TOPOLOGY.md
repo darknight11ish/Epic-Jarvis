@@ -472,7 +472,16 @@ be the **bigger or longer-context lane, not the fast one**.
   slowly. The 8B at 32K has twice the room. (With the 1 GB gap llama.cpp
   keeps free, HARDWARE-PROFILES.md section 3 also puts the 14B at 16K
   slightly over 12 GB.) Measure on the real card before changing this.
-- Keep the everyday 8B chat on the 2080 Super, where it is fastest.
+- Keep the everyday 8B chat on one card, chosen by Ollama unless you pin one
+  (**corrected 2026-10-05**). This line used to read "keep it on the 2080
+  Super, where it is fastest". The machine says otherwise: the model is on
+  the **12 GB 2060**, which is GPU 0, and the 2080 SUPER is GPU 1 and runs
+  the desktop (`MEASURED-2026-10-05-owner-pc.md`). No speed comparison
+  between these two cards has been measured on this PC, so this page does
+  not make one. With `[compute] primary_gpu` empty, Jarvis does not pin a
+  card at all and leaves the choice to Ollama; the Hardware screen's
+  "Everyday chat runs on" setting is where you pin one, and it reports which
+  card the model is really on rather than assuming one.
 - Use the 2060 as the "second, larger-context lane" that
   `backend/jarvis_browser_control.py` says it is waiting for, and for any
   other long-context job. Browser control still stays switched off until that

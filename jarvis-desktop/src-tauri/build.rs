@@ -199,6 +199,13 @@ fn main() {
             // "enabled"); read is folded into get_second_card's own
             // answer (status()'s "third" key). Settings window only.
             "set_third_card",
+            // "Everyday chat runs on" (2026-10-05): pin everyday chat to one
+            // graphics card, or go back to leaving it to Ollama. Its own
+            // command (the wire shape differs: "action" and "card", not
+            // "enabled"), and pinning raises its own approval card
+            // (chat_card_pin); read is folded into get_second_card's own
+            // answer (status()'s "chat_card" key). Settings window only.
+            "set_chat_card",
             // "When to suggest the bigger model" (2026-09-27): no approval
             // card either way, folded into the same Settings section. read
             // is folded into get_second_card's own answer.

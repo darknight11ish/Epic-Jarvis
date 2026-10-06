@@ -44,6 +44,7 @@ focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09
 forget-range.patch	forget-range/53863a2.patch	53863a253a7034e31809a4ff4e5bec677da8049f	2026-09-28T08:28:43Z	Forget a time frame, backend: a checked list, ONE card, 10 minutes to undo
 games-temporary.patch	games-temporary/5c7124b.patch	5c7124b19b248a28fc65797044f0ea352b9ce81f	2026-09-28T20:37:36Z	Games stay out of chat history; Live's mark never reaches a model
 games-temporary.patch	games-temporary/6ecb640.patch	6ecb6403b4174da1c363ea7561d4160271467c7f	2026-09-26T10:23:51Z	Games and role-play run in a temporary chat automatically
+gate-outcome.patch	gate-outcome/5cc47a9.patch	5cc47a9c42b1ff1c3f7e5656ff53ca038e71d683	2026-09-28T04:50:33Z	Third graphics card: its own lane, an assign switch, and UI on both apps
 gate-outcome.patch	gate-outcome/8f672ce.patch	8f672cef4d26b1b88abd13cf156202706c5b0fac	2026-09-27T00:39:10Z	Add "One bigger model on both cards": a third, off-by-default second-card mode
 gate-outcome.patch	gate-outcome/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23Z	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 gate-outcome.patch	gate-outcome/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44Z	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
@@ -90,6 +91,7 @@ screen.patch	screen/2915125.patch	291512500a68410187aea64bafa68a81eff8c6d1	2026-
 second-card-suggest.patch	second-card-suggest/5540058.patch	55400589332bd2028eed95bc142bf3b9c57c396e	2026-09-27T14:18:45Z	Fix backend audit findings #6, #7, #9 and #10
 second-card-suggest.patch	second-card-suggest/ed7b4b3.patch	ed7b4b3dce2b9439e2a603591af385999cf4434b	2026-09-27T08:55:01Z	Fix the backend audit's six real findings, and the phone's own scroll bug
 second-card-suggest.patch	second-card-suggest/476be02.patch	476be02a5a254b7f6868f3aef75fc00288e3aa73	2026-09-27T04:50:08Z	Suggest the bigger model when the second card could help
+second-card.patch	second-card/5cc47a9.patch	5cc47a9c42b1ff1c3f7e5656ff53ca038e71d683	2026-09-28T04:50:33Z	Third graphics card: its own lane, an assign switch, and UI on both apps
 second-card.patch	second-card/8f672ce.patch	8f672cef4d26b1b88abd13cf156202706c5b0fac	2026-09-27T00:39:10Z	Add "One bigger model on both cards": a third, off-by-default second-card mode
 second-card.patch	second-card/e1ab659.patch	e1ab6598a8784df14f084fac3150e719e920e78e	2026-09-24T06:52:58Z	Merge fix-b3: bug audit 3 fixes
 second-card.patch	second-card/2a25605.patch	2a25605de02b58dfbe278a6043a478ac81ed8819	2026-09-24T06:14:15Z	Gate notice words (AP-10): what the second card, wiki and big model do

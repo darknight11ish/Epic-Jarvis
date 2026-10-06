@@ -404,6 +404,13 @@ permissions = [
   # differs ("assign", not "enabled"); the GET side rides along in
   # allow-get-second-card's own poll (status()'s new "third" key).
   "allow-set-third-card",
+  # "Everyday chat runs on" (2026-10-05): pin everyday chat to one graphics
+  # card, or go back to leaving it to Ollama. Its own command, since the wire
+  # shape differs ("action" and "card", not "enabled"); the GET side rides
+  # along in allow-get-second-card's own poll (status()'s new "chat_card"
+  # key). Pinning raises one approval card (chat_card_pin) and is held while
+  # the event stream is stale; leaving it to Ollama always goes through.
+  "allow-set-chat-card",
   # "When to suggest the bigger model": the two settings that decide
   # whether Jarvis may OFFER "One bigger model on both cards" on its own
   # (2026-09-27). No card either way - it only changes whether Jarvis

@@ -43,17 +43,26 @@ once its lane is switched on, and no lane is on yet:
 
 The card that runs everyday chat (the "main" card) is: the one named in
 `[compute] primary_gpu` in `jarvis-framework.toml`, if you set it; else the
-one your monitor is plugged into; else the first one `nvidia-smi` lists.
-With the monitors on the 2080 Super, that is the 2080 Super, which is what
-you want: it is the faster card.
+one the "Everyday chat runs on" setting in the Hardware screen pins, if you
+pinned one there; else the one your monitor is plugged into; else the first
+one `nvidia-smi` lists.
 
-**Measured 2026-10-05, and this is where the rule above and the machine
-disagree:** the model is running on the 12 GB card, which `nvidia-smi` calls
-**GPU 0**, while the 2080 SUPER is **GPU 1** and runs the desktop
-([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)). Setting
-`primary_gpu` is how you say which card you mean; until then, read which card
-the model is really on from `scripts\measure-cards.ps1` rather than from the
-rule above.
+**Corrected 2026-10-05.** This used to end "With the monitors on the 2080
+Super, that is the 2080 Super, which is what you want: it is the faster
+card." Two things were wrong with that. The machine says otherwise - the
+model is running on the 12 GB card, which `nvidia-smi` calls **GPU 0**,
+while the 2080 SUPER is **GPU 1** and runs the desktop
+([MEASURED-2026-10-05-owner-pc.md](MEASURED-2026-10-05-owner-pc.md)) - and
+**no speed comparison between these two cards has been measured on this
+PC**, so "the faster card" was never a measured claim here.
+
+The monitor rule above is now only the *fallback for planning*: with nothing
+pinned, Jarvis does not claim to know which card chat is on. It reads
+`ollama ps` and `nvidia-smi` and says what it sees - the "Everyday chat runs
+on" setting on the Hardware screen in both apps shows that sentence, the
+facts behind it, and a button to pin a card (one approval card) or to go
+back to leaving it to Ollama (immediate). `scripts\measure-cards.ps1` reads
+the same thing by hand.
 
 ## The seven switches
 
@@ -292,9 +301,13 @@ switch on, a line under the switch says how (for example "You said no, so
 
 **On the desktop:** Settings, "Second graphics card". The same list, the main
 switch and one switch per feature; turning one on raises the same approval
-card. It also shows the one-line command that keeps everyday chat on the main
-card, with a Copy button. With Pictures working, a screenshot question goes to
-the second card, and the answer's badge says "on the second graphics card".
+card. It also has **"Everyday chat runs on"** (2026-10-05): leave the choice
+to Ollama (the default), or pin one card - its own approval card, and going
+back is immediate. Under it is where the model really is, read from `ollama ps`
+and `nvidia-smi`, and a "Show the analysis" button with each card's own facts
+and the lines from your own measurement. With Pictures working, a screenshot
+question goes to the second card, and the answer's badge says "on the second
+graphics card".
 
 **Then measure before trusting it** (CLAUDE.md: "installed and measured").
 With a feature on, ask something that uses it and watch `nvidia-smi` in a

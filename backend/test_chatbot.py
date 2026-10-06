@@ -858,7 +858,8 @@ def t_which_version():
     lane = types.SimpleNamespace(url="http://127.0.0.1:11435", model="qwen3:8b", num_ctx=32768)
     t = CB.choose_tier(deps(lane=lane, full=False))
     check("second card running, full version not switched on: one card",
-          t.id == CB.ONE_CARD and "installed and measured" in t.why, t)
+          t.id == CB.ONE_CARD and "lane has been measured" in t.why
+          and "installed" not in t.why, t)
     t = CB.choose_tier(deps(lane=None, full=True))
     check("switched on, but no second-card lane: one card, and it says why",
           t.id == CB.ONE_CARD and "not running" in t.why, t)

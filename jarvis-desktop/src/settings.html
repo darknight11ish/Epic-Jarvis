@@ -1590,8 +1590,10 @@
         <h2>Second graphics card</h2>
         <p class="note">
           With a second graphics card in this computer, Jarvis can use it for
-          longer conversations, pictures and more, and everyday chat stays
-          fast on your main card. Everything here is off until you turn it
+          longer conversations, pictures and more. Which card everyday chat
+          runs on is Ollama's own choice unless you pin one - see "Everyday
+          chat runs on" below, which reads where the model really is.
+          Everything here is off until you turn it
           on. Turning something on shows you an approval card first;
           turning something off happens at once. Nothing here sends anything
           off this computer. A smaller card can take some of these
@@ -1645,8 +1647,8 @@
             time as anything switched on above - it needs both cards to
             itself. Ollama splits the model by how much memory is free on
             each card, not by how fast each card is, so it runs at roughly
-            the slower card's pace. Real speed is not measured yet: the
-            extra card is not installed yet.
+            the slower card's pace. Real speed is not measured yet: this lane
+            has never been run on this PC, so no speed number for it exists.
           </p>
           <div class="sc-switches" id="sc-combined"></div>
           <div class="row">
@@ -1675,20 +1677,44 @@
           </p>
           <p class="sc-line" id="sc-lane"></p>
 
-          <h3 class="subhead">Keep everyday chat on the main card</h3>
-          <p class="sc-line" id="sc-pinned"></p>
+          <h3 class="subhead">Everyday chat runs on</h3>
+          <p class="note">
+            Which graphics card runs your everyday chat. Jarvis starts out
+            leaving this to Ollama, which picks a card by itself. You can pin
+            one card instead - that raises an approval card first, and going
+            back to leaving it to Ollama happens at once, with no card.
+            Whichever you choose, the line below says where the model really
+            is, read from Ollama and this PC, never guessed.
+          </p>
+          <div class="sc-switches" id="sc-chat-choices"></div>
+          <p class="sc-line" id="sc-chat-where"></p>
+          <p class="sc-line sc-held" id="sc-pinned"></p>
+          <button class="btn ghost small" id="sc-analysis-toggle" type="button"
+                  aria-expanded="false">Show the analysis</button>
+          <div id="sc-analysis" hidden>
+            <p class="note">
+              Every line here is read from this PC, or quoted from your own
+              measurement of 2026-10-05. Jarvis has no measured speed for
+              these cards, so nothing here says one is faster.
+            </p>
+            <div id="sc-analysis-cards"></div>
+            <p class="sc-line" id="sc-analysis-suggestion"></p>
+          </div>
+          <div id="sc-pin-problem" hidden>
+            <p class="sc-line sc-held" id="sc-pin-problem-words"></p>
+          </div>
           <div id="sc-pin" hidden>
             <p class="note">
-              Run this once. It sets one Windows setting for your user
-              account, so your everyday Ollama only uses the main card and
-              leaves the second one free. Nothing is written to any file.
-              To run it: press Copy, open PowerShell from the Start menu,
-              paste it in and press Enter. Then quit Ollama (right-click its
-              icon by the clock) and start it again.
+              Run this once. It sets two Windows settings for your user
+              account, so your everyday Ollama only uses the card you chose.
+              Nothing is written to any file. To run it: press Copy, open
+              PowerShell from the Start menu, paste it in and press Enter.
+              Then quit Ollama (right-click its icon by the clock) and start
+              it again.
             </p>
             <div class="row sc-command">
               <input id="sc-pin-command" type="text" readonly spellcheck="false" autocomplete="off"
-                     aria-label="The PowerShell command that keeps everyday Ollama on the main card" />
+                     aria-label="The PowerShell command that pins your everyday Ollama to the card you chose" />
               <button class="btn ghost small" id="sc-pin-copy" type="button">Copy</button>
             </div>
             <span class="status" id="sc-pin-status" role="status"></span>

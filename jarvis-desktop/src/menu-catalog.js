@@ -108,6 +108,7 @@ export const GROUPS = [
         "settings.second-card.study-helper",
         "settings.second-card.referee",
         "settings.second-card.third-card",
+        "settings.second-card.chat-card",
         "settings.big-model"
       ],
       "phone": [
@@ -116,6 +117,7 @@ export const GROUPS = [
         "settings.second-card.study-helper",
         "settings.second-card.referee",
         "settings.second-card.third-card",
+        "settings.second-card.chat-card",
         "settings.big-model"
       ]
     },
@@ -573,6 +575,30 @@ export const MENUS = [
     "names": [
       "third graphics card",
       "third card"
+    ]
+  },
+  {
+    "id": "settings.second-card.chat-card",
+    "title": "Everyday chat runs on",
+    "about": "One row inside the second graphics card.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "row",
+    "group": "group.graphics-cards",
+    "parent": "settings.second-card",
+    "hide": true,
+    "collapse": false,
+    "why": "",
+    "names": [
+      "everyday chat runs on",
+      "which card runs chat",
+      "the chat card",
+      "leave it to ollama",
+      "pin everyday chat"
     ]
   },
   {
@@ -2364,6 +2390,7 @@ export const ALIASES = {
   "browser settings": "settings.browser-engine",
   "browser without a window": "settings.browser-engine",
   "bubble": "settings.floating-avatar",
+  "chat card": "settings.second-card.chat-card",
   "chat history": "brain.tab.history",
   "chat history and conversations": "brain.history.conversations",
   "chat tags": "brain.history.tags",
@@ -2387,6 +2414,7 @@ export const ALIASES = {
   "deep questions": "brain.memory.deep",
   "devices": "settings.devices",
   "email sending": "settings.email-sending",
+  "everyday chat runs on": "settings.second-card.chat-card",
   "faces": "settings.appearance-card",
   "faq": "settings.faq",
   "finance": "group.finance",
@@ -2430,6 +2458,7 @@ export const ALIASES = {
   "jarvis's voices": "settings.voices",
   "keyboard shortcuts": "settings.shortcuts",
   "learning": "brain.memory.learning",
+  "leave it to ollama": "settings.second-card.chat-card",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
   "manner": "settings.manner",
@@ -2455,6 +2484,7 @@ export const ALIASES = {
   "people": "brain.memory.people-things",
   "people and things": "brain.memory.people-things",
   "phone notifications": "settings.phone-notify",
+  "pin everyday chat": "settings.second-card.chat-card",
   "pinned facts": "brain.memory.profile",
   "progress": "brain.projects.progress",
   "projects": "brain.tab.projects",
@@ -2544,6 +2574,7 @@ export const ALIASES = {
   "what jarvis is doing": "brain.now.trace",
   "what jarvis knows about you": "brain.memory.known",
   "what this backend supports": "settings.backend-supports",
+  "which card runs chat": "settings.second-card.chat-card",
   "widgets": "brain.work.widgets",
   "wiki": "brain.memory.wiki",
   "windows hello": "settings.security",

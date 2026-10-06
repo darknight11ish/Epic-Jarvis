@@ -429,6 +429,17 @@ BROWSER_ACTION = "second_card_browser_enable"
 #: is genuinely different from ACTION's own ("nothing leaves this PC" -
 #: true, but not the point of this particular card).
 THIRD_ACTION = "second_card_third_assign"
+#: Which card EVERYDAY CHAT runs on, when the owner pins one (the owner's
+#: decision, 2026-10-05: "Leave it to Ollama - whatever it picks, and set
+#: primary_gpu explicitly only if you want a say. I also want an option to
+#: choose through Jarvis based on an analysis."). Its own action, not
+#: ACTION: it names a SPECIFIC physical card, exactly like THIRD_ACTION -
+#: docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says which card runs
+#: which work must always be a real, named choice. Turning the pin ON is a
+#: capability change (it sets CUDA_VISIBLE_DEVICES for the everyday Ollama),
+#: so it raises one approval card; going back to "Leave it to Ollama" is
+#: immediate, like every other loosening in this project.
+PIN_ACTION = "chat_card_pin"
 HOST = "127.0.0.1"
 DEFAULT_PORT = 11435
 #: The third lane's own port (module docstring: it can run at the SAME
@@ -819,8 +830,29 @@ def _cards(fresh: bool = False) -> list:
 
 
 def _primary(cards: list) -> tuple:
+    """(the card Jarvis treats as the everyday chat card, the sentence saying
+    which rule chose it).
+
+    `[compute] primary_gpu` still wins, then the owner's own pin (the
+    "Everyday chat runs on" setting, 2026-10-05), then - unchanged, for
+    PLANNING only - jarvis_compute.primary's own fallback: the card a monitor
+    is plugged into, else nvidia-smi's first. The fallback is a layout
+    decision, never a claim about where the model is: with nothing pinned,
+    the reporting says where the model really is instead (see
+    `where_chat_runs`), because on this PC the monitor card and the card
+    holding the model are different cards."""
     if compute is None:
         return (cards[0], "it is the first card") if cards else (None, "no card")
+    if not str(compute._cfg("primary_gpu", "") or "").strip():
+        want = _read_pin()
+        if want:
+            hit = next((d for d in cards
+                        if (getattr(d, "uuid", "") or "").lower() == want.lower()), None)
+            if hit is not None:
+                return hit, "you pinned this card (the \"Everyday chat runs on\" setting)"
+            return compute.primary(cards), (
+                f"you pinned a card (id {want}) that nvidia-smi does not see now, so "
+                f"the everyday card is only an estimate")
     return compute.primary(cards)
 
 
@@ -1172,6 +1204,621 @@ def _write_suggest(signal: str, enabled: bool) -> Optional[str]:
 
 
 # --------------------------------------------------------------------------
+#   Which card everyday chat runs on, and where the model really is
+#   (owner's decision, 2026-10-05)
+#
+#   THE PROBLEM THIS ANSWERS. With `[compute] primary_gpu` empty, Jarvis's
+#   own rule calls the card a MONITOR is plugged into the "main card"
+#   (jarvis_compute.primary). On the owner's PC that rule and the machine
+#   disagree: the 12 GB card is GPU 0, has no monitor, and holds the
+#   everyday model; the 8 GB 2080 SUPER is GPU 1 and runs the desktop
+#   (docs/MEASURED-2026-10-05-owner-pc.md). So anything that says "everyday
+#   chat runs on your main card" named the WRONG card.
+#
+#   WHAT IS DONE ABOUT IT HERE. Nothing about pinning changes in this
+#   section: `[compute] primary_gpu` still wins, the monitor rule is only
+#   ever used as a *fallback for planning*, and no route writes the owner's
+#   toml (`_state_path`'s own comment). What changes is REPORTING: when the
+#   owner has not pinned a card, Jarvis does not claim to know which card
+#   chat is on. It reads `ollama ps` (what is loaded, and how much of it is
+#   on a card) and `nvidia-smi` (which card the model's own process is on)
+#   and says what it actually sees - and says so plainly when it cannot
+#   tell.
+#
+#   THE PIN IS THE EXISTING MECHANISM. `CUDA_VISIBLE_DEVICES` (+
+#   `OLLAMA_VULKAN=0`, the same pair `pin_command` and
+#   jarvis_profiles.settings_for already produce) is what makes Ollama use
+#   one card. This section only remembers WHICH card the owner chose, so
+#   the answer survives a restart and both apps can show it.
+# --------------------------------------------------------------------------
+
+#: The owner's own choice of card for everyday chat. A file of its own, NOT
+#: the toml: no route may write the owner's jarvis-framework.toml
+#: (`_state_path`'s comment), and `[compute] primary_gpu` stays the owner's
+#: hand-set override, read first wherever it is set.
+_PIN_NAME = "chat-card.json"
+
+#: The two user settings that really pin Ollama to one card. The same pair,
+#: and the same reasons, as `pin_command` below.
+PIN_ENV = ("CUDA_VISIBLE_DEVICES", "OLLAMA_VULKAN")
+
+#: A card's own nvidia-smi id, used by the pin file and by `pin_command`.
+_UUID_RE = re.compile(r"GPU-[0-9A-Fa-f-]{8,64}")
+
+
+def _pin_path() -> Path:
+    return _config_dir() / _PIN_NAME
+
+
+def _read_pin() -> Optional[str]:
+    """The card id the owner pinned everyday chat to, or None for "leave it
+    to Ollama". A missing or broken file reads as None - the default."""
+    try:
+        raw = json.loads(_pin_path().read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    want = str(raw.get("card") or "").strip()
+    return want if want and _UUID_RE.fullmatch(want) else None
+
+
+def pin_problem(card_uuid: str) -> str:
+    """One sentence saying whether Ollama is really set to this card, read
+    from the user settings `pin_command` writes - "" when it is. A pin Jarvis
+    only remembers but has not applied (or that someone changed) must never
+    be reported as done. None (not Windows) reads as "cannot tell", never as
+    "done"."""
+    if os.name != "nt":
+        return "Jarvis cannot check this on a PC that is not Windows."
+    val = _user_env(PIN_ENV[0])
+    if val is None:
+        return ("Ollama does not have this pin yet: quit Ollama and start it again after "
+                "Jarvis sets it, or run the line below yourself.")
+    if str(val).strip().lower() != str(card_uuid).strip().lower():
+        return (f"{PIN_ENV[0]} in your user settings is something else "
+                f"({str(val).strip()[:40]!r}), so this pin is not what Ollama is using.")
+    vulkan = (_user_env(PIN_ENV[1]) or "").strip()
+    if vulkan != "0":
+        return (f"{PIN_ENV[0]} is set, but Ollama's other route (Vulkan) is still on, so it "
+                f"could still use the other card. Run the line below, then restart Ollama.")
+    return ""
+
+
+def _write_pin(card_uuid: Optional[str]) -> Optional[str]:
+    """Remember the owner's card, or forget it (None). None on success, else
+    the error in words. `set_at` is kept so both apps can say when."""
+    p = _pin_path()
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps({"card": card_uuid, "set_at": int(time.time())},
+                                  indent=1), encoding="utf-8")
+        tmp.replace(p)
+    except OSError as exc:
+        return f"could not save your choice of card ({type(exc).__name__})"
+    return None
+
+
+def _set_user_env(name: str, value: Optional[str]) -> Optional[str]:
+    """Set (or, with None, remove) one Windows user setting - the same place
+    `pin_command`'s PowerShell line writes, so Ollama reads it at its next
+    start. None on success, else the error in words. Nothing else is
+    touched, and no administrator right is needed: these are the user's own
+    settings."""
+    if os.name != "nt":
+        return ("this PC is not Windows, so Jarvis cannot set the setting "
+                "Ollama reads at start-up")
+    try:
+        import winreg
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Environment") as k:
+            if value is None:
+                try:
+                    winreg.DeleteValue(k, name)
+                except FileNotFoundError:
+                    pass
+            else:
+                winreg.SetValueEx(k, name, 0, winreg.REG_SZ, value)
+    except Exception as exc:
+        return f"could not change {name} ({type(exc).__name__})"
+    return None
+
+
+def _smi_models() -> list:
+    """[(pid, process name, card uuid, used memory)] for every process
+    nvidia-smi names on a card, or [] when it names none (some Windows
+    drivers do not - docs/MEASURE-CARDS.md section 2)."""
+    text = _smi_apps()
+    out = []
+    if not text:
+        return out
+    for line in text.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 4:
+            continue
+        try:
+            pid = int(parts[0])
+        except ValueError:
+            continue
+        try:
+            used = int(float(parts[3]))
+        except ValueError:
+            used = None
+        out.append((pid, parts[1], parts[2], used))
+    return out
+
+
+def _model_process(cards: list) -> Optional[dict]:
+    """Which card the model's own process is on, as far as the machine says:
+    {"index", "name", "uuid", "used_mb", "process"} or None. Only a process
+    whose name is Ollama's or llama.cpp's, and only one this module did not
+    start itself (those run on another card BY DESIGN - the same exclusion
+    _main_pin makes, and for the same reason)."""
+    ours = _LANE.pids() | _COMBINED_LANE.pids() | _THIRD_LANE.pids()
+    by_uuid = {(getattr(c, "uuid", "") or "").lower(): c for c in cards if getattr(c, "uuid", "")}
+    for pid, pname, gpu, used in _smi_models():
+        low = pname.lower()
+        if not ("ollama" in low or "llama" in low) or pid in ours:
+            continue
+        card = by_uuid.get(gpu.lower())
+        if card is None:
+            continue
+        return {"index": card.index, "name": card.name, "uuid": card.uuid,
+                "used_mb": used, "process": pname}
+    return None
+
+
+def _ps(url: str) -> Optional[list]:
+    """Ollama's own /api/ps answer: what is loaded right now, and how much of
+    each model is on a card. None when Ollama is not answering - which is
+    not a failure, it just means there is nothing loaded to read."""
+    try:
+        body = _http_json(f"{url}/api/ps", timeout=2.0)
+    except Exception:
+        return None
+    rows = body.get("models") if isinstance(body, dict) else None
+    return [m for m in rows if isinstance(m, dict)] if isinstance(rows, list) else None
+
+
+def _ps_row() -> Optional[dict]:
+    """The everyday Ollama's own answer about what is loaded, or None:
+    {"model", "size", "size_vram", "on_card_percent", "context", "until"}.
+    `size_vram` against `size` is Ollama's own statement of how much of the
+    model is on a card - docs/MEASURE-CARDS.md section 3."""
+    rows = _ps(_main_ollama_url())
+    if not rows:
+        return None
+    # The one the owner's settings file says chat uses, else the first.
+    want = ""
+    try:
+        import jarvis_models
+        want = str(jarvis_models.current_model() or "")
+    except Exception:
+        want = ""
+    row = None
+    if want:
+        row = next((m for m in rows
+                    if _same_model(str(m.get("name") or m.get("model") or ""), want)), None)
+    row = row or rows[0]
+    size, vram = row.get("size"), row.get("size_vram")
+    pct = None
+    if isinstance(size, (int, float)) and size > 0 and isinstance(vram, (int, float)):
+        pct = int(min(100, round(vram * 100 / size)))
+    return {"model": str(row.get("name") or row.get("model") or ""),
+            "size": size if isinstance(size, (int, float)) else None,
+            "size_vram": vram if isinstance(vram, (int, float)) else None,
+            "on_card_percent": pct,
+            "context": row.get("context_length") if isinstance(row.get("context_length"), int) else None,
+            "until": str(row.get("expires_at") or "") or None}
+
+
+def _same_model(a: str, b: str) -> bool:
+    """Two model names that mean the same model: `qwen3:8b` and
+    `qwen3:8b-instruct` do NOT, but `qwen3:8b` and `qwen3:8b:latest` do."""
+    a, b = a.strip().lower(), b.strip().lower()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    for x, y in ((a, b), (b, a)):
+        if y == x + ":latest":
+            return True
+    return False
+
+
+def _free_mb(cards: list) -> dict:
+    """{card id, lower case: free MiB now}, from the card rows already read.
+    Missing reads as absent, never as zero."""
+    out = {}
+    for c in cards:
+        uuid = str(c.get("uuid") or "").lower()
+        if not uuid:
+            continue
+        free = c.get("free_mb")
+        if isinstance(free, int):
+            out[uuid] = free
+    return out
+
+
+def where_chat_runs(det: Optional[dict] = None) -> dict:
+    """Where everyday chat actually is, in plain words and as facts. Never
+    raises, and never guesses a card: with nothing pinned and nothing
+    loaded, `card` is None and `words` says Jarvis cannot tell.
+
+    `det` is any dict with a "cards" list (a detect() answer, or the rows
+    alone) - never detected a second time here, so a caller that already
+    read the cards does not read them twice.
+
+    {"pinned": card id | None, "card": {index, name, uuid} | None,
+     "model": str | None, "on_card_percent": int | None, "context": int | None,
+     "used_mb": int | None, "words": str}"""
+    det = det if det is not None else detect()
+    cards = list(det.get("cards") or [])
+    pin = _read_pin()
+    row = _ps_row()
+    proc = _model_process(_cards(False))
+    card = None
+    if proc is not None and proc.get("uuid"):
+        card = {"index": proc["index"], "name": proc["name"], "uuid": proc["uuid"]}
+    out = {"pinned": pin, "card": card, "model_loaded": row is not None,
+           "model": (row or {}).get("model"), "on_card_percent": (row or {}).get("on_card_percent"),
+           "context": (row or {}).get("context"), "used_mb": (proc or {}).get("used_mb")}
+    if not cards:
+        out["words"] = ("No graphics card could be read, so Jarvis cannot say where chat runs.")
+        return out
+    if pin:
+        name = next((c["name"] for c in cards
+                     if (c.get("uuid") or "").lower() == pin.lower()), None) or "the card you chose"
+        if card is not None and (card["uuid"] or "").lower() == pin.lower():
+            on = (f" {out['on_card_percent']}% of it is on the card"
+                  if out["on_card_percent"] is not None else "")
+            out["words"] = (f"You pinned everyday chat to the {name}, and the model really is "
+                            f"on it now{on}.")
+        else:
+            out["words"] = (f"You pinned everyday chat to the {name}. Jarvis cannot see the "
+                            f"model on it right now - it may not be loaded, or Ollama may not "
+                            f"have restarted since you set the pin.")
+        return out
+    if card is not None:
+        on = (f" {out['on_card_percent']}% of it is on a card"
+              if out["on_card_percent"] is not None else "")
+        out["words"] = (f"Jarvis leaves the choice to Ollama, and Ollama has the model on the "
+                        f"{card['name']} right now{on}. Jarvis did not pin a card, so which "
+                        f"card this is can change.")
+    elif row is not None:
+        out["words"] = ("Jarvis leaves the choice to Ollama, and a model is loaded, but "
+                        "nvidia-smi does not name the program using a card on this PC, so "
+                        "Jarvis cannot say which card it is on.")
+    else:
+        out["words"] = ("Jarvis leaves the choice to Ollama. Nothing is loaded right now, so "
+                        "there is nothing to read - ask again while Jarvis is answering.")
+    return out
+
+
+#: What the owner's own measurement says about each card. Each entry is
+#: matched by what the CARD IS (its name and its memory as nvidia-smi
+#: reports it), never by its slot, so a card that moves keeps its own
+#: measured lines. The sentences are the owner's own measurement, quoted -
+#: docs/MEASURED-2026-10-05-owner-pc.md and docs/MEASURE-CARDS.md - and are
+#: never combined or rounded by Jarvis. A card matching none of these shows
+#: NO measured line: measured or silent (CLAUDE.md).
+MEASURED_SAYINGS = (
+    # The RTX 2060 12 GB: GPU 0, no monitor, held the everyday model.
+    {"name": "2060", "total_mb": 12288,
+     "lines": ("Measured on 2026-10-05: the model was on this card and 100% of it was on "
+               "the card - every layer (offloaded 37/37) - running at 4,096 tokens of "
+               "conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+               "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the "
+               "6.5 GB it needs is worked out on paper, not measured.")},
+    # The RTX 2080 SUPER 8 GB: GPU 1, ran the desktop.
+    {"name": "2080", "total_mb": 8192,
+     "lines": ("Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, "
+               "and no model on it.",)},
+)
+
+
+def _measured_lines(name: str, total_mb) -> list:
+    low = str(name or "").lower()
+    for row in MEASURED_SAYINGS:
+        if row["name"] in low and total_mb == row["total_mb"]:
+            return list(row["lines"])
+    return []
+
+
+def card_facts(det: Optional[dict] = None) -> list:
+    """One entry per card, every fact read from the machine or from a
+    measurement already written down - never estimated, never inferred. This
+    is what "Show the analysis" shows, and it is the ONLY input to the
+    suggestion below.
+
+    {"index", "name", "total_mb", "free_mb", "compute_cap", "display",
+     "measured": [sentence], "facts": [sentence]}"""
+    det = det if det is not None else detect()
+    cards = list(det.get("cards") or [])
+    free = _free_mb(cards)
+    out = []
+    for c in sorted(cards, key=lambda r: (r.get("index") if r.get("index") is not None else 99)):
+        name = str(c.get("name") or "a graphics card")
+        total = c.get("total_mb")
+        cc = c.get("compute_cap")
+        display = c.get("display_active")
+        free_mb = free.get((c.get("uuid") or "").lower())
+        if free_mb is None:
+            free_mb = c.get("free_mb")
+        facts = []
+        if isinstance(total, int) and total > 0:
+            facts.append(f"Memory: {total:,} MiB total ({_gb(total)}), as nvidia-smi reports it.")
+        if isinstance(cc, (int, float)):
+            facts.append(f"Compute capability {cc} (Turing, the RTX 20 generation, is 7.5).")
+        else:
+            facts.append("This driver does not report the card's generation.")
+        if display is True:
+            facts.append("A monitor is plugged into this card, so the desktop uses part of "
+                         "its memory.")
+        elif display is False:
+            facts.append("No monitor is plugged into this card.")
+        else:
+            facts.append("nvidia-smi did not say whether a monitor is plugged into this card.")
+        if isinstance(free_mb, int):
+            facts.append(f"Free right now: {free_mb:,} MiB.")
+        out.append({"index": c.get("index"), "uuid": c.get("uuid") or None, "name": name,
+                    "total_mb": total,
+                    "free_mb": free_mb, "compute_cap": cc if isinstance(cc, (int, float)) else None,
+                    "display": display is True,
+                    "measured": _measured_lines(name, total), "facts": facts})
+    return out
+
+
+def suggestion(facts: list) -> dict:
+    """Jarvis's own suggestion, said as a suggestion, from the facts above
+    and nothing else. Never a speed claim: the only numbers it may use are
+    memory sizes the machine reports. {"name", "words"} - `name` is the card
+    it points at, or None when there is nothing to choose between."""
+    if not facts:
+        return {"name": None,
+                "words": "There is nothing to choose between: Jarvis found no graphics card."}
+    if len(facts) == 1:
+        return {"name": facts[0]["name"],
+                "words": (f"Jarvis's suggestion: there is only one card ({facts[0]['name']}), "
+                          f"so there is nothing to pin.")}
+    roomy = max(facts, key=lambda f: (f["total_mb"] or 0))
+    mono = [f for f in facts if f["display"]]
+    if len(mono) == len(facts):
+        mono = []
+    if mono and mono[0]["name"] == roomy["name"]:
+        return {"name": roomy["name"],
+                "words": (f"Jarvis's suggestion: the {roomy['name']} has the most memory "
+                          f"({roomy['total_mb']:,} MiB) and no monitor taking part of it, so it "
+                          f"is the roomy one. Jarvis cannot say which is faster - no speed "
+                          f"number for these cards has been measured on this PC.")}
+    fastest = mono[0]["name"] if mono else None
+    words = (f"Jarvis's suggestion: the {roomy['name']} is the roomy card "
+             f"({roomy['total_mb']:,} MiB)")
+    if fastest:
+        words += f", and the {fastest} runs your desktop"
+    words += (". Only you can weigh that. Jarvis cannot say which card is faster: no speed "
+              "number for these cards has been measured on this PC.")
+    return {"name": roomy["name"], "words": words}
+
+
+def chat_card_view(det: Optional[dict] = None) -> dict:
+    """Everything the "Everyday chat runs on" setting needs, in one place:
+    what is chosen, where the model really is, the facts per card, and
+    Jarvis's own suggestion (labelled as a suggestion). Never raises."""
+    det = det if det is not None else detect()
+    facts = card_facts(det)
+    chosen = _read_pin()
+    return {"chosen": chosen,
+            "chosen_name": next((c["name"] for c in facts
+                                 if (c.get("uuid") or "").lower() == (chosen or "").lower()), None),
+            "where": where_chat_runs({"cards": facts}),
+            "cards": facts,
+            "suggestion": suggestion(facts),
+            "pin_command": pin_command(chosen) if chosen else None,
+            "problem": pin_problem(chosen) if chosen else "",
+            "leave_words": ("Leave it to Ollama: Jarvis does not pin a card, and which card the "
+                            "model lands on is Ollama's own choice.")}
+
+
+def describe_pin(det: dict, card: dict) -> str:
+    """The approval card for pinning everyday chat to ONE card. Every word
+    from here; what refusing costs is on it (AP-4). The card's own facts -
+    the same lines "Show the analysis" shows - are listed so the decision is
+    made on the numbers, and no speed is claimed anywhere."""
+    name = card["name"]
+    cmd = pin_command(card.get("uuid")) or ""
+    facts = next((c for c in card_facts(det)
+                  if (c.get("uuid") or "").lower() == (card.get("uuid") or "").lower()), None)
+    lines = []
+    if facts:
+        lines = list(facts["facts"]) + ["(measured) " + m for m in facts["measured"]]
+    block = "\n".join(f"- {ln}" for ln in lines)
+    return (
+        f"Pin everyday chat to the {name}?\n\n"
+        f"Right now Jarvis leaves this to Ollama, which picks a card by itself. Pinning "
+        f"remembers your choice and sets two settings for your own Windows user - "
+        f"{PIN_ENV[0]} to the {name}'s id, and {PIN_ENV[1]} to 0, because Ollama's other "
+        f"route (Vulkan) ignores {PIN_ENV[0]} and could still use the other card. Nothing "
+        f"else is changed, no file of yours is written, and nothing leaves this PC.\n\n"
+        f"What Jarvis knows about the {name}, every line read from your PC or from your own "
+        f"measurement of 2026-10-05 and nothing worked out:\n{block}\n\n"
+        f"Jarvis has no measured speed for either card, so it does not claim one card is "
+        f"faster than the other.\n\n"
+        f"Ollama reads these settings only when it starts, so quit Ollama and start it again "
+        f"afterwards for the pin to take effect.\n\n"
+        f"The exact line, if you would rather run it yourself:\n\n{cmd}\n\n"
+        f"If you say no: nothing changes, Jarvis keeps leaving the choice to Ollama, and the "
+        f"screen keeps saying so.\n\n"
+        f"If you change your mind later: choosing \"Leave it to Ollama\" puts both settings "
+        f"back at once, with no card.")
+
+
+def handle_pin(body, *, gate: Optional[Callable] = None,
+               tier_of: Optional[Callable[[str], str]] = None,
+               spawn: Optional[Callable] = None) -> tuple:
+    """POST /api/second-card with {"feature": "chat_card", ...}.
+
+    {"action": "leave"} - back to Ollama's own choice. IMMEDIATE, no card:
+    every loosening in this project is immediate.
+
+    {"action": "pin", "card": "<id or nvidia-smi number>"} - ONE approval
+    card (PIN_ACTION, tier "ask"), raised and waited on exactly like every
+    other second-card card (its own pending row, so a second request while it
+    waits is a 409). Nothing is written and no setting is touched until a
+    person says yes on that card; the answer while it waits is
+    {"ok": true, "pending": true}."""
+    bad = 400, {"error": "send {\"feature\": \"chat_card\", \"action\": \"leave\"} or "
+                         "{\"feature\": \"chat_card\", \"action\": \"pin\", "
+                         "\"card\": \"<card id>\"}"}
+    if not isinstance(body, dict):
+        return bad
+    action = str(body.get("action") or "").strip().lower()
+    if action == "leave":
+        return _leave_pin()
+    if action != "pin":
+        return bad
+    det = detect(fresh=True)
+    cards = list(det.get("cards") or [])
+    if not cards:
+        return 503, {"error": "no graphics card could be read, so there is nothing to pin"}
+    want = str(body.get("card") or "").strip()
+    card = _card_by(want, cards)
+    if card is None:
+        return 400, {"error": (f"{want[:40]!r} is not one of this PC's graphics cards; run "
+                              f"nvidia-smi -L in a terminal and use the part that starts "
+                              f"\"GPU-\"")}
+    if not card.get("uuid"):
+        return 400, {"error": (f"nvidia-smi did not give the {card['name']}'s id, and Jarvis "
+                              f"only pins a card by its id")}
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    try:
+        tier = tier_of(PIN_ACTION)
+    except Exception as exc:
+        tier = f"unreadable ({type(exc).__name__})"
+    if tier != "ask":
+        # Checked BEFORE a card is raised: a card that could not end in a
+        # person deciding should not be raised at all.
+        return 503, {"error": (f"{PIN_ACTION} is tier {tier!r} in jarvis-framework.toml, which "
+                              f"is not a person saying yes; it must stay \"ask\"")}
+    text = describe_pin(det, card)
+    detail = {"text": text, "what": f"pin everyday chat to the {card['name']}",
+              "card": card["name"], "card_id": card["uuid"],
+              "settings": [{"name": PIN_ENV[0], "value": card["uuid"]},
+                           {"name": PIN_ENV[1], "value": "0"}],
+              "leaves_this_pc": False}
+    pid = _uuid.uuid4().hex
+    with _PENDING_LOCK:
+        p = _PENDING.get("chat_card")
+        if p is not None and not p.get("withdrawn"):
+            return 409, {"error": "a card to pin everyday chat to a card is already waiting"}
+        _PENDING["chat_card"] = {"id": pid, "since": time.time(), "withdrawn": False}
+    _audit("second_card.asked", {"feature": "chat_card"})
+
+    def work() -> None:
+        try:
+            _decide_pin(card, pid, gate, tier_of)
+        except Exception:
+            _finish("chat_card", pid, "failed", "unexpected error")
+
+    try:
+        spawn(work)
+    except Exception:
+        _finish("chat_card", pid, "failed", "could not start")
+        return 503, {"error": "could not raise the approval card"}
+    return 200, {"ok": True, "chosen": None, "pending": True,
+                 "message": ("Approve the card on your PC or phone to pin everyday chat. "
+                             "Nothing changes until you do.")}
+
+
+def _decide_pin(card: dict, pid: str, gate: Callable, tier_of: Callable) -> None:
+    """`_decide`'s shape for the pin card: raise it, wait, act. Its own
+    function rather than a branch in the generic path - the checks and the
+    message are different enough (one card, no "needs" chain) that folding it
+    in risked the well-tested generic path more than it saved."""
+    det = detect()
+    cards = list(det.get("cards") or [])
+    if _card_by(card.get("uuid") or "", cards) is None:
+        return _finish("chat_card", pid, "refused",
+                       "that graphics card is not in this PC any more")
+    text = describe_pin(det, card)
+    detail = {"text": text, "what": f"pin everyday chat to the {card['name']}",
+              "card": card["name"], "card_id": card["uuid"],
+              "settings": [{"name": PIN_ENV[0], "value": card["uuid"]},
+                           {"name": PIN_ENV[1], "value": "0"}],
+              "leaves_this_pc": False}
+    try:
+        v = gate(PIN_ACTION, detail, text)
+    except Exception as exc:
+        return _finish("chat_card", pid, "refused",
+                       f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    rid = getattr(v, "request_id", None)
+    if vtier != "ask":
+        return _finish("chat_card", pid, "refused",
+                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
+                       rid)
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _finish("chat_card", pid, outcome, "", rid)
+        return _finish("chat_card", pid, "refused", str(outcome or "not approved"), rid)
+    err = _apply_pin(card["uuid"])
+    if err:
+        return _finish("chat_card", pid, "failed", err, rid)
+    _finish("chat_card", pid, "enabled", "", rid)
+
+
+def _card_by(want: str, cards: list) -> Optional[dict]:
+    """The card a request named, by its id (case-insensitive) or by the
+    number nvidia-smi gives it. None when neither matches."""
+    if not want:
+        return None
+    for c in cards:
+        if (c.get("uuid") or "").lower() == want.lower():
+            return c
+    if want.isdigit():
+        for c in cards:
+            if c.get("index") == int(want):
+                return c
+    return None
+
+
+def _apply_pin(card_uuid: str) -> Optional[str]:
+    """Set both user settings, then remember the choice. Nothing is written
+    to the owner's toml. None on success, else the error in words."""
+    err = _set_user_env(PIN_ENV[0], card_uuid)
+    if err:
+        return err
+    err = _set_user_env(PIN_ENV[1], "0")
+    if err:
+        return err
+    return _write_pin(card_uuid)
+
+
+def _leave_pin() -> tuple:
+    """Back to "leave it to Ollama": both settings removed, the choice
+    forgotten. Immediate - no card, no wait, and safe on a PC that never had
+    the pin (removing a setting that is not there does nothing)."""
+    notes = []
+    for name in PIN_ENV:
+        err = _set_user_env(name, None)
+        if err:
+            notes.append(err)
+    err = _write_pin(None)
+    if err:
+        notes.append(err)
+    if notes:
+        return 500, {"error": "; ".join(notes)}
+    return 200, {"ok": True, "pending": False, "chosen": None,
+                 "words": where_chat_runs()["words"]}
+
+
+# --------------------------------------------------------------------------
 #   Detection
 # --------------------------------------------------------------------------
 
@@ -1288,14 +1935,53 @@ def _detect(fresh: bool) -> dict:
     # only what is kept internally for a card beyond the first two.
     lanes = sorted(candidates, key=lambda d: (-d.total_mb, d.index))
     second = lanes[0] if lanes else None
+    # Where the model really is, read from the machine - never inferred from
+    # which card a monitor is plugged into (2026-10-05). One read, used for
+    # every row below.
+    other_name = second.name if second is not None else "the second card"
+    det_rows = [{"index": c.index, "uuid": c.uuid or None, "name": c.name,
+                 "total_mb": c.total_mb, "free_mb": c.free_mb,
+                 "compute_cap": c.compute_cap, "display_active": c.display_active}
+                for c in cards]
+    seen = where_chat_runs({"cards": det_rows})
+    seen_card = (seen.get("card") or {}).get("uuid") or ""
+    pinned_here = bool(seen.get("pinned"))
     for c in sorted(cards, key=lambda d: d.index):
         if c is prim:
-            role, why = "primary", f"everyday chat runs here: {rule}"
+            if pinned_here and (c.uuid or "").lower() == str(seen.get("pinned")).lower():
+                role = "primary"
+                why = f"everyday chat runs here: {rule}"
+            elif seen_card and (c.uuid or "").lower() == seen_card.lower():
+                role = "primary"
+                why = ("everyday chat runs here now: Jarvis did not pin a card, and it read "
+                       "this card from Ollama and nvidia-smi")
+            elif seen_card:
+                # The model IS on another card, read from the machine. This
+                # one is only where Jarvis's own settings WOULD go; saying
+                # chat runs here would be the exact false claim this change
+                # exists to remove (2026-10-05).
+                role = "primary"
+                why = (f"Jarvis's own settings are made for this card ({rule}), but you have "
+                       f"not pinned a card, and the model is on the {other_name} right now, "
+                       f"so everyday chat is not on this card")
+            else:
+                # Nothing pinned, and either nothing is loaded or nvidia-smi
+                # does not name the program using a card. The fallback rule
+                # still picks this card for PLANNING (and for the settings
+                # commands, which need one card to name), but Jarvis must not
+                # say the model is on it: on this PC the monitor card and the
+                # card holding the model were different cards
+                # (docs/MEASURED-2026-10-05-owner-pc.md). The words here are
+                # the ones the owner reads, and they say only what is known.
+                role = "primary"
+                why = (f"Jarvis's own settings are made for this card ({rule}), but you have "
+                       f"not pinned a card, so Jarvis cannot say everyday chat is on it - open "
+                       f"\"Everyday chat runs on\" to read which card it is really on")
         elif c is second:
             role, why = "second", "the second-card features would run here"
             if c.display_active:
                 why += (" (a monitor is plugged into it, which uses some of its memory; "
-                        "plug the monitors into the main card)")
+                        f"plug the monitors into the {other_name})")
         elif c in candidates:
             if c.total_mb < second.total_mb:
                 role, why = "unused", f"capable, but the {second.name} has more memory"
@@ -2812,9 +3498,6 @@ def feature_active(feature: str) -> bool:
 #   Is the everyday Ollama kept off the second card?
 # --------------------------------------------------------------------------
 
-_UUID_RE = re.compile(r"GPU-[0-9A-Fa-f-]{8,64}")
-
-
 def pin_command(primary_uuid: Optional[str]) -> Optional[str]:
     """One PowerShell line (5.1-safe) that pins the owner's everyday Ollama
     to the main card. None without a real card id.
@@ -3007,6 +3690,13 @@ def status() -> dict:
         "main_ollama_pinned": pinned,
         "pin_note": note,
         "pin_command": cmd,
+        # "Everyday chat runs on" (owner's decision, 2026-10-05): what the
+        # owner chose, where the model really is, the facts per card (each
+        # read from the machine or from a measurement already written down),
+        # and Jarvis's own suggestion - labelled as a suggestion. Purely
+        # additive: everything above is unchanged, and with nothing pinned
+        # `chosen` is None, which is what "leave it to Ollama" reads as.
+        "chat_card": chat_card_view(det),
         "features": feats,
         # How the last approval card ended (AP-6): {feature, outcome, why,
         # at}, or null when none has ended since Jarvis started.
@@ -3746,7 +4436,7 @@ def _describe_combined(det: dict, why: str = "") -> str:
         f"how fast each card is - so most of the model can land on the bigger, slower card. "
         + (_combined_alone_note(det) + " " if _combined_alone_note(det) else "") +
         f"Every answer then runs at roughly that card's pace. Real speed is not measured yet: "
-        f"the extra card is not installed yet.\n\n"
+        f"this lane has never been run on this PC, so no speed number for it exists.\n\n"
         f"This uses both cards for the one model, so it cannot run at the same time as the "
         f"second card's other features (Longer conversations, Pictures, Learning in the "
         f"background, Browser control, Wiki builder, Study helper) - turn those off first, or "
@@ -4213,10 +4903,14 @@ def request_change(feature: str, enabled: bool = False, *, assign: Optional[str]
 def handle_post(body) -> tuple:
     """The route's body: {"feature": "...", "enabled": true|false} - or,
     for the third card, {"feature": "third", "assign": "<feature id>" or
-    null}."""
+    null} - or, for which card everyday chat runs on, {"feature":
+    "chat_card", "action": "leave"} / {"feature": "chat_card", "action":
+    "pin", "card": "<id>"}."""
     if not isinstance(body, dict):
         return 400, {"error": "send {\"feature\": \"...\", \"enabled\": true or false}"}
     feature = str(body.get("feature") or "")
+    if feature == "chat_card":
+        return handle_pin(body)
     if feature == "third":
         return request_change(feature, assign=body.get("assign"))
     return request_change(feature, body.get("enabled"))
