@@ -1175,6 +1175,8 @@ $SHIPPED = @(
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
     'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
     'jarvis_inbox_tidy.py'       # tool "tidy_inbox": archive, star, mark as read or move to Trash, ONE card listing every email, 10 minutes to Undo, no permanent delete; inbox-tidy.patch
+    'jarvis_energy.py'           # what one answer cost the card (jarvis_agent.py records a row at the end of a turn; off by default)
+    'jarvis_injection.py'        # the "sneaky instruction" table (jarvis_agent._TurnWatch.took_in turns a hit into a card flag; advisory only)
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
