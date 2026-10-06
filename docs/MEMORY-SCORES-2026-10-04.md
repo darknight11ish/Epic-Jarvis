@@ -77,10 +77,19 @@ know: none returned` = the share of questions memory cannot answer for which
 | neutral | 1,071 | recall 87.2%, none 31.6% | recall 91.5%, none 2.6% | recall 91.5%, **none 0.0%** | recall 91.5%, none 0.0% |
 | same-topic | 71 | — | recall 97.9%, none 5.3% | recall 97.9%, **none 0.0%** | — |
 
-So on the reported (held-out) half, **1.1 loses no right fact and returns no
-wrong fact at all**, where 1.0 returns one for ~5% of unanswerable
-questions. That looks like a free win — and it is deliberately **not taken
-in this pass**:
+**Read the TABLE above, not the sentence that used to be here (corrected
+2026-10-06).** The sentence said 1.1 "returns no wrong fact at all" while 1.0
+"returns one for ~5% of unanswerable questions", which is the opposite of what
+the column says. Taken as written - "none returned" meaning the share of
+unanswerable questions for which **no** wrong fact came back - the table reads
+39.5 % at 0.9, 5.3 % at 1.0 and **0.0 % at 1.1**: a *looser* floor hands back a
+wrong fact *more* often, and the build-machine scoreboard says the same in
+words ("Don't know" questions still get 1.47 wrong facts each,
+`docs/MEMORY-SCOREBOARD.md:87-88`). On that reading, moving to 1.1 would make
+the confabulation worse.
+
+So the change is deliberately **not taken in this pass** - and not only
+because the numbers disagree with themselves:
 
 `eval_memory.py` chooses the floor on the **tune half only**
 (`choose_distance()`, "Allowed: a distance that finds every right fact the

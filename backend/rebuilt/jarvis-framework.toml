@@ -191,6 +191,20 @@ run_shell_on_host         = "ask"
 spend_money               = "ask"
 control_computer          = "ask"
 change_own_config         = "ask"
+# FOUR ACTIONS THAT USED TO RESOLVE BY ACCIDENT (2026-10-06). Each of these
+# had NO line here, so each took `unknown_action_tier` - "ask" today, which is
+# the tier each was meant to have, but only because the default happens to
+# match. One edit to `unknown_action_tier` would have moved all four silently,
+# including phone and browser control. The values below are the tiers they
+# already had: nothing about today's behaviour changes, and
+# test_gate_names.py's recorded fall-through list no longer names them.
+#   control_browser / control_phone - read and act through another device
+#   research_authenticated - a GitHub call with the owner's own key
+#   run_plan - the plan card, switched off until tools/tool_eval clears it
+control_browser           = "ask"
+control_phone             = "ask"
+research_authenticated    = "ask"
+run_plan                  = "ask"
 # Loosening one line of this table from the desktop's "What asks first" page
 # (the owner's decision of 2026-09-26): one card, approved on this PC only,
 # with Windows Hello. Only calendar_read, email_read, notes_search,
