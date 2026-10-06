@@ -1,27 +1,26 @@
 # The documents, and which ones are current
 
-There are **288 markdown documents** here, adding up to about **6.7 MB**. Neither
+There are **290 markdown documents** here, adding up to about **6.8 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-06
 with the two lines below, run from the top of the repository - so run them again
 whenever you want today's numbers rather than this page's:
 
 ```powershell
-(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 288 documents
+(Get-ChildItem docs -Recurse -Filter *.md).Count                        # 290 documents
 "{0:N0}" -f (Get-ChildItem docs -Recurse -Filter *.md |
-  Measure-Object -Property Length -Sum).Sum                             # about 6,700,000 bytes
+  Measure-Object -Property Length -Sum).Sum                             # about 6,760,000 bytes
 ```
 
 Both lines count the documents in the subfolders too, not only the ones sitting
 directly in `docs/`. The count is the honest measure of how much is here; treat
-the size as "around 20 MB" and re-measure it rather than trusting the digits
+the size as "around 6.8 MB" and re-measure it rather than trusting the digits
 above. **Five of the documents are the ones to read**; the rest are the history of
 how Jarvis got here: audits, research, and notes that one working session left for
-another. One generated file, the source bundle, was recorded as deleted on
-2026-10-05 and is still in the tree (see the last table below): the removal was
-written down before it was run, so every old link still works, and the bundle's
-fate is the one open item on this page. This page says which is
-which.
+another. One generated file, the source bundle, is **really gone** now: the removal
+this page had recorded before it was run was run on 2026-10-05 (see the last table
+below), so `docs/` is 13.5 MB smaller than it was, and every old link still works
+because git history has it. This page says which is which.
 
 (An earlier version of this paragraph said "about ninety documents", and at some
 point it also gave a size of 720 KB for something that had grown far past that -
@@ -124,7 +123,7 @@ them; the current documents above replace them.
 
 | Document | Why it is stale |
 |---|---|
-| SOURCE-BUNDLE.md | **Still in the tree, checked 2026-10-05.** Its removal was recorded here as done and was never run, so this is the one row in this table whose document has not gone away; `docs/FEATURE-REVIEW-2026-10-04.md` section B1 item 5 asks for the removal. `git ls-files docs/SOURCE-BUNDLE.md` still lists it. It is 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` is this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line: `py -3 tools/gen_source_bundle.py`. |
+| ~~SOURCE-BUNDLE.md~~ | **Removed 2026-10-05, and this time the removal was really run**: `git ls-files docs/SOURCE-BUNDLE.md` lists nothing, and `.gitignore` now carries the path so a regenerated copy cannot come back tracked. It was 13,469,567 bytes of generated output - 13.5 MB of the 19 MB `docs/` was this one file - a copy of the phone app's source at an old commit on a deleted branch, made for an outside audit. The real source is in `jarvis-client/`, and the bundle is regenerated from the tree in one line whenever a reviewer wants it: `py -3 tools/gen_source_bundle.py`, which is still tracked. Git history still has the file (`git show <older-commit>:docs/SOURCE-BUNDLE.md`), so nothing is lost. |
 | [GEMINI-AUDIT-PROMPT.md](GEMINI-AUDIT-PROMPT.md), [GEMINI-AUDIT.md](GEMINI-AUDIT.md), [ASK-GEMINI.md](ASK-GEMINI.md) | Instructions for past outside audits. |
 | [HANDOFF.md](HANDOFF.md) | A handover note for the phone app, 15 September. |
 | [ANDROID-FEATURE-AUDIT.md](ANDROID-FEATURE-AUDIT.md), [ANDROID-REPLY-2026-09-15.md](ANDROID-REPLY-2026-09-15.md), [ANDROID-REPLY-2026-09-15-GRADIENT.md](ANDROID-REPLY-2026-09-15-GRADIENT.md), [ANDROID-REPLY-2026-09-18-CATCHUP.md](ANDROID-REPLY-2026-09-18-CATCHUP.md), [ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md](ANDROID-REPLY-2026-09-18-ENGINE-PARITY.md), [ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md](ANDROID-REPLY-2026-09-18-FEATURE-AUDIT.md) | Messages between the phone and desktop sessions, 15-18 September. |

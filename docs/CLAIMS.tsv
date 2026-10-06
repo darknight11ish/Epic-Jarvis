@@ -50,7 +50,7 @@ A16	per-widget transparency, accent and high contrast can be set	no definite che
 A17	"Pin to home screen" exists for a Brain section or a chat	grep:jarvis-client:Pin to home screen	open	CLAUDE.md:1828
 A18	after an approve the desktop says in one line which Undo exists	grep:jarvis-desktop/src/main.js:function desktopUndoNotice	built	CLAUDE.md:1830
 A19	after an approve the phone says in one line which Undo exists	grep:jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt:private fun undoNoticeFor	built	CLAUDE.md:1831
-A20	the phone shows a read-only list of past approvals ("Activity")	grep:jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/InboxScreen.kt:past approvals, read-only	built	CLAUDE.md:1831
+A20	the phone shows a read-only list of past approvals ("Activity")	grep:jarvis-client/app/src/main/java/com/jarvis/client/net/PastApprovals.kt:Cards you have already decided. Read-only	built	CLAUDE.md:1831
 A21	setup cards are written in plain words	no definite check: "plain words" is a judgement about wording, not a string; a grep for any particular phrasing would pin one card's sentence, not the rule	unverifiable	CLAUDE.md:1832
 A22	Approve and Deny are pinned on long phone cards	no definite check: whether the buttons need pinning depends on how long a card is on screen, which no file states; the card's layout is a Compose column (ApprovalCard.kt) and "pinned" is not a marker anywhere	unverifiable	CLAUDE.md:1833
 A23	a quiet reminder appears when a routine card has under 60 s left	no definite check: the sentences that carry "under a minute left" are the screen-watch sign (look-rules.js, ScreenRules.kt), not the card's timer, and the queue does not name the words a reminder would use	unverifiable	CLAUDE.md:1833
@@ -88,7 +88,7 @@ B16	the prompt-injection detector (Prompt Guard 2 or the Apache-licensed one) is
 B17	the shipped-module suite passes (a 2026-09-29 audit ran it: 486 pass)	test:backend/test_shipped_modules.py	built	docs/audit-reports-2026-09-29-30/46-audit-ad9d7ce2.md:12
 B18	the phone's shader budget is still the 60,000 the eyelids decision recorded	number:CLAUDE.md:tools/shader_size.py:60,000	built	CLAUDE.md:998
 B19	the second card's floor is still the 7,680 MiB the owner's decision recorded	number:docs/SECOND-CARD.md:backend/jarvis_second_card.py:7,680	built	docs/SECOND-CARD.md:26
-B20	the audit's "tap-to-talk is not built" is settled: the phone's VoiceButton no longer documents the opposite of the code ninety lines below it	absent:jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/VoiceButton.kt:Hold rather than tap-to-start/tap-to-stop	open	docs/audit-reports-2026-09-29-30/43-audit-a696f0b6.md:16
+B20	the audit's "tap-to-talk is not built" is settled: the phone's VoiceButton no longer documents the opposite of the code ninety lines below it	absent:jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/VoiceButton.kt:Hold rather than tap-to-start/tap-to-stop	built	docs/audit-reports-2026-09-29-30/43-audit-a696f0b6.md:16
 C01	the chat-tags design page no longer calls the built feature a design	absent:docs/CHAT-TAGS-DESIGN.md:designed, not built	built	docs/CHAT-TAGS-DESIGN.md:3
 C02	chat tags are built - the tag registry lives in the chat log	grep:backend/jarvis_chat_log.py:TAG_STARTERS	built	docs/JARVIS-API.md:15910
 C03	the review-decks page no longer says nothing here is built	absent:docs/QUIZ-DECKS-DESIGN.md:Nothing here is built	built	docs/QUIZ-DECKS-DESIGN.md:3
@@ -143,7 +143,7 @@ C51	"Things you can say" is built in the desktop's empty Jarvis bar	grep:jarvis-
 C52	the ease-of-use audit no longer calls the built "Things you can say" list not built	absent:docs/EASE-OF-USE-AUDIT-2026-09-27.md:I116 "Things you can say", I28 speaking speed	open	docs/EASE-OF-USE-AUDIT-2026-09-27.md:144
 C53	the documents page prints the command that measures its own count	grep:docs/README.md:Get-ChildItem docs -Recurse -Filter *.md	built	docs/README.md:10
 C54	the phone holds the neutral animal pose on the wellbeing event	no definite check: the phone reads the crisis help line from the X-Jarvis-Route header under the same word "wellbeing" (jarvis-client/.../net/Wellbeing.kt), so a grep for it cannot tell the event from the header, and the register will not invent the marker the phone would use; ARCHITECTURE.md:1699 now says the phone's half is still to build	unverifiable	docs/ARCHITECTURE.md:1699
-D01	the source bundle really is gone from the tree, as the documents page recorded	no-file:docs/SOURCE-BUNDLE.md	open	docs/README.md:127
-D02	the source bundle is still in the tree, so that removal was never run	file:docs/SOURCE-BUNDLE.md	built	docs/README.md:127
-D03	the documents page no longer claims the source bundle was removed while it is present	absent:docs/README.md:Removed 2026-10-05	built	docs/README.md:127
+D01	the source bundle really is gone from the tree, as the documents page recorded	no-file:docs/SOURCE-BUNDLE.md	built	docs/README.md:127
+D02	the documents page no longer records the source bundle as still being in the tree	absent:docs/README.md:Still in the tree	built	docs/README.md:127
+D03	the documents page records the source bundle's removal, now that the removal really ran	grep:docs/README.md:Removed 2026-10-05	built	docs/README.md:127
 D04	the documents page no longer counts an un-run removal as nothing moved or deleted	absent:docs/README.md:has been moved or deleted	built	docs/README.md:20

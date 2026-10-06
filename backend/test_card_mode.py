@@ -22,6 +22,10 @@ really done - the same stand-in backend/test_second_card.py uses):
     refused (409) while the first is set up, in both directions, and the
     refusal NAMES the switches to turn off instead of leaving the owner to
     find them;
+  - the choice and the split's own capability gate AGREE (2026-10-05): while a
+    chosen hardware preset is running, `_combined_capable` refuses the split
+    and the choice carries that exact refusal rather than writing one of its
+    own, so the words on screen cannot drift from the guard;
   - it is impossible in reality too: a hand-edited file holding both is
     reported as no choice at all, in words, and starts NEITHER lane;
   - picking the split raises the SAME approval card the switch already raises
@@ -470,6 +474,68 @@ def t_the_phone_already_has_the_same_decision():
           'obj["features"]' in net and 'obj["combined"]' in net)
     check("the phone was NOT given a copy of the choice's words: one source, on the PC",
           "One model across both cards" not in net and "Two models at once" not in net)
+
+
+def t_the_choice_reports_the_preset_gate():
+    """The two changes this suite and test_second_card.py carry are meant to
+    AGREE, and this is where that is proved rather than assumed.
+
+    The bug audit of 2026-10-05 (next-two-bugs) made `_combined_capable`
+    refuse the split while a chosen hardware preset is running: the preset
+    keeps the extra models beside chat on ONE card, the split wants BOTH cards
+    to itself, and the preset is the owner's own, more specific answer. The
+    choice (next-card-mode) REPORTS that same gate. So the mode block must not
+    re-derive the answer for itself - it must carry `_combined_capable`'s own
+    refusal, word for word - or the words on screen and the guard could say
+    different things about the same state, which is exactly the disagreement
+    `current_mode`'s derived-not-stored design exists to prevent.
+
+    Three states, all without a graphics card: two plain cards (capable), a
+    chosen preset (`_plan` set, `_main` true - both of next-card-mode's own
+    readings of the preset fire together), and the one-big-card path where
+    `_main` is true with NO preset (`_detect`'s own >= 15 GB branch), which
+    must fall through to the arithmetic refusal and not borrow the preset's
+    words."""
+    two_cards = [{"role": "primary", "name": "NVIDIA GeForce RTX 2080 SUPER",
+                  "uuid": "GPU-2080s", "total_mb": 8192, "compute_cap": 7.5},
+                 {"role": "second", "name": "NVIDIA GeForce RTX 2060",
+                  "uuid": "GPU-2060", "total_mb": 12288, "compute_cap": 7.5}]
+    plain = {"capable": True, "why": "", "cards": two_cards}
+    ok, why = SC._combined_capable(plain)
+    ms = SC.mode_status(SW_OFF, plain, [])
+    check("two plain cards: the split is capable and the choice offers it",
+          ok is True and ms["options"][0]["available"] is True, (ok, why, ms["options"][0]))
+    check("and with nothing refusing it, the choice invents no refusal of its own",
+          ms["options"][0]["blocked"] == "" and ms["preset"] is False,
+          (ms["options"][0]["blocked"], ms["preset"]))
+
+    preset = {"capable": True, "why": "", "cards": two_cards, "_main": True,
+              "_plan": {"preset": "features", "chat_card": None, "lane_card": None}}
+    ok, why = SC._combined_capable(preset)
+    ms = SC.mode_status(SW_OFF, preset, [])
+    check("a chosen preset: two capable cards, and the split is still refused",
+          ok is False and '"Most features" setup' in why, (ok, why))
+    check("both readings of that preset state fire together: _plan and _main",
+          preset.get("_plan") is not None and preset.get("_main") is True, preset)
+    check("the choice carries THAT refusal word for word, not one of its own",
+          ms["options"][0]["blocked"] == f"Not yet - {why}.",
+          (ms["options"][0]["blocked"], f"Not yet - {why}."))
+    check("so the choice reports the preset, and neither way as running",
+          ms["preset"] is True and ms["mode"] == "" and ms["chosen"] is False, ms)
+    check("and the second way is refused with the preset named, not silently",
+          ms["options"][1]["available"] is False
+          and "hardware preset is chosen" in ms["options"][1]["blocked"],
+          ms["options"][1])
+    check("the note says the extra features run in the everyday Ollama instead",
+          "hardware preset is chosen" in ms["note"], ms["note"])
+
+    one_big = {"capable": False, "why": "only one graphics card found", "_main": True}
+    ok, why = SC._combined_capable(one_big)
+    check("one big card with NO preset: the refusal is the arithmetic, not the preset",
+          ok is False and "needs two graphics cards" in why
+          and "setup" not in why, (ok, why))
+    check("and that state is still neither way, read from _main alone",
+          SC.current_mode(switches(master=True, features=("learning",)), one_big) == "")
 
 
 def t_real_two_card_hardware():
