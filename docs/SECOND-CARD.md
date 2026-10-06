@@ -44,8 +44,22 @@ once its lane is switched on, and no lane is on yet:
 The card that runs everyday chat (the "main" card) is: the one named in
 `[compute] primary_gpu` in `jarvis-framework.toml`, if you set it; else the
 one the "Everyday chat runs on" setting in the Hardware screen pins, if you
-pinned one there; else the one your monitor is plugged into; else the first
-one `nvidia-smi` lists.
+pinned one there; else **the card the model is really on**, read from
+`ollama ps` and `nvidia-smi`; else the one your monitor is plugged into; else
+the first one `nvidia-smi` lists.
+
+**The "card the model is really on" step was added to the plan on 2026-10-06,
+and it is the one that changes what you see.** Before it, the plan took the
+monitor rule while the "Everyday chat runs on" setting read the machine - so
+on this PC the boot banner and the Brain pane said chat was on the 2080
+SUPER (the monitor card) while the model was really on the 12 GB 2060. Now
+both read the same thing, in the same words. When the model cannot be read
+at all - nothing is loaded, or the driver does not name the program using a
+card - the sentence says so plainly ("Jarvis cannot see which card the model
+is on, so everyday chat is only ASSUMED to be on the ... - an assumption,
+not something it read") rather than naming a card it did not see. Jarvis
+still has to pick one card to plan around; it just no longer claims to have
+read it.
 
 **Corrected 2026-10-05.** This used to end "With the monitors on the 2080
 Super, that is the 2080 Super, which is what you want: it is the faster

@@ -888,6 +888,320 @@
         "why": "No capable third graphics card is plugged in right now."
       }
     },
+    "chat_observed_on_the_second_card": {
+      "active": false,
+      "chat_card": {
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display": true,
+            "facts": [
+              "Memory: 8,192 MiB total (8 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "A monitor is plugged into this card, so the desktop uses part of its memory.",
+              "Free right now: 6,120 MiB."
+            ],
+            "free_mb": 6120,
+            "index": 0,
+            "measured": [
+              "Measured on 2026-10-05: this card ran the desktop only - 1,144 MiB in use, and no model on it."
+            ],
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+          },
+          {
+            "compute_cap": 7.5,
+            "display": false,
+            "facts": [
+              "Memory: 12,288 MiB total (12 GB), as nvidia-smi reports it.",
+              "Compute capability 7.5 (Turing, the RTX 20 generation, is 7.5).",
+              "No monitor is plugged into this card.",
+              "Free right now: 12,030 MiB."
+            ],
+            "free_mb": 12030,
+            "index": 1,
+            "measured": [
+              "Measured on 2026-10-05: the model was on this card and 100% of it was on the card - every layer (offloaded 37/37) - running at 4,096 tokens of conversation, holding 5.6 GB and leaving about 6.4 GB free.",
+              "Measured on 2026-10-05: 16,384 tokens of conversation was NOT loaded; the 6.5 GB it needs is worked out on paper, not measured."
+            ],
+            "name": "NVIDIA GeForce RTX 2060",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          }
+        ],
+        "chosen": null,
+        "chosen_name": null,
+        "leave_words": "Leave it to Ollama: Jarvis does not pin a card, and which card the model lands on is Ollama's own choice.",
+        "pin_command": null,
+        "problem": "",
+        "suggestion": {
+          "name": "NVIDIA GeForce RTX 2060",
+          "words": "Jarvis's suggestion: the NVIDIA GeForce RTX 2060 is the roomy card (12,288 MiB), and the NVIDIA GeForce RTX 2080 SUPER runs your desktop. Only you can weigh that. Jarvis cannot say which card is faster: no speed number for these cards has been measured on this PC."
+        },
+        "where": {
+          "card": {
+            "context": null,
+            "index": 1,
+            "model": "qwen3:8b",
+            "name": "NVIDIA GeForce RTX 2060",
+            "on_card_percent": 100,
+            "used_mb": 5200,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+          },
+          "context": 4096,
+          "model": "qwen3:8b",
+          "model_loaded": true,
+          "on_card_percent": 100,
+          "pinned": null,
+          "used_mb": 5200,
+          "words": "Jarvis leaves the choice to Ollama, and Ollama has the model on the NVIDIA GeForce RTX 2060 right now. 100% of it is on a card. Jarvis did not pin a card, so which card this is can change."
+        }
+      },
+      "combined": {
+        "active": false,
+        "available": false,
+        "capable": true,
+        "capable_why": "",
+        "conflict": false,
+        "context": 32768,
+        "enabled": false,
+        "id": "combined",
+        "memory_gib": 12.28,
+        "model": "qwen3:14b",
+        "name": "One bigger model on both cards",
+        "what": "Loads one bigger model than either card holds alone, split across both at once by Ollama's own scheduler. Ties up both cards: the second card's other features cannot run while this does.",
+        "why": "Off."
+      },
+      "detected": {
+        "capable": true,
+        "cards": [
+          {
+            "compute_cap": 7.5,
+            "display_active": true,
+            "free_mb": 6120,
+            "index": 0,
+            "name": "NVIDIA GeForce RTX 2080 SUPER",
+            "role": "second",
+            "total_mb": 8192,
+            "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10",
+            "why": "the second-card features would run here (a monitor is plugged into it, which uses some of its memory; plug the monitors into the NVIDIA GeForce RTX 2080 SUPER)"
+          },
+          {
+            "compute_cap": 7.5,
+            "display_active": false,
+            "free_mb": 12030,
+            "index": 1,
+            "name": "NVIDIA GeForce RTX 2060",
+            "role": "primary",
+            "total_mb": 12288,
+            "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23",
+            "why": "everyday chat runs here now: Jarvis read this card from Ollama and nvidia-smi, and it did not pin one"
+          }
+        ],
+        "primary": {
+          "index": 1,
+          "name": "NVIDIA GeForce RTX 2060",
+          "uuid": "GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23"
+        },
+        "second": {
+          "compute_cap": 7.5,
+          "index": 0,
+          "name": "NVIDIA GeForce RTX 2080 SUPER",
+          "total_mb": 8192,
+          "uuid": "GPU-3f2a9c1e-7b1d-4e8a-9c55-0d4b2e6a8f10"
+        },
+        "why": "the NVIDIA GeForce RTX 2080 SUPER (8 GB) can take some of the extra-card features (Learning in the background, Wiki builder, Study helper, Referee suggestions), which keeps that work off the NVIDIA GeForce RTX 2060; it holds no more than the NVIDIA GeForce RTX 2060, so Longer conversations, Pictures, Browser control stay off; everyday chat stays on the NVIDIA GeForce RTX 2060"
+      },
+      "enabled": false,
+      "features": [
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "long_context",
+          "memory_gib": null,
+          "model": null,
+          "model_free": false,
+          "model_installed": null,
+          "name": "Longer conversations",
+          "needs": [],
+          "what": "When a conversation grows past what the main card has room for, that answer is written on the second card, which has room for more of it.",
+          "why": "Off, but the NVIDIA GeForce RTX 2080 SUPER (8 GB) holds no more conversation than your main card already does (16,384 tokens), so moving long conversations there would not help. A card with 10 GB or more can hold more. It cannot be turned on with this card."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "vision",
+          "memory_gib": null,
+          "model": null,
+          "model_free": false,
+          "model_installed": null,
+          "name": "Pictures",
+          "needs": [],
+          "what": "A message with a picture goes to a picture-reading model on the second card, on this PC, so Jarvis can see what you attached.",
+          "why": "Off, but the picture model needs about 6.5 GB and the NVIDIA GeForce RTX 2080 SUPER has about 6.2 GB to spare after the desktop and the monitor plugged into it and a safety gap; plug the monitors into the main card and it may fit. It cannot be turned on with this card."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "learning",
+          "memory_gib": 5.9,
+          "model": "qwen3:8b",
+          "model_free": false,
+          "model_installed": true,
+          "name": "Learning in the background",
+          "needs": [],
+          "what": "Jarvis learns from your conversations on the second card, so it never slows the main card down and does not wait long for a pause.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "browser_control",
+          "memory_gib": null,
+          "model": null,
+          "model_free": false,
+          "model_installed": null,
+          "name": "Browser control",
+          "needs": [
+            "long_context"
+          ],
+          "what": "Jarvis can work a web page for you in your browser, one approved step at a time, using the second card's extra room for long pages. The pages are on the internet: what it types or clicks there reaches that website.",
+          "why": "Off, but Browser control needs room for page after page of history, more than your main card has, and the NVIDIA GeForce RTX 2080 SUPER (8 GB) has no more than the main card. A card with 10 GB or more can do it. It cannot be turned on with this card."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "wiki",
+          "memory_gib": 5.9,
+          "model": "qwen3:8b",
+          "model_free": false,
+          "model_installed": true,
+          "name": "Wiki builder",
+          "needs": [],
+          "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": 5.9,
+          "model": "qwen3:8b",
+          "model_free": false,
+          "model_installed": true,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_free": true,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
+          "why": "Off."
+        }
+      ],
+      "lane": {
+        "state": "off",
+        "why": "the second-card switch is off"
+      },
+      "last": null,
+      "main_ollama_pinned": false,
+      "mode": {
+        "chosen": false,
+        "conflict": false,
+        "conflict_why": "",
+        "detail": "",
+        "mode": "",
+        "name": "",
+        "note": "Two ways to use both cards. They cannot both run at once, because each one wants the whole of at least one card - picking one is the whole decision, so there is nothing to keep in step by hand.",
+        "options": [
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis loads ONE bigger model and spreads it across both cards, so you get a model neither card could hold on its own. The cost is speed: every word has to cross from one card to the other and back, so it runs at roughly the slower card's pace. It needs BOTH cards to itself, so none of the switches below can be on at the same time. Worth knowing: Ollama divides the model by how much memory is free on each card, so if your everyday model is still loaded, that card has less room than this plan expects.",
+            "hint": "",
+            "id": "split",
+            "name": "One model across both cards",
+            "pending": false,
+            "selected": false
+          },
+          {
+            "available": true,
+            "blocked": "",
+            "detail": "Jarvis keeps your everyday model on your main card and runs a second, different model on the other card. Each one runs at its own full speed and the two can work at the same time - that is what the switches below set up, and each one needs the main switch on. The cost is size: each model still has to fit on its own card, so neither can be bigger than that card.",
+            "hint": "Nothing is set up on the second card yet. Turn on the main switch below, then the switches you want the other card to run.",
+            "id": "concurrent",
+            "name": "Two models at once, one on each card",
+            "pending": false,
+            "selected": false
+          }
+        ],
+        "preset": false,
+        "title": "How should Jarvis use your two graphics cards?"
+      },
+      "pending": [],
+      "picture_text": {
+        "available": false,
+        "engine": "Windows' own text recognition",
+        "why": "Reading the words in a picture needs Windows' own text recognition, and this is not Windows."
+      },
+      "pin_command": "[Environment]::SetEnvironmentVariable('CUDA_VISIBLE_DEVICES', 'GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23', 'User'); [Environment]::SetEnvironmentVariable('OLLAMA_VULKAN', '0', 'User'); Write-Host 'Done. Now quit Ollama (right-click its icon by the clock, then Quit Ollama) and start it again from the Start menu. Nothing was written to any file.'",
+      "pin_note": "The everyday Ollama is not pinned: it can see both cards and may put models on the second one. Run the command below once, then restart Ollama.",
+      "suggest": {
+        "available": true,
+        "detail": "Lets Jarvis OFFER to turn on \"One bigger model on both cards\" when it notices one of these - never switches it on by itself. Accepting the offer raises the exact same approval card as the switch above; saying no only means \"not now\" - Jarvis waits a while before offering again.",
+        "signals": [
+          {
+            "default": true,
+            "enabled": true,
+            "id": "struggle",
+            "label": "When Jarvis is visibly struggling",
+            "why": "Jarvis had to ask the model to try a tool call again more than a couple of times in one conversation - a sign it is struggling with what you are asking."
+          },
+          {
+            "default": true,
+            "enabled": true,
+            "id": "correction",
+            "label": "When you correct an answer more than once",
+            "why": "You have told Jarvis it got something wrong more than once in the same conversation."
+          }
+        ],
+        "title": "When to suggest the bigger model"
+      },
+      "third": {
+        "assignable": [],
+        "assigned": null,
+        "capable": false,
+        "card": null,
+        "context": null,
+        "lane": {
+          "state": "off",
+          "why": "no capable third graphics card"
+        },
+        "memory_gib": null,
+        "model": null,
+        "model_installed": null,
+        "pending": false,
+        "unavailable": {},
+        "why": "No capable third graphics card is plugged in right now."
+      }
+    },
     "combined_running": {
       "active": false,
       "chat_card": {

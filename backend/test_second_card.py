@@ -1811,6 +1811,153 @@ def t_planning_uses_the_card_the_model_is_on():
           not _claims_speed(why) and "read this card from Ollama" not in why, why)
 
 
+def _plan_on_the_same_machine(world):
+    """`jarvis_compute.plan()` for the machine `world` is standing up - the
+    SAME cards the world's nvidia-smi answers with, and the same observation
+    (its process list and its loaded model), never a fresh read of the real
+    PC. That is what makes this comparable with `where_chat_runs`: one
+    machine, read twice, by two callers."""
+    cards = [d for d in CP.devices() if d is not None]
+    with mock.patch.object(CP, "devices", return_value=cards):
+        return CP.plan("qwen3:8b"), cards
+
+
+def _card_the_banner_names(plan, cards):
+    """Which card `plan()` puts everyday chat on, as a card id - read the way
+    a screen reads it (the index `text_on` carries, into `plan.devices`).
+    None when the plan names no card (the processor)."""
+    on = str(plan.text_on or "")
+    if not on.startswith("cuda:"):
+        return None
+    try:
+        index = int(on.split(":", 1)[1])
+    except ValueError:
+        return None
+    row = next((d for d in plan.devices if d.get("index") == index), None)
+    return (row or {}).get("uuid") or None
+
+
+def t_the_banner_and_the_running_card_cannot_disagree():
+    """The owner's decision, 2026-10-06 ("option B: true to its reporting"),
+    in the LAST place it was not true: the HUD banner.
+
+    WHAT WAS WRONG. `where_chat_runs()` reported where the model really is.
+    `jarvis_second_card._primary()` planned around that same card. But
+    `jarvis_compute.plan()` - which is what the boot banner prints, what
+    GET /api/compute answers for the Brain pane, and what the phone's Brain
+    screen shows - still decided from the MONITOR rule. On this PC those are
+    two different cards (the 12 GB 2060, nvidia-smi number 1, holds the
+    model; the 8 GB 2080 SUPER, number 0, has the monitor), so the banner
+    named the 2080 SUPER while Jarvis ran on the 2060 - one screen making a
+    claim the machine contradicted.
+
+    WHAT THIS PROVES, and it is the point of the whole change: for ONE
+    machine, read once, the card `where_chat_runs` reports and the card
+    `plan()` names are the same card - and when the card cannot be told,
+    `plan()` says so in words instead of naming one confidently. Nothing is
+    stubbed over `everyday_card`, `observed_card` or `plan`; only the machine
+    itself is (nvidia-smi's two answers and Ollama's own /api/ps), exactly as
+    every other case in this suite does it.
+
+    The cases below each FAIL against the code before this change: the first
+    names a different card from the one the report reads, the next two name a
+    card confidently where Jarvis cannot tell, and the pinned one dresses the
+    owner's own choice up as something read."""
+    load = f"4242, ollama_llama_server.exe, {G.U_2060}, 5200\n"
+    loaded = {"name": "qwen3:8b", "size": 7_000_000_000, "size_vram": 7_000_000_000,
+              "context_length": 4096}
+
+    # 1. THE BUG ITSELF. The model is observed on the card with NO monitor.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load, ps=[loaded]) as w:
+        det = SC.detect(fresh=True)
+        seen = SC.where_chat_runs({"cards": det["cards"]})
+        plan, cards = _plan_on_the_same_machine(w)
+    banner = _card_the_banner_names(plan, cards)
+    check("banner: the report says the model is on the 2060, and the banner names the 2060",
+          (seen.get("card") or {}).get("uuid") == G.U_2060 and banner == G.U_2060,
+          (seen.get("card"), plan.text_on, plan.why))
+    # The very failure the owner asked to close: BEFORE this change plan()
+    # took the monitor rule here and named the 2080 SUPER, so this assertion
+    # is what fails without it.
+    check("banner: and NOT the monitor card - the old bug was exactly this",
+          banner != G.U_2080S and plan.text_on == "cuda:1",
+          (plan.text_on, plan.why))
+    check("banner: the first card in the plan's own list is the one chat is on",
+          plan.devices and plan.devices[0]["uuid"] == G.U_2060, plan.devices)
+    check("banner: the sentence says the card was READ, not assumed",
+          "Jarvis read the model on this card" in plan.why
+          and "ASSUMED" not in plan.why, plan.why)
+
+    # 2. CANNOT TELL. A model IS loaded (Ollama says so) but nvidia-smi does
+    #    not name the program using a card - some Windows drivers do not
+    #    (docs/MEASURE-CARDS.md section 2). `where_chat_runs` says it cannot
+    #    tell; the banner must not name a card confidently either.
+    with G.World(G.SMI["2080s_2060"], windows=True, ps=[loaded]) as w:
+        det = SC.detect(fresh=True)
+        seen = SC.where_chat_runs({"cards": det["cards"]})
+        plan, cards = _plan_on_the_same_machine(w)
+    check("cannot tell: the report names no card",
+          seen.get("card") is None and "cannot say which card it is on" in seen["words"],
+          seen)
+    check("cannot tell: the banner says it cannot see the card, and that it is ASSUMING",
+          "Jarvis cannot see which card the model is on" in plan.why
+          and "only ASSUMED to be on" in plan.why
+          and "an assumption, not something it read" in plan.why, plan.why)
+    check("cannot tell: the banner still names ONE card to plan around, in the plan itself",
+          plan.text_on == "cuda:0" and "a monitor is plugged into it" in plan.why,
+          plan.why)
+
+    # 3. Nothing loaded at all: the same "cannot tell", not a silent guess.
+    with G.World(G.SMI["2080s_2060"], windows=True) as w:
+        seen = SC.where_chat_runs()
+        plan, cards = _plan_on_the_same_machine(w)
+    check("nothing loaded: the report says there is nothing to read",
+          seen.get("card") is None and "Nothing is loaded right now" in seen["words"], seen)
+    check("nothing loaded: the banner does not claim to have read a card",
+          "Jarvis read the model" not in plan.why
+          and "only ASSUMED to be on" in plan.why, plan.why)
+
+    # 4. A card the owner pinned is HIS choice: the banner names the pin, and
+    #    never dresses it up as a reading - even when the model is observed
+    #    on the other card.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load, ps=[loaded]) as w:
+        w.pin(G.U_2080S)
+        plan, cards = _plan_on_the_same_machine(w)
+        st = SC.status()
+    check("pinned: the banner names the card he pinned, and calls it the pin",
+          _card_the_banner_names(plan, cards) == G.U_2080S
+          and "everyday chat is pinned to the" in plan.why
+          and "read the model on this card" not in plan.why, plan.why)
+    check("pinned: the plan and the report still name the same card",
+          _card_the_banner_names(plan, cards) == (st["detected"]["primary"] or {}).get("uuid"),
+          (plan.text_on, st["detected"]["primary"]))
+
+    # 5. `[compute] primary_gpu` is his own hand-set override, and outranks
+    #    both the pin and the reading - unchanged, and still named as the
+    #    setting rather than as something read.
+    with G.World(G.SMI["2080s_2060"], windows=True, apps=load, ps=[loaded]) as w:
+        with mock.patch.object(CP, "_cfg",
+                               lambda k, d=None: G.U_2080S if k == "primary_gpu" else d):
+            plan, cards = _plan_on_the_same_machine(w)
+    check("primary_gpu set: the banner names that card, as the setting",
+          _card_the_banner_names(plan, cards) == G.U_2080S
+          and "primary_gpu" in plan.why
+          and "read the model on this card" not in plan.why, plan.why)
+
+    # 6. The fixture the desktop and the phone build against carries the
+    #    observation too, so the sentence they render is this one and not a
+    #    shape typed to suit them (tools/gen_second_card_cases.py).
+    fixture = REPO / "jarvis-desktop" / "tests" / "fixtures" / "second-card-cases.json"
+    if fixture.is_file():
+        case = (json.loads(fixture.read_text(encoding="utf-8")).get("cases") or {}).get(
+            "chat_observed_on_the_second_card")
+        check("the desktop/phone fixture has the observed case, naming the card read",
+              bool(case) and case["detected"]["primary"]["uuid"] == G.U_2060
+              and "has the model on the NVIDIA GeForce RTX 2060 right now"
+              in case["chat_card"]["where"]["words"],
+              case and case["chat_card"]["where"]["words"])
+
+
 # ------------------------------------------------------------- the hooks --
 
 def _turn(messages, *, lane_for=None, combined_lane_for=None, enabled=None,
@@ -2598,10 +2745,15 @@ def t_the_fixture():
     check("second-card-cases.json (the desktop's and the phone's copy) equals a fresh run",
           rc == 0, "run python3 tools/gen_second_card_cases.py")
     data = json.loads(G.FIXTURE.read_text(encoding="utf-8"))["cases"]
-    check("the eight named cases are there",
+    check("the nine named cases are there",
           set(data) == {"one_card", "capable_off", "capable_pending", "running_long_context",
                         "card_missing_but_enabled", "not_capable_old_card",
-                        "one_card_reads_words", "combined_running"}, sorted(data))
+                        "one_card_reads_words", "combined_running",
+                        # 2026-10-06: the monitor is on one card and the model
+                        # is really on the other - the only case that says
+                        # anything about WHERE the model is (see
+                        # t_the_banner_and_the_running_card_cannot_disagree).
+                        "chat_observed_on_the_second_card"}, sorted(data))
 
 
 def t_the_real_file():

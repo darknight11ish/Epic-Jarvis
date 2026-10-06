@@ -153,7 +153,31 @@ class World:
             return None if self.old_driver is not None else self.smi
         if q == f"--query-gpu={CP.FIELDS_OLD}":
             return self.old_driver
+        # WHICH PROCESS IS ON WHICH CARD. This used to be answered for
+        # jarvis_second_card's own `_smi_apps`; since 2026-10-06 the one
+        # reader of that fact lives in jarvis_compute (`query_apps`), and
+        # every caller goes through it, so the same recorded answer is given
+        # here for the query jarvis_compute actually makes. Returning None
+        # for it would make every case read "cannot tell", which is how a
+        # change like this goes unnoticed.
+        if q == CP._APPS_FIELDS:
+            return self.apps
         return None
+
+    def ps_row(self, url):
+        """`jarvis_compute._ps_row`, answered from this world's own `ps` list
+        - the same facts `http_json` gives for /api/ps. A world with nothing
+        loaded reads None, exactly as the real function does when Ollama
+        answers with no models."""
+        if not self.ps:
+            return None
+        row = self.ps[0]
+        size, vram = row.get("size"), row.get("size_vram")
+        pct = None
+        if isinstance(size, (int, float)) and size > 0 and isinstance(vram, (int, float)):
+            pct = int(min(100, round(vram * 100 / size)))
+        return {"model": str(row.get("name") or row.get("model") or ""),
+                "on_card_percent": pct}
 
     def running(self, port=None):
         """Any of our own started processes alive, or - with `port` given -
@@ -228,6 +252,10 @@ class World:
             # settings folder the machine running it happens to have - the
             # owner's own "which card" choice lives in there too.
             (SC, "_config_dir"): lambda: self.dir,
+            # BOTH modules are pointed at this world's own settings folder:
+            # since 2026-10-06 jarvis_compute is what reads the owner's pin
+            # (`read_pin`), and the two must never read two different folders.
+            (CP, "_config_dir"): lambda: self.dir,
             (SC, "_state_path"): lambda: self.dir / "second-card.json",
             # The owner's choice of card for everyday chat (2026-10-05) lives
             # in its own file in the settings folder, so both are pointed at
@@ -239,6 +267,12 @@ class World:
                 "second-card-ollama.log" if role in ("second", "combined")
                 else f"second-card-{role}-ollama.log"),
             (SC, "_http_json"): self.http_json,
+            # jarvis_compute's own /api/ps question (the one reader of "is a
+            # model loaded", used by `observed_card`). Answered from this
+            # world's `ps` list through the same `http_json` the second-card
+            # module's own calls use, so no case can depend on whether a real
+            # Ollama happens to be running on the machine writing the fixture.
+            (CP, "_ps_row"): self.ps_row,
             (SC, "_port_taken"): lambda port: False,
             (SC, "_popen"): self.popen,
             (SC, "_which"): lambda name: "/usr/local/bin/ollama",
@@ -247,10 +281,10 @@ class World:
             (SC, "_sleep"): lambda s: None,
             (SC, "_user_env"): self._env,
             (SC, "_ON_WINDOWS"): self.windows,
-            (SC, "_smi_apps"): lambda: self.apps,
             (SC, "_audit"): lambda event, detail: None,
             (SC, "_tier"): lambda action: "ask",
             (SC, "_main_ollama_url"): lambda: "http://127.0.0.1:11434",
+            (CP, "main_ollama_url"): lambda: "http://127.0.0.1:11434",
             # No preset chosen (docs/HARDWARE-PROFILES.md): these cases are
             # today's behaviour, whatever the settings folder of the PC
             # running this holds.
@@ -330,6 +364,21 @@ def cases() -> dict:
     with World(SMI["2080s_2060"], windows=True, user_env=U_2080S) as w:
         w.switches(combined=True)
         out["combined_running"] = SC.status()
+    # THE CARD THE MODEL IS ON, OBSERVED (2026-10-06, "option B: true to its
+    # reporting"). The owner's own PC: the monitor is on the 2080 SUPER
+    # (nvidia-smi number 0) and the model is really on the 12 GB 2060
+    # (number 1) - two different cards. Nothing is pinned, and nvidia-smi
+    # names the model's own process, so Jarvis can READ which card chat is
+    # on. This case is here because every case above has an empty process
+    # list, so the whole fixture used to say nothing about the reading: the
+    # bug this closes - the HUD banner naming the monitor card while the
+    # model ran on the other one - was invisible to it.
+    loaded = {"name": "qwen3:8b", "size": 7_000_000_000, "size_vram": 7_000_000_000,
+              "context_length": 4096}
+    with World(SMI["2080s_2060"], windows=True,
+               apps=f"4242, ollama_llama_server.exe, {U_2060}, 5200\n",
+               ps=[loaded]) as w:
+        out["chat_observed_on_the_second_card"] = SC.status()
     return out
 
 

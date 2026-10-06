@@ -55,11 +55,15 @@ class SecondCardContractTest {
     )
 
     @Test
-    fun `all eight cases are read, with the seven features in the PC's order`() {
+    fun `all nine cases are read, with the seven features in the PC's order`() {
         // Seven since 2026-09-26: one_card_reads_words (the PC reads the
         // words in a picture). Eight since 2026-09-27: combined_running
-        // ("One bigger model on both cards").
-        assertEquals(8, cases.size)
+        // ("One bigger model on both cards"). Nine since 2026-10-06:
+        // chat_observed_on_the_second_card (the monitor is on one card and
+        // the model is really on the other, read from nvidia-smi) - the case
+        // that makes the fixture say something about WHERE the model is, not
+        // only about what the switches are set to.
+        assertEquals(9, cases.size)
         for (name in cases.keys) {
             val s = status(name)
             assertEquals(name, sevenIds, s.features.map { it.id })

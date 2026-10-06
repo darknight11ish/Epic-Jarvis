@@ -6031,15 +6031,22 @@ code does.
 
 - **Detection.** `nvidia-smi` via `jarvis_compute.query_cards()` (cached 30 s;
   an older driver without `compute_cap` is asked again without it, and the
-  generation looked up by name). The main card is chosen by one rule, shared
-  with `jarvis_compute.plan()`: `[compute] primary_gpu`, else the owner's own
+  generation looked up by name). The main card is chosen by one rule set,
+  `jarvis_compute.everyday_card()`, read by `jarvis_compute.plan()` too (the
+  boot banner, the Brain pane, the phone) — there is no second copy of it
+  anywhere (2026-10-06): `[compute] primary_gpu`, else the owner's own
   pin (**"Everyday chat runs on", 2026-10-05** - `chat-card.json` in the
   settings folder, set through the `chat_card_pin` approval card; the toml
-  itself is never written), else the card with a
-  monitor, else index 0. **That last fallback is a LAYOUT decision, never a
+  itself is never written), else **the card the model is OBSERVED on**
+  (`jarvis_compute.observed_card`, the same one reading of `ollama ps` and
+  `nvidia-smi` that `where_chat_runs()` reports with), else the card with a
+  monitor, else index 0. **The monitor step is a LAYOUT decision, never a
   claim about where the model is** (2026-10-05): with nothing pinned and no
   model observed, the card's own `why` says only that Jarvis's settings are
-  made for it. `where_chat_runs()` reports instead what the machine says -
+  made for it, and the plan's own sentence says plainly that it is ASSUMING
+  rather than that it read anything (2026-10-06) — a card named confidently
+  that nobody looked at is the exact wrong card the 2026-10-06 change
+  removed. `where_chat_runs()` reports the machine's answer -
   `ollama ps` for the model and its on-card percentage, and `nvidia-smi` for
   the card the model's process is on - and says plainly when it cannot tell.
   A second card is capable at compute capability 7.5

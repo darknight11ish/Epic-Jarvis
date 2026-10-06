@@ -923,18 +923,26 @@ def _primary(cards: list) -> tuple:
     """(the card Jarvis treats as the everyday chat card, the sentence saying
     which rule chose it).
 
-    FOUR RULES, in this order, and the sentence says which one was used:
+    THE RULES NOW LIVE IN jarvis_compute.everyday_card(), AND THIS IS A THIN
+    CALL TO IT (owner's decision, 2026-10-06, "option B: true to its
+    reporting"). The first pass gave this module the observed-card rule, so
+    planning and reporting agreed HERE - but jarvis_compute.plan() still
+    decided from the monitor rule, and that is what the HUD banner, the Brain
+    pane and the phone read. So the banner could name one card while the
+    model ran on the other. Two copies of one rule is exactly how the two
+    drifted apart in the first place: there is now ONE copy, in
+    jarvis_compute, and this call reads it.
+
+    Four rules, in this order, and the sentence says which one was used:
 
     1. `[compute] primary_gpu` in the owner's toml - his own hand-set
        override. Read first wherever it is set, and nothing here writes it
        back (`_state_path`'s own comment).
     2. the owner's own pin (the "Everyday chat runs on" setting,
        2026-10-05), when nvidia-smi still sees that card;
-    3. THE CARD THE MODEL IS OBSERVED ON - `_observed_card_in`, the same one
-       reading of `ollama ps` and nvidia-smi that `where_chat_runs` reports
-       with. This is the 2026-10-06 fix: with nothing pinned, this used to
-       skip straight to the monitor rule, so planning worked around one card
-       while the reporting named the other;
+    3. THE CARD THE MODEL IS OBSERVED ON - `jarvis_compute.observed_card_in`,
+       the same one reading of `ollama ps` and nvidia-smi that
+       `where_chat_runs` reports with;
     4. the old fallback, UNCHANGED as the fallback: the card a monitor is
        plugged into, else nvidia-smi's first (`jarvis_compute.primary`).
        `_detect` is what says, in the owner's own reading, that this card is
@@ -946,30 +954,36 @@ def _primary(cards: list) -> tuple:
     Never raises, never invents a card, and a card named by only one of
     rules 3 and 4 reads as exactly that. The sentence this returns is about
     the RULE, so `_detect` can tell an observation (rule 3) from the owner's
-    own choice (rules 1 and 2) and from the assumption (rule 4)."""
+    own choice (rules 1 and 2) and from the assumption (rule 4).
+
+    `_lane_pids()` is passed in because those processes must never be read as
+    "the everyday model": this module's own lanes run on another card BY
+    DESIGN, and the reader in jarvis_compute cannot know that on its own.
+
+    A backend without `everyday_card` (one whose jarvis_compute.py was not
+    updated) raises here rather than falling back to a second copy of these
+    rules. That is on purpose: a copy kept "just in case" is how the two
+    answers drifted apart in the first place, and the two files are shipped
+    together - `_where.SHIPPED` lists both and test_shipped_modules.py fails
+    if either stops being shipped - so the mismatched pair cannot ship."""
     if compute is None:
         return (cards[0], "it is the first card") if cards else (None, "no card")
-    if not str(compute._cfg("primary_gpu", "") or "").strip():
-        want = _read_pin()
-        if want:
-            hit = next((d for d in cards
-                        if (getattr(d, "uuid", "") or "").lower() == want.lower()), None)
-            if hit is not None:
-                return hit, "you pinned this card (the \"Everyday chat runs on\" setting)"
-            # The pinned card is not in the PC any more. `compute.primary`
-            # answers (card, sentence) and MUST be unpacked here: returning it
-            # whole made this a ((card, sentence), sentence) tuple, which blew
-            # up in `_detect` on `prim.uuid` (found 2026-10-06, by the test for
-            # exactly this branch - a scenario that became reachable once a pin
-            # was checked before the observation).
-            est, _ = compute.primary(cards)
-            return est, (f"you pinned a card (id {want}) that nvidia-smi does not see now, so "
-                         f"the everyday card is only an estimate")
-        seen = _observed_card_in(cards)
-        if seen is not None:
-            return seen, ("Jarvis read the model on this card from Ollama and nvidia-smi, and "
-                          "you have not pinned a card")
-    return compute.primary(cards)
+    return compute.everyday_card(
+        list(cards or []), pinned=_read_pin(), exclude_pids=_lane_pids(),
+        ollama_url=_main_ollama_url())
+
+
+def _lane_pids() -> set:
+    """Every process this module started on a card of its own. They are model
+    processes, so the shared reader would otherwise be able to name one of
+    them as "the everyday model" (see `_primary`)."""
+    out = set()
+    for lane in (_LANE, _COMBINED_LANE, _THIRD_LANE):
+        try:
+            out |= set(lane.pids())
+        except Exception:
+            continue
+    return out
 
 
 def _smi_apps() -> Optional[str]:
@@ -1571,21 +1585,24 @@ def _observed_card(cards: list) -> Optional[dict]:
     driver does not name the program using a card (some Windows drivers do
     not - docs/MEASURE-CARDS.md section 2), no card could be read, or this
     module's own lanes are the only model processes (they run on another
-    card BY DESIGN and are excluded by `_model_process`).
+    card BY DESIGN and are left out by `_lane_pids`).
 
-    THE ONE READER of that fact. `where_chat_runs` reports with it and
-    `_primary` PLANS with it, so the card Jarvis plans around and the card
-    it reports are the same reading of the same machine, taken once per
-    caller (2026-10-06: planning used to fall back to the monitor card while
-    reporting named the card the model was really on, so Jarvis could say
-    "Ollama has the model on the 2060" in one breath and plan around "the
-    main card is busy with chat" in another).
+    THE READING ITSELF NOW LIVES IN jarvis_compute.observed_card, and this is
+    a thin call to it (2026-10-06, "option B: true to its reporting").
+    jarvis_compute.plan() - the HUD banner, the Brain pane, the phone - reads
+    the same function, so the card Jarvis plans around, the card it reports
+    here and the card the banner names are ONE reading of ONE machine. There
+    is no second copy of this rule anywhere, which is what let the two
+    disagree before.
+
+    A backend without `observed_card` raises rather than falling back to a
+    second copy of this rule - see `_primary`'s own note on why, and on the
+    ship-together guarantee.
     """
-    proc = _model_process(list(cards or []))
-    if proc is None or not proc.get("uuid"):
+    if compute is None:
         return None
-    return {"index": proc["index"], "name": proc["name"], "uuid": proc["uuid"],
-            "used_mb": proc.get("used_mb")}
+    return compute.observed_card(list(cards or []), exclude_pids=_lane_pids(),
+                                 ollama_url=_main_ollama_url())
 
 
 def _observed_card_in(cards: list) -> Optional[object]:
@@ -1616,14 +1633,19 @@ def where_chat_runs(det: Optional[dict] = None) -> dict:
     det = det if det is not None else detect()
     cards = list(det.get("cards") or [])
     pin = _read_pin()
-    row = _ps_row()
-    # The same one reader planning uses (`_observed_card`), so the card the
-    # plan assumes and the card this reports can never be two different
-    # readings of the machine.
+    # The same one reader planning uses (`_observed_card`) - and, since
+    # 2026-10-06, the same one reader jarvis_compute.plan() uses for the HUD
+    # banner and the Brain pane. The model's own name and its on-card
+    # percentage come back with the card it was read on, so where the model
+    # is and what is loaded are ONE reading of the machine.
     card = _observed_card(_cards(False))
-    out = {"pinned": pin, "card": card, "model_loaded": row is not None,
-           "model": (row or {}).get("model"), "on_card_percent": (row or {}).get("on_card_percent"),
-           "context": (row or {}).get("context"), "used_mb": (card or {}).get("used_mb")}
+    row = _ps_row()
+    out = {"pinned": pin, "card": card,
+           "model_loaded": row is not None or bool((card or {}).get("model")),
+           "model": (card or {}).get("model") or (row or {}).get("model"),
+           "on_card_percent": (card or {}).get("on_card_percent") or (row or {}).get("on_card_percent"),
+           "context": (card or {}).get("context") or (row or {}).get("context"),
+           "used_mb": (card or {}).get("used_mb")}
     if not cards:
         out["words"] = ("No graphics card could be read, so Jarvis cannot say where chat runs.")
         return out
@@ -1641,7 +1663,7 @@ def where_chat_runs(det: Optional[dict] = None) -> dict:
                             f"have restarted since you set the pin.")
         return out
     if card is not None:
-        on = (f" {out['on_card_percent']}% of it is on a card"
+        on = (f". {out['on_card_percent']}% of it is on a card"
               if out["on_card_percent"] is not None else "")
         out["words"] = (f"Jarvis leaves the choice to Ollama, and Ollama has the model on the "
                         f"{card['name']} right now{on}. Jarvis did not pin a card, so which "

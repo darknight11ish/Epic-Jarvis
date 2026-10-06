@@ -20,33 +20,73 @@ WHICH CARD IS "FIRST" (fixed 2026-09-24). This used to rank "fastest card =
 most free memory". With the second card the owner is adding - an RTX 2060
 12 GB beside the 2080 Super 8 GB - that put everyday chat on the 2060: more
 free memory, about two thirds the memory speed (docs/MODEL-TOPOLOGY.md, "The
-planned second card"). The everyday card is now chosen by one rule, which
-jarvis_second_card.py uses too (it imports it from here):
+planned second card"). The everyday card is now chosen by ONE rule set, in
+`everyday_card()` below, which jarvis_second_card.py uses too (it calls this
+one rather than keeping a copy):
 
     1. `[compute] primary_gpu` in the toml - a UUID ("GPU-...") or an
        nvidia-smi index - when it names a card that is there;
-    2. otherwise the card a monitor is plugged into (nvidia-smi's
+    2. otherwise the card the owner himself pinned (the "Everyday chat runs
+       on" setting, 2026-10-05), when nvidia-smi still sees that card;
+    3. otherwise THE CARD THE MODEL IS OBSERVED ON - the same one reading of
+       `ollama ps` and nvidia-smi that jarvis_second_card.where_chat_runs()
+       reports with. This is the 2026-10-06 fix ("option B: true to its
+       reporting"): `plan()` used to skip that reading and fall back to the
+       monitor rule, so the HUD banner could name the 2080 SUPER - and the
+       Brain pane, and the phone - while the model was really on the 2060.
+       On the owner's PC those two cards are different cards
+       (docs/MEASURED-2026-10-05-owner-pc.md), so this was not a corner.
+    4. otherwise the card a monitor is plugged into (nvidia-smi's
        `display_active`), because the owner plugs the monitors into the
        fast card (MODEL-TOPOLOGY's install checklist, step 2);
-    3. otherwise nvidia-smi index 0.
+    5. otherwise nvidia-smi index 0.
 
-`primary()` returns the card AND the sentence saying which rule chose it, so
-a screen can say why rather than just what.
+`everyday_card()` returns the card AND the sentence saying which rule chose
+it, so a screen can say why rather than just what - and so a caller can tell
+an OBSERVATION (rule 3) from the owner's own choice (rules 1 and 2) from the
+ASSUMPTION (rules 4 and 5). `primary()` is kept exactly as it was: the
+monitor rule alone, which several callers and tests read directly.
 
 `simulated` is the honest field. When no GPU can be interrogated this returns
 a plan anyway - the HUD prints one at startup and must not crash on a machine
 with no card - but it says so, rather than reporting a confident layout for
 hardware nobody looked at.
+
+WHY THE READER LIVES HERE AND NOT IN jarvis_second_card.py. "One reader" is
+the whole point (jarvis_second_card's own `_observed_card` docstring says
+so), and the two modules already import one way only: jarvis_second_card
+imports THIS module. So the reading is taken here, and jarvis_second_card
+delegates to it - `where_chat_runs` still reports with it, `_primary` now
+plans with it, and there is exactly one copy of the rule. The one thing this
+module cannot know is which of the second card's own lane processes to leave
+out (they run on another card by design - `_model_process`'s own comment),
+so that list is a parameter the caller passes, defaulting to "none to leave
+out".
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 import shutil
 import subprocess
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field, asdict
+from pathlib import Path
 from typing import Optional
+
+#: Every request here goes straight to the address, never through a proxy
+#: (bug audit 3, CONN-1): see jarvis_local_http.py. Wrapped, so a backend
+#: without that file still runs - the relay is then the plain one, exactly as
+#: before it existed.
+try:
+    import jarvis_local_http
+except Exception:
+    jarvis_local_http = None  # type: ignore
 
 try:
     import jarvis_framework as fw
@@ -129,6 +169,60 @@ def _cfg(key: str, default=None):
 
 
 # --------------------------------------------------------------------------
+#   The owner's own pin on a card (2026-10-05)
+#
+#   THE SAME FILE jarvis_second_card.py writes and reads (chat-card.json in
+#   the config folder) - the address is spelled here as well, and NOT
+#   imported from there, because that module imports this one. Duplicating
+#   the FILE NAME is a far smaller thing than duplicating the RULE: if the
+#   two ever disagreed about which card is "the everyday card", the banner
+#   and the running model could name different cards again, which is the
+#   whole reason this file changed. A test
+#   (test_second_card.py::t_the_banner_and_the_running_card_cannot_disagree)
+#   reads both modules' answer for one machine and fails if they differ.
+# --------------------------------------------------------------------------
+
+#: The pin file, beside second-card.json (jarvis_second_card). A card id is
+#: the only value it may hold; anything else reads as "not pinned".
+PIN_FILE = "chat-card.json"
+_UUID_RE = re.compile(r"GPU-[0-9A-Fa-f-]{8,64}")
+#: The everyday Ollama, the same default jarvis_second_card uses.
+MAIN_OLLAMA_PORT = 11434
+
+
+def _config_dir() -> Path:
+    """Where Jarvis keeps its own settings files. The same answer as
+    jarvis_second_card._config_dir, read the same way (`fw.CONFIG_DIR` when
+    the framework names one, else the environment, else ~/.openjarvis)."""
+    cdir = getattr(fw, "CONFIG_DIR", None) if fw is not None else None
+    if cdir:
+        return Path(cdir)
+    return Path(os.environ.get("OPENJARVIS_CONFIG_DIR")
+                or os.environ.get("JARVIS_CONFIG_DIR")
+                or (Path.home() / ".openjarvis"))
+
+
+def read_pin() -> Optional[str]:
+    """The card id the owner pinned everyday chat to, or None for "leave it
+    to Ollama". A missing or broken file reads as None - the default, and
+    never an invented card."""
+    try:
+        raw = json.loads((_config_dir() / PIN_FILE).read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    want = str(raw.get("card") or "").strip()
+    return want if want and _UUID_RE.fullmatch(want) else None
+
+
+def main_ollama_url() -> str:
+    """The everyday Ollama's address. Loopback unless the owner set
+    OLLAMA_URL, exactly as jarvis_second_card._main_ollama_url reads it."""
+    return (os.environ.get("OLLAMA_URL") or f"http://127.0.0.1:{MAIN_OLLAMA_PORT}").rstrip("/")
+
+
+# --------------------------------------------------------------------------
 #   Reading the cards
 # --------------------------------------------------------------------------
 
@@ -173,6 +267,188 @@ def _run_smi(args: list) -> Optional[str]:
     if out.returncode != 0:
         return None
     return out.stdout
+
+
+# --------------------------------------------------------------------------
+#   Which card the MODEL's own process is on (the one reader)
+#
+#   THE FACTS THAT MATTER HERE, and they are the reason this is one function
+#   and not two. `where_chat_runs()` (jarvis_second_card.py) tells the owner
+#   where chat really is; `plan()` says where Jarvis will run things. They
+#   used to be two readings of the machine, and they disagreed - the plan
+#   used the monitor rule while the report named the card the model was on
+#   (owner's decision, 2026-10-06, "option B: true to its reporting"). Now
+#   both call `observed_card()` below, so they are the same reading.
+# --------------------------------------------------------------------------
+
+#: nvidia-smi's process list, in the CSV shape _run_smi gives back.
+_APPS_FIELDS = "--query-compute-apps=pid,process_name,gpu_uuid,used_memory"
+
+
+def query_apps() -> list:
+    """[(pid, process name, card uuid, used MiB)] for every process
+    nvidia-smi names on a card. [] when it names none or cannot be asked -
+    some Windows drivers never name the program using a card
+    (docs/MEASURE-CARDS.md section 2), and that reads as "cannot tell",
+    never as "nothing is running"."""
+    out = []
+    try:
+        text = _run_smi([_APPS_FIELDS, "--format=csv,noheader,nounits"])
+    except Exception:
+        return out
+    if not text:
+        return out
+    for line in text.splitlines():
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) < 4:
+            continue
+        try:
+            pid = int(parts[0])
+        except (TypeError, ValueError):
+            continue
+        try:
+            used = int(float(parts[3]))
+        except (TypeError, ValueError):
+            used = None
+        out.append((pid, parts[1], parts[2], used))
+    return out
+
+
+def _ps_row(url: Optional[str]) -> Optional[dict]:
+    """The everyday Ollama's own answer about what is loaded, or None:
+    {"model", "on_card_percent"}. Ollama's `size_vram` against `size` is its
+    own statement of how much of the model is on a card
+    (docs/MEASURE-CARDS.md section 3). `url` None means "do not ask" - the
+    caller only wants the process reading. Never through a proxy
+    (jarvis_local_http.py, bug audit 3 CONN-1), and it refuses any address
+    that is not this PC: a card reading never comes off the network."""
+    if not url:
+        return None
+    try:
+        if (urllib.parse.urlparse(url).hostname or "").lower() not in (
+                "127.0.0.1", "localhost", "::1"):
+            return None
+    except Exception:
+        return None
+    req = urllib.request.Request(f"{url}/api/ps", method="GET")
+    try:
+        if jarvis_local_http is not None:
+            resp = jarvis_local_http.urlopen(req, 2.0)
+        else:
+            resp = urllib.request.urlopen(req, timeout=2.0)   # noqa: S310
+        with resp:
+            body = json.loads(resp.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+    rows = body.get("models") if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        return None
+    row = next((m for m in rows if isinstance(m, dict)), None)
+    if row is None:
+        return None
+    # The one the owner's settings file says chat uses, else the first. This
+    # preference was jarvis_second_card._ps_row's (its own comment said so),
+    # and it moved HERE with the reading: with more than one model loaded,
+    # "the first row" can be a different model from the one answering, and a
+    # banner naming the wrong MODEL while it reports the right CARD would be
+    # the same kind of half-truth this change exists to remove. Import inside
+    # the function, wrapped: jarvis_models is one of the owner's own patched
+    # files, and its absence must not take the card reading down with it.
+    want = ""
+    try:
+        import jarvis_models
+        want = str(jarvis_models.current_model() or "")
+    except Exception:
+        want = ""
+    if want:
+        row = next((m for m in rows
+                    if isinstance(m, dict)
+                    and _same_model(str(m.get("name") or m.get("model") or ""), want)), row)
+    size, vram = row.get("size"), row.get("size_vram")
+    pct = None
+    if isinstance(size, (int, float)) and size > 0 and isinstance(vram, (int, float)):
+        pct = int(min(100, round(vram * 100 / size)))
+    return {"model": str(row.get("name") or row.get("model") or ""),
+            "on_card_percent": pct,
+            "context": row.get("context_length")}
+
+
+def _same_model(a: str, b: str) -> bool:
+    """Two model references naming the same model, allowing for the `:latest`
+    tag one side may leave off (jarvis_second_card._same_model's own rule)."""
+    a, b = str(a or "").strip().lower(), str(b or "").strip().lower()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    for x, y in ((a, b), (b, a)):
+        if y == x + ":latest":
+            return True
+    return False
+
+
+def _model_process(cards: list, exclude_pids=None) -> Optional[dict]:
+    """Which card the model's own process is on, as far as the machine says:
+    {"index", "name", "uuid", "used_mb", "process"} or None. Only a process
+    whose name is Ollama's or llama.cpp's, and only one the caller did not
+    start itself: jarvis_second_card's own lanes run on another card BY
+    DESIGN, so it passes their pids in `exclude_pids` and they are skipped
+    (its `_model_process` did exactly this before this function existed)."""
+    ours = set(exclude_pids or ())
+    by_uuid = {(getattr(c, "uuid", "") or "").lower(): c for c in cards
+               if getattr(c, "uuid", "")}
+    for pid, pname, gpu, used in query_apps():
+        low = pname.lower()
+        if not ("ollama" in low or "llama" in low) or pid in ours:
+            continue
+        card = by_uuid.get(gpu.lower())
+        if card is None:
+            continue
+        return {"index": card.index, "name": card.name, "uuid": card.uuid,
+                "used_mb": used, "process": pname}
+    return None
+
+
+def observed_card(cards: list, *, exclude_pids=None, ollama_url: Optional[str] = None) -> Optional[dict]:
+    """Which card the MODEL's own process is on right now, read from the
+    machine (nvidia-smi's process list) - or None when Jarvis cannot tell.
+
+    None covers every way of not knowing, and every caller says it as
+    "cannot tell" rather than turning it into a guess: nothing is loaded, the
+    driver does not name the program using a card (some Windows drivers do
+    not - docs/MEASURE-CARDS.md section 2), no card could be read, or the
+    only model processes are the caller's own lanes (see `_model_process`).
+
+    THE ONE READER of that fact. `where_chat_runs` reports with it and
+    `everyday_card` PLANS with it, so the card Jarvis plans around and the
+    card it reports are the same reading of the same machine. Taken once per
+    caller: `cards` is what the caller already read, never re-read here.
+
+    `ollama_url` is only used to answer "is a model really loaded", the same
+    `/api/ps` question jarvis_second_card._observed_card asked; None skips
+    that and reads the process list alone."""
+    proc = _model_process(list(cards or []), exclude_pids)
+    if proc is None or not proc.get("uuid"):
+        return None
+    loaded = _ps_row(ollama_url) or {}
+    return {"index": proc["index"], "name": proc["name"], "uuid": proc["uuid"],
+            "used_mb": proc.get("used_mb"),
+            "model": loaded.get("model"),
+            "on_card_percent": loaded.get("on_card_percent"),
+            "context": loaded.get("context")}
+
+
+def observed_card_in(cards: list, **kwargs) -> Optional[object]:
+    """`observed_card`, as the Device object in `cards` - the same card, with
+    its memory, its free memory and its monitor, so a PLANNING caller gets
+    the card itself and not only its name. None when Jarvis cannot tell (see
+    `observed_card`)."""
+    got = observed_card(cards, **kwargs)
+    if got is None:
+        return None
+    want = str(got["uuid"]).lower()
+    return next((c for c in cards
+                 if (getattr(c, "uuid", "") or "").lower() == want), None)
 
 
 def _num(text) -> Optional[float]:
@@ -289,6 +565,67 @@ def primary(devs: list, configured=None) -> tuple:
     return first, note + "it is nvidia-smi's first card (no monitor was seen on any card)"
 
 
+def everyday_card(cards: list, *, configured=None, pinned=None, exclude_pids=None,
+                  ollama_url: Optional[str] = None) -> tuple:
+    """(the card Jarvis treats as the everyday chat card, the sentence saying
+    which rule chose it). THE ONE RULE SET - see this module's docstring for
+    the five rules and their order.
+
+    Kept beside `primary()` and NOT inside it, on purpose (owner's decision,
+    2026-10-06): `primary()` keeps its own contract - the monitor rule alone,
+    the fallback - because callers and tests read it directly and because
+    `_detect` (jarvis_second_card.py) tells an ASSUMPTION from an
+    OBSERVATION by the sentence that comes back. A new function is additive;
+    changing `primary()` would have changed what every existing caller sees.
+
+    The sentence is about the RULE, so a caller can tell them apart: rule 3's
+    sentence starts "Jarvis read the model", and rules 4/5's says the monitor
+    or first-card rule (an ASSUMPTION). `configured` is `[compute]
+    primary_gpu` (None reads the toml); `pinned` is the owner's own pin (None
+    reads chat-card.json); `exclude_pids` is the set of model processes that
+    are the caller's own second-card lanes, left out of the reading;
+    `ollama_url` is the everyday Ollama, asked only for the report's model
+    name and on-card percentage - None skips that question.
+
+    Never raises, never invents a card."""
+    cards = [d for d in cards or [] if d is not None]
+    if not cards:
+        return None, "no graphics card was found"
+    if configured is None:
+        configured = _cfg("primary_gpu", "")
+    want = str(configured if configured is not None else "").strip()
+    if want:
+        # His own hand-set override, and nothing here writes it back. The
+        # owner's pin is not consulted at all when this is set, exactly as
+        # jarvis_second_card._primary has always read it.
+        return primary(cards, configured=want)
+    if pinned is None:
+        pinned = read_pin()
+    pinned = str(pinned or "").strip()
+    if pinned:
+        hit = next((d for d in cards
+                    if (getattr(d, "uuid", "") or "").lower() == pinned.lower()), None)
+        if hit is not None:
+            return hit, "you pinned this card (the \"Everyday chat runs on\" setting)"
+        # His pinned card is not in the PC any more. The monitor rule answers
+        # (card, sentence) and MUST be unpacked: returning it whole made this
+        # a ((card, sentence), sentence) tuple once, which blew up in
+        # `_detect` on `prim.uuid` (found 2026-10-06, by the test for exactly
+        # this branch).
+        est, _ = primary(cards)
+        return est, (f"you pinned a card (id {pinned}) that nvidia-smi does not see now, so "
+                     f"the everyday card is only an estimate")
+    seen = observed_card_in(cards, exclude_pids=exclude_pids, ollama_url=ollama_url)
+    if seen is not None:
+        return seen, ("Jarvis read the model on this card from Ollama and nvidia-smi, and "
+                      "you have not pinned a card")
+    # Nothing is pinned and nothing was observed. `primary()` is what says so,
+    # in words, and the caller's own `_detect` turns that into the ASSUMING
+    # sentence the owner reads - "cannot tell" must never come out as a
+    # silent guess.
+    return primary(cards, configured=want)
+
+
 # --------------------------------------------------------------------------
 #   Who is starting a process on which card (added 2026-09-24)
 #
@@ -334,6 +671,37 @@ def card_holder(uuid: str) -> Optional[str]:
         return _CLAIMS.get(str(uuid or "").strip().lower())
 
 
+def everyday_chat_words(name: str, rule: str) -> str:
+    """The one sentence every screen says about which card everyday chat is
+    on, built from `everyday_card`'s own rule sentence.
+
+    WHY THIS EXISTS AT ALL (owner's decision, 2026-10-06, "option B: true to
+    its reporting"). A banner that says "everyday chat on the X" and stops
+    there makes a CLAIM. When the card was OBSERVED that claim is true. When
+    nothing could be read - no model loaded, or a driver that does not name
+    the program using a card - the same sentence named a card nobody had
+    looked at, which is the confident wrong card this whole change exists to
+    remove. So the sentence says which of the two it is, in the same words
+    the owner already reads on the Hardware screen:
+
+        observed   "Jarvis read the model on this card from Ollama and
+                    nvidia-smi, and you have not pinned a card"
+        assumed    "the card a monitor is plugged into" (or nvidia-smi's
+                    first) - and the sentence says plainly that this is an
+                    assumption, not something read
+
+    Never invents a card and never raises: a rule sentence it does not
+    recognise is passed through as "because <rule>", which is still true."""
+    rule = str(rule or "")
+    if "you pinned this card" in rule:
+        return f"everyday chat is pinned to the {name} ({rule})"
+    if rule.startswith("Jarvis read the model"):
+        return (f"everyday chat on the {name}: Jarvis read the model on this card from "
+                f"Ollama and nvidia-smi, and you have not pinned one")
+    return (f"Jarvis cannot see which card the model is on, so everyday chat is only "
+            f"ASSUMED to be on the {name} ({rule}) - an assumption, not something it read")
+
+
 def plan(model: Optional[str] = None) -> Plan:
     """Where things should run. Never raises; says `simulated` when guessing."""
     prefer = str(_cfg("prefer", "speed")).strip().lower()
@@ -349,10 +717,13 @@ def plan(model: Optional[str] = None) -> Plan:
                     devices=[],
                     why="no GPU could be interrogated; this layout is a guess")
 
-    # The everyday card by the primary rule (module docstring), never "the
-    # one with the most free memory": that picked a 12 GB RTX 2060 over the
-    # faster 8 GB 2080 Super. The others follow in nvidia-smi order.
-    first, rule = primary(devs)
+    # The everyday card by the rule set in `everyday_card` (module
+    # docstring), never "the one with the most free memory": that picked a
+    # 12 GB RTX 2060 over the faster 8 GB 2080 Super. The others follow in
+    # nvidia-smi order. This used to be `primary()` alone - the monitor rule -
+    # which is what let this banner name the 2080 SUPER while the model ran on
+    # the 2060 (owner's decision, 2026-10-06).
+    first, rule = everyday_card(devs, ollama_url=main_ollama_url())
     ranked = [first] + sorted((d for d in devs if d is not first), key=lambda d: d.index)
     second = ranked[1] if len(ranked) > 1 else None
 
@@ -371,7 +742,7 @@ def plan(model: Optional[str] = None) -> Plan:
                 vision = jarvis_second_card.lane_for("vision") is not None
             except Exception:
                 vision = False
-        why = (f"speed: everyday chat on the {first.name} (because {rule}); "
+        why = (f"speed: {everyday_chat_words(first.name, rule)}; "
                + ("the second card runs only the second-card features that are "
                   "switched on (GET /api/second-card)"
                   if second else "one card only"))

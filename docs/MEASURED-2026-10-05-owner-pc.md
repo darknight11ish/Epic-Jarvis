@@ -47,8 +47,16 @@ its `two_2080s_2060_mon12` row said "monitor on the 2060". That row is now the s
 machine as `two_2080s_2060_mon8` (monitor on the 2080 SUPER), and both are made by
 `tools/gen_hardware_cases.py` from the designer's case list, so the table cannot
 drift from it again. And the case list is where the *planner* reads the monitor
-from; `jarvis_compute.primary()` (which does read `display_active`) sits in the
-second-card path, `jarvis_second_card._primary`, not in `jarvis_profiles.plan()`.
+from; `jarvis_compute.primary()` (which does read `display_active`) is the
+**fallback**, in `jarvis_second_card._primary` and in
+`jarvis_compute.everyday_card` - the shared rule `jarvis_compute.plan()` (the
+boot banner, the Brain pane, the phone) now uses too, so it reads the
+observed card first and only falls back to the monitor. **Corrected
+2026-10-06:** this sentence used to say `primary()` "sits in the second-card
+path, `jarvis_second_card._primary`, not in ... `plan()`" - true when it was
+written, and the exact gap the 2026-10-06 change closed (the banner named one
+card while the model ran on the other). It still does not sit in
+`jarvis_profiles.plan()`, which reads the monitor from the case list.
 
 ## What the model is doing
 
