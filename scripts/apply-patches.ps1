@@ -1077,6 +1077,18 @@ $PATCHES = @(
     # jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below); without
     # them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
+    # The gate's risk table held draft_email TWICE: the owner's own original
+    # line ("a draft is not a sent message", rated local) and draft-email.patch's
+    # row ("saves the draft ... to your own Drafts folder", rated outbound -
+    # which is right, because saving a draft goes to the mail server). Python
+    # keeps the LAST of two equal keys, so outbound won today; but only by luck
+    # of ordering, and the natural cleanup - deleting the later line - would
+    # have made an email draft swipe-approvable with nobody noticing, because
+    # the two had already collapsed into one key in the file. This removes the
+    # stale original line, so there is one row, the right one, on any reading.
+    # Tested by test_gate_risk_rows.py; the apply itself is proven by this
+    # script's dry run, as for every patch here.
+    'gate-risk-rows.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

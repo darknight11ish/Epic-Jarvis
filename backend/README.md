@@ -18635,3 +18635,29 @@ of the check that needs them. It proves the failure paths the owner's question
 turns on - an address that does not answer, a response that is not a page, a
 page larger than the cap, and a page with no readable words - and it proves the
 patch applies after the rest of the stack and reverses.
+
+---
+
+# `gate-risk-rows.patch`
+
+**The gate's risk table held `draft_email` twice.** The owner's own original line
+rated a draft `("yes", "local", "a draft is not a sent message")`; `draft-email.patch`
+adds its own row rated `("yes", "outbound", "saves the draft ... to your own Drafts
+folder")`. Python keeps the **last** of two equal dict keys, so outbound won - but
+only by luck of ordering, because the two copies had already collapsed into one key
+in the file. The natural cleanup (deleting the later line) would have made an email
+draft **swipe-approvable**, which is wrong: saving a draft goes to the mail server.
+
+This patch removes the stale original line and adds nothing, so there is one row,
+the right one, on any reading of the file. It handles the only one of the four
+duplicated `_RISK` keys (`draft_email`, `send_email`, `append_logseq_journal`,
+`create_joplin_note`) where the two copies disagree; the other three carry identical
+values and are deliberately left alone, in one patch rather than four.
+
+**Tested by `test_gate_risk_rows.py`**, which proves from a checkout alone that the
+patch is registered last, that its single hunk is well formed, that it removes that
+one line and adds none, that no other patch touches it, and - when the verified copy
+of the owner's own `jarvis_gate.py` is present under `dshwork/` - that every line the
+hunk needs is in that file verbatim. What no test in a checkout can prove is the
+apply itself: **`scripts/apply-patches.ps1`'s dry run is what proves it**, as for
+every patch here.
