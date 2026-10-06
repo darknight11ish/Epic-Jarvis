@@ -698,13 +698,41 @@ def passes(summ):
     return sum(line.get("pass", 0) for suites in summ.values() for line in suites.values())
 
 
+def publish_path():
+    """Where the BACKEND reads the result: the config folder.
+
+    The repository this runs from and the folder the backend runs in are
+    different folders on the owner's PC, so a result saved only beside this
+    script could never satisfy `jarvis_plan.enabled()` - the multi-step plan
+    card stayed off after a real, passed run (found 2026-10-06). One copy
+    beside this script (the record), one where the backend looks.
+    """
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    base = env or os.path.join(os.path.expanduser("~"), ".openjarvis")
+    return os.path.join(base, "tool_eval_results.json")
+
+
 def save(runs, path=RESULTS):
     doc = {"run_at": datetime.datetime.now().isoformat(timespec="seconds"),
            "what": "tools/tool_eval/ollama_tool_eval.py - pick, ask, multi, injection, "
                    "behaviour; full list vs short list",
            "models": runs}
+    text = json.dumps(doc, indent=1, ensure_ascii=False)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(doc, f, indent=1, ensure_ascii=False)
+        f.write(text)
+    # The copy the backend reads. Best effort: a config folder that cannot be
+    # written must not lose the run's own record, and the caller says so.
+    where = publish_path()
+    try:
+        os.makedirs(os.path.dirname(where), exist_ok=True)
+        with open(where, "w", encoding="utf-8") as f:
+            f.write(text)
+    except OSError as exc:
+        print(f"\nNote: the result could not be copied to {where} ({exc.__class__.__name__}), "
+              "so the plan card will keep saying the test has not been run. The copy beside "
+              f"this script is safe: {path}")
+        return path
+    print(f"\nThe backend reads this copy: {where}")
     return path
 
 
