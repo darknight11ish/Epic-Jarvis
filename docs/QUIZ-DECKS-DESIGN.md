@@ -8,8 +8,7 @@ maths py-fsrs, JARVIS-API section 102, both apps' screens
 (`jarvis-desktop/src-tauri/src/brain/decks.rs`, `jarvis-client/.../net/Decks.kt`)
 - and (B) **typed Spanish practice** as a second quiz mode. It was build-queue
 item 4 (`docs/BUILD-QUEUE-2026-09-30.md`), after the quiz audit fixes (item 0).
-`tools/check_parity.py` has no `/api/decks` or `/api/review` row yet, which is
-its own gap (see the claims register).
+The routes are in `tools/check_parity.py` as `ported` for both apps.
 
 Read first: `docs/STUDY-FROM-TEXT-DESIGN.md` (the quiz, its section 11 contract
 and "Shared words"), `backend/jarvis_quiz.py`, `docs/JARVIS-API.md` section 98.
