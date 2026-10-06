@@ -230,9 +230,24 @@ $ git merge-tree --write-tree origin/integration/backlog origin/audit-pass-2026-
 ... 19 conflicted files ...
 ```
 
-**19 conflicted files post-#79, against 4 pre-#79.** So the dry-run warning was
-right in kind and understated in size: `ci.yml` does not just conflict more, it
-drags eighteen more files into conflict with it.
+**16 conflicted files post-#79, against 4 pre-#79.**
+
+```
+$ git merge-tree --write-tree origin/integration/backlog origin/audit-pass-2026-10-05 2>&1 |
+    Select-String "^CONFLICT \(content\): Merge conflict in (.+)$" | Sort-Object -Unique
+16 files: .github/workflows/ci.yml, .gitignore, backend/_stack.py, backend/README.md,
+backend/run_suites.py, backend/test_agent_plan_wiring.py, backend/test_bind_wildcard.py,
+backend/test_briefing.py, backend/test_decks.py, backend/test_injection_cases.py,
+backend/test_reach.py, backend/test_research.py, backend/test_task_control.py,
+backend/test_tool_calling_wiring.py, docs/README.md, jarvis-desktop/src/brain.js
+
+$ ... origin/main ...   ->  4 files: .github/workflows/ci.yml, backend/_stack.py,
+                                backend/test_bind_wildcard.py, backend/test_tool_calling_wiring.py
+```
+
+So the dry-run warning was right in kind and understated in size: `ci.yml` does
+not just conflict more, it drags twelve more files into conflict with it, and
+`.gitignore` - named in the warning - only conflicts *after* #79 lands.
 
 | file | ours (#79) vs theirs (branch) | severity | right resolution |
 |---|---|---|---|
@@ -260,6 +275,14 @@ Read the "right resolution" column as one instruction: **take `#79`'s side in
 every one of the 19.** No audit-pass content is lost by doing so, because the
 audit-pass content in all 19 is already in `main` and therefore already in
 `#79`.
+
+Three of those 19 (`docs/MEASURE-CARDS.md`, `docs/MEASURED-2026-10-05-owner-pc.md`,
+`docs/SESSION-HANDOFF-2026-10-05-audit-pass.md`) are *not* in `git merge-tree`'s
+conflict list: they auto-merge. I list them because they are the auto-merges
+that need a human eye - each is a file where `main` and the branch are the
+**same content** and `#79` adds ~22-227 lines on top, so an auto-merge silently
+keeps `#79`'s additions and there is nothing to decide. They are in the table
+for completeness, not because a conflict marker will appear.
 
 ### The one trap in this map: `.gitignore`
 
