@@ -166,6 +166,16 @@ def run_helper(tmp: Path, sdk_root: Path, attempts: int, stub_install: str,
 
     stub = tmp / "sdkmanager-stub.sh"
     stub.write_text(stub_install.replace("\r\n", "\n"), encoding="utf-8", newline="\n")
+    # The stub stands in for the sdkmanager COMMAND, and the script calls that
+    # by name - `timeout "$ATTEMPT_TIMEOUT" "$SDKM" "$@"`. The real sdkmanager
+    # is an executable file, so the stand-in has to be one too. Python writes
+    # 0644, which is harmless on Windows (there is no exec bit, and Git's shell
+    # reads the shebang regardless) and is EACCES on the Ubuntu runner:
+    #   timeout: failed to run command '.../sdkmanager-stub.sh': Permission denied
+    # exit 126, on every attempt - which is exactly what the Linux `backend`
+    # job reported on 2026-10-06. The emulator stub below needs no chmod: the
+    # script is told to run that one through `sh` (EMU_VERSION_CMD).
+    os.chmod(stub, 0o755)
 
     # The "emulator" the install left behind, and how the script should ask it
     # its version. Always through `sh`: a shell script is not executable BY

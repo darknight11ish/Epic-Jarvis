@@ -148,7 +148,17 @@ jobs:
       # lock is hash-checked, this line is not - so at least the version is fixed,
       # and a new release cannot change what CI tests overnight). Update these
       # together with the lock. Supply-chain audit, 2026-09-30.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1
+      #
+      # pyyaml is here for backend/test_ci_emulator_install.py, which parses
+      # .github/workflows/jarvis-client.yml to prove the emulator retry is
+      # really wired into the face-shots job. Without it that suite's `import
+      # yaml` fails and its whole wiring half SKIPS by name - including the
+      # checks that the install step still runs scripts/install-android-emulator.sh
+      # and that the script is saved with LF endings. A skipped check is not a
+      # passing one, and this half was silently never running on the one job
+      # (Ubuntu) whose shell the script actually is. Version from
+      # requirements.lock, like the four above.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 pyyaml==6.0.3
       - name: Backend suites (the ones that need no file from the owner's PC)
         # The FAILING SUITE NAMES are the useful part of a red run, and they
         # were only in a thirteen-minute log - which needs a signed-in browser
@@ -443,7 +453,11 @@ jobs:
       # "No module named 'tzdata'" and test_screen_win.py fails with "The
       # 'uiautomation' package is missing"; with them both pass. On Ubuntu both
       # suites pass without either, so the gap was invisible to CI.
-      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29
+      #
+      # pyyaml, for the same reason as the Ubuntu job above: without it
+      # backend/test_ci_emulator_install.py's wiring half SKIPS by name here
+      # too. One version, from requirements.lock.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1 tzdata==2026.4 uiautomation==2.0.29 pyyaml==6.0.3
       - name: Backend suites that need no file from the owner's PC, on Windows
         # One step, not two: an environment variable set in one step does not
         # reach the next one.
