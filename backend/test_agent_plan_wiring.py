@@ -609,15 +609,16 @@ def t_the_checker_is_asked_with_the_resolved_action_name():
     """
     from _where import missing as _missing
     if _missing("jarvis_gate.py"):
-        return check("SKIP - no jarvis_gate.py here, so no table can turn "
-                     "'jarvis_home_control_run' into an action name; the owner's own "
-                     "run proves this", True)
+        return skip("the checker is asked with the resolved action name: no jarvis_gate.py "
+                    "here, so no table can turn 'jarvis_home_control_run' into an action "
+                    "name; the owner's own run proves this")
     try:
         import jarvis_gate
         want, _known = jarvis_gate.action_for_tool("jarvis_home_control_run", {})
     except Exception as exc:
-        return check(f"SKIP - jarvis_gate.action_for_tool could not be asked "
-                     f"({type(exc).__name__}: {exc})", True)
+        return skip("the checker is asked with the resolved action name: "
+                    f"jarvis_gate.action_for_tool could not be asked "
+                    f"({type(exc).__name__}: {exc})")
 
     def body():
         checker, calls = _fake_checker({

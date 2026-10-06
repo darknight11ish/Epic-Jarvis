@@ -1073,6 +1073,7 @@ def t_every_sensitive_phrasing_is_flagged():
     missed = [t for lines in cases.values() for t in lines if not A.sensitivity(t)]
     check(f"all {n} phrasings in attack_sensitive.py are flagged (L7)", not missed, missed)
     check("the red team's file holds 38 phrasings (the brief said 42)", n == 38, n)
+    not_carded = []
     for lines in cases.values():
         for t in lines:
             w = World()
@@ -1080,10 +1081,16 @@ def t_every_sensitive_phrasing_is_flagged():
                 w.say(t)
                 res = w.learn([re.sub(r"^I\b", "The owner", re.sub(r"\bmy\b", "the owner's", t))])
                 if not carded(res, "sensitive"):
+                    not_carded.append(t)
                     check(f"end to end, {t!r} stays a card", False, res)
             finally:
                 w.done()
-    check("end to end, every one of them stays a card", True)
+    # Was `check("end to end, every one of them stays a card", True)`: the
+    # condition was the constant True, so on a run where the loop above had just
+    # printed FAIL for a phrasing, this line still printed ok for the same claim.
+    # It now asserts what its name says, so the two cannot disagree.
+    check("end to end, every one of them stays a card", not not_carded,
+          f"these stayed no card: {not_carded}")
     benign = ["I'm working on project Falcon, a Rust CLI", "I prefer dark mode in every editor",
               "My favourite editor is Vim", "I live in Leeds", "I'm moving to Berlin in June",
               "I like hiking on weekends", "My dog is called Biscuit", "I'm learning Kotlin",
@@ -1142,7 +1149,15 @@ def t_remember():
         try:
             q, res = _remember(w, text, prov=prov, **kw)
             if not q or not q.get("queued"):
-                check(f"Remember, {name}: not even queued as a card (fine)", True)
+                # Was `check(f"Remember, {name}: not even queued as a card
+                # (fine)", True)`: a condition of the constant True, in a branch
+                # that never ran (all twelve cases queue as a card today - read
+                # off them one by one), so a regression that stopped the
+                # "Remember:" pipeline queueing ANY of them would have printed
+                # twelve passes and gone green. Not queueing is the failure this
+                # case is here to catch, so it is checked rather than excused.
+                check(f"Remember, {name}: queued as a card", False,
+                      f"nothing was queued at all: q={q!r} res={res!r}")
                 continue
             check(f"Remember, {name}: a card", carded(res, words), (q, res))
             card = w.card(q["proposal_id"])

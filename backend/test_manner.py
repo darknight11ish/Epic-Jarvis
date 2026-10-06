@@ -450,7 +450,8 @@ def t_quick_answers_follow_the_setting():
         except Exception:
             sched = None
         if sched is None:
-            check("the scheduler can be made for this test (skipped: no Scheduler)", True)
+            skip("quick answers following the setting: no jarvis_schedule.Scheduler here, "
+                 "so a timer cannot be set up for this check")
             _cleanup(tmp)
             return
         body = {"messages": [{"role": "user", "content": "set a timer for 10 minutes",

@@ -68,12 +68,22 @@ import jarvis_ui_control as U  # noqa: E402
 from test_agent import NoRealIO, scripted_post  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("(symlinks not available here - link
+    case skipped)", True) - a condition of the constant True, so it printed as
+    a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 LOOPBACK = "http://127.0.0.1:11434"
@@ -662,8 +672,9 @@ def t_file_read_opens_the_path_it_checked():
         link = home / "Documents" / "innocent.txt"
         try:
             link.symlink_to(home / ".ssh" / "id_ed25519")
-        except (OSError, NotImplementedError):
-            check("(symlinks not available here - link case skipped)", True)
+        except (OSError, NotImplementedError) as exc:
+            skip(f"a harmless-looking link to an SSH key: a symlink cannot be made here "
+                 f"({exc.__class__.__name__}), so nothing was proved")
             return
         r = AG._run_file_read({"path": str(link)})
         check("a harmless-looking link to an SSH key is refused",
@@ -706,7 +717,7 @@ if __name__ == "__main__":
             except Exception:
                 FAILED.append(name)
                 traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

@@ -390,6 +390,21 @@ def fake_jpeg(w=800, h=600, size=None):
     return body
 
 
+def _real_jpeg(w, h):
+    """A genuinely decodable JPEG of this size, for the Pillow branch below.
+
+    `fake_jpeg` above is enough for `jpeg_size()` and for the no-Pillow path,
+    but Pillow cannot decode it - so with Pillow installed `fit()` refused it as
+    bytes, and the check that was named "not refused for size alone" reported ok
+    without ever reaching the scaling it is named for.
+    """
+    from PIL import Image
+    img = Image.new("RGB", (w, h), (30, 120, 200))
+    buf = io.BytesIO()
+    img.save(buf, "JPEG", quality=70)
+    return buf.getvalue()
+
+
 def sample_info(picture=True, **over):
     info = {"site": "clinic.example", "goal": "book", "engine": "visible",
             "steps": [{"action": "type", "role": "textbox", "name": "Name", "within": "",
@@ -580,7 +595,13 @@ def t_capture_takes_one_whole_page_jpeg_inside_the_caps():
           and shots[0]["full_page"] is True, repr(shots))
     check("a picture inside the caps is used as taken", pic["width"] == 1200 and pic["height"] == 900
           and pic["jpeg"] == fake_jpeg(1200, 900))
-    for label, data in (("too tall", fake_jpeg(800, 4000)), ("too many bytes", fake_jpeg(800, 600, FR.MAX_BYTES + 10))):
+    # `make_real` is a lambda, not a call: it needs Pillow, and Pillow is not
+    # installed everywhere this suite runs (the Windows CI job installs no
+    # Pillow), so it is built only on the branch that has already found it.
+    for label, data, make_real, src_wh in (
+            ("too tall", fake_jpeg(800, 4000), lambda: _real_jpeg(800, 4000), (800, 4000)),
+            ("too many bytes", fake_jpeg(800, 600, FR.MAX_BYTES + 10),
+             lambda: _real_jpeg(800, 600) + b"\x00" * (FR.MAX_BYTES + 10), (800, 600))):
         try:
             import PIL  # noqa: F401
             have_pil = True
@@ -592,7 +613,19 @@ def t_capture_takes_one_whole_page_jpeg_inside_the_caps():
         except FR.NoPicture as exc:
             scaled, why = False, exc.plain
         if have_pil:
-            check(f"{label}: Pillow present - not refused for size alone", True)
+            # Was `check(f"{label}: Pillow present - not refused for size alone",
+            # True)`: the condition was the constant True, so it printed ok
+            # whatever fit() did. It was untrue as well - `fake_jpeg` is a
+            # header, not a decodable image, so fit() refused it as bytes and
+            # never reached the scaling this check is named for. A real JPEG is
+            # passed in instead, so the name is what is proved.
+            got = FR.fit(make_real())
+            shrunk = max(got["width"], got["height"]) < max(*src_wh)
+            check(f"{label}: Pillow present - scaled inside the caps, not refused for "
+                  f"size alone",
+                  max(got["width"], got["height"]) <= FR.MAX_SIDE
+                  and len(got["jpeg"]) <= FR.MAX_BYTES
+                  and shrunk == (max(*src_wh) > FR.MAX_SIDE), got)
         else:
             check(f"{label}: with no Pillow it is refused in words, never sent unscaled",
                   scaled is False and "too big" in why, why if not scaled else "was sent")

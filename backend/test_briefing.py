@@ -510,8 +510,9 @@ def t_it_goes_off_is_built_without_a_model_and_rings_ready():
     # own zone: 09:30 came out as 01:30 and the check read as a bug. CI (Linux)
     # proves it; here it is reported as not proven (2026-10-03).
     if not use_tz("Europe/London"):
-        check("SKIPPED (this system has no time.tzset, so the PC's timezone cannot be "
-              "set to Europe/London; CI proves this one on Linux)", True)
+        skip("the built-without-a-model briefing that rings ready: this system has no "
+             "time.tzset, so the PC's timezone cannot be set to Europe/London; CI proves "
+             "this one on Linux")
         return
     B.forget()
     w = World(local(2026, 9, 25, 6, 0), name="fire")
@@ -589,8 +590,8 @@ def t_calendar_lines():
     # expected clock times are London's, and there is no time.tzset() on Windows
     # (2026-10-03).
     if not use_tz("Europe/London"):
-        check("SKIPPED (this system has no time.tzset, so the PC's timezone cannot be "
-              "set to Europe/London; CI proves this one on Linux)", True)
+        skip("the briefing's calendar lines: this system has no time.tzset, so the PC's "
+             "timezone cannot be set to Europe/London; CI proves this one on Linux")
         return
     now = local(2026, 9, 25, 7, 0)
     xml = calendar_xml(("Stand-up", "", "20260911T080000Z", "RRULE:FREQ=WEEKLY\n"),

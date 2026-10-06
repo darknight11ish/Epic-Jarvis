@@ -482,8 +482,9 @@ def t_resume_asks_first_and_runs_only_the_rest():
         check("exactly one card was raised, under the ORIGINAL action's tier",
               len(seen) == 1 and seen[0][0] == "control_computer", repr(seen))
     else:
-        check("SKIP - no jarvis_gate.py here, so no _TOOL_ACTIONS table to resolve "
-              "'jarvis_ui_control_run' with; the owner's own run proves this", True)
+        skip("exactly one card was raised under the ORIGINAL action's tier: no "
+             "jarvis_gate.py here, so no _TOOL_ACTIONS table to resolve "
+             "'jarvis_ui_control_run' with; the owner's own run proves this")
     text = seen[0][1]
     check("the card lists every step that is left, in full",
           "1. two" in text and "2. three" in text and "1. one" not in text)

@@ -89,6 +89,7 @@ def _block(src, marker):
 
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def _scratch_root() -> Path:
@@ -120,6 +121,15 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond
                                                         else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("(links cannot be made here -
+    skipped)", True) - a condition of the constant True, so it printed as a
+    pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Verdict:
@@ -289,8 +299,9 @@ def t_only_inside_a_listed_folder():
         os.symlink(str(outside), str(root / "link"))
         check("a link pointing out of it: refused",
               D.allowed_path(str(root / "link" / "o.md"), roots) is None)
-    except (OSError, NotImplementedError):
-        check("(links cannot be made here - skipped)", True)
+    except (OSError, NotImplementedError) as exc:
+        skip(f"a link pointing out of the folder: cannot be made here ({exc.__class__.__name__}), "
+             "so nothing was proved")
     check("no list: refused", D.allowed_path(str(root / "a.md"), []) is None)
     prog = D._program_folder()
     check("Jarvis's own program folder is refused even inside a listed folder (the "
@@ -525,7 +536,7 @@ def t_the_converter_is_a_separate_program_without_secrets():
 def t_real_conversion_when_markitdown_is_here():
     D._READY.clear()
     if not D.converter_ready():
-        check("(MarkItDown is not installed here - real conversion skipped)", True)
+        skip("MarkItDown is not installed here, so a real PDF/Word conversion cannot be read")
         return
     root = folder("Real")
     (root / "letter.pdf").write_bytes(_minimal_pdf("Pets are allowed here"))
@@ -832,7 +843,7 @@ if __name__ == "__main__":
                 FAILED.append(name)
                 traceback.print_exc()
     shutil.rmtree(TMP, ignore_errors=True)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

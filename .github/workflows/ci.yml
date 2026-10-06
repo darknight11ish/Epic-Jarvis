@@ -1071,6 +1071,19 @@ jobs:
       # it. This is the other half.
       - name: Every command a page calls is granted to its window
         run: python3 ../../tools/check_invoke_grants.py
+      # A suite check that cannot fail hides a real defect indefinitely, and it
+      # is worse than a failing one: it is counted as a PASS. On 2026-10-05 this
+      # repository fixed 153 `check("SKIP - <reason>", True)` sites; the same
+      # shape was back on 2026-10-06, 24 more in 14 files, and two summary
+      # lines (`check("... every one of them stays a card", True)`) that
+      # printed ok on a run where the loop above had just printed FAIL. The
+      # suite's own words are the evidence: if it says it could not run the
+      # check here, the answer is a real `skip(why)`, counted separately and
+      # never as a pass. This reads every backend/test_*.py and
+      # backend/eval_*.py and fails on a fake skip, on a string used as the
+      # condition, and on a harness whose condition has a default.
+      - name: No suite check can pass while checking nothing
+        run: python3 ../../tools/check_vacuous_checks.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility

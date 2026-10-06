@@ -27,12 +27,22 @@ from _where import BACKEND, REPO, missing, explain
 import jarvis_memory as M
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("a NaN row is not written", True,
+    "sqlite-vec absent; skipped") - a condition of the constant True, so it
+    printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 class Bad(M.Embedder):
@@ -110,7 +120,8 @@ def t_the_validator():
 def t_a_nan_is_not_stored():
     s = fresh(Bad(lambda t: [float("nan")] + [0.0] * 7))
     if not s._vec_ok:
-        check("a NaN row is not written", True, "sqlite-vec absent; skipped")
+        skip("a NaN row is not written: sqlite-vec is absent here, so the vector "
+             "path cannot be exercised")
         return
     s.add_fact("Mario is allergic to penicillin")
     check("a NaN row is not written to facts_vec", vec_rows(s) == 0,
@@ -123,7 +134,8 @@ def t_a_nan_is_not_stored():
 def t_all_zeros_is_not_stored():
     s = fresh(Bad(lambda t: [0.0] * 8))
     if not s._vec_ok:
-        check("an all-zero row is not written", True, "sqlite-vec absent; skipped")
+        skip("an all-zero row is not written: sqlite-vec is absent here, so the vector "
+             "path cannot be exercised")
         return
     s.add_fact("Mario prefers tabs over spaces")
     check("an all-zero row is not written to facts_vec", vec_rows(s) == 0)
@@ -134,7 +146,8 @@ def t_a_good_vector_still_lands():
     """CONTROL. A guard that rejects everything would pass the tests above."""
     s = fresh(Good())
     if not s._vec_ok:
-        check("a good vector is stored", True, "sqlite-vec absent; skipped")
+        skip("a good vector is stored: sqlite-vec is absent here, so the vector "
+             "path cannot be exercised")
         return
     s.add_fact("Mario's main editor is Vim")
     check("a good vector IS written", vec_rows(s) == 1,
@@ -145,7 +158,8 @@ def t_a_good_vector_still_lands():
 def t_it_is_counted_and_said_out_loud():
     s = fresh(Bad(lambda t: [float("nan")] + [0.0] * 7))
     if not s._vec_ok:
-        check("status reports the count", True, "sqlite-vec absent; skipped")
+        skip("status reports the count: sqlite-vec is absent here, so the vector "
+             "path cannot be exercised")
         return
     s.add_fact("one")
     s.add_fact("two")
@@ -174,7 +188,8 @@ def t_a_broken_query_falls_back_to_keywords():
     """
     s = fresh(Good())
     if not s._vec_ok:
-        check("a broken query still answers from FTS5", True, "sqlite-vec absent; skipped")
+        skip("a broken query still answers from FTS5: sqlite-vec is absent here, so the "
+             "vector path cannot be exercised")
         return
     s.add_fact("Mario is allergic to penicillin and carries an EpiPen")
     s.add_fact("Mario prefers tabs over spaces in Go")
@@ -199,7 +214,7 @@ def main():
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     return 1 if FAILED else 0

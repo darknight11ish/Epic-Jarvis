@@ -33,6 +33,7 @@ require_shipped("jarvis_forecast.py")
 import jarvis_forecast as F  # noqa: E402
 
 PASSED, FAILED = [], []
+SKIPPED = []
 UTC = timezone.utc
 DAY = 86400.0
 NOW = 1790000000.0
@@ -41,6 +42,15 @@ NOW = 1790000000.0
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this machine cannot run: printed as `skip`, counted on its own,
+    never as a pass. (It used to be check("(zoneinfo has no America/New_York
+    here - DST check skipped)", True) - a condition of the constant True, so it
+    printed as a pass and was counted as one.)"""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def weekly(vals, step_days=7.0, end=NOW - 3600):
@@ -259,8 +269,9 @@ def t_days_are_the_owners_local_days_across_a_dst_weekend():
         from zoneinfo import ZoneInfo
         ny = ZoneInfo("America/New_York")
         ny.utcoffset(datetime(2026, 3, 8, 12))
-    except Exception:
-        check("(zoneinfo has no America/New_York here - DST check skipped)", True)
+    except Exception as exc:
+        skip(f"the owner's local days across a DST weekend: zoneinfo has no "
+             f"America/New_York here ({exc.__class__.__name__})")
         return
     # US clocks jumped forward at 2:00 on 8 March 2026. Local times:
     def loc(m, d, h, mi=0):
@@ -341,7 +352,7 @@ def main() -> int:
                 import traceback
                 traceback.print_exc()
                 check(f"{name} ran without crashing", False, repr(exc))
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 
