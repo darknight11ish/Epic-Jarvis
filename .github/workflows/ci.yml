@@ -6,8 +6,17 @@
 name: CI
 
 on:
+  # main only, and that is the whole fix for running twice per commit: a branch
+  # push started this workflow on refs/heads/<branch>, and the same commit's
+  # pull request started it again on refs/pull/<n>/merge - two different refs,
+  # so the concurrency group below could never collapse them, and every check
+  # name appeared twice in the pull request's list (measured 2026-10-06: of the
+  # last 100 runs, 42 were that duplicate pull_request half of a commit whose
+  # push half ran too). A branch with no pull request now runs nothing; a draft
+  # pull request is enough to get a check, and the merge into main is checked
+  # again by the push below.
   push:
-    branches: ["**"]
+    branches: [main]
     # A push that changes ONLY these files runs nothing: no test reads them
     # (checked 2026-09-26 - the suites read docs/*.md, backend/README.md and
     # CHANGELOG.md, so those are NOT listed). Every changed file must be on
@@ -15,14 +24,18 @@ on:
     paths-ignore:
       - "CLAUDE.md"
       - "README.md"
-  # Pull requests into main only (every other branch is already checked by
-  # its push). No path filter here, so a required check on a pull request
-  # always reports instead of waiting for a run that never starts.
+  # Proposed changes run here, once. No path filter, so a required check on a
+  # pull request always reports instead of waiting for a run that never starts
+  # (the filter above is safe on the push because main is merged by hand, after
+  # the pull request was already checked).
   pull_request:
     branches: [main]
 
-# A newer push to the same branch (or pull request) stops the older run: its
-# result would be out of date before it finished.
+# A newer push to the same place stops the older run: its result would be out
+# of date before it finished. github.ref is refs/pull/<n>/merge for a pull
+# request and refs/heads/main for the push, so those two never cancel each
+# other - and with the push trigger on main only, one commit no longer produces
+# two of them to begin with.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true

@@ -2,7 +2,13 @@ name: Jarvis client
 
 on:
   workflow_dispatch:
+  # main only, plus every pull request into main (below). This workflow had no
+  # pull_request trigger at all, so a branch push built the branch; it now
+  # builds the merge instead, which is the tree that actually lands. Nothing
+  # reaches the owner from here: the APK publish step is `github.ref ==
+  # 'refs/heads/main'`, so a pull request run builds, tests and smokes only.
   push:
+    branches: [main]
     paths:
       - "jarvis-client/**"
       # The shared debug key this module is now signed with.
@@ -17,12 +23,31 @@ on:
       - "jarvis-desktop/tests/fixtures/**"
       # The one version number both apps and the backend share.
       - "VERSION"
+  # The same file list as the push above, on purpose: this list is what decides
+  # whether the workflow reports at all, so a pull request that touches none of
+  # these files is skipped here exactly as its push would have been skipped
+  # before. No check is left waiting for a run that never starts that was not
+  # already in that state.
+  pull_request:
+    branches: [main]
+    paths:
+      - "jarvis-client/**"
+      - "keystore/**"
+      - ".github/workflows/jarvis-client.yml"
+      - "backend/**"
+      - "jarvis-desktop/src/**"
+      - "jarvis-desktop/src-tauri/src/**"
+      - "jarvis-desktop/tests/fixtures/**"
+      - "VERSION"
 
 # Read only by default. Only the `smoke` job, which publishes the APK after
 # it has passed, gets write access.
 permissions:
   contents: read
 
+# a second push to the same pull request cancels the first: github.ref is
+# refs/pull/<n>/merge there, one value for the whole pull request, and
+# refs/heads/main for the post-merge push, so the two never cancel each other.
 concurrency:
   group: jarvis-client-${{ github.ref }}
   cancel-in-progress: true

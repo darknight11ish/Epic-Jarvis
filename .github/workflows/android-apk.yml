@@ -18,11 +18,20 @@ on:
         description: "JDK version used for the Gradle build"
         default: "17"
   push:
-    branches: ["**"]
+    branches: [main]
     # The desktop endpoint has no bearing on the APK.
     # keystore/ is in here because the build now reads the shared debug key from
     # it. Rotating that key changes what every APK is signed with, and without
     # this the change would build nothing.
+    paths:
+      - "jarvis-android/**"
+      - "keystore/**"
+      - ".github/workflows/android-apk.yml"
+  # same shape as ci.yml and jarvis-client.yml: main by push, proposed changes
+  # by pull request, once each. The same file list as the push above, so a pull
+  # request reports exactly when its push would have.
+  pull_request:
+    branches: [main]
     paths:
       - "jarvis-android/**"
       - "keystore/**"
@@ -33,6 +42,8 @@ on:
 permissions:
   contents: read
 
+# as the other workflows: github.ref is refs/pull/<n>/merge for a pull request,
+# so a second push to the same one stops the older, stale run.
 concurrency:
   group: android-apk-${{ github.ref }}
   cancel-in-progress: true
