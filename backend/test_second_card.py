@@ -58,6 +58,35 @@ import jarvis_intake as IN  # noqa: E402
 import gen_second_card_cases as G  # noqa: E402
 import _ollama_wire as W  # noqa: E402
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `after[i:i + 900]` counted characters from the route header and hoped
+    everything the check names was inside the next 900 of them - a promise
+    about how long the route stays, which had to be re-tuned by hand when it
+    grew (2026-10-03). The block ends where the indentation returns to the
+    level of the line the marker sits on, however long it grew to.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 FAILED, PASSED = [], []
 SKIPPED = []
 
@@ -1342,11 +1371,28 @@ def t_hooks_are_no_ops_when_off():
     # secrets first, so this PC's text reader must be able to read it: a stand-in that finds no
     # words at all (nothing to hide) lets the picture go on exactly as it came.
     nothing_to_hide = {"ok": True, "text": "", "left_out": 0, "why": "", "lines": [], "size": None}
-    with mock.patch.object(AG, "_read_picture", lambda image: dict(nothing_to_hide)):
+    # The case is "the model answering cannot see pictures", and that is what
+    # is pinned here. `keep_picture` is `sees is None` - the answer when Ollama
+    # does not REPORT the model's capabilities (an older Ollama). The stand-in
+    # server in this suite does not report them either, so on CI the picture
+    # was kept and no note was written: the same suite passed on the owner's PC
+    # (whose Ollama does report) and failed on Linux, on nothing to do with the
+    # behaviour it is checking (2026-10-04, reproduced here by forcing None).
+    no_vision = mock.patch.object(AG, "_model_can_see_pictures", lambda *a, **k: False)
+    with mock.patch.object(AG, "_read_picture", lambda image: dict(nothing_to_hide)), no_vision:
         sent = _turn(pic, enabled={"calculator"})
-    check("a picture, second card off: the main model gets it exactly as before, tools and all",
+    # Second card off, and this PC's text reader found no words in the picture -
+    # so the model answering cannot see it, and the picture is replaced by a note
+    # saying exactly that rather than sent to something that would silently
+    # ignore it (owner kept the note, 2026-10-04). The turn itself still goes to
+    # this PC's main model, with the tools it always had.
+    parts = [p for p in sent[0][1]["messages"][0]["content"] if isinstance(p, dict)]
+    check("a picture, second card off: this PC's main model gets the turn, tools and all",
           sent[0][0].startswith("http://127.0.0.1:11434") and sent[0][1]["model"] == "qwen3:8b"
-          and sent[0][1]["messages"] == pic and "tools" in sent[0][1])
+          and "tools" in sent[0][1])
+    check("... and the unreadable picture is replaced by a note, never sent blind",
+          not any(p.get("type") == "image_url" for p in parts)
+          and any("cannot see pictures" in p.get("text", "") for p in parts), parts)
     with mock.patch.object(AG, "_read_picture", lambda image: {"ok": False, "why": "no reader here"}):
         sent = _turn(pic, enabled={"calculator"})
     check("... but a picture that cannot be checked for secrets is not sent to the model at all",
@@ -1622,12 +1668,12 @@ def t_the_patch():
               and (d / "jarvis_gate.py").read_text(encoding="utf-8") == gate_start, r.stderr)
     finally:
         shutil.rmtree(d, ignore_errors=True)
-    i = after.index('if path == "/api/second-card":')
-    w = after[i:i + 900]
+    w = _block(after, 'if path == "/api/second-card":')
+    check("the second-card GET route is still there to check", bool(w))
     check("GET /api/second-card checks origin and token, and answers status()",
           "_origin_ok(self)" in w and "_token_ok(self)" in w and "jarvis_second_card.status()" in w)
-    i = after.index('if route == "/api/second-card":')
-    w = after[i:i + 1600]
+    w = _block(after, 'if route == "/api/second-card":')
+    check("the second-card POST route is still there to check", bool(w))
     check("POST /api/second-card checks origin and token, and hands the body over",
           "_origin_ok(self)" in w and "_token_ok(self)" in w
           and "jarvis_second_card.handle_post(body)" in w)
@@ -1646,10 +1692,13 @@ def t_the_patch():
     check("... and that Browser control's action reaches the internet (AP-9)",
           '"second_card_browser_enable": ("yes", "outbound",' in gate_after)
     # The patched chat block still compiles as Python (the ** in the call).
-    i = after.index("_turn = jarvis_agent.run_local_turn(")
-    call = after[i:after.index("announce=lambda text", i)] + "announce=None)"
+    # The whole call is taken by indentation, not cut at
+    # `after.index("announce=lambda text")` and stubbed - that slice was an
+    # offset, and the stub meant a broken `announce=` would compile anyway.
+    call = _block(after, "_turn = jarvis_agent.run_local_turn(")
     try:
-        compile("def f():\n    " + call.replace("\n", "\n    ") + "\n", "<patched call>", "exec")
+        compile("def f():\n" + "\n".join("    " + ln for ln in call.splitlines()) + "\n",
+                "<patched call>", "exec")
         check("the patched run_local_turn call is valid Python", True)
     except SyntaxError as exc:
         check("the patched run_local_turn call is valid Python", False, str(exc))

@@ -93,7 +93,14 @@ def t_data():
               for r in R.RULES))
     check("a rule that needed a file path is not in the data",
           all(a["target"] in ("secret", "match", "line") for r in R.RULES for a in r["allow"]))
-    head = (HERE / "jarvis_secret_rules.py").read_text(encoding="utf-8")[:1800]
+    # The header IS the module docstring, so it is read as one. The old form
+    # was `read_text(...)[:1800]`: a promise about how long the header stays,
+    # which silently truncates the provenance the check exists to pin the day
+    # someone adds a paragraph above it (2026-10-03).
+    import ast as _ast
+    _rules_src = (HERE / "jarvis_secret_rules.py").read_text(encoding="utf-8")
+    head = _ast.get_docstring(_ast.parse(_rules_src)) or ""
+    check("the module still carries its own header as a docstring", bool(head))
     check("the header says where it came from, what changed and the licence",
           "gitleaks" in head and "MIT" in head and "sha256" in head and "Zachary Rice" in head
           and "dropped: pkcs12-file" in head, head[:200])

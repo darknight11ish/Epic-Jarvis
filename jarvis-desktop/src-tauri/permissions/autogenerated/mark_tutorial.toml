@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-mark-tutorial"
+description = "Enables the mark_tutorial command without any pre-configured scope."
+commands.allow = ["mark_tutorial"]
+
+[[permission]]
+identifier = "deny-mark-tutorial"
+description = "Denies the mark_tutorial command without any pre-configured scope."
+commands.deny = ["mark_tutorial"]

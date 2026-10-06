@@ -149,6 +149,58 @@ jobs:
             exit 1
           fi
 
+      # A failing test's NAME is the useful part, and it was only in the log -
+      # which needs a signed-in browser. The checks API is public, so the same
+      # names go out as annotations and on the run's Summary. This is the same
+      # trick the backend job uses, and it exists because a red phone job could
+      # not be diagnosed from a terminal at all (2026-10-05).
+      - name: Name the failing tests, for anyone without the log
+        if: failure()
+        run: |
+          python3 - <<'PYEOF' || true
+          import glob, os, re, xml.etree.ElementTree as ET
+          # A failure BEFORE any test runs leaves no XML at all - a Kotlin error
+          # in the test sources, for one. So the compiler's own lines go out
+          # first; otherwise this step would say "no failing cases" and hide the
+          # only thing that mattered (2026-10-05).
+          if os.path.exists("test.log"):
+              text = open("test.log", encoding="utf-8", errors="replace").read()
+              seen = []
+              for line in text.splitlines():
+                  if line.startswith("w: "):
+                      # A warning is NOT a failure: several files in this app
+                      # carry them already. Labelling them ::error:: made a
+                      # green compile look red and hid the real failure
+                      # (2026-10-05).
+                      print(f"::warning title=Kotlin warning::{line.strip()[:400]}")
+                      continue
+                  if (line.startswith("e: ") or "Unresolved reference" in line
+                          or "Compilation error" in line or "error: " in line):
+                      if line.strip() and line not in seen:
+                          seen.append(line)
+              for line in seen[:20]:
+                  print(f"::error title=Kotlin::{line.strip()[:900]}")
+          results = "app/build/test-results/testDebugUnitTest"
+          lines = []
+          for path in sorted(glob.glob(os.path.join(results, "TEST-*.xml"))):
+              try:
+                  root = ET.parse(path).getroot()
+              except Exception:
+                  continue
+              for case in root.iter("testcase"):
+                  for bad in list(case.findall("failure")) + list(case.findall("error")):
+                      name = f'{case.get("classname")}.{case.get("name")}'
+                      why = (bad.get("message") or bad.get("text") or "").strip()
+                      why = " ".join(why.split())[:600]
+                      print(f"::error title=Failing phone test: {name}::{why}")
+                      lines.append(f"* `{name}` - {why[:300]}")
+          if lines:
+              with open(os.environ.get("GITHUB_STEP_SUMMARY", "/dev/null"), "a") as out:
+                  out.write("### Failing phone tests\n\n" + "\n".join(lines) + "\n")
+          else:
+              print("no failing test cases were recorded in the XML")
+          PYEOF
+
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0

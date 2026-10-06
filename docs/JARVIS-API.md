@@ -17182,3 +17182,32 @@ Refusals are `{"ok": false, "error": <code>, "message": <plain words>}` and rais
 `quiz-cloud.patch` adds `quiz_cloud_grade` to `jarvis_gate.py`'s "acts only on tier ask" set and its `_RISK` (`"no"`, `"outbound"`) and installs the routes in `jarvis_hud.py` after `youtube.patch`. The framework file gets `quiz_cloud_grade = "ask"`. The action is in `jarvis_asks_first.py` (`HARD_LIMITS`, `MUST_ASK`, the page's "The internet" group, `LOCKDOWN_ACTIONS`), `jarvis_card_words.py` (title "send a quiz to a cloud AI service to be graded better"), and `jarvis_reach.py` has a row "Quiz grading in the cloud"; the three fixture generators were re-run. `docs/ARCHITECTURE.md` section 4 has its row. `tools/check_parity.py` lists the four routes as `planned`. `NEEDS_A_PERSON` (in `jarvis_agent.py`) is not touched because no model tool exists yet.
 
 Tests: `backend/test_quiz_cloud.py`.
+
+## 114. Tutorials and the FAQ
+
+The owner asked (2026-10-05) for a skippable comprehensive intro tutorial and a tutorial for each major part of Jarvis, on the desktop program and the Android app, with the progress of tutorial completion recorded and the ability to quit a specific tutorial and resume it later - the same tutorials on both apps, but with a section for the desktop program and a section for the Android app, and an FAQ with well-thought-out questions and answers. `docs/TUTORIALS-DESIGN.md` is the design; the content lives in `jarvis_tutorials.py`, **not** in the two apps, so the phone and the PC cannot teach different things.
+
+### 114.1 The routes
+
+* `GET /api/tutorials` (optional `?section=pc` or `?section=phone`) answers `{"ok", "sections": [{"id", "title"}], "tutorials": [...], "counts": {"done", "due", "total"}, "note"}`. Each tutorial carries `id`, `section` (`pc`, `phone` or `both`), `title`, `why`, `minutes`, `steps` (each with `title`, `body`, `where` in words and an optional `shows` picture name), and the owner's place in it: `state` (`not_started`, `in_progress`, `done`, `skipped`), `step`, `steps_total`, `done`, `resume_at` (the step to continue at, or `null`), `due` and `changed_since`.
+* `POST /api/tutorials/progress` `{id, state, step}` records it: `state` is one of `in_progress`, `done`, `skipped`, or `not_started` to **remove** the record, which is what "Show this one again" does. `step` is 0 to `steps_total`. Answers `{"ok", "id", "state", "step", "steps_total", "done"}`.
+* `GET /api/faq` answers `{"ok", "questions": [{"q", "a", "where"}], "count", "note"}`.
+* A tutorial is **due** when there is no record at all, and again when its `version` is higher than the version recorded: a tutorial whose steps changed is offered again rather than counted done on words the owner never saw. That is the same reason `jarvis-desktop/src-tauri/src/commands.rs` versions its onboarding marker.
+* All three routes are behind the server's own origin and token checks (`jarvis_tutorials.install` wraps `do_GET` and `do_POST`); every other request goes straight to the original handler.
+
+### 114.2 Errors
+
+`{"ok": false, "error": <plain words>}` and **no card, ever**: `400` when a request does not say which tutorial, names a state that is not one of the three, or gives a step outside `0..steps_total`; `404` when it names a tutorial that does not exist; `500` when the record could not be written. Nothing here raises an approval card: this is the owner marking their own reading, it acts on nothing, and a card per "Next" would be absurd.
+
+### 114.3 What it keeps, and what it does not do
+
+* One file, `tutorials.json` in the config folder (`OPENJARVIS_CONFIG_DIR`), holding one record per tutorial: `{"state", "step", "version", "at"}`. It is written atomically (a temporary file, then `os.replace`) and the module writes nothing else - never the owner's `jarvis-framework.toml`.
+* Progress is kept **on the PC and shared by both apps**: finishing a tutorial on the phone marks it on the PC, because the record is the PC's and the apps only read and write it through these routes.
+* It reads no other file, makes no network call, runs nothing, and imports no gate. It is **not** one of `jarvis_agent.py`'s tools, so the model cannot be asked to complete a tutorial, and nothing is learned from it.
+* The FAQ answers are written from how the app behaves today, in plain words, each with a `where` line naming the screen where the owner can see or change the thing.
+
+### 114.4 The gate, files and parity
+
+`tutorials.patch` is ONE hunk in `jarvis_hud.py`, an install block right after `retirement.patch`'s own, so it applies after it. It wraps `Handler` before the main socket, like spending and retirement above, and the banner says so. `jarvis_tutorials.py` is in `_where.SHIPPED` and in `scripts/apply-patches.ps1`'s shipped list, so the patcher copies it to the owner's PC; without it, or on any error, the banner says the tutorials are off and the routes are simply not there. The feature adds **no** gate action and no tier line: it acts on nothing, so there is nothing to ask about.
+
+Tests: `backend/test_tutorials.py` (the catalogue's shape, both sections, resume after quitting, finished once, reversible skips, a changed tutorial re-offered, every bad input answered with a status, exactly one file written, and no gate, tool, socket or subprocess import at all).

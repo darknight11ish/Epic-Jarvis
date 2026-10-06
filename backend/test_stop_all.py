@@ -53,6 +53,35 @@ PASSED, FAILED = [], []
 TOKEN = "stop-all-test-token"       # a stand-in, not key-shaped
 
 
+def _block(src, marker):
+    """The block `marker` opens, delimited by INDENTATION, not by a count.
+
+    `call = text[i:i + 200]` counted characters from the install call and
+    hoped the two guards were inside the next 200 of them - a promise about
+    how long the call stays, which has to be re-measured by hand whenever it
+    grows (2026-10-03). The call ends where the indentation comes back to its
+    own level.
+
+    The text here is a fragment of jarvis_hud.py assembled by the patch stack,
+    so it is not a parseable module and ast cannot be used on it; indentation
+    is the structure that is available, and unlike a character count it is the
+    same structure the Python parser reads.
+    """
+    at = src.find(marker)
+    if at < 0:
+        return ""
+    start = src.rfind("\n", 0, at) + 1
+    head = src[start:at]
+    indent = len(head) - len(head.lstrip())
+    lines = src[start:].split("\n")
+    out = [lines[0]]
+    for line in lines[1:]:
+        if line.strip() and (len(line) - len(line.lstrip())) <= indent:
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
@@ -433,7 +462,8 @@ def t_the_patch_in_the_stack():
     k = text.find("jarvis_owner_check.install(Handler")
     check("install() is called before anything listens, after owner-check", -1 < k < i < j,
           (k, i, j))
-    call = text[i:i + 200]
+    call = _block(text, "jarvis_stop_all.install(Handler")
+    check("the install call is still there to check", bool(call))
     check("with the server's own origin and token checks",
           "origin_ok=_origin_ok" in call and "token_ok=_token_ok" in call, call)
     check("a missing module is said on the banner", "Stop everything cannot reach" in text)

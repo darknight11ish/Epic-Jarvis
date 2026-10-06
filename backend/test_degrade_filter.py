@@ -48,11 +48,27 @@ def check(name, cond, detail=""):
 
 
 def _loop():
-    """The real `for _hop in range(len(lanes) + 2):` block."""
+    """The real degrade loop.
+
+    It is `for _hop in _degrade_hops:` now, with
+    `_degrade_hops = () if use_tools else range(len(lanes) + 2)` just above it -
+    a tool turn does not degrade. The loop is found by that name and `run()`
+    supplies the range the test wants.
+
+    The fallback, for the pre-chat-stream spelling that sized the loop inline,
+    matches the SHAPE (`for _hop in range(...)`) rather than the exact text.
+    The old `"len(lanes) + 2" in ast.unparse(n.iter)` was still a check on how
+    the expression is written, so it needed re-tuning every time the
+    expression was touched (2026-10-03); a Call to `range` does not.
+    """
     src = SRC.read_text(encoding="utf-8")
     tree = ast.parse(src)
     found = [n for n in ast.walk(tree)
-             if isinstance(n, ast.For) and "len(lanes) + 2" in (ast.unparse(n.iter) or "")]
+             if isinstance(n, ast.For) and (ast.unparse(n.iter) or "") == "_degrade_hops"]
+    if not found:
+        found = [n for n in ast.walk(tree)
+                 if isinstance(n, ast.For) and isinstance(n.iter, ast.Call)
+                 and getattr(n.iter.func, "id", "") == "range"]
     if len(found) != 1:
         raise AssertionError(f"expected one degrade loop, found {len(found)}")
     return compile(ast.Module(body=[found[0]], type_ignores=[]), "<lifted>", "exec")
@@ -106,6 +122,8 @@ def run(*, start_lane, inject_memory, messages, codes, raw=None):
                          "injected_ids": ["mem:1"] if inject_memory else [],
                          "memory_side": "hud" if inject_memory else "none"},
         "_build_payload": lambda lane: {"model": lane},
+        # use_tools is False for every case here, so the loop really hops.
+        "_degrade_hops": range(len(LANES) + 2),
     }
     exec(CODE, {"len": len, "range": range, "isinstance": isinstance,
                 "dict": dict, "list": list, "str": str}, ns)

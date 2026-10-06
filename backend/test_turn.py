@@ -141,8 +141,10 @@ def t_predict():
     with mock.patch.object(T, "_load", return_value=None), \
             mock.patch.object(T, "model_path", return_value=Path("/nowhere/x.onnx")):
         t = T.predict(x)
-    check("no model: did not run, and says where it looked", not t.ran and "/nowhere" in t.why,
-          t)
+    # The path as this machine spells it: "/nowhere/x.onnx" is "\nowhere\x.onnx"
+    # on Windows, and the module rightly reports the real one (2026-10-03).
+    check("no model: did not run, and says where it looked",
+          not t.ran and str(Path("/nowhere/x.onnx")) in t.why, t)
     s = FakeSession(0.6)
     with mock.patch.object(T, "_load", return_value=(s, "input_features")), \
             mock.patch.object(T, "_cfg", side_effect=lambda k, d=None:
