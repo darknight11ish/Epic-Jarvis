@@ -107,6 +107,17 @@ carefully they followed the install page.
 
 Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
 
+0. **Or one command.** From the folder you downloaded this into:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\setup-jarvis.ps1
+   ```
+
+   It copies `jarvis-backend\` into place, runs both scripts below, checks
+   Ollama and the model, and starts Jarvis. It prints the 5 GB model command
+   rather than downloading it for you, and `-Print` shows every command it
+   would run while changing nothing.
+
 1. **The backend on the PC** - the Python program that does the work, plus
    the model in Ollama. Copy `jarvis-backend\` to a folder of your own
    (INSTALL.md step 1.3); one script, `scripts/install-backend.ps1`, writes

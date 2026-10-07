@@ -682,6 +682,7 @@ jobs:
             'test_sensitive.py',
             'test_settings_registry.py',
             'test_settings_switches.py',
+            'test_setup_script.py',
             'test_shipped_modules.py',
             'test_short_tool_list.py',
             'test_skill_discovery.py',
