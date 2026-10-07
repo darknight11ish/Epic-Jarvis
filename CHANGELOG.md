@@ -11,6 +11,8 @@ number as the last part - `0.2.57` is a build of 0.2.
   window's own chat box and the **Open the Jarvis bar** button still beside it,
   and `jarvis-backend/` carries the same text.
 
+- **Settings → Accounts now collects the server ADDRESSES, so email and Home Assistant work from the app itself (2026-10-06).** The card already held the four secrets (the IMAP username and password, the private calendar link, the Home Assistant token) in Windows Credential Manager - but no server address, so email answered "JARVIS_IMAP_HOST is not set - there is no mail server to read" and Home Assistant answered "not set up on this PC" unless the addresses were plain-text Windows environment variables. Eight addresses and one choice now have their own boxes (the mail server, its port and mailbox; the sending server, its port and how email is encrypted; the Home Assistant address; the calendar's CalDAV address); they are read from and written to the PC's own route and kept in `accounts.json` beside `web-search.json`, because an address is not a secret - it is a plain settings file, and the box shows what is saved. A key, password or token can never reach it: the route refuses every name but the eight. An environment variable you already set still wins, and the row says so.
+
 - **The big HUD window has its own chat box again (2026-10-06).** This
   reverses the decision of 2026-09-28 that the desktop HUD's own box should
   open the Jarvis bar instead, "so the PC has one chat box". The box and its

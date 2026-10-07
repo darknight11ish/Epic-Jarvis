@@ -48,16 +48,21 @@ backend/README.md's `email-wiring` section for the exact `jarvis_gate`/
 rather than `ask` - the same reasoning applies here unchanged.
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
-`JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` and `JARVIS_IMAP_MAILBOX` are read
-fresh from the environment on every call, exactly like `jarvis_calendar.py`'s
-own. The username and password are the two that are worth stealing, so
-`imap_user()` / `imap_password()` (ease-of-use audit row 15) read them the
-same way `jarvis_search.py` reads the Exa/Tavily/Brave keys: the environment
-variable first, if the owner already set one - unchanged, nothing that works
-today stops working - otherwise Windows Credential Manager, under
-`IMAP_USER_TARGET` / `IMAP_PASSWORD_TARGET`, entered on the PC only in the
-desktop's Settings ("Accounts"). This module never writes either to disk and
-never puts the password in a `Plan` or `describe()`'s output.
+`JARVIS_IMAP_HOST`, `JARVIS_IMAP_PORT` and `JARVIS_IMAP_MAILBOX` are the
+addresses of the mail server: `imap_address()` reads them fresh on every call,
+the environment variable FIRST - an installation that already sets one keeps
+working exactly as before - and otherwise the address the owner typed into
+the desktop's Settings -> "Accounts" card, kept on this PC in `accounts.json`
+beside `web-search.json` (`jarvis_accounts.py`; accounts.patch, 2026-10-06).
+An ADDRESS is not a secret, so it is a plain JSON file; the two that ARE
+worth stealing are not here at all - `imap_user()` / `imap_password()`
+(ease-of-use audit row 15) read them the same way `jarvis_search.py` reads
+the Exa/Tavily/Brave keys: the environment variable first, if the owner
+already set one - unchanged, nothing that works today stops working -
+otherwise Windows Credential Manager, under `IMAP_USER_TARGET` /
+`IMAP_PASSWORD_TARGET`, entered on the PC only in the desktop's Settings
+("Accounts"). This module never writes either to disk and never puts the
+password in a `Plan` or `describe()`'s output.
 
 WHAT A "PREVIEW" ACTUALLY SHOWS, AND WHY IT IS SHORT
 The full body of an email can be arbitrarily large and can carry attachments,
@@ -138,8 +143,37 @@ def tls_context(host: str):
     return ssl.create_default_context()
 
 
+def imap_address(key: str, env_name: str) -> str:
+    """One of this account's ADDRESSES, in the order that is the whole point
+    of this function:
+
+      1. the environment variable (`env_name`), if the owner set one - read
+         FIRST and returned unchanged, so an installation that already relies
+         on it behaves exactly as it did before there was a Settings box;
+      2. otherwise the address saved on this PC in `accounts.json`
+         (`jarvis_accounts.py`, `value()`), which the desktop's Settings ->
+         Accounts card writes;
+      3. otherwise "" - simply not configured.
+
+    The environment variable is checked here as well as inside
+    `jarvis_accounts.value()` on purpose: if that module is not on this PC at
+    all, step 1 must still work, and nothing that works today may stop.
+
+    `key` is a jarvis_accounts field name ("imap_host", "imap_port",
+    "imap_mailbox"); a name it does not know is answered "" rather than
+    guessed at."""
+    from_env = os.environ.get(env_name, "").strip()
+    if from_env:
+        return from_env
+    try:
+        import jarvis_accounts
+        return jarvis_accounts.value(key)
+    except Exception:
+        return ""
+
+
 def _configured() -> bool:
-    return bool(os.environ.get(HOST_ENV, "").strip())
+    return bool(imap_address("imap_host", HOST_ENV))
 
 
 def imap_user() -> str:
@@ -189,10 +223,10 @@ class Plan:
 def plan(limit: int = 10, *, unread_only: bool = True) -> Plan:
     """Work out the one connection this would make. Opens no socket."""
     limit = max(1, min(_MAX_MESSAGES, int(limit)))
-    host = os.environ.get(HOST_ENV, "").strip()
-    mailbox = os.environ.get(MAILBOX_ENV, "").strip() or _DEFAULT_MAILBOX
+    host = imap_address("imap_host", HOST_ENV)
+    mailbox = imap_address("imap_mailbox", MAILBOX_ENV) or _DEFAULT_MAILBOX
     try:
-        port = int(os.environ.get(PORT_ENV, "") or _DEFAULT_PORT)
+        port = int(imap_address("imap_port", PORT_ENV) or _DEFAULT_PORT)
     except ValueError:
         port = _DEFAULT_PORT
     criterion = "UNSEEN" if unread_only else "ALL"
@@ -202,7 +236,8 @@ def plan(limit: int = 10, *, unread_only: bool = True) -> Plan:
             host="", port=port, mailbox=mailbox, criterion=criterion, limit=limit,
             if_refused="nothing is read; the inbox stays unknown to Jarvis",
             authenticated=authenticated(),
-            reason_empty=f"{HOST_ENV} is not set - there is no mail server to read")
+            reason_empty=f"{HOST_ENV} is not set, and no mail server is saved in "
+                          f"Settings, Accounts on this PC - there is no mail server to read")
     return Plan(
         host=host, port=port, mailbox=mailbox, criterion=criterion, limit=limit,
         if_refused="nothing is read; the inbox stays unknown to Jarvis",

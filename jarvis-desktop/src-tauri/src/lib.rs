@@ -18,6 +18,7 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod account_addresses;
 pub mod account_secrets;
 pub mod aec;
 pub mod animal;
@@ -1028,6 +1029,8 @@ pub fn run() {
             account_secrets::get_account_secrets,
             account_secrets::save_account_secret,
             account_secrets::forget_account_secret,
+            account_addresses::get_account_addresses,
+            account_addresses::save_account_address,
             reach::get_reach,
             asks_first::get_asks_first,
             asks_first::set_asks_first,

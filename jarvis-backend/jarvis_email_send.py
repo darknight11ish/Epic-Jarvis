@@ -54,8 +54,15 @@ Optional, only when that guess is wrong:
                             a mail bridge), never across the internet, the
                             same rule as plain http:// to Home Assistant
                             (jarvis_local_http.plain_http_problem).
-All read fresh from the environment on every call, never cached, never
-written to disk.
+All read fresh on every call, never cached, never written to disk. The four
+servers/ports/modes are ADDRESSES and one CHOICE, not secrets: each is the
+environment variable FIRST - an installation that already sets one keeps
+working exactly as it did - and otherwise the value typed into the desktop's
+Settings -> "Accounts" card, kept on this PC in `accounts.json` beside
+`web-search.json` (`jarvis_email._address`, `jarvis_accounts.py`,
+accounts.patch, 2026-10-06). The two secrets (the username and the password)
+are never in that file: they come from the environment, else Windows
+Credential Manager (ease-of-use audit row 15).
 
 THE PASSWORD (CLAUDE.md rule 3)
   - read from the environment at the moment of sending, and nowhere else;
@@ -91,7 +98,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import os
 import re
 import smtplib
 import ssl
@@ -106,7 +112,7 @@ from typing import Callable, Optional
 #: and the two functions (env var, else Windows Credential Manager - ease-of-
 #: use audit row 15) that resolve the username and password.
 from jarvis_email import (HOST_ENV as IMAP_HOST_ENV, PASSWORD_ENV, USER_ENV,
-                          imap_password, imap_user)
+                          imap_address, imap_password, imap_user)
 
 SMTP_HOST_ENV = "JARVIS_SMTP_HOST"
 SMTP_PORT_ENV = "JARVIS_SMTP_PORT"
@@ -222,18 +228,20 @@ class Settings:
 
 
 def settings() -> Settings:
-    """How an email would leave, from the environment or Windows Credential
-    Manager (jarvis_email.imap_user/imap_password). Never the password -
-    only whether one is set. Opens nothing."""
+    """How an email would leave, from the environment, else the addresses
+    saved in Settings -> Accounts on this PC (accounts.json), and for the
+    username and password from Windows Credential Manager
+    (jarvis_email.imap_user/imap_password). Never the password - only whether
+    one is set. Opens nothing."""
     sender = imap_user()
     has_password = bool(imap_password())
-    host = os.environ.get(SMTP_HOST_ENV, "").strip().lower().rstrip(".")
+    host = imap_address("smtp_host", SMTP_HOST_ENV).strip().lower().rstrip(".")
     guessed = False
     if not host:
-        host = _guess_smtp_host(os.environ.get(IMAP_HOST_ENV, ""))
+        host = _guess_smtp_host(imap_address("imap_host", IMAP_HOST_ENV))
         guessed = bool(host)
-    tls = os.environ.get(SMTP_TLS_ENV, "").strip().lower()
-    raw_port = os.environ.get(SMTP_PORT_ENV, "").strip()
+    tls = imap_address("smtp_tls", SMTP_TLS_ENV).strip().lower()
+    raw_port = imap_address("smtp_port", SMTP_PORT_ENV).strip()
     port = None
     port_problem = ""
     if raw_port:
@@ -267,8 +275,9 @@ def settings() -> Settings:
     if port_problem:
         return s(port_problem)
     if not host:
-        return s(f"{SMTP_HOST_ENV} is not set, and the sending server cannot be worked "
-                 f"out from {IMAP_HOST_ENV} (it does not start with \"imap.\")")
+        return s(f"{SMTP_HOST_ENV} is not set, and no sending server is saved in "
+                 f"Settings, Accounts on this PC, and it cannot be worked out from "
+                 f"{IMAP_HOST_ENV} either (it does not start with \"imap.\")")
     if not _host_ok(host):
         return s(f"{SMTP_HOST_ENV} is not a plain server name or address")
     if tls == "off" and not _own_network(host, port):
