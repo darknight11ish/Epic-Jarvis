@@ -96,6 +96,44 @@ check("a request cut off at the gate's 4000 characters is marked, a whole one is
   assert.equal(normaliseApproval({ id: "s", detail: "short and not JSON" }).cutOff, false);
 });
 
+// The cut-off refusal used to live only in the two pages' Approve.disabled, so
+// a window that reached `decide_approval` directly could approve a request
+// nobody had seen in full. Rust now refuses it too (commands.rs,
+// `waiting_cut_off`), which means TWO places know the number 4000 - and a
+// constant that drifts on one side is a refusal that never fires, or one that
+// fires on a whole card. These three checks hold the sides together.
+check("Rust's cut-off limit is the same 4000 as jarvis-link.js's", () => {
+  const js = readFileSync(join(HERE, "..", "src", "jarvis-link.js"), "utf8");
+  const jsLimit = /const GATE_DETAIL_LIMIT = (\d+);/.exec(js);
+  assert.ok(jsLimit, "jarvis-link.js no longer declares GATE_DETAIL_LIMIT");
+  const rs = readFileSync(join(HERE, "..", "src-tauri", "src", "stream.rs"), "utf8");
+  const rsLimit = /pub\(crate\) const GATE_DETAIL_LIMIT: usize = (\d+);/.exec(rs);
+  assert.ok(rsLimit, "stream.rs no longer declares GATE_DETAIL_LIMIT");
+  assert.equal(rsLimit[1], jsLimit[1],
+    `the desktop would refuse a different length than the pages mark: Rust ${rsLimit[1]}, JS ${jsLimit[1]}`);
+});
+
+check("...and it is the same cut the backend records", () => {
+  // jarvis_gate.py itself is never in this repository (it is the owner's
+  // backend, and backend/.gitignore refuses it), so the number is pinned
+  // against the two places that DO quote it here: agent's own comment and
+  // the plan-length test that exists because of it.
+  const agent = readFileSync(join(HERE, "..", "..", "backend", "jarvis_agent.py"), "utf8");
+  const noted = /json\.dumps\(detail\)\[:(\d+)\]/.exec(agent);
+  assert.ok(noted, "jarvis_agent.py no longer records the gate's detail cut");
+  const js = readFileSync(join(HERE, "..", "src", "jarvis-link.js"), "utf8");
+  assert.equal(/const GATE_DETAIL_LIMIT = (\d+);/.exec(js)[1], noted[1],
+    "the pages and the backend's recorded cut disagree about where a card's detail is cut");
+});
+
+check("the Rust command actually consults the cut-off, for Approve only", () => {
+  const rs = readFileSync(join(HERE, "..", "src-tauri", "src", "commands.rs"), "utf8");
+  assert.match(rs, /if approved && waiting_cut_off\(&app, id\)/,
+    "answer_approval no longer refuses an Approve on a cut-off card");
+  assert.match(rs, /fn waiting_cut_off\(app: &AppHandle, id: &str\) -> bool/,
+    "the waiting_cut_off helper is gone");
+});
+
 // ---- the HUD's card, lifted out of jarvis_hud.html and run as it is ----------
 const lift = (name) => {
   const m = HUD.match(new RegExp(`function ${name}\\([^)]*\\)\\{[\\s\\S]*?\\n\\}\\n`));

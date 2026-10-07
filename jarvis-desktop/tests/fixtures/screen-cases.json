@@ -120,7 +120,7 @@
           "waiting": false,
           "line": "Picture mode is off. Jarvis reads the words on your screen only.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
         "want": {
           "available": true,
@@ -129,7 +129,7 @@
           "checked": false,
           "line": "Picture mode is off. Jarvis reads the words on your screen only.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
       },
       {
@@ -139,7 +139,7 @@
           "waiting": true,
           "line": "Waiting for your yes on the card. Nothing has changed yet.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
         "want": {
           "available": true,
@@ -148,7 +148,7 @@
           "checked": true,
           "line": "Waiting for your yes on the card. Nothing has changed yet.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
       },
       {
@@ -156,18 +156,18 @@
         "payload": {
           "enabled": true,
           "waiting": false,
-          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Run the set-up line in Settings, Picture mode. Jarvis reads the words only until then.",
+          "line": "On, but not working yet: The picture model (minicpm-v4.6) is not installed on this PC yet. Run the set-up line in Settings, Picture mode. Jarvis reads the words only until then.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
         "want": {
           "available": true,
           "enabled": true,
           "waiting": false,
           "checked": true,
-          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Run the set-up line in Settings, Picture mode. Jarvis reads the words only until then.",
+          "line": "On, but not working yet: The picture model (minicpm-v4.6) is not installed on this PC yet. Run the set-up line in Settings, Picture mode. Jarvis reads the words only until then.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
       },
       {
@@ -177,7 +177,7 @@
           "waiting": false,
           "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
         "want": {
           "available": true,
@@ -186,7 +186,7 @@
           "checked": true,
           "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
       },
       {
@@ -196,7 +196,7 @@
           "waiting": false,
           "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture. Your last look took 41 seconds.",
           "measured_words": "Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture - a busy real screen may take longer).",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
         "want": {
           "available": true,
@@ -205,7 +205,7 @@
           "checked": true,
           "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture. Your last look took 41 seconds.",
           "measured": "Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture - a busy real screen may take longer).",
-          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+          "install_line": "ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
       },
       {

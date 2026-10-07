@@ -34,6 +34,16 @@ for p in (BACKEND, BACKEND / "rebuilt"):
 
 import jarvis_reach as R  # noqa: E402
 
+try:
+    import jarvis_screen_picture as _SP  # noqa: E402
+    #: The tag the picture reader really uses. Read from the module, never
+    #: spelled out here: this file used to hard-code "minicpm-v:4.6", which
+    #: turned out not to exist at all (2026-10-07 bug audit, finding F1), so
+    #: the fixture named a model nobody could install.
+    _PICTURE_MODEL = _SP.DEFAULT_MODEL
+except Exception:                                   # the module is not present
+    _PICTURE_MODEL = "minicpm-v4.6"
+
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "reach-cases.json"
 PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
          / "reach-cases.json")
@@ -134,7 +144,7 @@ def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=N
                  second_card=second or OFF, big_model=big or {"master": False},
                  gate_action=lambda lookup: None, plugins=plugins or NO_PLUGINS,
                  chatbot=chatbot or _gemini(False), support=support or _support(False),
-                 screen_picture=picture or {"enabled": False, "model": "minicpm-v:4.6"},
+                 screen_picture=picture or {"enabled": False, "model": _PICTURE_MODEL},
                  youtube={"ready": True})
 
 
@@ -157,7 +167,7 @@ def cases() -> dict:
         big={"master": True, "wiki": True, "deep_questions": False},
         plugins={"servers": ["repo"], "running": ["repo"], "problem": "",
                  "card_every_start": False}, chatbot=_gemini(True), support=_support(True),
-        picture={"enabled": True, "model": "minicpm-v:4.6"}))
+        picture={"enabled": True, "model": _PICTURE_MODEL}))
     _set_env(EVERYDAY_ENV)
     out["blocked_and_no_key"] = R.view(_ctx(
         {"web_search", "email_check", "browser_control"}, tiers={"email_read": "never"},

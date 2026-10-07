@@ -300,6 +300,17 @@ permissions = [
   # "Erase the words" names the chat it would also delete (the chat audit,
   # 2026-09-28): which chat a fact came from, a read.
   "allow-brain-fact-chat",
+  # ...and "Also delete the chat it came from?" asks how many OTHER facts that
+  # chat taught, because deleting the chat forgets none of them. That count is
+  # the whole warning, and it is a read of the same conversation.
+  #
+  # It used to be granted only by the `brain-memory` set, which the Brain holds
+  # and the Jarvis bar does not: the bar's copy of this exact flow asked, was
+  # refused by Tauri, and swallowed the refusal into the number 0, so the bar
+  # said "some other facts stay" where the Brain named the count. Same read,
+  # same question, so it belongs beside the two calls it is part of
+  # (2026-10-07 bug audit, desktop finding B1).
+  "allow-brain-conversation-facts",
 ]
 
 # "Where this came from" (feasibility I42/I132, answer-sources.patch): the

@@ -2457,6 +2457,27 @@ async fn answer_approval(
         );
     }
 
+    // ARCHITECTURE section 3 requires every command to be approved IN FULL.
+    // The gate cuts `detail` at 4000 characters, so a long command reaches the
+    // card truncated; `main.js` and `widget.js` then disable their Approve
+    // button on `approval.cutOff`. Until now that disabled button was the
+    // whole enforcement, in the two pages - the identical mistake rule 4 made
+    // above, and refused here for the identical reason: another window holding
+    // the `approvals` capability reaches this command directly.
+    //
+    // APPROVE ONLY. Deny stays available on a card nobody can read in full -
+    // refusing costs a retry, and leaving the owner unable to dismiss a
+    // truncated card would be worse than the bug. This mirrors the email rule
+    // and the App-lock widget rule below, which also gate Approve alone.
+    if approved && waiting_cut_off(&app, id) {
+        return Err(
+            "this request was cut off before it reached the card, so no one has seen \
+             all of what would run - approving it is refused. Deny still works; ask \
+             Jarvis for a shorter version of the same thing."
+                .to_string(),
+        );
+    }
+
     // The widget approves nothing while App lock is on (apps security audit
     // M3, the owner's decision 2026-09-25): it sits on the desktop outside
     // the lock, so its Approve opens the Jarvis bar - which asks Windows
@@ -3324,6 +3345,35 @@ fn waiting_email(app: &AppHandle, id: &str) -> bool {
         .find(|item| crate::stream::approval_id(item).as_deref() == Some(id));
     match card {
         Some(item) => crate::email_sending::is_email(item),
+        None => true,
+    }
+}
+
+/// Whether the request behind `id` was cut off before it reached the card, so
+/// nothing on screen is the whole of what would run.
+///
+/// The gate stores `detail` as `json.dumps(detail)[:4000]`, so a long command
+/// arrives as text that no longer parses AND is exactly as long as the cut.
+/// `crate::stream::detail_was_cut_off` is the test for that, and it lives
+/// beside the row it reads.
+///
+/// This existed only in the webviews (`main.js`, `widget.js` set
+/// `Approve.disabled = ... || approval.cutOff`), which is the same mistake
+/// rule 4 made - and the comment above the staleness check in
+/// `answer_approval` already says why a disabled button is not a gate: "any
+/// window holding the `approvals` capability reaches this directly". So the
+/// refusal is re-checked here, on the one path that sends a decision, exactly
+/// as the staleness rule is. ARCHITECTURE section 3: every command, in FULL.
+///
+/// An id this process has not read yet fails CLOSED (it might be cut off),
+/// matching `waiting_email`.
+fn waiting_cut_off(app: &AppHandle, id: &str) -> bool {
+    let pending = app.state::<crate::stream::StreamState>().pending();
+    let card = pending
+        .iter()
+        .find(|item| crate::stream::approval_id(item).as_deref() == Some(id));
+    match card {
+        Some(item) => crate::stream::detail_was_cut_off(item),
         None => true,
     }
 }
