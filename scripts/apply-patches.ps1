@@ -1080,6 +1080,20 @@ $PATCHES = @(
     # It needs jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below);
     # without them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
+    # The ADDRESSES of the owner's accounts (the owner's decision of 2026-10-06,
+    # CLAUDE.md: "anything needing a key or a sign-in should be settable in the
+    # Jarvis app itself, desktop only, stored under rule 3"): GET and POST
+    # /api/accounts/addresses - the mail server, its port and mailbox, the
+    # sending server, its port and how the email is encrypted, the Home
+    # Assistant address and the calendar's CalDAV address. TWO hunks in
+    # jarvis_hud.py, each sitting on a line web-search.patch wrote (its own GET
+    # block's 503 return, and its POST block's own return), so it goes after
+    # web-search.patch and touches nothing any later patch rewrites. It carries
+    # ADDRESSES ONLY: POST refuses every name but the eight, so no route here
+    # can put a key, a password, a token or the private calendar link in a
+    # plain-text file (rule 3). Needs jarvis_accounts.py copied in (it is in
+    # SHIPPED below); without it the routes answer 503 and carry on.
+    'accounts.patch'
     # The gate's risk table held draft_email TWICE: the owner's own original
     # line ("a draft is not a sent message", rated local) and draft-email.patch's
     # row ("saves the draft ... to your own Drafts folder", rated outbound -
@@ -1195,6 +1209,7 @@ $SHIPPED = @(
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
+    'jarvis_accounts.py'         # the ADDRESSES of the owner's accounts (mail server, sending server, Home Assistant, CalDAV) in accounts.json beside web-search.json; accounts.patch. ADDRESSES ONLY - never a key, password or token (rule 3)
     # --- Stop everything (2026-09-25) ---
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool

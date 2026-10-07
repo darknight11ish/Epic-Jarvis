@@ -1,0 +1,63 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1551,3 +1551,28 @@
+                 return self._send(503, {"available": False, "error": type(exc).__name__})
++        if path == "/api/accounts/addresses":
++            # accounts.patch - the ADDRESSES of the owner's accounts
++            # (jarvis_accounts.py; the owner's decision of 2026-10-06:
++            # "anything needing a key or a sign-in should be settable in the
++            # Jarvis app itself"). The eight addresses and choices the
++            # desktop's Settings -> Accounts card collects: the mail server,
++            # its port and its mailbox; the sending server, its port and how
++            # the email is encrypted; the Home Assistant address; and the
++            # calendar's CalDAV address - each with whether it is already set
++            # as a Windows environment variable, which still wins on every
++            # read. NEVER a key, a password, a token or the private calendar
++            # link: those are written straight into Windows Credential
++            # Manager by the desktop's own Rust and never travel over HTTP
++            # (CLAUDE.md rule 3), and the POST below refuses to carry one.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_accounts
++                code, out = jarvis_accounts.handle_get()
++                return self._send(code, out)
++            except Exception as exc:
++                # The exception's NAME only: its message could quote a setting.
++                return self._send(503, {"available": False, "error": type(exc).__name__})
+ 
+         if path == "/api/schedule":
+@@ -2119,6 +2119,31 @@
+             if route == "/api/search/settings":
+                 code, out = jarvis_search.handle_settings(body)
+             else:
+                 code, out = jarvis_search.handle_test(body)
+             return self._send(code, out)
++        if route == "/api/accounts/addresses":
++            # accounts.patch - ONE change per request: {"imap_host": ...},
++            # {"smtp_tls": "starttls"}, {"home_url": ...} and the rest of
++            # jarvis_accounts.FIELDS; "" clears that one here, and an
++            # environment variable the owner already set still wins on every
++            # read. The value is checked for shape, and a plain http:// one
++            # only on this PC or the owner's own networks. There is NO route
++            # for a key, a password, a token or the private calendar link:
++            # those are typed on the PC and live in Windows Credential
++            # Manager (CLAUDE.md rule 3), and this route refuses every name
++            # but the eight.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_accounts
++            except Exception as exc:
++                return self._send(503, {"available": False, "error": type(exc).__name__})
++            code, out = jarvis_accounts.handle_settings(body)
++            return self._send(code, out)
+ 

@@ -19,13 +19,18 @@ is built here from the same settings the rest of Jarvis reads:
     action's tier in [autonomy.tiers]; the tools jarvis_agent.py only
     ever runs on a person's yes (NEEDS_A_PERSON) say "every time" whatever
     the tier;
-  * which accounts are set up: the same environment variables each module
-    reads (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...) - for
-    the IMAP username and password, the private calendar link, and the Home
+  * which accounts are set up: the same values each module reads
+    (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...) - for the
+    IMAP username and password, the private calendar link, and the Home
     Assistant token, `_env` asks the module that owns each one
     (`jarvis_email.imap_user()`, ...), so a value saved in Windows
     Credential Manager instead of typed as an environment variable
-    (ease-of-use audit row 15) shows here too;
+    (ease-of-use audit row 15) shows here too; and for the ADDRESSES - the
+    mail server, the sending server, Home Assistant and the calendar's CalDAV
+    address - it reads the environment variable first and otherwise the value
+    typed into Settings -> Accounts on this PC (accounts.json,
+    jarvis_accounts.py; accounts.patch, 2026-10-06), so a row stops saying
+    "not set up" the moment the owner fills that box in;
   * web search: jarvis_search.settings() and whether a key is SAVED;
   * the cloud lanes: the chat route's own `_lane_names()` when this runs
     inside the server, else the same file it reads (litellm-proxy.yaml);
@@ -204,7 +209,25 @@ def _env(name: str) -> str:
             return str(_H._token() or "").strip()
     except Exception:
         pass
-    return str(os.environ.get(name, "") or "").strip()
+    # The environment variable still WINS, unchanged.
+    got = str(os.environ.get(name, "") or "").strip()
+    if got:
+        return got
+    # Otherwise an ADDRESS the owner typed into Settings -> Accounts on this PC
+    # (accounts.patch, 2026-10-06), kept in accounts.json beside
+    # web-search.json: the mail server and its port and mailbox, the sending
+    # server and its port and how the email is encrypted, the Home Assistant
+    # address and the calendar's CalDAV address. NO SECRET is here - the
+    # username, the password, the private iCal link and the token come from
+    # Credential Manager through the block above, and jarvis_accounts answers
+    # "" for any name that is not one of its own eight. Without that module,
+    # or on any error, this is exactly what it was before: the environment
+    # variable alone.
+    try:
+        import jarvis_accounts
+        return jarvis_accounts.env_or_file(name)
+    except Exception:
+        return ""
 
 
 def _server_lanes() -> Optional[list]:
