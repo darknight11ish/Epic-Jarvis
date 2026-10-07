@@ -2246,8 +2246,8 @@ this repository and have a backend to run rather than a folder of patches
 against a folder they do not have: 181 files, 10.59 MB, LF endings.
 `jarvis-backend/README.md` has the rule that produced it and what it
 deliberately leaves out; `docs/BACKEND-PUBLISH-INVENTORY-2026-10-06.md` has the
-measurement behind it (that document is on the branch `next-publish-inventory`,
-not on `main`). `backend/test_base_matches_repo.py` keeps the copy equal to
+measurement behind it, file by file. `backend/test_base_matches_repo.py` keeps
+the copy equal to
 this repository's own modules, and says plainly what it cannot prove: **the
 patch stack does not reverse off the base** — it stops at
 `approval-notice.patch`, because `backend/rebuilt/jarvis_events.py` already
