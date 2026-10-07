@@ -94,13 +94,43 @@ body {
   margin-bottom: 8px;
 }
 
-.settings-jump-group:last-child { margin-bottom: 0; }
+.settings-jump-group:last-of-type { margin-bottom: 0; }
 
+/* A band (Everyday / Rare / What Jarvis does) is a heading on the page, not a
+   place you can go: its own label is text, never a link, and the links under
+   it belong to the place rows below. */
 .settings-jump-label {
   font-size: var(--text-xs);
   font-weight: 600;
   color: var(--text-muted);
-  min-width: 68px;
+  /* Wide enough for the longest band name ("What Jarvis does") and for every
+     place label below (the longest is "The AI and its tools"). The place
+     labels borrow it (see `.settings-jump-place-label`), so both levels share
+     one left edge - a new label longer than this would wrap and break that
+     line, which is the one thing to watch when adding a group. */
+  min-width: 104px;
+}
+
+/* One short row inside a band (owner, 2026-10-06: forty flat links were "really
+   disorganized"). Same shape as a band: a label in the band's own gutter, then
+   that group's links wrapping beside it - one more line per group, not a box,
+   so the ten groups still fit one card. `flex: 1` keeps the label narrow and
+   lets `.settings-jump-label`'s min-width do the lining up. */
+.settings-jump-place {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  flex: 1;
+  margin-bottom: 6px;
+}
+
+.settings-jump-place:last-of-type { margin-bottom: 0; }
+
+.settings-jump-place-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  min-width: 104px;
 }
 
 .settings-jump-group a {
