@@ -1,0 +1,8 @@
+{
+  "name": "progress",
+  "summary": "the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-DESIGN.md part C and its \"Progress contract (frozen)\"",
+  "module": "jarvis_progress",
+  "install": "handler",
+  "replaces_patch": "progress.patch",
+  "stack_order": 111
+}

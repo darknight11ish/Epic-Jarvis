@@ -641,7 +641,15 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # in jarvis_hud.py - so it cannot rewrite a line
                                 # devices.patch wrote either. The
                                 # later_rewriting() half below proves it.
-                                "handoff-front.patch"}
+                                # plugin-loader.patch (2026-10-10, this branch) is
+                                # appended last and has exactly ONE hunk, in
+                                # jarvis_hud.py: fifteen ADDED lines at the end of the
+                                # install chain. It removes no line and does not touch
+                                # jarvis_gate.py at all, so it cannot rewrite a line
+                                # devices.patch wrote - and the later_rewriting() half
+                                # below proves it.
+                                "handoff-front.patch",
+                                "plugin-loader.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
