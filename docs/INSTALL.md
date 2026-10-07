@@ -254,6 +254,20 @@ Ten modules that were lost *have* been rebuilt, and live in this repository
 (`backend\rebuilt\`), along with every newer module. You do not copy those by
 hand: step 1.5 does, and the published folder already has them.
 
+**Or let one command do 1.3 to 1.8.** From the folder you downloaded this into:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\setup-jarvis.ps1
+```
+
+It copies the published folder into place, runs 1.5's two scripts, says whether
+Ollama and Jarvis's model are ready, and starts the backend. Two honest limits,
+both by design: it **prints** 1.7's model command rather than downloading about
+5 GB for you, and if the model is missing it stops there instead of starting an
+assistant that cannot answer. Add `-Print` to see every command it would run
+while changing nothing, `-SkipTests` to skip the suite run, or `-BackendPath` to
+put the folder somewhere else.
+
 ### 1.4 Check the backend folder
 
 One line. It reads every file in your backend folder, works out which
