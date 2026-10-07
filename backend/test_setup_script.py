@@ -66,9 +66,16 @@ def skip(why):
 
 
 def code_lines() -> list:
-    """The script's lines that are not comments. A `#` line is prose about the
-    script; the checks below are about what it does."""
-    return [ln for ln in SCRIPT.read_text(encoding="utf-8").splitlines()
+    """The script's lines that are not comments. A `#` line and everything
+    inside a `<# ... #>` help block are prose ABOUT the script; the checks below
+    are about what it does.
+
+    The help block used to count as code - only lines starting with `#` were
+    dropped - so a check could pass on the help text alone. `-SkipPatches`, for
+    instance, appeared in the help three times: deleting the real argument would
+    not have failed the check that says it is asked for."""
+    text = re.sub(r"<#.*?#>", "", SCRIPT.read_text(encoding="utf-8"), flags=re.S)
+    return [ln for ln in text.splitlines()
             if ln.strip() and not ln.lstrip().startswith("#")]
 
 
@@ -98,6 +105,20 @@ def t_everything_it_needs_is_in_the_download():
           INSTALL.is_file() and PATCHER.is_file())
     check("it names the Modelfile for the model step, and that file is here",
           "jarvis-primary.Modelfile" in body and MODELFILE.is_file())
+    # The desktop app is the last step, and it is the one thing this script does
+    # not do itself: scripts\update-jarvis.ps1 does it, so that the installer,
+    # the release page and the "build it here instead" fallback live in one
+    # place both commands share. The quoted names are what the CODE uses; the
+    # help mentions the same files unquoted, and code_lines() drops the help.
+    check("it hands the desktop app to update-jarvis.ps1", "'update-jarvis.ps1'" in body)
+    check("... and really calls it, as a child process",
+          "& powershell @updateArgs" in body)
+    check("... and that script is in this repository",
+          (REPO / "scripts" / "update-jarvis.ps1").is_file())
+    # Without this the patcher would run twice on a first install - once in step
+    # 3 here, once inside update-jarvis.ps1 - and a second run rehearses all 121
+    # patches again for no new information.
+    check("... and asks it not to patch the backend a second time", "'-SkipPatches'" in body)
 
 
 def t_it_works_on_a_pc_that_is_not_the_authors():
@@ -144,12 +165,40 @@ def t_print_mode_changes_nothing():
         check("-Print prints the install-backend command with the reader's path in it",
               "install-backend.ps1" in out and str(target) in out)
         check("-Print prints the apply-patches command too", "apply-patches.ps1" in out)
-        check("-Print shows the model command rather than running it",
-              "ollama pull qwen3:8b" in out)
+        # `-Print` really checks Ollama (a read, so it can), which means the two
+        # possible plans are honestly different: with no model, the 5 GB command
+        # is printed for the reader; with the model already built, there is no
+        # such command to print and the start line is shown instead. The old
+        # check assumed the first case, so it passed on CI and failed on the
+        # owner's own PC, where jarvis-primary is built.
+        check("-Print shows the model command rather than running it (or says the model is already built)",
+              "ollama pull qwen3:8b" in out or "the jarvis-primary model is ready" in out)
+        check("-Print never runs the 5 GB download",
+              "downloading the base model" not in out.lower())
         check("-Print shows a start line that runs jarvis_hud.py",
               "jarvis_hud.py" in out)
         check("-Print says plainly that nothing was changed",
               "PRINT" in out or "nothing" in out.lower())
+        # The desktop step is a command it would run, not something it ran: if
+        # the update script had been started, its own banner would be in this
+        # output. The path is asserted, not just the file name - the step title
+        # and the help block both contain the name.
+        check("-Print shows the desktop step as a command, with the reader's path",
+              str(REPO / "scripts" / "update-jarvis.ps1") in out and "would run" in out)
+        check("-Print did not actually run the desktop step",
+              "ALL DONE" not in out and "Patching the backend" not in out)
+
+
+def t_the_desktop_step_can_be_left_alone():
+    """-SkipDesktop is checked where it matters: the guard is read BEFORE the
+    line that runs the update script, so the switch cannot be quietly ignored."""
+    body = SCRIPT.read_text(encoding="utf-8")
+    check("there is a -SkipDesktop switch", "[switch] $SkipDesktop" in body)
+    guard = body.find("if ($SkipDesktop)")
+    run = body.find("& powershell @updateArgs")
+    check("... and the guard comes before the desktop step runs",
+          0 <= guard < run,
+          f"guard at {guard}, the run at {run}")
 
 
 def t_a_missing_download_is_refused_before_anything_changes():
@@ -172,6 +221,7 @@ if __name__ == "__main__":
                t_it_works_on_a_pc_that_is_not_the_authors,
                t_it_never_downloads_the_model_itself,
                t_print_mode_changes_nothing,
+               t_the_desktop_step_can_be_left_alone,
                t_a_missing_download_is_refused_before_anything_changes):
         print(f"\n--- {fn.__name__} ---")
         try:

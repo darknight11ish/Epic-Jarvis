@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
   One command on a new PC: put the backend in place, install its packages, say
-  what is still missing, and start Jarvis.
+  what is still missing, install the desktop app, and start Jarvis.
 
 .DESCRIPTION
-  docs\INSTALL.md walks a person through four steps in order. This runs the
-  same scripts, in the same order, without the walking:
+  docs\INSTALL.md walks a person through the whole first part in order. This
+  runs the same scripts, in the same order, without the walking:
 
     1.3  copy jarvis-backend\ to a folder of your own
     1.5  scripts\install-backend.ps1   writes down where that folder is
@@ -13,16 +13,28 @@
     1.7  say whether Ollama and Jarvis's model are ready, and print the exact
          command when they are not
     1.8  start the backend
+    part 2  the desktop app: scripts\update-jarvis.ps1 installs the published
+         installer, or builds it here, and then runs the live check
 
-  WHAT IT WILL NOT DO. It never downloads the model: that is about 5 GB, so the
-  one command that does it is printed for you to read and run yourself. It never
-  writes inside this download. It copies the backend; it does not move it. And
-  it never overwrites a backend folder that is already there: a second run says
-  so and hands the folder to apply-patches.ps1, which is idempotent on purpose.
+  WHAT IT WILL NOT DO ITSELF. It never downloads the model: that is about 5 GB,
+  so the one command that does it is printed for you to read and run yourself.
+  It never writes inside this download. It copies the backend; it does not move
+  it. And it never overwrites a backend folder that is already there: a second
+  run says so and hands the folder to apply-patches.ps1, which is idempotent on
+  purpose.
+
+  THE DESKTOP APP IS THE ONE THING IT DOES NOT DO ITSELF. It calls
+  scripts\update-jarvis.ps1 for that, at the end, with -SkipPatches so the
+  patcher is not run twice. That script fetches the published installer from
+  this project's own release page and says so before it does (or builds the app
+  from this folder when there is no release, or when you add -FromSource). Add
+  -SkipDesktop to leave the app alone entirely.
 
   Everything it changes, it names as it goes: one folder under your own
-  Documents, and one environment variable for your Windows account (set by
-  install-backend.ps1, User scope, no administrator needed).
+  Documents, one environment variable for your Windows account (set by
+  install-backend.ps1, User scope, no administrator needed), and whatever the
+  desktop installer does - it installs for your account only, under
+  %LOCALAPPDATA%, so it needs no administrator window either.
 
   If a step fails, it stops and says which one, and nothing later is attempted.
   The scripts it runs each rehearse before they change anything.
@@ -36,8 +48,15 @@
   them. Nothing is copied, installed, downloaded or started.
 
 .PARAMETER NoStart
-  Everything except the last step: do not start the backend. The start line is
-  printed instead.
+  Do not start the backend. The start line is printed instead.
+
+.PARAMETER SkipDesktop
+  Leave the desktop app exactly as it is: do not call update-jarvis.ps1 at all.
+
+.PARAMETER FromSource
+  Passed to update-jarvis.ps1: build the desktop app from this folder instead
+  of installing the published one. It needs the C++ build tools, Rust and
+  Node.js, and takes a few minutes.
 
 .PARAMETER SkipPackages
   Passed to apply-patches.ps1: do not install the Python packages. The features
@@ -48,9 +67,13 @@
   proven - the patcher says so in its own words when it finishes.
 
 .PARAMETER Force
-  Passed to apply-patches.ps1 only: run it even while a Jarvis program looks
-  like it is running. Use it when you know the folder is not in use. It does not
-  mean "overwrite the folder" - this script never overwrites the backend folder.
+  Passed to both scripts this one runs, where it means two different things:
+  to apply-patches.ps1, "run even while a Jarvis program looks like it is
+  running" (use it when you know the folder is not in use); to
+  update-jarvis.ps1, "close a running Jarvis rather than asking you to" - which
+  stops the app and the backend process, cutting off anything Jarvis was doing
+  at that moment. It does not mean "overwrite the backend folder": this script
+  never overwrites one.
 
 .EXAMPLE
   From the folder you downloaded this repository into. -ExecutionPolicy Bypass
@@ -64,6 +87,11 @@
   Somewhere else, and without the long test run:
 
   powershell -ExecutionPolicy Bypass -File .\scripts\setup-jarvis.ps1 -BackendPath "D:\jarvis" -SkipTests
+
+.EXAMPLE
+  The backend only, no desktop app:
+
+  powershell -ExecutionPolicy Bypass -File .\scripts\setup-jarvis.ps1 -SkipDesktop
 #>
 
 [CmdletBinding()]
@@ -71,6 +99,8 @@ param(
     [string] $BackendPath = (Join-Path $env:USERPROFILE 'Documents\jarvis-backend'),
     [switch] $Print,
     [switch] $NoStart,
+    [switch] $SkipDesktop,
+    [switch] $FromSource,
     [switch] $SkipPackages,
     [switch] $SkipTests,
     [switch] $Force
@@ -80,7 +110,7 @@ $ErrorActionPreference = 'Stop'
 
 function Say($msg, $colour = 'Gray') { Write-Host $msg -ForegroundColor $colour }
 function Title($msg) { Say ""; Say $msg White }
-function Step($n, $msg) { Say ""; Say "  [$n/5] $msg" Cyan }
+function Step($n, $msg) { Say ""; Say "  [$n/6] $msg" Cyan }
 
 $repo         = Split-Path -Parent $PSScriptRoot
 $base         = Join-Path $repo 'jarvis-backend'
@@ -139,7 +169,13 @@ $installLine = "powershell -ExecutionPolicy Bypass -File `"$installScript`" -Bac
 Say "  $installLine" DarkGray
 if (-not $Print) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $installScript -BackendPath $BackendPath
-    if ($LASTEXITCODE -ne 0) { Say ""; Say "  FAIL  install-backend.ps1 exited $LASTEXITCODE - read what it printed above. Nothing later was attempted." Red; exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        Say ""
+        Say "  FAIL  install-backend.ps1 exited $LASTEXITCODE - read what it printed above." Red
+        Say "  Already done: the backend folder $BackendPath was created and filled. Nothing" Yellow
+        Say "  later was attempted. Run this command again once that is fixed." Yellow
+        exit $LASTEXITCODE
+    }
 }
 
 # ------------------------------------------- 3. packages, settings and tests
@@ -153,7 +189,15 @@ if ($patchArgs.Count -gt 0) { $patchLine += ' ' + ($patchArgs -join ' ') }
 Say "  $patchLine" DarkGray
 if (-not $Print) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $patchScript -BackendPath $BackendPath @patchArgs
-    if ($LASTEXITCODE -ne 0) { Say ""; Say "  FAIL  apply-patches.ps1 exited $LASTEXITCODE - read what it printed above. Nothing later was attempted." Red; exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        Say ""
+        Say "  FAIL  apply-patches.ps1 exited $LASTEXITCODE - read what it printed above; its own" Red
+        Say "  last screen says whether it changed any file." Red
+        Say "  Already done: the backend folder is in place and JARVIS_BACKEND is set for your" Yellow
+        Say "  account. Nothing later was attempted - in particular the desktop app was not" Yellow
+        Say "  installed. Run this command again once the first problem is fixed." Yellow
+        exit $LASTEXITCODE
+    }
 }
 
 # ------------------------------------------------------------- 4. the model
@@ -163,10 +207,10 @@ $modelLine = "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_
 $modelReady = $false
 if (-not $ollama) {
     Say "  Ollama is not installed. Install it from ollama.com, then click its tray icon once." Red
-} elseif ($Print) {
-    Say ("  ollama found: {0}" -f $ollama.Source) Green
-    Say "  would run : ollama list   (to see whether jarvis-primary is built)"
 } else {
+    # Asked for real, in -Print too: `ollama list` only reads, and a plan that
+    # skipped this step said "Jarvis needs its model first" - and printed the
+    # 5 GB command - on a PC that already had the model.
     Say ("  ollama found: {0}" -f $ollama.Source) Green
     $listed = & ollama list 2>$null
     if ($LASTEXITCODE -eq 0 -and ($listed -join "`n") -match 'jarvis-primary') {
@@ -208,6 +252,49 @@ if ($NoStart) {
     Say "    and saved. Anything else on that line says why." DarkGray
 }
 
+# ------------------------------------------------- 6. the desktop app, and the check
+Step 6 "the desktop app, and the live check (scripts\update-jarvis.ps1)"
+$updateScript = Join-Path $PSScriptRoot 'update-jarvis.ps1'
+$updateArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $updateScript,
+                '-BackendPath', $BackendPath, '-SkipPatches')
+if ($FromSource) { $updateArgs += '-FromSource' }
+if ($Force)      { $updateArgs += '-Force' }
+# Built for PRINTING, not for running: both paths here and the backend folder
+# can hold spaces (this repository's own folder does), and a printed line that
+# cannot be pasted is no use to the person reading it.
+$updateLine = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $updateScript +
+              '" -BackendPath "' + $BackendPath + '" -SkipPatches'
+if ($FromSource) { $updateLine += ' -FromSource' }
+if ($Force)      { $updateLine += ' -Force' }
+
+if ($SkipDesktop) {
+    Say "  -SkipDesktop was given, so the desktop app was left exactly as it is." DarkGray
+    Say "  Install it whenever you like with:" DarkGray
+    Say "  $updateLine" DarkGray
+} elseif (-not (Test-Path -LiteralPath $updateScript)) {
+    Say "  FAIL  scripts\update-jarvis.ps1 is missing from this download, so the desktop" Red
+    Say "        app was not installed. The backend above is in place and usable." Red
+    exit 1
+} elseif ($Print) {
+    Say "  would run : $updateLine" 
+    Say "  (that script installs the published desktop installer, or builds the app from" DarkGray
+    Say "   this folder when there is no release, then runs the live check. -SkipPatches" DarkGray
+    Say "   is there because step 3 above already patched the backend.)" DarkGray
+} else {
+    Say "  $updateLine" DarkGray
+    Say "  Install the desktop app, then check the whole chain. This is the long step, and" DarkGray
+    Say "  the one that may download (see the note above this script's step 6): the" DarkGray
+    Say "  published installer, or a few minutes of building when there is none." DarkGray
+    & powershell @updateArgs
+    if ($LASTEXITCODE -ne 0) {
+        Say ""
+        Say "  FAIL  update-jarvis.ps1 exited $LASTEXITCODE. The backend above IS installed and" Red
+        Say "        patched; read what it printed for the desktop app, then run this command" Red
+        Say "        again - everything already done is recognised and skipped." Red
+        exit $LASTEXITCODE
+    }
+}
+
 # ------------------------------------------------------------------ done
 Title "Done"
 if ($Print) {
@@ -218,5 +305,10 @@ if ($Print) {
     Say "  undone  : delete the folder; the variable is removed by" Green
     Say "            [Environment]::SetEnvironmentVariable('JARVIS_BACKEND', `$null, 'User')" DarkGray
     if (-not $NoStart -and $modelReady) { Say "  Jarvis is starting in its own window." Green }
+    if (-not $SkipDesktop) {
+        Say ""
+        Say "  From now on, one command updates both halves - the backend and the desktop app:" White
+        Say "    powershell -ExecutionPolicy Bypass -File `"$PSScriptRoot\update-jarvis.ps1`"" Cyan
+    }
 }
 Say ""

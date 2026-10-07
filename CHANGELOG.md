@@ -50,6 +50,62 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 - **Settings → Accounts now collects the server ADDRESSES, so email and Home Assistant work from the app itself (2026-10-06).** The card already held the four secrets (the IMAP username and password, the private calendar link, the Home Assistant token) in Windows Credential Manager - but no server address, so email answered "JARVIS_IMAP_HOST is not set - there is no mail server to read" and Home Assistant answered "not set up on this PC" unless the addresses were plain-text Windows environment variables. Eight addresses and one choice now have their own boxes (the mail server, its port and mailbox; the sending server, its port and how email is encrypted; the Home Assistant address; the calendar's CalDAV address); they are read from and written to the PC's own route and kept in `accounts.json` beside `web-search.json`, because an address is not a secret - it is a plain settings file, and the box shows what is saved. A key, password or token can never reach it: the route refuses every name but the eight. An environment variable you already set still wins, and the row says so.
 
+- **One command installs Jarvis, and one command updates both halves
+  (2026-10-06).** Setting Jarvis up was eight steps in order - copy the
+  published backend, tell the PC where it is, let the patcher install the
+  packages and write the settings file, deal with Ollama and the model, start
+  it, then build and install the desktop app. `scripts\setup-jarvis.ps1` did
+  the backend half in one command; it now finishes the job, installing the
+  desktop app and running the live check, so a new PC is genuinely one
+  command. `scripts\update-jarvis.ps1` is new: updating used to be two jobs
+  that had to happen in a particular order - patch the backend, then rebuild
+  and reinstall the desktop app - because an app updated alone spends its time
+  saying "your PC's Jarvis cannot do that yet". It is that order as one
+  command: stop Jarvis, get the newest code, patch the backend, update the
+  desktop app, start Jarvis again, check it.
+
+- **Neither of the two commands patches a backend by itself.** Each one
+  patches by running `scripts\apply-patches.ps1`, unchanged - still the only
+  thing that touches a backend, still rehearsing on a throwaway copy first.
+  The install command hands the desktop half to the update command with a new
+  `-SkipPatches` switch ("do not run the patch script this time"), so the
+  patcher is not run twice on a first install. Where the desktop app is
+  concerned the update command prefers the published signed installer and
+  builds from this folder when there is none; when this folder IS a git
+  checkout holding that release's commit or newer, it builds rather than
+  downloading, so a branch's own newer build is never replaced by an older
+  release. A folder that was unzipped rather than cloned has no history to
+  compare, and the script says so instead of guessing.
+
+- **Both commands are safe to run again, and both are honest about what they
+  changed.** The update command keeps a log of its own output in `_jarvis-logs`
+  inside the backend folder, and `apply-patches.ps1` keeps its own log of what
+  it changed. Neither ever prints a token or a key. Both take `-Print`, which
+  means "show me the plan and change nothing" - it writes no file, starts no
+  process and installs nothing; it does make one read of the release page (a few
+  hundred bytes, and it says so on screen) so the plan can say which route it
+  would take. What stays by hand is printed on screen: the phone (INSTALL.md part
+  3) and two switches in the desktop app's own Settings - "Let Jarvis Desktop
+  start and stop Jarvis", and "Start Jarvis Desktop when Windows starts".
+
+- **One limit of the desktop half, said on screen and in INSTALL.md.** When it
+  downloads an installer it cannot check the signature published beside it -
+  the small file that proves the installer is really this project's.
+  PowerShell has no way to check that kind of signature, and the tool that
+  makes it has no "check" command, so the script prints the file's SHA-256
+  instead and says so in the plan as well as in the real run. The app's own
+  Settings -> Updates button is the route that does check it; `-FromSource`
+  builds the app from this folder and downloads nothing.
+
+- **Checked rather than assumed (2026-10-06).** Both scripts parse under
+  Windows PowerShell 5.1 and are ASCII-only outside comments;
+  `backend\test_setup_script.py` grew from 23 to 30 checks for the new step
+  (the install command must show the desktop step as a command and must not run
+  it, and its `-SkipDesktop` guard must come before the call); a new
+  `powershell-5` CI step runs the real scripts against stubs that record their
+  arguments, including the release-vs-local build decision both ways; and
+  `docs\CLAIMS.tsv` gains D07-D10.
+
 - **The big HUD window has its own chat box again (2026-10-06).** This
   reverses the decision of 2026-09-28 that the desktop HUD's own box should
   open the Jarvis bar instead, "so the PC has one chat box". The box and its

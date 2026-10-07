@@ -1054,6 +1054,254 @@ jobs:
           # Explicitly: the runner ends a powershell step with the LAST native
           # exit code, and case 3 above expects one that is not 0.
           exit 0
+      - name: The one-step scripts - install, update, and the hand-off between them
+        run: |
+          # scripts\setup-jarvis.ps1 (install) and scripts\update-jarvis.ps1
+          # (update both halves) are the two commands the owner runs. Neither
+          # can run for real here - the first copies a backend and sets an
+          # account-wide variable, the second patches a real backend and
+          # installs a real app - so the scripts they CALL are replaced with
+          # stubs that record the arguments they were given. What is under test
+          # is the calling and the chaining: the install script's copy landing
+          # where it said, the right folder handed on, the desktop step asking
+          # the update script NOT to patch the backend a second time, -Print
+          # leaving the backend folder and the registry alone and running no
+          # child script, and update's own log landing inside the backend folder
+          # beside apply-patches.ps1's logs. (A plan run does make one read of
+          # the release page, which it now says out loud; case 6 checks that.)
+          #
+          # backend\test_setup_script.py checks what setup-jarvis.ps1 says about
+          # itself; this checks that the two scripts really do chain the way
+          # they claim.
+          $ErrorActionPreference = 'Stop'
+          function Invoke-PS([string[]] $Arguments) {
+            $prev = $ErrorActionPreference
+            $ErrorActionPreference = 'Continue'
+            try { $out = & powershell @Arguments 2>&1 | Out-String; $code = $LASTEXITCODE }
+            finally { $ErrorActionPreference = $prev }
+            return @{ Code = $code; Out = $out }
+          }
+          function Assert-True([bool] $Cond, [string] $Why) {
+            if (-not $Cond) { throw "FAILED: $Why" }
+            "  ok    $Why"
+          }
+          # A stand-in for one of the scripts the two new ones call. It PRINTS
+          # something on purpose: a child that prints is what the exit-code bug
+          # below needed in order to show itself, so these end-to-end cases now
+          # fail too if it ever comes back.
+          function Write-Stub([string] $Path, [string] $Label) {
+            $body = "`$ErrorActionPreference = 'Continue'`n" +
+                    "Write-Output 'the $Label stand-in ran'`n" +
+                    "Add-Content -LiteralPath (Join-Path `$PSScriptRoot 'stub-calls.txt') -Value ('$Label|' + (`$args -join ' '))`n" +
+                    "exit 0`n"
+            Set-Content -LiteralPath $Path -Value $body -Encoding ASCII
+          }
+          function Get-Tree([string] $Path) {
+            return (@(Get-ChildItem -LiteralPath $Path -Recurse -Force | ForEach-Object { $_.FullName }) -join '|')
+          }
+          function Get-Calls([string] $Temp) {
+            $f = Join-Path $Temp 'scripts\stub-calls.txt'
+            if (-not (Test-Path -LiteralPath $f)) { return '' }
+            return (@(Get-Content -LiteralPath $f) -join "`n")
+          }
+          function Reset-Calls([string] $Temp) {
+            Remove-Item -LiteralPath (Join-Path $Temp 'scripts\stub-calls.txt') -Force -ErrorAction SilentlyContinue
+          }
+
+          $root = Join-Path $env:RUNNER_TEMP 'one-step'
+          if (Test-Path -LiteralPath $root) { Remove-Item -LiteralPath $root -Recurse -Force }
+          $tmp = Join-Path $root 'repo'
+          New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+          Copy-Item -Recurse scripts -Destination $tmp
+          # What setup-jarvis.ps1 checks for and copies. The whole jarvis-backend
+          # folder is not copied: two files prove the copy step, and the real
+          # one is 185 files of backend source.
+          New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'jarvis-backend') | Out-Null
+          Set-Content -LiteralPath (Join-Path $tmp 'jarvis-backend\jarvis_hud.py') -Value 'print("stand-in")'
+          Set-Content -LiteralPath (Join-Path $tmp 'jarvis-backend\jarvis_gate.py') -Value '# stand-in'
+          New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'backend') | Out-Null
+          Copy-Item backend\jarvis-primary.Modelfile (Join-Path $tmp 'backend')
+          New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'jarvis-desktop\src') | Out-Null
+          Copy-Item jarvis-desktop\src\jarvis_hud.html (Join-Path $tmp 'jarvis-desktop\src')
+          # A stand-in tauri.conf.json whose update address cannot be reached.
+          # The desktop step then takes its "no release, build from this folder"
+          # route every time, so this step never touches the real release page
+          # and never needs the signing key. Port 9 (discard) refuses at once.
+          New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'jarvis-desktop\src-tauri') | Out-Null
+          Set-Content -LiteralPath (Join-Path $tmp 'jarvis-desktop\src-tauri\tauri.conf.json') -Encoding ASCII -Value (
+            '{"plugins":{"updater":{"endpoints":["https://127.0.0.1:9/latest.json"],"pubkey":""}}}')
+          Write-Stub (Join-Path $tmp 'scripts\apply-patches.ps1') 'apply-patches'
+          Write-Stub (Join-Path $tmp 'scripts\install-backend.ps1') 'install-backend'
+          # Two things are under test, and they need opposite stand-ins, so the
+          # real update script is kept aside: the install script must see it as
+          # a stub (it must not be allowed to install an app here), and the
+          # update script's own behaviour must be tested for real.
+          $realUpdate = Join-Path $root 'update-jarvis.real.ps1'
+          Copy-Item (Join-Path $tmp 'scripts\update-jarvis.ps1') $realUpdate
+          Write-Stub (Join-Path $tmp 'scripts\update-jarvis.ps1') 'update-jarvis'
+          $setup = Join-Path $tmp 'scripts\setup-jarvis.ps1'
+          $update = Join-Path $tmp 'scripts\update-jarvis.ps1'
+
+          # 1. The install script copies the backend, calls both scripts, and
+          #    hands the desktop half to the update script - without asking it
+          #    to patch the backend a second time.
+          $be = Join-Path $root 'backend'
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $setup,
+                           '-BackendPath', $be, '-NoStart', '-SkipTests')
+          if ($r.Code -ne 0) { throw "setup-jarvis.ps1 exited $($r.Code)`n$($r.Out)" }
+          $calls = Get-Calls $tmp
+          Assert-True (Test-Path -LiteralPath (Join-Path $be 'jarvis_hud.py')) 'the published backend was copied where -BackendPath said'
+          Assert-True ($calls -match 'install-backend') 'install-backend.ps1 was called'
+          Assert-True ($calls -match 'apply-patches') 'apply-patches.ps1 was called'
+          Assert-True ($calls -match 'update-jarvis') 'update-jarvis.ps1 was called for the desktop half'
+          if (-not ($calls -match [regex]::Escape($be))) { throw "a child script was not given the backend folder`n$calls" }
+          if (-not (@($calls -split "`n" | Where-Object { $_ -match '^update-jarvis' }) -match '-SkipPatches')) {
+            throw "the desktop step did not ask for -SkipPatches, so the patcher would run twice`n$calls"
+          }
+          Assert-True ($r.Out -match 'backend : ') 'the install run reached its done screen'
+
+          # 2. -SkipDesktop: the update script is never called.
+          Reset-Calls $tmp
+          $be2 = Join-Path $root 'backend-skipdesktop'
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $setup,
+                           '-BackendPath', $be2, '-NoStart', '-SkipTests', '-SkipDesktop')
+          if ($r.Code -ne 0) { throw "setup-jarvis.ps1 -SkipDesktop exited $($r.Code)`n$($r.Out)" }
+          $calls = Get-Calls $tmp
+          Assert-True ($calls -match 'install-backend') '-SkipDesktop still ran the backend steps'
+          Assert-True ($calls -notmatch 'update-jarvis') '-SkipDesktop did not call the update script'
+
+          # 3. -Print on the install script: every command shown, nothing made.
+          Reset-Calls $tmp
+          $be3 = Join-Path $root 'backend-print'
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $setup,
+                           '-BackendPath', $be3, '-Print')
+          if ($r.Code -ne 0) { throw "setup-jarvis.ps1 -Print exited $($r.Code)`n$($r.Out)" }
+          Assert-True (-not (Test-Path -LiteralPath $be3)) 'install -Print created no backend folder'
+          Assert-True ((Get-Calls $tmp) -eq '') 'install -Print ran no child script'
+          Assert-True ($r.Out -match 'update-jarvis\.ps1') 'install -Print showed the desktop step'
+          Assert-True ($r.Out -match 'PRINT mode') 'install -Print said plainly that nothing was run'
+
+          # 4. The update script patches the folder it was given, and logs there.
+          #    From here the REAL update script is put back; only the patcher it
+          #    calls is a stub.
+          Copy-Item $realUpdate $update -Force
+          Reset-Calls $tmp
+          $be4 = Join-Path $root 'backend-update'
+          New-Item -ItemType Directory -Force -Path $be4 | Out-Null
+          Set-Content -LiteralPath (Join-Path $be4 'jarvis_hud.py') -Value 'print("stand-in")'
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $update,
+                           '-BackendPath', $be4, '-SkipDesktop', '-NoCheck')
+          if ($r.Code -ne 0) { throw "update-jarvis.ps1 exited $($r.Code)`n$($r.Out)" }
+          $calls = Get-Calls $tmp
+          Assert-True ($calls -match 'apply-patches') 'the update script called apply-patches.ps1'
+          if (-not ($calls -match [regex]::Escape($be4))) { throw "apply-patches.ps1 was not given the backend folder`n$calls" }
+          Assert-True (@(Get-ChildItem -LiteralPath (Join-Path $be4 '_jarvis-logs') -Filter 'update-jarvis-*.txt').Count -ge 1) 'the update run wrote its log in the backend folder'
+          Assert-True ($r.Out -match 'ALL DONE') 'the update run ended on the green banner'
+
+          # 5. -SkipPatches on the update script: the patcher is not run at all,
+          #    which is what the install script relies on.
+          Reset-Calls $tmp
+          $be5 = Join-Path $root 'backend-skippatches'
+          New-Item -ItemType Directory -Force -Path $be5 | Out-Null
+          Set-Content -LiteralPath (Join-Path $be5 'jarvis_hud.py') -Value 'print("stand-in")'
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $update,
+                           '-BackendPath', $be5, '-SkipPatches', '-SkipDesktop', '-NoCheck')
+          if ($r.Code -ne 0) { throw "update-jarvis.ps1 -SkipPatches exited $($r.Code)`n$($r.Out)" }
+          Assert-True ((Get-Calls $tmp) -notmatch 'apply-patches') '-SkipPatches did not run the patcher'
+          Assert-True ($r.Out -match 'the backend was left as it is') '-SkipPatches said so on screen'
+
+          # 6. -Print on the update script: the whole plan, and nothing else.
+          #    The desktop step is ENABLED here on purpose, unlike cases 4 and 5:
+          #    it is the one part of a plan that reads something (the release
+          #    page) and the part whose -Print guard could go missing.
+          Reset-Calls $tmp
+          $be6 = Join-Path $root 'backend-update-print'
+          New-Item -ItemType Directory -Force -Path $be6 | Out-Null
+          Set-Content -LiteralPath (Join-Path $be6 'jarvis_hud.py') -Value 'print("stand-in")'
+          $before = Get-Tree $be6
+          $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $update,
+                           '-BackendPath', $be6, '-NoCheck', '-Print')
+          if ($r.Code -ne 0) { throw "update-jarvis.ps1 -Print exited $($r.Code)`n$($r.Out)" }
+          Assert-True ((Get-Tree $be6) -eq $before) 'update -Print changed nothing in the backend folder'
+          Assert-True ((Get-Calls $tmp) -eq '') 'update -Print ran apply-patches.ps1'
+          Assert-True ($r.Out -match 'PRINTED ONLY') 'update -Print ended on the printed-only banner'
+          # -Print changes nothing, and it says out loud the one thing a plan run
+          # does over the network, so "change nothing" is never read as "touches
+          # nothing".
+          Assert-True ($r.Out -match 'asking the release page') 'update -Print said it would read the release page'
+          Assert-True ($r.Out -match 'no published desktop installer was found') 'update -Print carried on when that address could not be reached'
+          Assert-True ($r.Out -match 'would run|the desktop app cannot be built here') 'update -Print said what it would do about the desktop app'
+
+          # 7. The one decision in the update script that is neither a call nor a
+          #    download: when this folder already holds the release's commit or
+          #    newer, BUILD instead of installing that release - otherwise a
+          #    branch's own newer app would be replaced by an older published
+          #    one. The function is lifted out of the script as it is written and
+          #    run against a real repository with a side branch.
+          #
+          #    WHAT THIS COVERS, AND WHAT IT DOES NOT. It pins the ANSWER for
+          #    four inputs, including a commit that exists in the repository but
+          #    is NOT in this branch's history - which is the case the decision
+          #    exists for. It does NOT run the caller that acts on the answer
+          #    (that needs a release manifest, and so the network), and it does
+          #    not pin the two guards at the top of the function: a commit that
+          #    does not exist and a folder that is not a git checkout come back
+          #    false whether those guards are there or not, because git itself
+          #    fails. Those two are pinned as the ANSWER the caller relies on,
+          #    not as coverage of the guards.
+          $gitRepo = Join-Path $root 'ancestor'
+          New-Item -ItemType Directory -Force -Path $gitRepo | Out-Null
+          & git -C $gitRepo init -q
+          if ($LASTEXITCODE -ne 0) { throw "git init exited $LASTEXITCODE" }
+          Set-Content -LiteralPath (Join-Path $gitRepo 'a.txt') -Value 'first'
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm first
+          $shaA = (& git -C $gitRepo rev-parse HEAD).Trim()
+          Set-Content -LiteralPath (Join-Path $gitRepo 'b.txt') -Value 'second'
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm second
+          $shaB = (& git -C $gitRepo rev-parse HEAD).Trim()
+          & git -C $gitRepo checkout -q -b side
+          Set-Content -LiteralPath (Join-Path $gitRepo 'c.txt') -Value 'on the side branch'
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm side
+          $shaC = (& git -C $gitRepo rev-parse HEAD).Trim()
+          & git -C $gitRepo checkout -q master 2>$null
+          if ($LASTEXITCODE -ne 0) { & git -C $gitRepo checkout -q main }
+          if ((& git -C $gitRepo rev-parse HEAD).Trim() -ne $shaB) { throw "the test repository did not go back to its second commit" }
+          $src = Get-Content -LiteralPath $update -Raw
+          $found = [regex]::Match($src, '(?s)function Test-LocalAtLeastAsNew.*?\n\}')
+          if (-not $found.Success) { throw "could not find Test-LocalAtLeastAsNew in update-jarvis.ps1" }
+          Invoke-Expression $found.Value
+          $notARepo = Join-Path $root 'not-a-repo'
+          New-Item -ItemType Directory -Force -Path $notARepo | Out-Null
+          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaA) -eq $true) 'a release commit this folder already contains means: build here, do not download'
+          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaB) -eq $true) 'a release commit equal to HEAD means the same'
+          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaC) -eq $false) 'a commit that exists here but is NOT in this branch means: the release is ahead, download it'
+          Assert-True ((Test-LocalAtLeastAsNew $gitRepo '0123456789abcdef0123456789abcdef01234567') -eq $false) 'a commit this folder has never seen means: do not claim the folder is newer'
+          Assert-True ((Test-LocalAtLeastAsNew $notARepo $shaB) -eq $false) 'a folder that is not a git checkout cannot be newer than a release'
+
+          # 8. The helper that reads a child program's exit code. THIS IS THE
+          #    CHECK FOR A BUG A REAL FIRST INSTALL FOUND: it used to be
+          #    `& $Exe @Arguments; return $LASTEXITCODE`, which hands the caller
+          #    the child's OUTPUT and the exit code as ONE ARRAY - and
+          #    `$code -ne 0` on an array is true whenever it holds anything. So a
+          #    successful npm ci, which prints "added 2 packages", was reported
+          #    as "npm ci failed" and the desktop app was never built. npm's own
+          #    log said "exit 0" the whole time. Everything below fails if the
+          #    output is ever returned again.
+          $inv = [regex]::Match((Get-Content -LiteralPath $update -Raw), '(?s)function Invoke-Native \{.*?\n\}')
+          if (-not $inv.Success) { throw "could not find Invoke-Native in update-jarvis.ps1" }
+          Invoke-Expression $inv.Value
+          $quiet = Invoke-Native 'cmd' @('/c', 'exit /b 0') 2>$null
+          $loud = Invoke-Native 'cmd' @('/c', 'echo a child that prints & exit /b 0') 2>$null
+          $loudBad = Invoke-Native 'cmd' @('/c', 'echo a child that fails & exit /b 3') 2>$null
+          Assert-True ($quiet -is [int] -and $quiet -eq 0) 'a silent child that exits 0 is read as success'
+          Assert-True ($loud -is [int]) 'a child that PRINTS returns one exit code, not its output'
+          Assert-True ($loud -eq 0) 'a child that prints and exits 0 is read as SUCCESS (the npm ci bug)'
+          Assert-True ($loudBad -eq 3) 'a child that prints and fails is read as its own exit code'
+          # The runner takes the LAST native exit code of the step.
+          exit 0
 
   audit:
     runs-on: ubuntu-latest

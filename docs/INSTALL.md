@@ -50,10 +50,13 @@ so keep it there where you see it.
    git clone https://github.com/darknight11ish/Epic-Jarvis.git "$env:USERPROFILE\Epic-Jarvis"; cd "$env:USERPROFILE\Epic-Jarvis"
    ```
 
-3. **Have your backend folder ready** (section 1.3 - there is no download
-   for it). First tell this PC where it is: one line, it changes nothing
-   inside the folder, and the live check and the test suites then find the
-   folder by themselves (section 1.5 has this in full):
+3. **Have your backend folder ready** (section 1.3). It is published in this
+   repository, as `jarvis-backend\`, so copying it into place and pointing this
+   PC at it is two lines - or one command, `scripts\setup-jarvis.ps1`, which
+   also patches it, deals with the model, installs the desktop app and checks
+   the result. By hand, first tell this PC where the folder is: one line, it
+   changes nothing inside the folder, and the live check and the test suites
+   then find the folder by themselves (section 1.5 has this in full):
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1 -BackendPath "<your backend folder>"
@@ -254,19 +257,28 @@ Ten modules that were lost *have* been rebuilt, and live in this repository
 (`backend\rebuilt\`), along with every newer module. You do not copy those by
 hand: step 1.5 does, and the published folder already has them.
 
-**Or let one command do 1.3 to 1.8.** From the folder you downloaded this into:
+**Or let one command do the whole first part.** From the folder you downloaded
+this into:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-jarvis.ps1
 ```
 
 It copies the published folder into place, runs 1.5's two scripts, says whether
-Ollama and Jarvis's model are ready, and starts the backend. Two honest limits,
-both by design: it **prints** 1.7's model command rather than downloading about
-5 GB for you, and if the model is missing it stops there instead of starting an
-assistant that cannot answer. Add `-Print` to see every command it would run
-while changing nothing, `-SkipTests` to skip the suite run, or `-BackendPath` to
-put the folder somewhere else.
+Ollama and Jarvis's model are ready, installs the desktop app (part 2, by
+calling `scripts\update-jarvis.ps1`), starts the backend, and runs the live
+check. Two honest limits, both by design: it **prints** 1.7's model command
+rather than downloading about 5 GB for you, and if the model is missing it stops
+before starting an assistant that cannot answer.
+
+`-Print` means "show me the plan and change nothing". Add it to see each command
+it would run, with your own paths in it. One exception, because there is nothing
+else it could do: if Ollama or the model is missing, the model line is printed as
+two commands for **you** to run, in the same words a real run would use. The
+other switches: `-SkipTests` skips the suite run, `-BackendPath` puts the folder
+somewhere else, `-SkipDesktop` leaves the desktop app alone, `-NoStart` starts
+nothing and prints the start line instead, and `-FromSource` builds the desktop
+app from this folder instead of downloading the published installer.
 
 ### 1.4 Check the backend folder
 
@@ -1153,7 +1165,29 @@ others), so a restore can be undone.
 ## Updating everything
 
 When this repository changes (the apps say "run apply-patches.ps1" when
-your PC's Jarvis is too old for something), update all three parts:
+your PC's Jarvis is too old for something), update all three parts.
+
+**Or update both halves in one command.** From the folder you downloaded this
+into. It stops Jarvis, patches the backend, updates the desktop app, starts
+Jarvis again and runs the live check:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\update-jarvis.ps1
+```
+
+It is safe to run again, keeps a log of its own output in `_jarvis-logs` inside
+your backend folder, stops and says plainly what it did and did not change when
+something is wrong, and prints the whole plan first with `-Print` ("show me the
+plan and change nothing": no file, no app, nothing installed - it does read the
+release page once, a few hundred bytes, so the plan can say which route it would
+take). It is steps 1, 2 and 4 below, in the one order that works - do those by
+hand instead when it stops and says why. The phone is still step 3.
+
+**You do not have to close Jarvis first.** The command waits up to 90 seconds for
+you to close it (it says what to click), or closes it for you if you add `-Force`
+- which cuts off whatever Jarvis was doing at that moment. It starts Jarvis
+again when it is done, and it leaves your phone paired and your Settings switches
+as you set them.
 
 1. **The backend.** Stop Jarvis (close its PowerShell window, or quit the
    desktop app if it starts Jarvis for you). Then one line in PowerShell -
@@ -1196,7 +1230,20 @@ yet"**.
 This section is the one thing that changes both, and it is about **ten
 minutes of your time**. When you have finished it, GitHub builds the
 installer for you, you download it like any other program, and each new
-version after that appears in Settings → Updates.
+version after that appears in Settings → Updates. `scripts\update-jarvis.ps1`
+uses that same published installer for the desktop half from then on (before it
+exists, that script builds the app from this folder instead).
+
+**One limit worth knowing, said plainly.** `scripts\update-jarvis.ps1`
+downloads the installer over HTTPS from this project's own release page - the
+same file that page offers anyone - and then runs it with no clicks. It cannot
+check the signature published beside it: PowerShell has no way to check that
+kind of signature, and the Tauri command line tool has no `signer verify`
+command (checked: its `signer` subcommands are `generate` and `sign`). So the
+script prints the file's SHA-256 and says this on screen. The app's own
+**Settings → Updates** button is the route that does check the signature; add
+`-FromSource` to build the app from this folder if you would rather nothing was
+downloaded at all.
 
 **What a signing key is, in one line.** Two files made together: the
 **private** key stamps each installer (kept secret, on your PC and in
@@ -1538,12 +1585,14 @@ rather than your fault.
   installer, and the update signing key" (above, about ten minutes) makes
   GitHub build and publish a signed installer, after which Settings →
   Updates stops saying "Not set up yet".
-- **There is no download link for the backend, and there will not be one.**
-  The Python program Jarvis is made of is on the author's PC only, so a
-  second person cannot install Jarvis today - you cannot download it from
-  here, and neither can anyone else. Step 1.3 says where the files come from
-  for the one PC that has them. This is written down rather than papered
-  over: it is the real limit of this project, not a missing step.
+- ~~There is no download link for the backend, and there will not be one.~~
+  **Fixed 2026-10-06.** Until then the Python program Jarvis is made of existed
+  on the author's PC only, so a second person could not install Jarvis at all.
+  It is now published in this repository as [`jarvis-backend\`](../jarvis-backend/README.md),
+  as plain source - step 1.3, and `scripts\setup-jarvis.ps1` copies it into
+  place for you. Nothing about the five rules changes: the published copy is
+  the same local-first program, and it still sends none of your things
+  anywhere.
 - **Where the token is kept, honestly.** Two places.
   - A token you **typed into Settings** is in **Windows Credential Manager**
     (since 2026-09-23), encrypted to your Windows account — the same place
