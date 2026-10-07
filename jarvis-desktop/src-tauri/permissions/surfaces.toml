@@ -491,6 +491,19 @@ permissions = [
   # write is held on a stale link in Rust (rule 4). Settings window only.
   "allow-chatbot-money",
   "allow-set-chatbot-money",
+  # "Accounts", the ADDRESS half (backend/accounts.patch, jarvis_accounts.py,
+  # 2026-10-06): the mail server, its port and mailbox, the sending server,
+  # its port and how the email is encrypted, the Home Assistant address and
+  # the calendar's CalDAV address - kept on the PC in accounts.json beside
+  # web-search.json, read back to this page, ONE saved at a time. ADDRESSES
+  # ONLY: nothing here carries a key, a password, a token or the private
+  # calendar link (those are the three above, written straight into
+  # Credential Manager and never sent over HTTP), and the command refuses any
+  # name but the eight before a request is built. Settings window only - rule
+  # 3. Holds a save while the event stream is stale, like every other change
+  # sent to the PC.
+  "allow-get-account-addresses",
+  "allow-save-account-address",
   # "What Jarvis can reach": every way Jarvis can reach something outside
   # itself, whether each is on, where it goes (a host only) and whether it
   # asks first - written by the PC from its settings, never by the model.

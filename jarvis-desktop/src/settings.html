@@ -1479,15 +1479,24 @@
       </section>
 
       <!-- ── Accounts ──────────────────────────────────────────────────────
-           Ease-of-use audit row 15 ("Security G3"): the IMAP username and
-           password, the private calendar link, and the Home Assistant token
-           used to be plain Windows user environment variables only - which
-           Windows itself stores as plain text. account-secrets-settings.js;
-           src-tauri/src/account_secrets.rs, token_store.rs. Same shape as
-           the web search keys above: written straight into Windows
-           Credential Manager on this PC, never sent over HTTP, never shown
-           again. The matching environment variable, if the owner already
-           has one, keeps winning either way - saving here never touches it. -->
+           Ease-of-use audit row 15 ("Security G3"), and the owner's decision
+           of 2026-10-06: the IMAP username and password, the private calendar
+           link, and the Home Assistant token used to be plain Windows user
+           environment variables only - which Windows itself stores as plain
+           text. account-secrets-settings.js; src-tauri/src/account_secrets.rs,
+           account_addresses.rs, token_store.rs.
+
+           TWO SHAPES ON ONE CARD. The four SECRETS go straight into Windows
+           Credential Manager on this PC, never over HTTP, never shown again -
+           the same shape as the web search keys above. The eight ADDRESSES
+           and the one choice (the mail server, its port and mailbox, the
+           sending server, its port and how the email is encrypted, the Home
+           Assistant address and the calendar's CalDAV address) are not
+           secrets, so they take the shape already proved for the SearXNG
+           address: read from and written to the PC's own route, kept in
+           accounts.json beside web-search.json, and SHOWN back here. The
+           matching environment variable, if the owner already has one, keeps
+           winning either way - saving here never touches it. -->
       <section class="card" id="account-secrets">
         <h2>Accounts</h2>
         <p class="note">
@@ -1501,6 +1510,11 @@
         </p>
 
         <div id="as-body"></div>
+
+        <h3 class="subhead" id="as-addresses-title">Server addresses</h3>
+        <p class="note" id="as-addresses-note"></p>
+        <div id="as-addresses"></div>
+        <p class="state" id="as-addresses-state" role="status"></p>
 
         <div class="row">
           <span class="status" id="as-status" role="status"></span>

@@ -86,7 +86,10 @@ fn own_404(body: &str) -> bool {
 /// else the shared reading of `{"error": ...}`.
 pub(crate) fn refusal(status: u16, body: &str) -> String {
     if let Some(message) = parsed(body)
-        .and_then(|v| v.get("message").and_then(|m| m.as_str().map(str::to_string)))
+        .and_then(|v| {
+            v.get("message")
+                .and_then(|m| m.as_str().map(str::to_string))
+        })
         .filter(|m| !m.trim().is_empty())
     {
         return message;
@@ -159,13 +162,18 @@ pub(crate) fn limit_action(action: &str) -> Option<&'static str> {
 /// The body of `POST /api/chatbot/money`: only the known keys, built here
 /// rather than forwarded, so the page cannot smuggle anything else through.
 /// `Err` when the action or the service is missing.
-pub(crate) fn limit_body(service: &str, action: &str, dollars: Option<f64>,
-                         price_in: Option<f64>, price_out: Option<f64>)
-    -> Result<serde_json::Value, String> {
+pub(crate) fn limit_body(
+    service: &str,
+    action: &str,
+    dollars: Option<f64>,
+    price_in: Option<f64>,
+    price_out: Option<f64>,
+) -> Result<serde_json::Value, String> {
     let action = limit_action(action)
         .ok_or_else(|| "That is not one of the chatbot money changes.".to_string())?;
     let service = service.trim();
-    if service.is_empty() || service.len() > 32 || !service.bytes().all(|b| b.is_ascii_lowercase()) {
+    if service.is_empty() || service.len() > 32 || !service.bytes().all(|b| b.is_ascii_lowercase())
+    {
         return Err("Say which chatbot service.".to_string());
     }
     let mut out = serde_json::Map::new();
@@ -323,15 +331,27 @@ mod tests {
         assert!(limit_body("openai", "lower_limit", Some(f64::NAN), None, None).is_err());
         assert!(limit_body("openai", "set_price", None, Some(1.0), None).is_err());
         assert!(limit_body("openai", "set_price", None, Some(-1.0), Some(1.0)).is_err());
-        for bad in ["", "OpenAI", "openai api", "a".repeat(33).as_str(), "openai;drop"] {
-            assert!(limit_body(bad, "lower_limit", Some(1.0), None, None).is_err(), "{bad}");
+        for bad in [
+            "",
+            "OpenAI",
+            "openai api",
+            "a".repeat(33).as_str(),
+            "openai;drop",
+        ] {
+            assert!(
+                limit_body(bad, "lower_limit", Some(1.0), None, None).is_err(),
+                "{bad}"
+            );
         }
     }
 
     #[test]
     fn a_service_name_can_never_carry_a_path_or_a_query_into_the_route() {
         for bad in ["../openai", "openai?x=1", "openai/../..", "openai&y"] {
-            assert!(limit_body(bad, "lower_limit", Some(1.0), None, None).is_err(), "{bad}");
+            assert!(
+                limit_body(bad, "lower_limit", Some(1.0), None, None).is_err(),
+                "{bad}"
+            );
         }
         assert!(limit_body("openrouter", "lower_limit", Some(1.0), None, None).is_ok());
     }

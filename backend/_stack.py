@@ -122,8 +122,27 @@ RATCHET = {
     #: anchor in this walk is ~800 lines away - the same honest reason as
     #: `gate-risk-rows.patch`'s, not a patch that drifted. The number below is
     #: what the walk measures with both patches in it; `test_installed_stand_in.py`
-    #: is what says so, and it may still only go down.
-    "jarvis_gate.py": 25,
+    #: is what says so, and it may still only go down. (SUPERSEDED below.)
+    #:
+    #: LOWERED 2026-10-06, 25 -> 23, when the walk was read again while this
+    #: branch and PR #89's `main` were merged. The note above called
+    #: `chatbot-limits.patch`'s two materialised hunks honest, and they were not:
+    #: BOTH hunks were anchored on the entry each list held when that patch was
+    #: written - `"youtube_captions_read"` in `_RISK`, `"quiz_cloud_grade"` in
+    #: `_NO_RULE_FROM_DENIAL` - and neither was the last entry any more, because
+    #: `quiz-cloud.patch` and `readpage.patch` add their own entries after them
+    #: and both run earlier in this walk. A hunk that cannot match is
+    #: materialised at the END of the file (see the module docstring), so the
+    #: `_RISK` hunk re-emitted its context lines - `youtube_captions_read` among
+    #: them - and `jarvis_gate.py`'s `_RISK` held that action TWICE. The last row
+    #: wins, so the first was dead code; `test_gate_risk_words.py`'s duplicate
+    #: check is what caught it. Both hunks now name `read_web_page`,
+    #: `readpage.patch`'s own last entry in each of those two lists, so both
+    #: apply to real context: neither is in `by_patch` and the walk reads 23.
+    #: This was never a missing-line problem of the owner's PC's, which is what
+    #: the note above assumed - it was a patch anchored one entry too early. A
+    #: ratchet: it may still only go down.
+    "jarvis_gate.py": 23,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

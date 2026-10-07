@@ -1,16 +1,16 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -192,4 +192,6 @@ _NO_RULE_FROM_DENIAL = frozenset({
-     "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
+@@ -175,4 +175,6 @@ _NO_RULE_FROM_DENIAL = frozenset({
+     "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
 +    "raise_api_limit",  # jarvis_chatbot_limits.py acts only on tier "ask": ONE card per raise of a chatbot service's monthly money limit, plus Windows Hello, because raising it lets Jarvis spend more of the owner's money (chatbot-limits.patch)
 +    "lower_api_limit",  # jarvis_chatbot_limits.py: LOWERING a limit only ever spends less, so it asks nothing - this name exists so the owner-check's Windows Hello, which is attached to the action and not to the direction, lands on the raise alone (chatbot-limits.patch)
  })
  
  
-@@ -925,6 +925,15 @@ _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
+@@ -869,6 +871,15 @@ _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
      # "outbound": a risky approval (Windows Hello on the PC, a screen lock on
-     # the phone). Only that one page's words come back, never a link on it.
-     "read_web_page": ("no", "outbound", "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on"),
+     # the phone). Only the caption text comes back, never video or sound.
+     "youtube_captions_read": ("no", "outbound", "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back"),
 +    # chatbot-limits.patch (jarvis_chatbot_limits.py, JARVIS-API section 87.4.1;
 +    # the owner's approval of 2026-10-06, docs/ACCOUNT-KEYS-DESIGN.md decisions 1
 +    # and 3). Raising a monthly money limit LOOSENS: it lets Jarvis spend more of

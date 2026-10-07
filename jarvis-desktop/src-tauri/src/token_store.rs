@@ -721,9 +721,7 @@ mod tests {
     /// cannot be satisfied by editing the fixture alone.
     #[test]
     fn the_six_chatbot_targets_are_the_python_sides_own() {
-        use super::{
-            chatbot_api_key_problem, chatbot_api_key_target, CHATBOT_API_KEY_TARGETS,
-        };
+        use super::{chatbot_api_key_problem, chatbot_api_key_target, CHATBOT_API_KEY_TARGETS};
         let fixture: serde_json::Value = serde_json::from_str(include_str!(
             "../../tests/fixtures/chatbot-api-key-targets.json"
         ))

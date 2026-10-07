@@ -512,6 +512,12 @@ jobs:
           # Every suite in the list, in name order. A suite that fails does not
           # stop the rest: one red run lists every Windows failure at once.
           $suites = @(
+            # Back in the list on 2026-10-06, with the account addresses: it
+            # needs nothing from the owner's PC (every module it imports is
+            # shipped whole) and was run here on Windows 11 with the same
+            # throwaway state folder this step uses, repo mode and staged mode
+            # both. It asserts file layout and patch text, never a browser.
+            'test_account_addresses.py',
             'test_account_secrets.py',
             'test_agent_retirement_wiring.py',
             'test_android_control.py',
@@ -682,6 +688,7 @@ jobs:
             'test_sensitive.py',
             'test_settings_registry.py',
             'test_settings_switches.py',
+            'test_setup_script.py',
             'test_shipped_modules.py',
             'test_short_tool_list.py',
             'test_skill_discovery.py',

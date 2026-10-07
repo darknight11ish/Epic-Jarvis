@@ -556,6 +556,15 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # jarvis_gate.py not at all, so it adds no list
                                 # entry and no risk row.
                                 "chatbot-limits-hud.patch",
+                                # accounts.patch (2026-10-06) adds the account
+                                # addresses' two routes to jarvis_hud.py, in
+                                # hunks anchored on web-search.patch's own added
+                                # lines. It adds no gate list entry, no risk row
+                                # and no _TOOL_ACTIONS line - it touches
+                                # jarvis_gate.py not at all - so it cannot rewrite
+                                # a line devices.patch wrote. The
+                                # later_rewriting() half below is what proves it.
+                                "accounts.patch",
                                 "readpage.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

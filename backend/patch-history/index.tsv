@@ -31,6 +31,7 @@ chat-history.patch	chat-history/d1d2515.patch	d1d2515f681cdee0e95267f3c64b41f2e2
 chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35Z	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h
 chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53Z	Backend: keep chat history on the PC, encrypted (chat-history.patch)
 chat-stream.patch	chat-stream/997bfa1.patch	997bfa1dbd0acc61ab7d6d831c7f3f7c59797d27	2026-09-24T00:22:48Z	Chat: every local turn streamed once, with the right Content-Type, kept alive through approvals
+chatbot-limits.patch	chatbot-limits/4e3963f.patch	4e3963fbc469aba4690e8ab8a137d4e0444b058d	2026-10-06T22:05:29-07:00	the keys work joins main, and the patch that needed two places is now two patches
 chatbot-limits.patch	chatbot-limits/581cda8.patch	581cda87af0da89dd45f9d069d93f342f1858b95	2026-10-06T17:59:57-07:00	the six chatbot API keys and their monthly money limits were one job, and neither was in the app
 chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef1620052d2437275	2026-09-28T02:09:55Z	Merge branch 'studio-chatbot-screens' into claude/jarvis-ai-assistant-research-ff37vy
 chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34Z	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
@@ -61,6 +62,7 @@ gate-outcome.patch	gate-outcome/37fad26.patch	37fad2683a8941a4d26ae5ce6909cc9c98
 gate-outcome.patch	gate-outcome/10db67c.patch	10db67c2111fb8d61d0954380cd764052c5717d5	2026-09-15T04:28:13Z	There was an approve-all in the gate, and a timeout looked like a refusal
 gate-push.patch	gate-push/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9a0961058	2026-09-15T01:20:34Z	Master audit: the worst finding was a cloud lane nobody re-filtered
 gate-push.patch	gate-push/5cb5947.patch	5cb5947da824b6d2faf13f16a5335674a2cdabd5	2026-09-15T00:16:24Z	Stop the two paths that send private content off the machine
+gate-risk-rows.patch	gate-risk-rows/f4d0f3a.patch	f4d0f3af727d85b02f7dc53fc8eced33fda30493	2026-10-06T11:37:28-07:00	the gate's risk table held draft_email twice, and the stale copy is the one a cleanup would have kept
 goals.patch	goals/d68f7b2.patch	d68f7b240737ac081d91b26c85410738520d8f42	2026-09-27T23:29:50Z	Backend: Goals - a plan the owner edits, one card per acting step
 inbox-tidy.patch	inbox-tidy/d8d7911.patch	d8d7911ced71029756efc677cd6f883416561c84	2026-09-29T07:42:51Z	inbox-tidy.patch: its first hunk's context now ends at apps-in-projects' own line
 inbox-tidy.patch	inbox-tidy/98a5310.patch	98a5310e72ffb101536da6fc16ae983d89f8cf46	2026-09-29T07:27:30Z	Merge origin/main (PR #27: audit fixes, signed approvals, apps in projects) into the working branch
