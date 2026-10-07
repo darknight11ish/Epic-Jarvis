@@ -97,14 +97,20 @@ GAP = "# gap"
 #: Neither can be fixed by editing a patch: what is missing is the owner's own
 #: lines. The pin may come back down when `inbox-tidy.patch` joins the walk.
 RATCHET = {
-    #: 47, raised from 45 on 2026-10-06, when this branch and PR #80 met. Both
-    #: sides add a hunk to jarvis_hud.py whose context is text only the owner's
-    #: PC holds, so the walk materialises it rather than reading it as drift:
-    #: PR #80's `gate-risk-rows.patch` install block, and this branch's
-    #: `chatbot-limits.patch` install block. 45 was the measure before either
-    #: existed, and neither side alone would have moved it by two. A ratchet: it
-    #: may still only go down.
-    "jarvis_hud.py": 47,
+    #: 46, LOWERED from 47 on 2026-10-06, when `ollama-direct.patch` stopped
+    #: carrying the cloud lane's whole resolution in the HUD and left
+    #: `body["model"]`, the key and the reason to `jarvis_chatbot_api.py`'s
+    #: `lane_state()`. Measured, not argued: with the patch as it was, the walk
+    #: materialised 47 hunks and THREE patches were in `by_patch` for this file
+    #: - `ollama-direct.patch` 3, and then `cloud-one-turn.patch` 1 and
+    #: `chat-stream.patch` 1, both of which had to invent context that
+    #: ollama-direct was supposed to have written and did not. With the smaller
+    #: patch the walk materialises 46 and only `ollama-direct.patch` is there,
+    #: at 4: its one added hunk still needs the owner's own lines, and the other
+    #: two no longer drift. 3 + 1 + 1 became 4 + 0 + 0, which is one hunk less
+    #: and, more to the point, two patches that now anchor on real text. A
+    #: ratchet: it may still only go down.
+    "jarvis_hud.py": 46,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

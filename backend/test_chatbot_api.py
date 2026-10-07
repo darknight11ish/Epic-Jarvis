@@ -1574,6 +1574,77 @@ def t_the_cloud_lane_status_never_carries_a_key():
           not SRV.requests, len(SRV.requests))
 
 
+def t_lane_state_is_the_one_thing_the_hud_asks():
+    """`lane_state(lane)` is the seam `jarvis_hud.py` uses for a whole lane's
+    transport: the service, the model the service is asked for, its own pinned
+    address, its own key, the answer-length cap, and - when it cannot be used -
+    this module's own sentence for why. `last_lane_state()` reads the same
+    answer back for the request's Authorization header, so the address and the
+    key can never disagree about which lane is being sent.
+
+    It is remembered per THREAD, because the HUD's Handler is made per request
+    and two requests at once must never be able to pick up each other's key
+    (rule 3). The empty lane is how the HUD says "this hop is the local one":
+    it must clear the thread, so a hop back down the degrade chain cannot leave
+    a cloud lane's key behind for the next request to carry."""
+    clean()
+    point_all(limit=5.0)
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    st = API.lane_state("jarvis-escalate")
+    was = API.PRESETS["deepseek_api"]
+    try:
+        API.point_at("deepseek_api", DEEPSEEK_URL)
+        real = API.cloud_lane("jarvis-escalate")
+    finally:
+        API.PRESETS["deepseek_api"] = was
+    check("one call answers a whole lane: service, model, address, key and cap",
+          st["pid"] == "deepseek_api" and st["model"] == "deepseek-flash"
+          and st["key"] == KEY and st["cap"] == API.MOST_REPLY_TOKENS
+          and st["problem"] == "" and real and real["url"] == DEEPSEEK_URL + "/chat/completions"
+          and ORIGINAL["deepseek_api"].base_url == DEEPSEEK_URL, st)
+    check("... and the address it hands the HUD is that service's own endpoint",
+          st["url"] == API.PRESETS["deepseek_api"].base_url.rstrip("/") + "/chat/completions", st)
+    check("... and the header builder reads that same answer back",
+          API.last_lane_state() == st, API.last_lane_state())
+    check("... as a copy: a caller cannot write into what was stored",
+          (lambda d: (d.update(key="someone-elses"), API.last_lane_state()["key"] == KEY)[1])(
+              API.last_lane_state()), API.last_lane_state())
+    # A second thread has asked nothing, so it must see nothing - and asking
+    # there must not disturb this thread's answer.
+    seen = {}
+    t = threading.Thread(target=lambda: (seen.update(before=API.last_lane_state()),
+                                         API.lane_state("jarvis-critic")),
+                         name="jarvis-lane-state-test")
+    t.start()
+    t.join()
+    check("another thread has asked nothing, so it is handed no lane and no key",
+          seen["before"]["url"] == "" and seen["before"]["key"] == "", seen["before"])
+    check("... and asking there does not change this thread's own answer",
+          API.last_lane_state() == st, API.last_lane_state())
+    cleared = API.lane_state("")
+    check("the local lane clears the thread, so no cloud key can be carried onto it",
+          cleared["lane"] == "" and cleared["url"] == "" and cleared["key"] == ""
+          and cleared["problem"] == "" and API.last_lane_state() == cleared, cleared)
+    # No key saved, a model with no price, a reached limit and a message the
+    # month cannot pay for: no address, and the module's own words for why.
+    clean()
+    point_all(limit=5.0)
+    why = API.ready_for("deepseek_api")
+    st = API.lane_state("jarvis-escalate")
+    check("a lane this PC cannot pay for comes back with no address, in the module's own words",
+          st["url"] == "" and st["key"] == "" and st["problem"] == why
+          and "API key" in why, (st, why))
+    check("... and it still names the service and model, so the caller can say which lane",
+          st["pid"] == "deepseek_api" and st["model"] == "deepseek-flash", st)
+    check("the module's own status route is untouched by any of this: every lane "
+          "listed, none ready, each saying why",
+          API.lane_status()["available"] and len(API.lane_status()["lanes"]) == len(API.CLOUD_LANES)
+          and API.lane_status()["ready"] == []
+          and all(r["why"] for r in API.lane_status()["lanes"]), API.lane_status())
+    API.lane_state("")
+    clean()
+
+
 def t_shipped_and_documented():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("shipped: in _where.SHIPPED and apply-patches.ps1",

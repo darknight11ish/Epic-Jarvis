@@ -8,29 +8,41 @@ local turn was one `_open()` call away from a 503 it could never recover
 from. `ollama-direct.patch` added `_completions_url(lane)`, which sends the
 local lane to Ollama's own OpenAI-compatible endpoint instead.
 
-WHAT CHANGED ON 2026-10-06, AND WHY THIS TEST READS AS IT DOES. The cloud
-half of that function was a placeholder: a non-local lane went to `JARVIS_URL`
-too, and the patch's own comment called itself "the one place that needs a
-real answer". The owner made that decision (docs/ACCOUNT-KEYS-DESIGN.md
-section 5 and part C): a cloud lane goes through `jarvis_chatbot_api.py`'s
-adapter family - HTTPS to the service's own pinned host, the key from Windows
-Credential Manager, the monthly money limit, the answer-length cap, and a
-redirect refused - and the service behind it is DeepSeek. This test used to
-assert the placeholder ("a cloud lane still resolves to JARVIS_URL -
-unimplemented, not silently redirected"). It now asserts the real thing,
-which is not the same test with a different string: a cloud lane reaches
-DeepSeek's own address, asks for DeepSeek's own model name, carries DeepSeek's
-own key, and is answered LOCALLY when the owner's monthly limit cannot pay
-for it - never sent to a paid service, and never quietly reported as a cloud
-answer.
+WHAT CHANGED ON 2026-10-06, AND WHY THIS TEST READS AS IT DOES. The cloud half
+of that function was a placeholder: a non-local lane went to `JARVIS_URL` too,
+and the patch's own comment called itself "the one place that needs a real
+answer". The owner made that decision (docs/ACCOUNT-KEYS-DESIGN.md section 5
+and part C): a cloud lane goes through `jarvis_chatbot_api.py`'s adapter family
+- HTTPS to the service's own pinned host, the key from Windows Credential
+Manager, the monthly money limit, the answer-length cap, and a redirect
+refused - and the service behind it is DeepSeek. This test used to assert the
+placeholder. It now asserts the real thing, which is not the same test with a
+different string: a cloud lane reaches DeepSeek's own address, asks for
+DeepSeek's own model name, carries DeepSeek's own key, and is answered LOCALLY
+when the owner's monthly limit cannot pay for it - never sent to a paid
+service, and never quietly reported as a cloud answer.
 
-This test executes the real `_completions_url`, lifted from the source with
-ast - the same technique test_degrade_filter.py already uses on this exact
-file, for this exact reason. It cannot start a real HTTP server or reach a
-real Ollama or DeepSeek; that part only the owner's own machine can prove.
-What it does instead is run the lifted text inside a wrapper that declares the
-per-request names it binds with `nonlocal`, so the whole decision can be
-exercised here, with no socket.
+AND WHERE THAT DECISION NOW LIVES. The first version of it lived in the HUD:
+`_completions_url` called `cloud_lane`, `lane_key`, `lane_service` and
+`ready_for` itself and kept what it decided in three names of its own, which
+`_auth_headers` then read - and the block that did it had grown to about sixty
+added lines, all of it around `_open`, whose lines are `cloud-one-turn.patch`'s
+context. Every one of those lines is a line a later patch has to anchor on, so
+the resolution moved OUT to `jarvis_chatbot_api.py`'s ONE seam: `lane_state(lane)`
+resolves a whole lane (service, model, address, key, cap, and the module's own
+sentence for why it cannot be used) and remembers it on the calling THREAD;
+`last_lane_state()` reads that back. `_completions_url` now asks once and puts
+the answer's model on the request; `_auth_headers` reads the key back from the
+same place rather than from a name in the HUD. `FakeApi` below is that seam,
+which is why it stands in for two functions rather than four.
+
+This test executes the real `_completions_url` and the real `_auth_headers`,
+lifted from the source with ast - the same technique test_degrade_filter.py
+already uses on this exact file, for this exact reason. It cannot start a real
+HTTP server or reach a real Ollama or DeepSeek; that part only the owner's own
+machine can prove. What it does instead is run the lifted text with a stand-in
+`jarvis_chatbot_api` in `sys.modules`, so the whole decision can be exercised
+here, with no socket.
 
     python3 test_ollama_direct.py
 """
@@ -51,6 +63,7 @@ SKIPPED = []
 LOCAL = "qwen3:8b"
 LANE = "jarvis-escalate"
 DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
+PAIRING_TOKEN = "the-pairing-token"
 
 
 def check(name, cond, detail=""):
@@ -68,72 +81,60 @@ def skip(why):
 
 class FakeApi:
     """What `jarvis_chatbot_api` hands back on a PC where DeepSeek is set up.
-    `why` is the real module's own sentence for a lane that cannot be used."""
+
+    The one seam, for a whole lane: `lane_state(lane)` resolves the service,
+    the model the SERVICE is asked for, its pinned address, its key and its
+    cap, and returns the module's own sentence (`why`) when the lane cannot be
+    used at all. It remembers what it resolved for this thread, exactly as the
+    real module does, and `last_lane_state()` reads it back - which is how the
+    HUD's header builder gets the key without any caller passing it around.
+
+    `calls` is what the HUD asked for, so a test can say that the LOCAL lane is
+    asked for as the empty name (which is how the real module is told to clear
+    a cloud lane's key off the thread)."""
 
     def __init__(self, *, ready=True, model="deepseek-flash",
                  key="the-deepseek-key", why="No monthly money limit is set for DeepSeek."):
         self.ready, self.model, self.key, self.why = ready, model, key, why
+        self.calls = []
+        self.state = {"lane": "", "pid": "", "model": "", "host": "", "url": "",
+                      "key": "", "cap": 0, "problem": ""}
 
-    def cloud_lane(self, lane, **kw):
-        if not self.ready:
-            return None
-        return {"pid": "deepseek_api", "model": self.model, "host": "api.deepseek.com",
-                "url": DEEPSEEK_URL, "cap": 8000, "why": ""}
+    def lane_state(self, lane):
+        self.calls.append(lane)
+        lane = str(lane or "")
+        if not lane:
+            self.state = {"lane": "", "pid": "", "model": "", "host": "", "url": "",
+                          "key": "", "cap": 0, "problem": ""}
+        elif not self.ready:
+            self.state = {"lane": lane, "pid": "deepseek_api", "model": self.model,
+                          "host": "", "url": "", "key": "", "cap": 0, "problem": self.why}
+        else:
+            self.state = {"lane": lane, "pid": "deepseek_api", "model": self.model,
+                          "host": "api.deepseek.com", "url": DEEPSEEK_URL,
+                          "key": self.key, "cap": 8000, "problem": ""}
+        return dict(self.state)
 
-    def lane_key(self, lane):
-        return self.key if self.ready else ""
-
-    def lane_service(self, lane):
-        return ("deepseek_api", self.model)
-
-    def ready_for(self, pid):
-        return "" if self.ready else self.why
+    def last_lane_state(self):
+        return dict(self.state)
 
 
-def _lift_completions(source: str):
-    """The real `_completions_url`, made runnable on its own.
-
-    It binds three names with `nonlocal`, so it cannot simply be exec'd: the
-    lifted text goes inside a wrapper that declares those three, runs the
-    function once for LANE, leaves what the function set in `_out`, and
-    returns the URL. `body` is the request body the real `_open` has in hand.
-    """
-    tree = ast.parse(source)
-    found = [n for n in ast.walk(tree)
-             if isinstance(n, ast.FunctionDef) and n.name == "_completions_url"]
+def _lifted(source, name):
+    """The one top-level `def name(` in `source`, as a compiled code object."""
+    found = [n for n in ast.walk(ast.parse(source))
+             if isinstance(n, ast.FunctionDef) and n.name == name]
     if len(found) != 1:
-        raise AssertionError(f"expected exactly one _completions_url, found {len(found)}")
-    ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "JARVIS_URL": "http://127.0.0.1:8000",
-          "local_model": LOCAL, "body": {"model": LANE}, "_out": {}}
-    wrapper = ("def _run():\n"
-               "    _cloud_model, _cloud_key, _cloud_problem = {}, '', ''\n"
-               + "".join(f"    {line}\n"
-                         for line in ast.unparse(found[0]).splitlines())
-               + "    return (_completions_url(%r), _cloud_model, _cloud_key, "
-                 "_cloud_problem)\n" % LANE)
-    exec(compile(wrapper, "<lifted>", "exec"), ns)
-    url, model, key, problem = ns["_run"]()
-    return url, model, key, problem, ns["body"]
+        raise AssertionError(f"expected exactly one {name}, found {len(found)}")
+    return compile(ast.Module(body=[found[0]], type_ignores=[]), "<lifted>", "exec")
 
 
-def _lift_auth(source: str):
-    """The real `_auth_headers`, with the key a resolved cloud lane leaves."""
-    tree = ast.parse(source)
-    found = [n for n in ast.walk(tree)
-             if isinstance(n, ast.FunctionDef) and n.name == "_auth_headers"]
-    if len(found) != 1:
-        raise AssertionError(f"expected exactly one _auth_headers, found {len(found)}")
-    ns = {"JARVIS_API_KEY": "the-pairing-token", "_cloud_key": ""}
-    exec(compile(ast.Module(body=[found[0]], type_ignores=[]), "<lifted>", "exec"), ns)
-    return ns["_auth_headers"]
-
-
-def _with_api(source: str, api, fn):
-    """Run `fn` with a stand-in jarvis_chatbot_api installed in sys.modules."""
+def _with_api(api, fn):
+    """Run `fn()` with a stand-in jarvis_chatbot_api installed in sys.modules,
+    the way the real HUD has the real one."""
     saved = sys.modules.get("jarvis_chatbot_api")
     sys.modules["jarvis_chatbot_api"] = api
     try:
-        return fn(source)
+        return fn()
     finally:
         if saved is not None:
             sys.modules["jarvis_chatbot_api"] = saved
@@ -141,14 +142,38 @@ def _with_api(source: str, api, fn):
             sys.modules.pop("jarvis_chatbot_api", None)
 
 
+def _completions(source, api, lane=LANE):
+    """(url, body, api) after running the REAL `_completions_url` for `lane`.
+
+    `body` is the request body the real `_open` has in hand - the same dict the
+    helper may put the service's model on."""
+    ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "JARVIS_URL": "http://127.0.0.1:8000",
+          "local_model": LOCAL, "body": {"model": lane}}
+    _with_api(api, lambda: exec(_lifted(source, "_completions_url"), ns))
+    url = _with_api(api, lambda: ns["_completions_url"](lane))
+    return url, ns["body"], api
+
+
+def _auth(source, api):
+    """The real `_auth_headers`, ready to call as many times as a request does.
+    What it reads is `api`'s remembered state, so `_completions` must have run
+    first for a cloud lane - exactly the order the real request uses."""
+    ns = {"JARVIS_API_KEY": PAIRING_TOKEN}
+    _with_api(api, lambda: exec(_lifted(source, "_auth_headers"), ns))
+    return lambda extra=None: _with_api(api, lambda: ns["_auth_headers"](extra))
+
+
 def t_local_lane_goes_to_ollama():
     if missing("jarvis_hud.py"):
         return skip(explain())
     src = SRC.read_text(encoding="utf-8")
-    url, _, _, _, _ = _with_api(src, FakeApi(ready=False),
-                                lambda s: _lift_completions(s.replace(LANE, LOCAL)))
+    api = FakeApi(ready=False)
+    url, body, _ = _completions(src, api, lane=LOCAL)
     check("the local lane resolves to Ollama's own endpoint",
           url == "http://127.0.0.1:11434/v1/chat/completions", url)
+    check("... and it is asked for as the module's empty lane, which clears the thread's answer",
+          api.calls == [""], api.calls)
+    check("... and the request keeps the local model's own name", body["model"] == LOCAL, body)
 
 
 def t_a_cloud_lane_goes_to_the_service_behind_it():
@@ -159,85 +184,103 @@ def t_a_cloud_lane_goes_to_the_service_behind_it():
     if missing("jarvis_hud.py"):
         return skip(explain())
     src = SRC.read_text(encoding="utf-8")
-    url, model, key, problem, body = _with_api(src, FakeApi(), _lift_completions)
+    api = FakeApi()
+    url, body, _ = _completions(src, api)
     check("a cloud lane resolves to the cloud service's own endpoint",
           url == DEEPSEEK_URL, url)
     check("... and not to JARVIS_URL's own port any more", "127.0.0.1:8000" not in url, url)
     check("... and not to Ollama, which has no such model", "11434" not in url, url)
     check("... and the request asks for the SERVICE's model, not the lane's name",
           body["model"] == "deepseek-flash", body)
-    check("... and the service's own key is what the request will carry",
-          key == "the-deepseek-key", key)
-    check("... and nothing is reported as a problem", problem == "", problem)
+    check("... because the HUD asked the module, and the lane's own name is what it asked with",
+          api.calls == [LANE], api.calls)
+    check("... and the module is where the key that goes with that address comes from",
+          api.last_lane_state()["key"] == "the-deepseek-key", api.last_lane_state())
 
 
 def t_a_lane_that_cannot_be_paid_for_is_answered_locally():
-    """When `cloud_lane()` returns None - no key saved, a model with no price,
-    the month's money limit reached, a message it cannot pay for - nothing is
-    sent to a paid service at all. The lane goes to the LOCAL address instead:
-    this PC answers, nothing is spent, and the request keeps the local model's
-    name and Jarvis's own pairing token, exactly as a local turn always did."""
+    """When `lane_state()` comes back with no address - no key saved, a model
+    with no price, the month's money limit reached, a message it cannot pay for
+    - nothing is sent to a paid service at all. The lane goes to the LOCAL
+    address instead: this PC answers, nothing is spent, and the request keeps
+    the lane's own name and Jarvis's own pairing token, exactly as a local turn
+    always did."""
     if missing("jarvis_hud.py"):
         return skip(explain())
     src = SRC.read_text(encoding="utf-8")
-    url, model, key, problem, body = _with_api(src, FakeApi(ready=False), _lift_completions)
+    api = FakeApi(ready=False)
+    url, body, _ = _completions(src, api)
     check("an unpaid-for cloud lane is answered on this PC's own Ollama",
           url == "http://127.0.0.1:11434/v1/chat/completions", url)
     check("... never sent to the cloud host without a resolved lane",
           "api.deepseek.com" not in url, url)
-    check("... and no cloud key is attached", key == "", key)
-    check("... and it says why, in the module's own words",
-          problem == "No monthly money limit is set for DeepSeek.", problem)
+    check("... and no cloud key is left on the thread", api.last_lane_state()["key"] == "",
+          api.last_lane_state())
+    check("... and the module's own words for why are what the caller has to report",
+          api.last_lane_state()["problem"] == "No monthly money limit is set for DeepSeek.",
+          api.last_lane_state())
+    check("... and the request keeps the lane's own name, because this PC answers it",
+          body["model"] == LANE, body)
 
 
 def t_the_request_uses_the_lane_key_not_the_pairing_token():
     """Rule 3. The pairing token authenticates THIS PC's own server; a cloud
-    service must get that service's own key and nothing else. The one place
-    any request's Authorization header is built switches on what the resolved
-    lane left behind, and a local lane behaves exactly as it did before."""
+    service must get that service's own key and nothing else. The one place any
+    request's Authorization header is built reads back what the resolved lane
+    left on this thread, and a local lane behaves exactly as it did before."""
     if missing("jarvis_hud.py"):
         return skip(explain())
     src = SRC.read_text(encoding="utf-8")
-    fn = _lift_auth(src)
-    local = fn({"Content-Type": "application/json"})
+    api = FakeApi()
+    auth = _auth(src, api)
+    local = auth({"Content-Type": "application/json"})
     check("a local request still carries Jarvis's own pairing token",
-          local.get("Authorization") == "Bearer the-pairing-token", local)
-    # What a resolved cloud lane leaves behind, a moment later in the request.
-    ns = {"JARVIS_API_KEY": "the-pairing-token", "_cloud_key": "the-deepseek-key"}
-    tree = ast.parse(src)
-    node = [n for n in ast.walk(tree)
-            if isinstance(n, ast.FunctionDef) and n.name == "_auth_headers"][0]
-    exec(compile(ast.Module(body=[node], type_ignores=[]), "<lifted>", "exec"), ns)
-    cloud = ns["_auth_headers"]({"Content-Type": "application/json"})
+          local.get("Authorization") == f"Bearer {PAIRING_TOKEN}", local)
+    # What a resolved cloud lane leaves behind, a moment earlier in the request.
+    _completions(src, api)
+    cloud = auth({"Content-Type": "application/json"})
     check("a cloud request carries the SERVICE's key instead",
           cloud.get("Authorization") == "Bearer the-deepseek-key", cloud)
     check("... and the pairing token is not sent to the cloud service at all",
-          "the-pairing-token" not in json.dumps(cloud), cloud)
+          PAIRING_TOKEN not in json.dumps(cloud), cloud)
+    # A lane this PC cannot pay for goes to its OWN Ollama, which wants the
+    # pairing token - so the empty key must not be mistaken for "no token".
+    unpaid = FakeApi(ready=False)
+    _completions(src, unpaid)
+    check("... and a lane that could not be resolved leaves the pairing token alone",
+          _auth(src, unpaid)({}).get("Authorization") == f"Bearer {PAIRING_TOKEN}",
+          _auth(src, unpaid)({}))
 
 
 def t_the_error_message_names_the_right_service():
-    """A local-lane failure has to say Ollama and how to start it. A cloud
-    lane's failure has to name the service it really tried, and a lane that
-    could not be set up has to say what is missing - never blame a program
-    that was never supposed to be running. That string is what a confused
-    owner would actually go and act on."""
-    if missing("jarvis_hud.py"):
-        return skip(explain())
-    src = SRC.read_text(encoding="utf-8")
-    check("mentions Ollama's own start command for the local-lane failure",
-          "ollama serve" in src, "expected the literal `ollama serve` advice somewhere")
+    """The 503 the owner sees when a lane cannot be answered. The local half's
+    advice has always been there; the cloud half's real wording belongs to
+    `chat-stream.patch`, which rewrites that whole block later in the stack.
+    `ollama-direct.patch` only LIFTS the block, word for word, so that patch has
+    the text it anchors on - it no longer names a service or a reason here.
+
+    Read from the patches rather than from the HUD: the words live in them, and
+    on a machine with no `jarvis_hud.py` there is nothing else to read."""
+    src = SRC.read_text(encoding="utf-8") if not missing("jarvis_hud.py") else ""
+    direct = (HERE / "ollama-direct.patch").read_text(encoding="utf-8")
+    stream = (HERE / "chat-stream.patch").read_text(encoding="utf-8")
+    check("the local-lane failure mentions Ollama's own start command",
+          "ollama serve" in stream, "expected the literal `ollama serve` advice in chat-stream.patch")
     check("the local-lane message is conditioned on lane == local_model, not unconditional",
-          "if lane == local_model else" in src or "if lane == local_model\n" in src,
+          "if lane == local_model else" in stream,
           "expected the ternary picking the message by lane")
-    check("the cloud failure names the host the lane really tried",
-          "is not answering at {_cloud_model['host']}" in src
-          or 'is not answering at {_cloud_model["host"]}' in src,
-          "expected the cloud branch to name the resolved lane's host")
-    check("... and a lane that could not be set up repeats the module's own "
-          "words for why, not a wrong address",
-          "{_cloud_problem} (Details: {exc})" in src)
-    check("the cloud failure no longer tells the owner to go to JARVIS_URL",
-          "answers at {JARVIS_URL}" not in src)
+    check("ollama-direct no longer writes cloud-lane wording of its own",
+          "_cloud_model" not in direct and "is not answering at" not in direct,
+          "cloud wording found in ollama-direct.patch")
+    check("... it only lifts the block, in the words the stack already had",
+          "unreachable_msg = (" in direct
+          and 'f"Ollama is not answering on {OLLAMA_URL}. "' in direct,
+          "expected the 503 lifted with its own words")
+    check("... so the cloud 503's wording is chat-stream's, and nothing in the HUD "
+          "still tells the owner to act on JARVIS_URL alone",
+          "The cloud model is not set up on this PC" in stream
+          and (not src or "answers at {JARVIS_URL}" not in src),
+          "expected chat-stream.patch to carry the cloud half")
 
 
 if __name__ == "__main__":

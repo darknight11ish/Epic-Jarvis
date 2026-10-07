@@ -1611,6 +1611,79 @@ def lane_key(lane: str) -> Optional[str]:
     return _read_key(pid)
 
 
+#: ONE request's resolved cloud lane, per THREAD. `jarvis_hud.py`'s Handler
+#: object is made per request, but two different calls need the same answer:
+#: the one that decides the address `_open` sends to, and the one that builds
+#: that request's Authorization header a moment later. So `lane_state()` stores
+#: what it resolved HERE, on the thread that asked, and `last_lane_state()`
+#: reads it back. Never a module-wide name: two requests at once must never be
+#: able to pick up each other's key (rule 3). A thread that never asked gets
+#: `NO_LANE_STATE` - which is exactly what a local request must see.
+_LANE_STATE = threading.local()
+
+#: The answer for "no cloud lane here": no service, no model, no address, no
+#: key, nothing to report. `lane_state("")` stores a copy of this, which is how
+#: a caller says "this hop is the local one" - so a hop back down the degrade
+#: chain can never leave an earlier cloud lane's key where the next request's
+#: `_auth_headers` would find it and send it to Ollama.
+NO_LANE_STATE = {"lane": "", "pid": "", "model": "", "host": "", "url": "",
+                 "key": "", "cap": 0, "problem": ""}
+
+#: Said when `cloud_lane` refuses a lane that `ready_for` did not refuse - the
+#: one case left, a message large enough that this month's limit could not pay
+#: for it. `ready_for`'s own sentences cover every other refusal.
+LANE_NOT_PAID = ("The cloud lane cannot be paid for on this PC: the message could pass this "
+                 "month's money limit for the service behind it. Raise the limit on the PC, "
+                 "or ask something shorter.")
+
+
+def lane_state(lane: str) -> dict:
+    """Everything `jarvis_hud.py` needs to send ONE lane, resolved here.
+
+    The answer, always a fresh dict: `lane` (as asked), `pid` (the service),
+    `model` (the model the SERVICE is asked for, which is not the lane's name),
+    `host` and `url` (that service's own pinned https address), `key` (that
+    service's own key, or ""), `cap` (the answer-length cap to send, 0 for
+    none) and `problem` - this module's own plain sentence for why the lane
+    cannot be used right now, "" when it can.
+
+    `url` is "" and `problem` is set whenever the lane must NOT be sent to a
+    cloud service at all: no key is saved for the service behind it, the model
+    has no price, this month's money limit is reached, or a message of the
+    assumed size could not be paid for. The caller then answers on this PC.
+
+    An empty `lane` (the local one - this module never sees the local model's
+    name) resolves to `NO_LANE_STATE`. It is stored, not just returned, so it
+    CLEARS whatever this thread resolved for the request before it.
+
+    The answer is remembered for this thread and read back by
+    `last_lane_state()`, so the address and the key can never disagree, and no
+    caller has to pass the key around. Opens no socket: Windows Credential
+    Manager (whether a key is SAVED, then the key itself) and the money file
+    only."""
+    state = dict(NO_LANE_STATE)
+    state["lane"] = str(lane or "")
+    if state["lane"]:
+        pid, model = lane_service(state["lane"])
+        state["pid"], state["model"] = pid, model
+        how = cloud_lane(state["lane"])
+        if how:
+            state.update(model=how["model"], host=how["host"], url=how["url"],
+                         cap=int(how.get("cap") or 0), key=lane_key(state["lane"]) or "")
+        else:
+            state["problem"] = ready_for(pid) or LANE_NOT_PAID
+    _LANE_STATE.state = dict(state)
+    return dict(state)
+
+
+def last_lane_state() -> dict:
+    """What `lane_state()` resolved for THIS thread, or `NO_LANE_STATE` when it
+    was never asked (a local request, or a request that has not reached the
+    chat turn). Always a fresh dict, so a caller cannot write into the stored
+    copy; never raises and reads nothing."""
+    return dict(getattr(_LANE_STATE, "state", NO_LANE_STATE))
+
+
 def lane_status() -> dict:
     """What the PC can say about the cloud lanes without sending anything:
     the lane names, the service and model each one means, and whether each
