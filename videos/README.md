@@ -4,7 +4,7 @@ Every version is kept. The newest is at the top. Tap a picture to watch.
 
 ## v6 — "Your AI" (26 s, plus a 14 s upright cut)
 
-[![Jarvis launch video v6](v6/jarvis-launch-v6.jpg)](v6/jarvis-launch-v6.mp4)
+[![Jarvis launch video v6](v6/jarvis-launch-v6.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v6.mp4)
 
 The AI itself, at work: a real AI model on your own PC (Qwen3 8B by default).
 It looks things up and shows where it read them, flagging any quote it cannot
@@ -18,11 +18,11 @@ launch strategist, three everyday viewers, a sound designer and an honesty
 skeptic). `v6/brag-plan.md` has what they found and where each claim is in the
 code.
 
-For a phone held upright: [the 14-second cut](v6/jarvis-launch-v6-vertical.mp4).
+For a phone held upright: [the 14-second cut](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v6-vertical.mp4).
 
 ## v5 — "A day with Jarvis" (34 s, plus a 16 s upright cut)
 
-[![Jarvis launch video v5](v5/jarvis-launch-v5.jpg)](v5/jarvis-launch-v5.mp4)
+[![Jarvis launch video v5](v5/jarvis-launch-v5.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v5.mp4)
 
 A completely new style: one ordinary day, from 7:30 in the morning to 23:00
 at night, in one continuous shot with no cuts. The sky changes with the hour,
@@ -39,11 +39,11 @@ drawn with the app's own words, and `v5/brag-plan.md` lists where each claim
 is in the code. The music is new too: a relaxed, warm groove that follows the
 day.
 
-For a phone held upright: [the 16-second cut](v5/jarvis-launch-v5-vertical.mp4).
+For a phone held upright: [the 16-second cut](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v5-vertical.mp4).
 
 ## v4 — "Cutting-edge. And it still asks first." (30 s, plus a 15 s upright cut)
 
-[![Jarvis launch video v4](v4/jarvis-launch-v4.jpg)](v4/jarvis-launch-v4.mp4)
+[![Jarvis launch video v4](v4/jarvis-launch-v4.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v4.mp4)
 
 v2's fast, punchy style again, now with Jarvis's newest features:
 - focus sessions ("YouTube can wait.");
@@ -56,11 +56,11 @@ v2's fast, punchy style again, now with Jarvis's newest features:
 Every screen is the real desktop app with made-up examples, and
 `v4/brag-plan.md` lists where each claim is in the code.
 
-For a phone held upright: [the 15-second cut](v4/jarvis-launch-v4-vertical.mp4).
+For a phone held upright: [the 15-second cut](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v4-vertical.mp4).
 
 ## v3 — "It asks first" (32 s, plus a 15 s upright cut)
 
-[![Jarvis launch video v3](v3/jarvis-launch-v3.jpg)](v3/jarvis-launch-v3.mp4)
+[![Jarvis launch video v3](v3/jarvis-launch-v3.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v3.mp4)
 
 One idea: Jarvis does nothing, and keeps nothing, until you say so. It asks
 before it acts, and your phone checks it's you. The example is a visible
@@ -70,7 +70,7 @@ of what changed. (Out of date since: Jarvis now learns from your own words
 automatically, with Forget and "Erase the words" on every fact.) And when you say "stop", it stops. Every screen is the real
 desktop app, and every spoken line is captioned.
 
-For a phone held upright: [the 15-second cut](v3/jarvis-launch-v3-vertical.mp4).
+For a phone held upright: [the 15-second cut](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v3-vertical.mp4).
 
 Made after a team review of v2: editors, an AI developer, a music producer, an
 ad specialist, and five everyday viewers, who then reviewed v3 itself too. `v3/brag-plan.md` has what changed
@@ -78,7 +78,7 @@ and why, and where each claim is in the code.
 
 ## v2 — "It learns. It adapts. It scales." (35 s)
 
-[![Jarvis launch video v2](v2/jarvis-launch-v2.jpg)](v2/jarvis-launch-v2.mp4)
+[![Jarvis launch video v2](v2/jarvis-launch-v2.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v2.mp4)
 
 How Jarvis learns you over time (it proposes facts, keeps only the ones you
 accept, and remembers what changed; out of date since: it now learns from
@@ -90,7 +90,7 @@ or **next**, and `v2/brag-plan.md` lists where each one is in the code.
 
 ## v1 — "Your assistant. Your PC. Your rules." (25 s)
 
-[![Jarvis launch video v1](v1/jarvis-launch-v1.jpg)](v1/jarvis-launch-v1.mp4)
+[![Jarvis launch video v1](v1/jarvis-launch-v1.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v1.mp4)
 
 The first beat-cut video: the reactor faces, "Hey Jarvis", being cut off
 with "stop", the phone approval card, and the private link between desktop
@@ -98,9 +98,18 @@ and phone.
 
 ## How each folder is laid out
 
-- `jarvis-launch-vN.mp4` — the video. `jarvis-launch-vN.jpg` — its poster.
+- `jarvis-launch-vN.jpg` — the poster. Stays here: the links above show it, and it is small.
+- `jarvis-launch-vN.mp4` — the video itself. **These are not in this folder any
+  more** (owner's decision, 2026-10-07). Ten of them were 184 MB, and `videos/`
+  was 199 MB of a 296 MB repository — 67% of it — in files no code, test or
+  script ever reads; git cannot delta-compress an already-compressed video
+  either, so every re-render stored a whole new copy. They now live on the
+  [`launch-videos` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/launch-videos),
+  which is what the links above open, and
+  `backend/test_no_videos_in_the_tree.py` is what keeps them from coming back.
 - `brag-plan.md` — the plan and storyboard. `composition-brief.md` — how it was built.
 - `share-copy.txt` — a caption to post with it.
-- `composition/` — the Hyperframes project, to make the video again.
-  The faces come from the app's own code (`tools/extract-reactor.mjs`) and the
-  music is made by `tools/score.py`.
+- `composition/` — the Hyperframes project, to make the video again. **This is
+  why moving the files lost nothing:** render it and the video is back. The
+  faces come from the app's own code (`tools/extract-reactor.mjs`) and the music
+  is made by `tools/score.py`.

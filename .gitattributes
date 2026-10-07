@@ -32,3 +32,11 @@
 *.wav  binary
 *.mp3  binary
 *.onnx binary
+# Video: the launch videos are release assets, not files in the tree (owner's
+# decision, 2026-10-07). Ten .mp4s were 184 MB, and ideos/ was 199 MB of a
+# 296 MB repository - 67% of it - in files no code, test or script ever reads.
+# Git also cannot delta-compress an already-compressed video, so every re-render
+# stored a whole new copy. Kept here as well as in the tripwire below
+# (backend/test_no_videos_in_the_tree.py) so a reviewer looking for the rule
+# finds it in the file that holds every other binary rule.
+*.mp4  binary
