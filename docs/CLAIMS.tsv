@@ -151,5 +151,5 @@ D05	the base backend is published in this repository as plain source	file:jarvis
 D06	the published base still matches this repository's own copies of the modules it ships whole	test:backend/test_base_matches_repo.py	built	jarvis-backend/README.md:1
 D07	one command installs Jarvis from the published base: it copies it into place, patches it, installs the desktop app and runs the live check	file:scripts/setup-jarvis.ps1	built	docs/INSTALL.md:260
 D08	one command updates the backend and the desktop app together, and the install command hands it the desktop half with -SkipPatches so the patcher does not run twice	grep:scripts/setup-jarvis.ps1:-SkipPatches	built	docs/INSTALL.md:1159
-D09	the update command patches the backend by running apply-patches.ps1, and never patches anything itself	grep:scripts/update-jarvis.ps1:apply-patches.ps1	built	docs/INSTALL.md:1159
+D09	the update command's backend half is done by running scripts\apply-patches.ps1 in a child PowerShell, with the backend folder in its argument list	grep:scripts/update-jarvis.ps1:Invoke-Native 'powershell'	built	docs/INSTALL.md:1159
 D10	the one-step install and update scripts are run by CI, in the Windows PowerShell 5.1 job	grep:.github/workflows/ci.yml:The one-step scripts	built	CHANGELOG.md:9
