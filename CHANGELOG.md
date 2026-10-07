@@ -8,6 +8,8 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 - **Settings has a switch for the "Open the Jarvis bar" button in the big HUD window (2026-10-06).** The owner asked for that window's button to be replaced by a text box he could type into, and then chose: keep the button beside the box, and add a Settings option for whether the button shows there at all. The box is PR #85's work and is untouched; this is only the option, under **Settings → The big HUD window**, on the PC only. It is cosmetic, so it changes at once and raises no approval card: that computer's own choice, kept in its `localStorage` (`jarvis.hud.openBar`, `src/hud-window.js`), read by the injected bootstrap that draws the button. **On by default**, because that is the state the owner already approved - "the button stays in that window, beside the box" - so nothing changes for anyone who does not touch it. Off, the button is not drawn; the box, its Send and the microphone button are exactly as they were, and Alt+Space still opens the Jarvis bar. A change made while the window is open is obeyed at once through the usual `storage` event, and on the next load of the window where a browser does not deliver that event. The button-in-the-real-page check drives it (`tests/hud.mjs`), and because Playwright is not installed everywhere, `tests/hud-window.mjs` also runs the injected bootstrap itself in a hand-made DOM - both are for the packaged app, so nobody has clicked the switch on a real desktop run yet.
 
+- **Settings' "Jump to:" list is grouped, so a setting can be found (2026-10-06).** The owner opened Settings and said "can you organize the jump to settings in the settings menu? This is really disorganized" - about forty links in eleven flat rows that did not say what any row was. Each link now sits under a short plain-English row inside the band it already belonged to: Everyday holds Start here, Your devices, Help, Look, Talk and voice, Schedules and This page; Rare holds On this PC, Voice and sound, The AI and its tools, More on this PC, The model and cards, Where things are kept and Keeping it up to date; What Jarvis does holds What Jarvis may do and About this build. Look and feel are unchanged - same card, same small muted labels, same link colour - and so is every link: the same 32 hrefs, in the same order, with the same words and the same card ids; the 33rd, `#chatbot-api-keys`, is the API-keys work landing in main underneath this one, and it sits in the More on this PC row beside Accounts, where the flat list had it; the 34th, `#hud-window`, is the HUD-button switch landing underneath this one in the same way, at the end of Everyday's This page row, where the flat list had it. No other link was added, removed, reworded or moved between bands. The grouping is the page's own: the three bands are its own three headings, and the short rows are the six groups `docs/ease-audit-2026-09-27/customize.md` proposed and `critic.md:199` kept as "the target order of the jump list" for both apps. The registry records no group and no order (only an id, its spoken names, `app` and `where`), and `jarvis_menus.py`'s groups are feature groups for the hide-a-menu list, so rather than give the backend a second, quieter opinion about where a card sits on one page, a new check holds the list to the page instead: `backend/test_settings_registry.py`'s `t_jump_list_matches_the_page` fails if a link is not a real card, is listed twice, is missing, or has floated to another band. Playwright is not installed on this machine, so `tests/ia.mjs` still exits without running a single check, and the list has not been seen rendered in a browser. `menu-visibility-settings.js` also hides a row whose every link is hidden.
+
 - **The cloud lane asks the service for the service's own model now, not for
   its own lane name (2026-10-06).** The lane built the day before reached
   DeepSeek correctly - right address, right key, right limit - and then asked
@@ -51,6 +53,62 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Three comments that still described the HUD's box as opening the Jarvis bar now describe the reversal (2026-10-06).** `voice.rs`'s doc comment on `hud_open_bar`, the `hud-voice` set's comment in `permissions/surfaces.toml` and the matching line in `build.rs` all still said, in the present tense, that the PC has one chat box, so the HUD's own box opens it instead of chatting on its own - the rule the owner reversed when the box came back. They now say what the code does: the HUD's box is its own conversation, the button beside it opens the bar, and that window has no Temporary chat, no New conversation, no "Used in this answer" and no crisis panel. Comments only - no permission, command or behaviour changed.
 
 - **Settings → Accounts now collects the server ADDRESSES, so email and Home Assistant work from the app itself (2026-10-06).** The card already held the four secrets (the IMAP username and password, the private calendar link, the Home Assistant token) in Windows Credential Manager - but no server address, so email answered "JARVIS_IMAP_HOST is not set - there is no mail server to read" and Home Assistant answered "not set up on this PC" unless the addresses were plain-text Windows environment variables. Eight addresses and one choice now have their own boxes (the mail server, its port and mailbox; the sending server, its port and how email is encrypted; the Home Assistant address; the calendar's CalDAV address); they are read from and written to the PC's own route and kept in `accounts.json` beside `web-search.json`, because an address is not a secret - it is a plain settings file, and the box shows what is saved. A key, password or token can never reach it: the route refuses every name but the eight. An environment variable you already set still wins, and the row says so.
+
+- **One command installs Jarvis, and one command updates both halves
+  (2026-10-06).** Setting Jarvis up was eight steps in order - copy the
+  published backend, tell the PC where it is, let the patcher install the
+  packages and write the settings file, deal with Ollama and the model, start
+  it, then build and install the desktop app. `scripts\setup-jarvis.ps1` did
+  the backend half in one command; it now finishes the job, installing the
+  desktop app and running the live check, so a new PC is genuinely one
+  command. `scripts\update-jarvis.ps1` is new: updating used to be two jobs
+  that had to happen in a particular order - patch the backend, then rebuild
+  and reinstall the desktop app - because an app updated alone spends its time
+  saying "your PC's Jarvis cannot do that yet". It is that order as one
+  command: stop Jarvis, get the newest code, patch the backend, update the
+  desktop app, start Jarvis again, check it.
+
+- **Neither of the two commands patches a backend by itself.** Each one
+  patches by running `scripts\apply-patches.ps1`, unchanged - still the only
+  thing that touches a backend, still rehearsing on a throwaway copy first.
+  The install command hands the desktop half to the update command with a new
+  `-SkipPatches` switch ("do not run the patch script this time"), so the
+  patcher is not run twice on a first install. Where the desktop app is
+  concerned the update command prefers the published signed installer and
+  builds from this folder when there is none; when this folder IS a git
+  checkout holding that release's commit or newer, it builds rather than
+  downloading, so a branch's own newer build is never replaced by an older
+  release. A folder that was unzipped rather than cloned has no history to
+  compare, and the script says so instead of guessing.
+
+- **Both commands are safe to run again, and both are honest about what they
+  changed.** The update command keeps a log of its own output in `_jarvis-logs`
+  inside the backend folder, and `apply-patches.ps1` keeps its own log of what
+  it changed. Neither ever prints a token or a key. Both take `-Print`, which
+  means "show me the plan and change nothing" - it writes no file, starts no
+  process and installs nothing; it does make one read of the release page (a few
+  hundred bytes, and it says so on screen) so the plan can say which route it
+  would take. What stays by hand is printed on screen: the phone (INSTALL.md part
+  3) and two switches in the desktop app's own Settings - "Let Jarvis Desktop
+  start and stop Jarvis", and "Start Jarvis Desktop when Windows starts".
+
+- **One limit of the desktop half, said on screen and in INSTALL.md.** When it
+  downloads an installer it cannot check the signature published beside it -
+  the small file that proves the installer is really this project's.
+  PowerShell has no way to check that kind of signature, and the tool that
+  makes it has no "check" command, so the script prints the file's SHA-256
+  instead and says so in the plan as well as in the real run. The app's own
+  Settings -> Updates button is the route that does check it; `-FromSource`
+  builds the app from this folder and downloads nothing.
+
+- **Checked rather than assumed (2026-10-06).** Both scripts parse under
+  Windows PowerShell 5.1 and are ASCII-only outside comments;
+  `backend\test_setup_script.py` grew from 23 to 30 checks for the new step
+  (the install command must show the desktop step as a command and must not run
+  it, and its `-SkipDesktop` guard must come before the call); a new
+  `powershell-5` CI step runs the real scripts against stubs that record their
+  arguments, including the release-vs-local build decision both ways; and
+  `docs\CLAIMS.tsv` gains D07-D10.
 
 - **The big HUD window has its own chat box again (2026-10-06).** This
   reverses the decision of 2026-09-28 that the desktop HUD's own box should

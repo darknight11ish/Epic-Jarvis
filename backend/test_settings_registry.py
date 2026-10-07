@@ -34,6 +34,10 @@ Runs anywhere; no Home Assistant, no model, no network, no Windows Hello
    reaches this file unchanged - proved end to end, not only at run()'s own
    boundary - and `is_command()` recognises every new sentence, so
    jarvis_intake.owner_turns never learns one of these as a fact.
+8. The settings.html jump list is still a map of that page, after the
+   owner's 2026-10-06 tidy-up: its bands are the page's own three headings
+   in order, every link is a real card on the page, none is listed twice and
+   none is missing (t_jump_list_matches_the_page).
 """
 from __future__ import annotations
 
@@ -168,6 +172,121 @@ def t_every_real_settings_card_is_listed():
               R.find_section(sid.replace("-", " ")) is not None)
     check("'devices' is on both apps, 'crash-notes' is desktop only",
           R.section_by_id("devices").app == "both" and R.section_by_id("crash-notes").app == "desktop")
+
+
+def t_jump_list_matches_the_page():
+    """The settings.html jump list, held to the page it is a map of.
+
+    The owner, 2026-10-06: "organize the jump to settings in the settings
+    menu? This is really disorganized" - about forty links in eleven flat
+    rows. The fix groups them under the page's own three bands (Everyday,
+    Rare, What Jarvis does) and, inside each band, under the short groups
+    `docs/ease-audit-2026-09-27/customize.md` proposed and `critic.md:199`
+    kept as "the target order of the jump list".
+
+    WHY THIS TEST AND NOT A REGISTRY FIELD. Checked before the grouping was
+    chosen: `jarvis_settings_registry.py`'s SECTIONS carries an id, its
+    spoken names, `app` and `where` - and NO group and NO order - and
+    `jarvis_menus.py`'s groups (graphics-cards, finance, study, chatbots,
+    goals-projects, home) are feature groups for the hide-a-menu list, not
+    places on this page (most settings cards, and all but three of the jump
+    list's own links, are in no group at all). So there was no grouping to
+    use, and adding one would have made the backend a second, quieter owner
+    of where a card sits on one desktop page. What is checked instead is the
+    two things that can really drift apart: the page's own band order, and
+    the jump list's agreement with it.
+
+    Proves, and does NOT prove:
+      * every jump link points at a real `<section class="card" id=...>` (or
+        the one `<details id="more-options">`) on this page;
+      * no link is listed twice, and none is missing - all of them are still
+        there, which is what "every existing link must keep working" means
+        for a list that only ever adds an anchor;
+      * each band's links ARE that band's cards, in the page's own order -
+        a link that floated to another band, or a card inserted in the wrong
+        place, fails here;
+      * every link is in SECTIONS with app "both"/"desktop", so nothing on
+        this list is a place "open <name>" cannot name.
+    It does NOT prove that clicking a link scrolls anywhere: that needs the
+    page in a browser, and Playwright is not installed here.
+    """
+    settings_html = (REPO / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
+
+    # The page's three bands, in order, with the exact heading each carries.
+    headings = [(m.start(), m.group(1)) for m in
+                re.finditer(r'<h2 class="settings-group-heading">([^<]+)</h2>', settings_html)]
+    check("the page still has its three bands, in this order",
+          [h for _, h in headings] == ["Everyday", "Rare", "What Jarvis does"],
+          [h for _, h in headings])
+
+    # Every card the page has, in page order, split by the band it sits under.
+    card_ids = [m.group(1) for m in
+                re.finditer(r'<section class="card"[^>]*\bid="([^"]+)"', settings_html)]
+    card_ids.append("more-options")          # the one top-level <details>
+    card_pos = {cid: settings_html.index(f'id="{cid}"') for cid in card_ids}
+    band_of = {}
+    for n, (at, name) in enumerate(headings):
+        end = headings[n + 1][0] if n + 1 < len(headings) else len(settings_html)
+        for cid, pos in card_pos.items():
+            # "start-jarvis" and "crash-notes" are cards INSIDE the folded "More
+            # options" (<details id="more-options">), whose own row is the jump
+            # link - they are reached through it, so they are not rows here.
+            # (The same two are the named exceptions in
+            # t_every_real_settings_card_is_listed.)
+            if at < pos < end and cid not in ("start-jarvis", "crash-notes"):
+                band_of[cid] = name
+
+    nav_at = settings_html.index('class="settings-jump"')
+    nav_end = settings_html.index("</nav>", nav_at)
+    nav = settings_html[nav_at:nav_end]
+
+    # Read the list back the way a person does: the band labels divide it, and
+    # every link belongs to the band label above it.
+    listed_by_band = {name: [] for _, name in headings}
+    band_now = None
+    for m in re.finditer(r'<span class="settings-jump-label">([^<]+)</span>'
+                         r'|<a href="#([\w-]+)">', nav):
+        if m.group(1) is not None:
+            band_now = m.group(1)
+        else:
+            check(f"jump link #{m.group(2)} sits under a band label",
+                  band_now in listed_by_band, band_now)
+            if band_now in listed_by_band:
+                listed_by_band[band_now].append(m.group(2))
+
+    by_band = {name: [] for _, name in headings}
+    for cid in card_ids:
+        if cid in band_of:
+            by_band[band_of[cid]].append(cid)
+
+    for name in listed_by_band:
+        check(f"the {name} band lists every card in it, in the page's own order",
+              listed_by_band[name] == by_band[name],
+              f"listed {listed_by_band[name]}, page has {by_band[name]}")
+
+    every = [cid for ids in listed_by_band.values() for cid in ids]
+    check("no jump link is listed twice", len(every) == len(set(every)),
+          sorted({c for c in every if every.count(c) > 1}))
+    # Every href really is on this page - an anchor to nothing scrolls nowhere.
+    check("every jump link points at a real card on this page",
+          all(cid in card_pos for cid in every),
+          sorted(c for c in every if c not in card_pos))
+
+    # ...and every one of them is a place "open <name>" can name.
+    unopenable = [c for c in every
+                  if R.section_by_id(c) is None
+                  or R.section_by_id(c).app not in ("both", "desktop")]
+    check("every jump link is a SECTION this app has", not unopenable, unopenable)
+
+    # The grouping is short rows inside a band, never a third level: a band's
+    # own direct children are its `.settings-jump-place` rows and nothing else.
+    for g in re.findall(r'<div class="settings-jump-group">(.*?)\n        </div>', nav, re.S):
+        check("a band holds only jump rows and its own label",
+              not re.search(r'<a\s', re.sub(r'<div class="settings-jump-place">.*?</div>', "", g, flags=re.S)),
+              g[:80])
+    check("no jump row is empty",
+          all(re.search(r'<a href="#', p) for p in
+              re.findall(r'<div class="settings-jump-place">(.*?)</div>', nav, re.S)))
 
 
 def _check_settings_item_index(kt: str):

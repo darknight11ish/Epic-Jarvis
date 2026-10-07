@@ -37,6 +37,34 @@
       groups (Everyday, Rare, What Jarvis does) under a jump list. Folded
       away: the face tuning, and "More options" at the end of Rare (starting
       Jarvis for you, starting with Windows, the logs and the crash notes).
+
+      THE JUMP LIST (owner, 2026-10-06: "organize the jump to settings ... this
+      is really disorganized" — about forty links in eleven flat rows). Its two
+      levels are the page's own, not a new idea:
+
+        - the three frequency bands below are the page's three
+          `.settings-group-heading` dividers (Everyday, Rare, What Jarvis
+          does), in that order. A band is a heading, not a destination, so it
+          is a label and never a link;
+        - inside a band, the short rows are the six groups
+          `docs/ease-audit-2026-09-27/customize.md` proposed and
+          `critic.md:199` kept as "the target order of the jump list"
+          (Talk and voice, Look, Your devices, On this PC, The model and
+          cards, Voice and sound, Where things are kept, The AI and its
+          tools, What Jarvis is allowed to do, About this build), in that
+          order.
+
+      Every link is the one that was already there: same href, same words,
+      same card, in the same band as the card it points at — the jump list is
+      a map OF the page, so a link that floated to another band would be
+      lying about where the card is. Nothing was added and nothing removed.
+
+      `backend/test_settings_registry.py` holds this shape to
+      `jarvis_settings_registry.py`'s SECTIONS (t_jump_list_matches_the_page):
+      every href is a real card, every band's links are that band's cards in
+      page order, and no card is left out. The grouping itself is this page's
+      own and is deliberately not a second copy of anything — see that test's
+      docstring for why the registry is left as it is.
     -->
     <main class="page">
       <header class="page-head">
@@ -52,46 +80,97 @@
         <p class="settings-jump-title">Jump to:</p>
         <div class="settings-jump-group">
           <span class="settings-jump-label">Everyday</span>
-          <a href="#first-run">Set up Jarvis</a>
-          <a href="#connection">Connection</a>
-          <a href="#devices">Devices</a>
-          <a href="#faq">FAQ</a>
-          <a href="#appearance-card">Appearance</a>
-          <a href="#animal-options">Animal options</a>
-          <a href="#voice">Voice</a>
-          <a href="#manner">How Jarvis talks</a>
-          <a href="#briefing-settings">Morning briefing</a>
-          <a href="#notifications">Notifications</a>
-          <a href="#menu-visibility">Show or hide menus</a>
-          <a href="#hud-window">The big HUD window</a>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Start here</span>
+            <a href="#first-run">Set up Jarvis</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Your devices</span>
+            <a href="#connection">Connection</a>
+            <a href="#devices">Devices</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Help</span>
+            <a href="#faq">FAQ</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Look</span>
+            <a href="#appearance-card">Appearance</a>
+            <a href="#animal-options">Animal options</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Talk and voice</span>
+            <a href="#voice">Voice</a>
+            <a href="#manner">How Jarvis talks</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Schedules</span>
+            <a href="#briefing-settings">Morning briefing</a>
+            <a href="#notifications">Notifications</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">This page</span>
+            <a href="#menu-visibility">Show or hide menus</a>
+            <a href="#hud-window">The big HUD window</a>
+          </div>
         </div>
         <div class="settings-jump-group">
           <span class="settings-jump-label">Rare</span>
-          <a href="#shortcuts">Shortcuts</a>
-          <a href="#security">Security</a>
-          <a href="#voices">Jarvis's voice</a>
-          <a href="#web-search">Web search</a>
-          <a href="#account-secrets">Accounts</a>
-          <a href="#chatbot-api-keys">Chatbot API keys</a>
-          <a href="#hardware">Hardware and models</a>
-          <a href="#second-card">Second graphics card</a>
-          <a href="#big-model">Big model (slow)</a>
-          <a href="#folders">Folders Jarvis may look in</a>
-          <a href="#spending">Spending</a>
-          <a href="#screen-look">Look at this and Watch with me</a>
-          <a href="#browser-engine">Browser without a window</a>
-          <a href="#backup">Backups</a>
-          <a href="#updates">Updates</a>
-          <a href="#tool-updates">Check for tool updates</a>
-          <a href="#more-options">More options</a>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">On this PC</span>
+            <a href="#shortcuts">Shortcuts</a>
+            <a href="#security">Security</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Voice and sound</span>
+            <a href="#voices">Jarvis's voice</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">The AI and its tools</span>
+            <a href="#web-search">Web search</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">More on this PC</span>
+            <a href="#account-secrets">Accounts</a>
+            <a href="#chatbot-api-keys">Chatbot API keys</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">The model and cards</span>
+            <a href="#hardware">Hardware and models</a>
+            <a href="#second-card">Second graphics card</a>
+            <a href="#big-model">Big model (slow)</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">The AI and its tools</span>
+            <a href="#folders">Folders Jarvis may look in</a>
+            <a href="#spending">Spending</a>
+            <a href="#screen-look">Look at this and Watch with me</a>
+            <a href="#browser-engine">Browser without a window</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Where things are kept</span>
+            <a href="#backup">Backups</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">Keeping it up to date</span>
+            <a href="#updates">Updates</a>
+            <a href="#tool-updates">Check for tool updates</a>
+            <a href="#more-options">More options</a>
+          </div>
         </div>
         <div class="settings-jump-group">
           <span class="settings-jump-label">What Jarvis does</span>
-          <a href="#asks-first">What asks first</a>
-          <a href="#reach">What Jarvis can reach</a>
-          <a href="#email-sending">Sending email</a>
-          <a href="#about">About Jarvis</a>
-          <a href="#backend-supports">What this backend supports</a>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">What Jarvis may do</span>
+            <a href="#asks-first">What asks first</a>
+            <a href="#reach">What Jarvis can reach</a>
+            <a href="#email-sending">Sending email</a>
+          </div>
+          <div class="settings-jump-place">
+            <span class="settings-jump-place-label">About this build</span>
+            <a href="#about">About Jarvis</a>
+            <a href="#backend-supports">What this backend supports</a>
+          </div>
         </div>
       </nav>
       <p class="note settings-brain-note">
