@@ -10,41 +10,53 @@ number as the last part - `0.2.57` is a build of 0.2.
   (2026-10-06).** Setting Jarvis up was eight steps in order - copy the
   published backend, tell the PC where it is, let the patcher install the
   packages and write the settings file, deal with Ollama and the model, start
-  it, then build and install the desktop app. `scripts\setup-jarvis.ps1` did the
-  backend half in one command; it now finishes the job, installing the desktop
-  app and running the live check, so a new PC is genuinely one command. And
-  updating was two jobs that had to happen in a particular order - patch the
-  backend, then rebuild and reinstall the desktop app - because an app updated
-  alone spends its time saying "your PC's Jarvis cannot do that yet";
-  `scripts\update-jarvis.ps1` is that order as one command: it stops Jarvis,
-  gets the newest code, patches the backend, updates the desktop app, starts
-  Jarvis again and checks it. **Neither script patches anything itself** -
-  `apply-patches.ps1` is still the only thing that touches a backend, with its
-  rehearsal on a throwaway copy first, and it is unchanged by this. The install
-  command hands the desktop half to the update command with a new `-SkipPatches`
-  switch, so the patcher is not run twice on a first install. Where the desktop
-  is concerned the update command prefers the published signed installer and
-  builds from this folder when there is none; it builds rather than downloading
-  when this folder already holds that release's commit or newer, so a branch's
-  own newer build is never replaced by an older release. Both commands are safe
-  to run again, write their log into `_jarvis-logs` inside the backend folder,
-  change NOTHING when something is wrong, never print a token or a key, and take
-  `-Print` to show the whole plan without changing anything. What stays by hand
-  is printed on screen: the phone (INSTALL.md part 3) and two switches in the
-  desktop app's own Settings. **One limit, said plainly in the script's output
-  and in INSTALL.md:** when it downloads an installer it cannot check the
-  signature published beside it (PowerShell has no minisign verifier, and the
-  Tauri command line tool's `signer` has only `generate` and `sign`), so it
-  prints the file's SHA-256 and leaves the app's own Settings, Updates button as
-  the route that does check it; `-FromSource` avoids the download entirely.
-  Checked rather than assumed: both scripts parse under Windows PowerShell 5.1
-  and are ASCII-only outside comments, `backend\test_setup_script.py` grew from
-  23 to 30 checks for the new step (the install command must show the desktop
-  step as a command and must not run it, and its `-SkipDesktop` guard must come
-  before the call), and a new `powershell-5` CI step runs the real scripts
-  against stubs that record their arguments - the copy landing where
-  `-BackendPath` said, `-SkipPatches` reaching the update command,
-  `-SkipDesktop` skipping it, and `-Print` changing nothing and calling nothing.
+  it, then build and install the desktop app. `scripts\setup-jarvis.ps1` did
+  the backend half in one command; it now finishes the job, installing the
+  desktop app and running the live check, so a new PC is genuinely one
+  command. `scripts\update-jarvis.ps1` is new: updating used to be two jobs
+  that had to happen in a particular order - patch the backend, then rebuild
+  and reinstall the desktop app - because an app updated alone spends its time
+  saying "your PC's Jarvis cannot do that yet". It is that order as one
+  command: stop Jarvis, get the newest code, patch the backend, update the
+  desktop app, start Jarvis again, check it.
+
+- **Neither of the two commands patches a backend by itself.** Each one
+  patches by running `scripts\apply-patches.ps1`, unchanged - still the only
+  thing that touches a backend, still rehearsing on a throwaway copy first.
+  The install command hands the desktop half to the update command with a new
+  `-SkipPatches` switch ("do not run the patch script this time"), so the
+  patcher is not run twice on a first install. Where the desktop app is
+  concerned the update command prefers the published signed installer and
+  builds from this folder when there is none; it builds rather than
+  downloading when this folder already holds that release's commit or newer,
+  so a branch's own newer build is never replaced by an older release.
+
+- **Both commands are safe to run again, and neither changes anything when
+  something is wrong.** The update command keeps a log in `_jarvis-logs`
+  inside the backend folder (the install command shows that same log when it
+  reaches the update step). Neither ever prints a token or a key. Both take
+  `-Print`, which means "show me the plan and change nothing". What stays by
+  hand is printed on screen: the phone (INSTALL.md part 3) and two switches in
+  the desktop app's own Settings - "Let Jarvis Desktop start and stop Jarvis",
+  and "Start Jarvis Desktop when Windows starts".
+
+- **One limit of the desktop half, said on screen and in INSTALL.md.** When it
+  downloads an installer it cannot check the signature published beside it -
+  the small file that proves the installer is really this project's.
+  PowerShell has no way to check that kind of signature, and the tool that
+  makes it has no "check" command, so the script prints the file's SHA-256
+  instead and says so in the plan as well as in the real run. The app's own
+  Settings -> Updates button is the route that does check it; `-FromSource`
+  builds the app from this folder and downloads nothing.
+
+- **Checked rather than assumed (2026-10-06).** Both scripts parse under
+  Windows PowerShell 5.1 and are ASCII-only outside comments;
+  `backend\test_setup_script.py` grew from 23 to 30 checks for the new step
+  (the install command must show the desktop step as a command and must not run
+  it, and its `-SkipDesktop` guard must come before the call); a new
+  `powershell-5` CI step runs the real scripts against stubs that record their
+  arguments, including the release-vs-local build decision both ways; and
+  `docs\CLAIMS.tsv` gains D07-D10.
 
 - **The big HUD window has its own chat box again (2026-10-06).** This
   reverses the decision of 2026-09-28 that the desktop HUD's own box should

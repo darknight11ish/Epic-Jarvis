@@ -269,10 +269,16 @@ Ollama and Jarvis's model are ready, installs the desktop app (part 2, by
 calling `scripts\update-jarvis.ps1`), starts the backend, and runs the live
 check. Two honest limits, both by design: it **prints** 1.7's model command
 rather than downloading about 5 GB for you, and if the model is missing it stops
-before starting an assistant that cannot answer. Add `-Print` to see every
-command it would run while changing nothing, `-SkipTests` to skip the suite run,
-`-BackendPath` to put the folder somewhere else, or `-SkipDesktop` to leave the
-desktop app alone.
+before starting an assistant that cannot answer.
+
+`-Print` means "show me the plan and change nothing". Add it to see each command
+it would run, with your own paths in it. One exception, because there is nothing
+else it could do: if Ollama or the model is missing, the model line is printed as
+two commands for **you** to run, in the same words a real run would use. The
+other switches: `-SkipTests` skips the suite run, `-BackendPath` puts the folder
+somewhere else, `-SkipDesktop` leaves the desktop app alone, `-NoStart` starts
+nothing and prints the start line instead, and `-FromSource` builds the desktop
+app from this folder instead of downloading the published installer.
 
 ### 1.4 Check the backend folder
 
@@ -1171,8 +1177,15 @@ powershell -ExecutionPolicy Bypass -File .\scripts\update-jarvis.ps1
 
 It is safe to run again, keeps a log in `_jarvis-logs` inside your backend
 folder, changes nothing at all if something is wrong, and prints the whole plan
-first with `-Print`. It is steps 1, 2 and 4 below, in the one order that works -
-do those by hand instead when it stops and says why. The phone is still step 3.
+first with `-Print` ("show me the plan and change nothing"). It is steps 1, 2 and
+4 below, in the one order that works - do those by hand instead when it stops and
+says why. The phone is still step 3.
+
+**You do not have to close Jarvis first.** The command waits up to 90 seconds for
+you to close it (it says what to click), or closes it for you if you add `-Force`
+- which cuts off whatever Jarvis was doing at that moment. It starts Jarvis
+again when it is done, and it leaves your phone paired and your Settings switches
+as you set them.
 
 1. **The backend.** Stop Jarvis (close its PowerShell window, or quit the
    desktop app if it starts Jarvis for you). Then one line in PowerShell -

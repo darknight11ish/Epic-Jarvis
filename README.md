@@ -117,20 +117,30 @@ Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
    It copies `jarvis-backend\` into place, runs both scripts below, checks
    Ollama and the model, installs the desktop app, starts Jarvis and runs the
    live check. It prints the 5 GB model command rather than downloading it for
-   you, and `-Print` shows every command it would run while changing nothing.
+   you, and `-Print` ("show me the plan, change nothing") shows each command it
+   would run.
 
    Every time after that, one command updates **both halves** - the backend and
-   the desktop app:
+   the desktop app. Run it from that same folder:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\update-jarvis.ps1
    ```
 
    It stops Jarvis, patches the backend, installs the newer desktop app, starts
-   Jarvis again and checks it. Both are safe to run again, both keep a log in
-   `_jarvis-logs` inside your backend folder, and both change nothing at all
-   when something is wrong. What is still by hand is the phone (part 3 below)
-   and two switches in the desktop app's own Settings.
+   Jarvis again and checks it. You do not have to close Jarvis first: it waits
+   for you to, or closes it for you if you add `-Force` (which cuts off whatever
+   Jarvis was doing at that moment). If Jarvis was running, it is started again
+   for you; if it was not, it prints the one line to start it.
+
+   Both commands are safe to run again and both change nothing at all when
+   something is wrong. The update command keeps a log in `_jarvis-logs` inside
+   your backend folder; the install command shows that same log when it reaches
+   the update step. `-FromSource` builds the desktop app from this folder
+   instead of downloading the published installer; `-SkipDesktop` leaves the
+   app alone. What is still by hand is the phone (part 3 below) and two switches
+   in the desktop app's own Settings: **Let Jarvis Desktop start and stop
+   Jarvis**, and **Start Jarvis Desktop when Windows starts**.
 
 1. **The backend on the PC** - the Python program that does the work, plus
    the model in Ollama. Copy `jarvis-backend\` to a folder of your own

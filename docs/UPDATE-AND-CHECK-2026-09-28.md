@@ -9,8 +9,8 @@ differ, this page is newer.
 `scripts\update-jarvis.ps1`, one command from the folder you downloaded**
 ([`INSTALL.md`](INSTALL.md), "Updating everything"). It stops Jarvis, patches
 the backend, updates the desktop app, starts Jarvis again and runs the live
-check. The steps below still work exactly as written, and they are what that
-script does, in that order.
+check. The steps below are the same work by hand; if they ever disagree with
+that script, the script is what runs.
 
 **Read this first (updated after pull requests #23 and #25 were merged).**
 Everything the sessions had built by the evening of 2026-09-28 is now on

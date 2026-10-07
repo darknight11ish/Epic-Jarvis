@@ -475,6 +475,13 @@ function Install-DesktopFromRelease($Release, [switch] $DryRun) {
     }
     if ($DryRun) {
         Info "would download $leaf (version $($Release.Version)) and install it silently"
+        # The limit is named in the PLAN as well as in the real run. An owner who
+        # does the careful thing and runs -Print first would otherwise not learn
+        # it until the moment the file had already been installed - and this is
+        # the one thing about this step that a person might want to decide on.
+        Info "its signature would NOT be checked here (PowerShell has no minisign"
+        Info "verifier, and the Tauri command line tool has no 'signer verify'); the"
+        Info "SHA-256 would be printed instead. -FromSource builds instead."
         return $true
     }
     $dest = Join-Path ([IO.Path]::GetTempPath()) $leaf
