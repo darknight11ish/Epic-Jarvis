@@ -6,6 +6,11 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The desktop tutorial no longer says the PC has one chat box
+  (2026-10-06).** `backend/jarvis_tutorials.py` now teaches the big HUD
+  window's own chat box and the **Open the Jarvis bar** button still beside it,
+  and `jarvis-backend/` carries the same text.
+
 - **The big HUD window has its own chat box again (2026-10-06).** This
   reverses the decision of 2026-09-28 that the desktop HUD's own box should
   open the Jarvis bar instead, "so the PC has one chat box". The box and its

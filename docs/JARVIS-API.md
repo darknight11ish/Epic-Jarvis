@@ -17400,7 +17400,7 @@ card names the address itself, so it stays honest either way.)
 ### 115.4 Both apps, and what raises a card
 
 **Both apps already have the surface.** There is no new screen: the owner
-pastes the link into the one chat box he already has - or shares the page
+pastes the link into a chat box he already has - or shares the page
 from Chrome, which the phone's existing share target (`ACTION_SEND`,
 `text/plain`) already folds into the composer draft - and asks Jarvis to read
 it out. So this feature adds **no** desktop JavaScript, **no** Kotlin and no

@@ -694,9 +694,10 @@ CATALOGUE = (
                      "mark, not a mood; the Zs mean standby, not a fault.",
              "where": "The HUD window"},
             {"title": "The Jarvis bar",
-             "body": "The one chat box on the PC: type or talk, see the answer, "
-                     "and reach History and the settings. The HUD's own chat box "
-                     "opens this one, so there is only ever one conversation.",
+             "body": "The main chat box on the PC: type or talk, see the "
+                     "answer, and reach History and the settings. The big HUD "
+                     "window has its own box too, with its own conversation, and "
+                     "the \"Open the Jarvis bar\" button is still there beside it.",
              "where": "The Jarvis bar"},
             {"title": "Approval cards and the widget",
              "body": "A card appears over whatever you are doing, and the small "
