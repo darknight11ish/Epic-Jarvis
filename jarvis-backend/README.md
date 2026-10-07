@@ -85,6 +85,41 @@ front page works.
   the owner's absolute path 231 times; the Reactor Kit pages are read by no
   module. See the inventory's §3 and §4.
 
+## The one deliberate difference from the author's file
+
+Publishing this folder found a real defect in the approval gate within minutes.
+`tools/check_literal_keys.py` reads every Python file in the tree for a dict
+literal that writes the same key twice — silent in CPython, which keeps the
+**last** one — and it had never been able to see `jarvis_gate.py`, because that
+file was not in this repository. Against this folder it reported four:
+
+| key | first written | written again | the two tiers |
+|---|---|---|---|
+| `draft_email` | line 265 | line 464 | `("yes", "local")` then `("yes", "outbound")` |
+| `create_joplin_note` | line 268 | line 365 | both `("yes", "local")` |
+| `append_logseq_journal` | line 270 | line 364 | both `("yes", "local")` |
+| `send_email` | line 285 | line 458 | both `("no", "outbound")` |
+
+**Nothing was weakened: the surviving values are the same or stricter.** For
+`draft_email` the gate already treated saving a draft as `outbound` — it leaves
+the PC for the owner's own mail server — which is what
+[docs/INSTALL.md](../docs/INSTALL.md) and `draft-email.patch` describe; it was
+the *earlier* `local` line that was dead and misleading.
+
+**What this folder does about it:** the four dead earlier lines are removed.
+Every dict literal in the file was parsed before and after and compared key by
+key and value by value — all 47 of them identical — so this changes no
+behaviour at all, and it is the only place this folder differs from the author's
+copy.
+
+**What still has to happen:** the author's live `jarvis_gate.py` and the
+patches that add the later entries (`note-capture.patch`, `email-send.patch`,
+`draft-email.patch`) still carry the duplicates, so a fresh snapshot taken from
+his PC would bring them back. The real fix is to make those patches *update*
+the existing entry rather than add a second one — a change to the patch stack,
+deliberately not attempted here. Remove the four lines from his file first, or
+re-take the snapshot after the patches are corrected.
+
 ## How it is kept true
 
 **[backend/test_base_matches_repo.py](../backend/test_base_matches_repo.py)**
@@ -131,6 +166,11 @@ both are in this folder's `.gitignore`, which is why they are.)
 
 ## Known follow-ups, not done in this commit
 
+0. **`jarvis_gate.py` still carries the four duplicate dict entries on the
+   author's PC and in the patches that add them** - see "The one deliberate
+   difference from the author's file" above. This folder has the dead lines
+   removed; the file it was copied from does not, so a fresh snapshot would
+   bring them back.
 1. **Three files hardcode the owner's working folder** - `jarvis_kokoro.py:576`
    (`MAKE_LINE`), `jarvis_mouth.py:267` (`PREPARE_LINE`) and
    `jarvis_live_photo_test.py:13` (a docstring) all name

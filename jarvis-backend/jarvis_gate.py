@@ -262,12 +262,9 @@ _RISK: dict[str, tuple[str, str, str]] = {
     "read_joplin_note":    ("yes", "local", "opens the note; the vault is unchanged"),
     "read_logseq_page":    ("yes", "local", "opens the page; the graph is unchanged"),
     "browse_model_catalog":("yes", "outbound", "a fixed public query; downloads nothing"),
-    "draft_email":         ("yes", "local", "a draft is not a sent message"),
 
     # additive writes to things you own
-    "create_joplin_note":     ("yes", "local", "delete it and it is gone"),
     "create_logseq_page":     ("yes", "local", "delete it and it is gone"),
-    "append_logseq_journal":  ("yes", "local", "appends; removes nothing"),
 
     # the ones that are reversible in one step, on purpose
     "switch_model":  ("yes", "local", "rollback is one tap, which is why rollback is tier auto"),
@@ -282,7 +279,6 @@ _RISK: dict[str, tuple[str, str, str]] = {
     "download_model":     ("hard", "outbound", "deletable afterwards, but you have already paid for the bytes"),
 
     # no undo
-    "send_email":             ("no", "outbound", "there is no unsend"),
     "edit_calendar_event":    ("no", "outbound", "attendees are notified the moment it changes"),
     "delete_calendar_event":  ("no", "outbound", "attendees are notified, and the invite is gone"),
     "delete_file":            ("no", "local", "not recoverable from here"),
