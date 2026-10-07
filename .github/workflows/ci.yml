@@ -539,6 +539,7 @@ jobs:
             'test_asks_first.py',
             'test_backoff_rule.py',
             'test_backup.py',
+            'test_base_matches_repo.py',
             'test_better_voice.py',
             'test_between_us.py',
             'test_big_model.py',

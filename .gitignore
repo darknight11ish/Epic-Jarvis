@@ -113,3 +113,18 @@ venv/
 # backend rather than in this repository, so this is only a guard against a
 # stray copy being committed from here.
 _jarvis-backup-*
+
+# ---------------------------------------------------------------------------
+# jarvis-backend/ is a published copy of the owner's live backend folder, and
+# that folder carries two things which must never be published: his live
+# settings file, and the patcher's _jarvis-logs/ transcripts (one of them names
+# his absolute path 231 times). Added 2026-10-06 with the base itself.
+#
+# ANCHORED AT THE ROOT ON PURPOSE. A bare `jarvis-framework.toml` would also
+# match backend/rebuilt/jarvis-framework.toml, which IS tracked: that file is
+# the settings template a new user needs, and 23 settings in it are missing
+# from the live one. jarvis-backend/.gitignore carries the folder-local rules.
+# ---------------------------------------------------------------------------
+/jarvis-framework.toml
+/jarvis-framework.toml.backup-*
+/_jarvis-logs/

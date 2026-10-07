@@ -1,0 +1,44 @@
+# The files that must never be committed here.
+#
+# This folder is a copy of the owner's live backend folder, and the mistake
+# this file exists for is dropping that whole folder in and running
+# `git add -A`. It carries his live settings file, the patcher's before-images
+# of security-relevant files, transcripts that name his absolute path 231
+# times, stale second copies of the entry point, and his databases. None of
+# that belongs in a public repository, and once pushed it cannot be taken
+# back.
+#
+# `backend/test_base_matches_repo.py` fails if any of it is ever found here.
+# This file is the second line of defence, not the only one.
+
+# His live settings file. The template beside it, jarvis-framework.toml, IS
+# committed on purpose: it is the file a new user needs, and it has 23
+# settings the live one lacks.
+jarvis-framework.toml.backup-*
+jarvis-framework.toml.live
+*.toml.bak
+
+# The patcher's before-images, and its transcripts.
+_jarvis-backup-*/
+_jarvis-logs/
+
+# Stale second and third copies of a module.
+*.bak
+*.before-*
+
+# The pairing token, if one is ever copied here rather than left in Windows
+# Credential Manager where it belongs.
+token
+*.env
+cloud-keys.env
+
+# His databases, by name and by the shape one appears under.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Python bytecode. The root .gitignore covers this too; it is repeated because
+# this folder is meant to be run in place.
+__pycache__/
+*.py[cod]

@@ -1,0 +1,2086 @@
+"""jarvis_asks_first.py - "What asks first": every action Jarvis can take and
+whether it asks you first, in plain words; "make stricter" switches; on the
+PC only, loosening a short safe list; the "lights, plugs and fans without a
+card" setting; and, on the PC only, offering a reading tool to the AI model
+at all.
+
+NEW MODULE, shipped whole. asks-first.patch adds the routes (jarvis_hud.py)
+and the gate's words for the loosening card (jarvis_gate.py). Both apps show
+the page: the desktop in Settings, "What asks first"; the phone on Mind.
+docs/JARVIS-API.md section 32; backend/README.md "What asks first".
+
+THE OWNER'S DECISIONS (2026-09-26, after the approvals audit,
+docs/APPROVALS-AUDIT-2026-09-26.md; CLAUDE.md)
+  * A "What asks first" page in both apps lists every action and whether it
+    asks, in plain words, with "make stricter" switches. On the PC only,
+    the owner may also loosen a short safe list - one card plus Windows
+    Hello per change. Nothing outside that list can be loosened from an app.
+  * Lights, plugs and fans: a setting, off by default, lets Jarvis switch
+    devices the owner names without a card. Turning it on raises a card;
+    turning it off is immediate. Never after outside text in the turn.
+    Locks, doors, alarms and covers always keep a card of their own.
+
+OFFERING A READING TOOL TO THE AI MODEL AT ALL (2026-09-27, the owner's
+answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md)
+  * "Reading tools (calendar, email, notes, home status) can be switched on
+    from the PC app, each with a card plus Windows Hello; other tools stay
+    in the settings file." A DIFFERENT thing from loosening, above: loosening
+    changes whether an offered tool asks first ([autonomy.tiers]); this
+    changes whether the model is offered the tool AT ALL ([tools].enabled -
+    jarvis_agent.offered_tools() only offers a tool named there). Each of
+    the four switches on its own, one card at a time (ENABLE_TOOL_ACTION,
+    "enable_reading_tool"), the same PC-only, Windows-Hello shape as
+    loosening (jarvis_owner_check.PC_ONLY_ACTIONS). Turning one OFF removes
+    it from [tools].enabled at once, from either app, never a card - it
+    only narrows what the model may do. Every other tool (github_search,
+    send_email, home_control, browser_control, ...) stays file-only: it can
+    only be added to [tools].enabled by hand (jarvis_reach.py's rows for
+    them say so plainly).
+
+WHAT THE PAGE READS
+The same things the gate reads: each action's tier in [autonomy.tiers] of
+jarvis-framework.toml (jarvis_framework.action_tier - a missing line is
+`unknown_action_tier`, "ask"), the tools jarvis_agent.py only ever runs on
+a person's yes (NEEDS_A_PERSON), and the actions whose own module refuses
+anything but "ask" (MUST_ASK below). Titles are the approval cards' own
+words (jarvis_card_words.TITLES), so a row says what its card says.
+
+MAKING SOMETHING STRICTER - immediate, no card, from either app
+For an action on SWITCHABLE only (below): its line becomes "ask". It only
+makes Jarvis ask more, like every "turn off" switch in both apps. It also
+withdraws a waiting card that would loosen the same action.
+
+LOOSENING - the PC only, ONE card plus Windows Hello, SWITCHABLE only
+Its line goes back to the tier this repository ships for it (LOOSE). The
+backend refuses it - not only the apps:
+  * for any action not on SWITCHABLE (403), which never holds anything in
+    NEEDS_A_PERSON or HARD_LIMITS (the tests check the two never meet);
+  * from any device but this PC (403, jarvis_owner_check.from_this_pc -
+    loopback, the PC's own addresses, or anything that cannot be placed);
+  * when this backend cannot ask Windows Hello itself (owner-check.patch
+    not armed: 503) - the card must meet Windows Hello, and without the
+    backend's own check a program holding the token could approve it;
+  * unless LOOSEN_ACTION's tier is "ask" (a line cannot be the owner's yes).
+The card is action LOOSEN_ACTION. jarvis_owner_check.PC_ONLY_ACTIONS makes
+its approval need Windows Hello whatever its risk says, and refuses it from
+any other device, so a phone (or anything pretending to be one) cannot
+approve it. Only "approved" from a person writes the line (the stamp and
+the gate's outcome - never `allowed` alone).
+
+THE SHORT SAFE LIST, AND WHAT IS LEFT OFF IT
+SWITCHABLE = reading your own calendar, email, notes and home status, and
+the three note writes (Obsidian daily note, Logseq journal, a new Joplin
+note). Each acts only on the owner's own things on this PC. After outside
+text a note still waits for a yes (write_notes_after_outside_text, which is
+not on the list), and a read still marks the chat as having read outside
+text.
+The wiki was on the owner's list, and is NOT here, said plainly: since the
+security audit (L1) jarvis_wiki.py writes the wiki only on a person's yes
+whatever wiki_update's tier says, so a looser line would switch "Add to
+wiki" off, not stop it asking. Its row says so.
+
+WRITING THE SETTINGS FILE (set_tier)
+Only the one `<action> = "<tier>"` line under [autonomy.tiers] changes - its
+value, nothing else - or, when the file has no line for it, one new line is
+added after the table's last line. Every other byte (comments, spacing,
+line endings, a byte-order mark) is kept. The new text is parsed before it
+is written, and it must parse to exactly the old settings with that one
+tier changed, or nothing is written. Written to a temporary file beside it
+and moved into place in one step (os.replace), so the file is never half
+written. An unusual file (the table written some other way, the key twice,
+not UTF-8) is refused with a sentence saying to edit it by hand.
+
+THE LIGHTS SETTING ("Lights, plugs and fans without a card")
+Off by default. The shape of every setting that trusts more
+(jarvis_briefing.py SENDERS, jarvis_auto_learn.py): OFF is immediate and
+withdraws a waiting ON card; ON is ONE card, action `change_own_config`,
+tier "ask" only. Kept in `asks_first.json` in the Jarvis settings folder:
+{"lights": bool, "changed": epoch}. No file: off. A damaged file: off.
+jarvis_agent.py asks lights_without_card() before it puts a home_control
+call to the gate - see that function for every condition.
+
+LOCKDOWN (2026-09-28, the owner's choice of the research audit's idea 10;
+docs/JARVIS-API.md section 75)
+One tap makes every way out of this PC (docs/ARCHITECTURE.md section 4) ask
+first, or stop. It is not a second mechanism: it is this page's own
+"stricter", for every way out at once, and its own "looser" to undo it.
+  * ON: at once, no card, from either app (and by voice) - it only makes
+    Jarvis ask more. POST /api/asks_first/tier {"action": "lockdown",
+    "ask": true}, the route every "Ask me first" switch already uses.
+  * OFF: {"action": "lockdown", "ask": false} - the PC only, ONE card of the
+    loosening action itself (LOOSEN_ACTION, so jarvis_owner_check.
+    PC_ONLY_ACTIONS makes it need Windows Hello and refuses it from any other
+    device) - the same path as loosening one action. The phone can turn
+    Lockdown on, never off.
+  * HOW IT BITES: lockdown_tier() below - rebuilt/jarvis_framework.
+    action_tier() asks it on every lookup, so every module and the gate see
+    "ask" for a way out (LOCKDOWN_ACTIONS) whose line says "auto" or
+    "notify". A chat tool then asks with a card; anything that runs by
+    itself - a "tell me when" look, a news feed, the briefing's calendar and
+    email - accepts only "auto" and so STOPS until Lockdown is off. Nothing
+    in jarvis-framework.toml is written: turning it off puts back exactly
+    what the file says. What the tier table cannot reach is switched here
+    or beside it: a web search always asks (jarvis_agent.
+    web_search_card_lines), no cloud AI model is offered (rebuilt/
+    jarvis_router.choose, gate "lockdown"), "Lights, plugs and fans without
+    a card" is off (lights_without_card), a plug-in program asks at every
+    start (jarvis_mcp), a "tell me when" on a web search stops
+    (jarvis_tellme.readiness), and checking for tool updates asks again
+    (jarvis_tool_updates). Loosening anything, or turning the lights
+    setting on, is refused while it is on.
+  * KEPT in lockdown.json in the Jarvis settings folder: {"on": bool,
+    "changed": epoch}. No file: off. A file that cannot be read, or holds
+    anything else: ON (fails closed), and the page says why.
+
+Standard library only. Nothing here opens a socket.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import stat
+import tempfile
+import threading
+import time
+import uuid
+from pathlib import Path
+from typing import Callable, Optional
+
+try:
+    import jarvis_framework as fw
+except Exception:  # pragma: no cover - shipped beside it on the PC
+    fw = None  # type: ignore
+
+try:
+    import tomllib as _toml
+except ModuleNotFoundError:  # pragma: no cover - Python before 3.11
+    try:
+        import tomli as _toml  # type: ignore
+    except ModuleNotFoundError:
+        _toml = None  # type: ignore
+
+PATH = "/api/asks_first"
+
+# ---------------------------------------------------------------------------
+# The words both apps show
+# ---------------------------------------------------------------------------
+
+TITLE = "What asks first"
+DETAIL = ("Everything Jarvis can do that might need your OK, and whether it asks you first. "
+          "The PC writes this list from its own settings - the AI model does not write it. "
+          "\"Ask me first\" makes one ask every time, at once, from either app. Letting one "
+          "go ahead without asking is only for the short list below, only on the PC, and "
+          "takes an approval card and Windows Hello.")
+MISSING = ("Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the "
+           "PC.")
+SWITCH_LABEL = "Ask me first"
+PHONE_LOOSEN = ("To let this go ahead without asking, use the PC: Settings, What asks first. "
+                "It takes an approval card and Windows Hello.")
+WAITING = "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+
+#: How each tier is said.
+SAYS = {
+    "auto": "Does it without asking",
+    "notify": "Does it, then tells you",
+    "ask": "Asks you first, every time",
+    "never": "Never allowed: switched off in your PC's settings file.",
+}
+#: An action that only ever runs on a person's yes, set looser in the file.
+SAYS_REFUSED = "Refused - it only runs on your yes, so its line must say \"ask\""
+#: The fixed rows (no tier: decided in the code, by the owner).
+SAYS_NO_CARD = "Does it without asking"
+
+#: The notes under a row.
+NOTE_ALWAYS = "Always asks. This cannot be changed from an app."
+NOTE_FILE = ("This can only be changed in your PC's settings file (jarvis-framework.toml), "
+             "not in the app.")
+NOTE_WIKI = ("Always asks: the wiki is written only on your yes (security audit), so it "
+             "cannot be loosened - a looser line would switch \"Add to wiki\" off.")
+#: "Check for tool updates" (2026-09-27, the owner's own request): a card
+#: only the very first time it is ever run, never again after that - unlike
+#: everything else in MUST_ASK, which really does ask every time.
+SAYS_ONCE = "Asks the first time only, then never again"
+NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs anything. It "
+                     "asks once, the first time you ever press the button; after that one "
+                     "yes it never asks again, and this cannot be changed from an app.")
+#: "Forget a time frame" (jarvis_forget_range.py, the owner's decision of
+#: 2026-09-28): one card for the whole list, then 10 minutes to undo.
+NOTE_FORGET_RANGE = ("Always asks, with ONE card listing every fact and chat - approved by "
+                     "tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. "
+                     "This cannot be changed from an app.")
+NOTE_SUPPORT = ("Always asks: one card lists every detail Jarvis may give in that chat. "
+                "This cannot be changed from an app.")
+NOTE_SUPPORT_OFFER = ("Always asks, one card per offer, showing the exact reply - nothing is "
+                      "accepted without it. This cannot be changed from an app.")
+NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
+             "which cannot stop to ask.")
+NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
+
+#: The web search row (the owner's decisions of 2026-09-25 and 2026-09-26;
+#: jarvis_agent.py WEB_SEARCH_* are the reasons a search asks). It does not
+#: ask every time, so "Asks you first, every time" was untrue (ease-of-use
+#: audit 2026-09-27, #1a).
+SAYS_SEARCH = "Asks only when something private could slip in"
+NOTE_SEARCH = ("A search straight from your own question runs without a card. It asks "
+               "first, showing the exact search words, after Jarvis has read an email, a "
+               "file, a note, a web page or other outside text in the chat, when your "
+               "message was pasted or shared, when the search words repeat something you "
+               "told Jarvis, or when it used a sensitive saved fact. \"Ask before every web "
+               "search\" (web search settings) makes it ask every time.")
+NOTE_SEARCH_EVERY = ("\"Ask before every web search\" is on, so every search waits for your "
+                     "yes. Turning it off (web search settings) takes an approval card.")
+#: An older name in the settings file for the same thing as another row. The
+#: page shows one row, under the name the tool is decided by (jarvis_reach.py
+#: _FALLBACK_ACTIONS; backend/README.md's jarvis_gate.py table), so "Read
+#: your calendar" is not listed twice.
+OLDER_NAMES = {"read_calendar": "calendar_read"}
+NOTE_OLDER = ("Your settings file also has an older line for this, {old} = \"{tier}\". "
+              "The calendar tool follows this row ({new}).")
+
+# ---------------------------------------------------------------------------
+# The lists
+# ---------------------------------------------------------------------------
+
+#: The actions the apps may switch, and the tier this repository ships for
+#: each - what "loosen" writes back. Nothing else can be loosened from an
+#: app, by the backend's own refusal.
+LOOSE = {
+    "calendar_read": "auto",
+    "email_read": "auto",
+    "notes_search": "auto",
+    "home_read": "auto",
+    "append_obsidian_daily": "auto",
+    "append_logseq_journal": "auto",
+    "create_joplin_note": "notify",
+}
+SWITCHABLE = tuple(LOOSE)
+
+#: The approval card for loosening one of them. jarvis_owner_check.
+#: PC_ONLY_ACTIONS holds the same name.
+LOOSEN_ACTION = "loosen_what_asks_first"
+
+#: The four reading tools the owner may offer to the AI model at ALL, from
+#: the PC (CLAUDE.md, the owner's answer of 2026-09-27: "Reading tools
+#: (calendar, email, notes, home status) can be switched on from the PC app,
+#: each with a card plus Windows Hello; other tools stay in the settings
+#: file."). A DIFFERENT thing from LOOSE above: this changes [tools].enabled
+#: - whether the model is offered the tool at all - never [autonomy.tiers],
+#: which decides whether it asks first once offered. Each switches on its
+#: own, one card at a time, because the owner may want one offered without
+#: the others.
+TOOLS_SWITCHABLE = ("calendar_read", "email_read", "notes_search", "home_read")
+
+#: TOOLS_SWITCHABLE holds the four rows' GATE ACTION names (what the pages and
+#: the approval card call them). [tools].enabled holds the model's TOOL names,
+#: and for one row the two differ: the gate action "email_read" is the tool
+#: "email_check" (jarvis_agent.TOOLS). Writing the action name into
+#: [tools].enabled switched nothing on (found 2026-09-30 by the settings
+#: audit). This maps each row to the tool name the model is really offered.
+TOOL_NAME = {"calendar_read": "calendar_read", "email_read": "email_check",
+             "notes_search": "notes_search", "home_read": "home_read"}
+#: Names an older build saved into [tools].enabled by mistake. Read as the real
+#: tool, so an owner who switched email on before the fix keeps what they chose.
+LEGACY_TOOL_NAMES = {"email_read": "email_check"}
+#: The real tool names of the four rows.
+SWITCHABLE_TOOL_NAMES = tuple(TOOL_NAME[a] for a in TOOLS_SWITCHABLE)
+
+
+def real_tool(name: str) -> str:
+    """The tool name behind a row id (or a legacy saved name)."""
+    return TOOL_NAME.get(name) or LEGACY_TOOL_NAMES.get(name) or name
+
+
+def normalise_enabled(names) -> set:
+    """[tools].enabled as a set, with legacy saved names read as the real tool."""
+    out = set(names or [])
+    for old, new in LEGACY_TOOL_NAMES.items():
+        if old in out:
+            out.add(new)
+    return out
+
+#: The approval card for offering one of them. jarvis_owner_check.
+#: PC_ONLY_ACTIONS holds the same name.
+ENABLE_TOOL_ACTION = "enable_reading_tool"
+
+#: Never loosened from an app, whatever else changes: anything that leaves
+#: the PC, deletes, sends, spends, moves a lock or a door, touches secrets
+#: or loosens a security or privacy setting - and the actions whose module
+#: accepts only "ask". test_asks_first.py checks SWITCHABLE never meets it.
+HARD_LIMITS = frozenset({
+    "send_email", "draft_email", "tidy_inbox", "spend_money", "delete_file",
+    "delete_calendar_event", "edit_calendar_event", "delete_joplin_note", "delete_logseq_page", "edit_joplin_note",
+    "edit_logseq_page", "run_shell_on_host", "control_computer", "control_phone",
+    "control_browser", "home_control", "post_to_external_service", "open_public_tunnel",
+    "search_the_web", "web_research", "research_authenticated",
+    "write_notes_after_outside_text", "change_own_config", "modify_own_code",
+    LOOSEN_ACTION, "stop_asking_before_every_web_search", "web_search_enable", "learning_enable",
+    "learning_auto_enable", "learning_sensitive_enable", "history_enable",
+    "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
+    "second_card_third_assign", "chat_card_pin", "screen_picture_enable", "obscura_enable",
+    "big_model_enable", "custom_voice",
+    "better_voice_enable", "download_model", "switch_model", "models_create",
+    "schedule_repeat", "wiki_update", "memory_manage", "user_profile_manage",
+    "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
+    "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
+    "app_merge_change",
+    "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
+    "chat_tags_suggest_on", "chat_tag_suggest",
+    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "register_approval_key",
+    "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+    "read_web_page",
+})
+
+#: Actions whose own module refuses anything but "ask" (a looser line
+#: switches the feature off rather than removing the card) - the toml's
+#: "Must stay 'ask'" lines, and the gate actions of NEEDS_A_PERSON's tools.
+MUST_ASK = frozenset({
+    "send_email", "tidy_inbox", "run_shell_on_host", "control_computer", "control_phone", "control_browser",
+    "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
+    "search_the_web", "stop_asking_before_every_web_search", "web_search_enable", "schedule_repeat",
+    "models_create", "second_card_enable", "second_card_browser_enable",
+    "second_card_combined_enable", "second_card_third_assign", "chat_card_pin",
+    "screen_picture_enable",
+    "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
+    "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
+    "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
+    "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
+    "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
+    "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "register_approval_key", "app_merge_change",
+    "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+    "read_web_page",
+})
+
+#: The page's groups, in order: (title, [action or fixed-row id]). A fixed
+#: row (FIXED) has no tier: the owner decided it and the code does it.
+GROUPS = (
+    ("Reading your own things", ["calendar_read", "email_read", "notes_search", "home_read",
+                                 "read_files_readonly", "read_joplin_note",
+                                 "read_logseq_page"]),
+    ("Writing your notes", ["append_obsidian_daily", "append_logseq_journal",
+                            "create_joplin_note", "create_logseq_page", "edit_joplin_note",
+                            "edit_logseq_page", "delete_joplin_note", "delete_logseq_page",
+                            "write_notes_after_outside_text", "wiki_update"]),
+    ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
+                              "referee_tick", "schedule_repeat"]),
+    ("Your smart home", ["fixed:lights", "home_control"]),
+    # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
+    # two cards are change_own_config cards, decided in the code; these rows
+    # say so in plain words (the Projects feature audit, 2026-09-28).
+    ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark",
+                  "fixed:app_tasks"]),
+    ("Email and calendar", ["draft_email", "send_email", "tidy_inbox", "edit_calendar_event",
+                            "delete_calendar_event"]),
+    ("The internet", ["search_the_web", "web_search_enable", "web_research", "research_authenticated",
+                      "control_browser", "browser_form_submit", "obscura_enable",
+                      "post_to_external_service",
+                      "open_public_tunnel",
+                      "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
+                      "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+                      "fixed:handoff"]),
+    ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
+                                "run_plan", "fixed:plugin_start", "fixed:plugin_use",
+                                "delete_file", "spend_money", "power_manage",
+                                "app_merge_change", "pair_device", "unretire_shared_key",
+                                "register_approval_key"]),
+    ("AI models and graphics cards", ["browse_model_catalog", "download_model",
+                                      "switch_model", "rollback_model", "models_create",
+                                      "second_card_enable", "second_card_browser_enable",
+                                      "second_card_combined_enable", "second_card_third_assign",
+                                      "chat_card_pin",
+                                      "screen_picture_enable", "big_model_enable"]),
+    # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
+    # page promises every action, and starting Live is one (the review of
+    # 2026-09-28). Decided in the code: no card, ever.
+    ("Talking with Jarvis", ["fixed:live", "fixed:screen"]),
+    ("Jarvis's own settings, memory and voice", [
+        "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
+        "learning_auto_enable", "learning_sensitive_enable", "history_enable",
+        "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
+        "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
+        "topic_loosen", "chat_tags_suggest_on", "chat_tag_suggest",
+        "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
+        "check_tool_updates"]),
+    ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
+)
+
+#: The fixed rows: (title, says, note).
+FIXED = {
+    "fixed:projects": ("Make, change or delete a project, and log your own numbers",
+                       SAYS_NO_CARD,
+                       "Your own taps or words. Deleting asks \"are you sure?\" in the app. A "
+                       "coding project's folder and a benchmark's command are set on the PC "
+                       "only."),
+    "fixed:project_share": ("Make a project Shareable", "Asks you first, every time",
+                            "Turning it off is instant. Nothing from a project is sent "
+                            "anywhere yet."),
+    "fixed:project_unmark": ("Take a private mark off a benchmark",
+                             "Asks when Jarvis made the mark",
+                             "A mark you added yourself comes off at once. Afterwards its "
+                             "numbers may be read aloud."),
+    # An app Jarvis builds, inside a project (jarvis_apps.py): everything short
+    # of adding the change is a copy of the app that nothing runs. Adding it is
+    # the card "Add its change to one of your apps" (app_merge_change, above).
+    "fixed:app_tasks": ("Start an app task, throw one away, or paste a change in on the PC",
+                        SAYS_NO_CARD,
+                        "Nothing runs, and nothing reaches your app until you approve the "
+                        "merge card (\"Add its change to one of your apps\" - it asks every "
+                        "time). Pasting a change in is done on the PC only."),
+    "fixed:timers": ("Set a timer, or a reminder or alarm that goes off once", SAYS_NO_CARD,
+                     "Your own words only; deleting is immediate."),
+    "fixed:repeats": ("Set up a repeating reminder or alarm, or the standby schedule",
+                      SAYS_NO_CARD,
+                      "Your own words only; the answer says when it next goes off, and "
+                      "deleting is immediate. A repeating morning briefing and \"tell me when\" "
+                      "still ask (below)."),
+    # Goals (jarvis_goals.py): the page promises every action, and none of a
+    # goal's own actions asks (cohesiveness audit, 2026-09-29).
+    "fixed:goals": ("Make a goal, edit its plan, tick a step off, or stop tracking it",
+                    SAYS_NO_CARD,
+                    "Your own words only. Accepting a plan sets up a weekly check-in that "
+                    "reads nothing and acts on nothing; ticking a step and stopping are "
+                    "immediate. A step that does something (a search, an email) still asks "
+                    "on its own card in ordinary chat."),
+    # The plug-in programs (jarvis_mcp.py): a program someone else wrote,
+    # running as the owner - every use asks, in code, whatever the file says.
+    "fixed:live": ("Start Jarvis Live (a back-and-forth voice conversation)", SAYS_NO_CARD,
+                   "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
+                   "checked for your voice, and a card that comes up during Live still waits "
+                   "for your tap. How far Live is trusted is a Voice setting."),
+    # "Look at this" and "Watch with me" (the owner's decision of 2026-09-28;
+    # jarvis_screen.py): the page promises every action. Decided in the code: no
+    # card - only the owner's own act on this PC, with a sign on screen. Removing
+    # an app from the "Never look at" list is a card (change_own_config).
+    "fixed:screen": ("Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")",
+                     SAYS_NO_CARD,
+                     "Your own key or words, on this PC only. \"Watch with me\" shows a "
+                     "\"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps "
+                     "you exclude, and Stop or \"stop everything\" ends it at once. What it reads "
+                     "counts as outside text and is never saved. Taking an app off the \"Never look "
+                     "at\" list asks with a card."),
+    # "Solve it here" (the owner's decision of 2026-09-28; jarvis_handoff.py):
+    # the page promises every action. Decided in the code: no card - only
+    # the owner's own taps and typing pass, only while Jarvis is paused there.
+    "fixed:handoff": ("Solve a captcha or sign-in page from your phone (\"Solve it here\")",
+                      SAYS_NO_CARD,
+                      "Your own taps and typing, passed to that one browser window on the PC "
+                      "only while Jarvis is paused at the page. Jarvis never solves it, and "
+                      "the picture is never saved. After you solve it, the paused job "
+                      "only carries on after you approve a card."),
+    "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
+                         "Asks you first, every time",
+                         "Always asks, whatever your settings file says: it is someone "
+                         "else's program. Only tools that read are offered for now."),
+}
+
+#: The plug-in start row's words: the owner's open question 9 is answered in
+#: one line of jarvis_mcp.py (CARD_EVERY_START), and this row follows it.
+PLUGIN_START_ROW = "Start a plug-in program on this PC (MCP)"
+PLUGIN_START_SAYS = "Asks you when it is new or has changed"
+PLUGIN_START_NOTE = ("Asks when you add a program under [mcp] in your settings file, and again "
+                     "whenever the program or its version changes.")
+PLUGIN_START_EVERY_NOTE = "Asks every time a plug-in program starts."
+
+
+def _plugin_card_every_start() -> bool:
+    try:
+        import jarvis_mcp
+        every = getattr(jarvis_mcp, "card_every_start", None)
+        return bool(every()) if callable(every) else bool(jarvis_mcp.CARD_EVERY_START)
+    except Exception:
+        return True
+
+# ---------------------------------------------------------------------------
+# What is read, replaceable for the tests
+# ---------------------------------------------------------------------------
+
+
+def _tier(action: str) -> str:
+    try:
+        t = str(fw.action_tier(action)) if fw is not None else "ask"
+    except Exception:
+        return "ask"
+    return t if t in SAYS else "ask"
+
+
+def _search_asks_every_time() -> bool:
+    """"Ask before every web search" (jarvis_search.settings - a damaged
+    file reads as on there). False when web search is not on this PC."""
+    try:
+        import jarvis_search
+        return bool(jarvis_search.settings().get("ask_every_time"))
+    except Exception:
+        return False
+
+
+def _file_tiers() -> dict:
+    try:
+        return dict(fw.all_tiers()) if fw is not None else {}
+    except Exception:
+        return {}
+
+
+#: A row whose card words are too short for a page that lists every action side by
+#: side: it says what the action really is here (only these kinds still ask).
+ROW_TITLES = {
+    "schedule_repeat": "set up the morning briefing or a \"tell me when\" alert",
+}
+
+
+def _title(action: str) -> str:
+    """The approval card's own words, as a row title: "Read your calendar"."""
+    try:
+        import jarvis_card_words as W
+        phrase = ROW_TITLES.get(action) or W.TITLES.get(action)
+    except Exception:
+        phrase = None
+    if not phrase:
+        phrase = action.replace("_", " ")
+    return phrase[:1].upper() + phrase[1:]
+
+
+def _audit(event: str, detail: dict) -> None:
+    try:
+        if fw is not None:
+            fw.audit_log(event, detail)
+    except Exception:
+        pass
+
+
+def _config_dir() -> Path:
+    if fw is not None:
+        try:
+            return Path(fw.CONFIG_DIR)
+        except Exception:
+            pass
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env))
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+def _toml_path() -> Optional[Path]:
+    try:
+        p = fw.config_path() if fw is not None else None
+    except Exception:
+        p = None
+    return Path(p) if p else None
+
+
+def _reload() -> None:
+    try:
+        if fw is not None:
+            fw.reload_framework()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# The page
+# ---------------------------------------------------------------------------
+
+
+def _row(action: str, *, here: bool) -> dict:
+    if action in FIXED:
+        title, says, note = FIXED[action]
+        return {"id": action, "title": title, "says": says, "note": note, "fixed": True}
+    if action == "fixed:plugin_start":
+        every = _plugin_card_every_start()
+        return {"id": action, "title": PLUGIN_START_ROW,
+                "says": SAYS["ask"] if every else PLUGIN_START_SAYS,
+                "note": PLUGIN_START_EVERY_NOTE if every else PLUGIN_START_NOTE,
+                "fixed": True}
+    if action == "fixed:lights":
+        on = lights_setting()["on"]
+        return {"id": action, "title": LIGHTS_ROW,
+                "says": SAYS_NO_CARD if on else SAYS["ask"],
+                "note": LIGHTS_NOTE, "fixed": True, "lights": True}
+    tier = _tier(action)
+    row = {"id": action, "action": action, "title": _title(action), "tier": tier,
+           "says": SAYS[tier], "fixed": False}
+    if locked_down(action):
+        # Lockdown (below) made this ask: said on the row, whatever else it says.
+        row["lockdown"] = True
+    if action == "search_the_web" and tier == "ask":
+        every = _search_asks_every_time()
+        row["says"] = SAYS["ask"] if every else SAYS_SEARCH
+        row["note"] = NOTE_SEARCH_EVERY if every else NOTE_SEARCH
+        return row
+    if action in MUST_ASK:
+        if tier in ("auto", "notify"):
+            row["says"] = SAYS_REFUSED
+        elif tier == "ask" and action == "check_tool_updates":
+            row["says"] = SAYS_ONCE
+        if action == "wiki_update":
+            row["note"] = NOTE_WIKI
+        elif action == "check_tool_updates":
+            row["note"] = NOTE_TOOL_UPDATES
+        elif action == "memory_forget_range":
+            row["note"] = NOTE_FORGET_RANGE
+        elif action == "support_chat":
+            row["note"] = NOTE_SUPPORT
+        elif action == "support_offer":
+            row["note"] = NOTE_SUPPORT_OFFER
+        else:
+            row["note"] = NOTE_ALWAYS
+        return row
+    if action in LOOSE:
+        if tier != "never":
+            row["switch"] = {"asks": tier == "ask", "loose": LOOSE[action],
+                             "can_loosen": bool(here) and not lockdown_on()}
+        row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
+        if tier == "ask" and not here and not row.get("lockdown"):
+            row["note"] += " " + PHONE_LOOSEN
+        for old, new in OLDER_NAMES.items():
+            had = _file_tiers().get(old) if new == action else None
+            # Compared with the file's own line: Lockdown changes neither.
+            own = _file_tier(action) if row.get("lockdown") else tier
+            if had is not None and str(had) != own:
+                row["note"] += " " + NOTE_OLDER.format(old=old, tier=had, new=new)
+        if row.get("lockdown"):
+            row["note"] += " " + LOCKDOWN_ROW_NOTE
+        return row
+    row["note"] = NOTE_FILE
+    if row.get("lockdown"):
+        row["note"] += " " + LOCKDOWN_ROW_NOTE
+    return row
+
+
+def view(*, here: bool = False) -> dict:
+    """GET /api/asks_first. `here`: the request comes from this PC, so the
+    page may offer loosening."""
+    groups, seen = [], set()
+    for title, ids in GROUPS:
+        rows = [_row(a, here=here) for a in ids]
+        seen.update(ids)
+        groups.append({"title": title, "rows": rows})
+    extra = sorted(a for a in _file_tiers() if a not in seen and a not in OLDER_NAMES)
+    if extra:
+        # A line in the owner's file that no group names: shown, never hidden.
+        groups[-1]["rows"].extend(_row(a, here=here) for a in extra)
+    with _L_LOCK:
+        pending = dict(_L_STATE["pending"])
+        last = dict(_L_STATE["last"]) or None
+    return {"available": True, "title": TITLE, "detail": DETAIL, "switch_label": SWITCH_LABEL,
+            "groups": groups, "switchable": list(SWITCHABLE), "can_loosen": bool(here),
+            "waiting": ({"action": pending["action"], "title": _title(pending["action"]),
+                         "said": WAITING} if pending else None),
+            "last": last, "lights": lights_status(), "tools": tools_status(here=here),
+            "lockdown": lockdown_status(here=here)}
+
+
+# ---------------------------------------------------------------------------
+# Writing one tier line
+# ---------------------------------------------------------------------------
+
+_FILE_LOCK = threading.Lock()
+_HEADER = re.compile(r"^[ \t]*\[[ \t]*autonomy[ \t]*\.[ \t]*tiers[ \t]*\][ \t]*(?:#.*)?$")
+_ANY_HEADER = re.compile(r"^[ \t]*\[")
+_KEY_LINE = re.compile(r"^[ \t]*(?:[A-Za-z0-9_-]+|\"[^\"]*\"|'[^']*')[ \t]*=")
+_INSERTED_NOTE = "  # set in the app's \"What asks first\" page"
+
+
+class TierFileError(Exception):
+    """The settings file could not be changed. The message is a sentence for
+    the owner."""
+
+
+HAND_EDIT = ("Your settings file (jarvis-framework.toml) is written in a way this page "
+             "cannot change safely, so nothing was changed. Edit the line by hand in "
+             "Notepad, under [autonomy.tiers], then restart Jarvis")
+
+
+def _parse(text: str) -> dict:
+    if _toml is None:
+        raise TierFileError("This PC's Python cannot read the settings file (it needs "
+                            "Python 3.11 or newer), so nothing was changed")
+    try:
+        return _toml.loads(text)
+    except Exception:
+        raise TierFileError("Your settings file (jarvis-framework.toml) has a mistake in "
+                            "it, so nothing was changed. Open it in Notepad and fix it first")
+
+
+def _tiers_of(doc: dict) -> dict:
+    a = doc.get("autonomy")
+    t = a.get("tiers") if isinstance(a, dict) else None
+    return t if isinstance(t, dict) else {}
+
+
+def rewrite(text: str, action: str, tier: str) -> str:
+    """`text` with ONE tier line changed (or added). Raises TierFileError.
+    Pure: no file is read or written here."""
+    if tier not in SAYS or not re.fullmatch(r"[a-z][a-z0-9_]{1,60}", action or ""):
+        raise TierFileError("That is not an action and a tier")
+    before = _parse(text)
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    heads = [i for i, line in enumerate(lines) if _HEADER.match(line)]
+    if len(heads) != 1:
+        raise TierFileError(HAND_EDIT)
+    start = heads[0] + 1
+    end = next((i for i in range(start, len(lines)) if _ANY_HEADER.match(lines[i])),
+               len(lines))
+    key = re.compile(r"^(?P<lead>[ \t]*(?:" + re.escape(action) + r"|\"" + re.escape(action)
+                     + r"\"|'" + re.escape(action) + r"')[ \t]*=[ \t]*)(?P<q>[\"'])"
+                     r"(?P<val>[A-Za-z]*)(?P=q)(?P<rest>[ \t]*(?:#.*)?)$")
+    hits = [i for i in range(start, end) if key.match(lines[i])]
+    if len(hits) > 1:
+        raise TierFileError(HAND_EDIT)
+    if hits:
+        i = hits[0]
+        m = key.match(lines[i])
+        lines[i] = f"{m.group('lead')}{m.group('q')}{tier}{m.group('q')}{m.group('rest')}"
+    else:
+        if action in _tiers_of(before):
+            # The file has it, but not as one plain line in the table.
+            raise TierFileError(HAND_EDIT)
+        keys = [i for i in range(start, end) if _KEY_LINE.match(lines[i])]
+        at = (keys[-1] + 1) if keys else start
+        lines.insert(at, f'{action} = "{tier}"{_INSERTED_NOTE}')
+    out = nl.join(lines)
+    after = _parse(out)
+    # Compared as JSON text: a date in the file (TOML has them) is written
+    # the same way on both sides, and a change anywhere else is a difference.
+    want = json.loads(json.dumps(before, default=str))
+    want.setdefault("autonomy", {}).setdefault("tiers", {})[action] = tier
+    if json.loads(json.dumps(after, default=str)) != want:
+        raise TierFileError(HAND_EDIT)
+    return out
+
+
+def set_tier(action: str, tier: str, *, path: Optional[Path] = None) -> dict:
+    """Change ONE tier line in the owner's jarvis-framework.toml, atomically.
+    {"ok": True, "from": old, "to": tier}. Raises TierFileError."""
+    p = path or _toml_path()
+    if p is None or not Path(p).is_file():
+        raise TierFileError("Jarvis could not find your settings file "
+                            "(jarvis-framework.toml), so nothing was changed")
+    p = Path(p)
+    with _FILE_LOCK:
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise TierFileError(f"Your settings file could not be read "
+                                f"({type(exc).__name__}), so nothing was changed")
+        bom = raw.startswith(b"\xef\xbb\xbf")
+        try:
+            text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise TierFileError(HAND_EDIT)
+        old = str(_tiers_of(_parse(text)).get(action, "")) or "(no line)"
+        new = rewrite(text, action, tier)
+        data = (b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8")
+        fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            try:
+                # The file's own permissions, not the temporary file's.
+                os.chmod(tmp, stat.S_IMODE(os.stat(p).st_mode))
+            except OSError:
+                pass
+            os.replace(tmp, p)
+        except OSError as exc:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise TierFileError(f"Your settings file could not be written "
+                                f"({type(exc).__name__}), so nothing was changed")
+    _reload()
+    return {"ok": True, "from": old, "to": tier}
+
+
+# ---------------------------------------------------------------------------
+# Stricter (either app) and looser (the PC, one card plus Windows Hello)
+# ---------------------------------------------------------------------------
+
+_L_LOCK = threading.Lock()
+_L_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+#: Held from an approved card's "was it withdrawn?" check through writing the
+#: line, and from a stricter press's withdrawing through ITS write - so a
+#: stricter press in between is never overwritten by the card. Always taken
+#: BEFORE _L_LOCK.
+_L_SWITCH = threading.Lock()
+
+LOOSEN_LAST_WORDS = {
+    "loosened": "You approved the card, so it no longer asks first.",
+    "denied": "The card was turned down, so it still asks first.",
+    "timed_out": "Nobody answered the card in time, so it still asks first.",
+    "refused": "Your PC's settings do not let this be approved, so it still asks first.",
+    "withdrawn": "You made it ask again while the card waited, so approving it changed "
+                 "nothing.",
+    "failed": "It was approved, but the settings file could not be changed, so it still "
+              "asks first.",
+}
+
+PC_ONLY = ("Letting Jarvis do this without asking can only be done on the PC (Settings, "
+           "What asks first), with an approval card and Windows Hello.")
+NOT_ON_LIST = ("Only reading your calendar, email, notes and home status, and adding to "
+               "your notes, can be changed from an app. Everything else changes only in "
+               "your settings file (jarvis-framework.toml), and some things always ask.")
+NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so nothing can be "
+                  "loosened from the app - run apply-patches.ps1 on the PC.")
+TOOLS_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so no tool can "
+                       "be offered to the AI model from the app - run apply-patches.ps1 on "
+                       "the PC.")
+
+
+def loosen_card(action: str) -> str:
+    phrase = _title(action)
+    phrase = phrase[:1].lower() + phrase[1:]
+    loose = LOOSE[action]
+    after = " and tell you afterwards" if loose == "notify" else ""
+    extra = NOTE_NOTE if action in ("append_obsidian_daily", "append_logseq_journal",
+                                    "create_joplin_note") else (
+        "A chat where it reads something still counts as having read outside text, so a "
+        "later web search or note in that chat still asks.")
+    return "\n".join([
+        f"Let Jarvis {phrase} without asking you first?",
+        "",
+        f"From now on Jarvis will {phrase} without an approval card{after}. This changes "
+        f"one line of your settings file on this PC (jarvis-framework.toml): "
+        f"{action} = \"{loose}\". Nothing else in it changes.",
+        "",
+        extra,
+        "",
+        "Approving it needs Windows Hello on this PC. You can make it ask again at any "
+        "time from either app, and that is instant.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes - it keeps asking first.",
+    ])
+
+
+def _gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _spawn(fn: Callable[[], None]) -> None:
+    threading.Thread(target=fn, name="jarvis-asks-first-card", daemon=True).start()
+
+
+def _owner_check_armed() -> bool:
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.armed())
+    except Exception:
+        return False
+
+
+def _from_this_pc(peer, local) -> bool:
+    try:
+        import jarvis_owner_check
+        return bool(jarvis_owner_check.from_this_pc(peer, local))
+    except Exception:
+        # Cannot tell: not this PC, so nothing is loosened (fail closed).
+        return False
+
+
+def _finish(pid: str, action: str, outcome: str, why: str = "") -> None:
+    with _L_LOCK:
+        if _L_STATE["pending"].get("id") == pid:
+            _L_STATE["pending"].clear()
+        _L_STATE["withdrawn"].discard(pid)
+        if _L_STATE["latest"].get("id") not in (None, pid):
+            return
+        _L_STATE["last"].clear()
+        _L_STATE["last"].update(outcome=outcome, action=action, why=why, at=time.time(),
+                                message=LOOSEN_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.loosen.card", {"action": action, "outcome": outcome})
+
+
+def _person_said_yes(v) -> bool:
+    if getattr(v, "allowed", False) is not True:
+        return False
+    outcome = getattr(v, "outcome", None)
+    if outcome is not None:
+        return outcome == "approved" and getattr(v, "tier", "ask") == "ask"
+    return getattr(v, "tier", None) == "ask"
+
+
+def _decide(pid: str, action: str, gate: Callable, tier_of: Callable,
+            write: Callable) -> None:
+    card = loosen_card(action)
+    detail = {"text": card, "what": f"{_title(action).lower()} without asking you first",
+              "setting": action, "to": LOOSE[action], "leaves_this_pc": False}
+    try:
+        v = gate(LOOSEN_ACTION, detail, card)
+    except Exception as exc:
+        return _finish(pid, action, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(LOOSEN_ACTION) != "ask":
+        return _finish(pid, action, "refused", f"the gate answered at tier {vtier!r}, which "
+                                               f"is not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _finish(pid, action, outcome)
+        return _finish(pid, action, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _L_SWITCH:
+        with _L_LOCK:
+            withdrawn = pid in _L_STATE["withdrawn"]
+        if withdrawn:
+            return _finish(pid, action, "withdrawn")
+        try:
+            write(action, LOOSE[action])
+        except TierFileError as exc:
+            return _finish(pid, action, "failed", str(exc))
+        except Exception as exc:
+            return _finish(pid, action, "failed", type(exc).__name__)
+    _audit("asks_first.tier", {"action": action, "to": LOOSE[action], "how": "loosened"})
+    _finish(pid, action, "loosened")
+
+
+def request_tier(body, *, peer=None, local=None, gate: Optional[Callable] = None,
+                 tier_of: Optional[Callable[[str], str]] = None,
+                 spawn: Optional[Callable] = None, write: Optional[Callable] = None,
+                 armed: Optional[Callable[[], bool]] = None,
+                 here: Optional[bool] = None) -> tuple:
+    """POST /api/asks_first/tier {"action", "ask": bool}. (code, body)."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    write = write or (lambda a, t: set_tier(a, t))
+    armed = armed or _owner_check_armed
+    if not isinstance(body, dict) or not isinstance(body.get("ask"), bool) \
+            or not isinstance(body.get("action"), str):
+        return 400, {"ok": False, "error": 'need {"action": "<name>", "ask": true|false}'}
+    action, ask = body["action"], body["ask"]
+    if action == LOCKDOWN:
+        return request_lockdown(ask, peer=peer, local=local, gate=gate, tier_of=tier_of,
+                                spawn=spawn, armed=armed, here=here)
+    if action not in LOOSE or action in HARD_LIMITS or action in MUST_ASK:
+        return 403, {"ok": False, "error": NOT_ON_LIST}
+    if not ask and lockdown_on():
+        return 409, {"ok": False, "error": LOCKDOWN_NO_LOOSEN, "lockdown": True}
+    now_tier = tier_of(action)
+    if ask and now_tier == "ask" and lockdown_on() and _file_tier(action) != "ask":
+        # Lockdown makes it ask for now; "Ask me first" makes it ask for good:
+        # the line is still written, so it keeps asking after Lockdown.
+        now_tier = _file_tier(action)
+    if now_tier == "never":
+        return 409, {"ok": False, "error": "Your settings file switches this off (\"never\"), "
+                                          "so the app leaves it alone."}
+    if ask:
+        # Stricter: at once, never a card - it only makes Jarvis ask more.
+        with _L_SWITCH:
+            with _L_LOCK:
+                p = _L_STATE["pending"]
+                if p and p.get("action") == action:
+                    _L_STATE["withdrawn"].add(p["id"])
+                    p.clear()
+            if now_tier == "ask":
+                return 200, {"ok": True, "changed": False, "view": view(here=_here(here, peer, local)),
+                             "message": "It already asks you first."}
+            try:
+                write(action, "ask")
+            except TierFileError as exc:
+                return 409, {"ok": False, "error": str(exc) + "."}
+            except Exception as exc:
+                return 500, {"ok": False, "error": f"could not change it ({type(exc).__name__})"}
+        _audit("asks_first.tier", {"action": action, "to": "ask", "how": "stricter"})
+        return 200, {"ok": True, "changed": True, "view": view(here=_here(here, peer, local)),
+                     "message": "Done - it asks you first from now on."}
+    # Looser: the PC only, one card plus Windows Hello.
+    if not _here(here, peer, local):
+        return 403, {"ok": False, "error": PC_ONLY, "pc_only": True}
+    if now_tier == LOOSE[action] or (now_tier == "auto" and LOOSE[action] == "notify"):
+        return 200, {"ok": True, "changed": False, "view": view(here=True),
+                     "message": "It already goes ahead without asking."}
+    if not armed():
+        return 503, {"ok": False, "error": NO_OWNER_CHECK}
+    t = tier_of(LOOSEN_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{LOOSEN_ACTION} is tier {t!r} in jarvis-framework.toml; loosening needs a "
+            f"person to say yes, so it must be 'ask'")}
+    with _L_LOCK:
+        if _L_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to loosen something is already waiting "
+                                               "- answer it first."}
+        pid = uuid.uuid4().hex
+        _L_STATE["pending"].update(id=pid, action=action, since=time.time())
+        _L_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _decide(pid, action, gate, tier_of, write))
+    except Exception:
+        with _L_LOCK:
+            _L_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "view": view(here=True),
+                 "message": "Waiting for your approval. Approve the card on this PC - it "
+                            "asks Windows Hello - and it stops asking first."}
+
+
+def _here(here: Optional[bool], peer, local) -> bool:
+    return bool(here) if here is not None else _from_this_pc(peer, local)
+
+
+# ---------------------------------------------------------------------------
+# Offering a reading tool to the AI model at all - the PC, one card plus
+# Windows Hello. A DIFFERENT thing from loosening (above): that changes
+# whether a tool asks first once it is offered; this changes whether it is
+# offered at all - one line of [tools].enabled, never [autonomy.tiers].
+# ---------------------------------------------------------------------------
+
+TOOLS_LABEL = "Let the AI use this"
+TOOLS_DETAIL = ("Whether the AI model is offered each reading tool at all - a separate thing "
+               "from whether it asks you first, above. Turning one on shows an approval card "
+               "and asks Windows Hello, on this PC; turning it off is instant, from either "
+               "app. Every other tool can only be added by hand, in your settings file "
+               "(jarvis-framework.toml, [tools].enabled) - see backend/README.md.")
+TOOLS_PC_ONLY = ("Offering a tool to the AI model can only be turned on from the PC (Settings, "
+                "What asks first). It takes an approval card and Windows Hello.")
+TOOLS_NOT_ON_LIST = ("Only reading your calendar, email, notes and home status can be offered "
+                     "to the AI model from an app. Every other tool changes only in your "
+                     "settings file (jarvis-framework.toml, [tools].enabled).")
+
+TOOL_ENABLE_LAST_WORDS = {
+    "enabled": "You approved the card, so the AI model is offered this tool.",
+    "denied": "The card was turned down, so the AI model is still not offered this tool.",
+    "timed_out": "Nobody answered the card in time, so the AI model is still not offered this "
+                "tool.",
+    "refused": "Your PC's settings do not let this be approved, so the AI model is still not "
+              "offered this tool.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the settings file could not be changed, so the AI model "
+             "is still not offered this tool.",
+}
+
+
+def tools_enabled_set() -> set:
+    try:
+        cfg = fw.load_framework() if fw is not None else {}
+        return normalise_enabled((cfg.get("tools") or {}).get("enabled") or [])
+    except Exception:
+        return set()
+
+
+def tool_enable_card(tool: str) -> str:
+    real = real_tool(tool)
+    phrase = _title(tool)
+    phrase = phrase[:1].lower() + phrase[1:]
+    return "\n".join([
+        f"Offer \"{phrase}\" to the AI model?",
+        "",
+        f"From now on the AI model may use this tool when it decides to - it can {phrase}. "
+        f"This changes one line of your settings file on this PC (jarvis-framework.toml): "
+        f"\"{real}\" is added to [tools].enabled. Nothing else in it changes.",
+        "",
+        "This is separate from whether it asks you first: that is set above, in \"Ask me "
+        "first\", and is unchanged by this card.",
+        "",
+        "Approving it needs Windows Hello on this PC. You can turn it off again at any time "
+        "from either app, and that is instant.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes - the AI model is still not offered this tool.",
+    ])
+
+
+#: The [tools] table's header, and its one `enabled = [...]` line - the only
+#: shape this page can change safely (mirrors _HEADER/_ANY_HEADER/_KEY_LINE
+#: above, for a different table).
+_TOOLS_HEADER = re.compile(r"^[ \t]*\[[ \t]*tools[ \t]*\][ \t]*(?:#.*)?$")
+_ENABLED_LINE = re.compile(
+    r'^(?P<lead>[ \t]*enabled[ \t]*=[ \t]*)\[(?P<items>[^\[\]]*)\](?P<rest>[ \t]*(?:#.*)?)$')
+_QUOTED_ITEM = re.compile(r'"([^"\\]*)"|\'([^\']*)\'')
+
+TOOLS_HAND_EDIT = ("Your settings file (jarvis-framework.toml) is written in a way this page "
+                  "cannot change safely, so nothing was changed. Edit [tools] enabled by hand "
+                  "in Notepad, then restart Jarvis")
+
+
+def rewrite_tools(text: str, tool: str, on: bool, *, seed=()) -> str:
+    """`text` with `tool` added to (on) or removed from (not on) the single
+    `enabled = [...]` line under [tools]. Pure: no file is read or written
+    here. Raises TierFileError. Mirrors rewrite() above, for an array
+    instead of a scalar.
+
+    NO [tools] TABLE YET (2026-10-06). The owner's own settings file has none,
+    so this used to answer "edit it by hand" and change nothing - on the one
+    switch the owner is told they can use, while the turn was in fact being
+    offered tools from the inherited `config.toml` list. When the table has
+    to be created, `seed` is what is already in use, so creating it cannot
+    turn the tools in use today off: the new line is the seed plus this tool.
+    """
+    if not re.fullmatch(r"[a-z][a-z0-9_]{1,60}", tool or ""):
+        raise TierFileError("That is not a tool name")
+    before = _parse(text)
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    heads = [i for i, line in enumerate(lines) if _TOOLS_HEADER.match(line)]
+    if len(heads) > 1:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    if not heads:
+        if not on:
+            return text  # nothing to remove from a table that does not exist
+        want = sorted({str(x) for x in seed if x} | {tool})
+        quoted = ", ".join('"%s"' % x for x in want)
+        lines.extend(["", "[tools]", f"enabled = [{quoted}]{_INSERTED_NOTE}"])
+
+        def _norm_new(doc):
+            d = json.loads(json.dumps(doc, default=str))
+            d.setdefault("tools", {})["enabled"] = sorted(
+                str(x) for x in (d.get("tools", {}).get("enabled") or []))
+            return d
+
+        after = _parse(nl.join(lines))
+        if set(after.get("tools", {}).get("enabled") or []) != set(want):
+            raise TierFileError(TOOLS_HAND_EDIT)
+        b = _norm_new(before)
+        b["tools"]["enabled"] = sorted(want)
+        if _norm_new(after) != b:
+            raise TierFileError(TOOLS_HAND_EDIT)
+        return nl.join(lines)
+    start = heads[0] + 1
+    end = next((i for i in range(start, len(lines)) if _ANY_HEADER.match(lines[i])),
+               len(lines))
+    hits = [i for i in range(start, end) if _ENABLED_LINE.match(lines[i])]
+    if len(hits) > 1:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    if hits:
+        i = hits[0]
+        m = _ENABLED_LINE.match(lines[i])
+        items = [a or b for a, b in _QUOTED_ITEM.findall(m.group("items"))]
+        if on:
+            if tool not in items:
+                items = items + [tool]
+        else:
+            items = [x for x in items if x != tool]
+        rebuilt = ", ".join(f'"{x}"' for x in items)
+        lines[i] = f"{m.group('lead')}[{rebuilt}]{m.group('rest')}"
+    else:
+        if not on:
+            return text  # already absent: nothing to remove
+        keys = [i for i in range(start, end) if _KEY_LINE.match(lines[i])]
+        at = (keys[-1] + 1) if keys else start
+        lines.insert(at, f'enabled = ["{tool}"]{_INSERTED_NOTE}')
+    out = nl.join(lines)
+    after = _parse(out)
+    want = set(before.get("tools", {}).get("enabled") or [])
+    if on:
+        want.add(tool)
+    else:
+        want.discard(tool)
+    got = set(after.get("tools", {}).get("enabled") or [])
+    if got != want:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    # Nothing else in the file may have changed: compare the two parses with
+    # [tools].enabled normalised to a sorted list on both sides.
+    def _norm(doc):
+        d = json.loads(json.dumps(doc, default=str))
+        d.setdefault("tools", {})["enabled"] = sorted(str(x) for x in
+                                                       (d.get("tools", {}).get("enabled") or []))
+        return d
+    b = _norm(before)
+    b["tools"]["enabled"] = sorted(want)
+    if _norm(after) != b:
+        raise TierFileError(TOOLS_HAND_EDIT)
+    return out
+
+
+def _seed_tools(tool: str):
+    """The tool names in use right now, minus the one being changed: what a
+    `[tools]` table that has to be created must start from, so switching one
+    reading tool on cannot turn the tools in use today off. Best effort - an
+    unreadable answer seeds nothing, which is exactly the old behaviour."""
+    try:
+        import jarvis_agent
+        return sorted(n for n in jarvis_agent.enabled_tools_for_turn() if n != tool)
+    except Exception:
+        return []
+
+
+def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> dict:
+    """Add or remove ONE tool from [tools].enabled, atomically - the same
+    write discipline as set_tier (parse, change, parse again and compare,
+    write to a temporary file, move into place). Raises TierFileError."""
+    legacy = tool if tool in LEGACY_TOOL_NAMES else None
+    tool = real_tool(tool)
+    p = path or _toml_path()
+    if p is None or not Path(p).is_file():
+        raise TierFileError("Jarvis could not find your settings file "
+                            "(jarvis-framework.toml), so nothing was changed")
+    p = Path(p)
+    with _FILE_LOCK:
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise TierFileError(f"Your settings file could not be read "
+                                f"({type(exc).__name__}), so nothing was changed")
+        bom = raw.startswith(b"\xef\xbb\xbf")
+        try:
+            text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise TierFileError(TOOLS_HAND_EDIT)
+        new = rewrite_tools(text, tool, on, seed=_seed_tools(tool))
+        # An older build wrote the row's action name ("email_read") instead of
+        # the tool's name. Whatever the owner does now, that stale entry goes.
+        for old, real in LEGACY_TOOL_NAMES.items():
+            if real == tool:
+                new = rewrite_tools(new, old, False)
+        if new == text:
+            _reload()
+            return {"ok": True, "changed": False}
+        data = (b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8")
+        fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp", dir=str(p.parent))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            try:
+                os.chmod(tmp, stat.S_IMODE(os.stat(p).st_mode))
+            except OSError:
+                pass
+            os.replace(tmp, p)
+        except OSError as exc:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise TierFileError(f"Your settings file could not be written "
+                                f"({type(exc).__name__}), so nothing was changed")
+    _reload()
+    return {"ok": True, "changed": True}
+
+
+_T_LOCK = threading.Lock()
+_T_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+#: Held the same way _L_SWITCH is: from an approved card's "was it withdrawn?"
+#: check through writing [tools].enabled, and from an OFF's withdrawing
+#: through ITS write - so an OFF pressed in between is never overwritten by
+#: the card. Always taken BEFORE _T_LOCK.
+_T_SWITCH = threading.Lock()
+
+
+def _tools_finish(pid: str, tool: str, outcome: str, why: str = "") -> None:
+    with _T_LOCK:
+        if _T_STATE["pending"].get("id") == pid:
+            _T_STATE["pending"].clear()
+        _T_STATE["withdrawn"].discard(pid)
+        if _T_STATE["latest"].get("id") not in (None, pid):
+            return
+        _T_STATE["last"].clear()
+        _T_STATE["last"].update(outcome=outcome, tool=tool, why=why, at=time.time(),
+                                message=TOOL_ENABLE_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.tools.card", {"tool": tool, "outcome": outcome})
+
+
+def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
+                  write: Callable) -> None:
+    card = tool_enable_card(tool)
+    detail = {"text": card, "what": f"offer {_title(tool).lower()} to the AI model",
+              "setting": tool, "to": True, "leaves_this_pc": False}
+    try:
+        v = gate(ENABLE_TOOL_ACTION, detail, card)
+    except Exception as exc:
+        return _tools_finish(pid, tool, "refused",
+                             f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(ENABLE_TOOL_ACTION) != "ask":
+        return _tools_finish(pid, tool, "refused", f"the gate answered at tier {vtier!r}, "
+                                                   f"which is not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _tools_finish(pid, tool, outcome)
+        return _tools_finish(pid, tool, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _T_SWITCH:
+        with _T_LOCK:
+            withdrawn = pid in _T_STATE["withdrawn"]
+        if withdrawn:
+            return _tools_finish(pid, tool, "withdrawn")
+        try:
+            write(real_tool(tool), True)
+        except TierFileError as exc:
+            return _tools_finish(pid, tool, "failed", str(exc))
+        except Exception as exc:
+            return _tools_finish(pid, tool, "failed", type(exc).__name__)
+    _audit("asks_first.tools.enabled", {"tool": tool})
+    _tools_finish(pid, tool, "enabled")
+
+
+def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable] = None,
+                        tier_of: Optional[Callable[[str], str]] = None,
+                        spawn: Optional[Callable] = None, write: Optional[Callable] = None,
+                        armed: Optional[Callable[[], bool]] = None,
+                        here: Optional[bool] = None) -> tuple:
+    """POST /api/asks_first/tools {"tool": "<name>", "enabled": bool}.
+    (code, body). ON is the PC only, one card plus Windows Hello - the same
+    shape as request_tier's looser side, aimed at [tools].enabled instead of
+    [autonomy.tiers]. OFF is instant, never a card, from either app."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    write = write or (lambda t, on: set_tools_enabled(t, on))
+    armed = armed or _owner_check_armed
+    if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool) \
+            or not isinstance(body.get("tool"), str):
+        return 400, {"ok": False, "error": 'need {"tool": "<name>", "enabled": true|false}'}
+    tool, enabled = body["tool"], body["enabled"]
+    if tool not in TOOLS_SWITCHABLE:
+        return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
+    now_on = real_tool(tool) in tools_enabled_set()
+    if not enabled:
+        # OFF: at once, never a card - it only narrows what the model may do.
+        with _T_SWITCH:
+            with _T_LOCK:
+                p = _T_STATE["pending"]
+                if p and p.get("tool") == tool:
+                    _T_STATE["withdrawn"].add(p["id"])
+                    p.clear()
+            if not now_on:
+                return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
+                             "message": "The AI model is already not offered this tool."}
+            try:
+                write(real_tool(tool), False)
+            except TierFileError as exc:
+                return 409, {"ok": False, "error": str(exc) + "."}
+            except Exception as exc:
+                return 500, {"ok": False, "error": f"could not change it ({type(exc).__name__})"}
+        _audit("asks_first.tools.disabled", {"tool": tool})
+        return 200, {"ok": True, "changed": True, "tools": tools_status(here=True),
+                     "message": "Done - the AI model is not offered this tool any more."}
+    # ON: the PC only, one card plus Windows Hello.
+    if not _here(here, peer, local):
+        return 403, {"ok": False, "error": TOOLS_PC_ONLY, "pc_only": True}
+    if now_on:
+        return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
+                     "message": "The AI model is already offered this tool."}
+    if not armed():
+        return 503, {"ok": False, "error": TOOLS_NO_OWNER_CHECK}
+    t = tier_of(ENABLE_TOOL_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{ENABLE_TOOL_ACTION} is tier {t!r} in jarvis-framework.toml; offering a tool "
+            f"needs a person to say yes, so it must be 'ask'")}
+    with _T_LOCK:
+        if _T_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to offer a tool is already waiting - "
+                                               "answer it first."}
+        pid = uuid.uuid4().hex
+        _T_STATE["pending"].update(id=pid, tool=tool, since=time.time())
+        _T_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _tools_decide(pid, tool, gate, tier_of, write))
+    except Exception:
+        with _T_LOCK:
+            _T_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "tools": tools_status(here=True),
+                 "message": "Waiting for your approval. Approve the card on this PC - it "
+                            "asks Windows Hello - and the AI model will be offered this tool."}
+
+
+def tools_status(*, here: bool = False) -> dict:
+    """The switch as the desktop shows it: {"label", "detail", "can_enable",
+    "items": [{"id", "title", "on", "waiting", "last"}, ...]}. Desktop only
+    (CLAUDE.md: no deep config editing on the phone) - the phone simply does
+    not read this key."""
+    enabled = tools_enabled_set()
+    with _T_LOCK:
+        pending = dict(_T_STATE["pending"])
+        last_all = dict(_T_STATE["last"])
+    items = []
+    for tool in TOOLS_SWITCHABLE:
+        waiting = bool(pending) and pending.get("tool") == tool
+        last = dict(last_all) if last_all.get("tool") == tool else None
+        items.append({"id": tool, "title": _title(tool), "on": real_tool(tool) in enabled,
+                      "waiting": waiting, "last": last})
+    return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
+            "items": items}
+
+
+# ---------------------------------------------------------------------------
+# Lights, plugs and fans without a card
+# ---------------------------------------------------------------------------
+
+LIGHTS_ACTION = "change_own_config"
+LIGHTS_ROW = "Switch lights, plugs and fans you name"
+LIGHTS_LABEL = "Lights, plugs and fans without a card"
+LIGHTS_DETAIL = ("When you name a light, plug or fan yourself - \"turn off the kitchen light\" "
+                 "- Jarvis switches it without an approval card. Locks, doors, alarms, covers "
+                 "and garage doors always ask, each with a card of its own, and so does "
+                 "everything after Jarvis has read outside text in the chat. Turning this on "
+                 "shows you an approval card first; turning it off happens at once.")
+LIGHTS_NOTE = "Asks first unless you turn on the switch below (off by default)."
+LIGHTS_WAITING = "Waiting for your yes on the approval card, on your PC or phone."
+
+LIGHTS_CARD = "\n".join([
+    "Let Jarvis switch lights, plugs and fans without a card?",
+    "",
+    "When you name a light, plug or fan yourself - \"turn off the kitchen light\" - Jarvis "
+    "will switch it on or off without an approval card. Only lights, plugs (Home Assistant "
+    "switches) and fans; only on, off or toggle; and only the ones your own words named in "
+    "that message.",
+    "",
+    "Locks, doors, alarms, covers, garage doors, valves, cameras, scenes and scripts always "
+    "get a card of their own. So does every change after Jarvis has read outside text (an "
+    "email, a web page, a file) in the chat, and anything you pasted or shared.",
+    "",
+    "Nothing leaves this PC except the switch itself, sent to your own Home Assistant. You "
+    "can turn this off at any time from either app, and that is instant.",
+    "",
+    "If you did not just do this, say no.",
+    "",
+    "If you say no: nothing changes - every change in your home still asks.",
+])
+
+LIGHTS_LAST_WORDS = {
+    "enabled": "You approved the card, so Jarvis switches the lights, plugs and fans you "
+               "name without a card.",
+    "denied": "The card was turned down, so every change in your home still asks.",
+    "timed_out": "Nobody answered the card in time, so every change in your home still asks.",
+    "refused": "Your PC's settings do not let this be approved, so every change in your home "
+               "still asks.",
+    "withdrawn": "You turned it off while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so every change in your "
+              "home still asks.",
+}
+_LIGHTS_DAMAGED = ("the settings file for this page is damaged, so every change in your "
+                   "home asks. Turn \"Lights, plugs and fans without a card\" on again to "
+                   "rewrite it")
+
+
+def settings_path() -> Path:
+    """asks_first.json in the Jarvis settings folder."""
+    return _config_dir() / "asks_first.json"
+
+
+_S_LOCK = threading.Lock()
+
+
+def lights_setting() -> dict:
+    """{"on": bool, "why": str}. No file: off (the default). Unreadable,
+    not JSON, or not true/false: off, and `why` says so."""
+    try:
+        raw = settings_path().read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return {"on": False, "why": ""}
+    except OSError as exc:
+        return {"on": False, "why": f"the settings file for this page could not be read "
+                                    f"({type(exc).__name__}), so every change in your home "
+                                    f"asks"}
+    try:
+        doc = json.loads(raw)
+        if not isinstance(doc, dict):
+            raise ValueError
+    except Exception:
+        return {"on": False, "why": _LIGHTS_DAMAGED}
+    on = doc.get("lights", False)
+    if not isinstance(on, bool):
+        return {"on": False, "why": _LIGHTS_DAMAGED}
+    return {"on": on, "why": ""}
+
+
+def set_lights(on: bool) -> dict:
+    """Write the setting. Only request_lights() calls this with True, and
+    only on an approved card."""
+    with _S_LOCK:
+        p = settings_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps({"lights": bool(on), "changed": time.time()}),
+                       encoding="utf-8")
+        os.replace(tmp, p)
+    return dict(lights_setting(), ok=True)
+
+
+_LS_LOCK = threading.Lock()
+_LS_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+_LS_SWITCH = threading.Lock()
+
+
+def lights_on() -> bool:
+    """What jarvis_agent.py asks: is the setting on? Fails to off."""
+    try:
+        return lights_setting()["on"] is True
+    except Exception:
+        return False
+
+
+def lights_status() -> dict:
+    """{"on", "waiting", "last", "why", "label", "detail"} - the switch as
+    the apps show it."""
+    st = lights_setting()
+    with _LS_LOCK:
+        waiting = bool(_LS_STATE["pending"])
+        last = dict(_LS_STATE["last"]) or None
+    return {"on": st["on"], "waiting": waiting, "last": last, "why": st["why"],
+            "label": LIGHTS_LABEL, "detail": LIGHTS_DETAIL}
+
+
+def _lights_finish(pid: str, outcome: str, why: str = "") -> None:
+    with _LS_LOCK:
+        if _LS_STATE["pending"].get("id") == pid:
+            _LS_STATE["pending"].clear()
+        _LS_STATE["withdrawn"].discard(pid)
+        if _LS_STATE["latest"].get("id") not in (None, pid):
+            return
+        _LS_STATE["last"].clear()
+        _LS_STATE["last"].update(outcome=outcome, why=why, at=time.time(),
+                                 message=LIGHTS_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.lights.card", {"outcome": outcome})
+
+
+def _lights_decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
+                   tier_of: Callable[[str], str]) -> None:
+    detail = {"text": LIGHTS_CARD, "what": "switch the lights, plugs and fans you name "
+                                          "without a card", "setting": "lights without a card",
+              "to": True, "leaves_this_pc": False}
+    try:
+        v = gate(LIGHTS_ACTION, detail, LIGHTS_CARD)
+    except Exception as exc:
+        return _lights_finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(LIGHTS_ACTION) != "ask":
+        return _lights_finish(pid, "refused", f"the gate answered at tier {vtier!r}, which is "
+                                              f"not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _lights_finish(pid, outcome)
+        return _lights_finish(pid, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _LS_SWITCH:
+        with _LS_LOCK:
+            withdrawn = pid in _LS_STATE["withdrawn"]
+        if withdrawn:
+            return _lights_finish(pid, "withdrawn")
+        try:
+            out = apply(True) or {}
+        except Exception as exc:
+            return _lights_finish(pid, "failed", type(exc).__name__)
+        if out.get("ok") is False or out.get("on") is not True:
+            return _lights_finish(pid, "failed", str(out.get("why") or ""))
+        _lights_finish(pid, "enabled")
+
+
+def request_lights(enabled, *, gate: Optional[Callable] = None,
+                   tier_of: Optional[Callable[[str], str]] = None,
+                   spawn: Optional[Callable] = None,
+                   apply: Optional[Callable[[bool], dict]] = None) -> tuple:
+    """POST /api/asks_first/lights {"enabled": bool}. (code, body). OFF at
+    once; ON through ONE approval card."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    apply = apply or set_lights
+    s = _LS_STATE
+    if not isinstance(enabled, bool):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    if not enabled:
+        with _LS_SWITCH:
+            with _LS_LOCK:
+                if s["pending"]:
+                    s["withdrawn"].add(s["pending"]["id"])
+                    s["pending"].clear()
+            try:
+                apply(False)
+            except Exception as exc:
+                return 500, {"ok": False,
+                             "error": f"could not save the setting ({type(exc).__name__})"}
+        _audit("asks_first.lights.off", {})
+        return 200, dict(ok=True, lights=lights_status(), waiting=False,
+                         message="Done - every change in your home asks you first again.")
+    if lockdown_on():
+        return 409, {"ok": False, "error": LOCKDOWN_NO_LOOSEN, "lockdown": True}
+    with _LS_LOCK:
+        waiting = bool(s["pending"])
+    if lights_setting()["on"] and not waiting:
+        return 200, dict(ok=True, lights=lights_status(), waiting=False,
+                         message="It is already on.")
+    tier = tier_of(LIGHTS_ACTION)
+    if tier != "ask":
+        return 503, {"ok": False, "error": (
+            f"{LIGHTS_ACTION} is tier {tier!r} in jarvis-framework.toml; this setting needs a "
+            f"person to say yes, so it must be 'ask'")}
+    with _LS_LOCK:
+        pid = None if s["pending"] else uuid.uuid4().hex
+        if pid is not None:
+            s["pending"].update(id=pid, since=time.time())
+            s["latest"]["id"] = pid
+    if pid is None:
+        return 202, dict(ok=True, lights=lights_status(), waiting=True,
+                         message="A card to turn this on is already waiting for your "
+                                 "approval.")
+    try:
+        spawn(lambda: _lights_decide(pid, apply, gate, tier_of))
+    except Exception:
+        with _LS_LOCK:
+            s["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, dict(ok=True, lights=lights_status(), waiting=True,
+                     message="Waiting for your approval. Nothing changes unless you approve "
+                             "the card, on your PC or phone.")
+
+
+#: The device words an entity's own name may hold without the owner saying
+#: them ("light.kitchen_light" is named by "the kitchen light").
+_DEVICE_WORDS = frozenset({"light", "lights", "lamp", "lamps", "bulb", "bulbs", "switch",
+                           "switches", "plug", "plugs", "socket", "sockets", "fan", "fans",
+                           "strip", "led", "leds", "the"})
+
+
+def named_in(entity_id: str, words: str) -> bool:
+    """Did the owner's own words name this device? Every word of its id,
+    after the domain and the device words, must be there as a whole word
+    ("light.kitchen_ceiling" needs "kitchen" and "ceiling"). An id with no
+    such word ("light.light_2" needs "2") is named only by those."""
+    _, _, obj = str(entity_id or "").lower().partition(".")
+    need = [w for w in obj.split("_") if w and w not in _DEVICE_WORDS]
+    if not need:
+        return False
+    have = set(re.findall(r"[a-z0-9]+", str(words or "").lower()))
+    plural = {h[:-1] for h in have if h.endswith("s")} | {h + "s" for h in have}
+    return all(w in have or w in plural for w in need)
+
+
+def lights_without_card(plan, owner_words: str, *, shaped: str) -> str:
+    """"" when this home_control call may run WITHOUT a card, else why not
+    (for the audit log - the call then goes to the gate as before).
+
+    Every condition must hold:
+      * the setting is on (off by default; a damaged file is off);
+      * `shaped` is "": nothing from outside shaped this turn (a reading
+        tool ran, the conversation is tainted, the newest message was
+        pasted, shared or not the owner's own, or the app sent text of its
+        own - jarvis_agent._TurnWatch.note_needs_a_person(), the note
+        writes' test);
+      * the plan is lights, switches and fans only, on, off or toggle, none
+        of them a lock, door, alarm, cover, gate or anything that stands
+        alone (jarvis_home.everyday_problem);
+      * every device was named in the owner's newest message (named_in)."""
+    if not lights_on():
+        return "the setting is off"
+    if lockdown_on():
+        return "Lockdown is on"
+    if shaped:
+        return "outside text shaped this turn"
+    try:
+        import jarvis_home as HOME
+        problem = HOME.everyday_problem(plan)
+    except Exception as exc:
+        return f"the plan could not be checked ({type(exc).__name__})"
+    if problem:
+        return problem
+    ids = [getattr(q, "entity_id", "") for q in getattr(plan, "queries", []) or []]
+    if not ids or not all(named_in(e, owner_words) for e in ids):
+        return "a device was not named in your own words"
+    return ""
+
+
+def record_no_card(plan) -> None:
+    """The audit line for a home change made without a card: the devices
+    and the service, never anything else."""
+    _audit("asks_first.lights.no_card", {
+        "entities": [getattr(q, "entity_id", "") for q in getattr(plan, "queries", []) or []],
+        "service": (getattr((getattr(plan, "queries", None) or [None])[0], "url", "") or "")
+        .rsplit("/api/services/", 1)[-1]})
+
+
+# ---------------------------------------------------------------------------
+# Lockdown - every way out of this PC asks first, or stops (2026-09-28)
+# ---------------------------------------------------------------------------
+
+#: The pseudo-action on POST /api/asks_first/tier: {"action": "lockdown",
+#: "ask": true} turns it on, "ask": false asks to turn it off.
+LOCKDOWN = "lockdown"
+
+#: The ways out of this PC (docs/ARCHITECTURE.md section 4) that go through
+#: the tier table: while Lockdown is on, each of these whose line says
+#: "auto" or "notify" is "ask" (lockdown_tier). "never" stays "never". A
+#: plug-in program's own tool (mcp__<server>__<tool>) is covered by its
+#: prefix, though every such call already asks.
+LOCKDOWN_ACTIONS = frozenset({
+    # web search and research
+    "search_the_web", "web_research", "research_authenticated",
+    "jarvis_research_run", "jarvis_research_run_authenticated",
+    # the owner's own accounts: calendar, email, Home Assistant
+    "calendar_read", "read_calendar", "email_read", "home_read", "home_control",
+    # sending, saving and tidying email
+    "send_email", "draft_email", "tidy_inbox",
+    # an address the owner typed, and GitHub watches
+    "news_read", "page_read", "read_web_page", "github_read", "youtube_captions_read", "quiz_cloud_grade",
+    # the browser, a cloud AI model, models and tool updates from the internet
+    "control_browser", "cloud_model", "browse_model_catalog", "download_model",
+    "check_tool_updates",
+    # anything that would spend or post
+    "spend_money", "post_to_external_service",
+})
+_LOCKDOWN_PREFIXES = ("mcp__",)
+
+LOCKDOWN_LABEL = "Lockdown"
+LOCKDOWN_DETAIL = ("One tap makes every way out of this PC ask you first, or stop: web search "
+                   "and research, sending or saving email, reading your calendar, email and "
+                   "Home Assistant, your smart home, news feeds and \"tell me when\" watches, "
+                   "plug-in programs, cloud AI models, chatbot conversations, the online "
+                   "weather behind the animal and checking for tool updates. Turning "
+                   "it on is instant, from either app. Turning it off is on the PC only, with "
+                   "an approval card and Windows Hello.")
+LOCKDOWN_ON_SAYS = ("Lockdown is on: everything that would leave this PC asks you first, and "
+                    "anything that runs by itself (\"tell me when\", news, the briefing's "
+                    "calendar and email, chatbot conversations, the online weather) has "
+                    "stopped.")
+LOCKDOWN_OFF_SAYS = "Lockdown is off: everything asks first as your settings say."
+LOCKDOWN_ON_LABEL = "Turn on Lockdown"
+LOCKDOWN_OFF_LABEL = "Turn off Lockdown"
+LOCKDOWN_PC_ONLY = ("Lockdown can only be turned off on the PC (Settings, What asks first), "
+                    "with an approval card and Windows Hello.")
+LOCKDOWN_WAITING = "Waiting for your yes on the approval card, and Windows Hello, on your PC."
+LOCKDOWN_ROW_NOTE = "Lockdown is on, so this asks you first - or stops, if it runs by itself."
+LOCKDOWN_NO_LOOSEN = ("Lockdown is on, so nothing can be loosened - turn Lockdown off first "
+                      "(on the PC, with an approval card and Windows Hello).")
+LOCKDOWN_DONE = ("Lockdown is on. Everything that would leave this PC asks you first, and "
+                 "anything that runs by itself has stopped. Turning it off takes the PC, an "
+                 "approval card and Windows Hello.")
+LOCKDOWN_ALREADY = "Lockdown is already on."
+LOCKDOWN_ALREADY_OFF = "Lockdown is already off."
+LOCKDOWN_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so Lockdown "
+                           "cannot be turned off from the app - run apply-patches.ps1 on the PC.")
+_LOCKDOWN_DAMAGED = ("the Lockdown file on this PC could not be read, so Lockdown counts as ON. "
+                     "Turn it off on the PC to rewrite it")
+
+LOCKDOWN_CARD = "\n".join([
+    "Turn off Lockdown?",
+    "",
+    "Lockdown makes every way out of this PC ask you first, or stop. Turning it off puts back "
+    "what your settings file says: web search, research, your calendar, email and Home "
+    "Assistant, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, "
+    "chatbot conversations, the online weather and checking for tool updates go back to "
+    "asking only when your settings say so.",
+    "",
+    "Nothing in your settings file changes - Lockdown only sits on top of it.",
+    "",
+    "Approving it needs Windows Hello on this PC. You can turn Lockdown on again at any time "
+    "from either app, and that is instant.",
+    "",
+    "If you did not just do this, say no.",
+    "",
+    "If you say no: nothing changes - Lockdown stays on.",
+])
+
+LOCKDOWN_LAST_WORDS = {
+    "off": "You approved the card, so Lockdown is off.",
+    "denied": "The card was turned down, so Lockdown is still on.",
+    "timed_out": "Nobody answered the card in time, so Lockdown is still on.",
+    "refused": "Your PC's settings do not let this be approved, so Lockdown is still on.",
+    "withdrawn": "You turned Lockdown on again while the card waited, so approving it changed "
+                 "nothing.",
+    "failed": "It was approved, but the Lockdown file could not be changed, so Lockdown is "
+              "still on.",
+}
+
+
+def lockdown_path() -> Path:
+    """lockdown.json in the Jarvis settings folder."""
+    return _config_dir() / "lockdown.json"
+
+
+_K_LOCK = threading.Lock()
+_K_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+_K_SWITCH = threading.Lock()
+#: (path, mtime_ns, size) -> the setting, so the framework's every tier
+#: lookup costs one os.stat, not a read.
+_K_CACHE_LOCK = threading.Lock()
+_K_CACHE: dict = {}
+
+
+def lockdown_setting() -> dict:
+    """{"on": bool, "why": str}. No file: off (the default). A file that
+    cannot be read, is not JSON, or does not say true/false: ON - it fails
+    closed, and `why` says so."""
+    p = lockdown_path()
+    try:
+        st = os.stat(p)
+    except FileNotFoundError:
+        return {"on": False, "why": ""}
+    except OSError:
+        return {"on": True, "why": _LOCKDOWN_DAMAGED}
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    with _K_CACHE_LOCK:
+        if _K_CACHE.get("key") == key:
+            return dict(_K_CACHE["value"])
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+        on = doc.get("on") if isinstance(doc, dict) else None
+        value = {"on": on, "why": ""} if isinstance(on, bool) else {"on": True,
+                                                                     "why": _LOCKDOWN_DAMAGED}
+    except FileNotFoundError:
+        return {"on": False, "why": ""}
+    except Exception:
+        value = {"on": True, "why": _LOCKDOWN_DAMAGED}
+    with _K_CACHE_LOCK:
+        _K_CACHE["key"] = key
+        _K_CACHE["value"] = dict(value)
+    return value
+
+
+def lockdown_on() -> bool:
+    """Is Lockdown on? What every other module asks. Never raises; anything
+    odd reads as ON."""
+    try:
+        return lockdown_setting()["on"] is True
+    except Exception:
+        return True
+
+
+def is_way_out(action: str) -> bool:
+    a = str(action or "")
+    return a in LOCKDOWN_ACTIONS or a.startswith(_LOCKDOWN_PREFIXES)
+
+
+def lockdown_tier(action: str, tier: str) -> str:
+    """The tier Lockdown leaves for `action` whose file line says `tier`:
+    "ask" for a way out that would otherwise go ahead ("auto"/"notify")
+    while Lockdown is on; `tier` itself otherwise. Only ever stricter.
+    rebuilt/jarvis_framework.action_tier() calls this on every lookup."""
+    if tier in ("auto", "notify") and is_way_out(action) and lockdown_on():
+        return "ask"
+    return tier
+
+
+def locked_down(action: str) -> bool:
+    """Is this action asking only because Lockdown is on?"""
+    if not is_way_out(action) or not lockdown_on():
+        return False
+    return _file_tier(action) in ("auto", "notify")
+
+
+def _file_tier(action: str) -> str:
+    """The tier the settings file itself gives, without Lockdown."""
+    try:
+        if fw is not None and hasattr(fw, "file_action_tier"):
+            t = str(fw.file_action_tier(action))
+        else:
+            t = str(_file_tiers().get(action) or _tier(action))
+    except Exception:
+        return "ask"
+    return t if t in SAYS else "ask"
+
+
+def set_lockdown(on: bool) -> dict:
+    """Write the setting. Only request_lockdown() calls this with False, and
+    only on an approved card."""
+    with _S_LOCK:
+        p = lockdown_path()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_name(p.name + ".tmp")
+        tmp.write_text(json.dumps({"on": bool(on), "changed": time.time()}), encoding="utf-8")
+        os.replace(tmp, p)
+    with _K_CACHE_LOCK:
+        _K_CACHE.clear()
+    return dict(lockdown_setting(), ok=True)
+
+
+def _publish_lockdown(on: bool) -> None:
+    """A doorbell for both apps: {"on": bool}, never anything else."""
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish("lockdown", {"on": bool(on)})
+    except Exception:
+        pass
+
+
+def lockdown_status(*, here: bool = False) -> dict:
+    """{"on", "waiting", "last", "why", "says", "label", "detail",
+    "can_turn_off"} - Lockdown as both apps show it. `can_turn_off` only for
+    a request from this PC."""
+    st = lockdown_setting()
+    with _K_LOCK:
+        waiting = bool(_K_STATE["pending"])
+        last = dict(_K_STATE["last"]) or None
+    return {"on": st["on"], "waiting": waiting, "last": last, "why": st["why"],
+            "says": LOCKDOWN_ON_SAYS if st["on"] else LOCKDOWN_OFF_SAYS,
+            "label": LOCKDOWN_LABEL, "detail": LOCKDOWN_DETAIL,
+            "can_turn_off": bool(here) and st["on"]}
+
+
+def _lockdown_finish(pid: str, outcome: str, why: str = "") -> None:
+    with _K_LOCK:
+        if _K_STATE["pending"].get("id") == pid:
+            _K_STATE["pending"].clear()
+        _K_STATE["withdrawn"].discard(pid)
+        if _K_STATE["latest"].get("id") not in (None, pid):
+            return
+        _K_STATE["last"].clear()
+        _K_STATE["last"].update(outcome=outcome, why=why, at=time.time(),
+                                message=LOCKDOWN_LAST_WORDS.get(outcome, ""))
+    _audit("asks_first.lockdown.card", {"outcome": outcome})
+
+
+def _lockdown_decide(pid: str, gate: Callable, tier_of: Callable, write: Callable) -> None:
+    detail = {"text": LOCKDOWN_CARD, "what": "turn off Lockdown", "setting": LOCKDOWN,
+              "to": False, "leaves_this_pc": False}
+    try:
+        v = gate(LOOSEN_ACTION, detail, LOCKDOWN_CARD)
+    except Exception as exc:
+        return _lockdown_finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(LOOSEN_ACTION) != "ask":
+        return _lockdown_finish(pid, "refused", f"the gate answered at tier {vtier!r}, which "
+                                                f"is not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _lockdown_finish(pid, outcome)
+        return _lockdown_finish(pid, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _K_SWITCH:
+        with _K_LOCK:
+            withdrawn = pid in _K_STATE["withdrawn"]
+        if withdrawn:
+            return _lockdown_finish(pid, "withdrawn")
+        try:
+            out = write(False) or {}
+        except Exception as exc:
+            return _lockdown_finish(pid, "failed", type(exc).__name__)
+        if out.get("ok") is False or out.get("on") is not False:
+            return _lockdown_finish(pid, "failed", str(out.get("why") or ""))
+    _audit("asks_first.lockdown", {"on": False})
+    _publish_lockdown(False)
+    _lockdown_finish(pid, "off")
+
+
+#: The modules whose already-running work Lockdown ends at once, each by its
+#: own stop_for_lockdown() (quick, never waits). Only a module already
+#: loaded can have anything running, so none is imported here.
+LOCKDOWN_STOPPERS = ("jarvis_chatbot_compare", "jarvis_chatbot")
+
+
+def _stop_running_ways_out() -> list:
+    """Lockdown just came on: end what is already talking to the outside by
+    itself (a chatbot conversation or comparison). The online weather needs
+    no stop - jarvis_sky reads Lockdown before every fetch. Returns the
+    words of what was stopped; a stopper that fails is skipped (each also
+    reads Lockdown itself before its next message)."""
+    import sys
+    said = []
+    for name in LOCKDOWN_STOPPERS:
+        mod = sys.modules.get(name)
+        fn = getattr(mod, "stop_for_lockdown", None) if mod is not None else None
+        if not callable(fn):
+            continue
+        try:
+            words = fn()
+        except Exception:
+            continue
+        if words:
+            said.append(str(words))
+    return said
+
+
+def request_lockdown(on, *, peer=None, local=None, gate: Optional[Callable] = None,
+                     tier_of: Optional[Callable[[str], str]] = None,
+                     spawn: Optional[Callable] = None,
+                     write: Optional[Callable[[bool], dict]] = None,
+                     armed: Optional[Callable[[], bool]] = None,
+                     here: Optional[bool] = None) -> tuple:
+    """Lockdown ON (at once, from anywhere) or OFF (the PC only, ONE
+    loosening card plus Windows Hello). (code, body)."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    write = write or set_lockdown
+    armed = armed or _owner_check_armed
+    if not isinstance(on, bool):
+        return 400, {"ok": False, "error": 'need {"action": "lockdown", "ask": true|false}'}
+    if on:
+        # Stricter: at once, never a card - it only makes Jarvis ask more. A
+        # card waiting to turn it off is withdrawn.
+        with _K_SWITCH:
+            with _K_LOCK:
+                p = _K_STATE["pending"]
+                if p:
+                    _K_STATE["withdrawn"].add(p["id"])
+                    p.clear()
+            already = lockdown_setting()
+            if already["on"] and not already["why"]:
+                return 200, {"ok": True, "changed": False, "message": LOCKDOWN_ALREADY,
+                             "lockdown": lockdown_status(here=_here(here, peer, local))}
+            try:
+                write(True)
+            except Exception as exc:
+                return 500, {"ok": False,
+                             "error": f"could not turn Lockdown on ({type(exc).__name__})"}
+        _audit("asks_first.lockdown", {"on": True})
+        _publish_lockdown(True)
+        _stop_running_ways_out()
+        return 200, {"ok": True, "changed": True, "message": LOCKDOWN_DONE,
+                     "lockdown": lockdown_status(here=_here(here, peer, local))}
+    # Off: the PC only, one card plus Windows Hello.
+    if not _here(here, peer, local):
+        return 403, {"ok": False, "error": LOCKDOWN_PC_ONLY, "pc_only": True}
+    st = lockdown_setting()
+    if not st["on"]:
+        return 200, {"ok": True, "changed": False, "message": LOCKDOWN_ALREADY_OFF,
+                     "lockdown": lockdown_status(here=True)}
+    if not armed():
+        return 503, {"ok": False, "error": LOCKDOWN_NO_OWNER_CHECK}
+    t = tier_of(LOOSEN_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{LOOSEN_ACTION} is tier {t!r} in jarvis-framework.toml; turning Lockdown off "
+            f"needs a person to say yes, so it must be 'ask'")}
+    with _K_LOCK:
+        if _K_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to turn Lockdown off is already waiting "
+                                               "- answer it first."}
+        pid = uuid.uuid4().hex
+        _K_STATE["pending"].update(id=pid, since=time.time())
+        _K_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _lockdown_decide(pid, gate, tier_of, write))
+    except Exception:
+        with _K_LOCK:
+            _K_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "lockdown": lockdown_status(here=True),
+                 "message": "Waiting for your approval. Approve the card on this PC - it asks "
+                            "Windows Hello - and Lockdown turns off."}
+
+
+# ---------------------------------------------------------------------------
+# Routes (asks-first.patch hands the request here)
+# ---------------------------------------------------------------------------
+
+
+def handle_get(peer=None, local=None) -> tuple:
+    """GET /api/asks_first."""
+    return 200, view(here=_from_this_pc(peer, local))
+
+
+def handle_tier(body, peer=None, local=None) -> tuple:
+    """POST /api/asks_first/tier."""
+    return request_tier(body, peer=peer, local=local)
+
+
+def handle_lights(body) -> tuple:
+    """POST /api/asks_first/lights."""
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": 'need {"enabled": true|false}'}
+    return request_lights(body.get("enabled"))
+
+
+def handle_tools(body, peer=None, local=None) -> tuple:
+    """POST /api/asks_first/tools."""
+    return request_tool_enable(body, peer=peer, local=local)
+
+
+def _reset_for_tests() -> None:
+    for st, lock in ((_L_STATE, _L_LOCK), (_LS_STATE, _LS_LOCK), (_T_STATE, _T_LOCK),
+                     (_K_STATE, _K_LOCK)):
+        with lock:
+            for v in st.values():
+                v.clear()
+    with _K_CACHE_LOCK:
+        _K_CACHE.clear()

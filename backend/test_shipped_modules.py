@@ -44,8 +44,13 @@ REQS = HERE / "requirements.txt"
 FAILED, PASSED = [], []
 
 # Modules the shipped code imports that live ONLY on the owner's PC. They are
-# not in this repository (checked below: an entry here that turns up as a file
-# in backend/ is an error, because then it should be shipped instead).
+# not in the *patch* directory - `backend/` - and never shipped by
+# apply-patches.ps1: patched instead. Checked below, and the check is about
+# this directory: an entry here that turns up as backend/<name>.py or
+# backend/rebuilt/<name>.py is an error, because then it should be shipped.
+# Since 2026-10-06 the five real modules are also PUBLISHED, in
+# `jarvis-backend/` - that is the base backend, not the copy the patcher
+# installs, so it does not count here (see jarvis-backend/README.md).
 OWNER_ONLY = {
     "jarvis_hud": "the server itself; patched, never shipped",
     "jarvis_gate": "the approval gate; patched (gate-push, no-auto-approve, ...), never shipped",
@@ -53,8 +58,9 @@ OWNER_ONLY = {
     "jarvis_models": "the model manager; patched (vram-estimate, gpu-offload), never shipped",
     "jarvis_skills": "the skill store; patched (skill-notes), never shipped",
     "jarvis_style": "probed by name in rebuilt jarvis_events.py's capability list, which "
-                    "reports false when it is absent; not in this repository, and whether "
-                    "the owner's PC has it is unverified",
+                    "reports false when it is absent; not in backend/, so never shipped - "
+                    "the owner's PC does have it, and it is published in "
+                    "jarvis-backend/jarvis_style.py, imported only by test_tripwire.py",
 }
 
 # A shipped file that imports a test-plumbing module ONLY when it is run from
@@ -347,9 +353,9 @@ def t_repo_only_imports_are_guarded():
 
 def t_the_exemptions_are_real():
     for n, why in OWNER_ONLY.items():
-        check(f"{n} is owner-only, so it must not be a file in this repository",
+        check(f"{n} is owner-only, so it must not be a file in backend/",
               not (HERE / f"{n}.py").is_file() and not (HERE / "rebuilt" / f"{n}.py").is_file(),
-              f"backend has {n}.py - ship it instead of exempting it ({why})")
+              f"backend/ has {n}.py - ship it instead of exempting it ({why})")
     for pip in sorted(set(THIRD_PARTY.values())):
         check(f"{pip} is named in requirements.txt", pip.lower() in requirement_names())
     # And the other way: nothing in requirements.txt that nothing imports.
