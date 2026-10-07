@@ -194,7 +194,12 @@ def t_markup_matches():
             check(f"{m.id} is a real Settings card", card in ids_in_settings or card in pending_on_desktop)
     # Every registry section is a menu, or is inside one.
     import jarvis_settings_registry as R
-    inside = {"start-jarvis", "crash-notes", "notifications"}       # inside #more-options, or standalone non-menu
+    # inside #more-options, or standalone non-menu. "first-run" (2026-10-06) is
+    # the third kind on purpose: it is a real top-level card, but it is the
+    # page a new owner meets first, so it is deliberately NOT given a
+    # menu-visibility entry and can never be hidden - the same choice already
+    # made for "notifications".
+    inside = {"start-jarvis", "crash-notes", "notifications", "first-run"}
     for s in R.SECTIONS:
         check(f"registry section {s.id} has a menu", M.menu("settings." + s.id) is not None or s.id in inside)
 
