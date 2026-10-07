@@ -72,6 +72,7 @@
           <a href="#voices">Jarvis's voice</a>
           <a href="#web-search">Web search</a>
           <a href="#account-secrets">Accounts</a>
+          <a href="#chatbot-api-keys">Chatbot API keys</a>
           <a href="#hardware">Hardware and models</a>
           <a href="#second-card">Second graphics card</a>
           <a href="#big-model">Big model (slow)</a>
@@ -1563,6 +1564,55 @@
         </div>
       </section>
 
+      <!-- ── Chatbot API keys ──────────────────────────────────────────────
+           docs/ACCOUNT-KEYS-DESIGN.md steps 1-2 (2026-10-06), the owner's
+           decision 1: keys and money limits are built together. The six API
+           services the chatbot driver can use used to be settable from the
+           PC's command line only - `py -3 jarvis_chatbot_api.py key openai`.
+           Each now has its own box here: typed on this PC, straight into
+           Windows Credential Manager from Rust (account_secrets.rs,
+           token_store.rs), never sent over HTTP, never to the phone, never
+           shown again - rule 3.
+
+           Saving a key raises NO approval card, the same written rule the
+           Accounts page above follows ("saving an account's own credentials
+           is the owner configuring their own accounts", JARVIS-API.md
+           :8471-8475). What raises a card is the monthly money limit, which
+           lives in the same box row below.
+
+           The Credential Manager names come from the Python side
+           (jarvis_chatbot_api.KEY_TARGETS). A key saved under a name the
+           backend never reads would say "Saved" forever and do nothing, so
+           backend/test_chatbot_keys.py and token_store.rs's own test pin the
+           two tables to one generated fixture. -->
+      <section class="card" id="chatbot-api-keys">
+        <h2>Chatbot API keys</h2>
+        <p class="note">
+          The six services Jarvis can ask through their official API:
+          ChatGPT (OpenAI), DeepSeek, Mistral, Grok (xAI), OpenRouter and
+          Groq. Typed here, each key goes straight into Windows Credential
+          Manager on this PC - never sent anywhere, never to your phone, and
+          never shown again once saved, exactly like the Accounts page above.
+          A key is only ever sent to the one service it belongs to.
+        </p>
+        <p class="note">
+          A key alone does not make a service usable. Each one also needs a
+          monthly money limit, set in the same row, because every service
+          charges your account for each answer. Each answer's cost is an
+          estimate from a price list you can see and correct - the row says
+          "about" for that reason.
+        </p>
+
+        <div id="cak-body"></div>
+
+        <p class="note" id="cak-estimates"></p>
+        <p class="note" id="cak-raise-words"></p>
+
+        <div class="row">
+          <span class="status" id="cak-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Hardware and models ──────────────────────────────────────────
            Read from GET /api/hardware (hardware-panel.js). The graphics
            cards, what runs on them now, and three setups. Nothing changes
@@ -2550,6 +2600,7 @@
     <script type="module" src="notifications-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="account-secrets-settings.js"></script>
+    <script type="module" src="chatbot-api-keys-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="sky-settings.js"></script>

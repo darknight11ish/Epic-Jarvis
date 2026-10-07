@@ -1044,6 +1044,26 @@ $PATCHES = @(
     # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'quiz-cloud.patch'
+    # "Chatbot money limits" - the INSTALL BLOCK half (the owner's approval of
+    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
+    # section 87.4.1). ONE block in jarvis_hud.py, wrapped round Handler right
+    # after quiz-cloud.patch's own, before anything listens.
+    #
+    # This is a SEPARATE PATCH from chatbot-limits.patch below, and that is
+    # load-bearing rather than tidiness: the two halves need different positions
+    # in this list. This hunk's context is quiz-cloud.patch's own printed lines,
+    # so it must run straight after quiz-cloud; put later, the tutorials.patch
+    # and readpage.patch blocks land between its anchor and that context, so it
+    # is materialised at the END of the file instead - which duplicates the
+    # `_loopback_companion(bind, HUD_PORT, Handler)` line it uses as trailing
+    # context (test_installed_stand_in.py, test_bind_wildcard.py,
+    # test_loopback_too.py). The gate half must run after readpage.patch, for
+    # its own reason. One patch cannot sit in two places, so there are two.
+    #
+    # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
+    # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
+    # banner says so and the route is simply not there.
+    'chatbot-limits-hud.patch'
     # The gate renamed an action on its way out (2026-10-03). For the 58
     # _TOOL_ACTIONS entries whose value is a TIER literal ("calculator": "auto"),
     # action_for_tool() returned f"tool:{name}" as the action name. That string
@@ -1080,6 +1100,38 @@ $PATCHES = @(
     # It needs jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below);
     # without them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
+    # "Chatbot money limits" - the GATE half (the owner's approval of
+    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
+    # section 87.4.1). Raising a limit is a loosening, so it raises ONE
+    # approval card (`raise_api_limit`) plus Windows Hello on the PC, and is
+    # refused from any other device. Lowering one, removing one, correcting a
+    # price and resetting one tighten or correct, so they need no card - the
+    # reason there are TWO action names, since the owner-check attaches Windows
+    # Hello to the action and not to the direction. TWO hunks in jarvis_gate.py:
+    # the names join the "acts only on tier ask" set and get their _RISK lines.
+    # Each of the two goes at the END of its list, right after readpage.patch's
+    # own last entry there (`read_web_page`), which is where readpage.patch and
+    # quiz-cloud.patch each put theirs. Both hunks first named the entry that was
+    # last when this patch was written - `quiz_cloud_grade` in the set,
+    # `youtube_captions_read` in _RISK - and neither was last any more, so
+    # `_stack.py` could not match them and materialised a pre-image at the end of
+    # the file instead: that re-emitted the context lines and gave
+    # `youtube_captions_read` a second _RISK row, of which only the last is ever
+    # read (test_gate_risk_words.py's duplicate check is what caught it). Both
+    # hunks now apply to real context - `_stack.py`'s RATCHET for jarvis_gate.py
+    # came down from 25 to 23 with the fix.
+    #
+    # It sits HERE, after readpage.patch, and that position is load-bearing:
+    # written straight after quiz-cloud.patch it stopped readpage.patch applying
+    # at all, because readpage's own jarvis_gate.py hunks anchor on the same two
+    # lists these two names join. test_readpage.py and
+    # test_installed_stand_in.py are what prove the order is right. The install
+    # block half is chatbot-limits-hud.patch above, which must stay where it is.
+    #
+    # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
+    # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
+    # banner says so and the route is simply not there.
+    'chatbot-limits.patch'
     # The ADDRESSES of the owner's accounts (the owner's decision of 2026-10-06,
     # CLAUDE.md: "anything needing a key or a sign-in should be settable in the
     # Jarvis app itself, desktop only, stored under rule 3"): GET and POST
@@ -1301,6 +1353,7 @@ $SHIPPED = @(
     'jarvis_chatbot_lechat.py'   # Le Chat by Mistral AI (chat.mistral.ai): a thin site file
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
+    'jarvis_chatbot_limits.py'   # chatbot-limits.patch: the monthly money limits and the price list, set from the PC's app - a raise is ONE card plus Windows Hello, a lowering and a price correction are not; GET/POST /api/chatbot/money, PC only
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
     # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py

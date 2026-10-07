@@ -148,6 +148,13 @@ MENUS: tuple = (
        names=("web search", "search settings", "the search provider")),
     _m("settings.account-secrets", "Accounts", "Keys and account details kept on this PC.",
        (DESKTOP,), names=("accounts", "account secrets", "credentials")),
+    # "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md steps 1-2, 2026-10-06):
+    # the six API services the chatbot driver can use. Each key is typed on
+    # the PC and written straight into Windows Credential Manager - the phone
+    # is never asked for an account secret, so this is a desktop card.
+    _m("settings.chatbot-api-keys", "Chatbot API keys",
+       "The six chatbot services' API keys, kept on this PC.",
+       (DESKTOP,), names=("chatbot api keys", "the api keys", "chatbot keys")),
     _m("settings.hardware", "Hardware and models", "Your graphics cards and the three setups.",
        group="graphics-cards", names=("hardware", "hardware and models")),
     _m("settings.second-card", "Second graphics card",

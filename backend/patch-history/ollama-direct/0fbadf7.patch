@@ -1,0 +1,51 @@
+--- a/jarvis_hud.py	2026-09-18 00:03:27.356566534 +0000
++++ b/jarvis_hud.py	2026-09-18 00:05:54.845649908 +0000
+@@ -2690,6 +2690,21 @@
+             "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
+         )
+ 
++        def _completions_url(lane: str) -> str:
++            # The local lane talks to Ollama directly, which has spoken this
++            # exact OpenAI-compatible shape for a long time - no separate
++            # agent process required. A non-local lane (only reachable at
++            # all when PROXY_FILE lists one - see _lane_names()) still goes
++            # to JARVIS_URL, because this project has no other cloud-lane
++            # transport today. That path is therefore unimplemented in
++            # practice on a machine with no litellm-proxy.yaml, which is
++            # every machine so far; it is left as-is rather than silently
++            # papered over, so the day a cloud lane is actually configured
++            # this is the one place that needs a real answer, not a second
++            # thing to discover broken.
++            return (f"{OLLAMA_URL}/v1/chat/completions" if lane == local_model
++                    else f"{JARVIS_URL}/v1/chat/completions")
++
+         # A rate-limited lane should step down, not surface a 429 to the user.
+         # jarvis_router.degrade() has always described that chain; nothing
+         # ever called it, so the documented behaviour did not exist. Try the
+@@ -2699,7 +2714,7 @@
+             body = dict(payload); body["model"] = lane
+             return urllib.request.urlopen(
+                 urllib.request.Request(
+-                    f"{JARVIS_URL}/v1/chat/completions",
++                    _completions_url(lane),
+                     data=json.dumps(body).encode("utf-8"),
+                     headers=_auth_headers({"Content-Type": "application/json"}),
+                     method="POST",
+@@ -2838,9 +2853,15 @@
+             return
+         except Exception as exc:
+             try:
++                unreachable_msg = (
++                    f"Ollama is not answering on {OLLAMA_URL}. "
++                    f"Start it with `ollama serve`. ({exc})"
++                    if lane == local_model else
++                    f"Jarvis is not answering on {JARVIS_URL}. "
++                    f"Start it with `uv run jarvis serve`. ({exc})"
++                )
+                 self._send(503, {
+-                    "error": f"Jarvis is not answering on {JARVIS_URL}. "
+-                             f"Start it with `uv run jarvis serve`. ({exc})",
++                    "error": unreachable_msg,
+                     "route": route_header,
+                 })
+             except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):

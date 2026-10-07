@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-chatbot-api-key"
+description = "Enables the save_chatbot_api_key command without any pre-configured scope."
+commands.allow = ["save_chatbot_api_key"]
+
+[[permission]]
+identifier = "deny-save-chatbot-api-key"
+description = "Denies the save_chatbot_api_key command without any pre-configured scope."
+commands.deny = ["save_chatbot_api_key"]

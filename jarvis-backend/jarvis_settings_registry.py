@@ -183,6 +183,12 @@ SECTIONS: tuple = (
                        "how jarvis sounds")),
     Section("web-search", ("web search", "search settings", "the search provider")),
     Section("account-secrets", ("accounts", "account secrets", "credentials"), app="desktop"),
+    # "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md steps 1-2, 2026-10-06):
+    # the six API services the chatbot driver can use, each key typed on the
+    # PC and written straight into Windows Credential Manager. Desktop only -
+    # the phone is never asked for an account secret.
+    Section("chatbot-api-keys", ("chatbot api keys", "the api keys",
+                                 "chatbot keys", "my api keys"), app="desktop"),
     Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="desktop"),
     Section("second-card", ("the second graphics card", "second card", "second gpu"),
             app="desktop"),

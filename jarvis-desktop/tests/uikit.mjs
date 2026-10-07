@@ -563,8 +563,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__openedInBar = (window.__openedInBar || 0) + 1;
             return null;
           case "check_server_health":
-            return { services: [{ name: "ollama", online: true },
-                                { name: "litellm", online: false, optional: true }] };
+            return { services: [{ id: "ollama", name: "Ollama", online: true },
+                                { id: "cloud_lane", name: "Cloud model", online: false,
+                                  optional: true }] };
           case "get_api_settings": {
             // Mirrors commands.rs pick_token: typed (Credential Manager),
             // then the environment, then the backend's own token - its old

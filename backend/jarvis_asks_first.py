@@ -401,6 +401,13 @@ GROUPS = (
         "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
         "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
         "topic_loosen", "chat_tags_suggest_on", "chat_tag_suggest",
+        # The chatbot API money limits (chatbot-limits.patch, 2026-10-06): both
+        # act on a Settings card, which is why they sit in this group rather
+        # than beside spend_money. The page must name them because a card can:
+        # raising a limit is a loosening, so it raises ONE card plus Windows
+        # Hello on the PC; lowering one only ever spends less, so it asks
+        # nothing. Their tiers come from the gate, not from here.
+        "raise_api_limit", "lower_api_limit",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
         "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),

@@ -67,6 +67,12 @@ NEEDS_OWNER = {
     "test_memory_pane.py": ("jarvis_hud.py",),
     "test_memory_prefix.py": ("jarvis_hud.py",),
     "test_memory_safety.py": ("jarvis_extract.py", "jarvis_memory.py"),
+    # It lifts the real `_completions_url` and `_auth_headers` out of
+    # jarvis_hud.py, so it needs that file - and, since 2026-10-06, the real
+    # jarvis_chatbot_api too (the cloud lane's resolver): without it the
+    # module-level `import jarvis_chatbot_api` inside the lifted function
+    # fails and every cloud check would read as "no lane".
+    "test_ollama_direct.py": ("jarvis_hud.py",),
     "test_token_file.py": ("jarvis_hud.py",),
     "test_voice_503.py": ("jarvis_hud.py",),
 }

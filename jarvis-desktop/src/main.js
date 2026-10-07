@@ -1710,8 +1710,8 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
     const dot = dom.services.querySelector(`[data-service="${service.id}"]`);
     if (!dot) continue;
     dot.dataset.online = String(Boolean(service.online));
-    // LiteLLM (the cloud lane's proxy) is optional: not running is normal
-    // with no cloud model set up, so its dot is drawn quiet, not red.
+    // The cloud escalation lane is optional: not set up is normal, so its
+    // dot is drawn quiet, not red.
     dot.dataset.optional = String(Boolean(service.optional));
     dot.title = `${service.name}: ${service.detail}`;
     // Shape and hue are for the eye; this is the same fact for a screen
@@ -1743,7 +1743,8 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
  *
  * Called when something has actually changed — the window is summoned, the
  * stream connects or drops, a request fails — and never on a timer. Ollama and
- * the LiteLLM proxy are not on the event bus, so their dots still need a probe;
+ * the cloud lane's own state are not on the event bus, so their dots still need
+ * a probe;
  * Jarvis itself does not, because a live event stream *is* the proof that it is
  * up, and a better one than a request that succeeded a moment ago.
  */

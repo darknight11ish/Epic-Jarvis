@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-chatbot-money"
+description = "Enables the set_chatbot_money command without any pre-configured scope."
+commands.allow = ["set_chatbot_money"]
+
+[[permission]]
+identifier = "deny-set-chatbot-money"
+description = "Denies the set_chatbot_money command without any pre-configured scope."
+commands.deny = ["set_chatbot_money"]
