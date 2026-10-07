@@ -495,8 +495,21 @@ def t_the_patch_is_in_the_stack_and_carries_both_gate_names():
     for name in (L.RAISE_ACTION, L.LOWER_ACTION):
         check(f"the patch carries {name} in the gate's own tables",
               src.count(f'"{name}"') >= 2, src.count(f'"{name}"'))
-    check("the patch installs the module from jarvis_hud.py",
-          "jarvis_chatbot_limits.install(" in src)
+    # The install block is its OWN patch, and that is load-bearing rather than
+    # tidiness. 2026-10-06: chatbot-limits.patch has hunks in TWO files that need
+    # different positions in apply-patches.ps1's order - the gate hunks must
+    # follow readpage.patch, whose hunks anchor on the same two lists these names
+    # join, and this install block must follow quiz-cloud.patch, whose printed
+    # lines are its context. Written as one patch the other way round it stopped
+    # readpage.patch applying at all, and moving it later made _stack.py
+    # materialise this hunk at the end of jarvis_hud.py, duplicating the
+    # `_loopback_companion(bind, HUD_PORT, Handler)` line it uses as trailing
+    # context. One patch cannot sit in two places, so there are two.
+    check("chatbot-limits-hud.patch, the install half, is in the order too",
+          "chatbot-limits-hud.patch" in order, order[-6:])
+    hud = (REPO / "backend" / "chatbot-limits-hud.patch").read_text(encoding="utf-8")
+    check("the install half of the patch installs the module from jarvis_hud.py",
+          "jarvis_chatbot_limits.install(" in hud)
     check("the patch says why there are two names",
           "the action and not to the direction" in src.replace("\n", " ")
           or "not to the direction" in src)
@@ -594,10 +607,14 @@ def t_no_other_module_raises_a_chatbot_money_card():
     loosening could happen, which rule 4 exists to stop."""
     hits = []
     for path in (REPO / "backend").glob("*.py"):
-        if path.name in ("jarvis_chatbot_limits.py", "jarvis_owner_check.py"):
+        if path.name in ("jarvis_chatbot_limits.py", "jarvis_owner_check.py",
+                         "jarvis_card_words.py"):
             # The limit module is the one path; the owner-check names the raise
-            # because that is where PC_ONLY_ACTIONS lives. Neither is a second
-            # path, and this test itself is full of these names on purpose.
+            # because that is where PC_ONLY_ACTIONS lives; and card-words names
+            # both only to give each a plain-English phrase for the card the
+            # owner sees ("raise a chatbot's monthly spending limit"). None of
+            # them is a second path to the decision, and this test itself is full
+            # of these names on purpose.
             continue
         if path.name.startswith("test_"):
             continue

@@ -146,6 +146,22 @@ read_web_page              = "ask"
 # switches the feature off. A file without this line asks too
 # (unknown_action_tier).
 quiz_cloud_grade          = "ask"
+# Raising a chatbot's monthly money limit (jarvis_chatbot_limits.py; the
+# owner's approval of 2026-10-06, docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and
+# 3): raising a limit LOOSENS, so it gets ONE approval card naming the service
+# and both amounts, plus Windows Hello on the PC (the action is in
+# jarvis_owner_check.PC_ONLY_ACTIONS), and it is refused from any other
+# device. Must stay "ask": anything else and no limit is raised; "never"
+# switches the app's own limit control off. A file without this line asks too
+# (unknown_action_tier) - which is the safe direction.
+raise_api_limit           = "ask"
+# LOWERING a chatbot's monthly money limit (jarvis_chatbot_limits.py, the same
+# decision): the one direction that TIGHTENS, so it needs no card - the same
+# "it only makes it stricter" rule every other tightening in Jarvis follows
+# (JARVIS-API.md:700). It carries its own action name precisely so Windows
+# Hello, which the owner-check attaches to the ACTION and not to the
+# direction, lands on the raise alone.
+lower_api_limit           = "auto"
 # GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
 # owner's choice of 2026-09-28): one read-only GET to api.github.com per look
 # - a workflow run list or one pull request - for a watch the owner already
