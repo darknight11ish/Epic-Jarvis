@@ -8,13 +8,27 @@
 > [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest).
 > This folder stays so its parts can be borrowed; its useful ones (the
 > approval widget and a quick-link widget) are already in `jarvis-client`.
-> It publishes no release; CI only builds it, so it does not rot.
+> It publishes no release.
+>
+> **It is also not built on every push any more** (owner's decision, 2026-10-07,
+> after the bug audit's stream C finding C4). It used to be, and that is how it
+> kept from rotting - but it also meant a real problem shipped on every change:
+> this module keeps a bearer token and an HMAC signing secret in **plain
+> SharedPreferences**, which breaks the project's rule 3, from an app nobody can
+> use. Building it now takes a deliberate click:
+> **Actions → Build Android APK → Run workflow**. Do that before porting
+> anything out of here, so you know it still compiles.
+>
+> **Do not copy its token storage.** `JarvisSettings.kt` holds those two in
+> plain text. `jarvis-client` solves the same problem with AES/GCM under the
+> Android Keystore and a triple-redacted crash log - port that shape instead.
 
 Native Android companion for a self-hosted Jarvis desktop server reached over
 Tailscale. Kotlin 2.0 / Compose / Material3, `compileSdk` 35, `minSdk` 28.
 
 Build: `./gradlew assembleDebug` → `app/build/outputs/apk/debug/app-debug.apk`.
-CI builds it on every push; download it from the run's Artifacts.
+The CI workflow builds it **only when you ask it to** (see above); the artifact
+appears under that run's Artifacts.
 
 ## Server endpoint
 

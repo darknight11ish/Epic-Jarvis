@@ -879,10 +879,19 @@ object JarvisRuntime {
         //    itself only in an in-app notice nobody is looking at - which is
         //    the exact failure ApprovalWidget's own comment claims to prevent.
         widgetJob = scope.launch {
-            combine(_pending, _link, _stale) { _, _, _ -> }.collect {
-                ApprovalWidget().updateAll(app)
-                QuickLinkWidget().updateAll(app)
-            }
+            // `settings.security` is in this combine for the same reason
+            // `boardJob` below has it, and it was the one thing missing here
+            // (2026-10-07 bug audit, stream C finding C1). `ApprovalWidget`
+            // reads App lock and "Hide memory lists" at DRAW time, so a card
+            // already on the home screen kept its full notice title and body -
+            // and a one-tap Deny - until something else happened to redraw it.
+            // Switching either setting on redraws it now.
+            combine(_pending, _link, _stale) { _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
+                .collect {
+                    ApprovalWidget().updateAll(app)
+                    QuickLinkWidget().updateAll(app)
+                }
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
