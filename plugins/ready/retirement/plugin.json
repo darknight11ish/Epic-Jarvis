@@ -1,0 +1,8 @@
+{
+  "name": "retirement",
+  "summary": "the retirement what-if calculator.",
+  "module": "jarvis_retirement",
+  "install": "handler",
+  "replaces_patch": "retirement.patch",
+  "stack_order": 110
+}

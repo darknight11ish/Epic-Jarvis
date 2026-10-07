@@ -1,0 +1,8 @@
+{
+  "name": "tutorials",
+  "summary": "Tutorials and the FAQ, for both apps, with the owner's progress.",
+  "module": "jarvis_tutorials",
+  "install": "handler",
+  "replaces_patch": "tutorials.patch",
+  "stack_order": 118
+}

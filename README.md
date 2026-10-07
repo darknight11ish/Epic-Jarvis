@@ -139,6 +139,7 @@ one would look like "my phone is broken" rather than "wrong app".
 | `jarvis-desktop/` | The Windows app (Tauri). Rust in `src-tauri/`, the windows in `src/`. |
 | `jarvis-client/` | The Android app. |
 | `backend/` | Changes (patches) for the backend on the PC, the modules it needs, and a test for each. The backend itself lives on the PC, not here. |
+| `plugins/` | Drop-in modules: a feature whose only wiring was one startup call is a folder you add or take out, with no patch. [`docs/PLUG-AND-PLAY.md`](docs/PLUG-AND-PLAY.md) explains it. |
 | `docs/` | How it all works. [`docs/README.md`](docs/README.md) says which documents are current. |
 | `scripts/`, `tools/` | The patch script, and tools that generate test data and notices. |
 | `keystore/` | How the phone app's signing key is restored on GitHub's build machines. The key itself is never committed. |

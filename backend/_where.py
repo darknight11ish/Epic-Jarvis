@@ -437,6 +437,12 @@ SHIPPED = (
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",
+    # Drop-in modules (feat/plug-and-play-modules): the loader that replaces a
+    # feature's one startup patch by calling each module's own install() from
+    # a folder. plugins/loader/plugin-loader.patch adds the single call;
+    # plugins/registry.json says which features fit and why the rest do not.
+    # Standard library only, no network, no child process, writes nothing.
+    "jarvis_plugins.py",
 )
 
 

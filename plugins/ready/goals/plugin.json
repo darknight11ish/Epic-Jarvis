@@ -1,0 +1,8 @@
+{
+  "name": "goals",
+  "summary": "\"Goals with one card per step\".",
+  "module": "jarvis_goals",
+  "install": "handler",
+  "replaces_patch": "goals.patch",
+  "stack_order": 84
+}

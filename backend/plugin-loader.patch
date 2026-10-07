@@ -1,0 +1,21 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6505,3 +6505,18 @@
+         print(f"  tutorials  NOT ON ({type(exc).__name__}) - the tutorials and FAQ are off")
+         print("             until jarvis_tutorials.py is back: run apply-patches.ps1 again")
++    # plugin-loader.patch (this branch). One call, once, and after it every
++    # feature whose only wiring was a startup call becomes a folder: put it
++    # in jarvis_plugins\ beside this file and restart, take it out and the
++    # feature is off. The modules it loads are the ones this repository
++    # already ships, and it hands each one's own install() the same three
++    # callbacks the blocks above use - it approves nothing, reaches nothing
++    # and writes nothing. See plugins/README.md; the catalogue of which
++    # features fit is plugins/registry.json.
++    try:
++        import jarvis_plugins
++        print(jarvis_plugins.install(Handler, origin_ok=_origin_ok,
++                                     token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  plugins    NOT ON ({type(exc).__name__}) - drop-in modules are off")
++        print("             until jarvis_plugins.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.

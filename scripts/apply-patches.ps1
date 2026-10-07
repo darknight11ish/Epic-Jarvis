@@ -1089,6 +1089,30 @@ $PATCHES = @(
     # Tested by test_gate_risk_rows.py; the apply itself is proven by this
     # script's dry run, as for every patch here.
     'gate-risk-rows.patch'
+    # --- drop-in modules (feat/plug-and-play-modules) ------------------------
+    # Last, like every new patch, and its context is tutorials.patch's own
+    # install block - the last one in the file. It adds ONE more block of the
+    # same shape, calling jarvis_plugins.install(), which loads every folder
+    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
+    # own install(). Nothing else about the core changes, and nothing about
+    # the 18 features it can carry changes: each still ships its own module
+    # and each module still wraps the Handler itself.
+    #
+    # This patch is applied ONCE, and it is the only core change the whole
+    # plug-in system needs. After it, adding or removing one of those features
+    # is a folder - scripts\add-plugin.ps1 and remove-plugin.ps1 - and never
+    # another patch. plugins/registry.json says which features those are, and
+    # for every other patch in this list, in plain words, what it does that
+    # stops it being one (a gate entry, a route in the core, an edit to a line
+    # the core already has).
+    #
+    # It cannot be applied on its own: its context is the output of the stack
+    # above it, so it needs that stack, which is what this script rehearses
+    # and enforces. If your tree differs, the dry run stops and nothing at all
+    # is changed - the safe failure this script already has. A tree that
+    # differs on purpose can skip the patch and paste the four lines by hand;
+    # plugins/loader/README.md prints them.
+    'plugin-loader.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1336,6 +1360,8 @@ $SHIPPED = @(
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
+    # --- Drop-in modules (feat/plug-and-play-modules) ---
+    'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
 )
 
 # The settings file. Installed only where none exists; never overwritten.
