@@ -131,7 +131,6 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import os
 import re
 import time
 import unicodedata
@@ -143,7 +142,8 @@ from typing import Callable, Optional
 
 #: The account is the one jarvis_email.py reads with - one place for the
 #: names, and the SAME ones jarvis_email_send.py already imports.
-from jarvis_email import HOST_ENV, PASSWORD_ENV, PORT_ENV, USER_ENV, imap_password, imap_user
+from jarvis_email import (HOST_ENV, imap_address, PASSWORD_ENV, PORT_ENV,
+                          USER_ENV, imap_password, imap_user)
 #: Validation shared with sending, so the two never drift apart on what
 #: counts as a plain address or how many people is too many.
 from jarvis_email_send import (MAX_ADDRESS_CHARS, MAX_BODY_CHARS, MAX_RECIPIENTS,
@@ -204,12 +204,14 @@ class Settings:
 
 def settings() -> Settings:
     """How a draft would be saved - the same account jarvis_email.py reads
-    with (env var, else Windows Credential Manager). Never the password -
-    only whether one is set. Opens nothing."""
+    with (the environment variable first, else the address saved in Settings ->
+    Accounts on this PC in accounts.json, else Windows Credential Manager for
+    the username and password). Never the password - only whether one is set.
+    Opens nothing."""
     sender = imap_user()
     has_password = bool(imap_password())
-    host = os.environ.get(HOST_ENV, "").strip()
-    raw_port = os.environ.get(PORT_ENV, "").strip()
+    host = imap_address("imap_host", HOST_ENV)
+    raw_port = imap_address("imap_port", PORT_ENV).strip()
     port = _DEFAULT_PORT
     port_problem = ""
     if raw_port:
@@ -225,7 +227,8 @@ def settings() -> Settings:
         return Settings(sender, host, port, problem)
 
     if not host:
-        return s(f"{HOST_ENV} is not set - saving a draft uses the same account as "
+        return s(f"{HOST_ENV} is not set, and no mail server is saved in Settings, "
+                 f"Accounts on this PC - saving a draft uses the same account as "
                  f"reading email, and there is none")
     if not sender:
         return s(f"{USER_ENV} is not set, and nothing is saved in Windows Credential "

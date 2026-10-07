@@ -8405,6 +8405,11 @@ long-lived access token (`backend/jarvis_home.py`). **Desktop only**
 (`CLAUDE.md`: no deep config editing on the phone) - see
 `docs/ARCHITECTURE.md` section 8.
 
+**The ADDRESSES those secrets authenticate against are a different shape and
+a different section.** A secret goes into Credential Manager and never over
+HTTP; an address is not a secret, so it takes §23's SearXNG-address shape - a
+backend route over a plain JSON file - and it is in section 116.
+
 **The mechanism** is `backend/jarvis_token_store.resolve_secret(env_name,
 target)` - the general form of §23.4's Exa/Tavily/Brave key pattern, added
 to the same module that already keeps the pairing token in Credential
@@ -17400,7 +17405,7 @@ card names the address itself, so it stays honest either way.)
 ### 115.4 Both apps, and what raises a card
 
 **Both apps already have the surface.** There is no new screen: the owner
-pastes the link into the one chat box he already has - or shares the page
+pastes the link into a chat box he already has - or shares the page
 from Chrome, which the phone's existing share target (`ACTION_SEND`,
 `text/plain`) already folds into the composer draft - and asks Jarvis to read
 it out. So this feature adds **no** desktop JavaScript, **no** Kotlin and no
@@ -17425,3 +17430,150 @@ HTML-to-words rule (`<main>` preferred, script/style/nav/footer dropped,
 entities unescaped), the read-aloud table and its two generated copies, the
 gate row's tier and risk words, and that `readpage.patch` applies after the
 rest of the stack and reverses.
+
+## 116. Account addresses: where the mail server, Home Assistant and the calendar are (added 2026-10-06)
+
+The owner's decision of 2026-10-06 (`CLAUDE.md`): "anything needing a key or a
+sign-in should be settable in the Jarvis app itself", desktop only, stored
+under rule 3. Settings -> Accounts already collected the four SECRETS of
+section 44, but no server ADDRESS - so `jarvis_email.plan()` answered
+`JARVIS_IMAP_HOST is not set - there is no mail server to read`, Home
+Assistant answered "not set up on this PC", the CalDAV calendar could not be
+reached at all, and "What Jarvis can reach" (section 24) showed them as
+"not set up" unless the owner had set plain-text Windows environment
+variables.
+
+### 116.1 Two shapes, and why an address is the second one
+
+* A **secret** (a key, a password, a token, the private iCal link) goes into
+  Windows Credential Manager, written by the desktop's own Rust, and never
+  over HTTP (section 44).
+* An **address or a choice** goes to a backend route that keeps it in a
+  plain-text JSON file in the config folder and hands it back to the UI. The
+  proven model is section 23's SearXNG address
+  (`jarvis_search.settings_path()` = `<config>/web-search.json`,
+  `handle_settings({"searxng_url": ...})`).
+
+There is a code-proven reason NOT to put an address in Credential Manager: a
+store-sourced value is registered with `jarvis_scrub` and redacted BY EXACT
+VALUE, which would swallow harmless surrounding text such as a host name
+(`backend/test_account_secrets.py`, its own first bullet). So an address is a
+small `accounts.json` beside `web-search.json`
+(`backend/jarvis_accounts.py`), and `jarvis_accounts` is that file's one
+reader and writer.
+
+### 116.2 The eight, and the routes
+
+| Field | Environment variable it has always been read under |
+|---|---|
+| `imap_host` | `JARVIS_IMAP_HOST` |
+| `imap_port` | `JARVIS_IMAP_PORT` |
+| `imap_mailbox` | `JARVIS_IMAP_MAILBOX` |
+| `smtp_host` | `JARVIS_SMTP_HOST` |
+| `smtp_port` | `JARVIS_SMTP_PORT` |
+| `smtp_tls` | `JARVIS_SMTP_TLS` |
+| `home_url` | `JARVIS_HOME_URL` |
+| `caldav_url` | `JARVIS_CALDAV_URL` |
+
+`smtp_tls` is the one CHOICE rather than an address (`ssl`, `starttls`, `off`
+- the same list as `jarvis_email_send.TLS_MODES`, which
+`backend/test_account_addresses.py` checks it against, so a fourth mode added
+there cannot be silently unsettable here). Every value is stored as TEXT, the
+digits the owner typed, so it drops into exactly the place
+`os.environ.get(<the variable>)` used to be.
+
+Two routes (`backend/accounts.patch`, both hunks in `jarvis_hud.py`), origin-
+and token-checked like every other:
+
+| Route | Body / answer |
+|---|---|
+| `GET /api/accounts/addresses` | `{"available": true, "why", "fields": [{"name", "env", "env_set", "value"}, ...]}`, all eight in the table's order. `value` is what is saved on this PC; an environment variable's own VALUE is never in the answer - only whether one wins. |
+| `POST /api/accounts/addresses` | ONE change per request: `{"imap_host": "imap.gmail.com"}`, `{"smtp_tls": "starttls"}`, ... `""` clears that one here. The answer is `{"ok", "said", "why"}` plus the whole `GET` object. |
+
+**A key, a password, a token or the private calendar link is REFUSED by
+name**: the route takes only the eight, and answers `400` with a plain
+sentence that never repeats what was sent. There is no route here that can
+put a secret in a plain-text file (rule 3), and
+`backend/test_account_addresses.py` proves it the same way
+`test_web_search.py`'s "the settings route takes no key" proves it for
+`/api/search/settings`.
+
+**A damaged or unreadable `accounts.json` fails SAFE**: all eight read as
+`""` (nothing is ever invented from a file nobody can parse) and `why` says
+so in plain words. It does not fail closed into refusing the reads - every
+reader already has its own true sentence for an address that is not set.
+
+### 116.3 The environment variable still wins, on every read
+
+`jarvis_accounts.value(key)` reads the environment variable FIRST and the
+file only as the fallback, so an installation that already sets one behaves
+exactly as it did before there was a Settings box; saving here never
+overwrites or clears one, and the page cannot either. Each reader checks it
+locally as well, so if `jarvis_accounts.py` is not on this PC at all, the
+environment variable still works and nothing that works today stops:
+
+* `jarvis_email.imap_address()` - `_configured()` and `plan()`'s host, port
+  and mailbox;
+* `jarvis_email_send.settings()` - the sending host, port and mode, and the
+  `imap.X` -> `smtp.X` guess when only the reading server is saved;
+* `jarvis_email_draft.settings()` - the same account, for saving a draft;
+* `jarvis_home._base_url()` - `_configured()` and all six places the Home
+  Assistant address was read (`plan_states`, `plan_service`,
+  `plan_services`, `plan_forecast`, the weather line);
+* `jarvis_calendar._base_url()` - `_configured()`, `source()` and `plan()`;
+  the private iCal link still WINS over it when both are set, unchanged;
+* `jarvis_reach._env()` - so "What Jarvis can reach" (section 24) answers
+  from the file's addresses too and stops saying "not set up". It answers
+  `""` for any name that is not one of the eight, so a SECRET's own name can
+  never be answered from this file.
+
+The shape check reuses `jarvis_local_http.plain_http_problem`, never
+re-inventing one: `https://` anywhere, plain `http://` only to this PC, the
+home network, Tailscale or NordVPN Meshnet - the same rule Home Assistant and
+the calendar already enforce at read time, now also told to the owner at the
+box.
+
+### 116.4 The desktop, PC only
+
+Two Tauri commands, Settings window only
+(`src-tauri/src/account_addresses.rs`, `account-secrets-settings.js`):
+
+| Command | Args | Answers |
+|---|---|---|
+| `get_account_addresses` | - | `GET /api/accounts/addresses` passed on as it is; a PC without the route answers `{"available": false, "why"}`. |
+| `save_account_address` | `{"name", "value"}` | `POST /api/accounts/addresses` with ONE change. Refused before a request is even built when `name` is not one of the eight - so this side has no way to ask the PC to store a secret - or when the value is over 200 characters. Held while the event stream is stale, like every other change sent to the PC. |
+
+The eight boxes show what is saved (an address is not a secret), the one
+choice is a picker, and a row whose environment variable is already set says
+so and disables its box. The phone has no such page - deep config editing
+stays off it, and the phone is never asked for an account secret
+(`docs/ARCHITECTURE.md` section 8; `jarvis-client`'s `OpenPlace.PC_ONLY`).
+
+### 116.5 Tests, and the known gaps
+
+`backend/test_account_addresses.py`: the eight and that none of the four
+secrets is among them; `accounts.json` beside `web-search.json`; the
+environment variable winning in every reader; the file being the fallback in
+every reader; a key refused by the route with nothing written; one change per
+request and every wrong-shaped value refused; and `accounts.patch` applying
+to what `web-search.patch` wrote, reversing, checking origin and token, and
+its blocks running. `jarvis-desktop/tests/account-addresses.mjs` covers the
+card itself, including that a stale link greys every Save.
+
+* **Nothing here was tried against a real mail server, Home Assistant or
+  calendar.** The suite proves the address reaches the reader that dials it;
+  whether a given provider answers is the owner's own setup.
+* **`backend/README.md`'s own tables still give the eight as environment
+  variables, and are not rewritten by this section** - exactly as section
+  44.3 leaves that file alone for the four secrets. The variables still work
+  and still WIN (a test proves the environment beats the file in every
+  reader), so the Settings boxes are a second place to set one, never a
+  replacement. An owner who follows the README is not misled; one who wants
+  the box has it.
+* **`JARVIS_CALDAV_USER` and `JARVIS_CALDAV_PASSWORD` are still environment
+  variables** (section 44.3) - this section moved the address only.
+* **A backend already running when an address is saved keeps the old one**
+  until it is restarted: the desktop's Rust and the Python backend are
+  separate processes. The value is read fresh on every call, so a backend
+  started after the save picks it up with no further step - and the four
+  secret boxes already say the same thing.
