@@ -45,14 +45,21 @@ jarvis_search, jarvis_mail_mask, jarvis_task_control and jarvis_stop_all:
     fails closed; the card shows "About $X of $Y left"; in a comparison the
     API chatbot near its limit drops out and the other carries on;
   - THE HARD STOP (the owner's decision of 2026-09-28, "make it a hard stop
-    too"): each service's own name for the answer-length cap (DeepSeek's
-    unverified, so none is sent there); every request carries it; it shrinks
+    too"): each service's own name for the answer-length cap - all six,
+    including DeepSeek's max_tokens, checked 2026-10-06 in DeepSeek's own API
+    reference; every request carries it; it shrinks
     as the month's spending grows, and the month never passes the limit as
     far as the service counts; a message that cannot pay for even a short
     answer is refused in the existing words; an answer the cap cut short is
-    marked cut_off with the shared note; DeepSeek is still guarded by the
-    worst-case check (with room for hidden reasoning); the key is never in a
-    log, the session view or the money file.
+    marked cut_off with the shared note; a service whose hidden reasoning the
+    cap may not cover is still guarded by the worst-case check (with room for
+    it); the key is never in a log, the session view or the money file.
+  - THE CLOUD ESCALATION LANE (docs/ACCOUNT-KEYS-DESIGN.md part C,
+    2026-10-06): a lane name such as `jarvis-escalate` resolves to a real
+    service and model through `cloud_lane()`; it is None - so nothing is sent
+    and nothing is spent - unless a key is saved, the model has a price and
+    the month's limit can pay for the message; DeepSeek's default model and
+    its worst-case prices are the ones its own page names.
 
 No pytest. The only sockets are to the two fake servers on 127.0.0.1.
 """
@@ -257,6 +264,12 @@ SRV = Server()
 ELSEWHERE = Server()
 ORIGINAL = dict(API.PRESETS)
 
+#: The real, unpointed DeepSeek base URL, kept aside because `point_all()`
+#: sends every preset (this one included) at the fake server. The cloud-lane
+#: checks below have to name what the lane really resolves to on the owner's
+#: PC, and the fake base URL is what the tests deliberately replace it with.
+DEEPSEEK_URL = "https://api.deepseek.com"
+
 
 def point_all(limit=100.0):
     """Every preset at the fake server; each keeps its own id and key entry,
@@ -413,9 +426,22 @@ def t_presets():
           len(set(API.KEY_TARGETS.values())) == len(API.PRESETS)
           and all(t.startswith("Jarvis Backend/") and t.endswith(" API key")
                   for t in API.KEY_TARGETS.values()), API.KEY_TARGETS)
-    check("every preset says where its address was checked, or 'unverified'",
-          all(p.verified for p in API.PRESETS.values())
-          and API.PRESETS["deepseek_api"].verified == "unverified")
+    check("every preset says where its address was checked",
+          all(p.verified and p.verified != "unverified" for p in API.PRESETS.values()),
+          {pid: p.verified for pid, p in API.PRESETS.items()})
+    # DeepSeek's row was the last "unverified" one. The owner read its own
+    # price page on 2026-10-06 (docs/ACCOUNT-KEYS-DESIGN.md part C), which
+    # names the base URL and the current models - and does NOT name
+    # deepseek-chat, the model this preset used to default to.
+    check("DeepSeek's address is verified against its own page now, with the date",
+          "api-docs.deepseek.com/quick_start/pricing" in API.PRESETS["deepseek_api"].verified
+          and "2026-10-06" in API.PRESETS["deepseek_api"].verified,
+          API.PRESETS["deepseek_api"].verified)
+    check("DeepSeek's default model is one its page names (not the retired deepseek-chat)",
+          API.PRESETS["deepseek_api"].model == "deepseek-flash"
+          and "deepseek-chat" not in API.PRESETS["deepseek_api"].model
+          and "deepseek-chat" in API.PRESETS["deepseek_api"].note,
+          (API.PRESETS["deepseek_api"].model, API.PRESETS["deepseek_api"].note))
     check("the Gemini website and the local AI are still listed beside them",
           got.get("gemini_web", {}).get("kind") == "website"
           and got.get("local_ai", {}).get("kind") == "local")
@@ -1039,22 +1065,28 @@ def t_money_cap_arithmetic():
 
 
 def t_cap_field_per_service():
-    """Each service's own name for the cap, as its own code names it;
-    DeepSeek's could not be confirmed, so none is sent there."""
+    """Each service's own name for the cap, as its own documentation names
+    it. DeepSeek's was the last one unconfirmed; its own API reference
+    ("Create Chat Completion") was read on 2026-10-06 and names max_tokens,
+    so a cap is now sent to all six."""
     clean()
     point_all()
     want = {"openai_api": "max_completion_tokens", "groq_api": "max_completion_tokens",
             "openrouter_api": "max_completion_tokens", "mistral_api": "max_tokens",
-            "xai_api": "max_tokens", "deepseek_api": ""}
+            "xai_api": "max_tokens", "deepseek_api": "max_tokens"}
     check("the field per service", {pid: p.cap_field for pid, p in API.PRESETS.items()}
           == want, {pid: p.cap_field for pid, p in API.PRESETS.items()})
     where = {"openai_api": "openai/openai-python", "groq_api": "groq/groq-python",
              "openrouter_api": "OpenRouterTeam/typescript-sdk",
              "mistral_api": "mistralai/client-python", "xai_api": "xai-org/grok-build"}
-    check("each field says where it was checked; DeepSeek's says unverified",
-          all(where[pid] in API.PRESETS[pid].cap_source for pid in where)
-          and API.PRESETS["deepseek_api"].cap_source.startswith("unverified"),
+    check("each field says where it was checked",
+          all(where[pid] in API.PRESETS[pid].cap_source for pid in where),
           {pid: p.cap_source for pid, p in API.PRESETS.items()})
+    check("DeepSeek's says its own API reference, with the date it was read",
+          "api-docs.deepseek.com/api/create-chat-completion"
+          in API.PRESETS["deepseek_api"].cap_source
+          and "2026-10-06" in API.PRESETS["deepseek_api"].cap_source,
+          API.PRESETS["deepseek_api"].cap_source)
     for pid, field in want.items():
         SRV.reset()
         STORE[API.KEY_TARGETS[pid]] = KEY
@@ -1064,13 +1096,9 @@ def t_cap_field_per_service():
         wait_reply(a)
         body = sent_bodies()[0]
         others = {"max_completion_tokens", "max_tokens"} - {field}
-        if field:
-            check(f"{pid}: the request carries {field} and no other cap field",
-                  body.get(field) == API.MOST_REPLY_TOKENS
-                  and not any(k in body for k in others), body)
-        else:
-            check(f"{pid}: no cap field is sent (unverified)",
-                  not any(k in body for k in others), body)
+        check(f"{pid}: the request carries {field} and no other cap field",
+              body.get(field) == API.MOST_REPLY_TOKENS
+              and not any(k in body for k in others), body)
         a.close()
 
 
@@ -1097,7 +1125,9 @@ def t_cut_off_note():
     wait_reply(a)
     check("... and the next, whole answer is not", a.cut_off() is False)
     a.close()
-    # DeepSeek: no cap was sent, so a "length" there is not Jarvis's doing.
+    # DeepSeek now carries a cap too (its own API reference names
+    # max_tokens), so a "length" there IS Jarvis's doing and gets the note -
+    # the reverse of what this check asserted while that field was unverified.
     SRV.reset()
     SRV.script = [(200, {}, body)]
     STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
@@ -1105,7 +1135,9 @@ def t_cut_off_note():
     a.open()
     a.send("Which plants like shade?")
     wait_reply(a)
-    check("with no cap sent (DeepSeek), a 'length' gets no note", a.cut_off() is False)
+    check("with a cap sent (DeepSeek), a 'length' gets the note",
+          a.cut_off() is True and sent_bodies()[0].get("max_tokens")
+          == API.MOST_REPLY_TOKENS, (a.cut_off(), sent_bodies()[0]))
     a.close()
     # All of the cap spent on hidden reasoning: no answer at all.
     SRV.reset()
@@ -1134,19 +1166,26 @@ def t_cut_off_note():
           [t.get("cut_off") for t in replies] == [True, None], replies)
 
 
-def t_unverified_service_keeps_the_worst_case_check():
-    """DeepSeek's cap field could not be confirmed: no cap is sent, and the
-    old worst-case check (8,000 answer + 8,000 reasoning) is its only guard."""
+def t_the_capped_service_stops_at_the_limit():
+    """DeepSeek used to be the one service with no confirmed cap field, and
+    the old worst-case check (8,000 answer + 8,000 reasoning, read at the
+    from-memory price) was its only guard. Since 2026-10-06 its own API
+    reference names `max_tokens`, and its price is the WORST CASE read off
+    DeepSeek's own price page - so what has to hold now is: the cap is sent,
+    it is computed from money that is really left, and the same arithmetic
+    still refuses a message the month cannot pay for."""
     clean()
     point_all(limit=0.01)
     STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
-    # Default $0.28 in, $0.42 out: 16,000 out at worst = $0.00672.
-    API.record_spend("deepseek_api", "deepseek-chat", 0, 10_000)     # $0.0042: $0.0058 left
+    # Worst-case price $0.30 in / $1.20 out a million (peak, cache miss:
+    # https://api-docs.deepseek.com/quick_start/pricing/, read 2026-10-06).
+    API.record_spend("deepseek_api", "deepseek-flash", 0, 10_000)   # $0.012 of $0.01
     a = CB.ADAPTERS["deepseek_api"].factory()
     a.open()
     why = a.before_send("Which plants like shade?")
-    check("DeepSeek with $0.0058 left: refused, since its worst case ($0.0067+) may not fit",
-          "would pass the $0.01 a month you set for DeepSeek" in why, why)
+    check("DeepSeek at its limit: refused in the existing words",
+          "about $0.01 is used this month" in why
+          and "would pass" not in why, why)
     try:
         a.send("Which plants like shade?")
         refused = False
@@ -1155,28 +1194,33 @@ def t_unverified_service_keeps_the_worst_case_check():
     check("... and send() refuses it too; nothing reaches the service",
           refused and not SRV.requests, (refused, len(SRV.requests)))
     a.close()
-    API.set_limit("deepseek_api", 0.02)
+    API.set_limit("deepseek_api", 0.05)
     a = CB.ADAPTERS["deepseek_api"].factory()
     a.open()
-    check("with enough left for the worst case, it may be sent",
-          a.before_send("Which plants like shade?") == "")
+    check("with room left it may be sent", a.before_send("Which plants like shade?") == "")
     a.send("Which plants like shade?")
     wait_reply(a)
     body = sent_bodies()[0]
-    check("... and carries no cap field (none was confirmed)",
-          "max_tokens" not in body and "max_completion_tokens" not in body, body)
+    check("... and the request carries DeepSeek's own cap field, and no other",          body.get("max_tokens") == API.MOST_REPLY_TOKENS
+          and "max_completion_tokens" not in body, body)
     a.close()
     text = CB.describe(CB.plan("deepseek_api", GOAL, deps=deps()))
-    check("DeepSeek's card says plainly that it cannot yet ask for short answers",
-          "cannot yet ask DeepSeek to keep answers short" in text, text)
+    check("DeepSeek's card now says it asks DeepSeek to keep answers short",
+          "asks DeepSeek to keep each answer short enough" in text
+          and "cannot yet ask DeepSeek" not in text, text)
     lines = "\n".join(API.spent_lines())
     check("`spent` says per service how the limit is kept, DeepSeek's plainly",
-          "deepseek: " in lines and "NO CAP IS SENT" in lines
-          and "The only guard is the check before each message" in lines
-          and "capped with max_completion_tokens" in lines
+          "deepseek: " in lines
           and "capped with max_tokens" in lines
+          and "capped with max_completion_tokens" in lines
           and "count hidden reasoning inside that cap" in lines
           and "does not say whether hidden reasoning counts inside" in lines, lines)
+    check("... and no shipped service is left with no cap at all",
+          "NO CAP IS SENT" not in lines, lines)
+    check("... and says DeepSeek's price was read off its own page, worst case, with the date",
+          "checked against DeepSeek's own price page on 2026-10-06" in lines
+          and "worst case" in lines and "off-peak is about half" in lines
+          and "deepseek-flash" in lines, lines)
     check("... and never the key", KEY not in lines)
 
 
@@ -1280,10 +1324,14 @@ def t_money_prices_and_the_command_line():
     lines.clear()
     API._main(["spent"], out=lines.append)
     text = "\n".join(lines)
-    check("`spent` shows the month, every service and every price, defaults UNVERIFIED",
+    check("`spent` shows the month, every service and every price",
           "September 2026" in text and "October 1" in text
           and all(p.name in text for p in API.PRESETS.values())
-          and text.count("UNVERIFIED") == len(API.PRESETS), text)
+          # Every default but DeepSeek's is still the from-memory guess and
+          # says UNVERIFIED; DeepSeek's two are read off its own page and say
+          # where and when instead (docs/ACCOUNT-KEYS-DESIGN.md part C).
+          and text.count("UNVERIFIED") == len(API.PRESETS) - 1
+          and "checked against DeepSeek's own price page" in text, text)
     check("... and never the key", KEY not in text and KEY[-10:] not in text)
     # A model the list does not know: no price, not used until one is set.
     CFG["openai_api_model"] = "gpt-4.1-nano"
@@ -1390,6 +1438,140 @@ def t_money_words_shared_with_both_apps():
           R.WORDS["money_left"] == API.MONEY_LEFT)
     check("the usage line has room for the estimate",
           R.WORDS["usage_line"].endswith(", about {cost}"))
+
+
+# ==========================================================================
+#   The cloud escalation lane's transport (docs/ACCOUNT-KEYS-DESIGN.md part C)
+# ==========================================================================
+
+def t_the_cloud_lane_resolves_to_a_real_service():
+    """`jarvis-escalate` and friends were labels read out of a LiteLLM config
+    for a proxy that is not installed. They now name a service and a model
+    this module actually has - DeepSeek, the service the owner chose."""
+    clean()
+    point_all(limit=5.0)
+    check("the three lanes the shipped degrade_chain names all resolve",
+          set(API.CLOUD_LANES) == {"jarvis-escalate", "jarvis-bulk", "jarvis-critic"},
+          sorted(API.CLOUD_LANES))
+    check("every lane names a real preset and a model that preset could send",
+          all(pid in API.PRESETS and model for pid, model in API.CLOUD_LANES.values()),
+          API.CLOUD_LANES)
+    check("jarvis-escalate and jarvis-bulk are DeepSeek's cheap current model",
+          API.lane_service("jarvis-escalate") == ("deepseek_api", "deepseek-flash")
+          and API.lane_service("jarvis-bulk") == ("deepseek_api", "deepseek-flash"),
+          (API.lane_service("jarvis-escalate"), API.lane_service("jarvis-bulk")))
+    check("jarvis-critic, whose job is to check an answer, is the stronger model",
+          API.lane_service("jarvis-critic") == ("deepseek_api", "deepseek-v4-pro"),
+          API.lane_service("jarvis-critic"))
+    check("a lane name nobody here knows still means something real, not nothing",
+          API.lane_service("jarvis-vision")[0] == API.DEFAULT_LANE[0]
+          and ORIGINAL[API.DEFAULT_LANE[0]].base_url == DEEPSEEK_URL
+          and API.price_of(API.DEFAULT_LANE[0], API.lane_service("jarvis-vision")[1]),
+          API.lane_service("jarvis-vision"))
+    # The owner's own [chatbot] model line still wins: the lane asks the
+    # module rather than keeping a second copy of the default.
+    CFG["deepseek_api_model"] = "deepseek-v4-pro"
+    API._reset_models_for_tests()
+    check("a model the owner set in jarvis-framework.toml is the one the lane uses",
+          API.lane_service("jarvis-escalate") == ("deepseek_api", "deepseek-v4-pro"),
+          API.lane_service("jarvis-escalate"))
+    CFG.pop("deepseek_api_model", None)
+    API._reset_models_for_tests()
+
+
+def t_the_cloud_lane_sends_nothing_unless_it_can():
+    """The money rule, at the point the lane is chosen: no key, no price, a
+    reached limit or a message the month cannot pay for all mean None - and
+    None means the caller must not send, rather than a request that leaves
+    the PC and a bill nobody counted."""
+    clean()
+    point_all(limit=5.0)
+    check("with no key saved: no lane, and nothing to send",
+          API.cloud_lane("jarvis-escalate") is None)
+    check("... and the reason is the module's own 'no key' sentence, not a new one",
+          API.no_key_words(API.PRESETS["deepseek_api"]) == API.ready_for("deepseek_api"),
+          API.ready_for("deepseek_api"))
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    got = API.cloud_lane("jarvis-escalate")
+    # The presets are pointed at the fake server by point_all(); what a lane
+    # resolves to on the owner's PC is the SAME arithmetic (that preset's own
+    # base_url + /chat/completions), so this proves both: the real base URL
+    # is DeepSeek's, and the lane builds its URL from the preset rather than
+    # from a second copy of the address.
+    was = API.PRESETS["deepseek_api"]
+    try:
+        API.point_at("deepseek_api", DEEPSEEK_URL)
+        real = API.cloud_lane("jarvis-escalate")
+    finally:
+        API.PRESETS["deepseek_api"] = was
+    check("with a key, a price and a limit: the lane is DeepSeek's own https endpoint",
+          got and real and real["host"] == "api.deepseek.com"
+          and real["url"] == DEEPSEEK_URL + "/chat/completions"
+          and ORIGINAL["deepseek_api"].base_url == DEEPSEEK_URL
+          and got["model"] == "deepseek-flash", (got, real))
+    check("... and carries the answer-length cap, so one answer cannot pass the limit",
+          got["cap"] == API.MOST_REPLY_TOKENS, got)
+    check("... and the key is read only when a request is built, from the real store",
+          API.lane_key("jarvis-escalate") == KEY)
+    API.set_limit("deepseek_api", None)
+    check("no monthly limit: no lane (the owner's rule: no limit, no conversation)",
+          API.cloud_lane("jarvis-escalate") is None)
+    API.set_limit("deepseek_api", 0.01)
+    API.record_spend("deepseek_api", "deepseek-flash", 0, 10_000)
+    check("a reached limit: no lane, so nothing is sent and nothing more is spent",
+          API.cloud_lane("jarvis-escalate") is None)
+    API.set_limit("deepseek_api", 0.05)
+    check("... and with room again, the lane comes back",
+          API.cloud_lane("jarvis-escalate") is not None)
+    check("a message the month cannot pay for: no lane",
+          API.cloud_lane("jarvis-escalate", chars=10_000_000) is None)
+    clean()
+    # A model with no price can never be sent: the lane says so rather than
+    # guessing a price. (The presets stay pointed at the fake server; nothing
+    # here opens a socket, because deciding a lane never does.)
+    point_all(limit=5.0)
+    CFG["deepseek_api_model"] = "deepseek-nobody-knows"
+    API._reset_models_for_tests()
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    why = API.ready_for("deepseek_api")
+    check("a model with no price: no lane, and the words say how to set one",
+          API.cloud_lane("jarvis-escalate") is None
+          and "no price for the model" in why and "py -3" in why, why)
+    CFG.pop("deepseek_api_model", None)
+    API._reset_models_for_tests()
+
+
+def t_the_cloud_lane_status_never_carries_a_key():
+    """What the apps, "What Jarvis can reach" and the desktop's health light
+    read: names, models, hosts, whether each lane can be used, and the money
+    left - never a key, never a message."""
+    clean()
+    point_all(limit=5.0)
+    st = API.lane_status()
+    check("one row per lane with the service and model each means",
+          st["available"] and len(st["lanes"]) == len(API.CLOUD_LANES)
+          and all({"lane", "pid", "model", "host", "company", "ready", "why"} <= set(r)
+                  for r in st["lanes"]), st)
+    check("with no key saved, no lane is ready, and each says why in plain words",
+          st["ready"] == [] and all(r["why"] for r in st["lanes"]), st)
+    check("... and no key is anywhere in it", KEY not in json.dumps(st), st)
+    STORE[API.KEY_TARGETS["deepseek_api"]] = KEY
+    st = API.lane_status()
+    check("with a key and a limit, every lane is ready, each naming api.deepseek.com",
+          sorted(st["ready"]) == sorted(API.CLOUD_LANES)
+          and all(r["model"] for r in st["lanes"])
+          and {r["lane"]: r["model"] for r in st["lanes"]}
+          == {"jarvis-escalate": "deepseek-flash", "jarvis-bulk": "deepseek-flash",
+              "jarvis-critic": "deepseek-v4-pro"}, st)
+    check("... and the host it names is the preset's own (DeepSeek's, unpointed)",
+          all(r["host"] == "127.0.0.1" for r in st["lanes"])
+          and ORIGINAL["deepseek_api"].host == "api.deepseek.com", st)
+    check("... and it carries the money view both apps already show",
+          all(r["money"] and r["money"]["company"] == "DeepSeek" for r in st["lanes"]), st)
+    check("... and still no key", KEY not in json.dumps(st))
+    st = API.lane_status()
+    check("the status opens no socket (a fake server counts requests)",
+          not SRV.requests, len(SRV.requests))
 
 
 def t_shipped_and_documented():

@@ -6,6 +6,8 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The cloud escalation lane has a real transport now, and DeepSeek is behind it (2026-10-06).** "Try the cloud model" sent its one question to `JARVIS_URL`, the port of a program this setup never installed; a lane name such as `jarvis-escalate` now resolves to a real service and model through the same code the chatbot API keys use - DeepSeek's own pinned host over HTTPS, the key from Windows Credential Manager, the monthly money limit, and the answer-length cap - and a lane the limit cannot pay for is answered on this PC instead, so the offer can disappear rather than overspend. DeepSeek's address, current model names and worst-case (peak, cache-miss) prices were read from its own pricing page on 2026-10-06, so the limit stops early rather than late; the desktop's "LiteLLM" health light now reads the lane's real state, and "What Jarvis can reach" no longer reads lane names out of `litellm-proxy.yaml`. `docs/ACCOUNT-KEYS-DESIGN.md` section 5 says what to remove from the PC by hand.
+
 - **Anything needing a key is settable in the app now (2026-10-06).** Settings
   has a new "Chatbot API keys" card for the six chatbot API services (OpenAI,
   DeepSeek, Mistral, xAI, OpenRouter, Groq): each key is typed on the PC and

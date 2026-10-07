@@ -96,8 +96,18 @@ const TELEMETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3
 pub const JARVIS_SERVER_URL: &str = commands::DEFAULT_BASE;
 /// Local Ollama daemon.
 pub const OLLAMA_URL: &str = "http://127.0.0.1:11434";
-/// Local LiteLLM proxy.
-pub const LITELLM_URL: &str = "http://127.0.0.1:4000";
+/// The cloud escalation lane's own state, answered by the backend.
+///
+/// This replaced `LITELLM_URL` (2026-10-06, the owner's decision,
+/// docs/ACCOUNT-KEYS-DESIGN.md section 5 and part C). That constant pointed at
+/// `http://127.0.0.1:4000`, the port of a LiteLLM proxy that was never
+/// installed, so the health light went red for a service that did not exist
+/// and could not have carried a lane anyway. A cloud lane is now a service and
+/// a model inside `jarvis_chatbot_api.py`, reached through the backend that
+/// already owns the key and the monthly money limit - so the health check asks
+/// the backend. The route is `jarvis_chatbot_limits.PATH`
+/// (`/api/chatbot/money`), a plain read of this month's limits and spending.
+pub const CLOUD_LANE_STATUS_PATH: &str = "/api/chatbot/money";
 
 /// Event names shared with the frontend. Keeping them in one place stops the
 /// Rust and JavaScript sides from drifting apart.

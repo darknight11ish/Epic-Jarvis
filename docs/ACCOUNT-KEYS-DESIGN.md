@@ -1,8 +1,9 @@
 # Keys and accounts set up inside Jarvis — a design note to approve
 
-**Status: the owner approved it, and parts A and B are built** (branch
+**Status: the owner approved it, and parts A, B and C are built** (branch
 `next-account-keys-design`, 2026-10-06). Part C — giving the idle cloud lane a
-real transport — still needs one decision, and §7 says which.
+real transport — is built too: §5 records what was built and where, and §7's
+Decision 6 is answered.
 
 You asked (CLAUDE.md, the short list, 2026-10-06) that "anything needing a key or
 a sign-in should be settable in the Jarvis app itself", desktop only. This note
@@ -227,6 +228,55 @@ options:
 Either way, `OPENROUTER_KEY_1` and `LITELLM_MASTER_KEY` should be retired from
 your Windows environment variables.
 
+### Part C, built (2026-10-06) — you chose "point it at `jarvis_chatbot_api.py`"
+
+The owner chose the first option, and the service behind the lane is
+**DeepSeek**. What was built, and where:
+
+| Piece | Where |
+|---|---|
+| The lane names, the service and model each one means, and whether each can be used | `backend/jarvis_chatbot_api.py` — `CLOUD_LANES`, `DEFAULT_LANE`, `lane_service()`, `cloud_lane()`, `lane_key()`, `lane_status()` |
+| The transport itself: the address, the model the service is asked for, the key, and the refusal when the month's limit cannot pay for the lane | `backend/ollama-direct.patch` — `_completions_url()` inside `jarvis_hud.py`'s `_open`, plus `_auth_headers()` and the 503's words |
+| DeepSeek's address and current model names, verified | `jarvis_chatbot_api.PRESETS["deepseek_api"]`, read from `api-docs.deepseek.com/quick_start/pricing/` on 2026-10-06 |
+| DeepSeek's worst-case prices, and why they are the worst case | `DEFAULT_PRICES` in the same file |
+| "What Jarvis can reach" reports the lane's real state | `backend/jarvis_reach.py` — `_cloud_model()` asks `jarvis_chatbot_api.lane_status()`; it no longer reads `litellm-proxy.yaml` |
+| The desktop's health light | `jarvis-desktop/src-tauri/src/lib.rs` (`CLOUD_LANE_STATUS_PATH`) and `commands.rs` (`check_server_health`): the old `LITELLM_URL` (`127.0.0.1:4000`) is gone |
+| The honest test | `backend/test_ollama_direct.py` — it used to assert the placeholder; it now asserts the real lane, and `backend/test_chatbot_api.py` covers the resolver and the prices |
+
+The three lane names in `jarvis-framework.toml`'s `degrade_chain` map like
+this: `jarvis-escalate` and `jarvis-bulk` to `deepseek-flash` (the cheap,
+current model), `jarvis-critic` to `deepseek-v4-pro` (the stronger one, for
+the lane whose job is to check an answer). Any other non-local lane name also
+resolves, to `deepseek-flash`. A `[chatbot] deepseek_api_model` line in
+`jarvis-framework.toml`, if you set one, wins over all of them.
+
+**A lane the month cannot pay for is answered on this PC instead** — no key
+saved, a model with no price, the limit reached, or a message the limit cannot
+cover. This is the strict reading of your own rule ("a money limit comes
+before API chatbots are used for real"), and it means the cloud offer can
+disappear rather than overspend.
+
+### Your PC: what to remove, and why
+
+Nothing in the repository was deleted from your machine. Two things there are
+now leftovers, and both are safe to remove by hand:
+
+1. **`~/.openjarvis/cloud-keys.env`** (the 1-byte file). No repository code
+   ever read it. A plain-text key file breaks rule 3, so it must not be
+   revived — not even as a fallback. Delete the file.
+2. **The user environment variables `OPENROUTER_KEY_1` and
+   `LITELLM_MASTER_KEY`.** Windows stores user environment variables as plain
+   text, so they are secret material sitting unencrypted (rule 3). The
+   LiteLLM proxy they belonged to is not installed and is no longer part of
+   this lane at all; the OpenRouter key, if you still want OpenRouter, belongs
+   in Credential Manager under `py -3 jarvis_chatbot_api.py key openrouter`.
+   Remove both variables:
+   `[Environment]::SetEnvironmentVariable("OPENROUTER_KEY_1", $null, "User")`
+   and the same for `LITELLM_MASTER_KEY`, then sign out and back in.
+
+`litellm-proxy.yaml` in the same folder is now read by nothing either. It can
+stay (harmless) or go; it is your file, so nothing here deletes it.
+
 ---
 
 ## 6. The rules this design must not break
@@ -337,6 +387,12 @@ which — only the service's own bill does.
 
 ### Decision 6 — what happens to the cloud lane?
 
+**ANSWERED 2026-10-06: the first option.** The lane goes through
+`jarvis_chatbot_api.py`, with **DeepSeek** behind it — the owner chose DeepSeek
+knowing its spending limit is an estimate rather than an exact figure. The two
+environment variables are to be retired by hand (§5, "Your PC: what to
+remove"). The options as they were put:
+
 - **Point it at `jarvis_chatbot_api.py`, and retire the two environment
   variables** *(recommended)*. The lane becomes real, and a plain-text key in
   your environment goes away.
@@ -390,7 +446,7 @@ The same screen, showing each model's price, where the number came from
 same fields `set_price` already writes (line 824-825).
 
 **Step 6 — the cloud lane. A separate piece of work, and it needs its own
-decision.** §5. Do not fold it into Step 3.
+decision.** §5. Do not fold it into Step 3. **BUILT — see §5, "Part C, built".**
 
 **Step 7 — the related secrets of §3.5. Each needs its own look, not this
 plan.** The GitHub token is the odd one: `jarvis_tellme` reads the environment

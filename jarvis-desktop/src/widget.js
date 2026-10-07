@@ -913,7 +913,7 @@ function applyLane(lane) {
 /** Paints the connection dot from a health report. */
 function applyHealth(report) {
   if (!report || !Array.isArray(report.services)) return;
-  // An optional service (LiteLLM, the cloud lane's proxy) counts only when it
+  // An optional service (the cloud escalation lane) counts only when it
   // answers - not running is normal with no cloud model set up. Same rule as
   // commands.rs summarise_health.
   const counted = report.services.filter((s) => s.online || !s.optional);
@@ -1814,7 +1814,7 @@ startLink();
   // command of its own (capability sky-read).
   startSkyFeed({ onEvent });
 
-  // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
+  // Ollama and the cloud lane's own state are not on the bus, so their dots need
   // one probe. Once, at boot — there is no timer here any more.
   const report = await invoke("check_server_health");
   if (report) applyHealth(report);

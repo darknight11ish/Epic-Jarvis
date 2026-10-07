@@ -14,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
-use crate::{windows, ChatState, HUD_LABEL, LITELLM_URL, OLLAMA_URL};
+use crate::{windows, ChatState, CLOUD_LANE_STATUS_PATH, HUD_LABEL, OLLAMA_URL};
 
 /// JPEG quality for desktop captures. 82 keeps text legible while staying well
 /// under the size at which a base64 data URI becomes painful over IPC.
@@ -81,7 +81,7 @@ pub struct CapturePayload {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceStatus {
-    /// Stable identifier: `"jarvis"`, `"ollama"` or `"litellm"`.
+    /// Stable identifier: `"jarvis"`, `"ollama"` or `"cloud_lane"`.
     pub id: &'static str,
     /// Human readable name for the UI.
     pub name: &'static str,
@@ -98,9 +98,10 @@ pub struct ServiceStatus {
     /// Parsed JSON body, when the service returned one and it was small enough
     /// to be worth forwarding (the Ollama model list, for instance).
     pub payload: Option<serde_json::Value>,
-    /// Only needed for something the owner may not use. LiteLLM is the cloud
-    /// lane's proxy: with no cloud lane set up, nothing runs on :4000, and
-    /// that is the normal state, not a fault. An optional service counts in
+    /// Only needed for something the owner may not use. The cloud escalation
+    /// lane is off unless the owner has set one up: with no cloud lane, the
+    /// backend still answers this probe and says there is nothing to use,
+    /// which is the normal state, not a fault. An optional service counts in
     /// the totals only when it answers - see [`summarise_health`].
     pub optional: bool,
 }
@@ -1606,15 +1607,15 @@ async fn probe(
     }
 }
 
-/// Pings the local Jarvis orchestrator, Ollama and LiteLLM, and returns a
-/// structured report. All three are probed concurrently, so the command costs
-/// roughly one timeout in the worst case rather than three.
+/// Pings the local Jarvis orchestrator, Ollama and the cloud lane's own state,
+/// and returns a structured report. All three are probed concurrently, so the
+/// command costs roughly one timeout in the worst case rather than three.
 #[tauri::command]
 pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String> {
     let client = reqwest::Client::builder()
         .timeout(HEALTH_TIMEOUT)
         .connect_timeout(HEALTH_TIMEOUT)
-        // These are loopback services; a proxy would only get in the way.
+        // These loopback services; a proxy would only get in the way.
         .no_proxy()
         // Never follow a redirect: reqwest would carry X-Jarvis-Token to
         // wherever it points (apps security audit L1).
@@ -1625,7 +1626,7 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
     // A refused address: Jarvis is not asked at all (the probe below would
     // only fail on the empty base), and the sentence says why.
     require_base_allowed(&app)?;
-    let (jarvis, ollama, litellm) = tokio::join!(
+    let (jarvis, ollama, cloud_lane) = tokio::join!(
         probe(
             &client,
             "jarvis",
@@ -1640,28 +1641,31 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
             format!("{OLLAMA_URL}/api/tags"),
             None,
         ),
+        // The cloud escalation lane's real state - not a proxy on :4000. It is
+        // the backend that owns the lane's key and monthly limit, so the
+        // backend is what is asked; this is a read, and a lane that is not set
+        // up answers "nothing to use" rather than failing.
         probe(
             &client,
-            "litellm",
-            "LiteLLM",
-            format!("{LITELLM_URL}/health"),
-            None,
+            "cloud_lane",
+            "Cloud model",
+            format!("{}{CLOUD_LANE_STATUS_PATH}", jarvis_base(&app)),
+            jarvis_headers(&app).ok(),
         ),
     );
 
-    // The cloud lane's proxy. Not running is the normal state when no cloud
-    // lane is set up - which is the default, and today's setup - so it no
-    // longer turns every status check into "2/3 online - offline: LiteLLM".
-    let mut litellm = litellm;
-    litellm.optional = true;
-    if !litellm.online {
-        litellm.detail = format!(
-            "not running — only needed if you set up a cloud model ({})",
-            litellm.detail
+    // The cloud lane is optional: not set up is the normal state, so it does
+    // not turn every status check into "2/3 online - offline: Cloud model".
+    let mut cloud_lane = cloud_lane;
+    cloud_lane.optional = true;
+    if !cloud_lane.online {
+        cloud_lane.detail = format!(
+            "not answering — only needed if you set up a cloud model ({})",
+            cloud_lane.detail
         );
     }
 
-    let services = vec![jarvis, ollama, litellm];
+    let services = vec![jarvis, ollama, cloud_lane];
     let (online_count, total_count, summary) = summarise_health(&services);
     Ok(HealthReport {
         checked_at: now_ms(),
@@ -1673,9 +1677,10 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
     })
 }
 
-/// The counts and the one-line summary. An optional service (LiteLLM) is
-/// counted only when it answers; when it does not, the summary says so in a
-/// separate, calm sentence instead of listing it as offline.
+/// The counts and the one-line summary. An optional service (the cloud
+/// escalation lane) is counted only when it answers; when it does not, the
+/// summary says so in a separate, calm sentence instead of listing it as
+/// offline.
 pub(crate) fn summarise_health(services: &[ServiceStatus]) -> (usize, usize, String) {
     let counted: Vec<&ServiceStatus> = services
         .iter()
@@ -5684,28 +5689,29 @@ mod health_tests {
         }
     }
 
-    /// The everyday state: no cloud lane, so nothing on :4000. That is not
-    /// "2/3 online - offline: LiteLLM".
+    /// The everyday state: no cloud lane set up. The backend still answers the
+    /// probe and says so, but if it is not answering either, that is not
+    /// "2/3 online - offline: Cloud model".
     #[test]
-    fn litellm_not_running_is_not_an_outage() {
+    fn a_cloud_lane_that_is_not_set_up_is_not_an_outage() {
         let (online, total, summary) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
             svc("ollama", "Ollama", true, false),
-            svc("litellm", "LiteLLM", false, true),
+            svc("cloud_lane", "Cloud model", false, true),
         ]);
         assert_eq!((online, total), (2, 2));
         assert!(summary.starts_with("All 2 services online."), "{summary}");
         assert!(!summary.contains("offline"), "{summary}");
-        assert!(summary.contains("LiteLLM is not running"), "{summary}");
+        assert!(summary.contains("Cloud model is not running"), "{summary}");
     }
 
-    /// When it does run, it counts like anything else.
+    /// When it does answer, it counts like anything else.
     #[test]
-    fn litellm_running_is_counted() {
+    fn a_cloud_lane_that_answers_is_counted() {
         let (online, total, _) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
             svc("ollama", "Ollama", true, false),
-            svc("litellm", "LiteLLM", true, true),
+            svc("cloud_lane", "Cloud model", true, true),
         ]);
         assert_eq!((online, total), (3, 3));
     }
@@ -5716,7 +5722,7 @@ mod health_tests {
         let (online, total, summary) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
             svc("ollama", "Ollama", false, false),
-            svc("litellm", "LiteLLM", false, true),
+            svc("cloud_lane", "Cloud model", false, true),
         ]);
         assert_eq!((online, total), (1, 2));
         assert!(summary.contains("offline: Ollama"), "{summary}");

@@ -25,9 +25,19 @@ that was possible):
 
     openai_api      https://api.openai.com/v1         VERIFIED: openai/openai-python
                                                       (_client.py; /chat/completions)
-    deepseek_api    https://api.deepseek.com          UNVERIFIED: from memory of
-                                                      DeepSeek's API docs; its GitHub
-                                                      READMEs only name platform.deepseek.com
+    deepseek_api    https://api.deepseek.com          VERIFIED 2026-10-06: DeepSeek's own
+                                                      "Models & Pricing" page
+                                                      (api-docs.deepseek.com/quick_start/
+                                                      pricing/) names this as the Base URL
+                                                      (OpenAI format). It also names the
+                                                      current models - deepseek-flash
+                                                      (DeepSeek-V4.1-Flash) and
+                                                      deepseek-v4-pro - and says the legacy
+                                                      names deepseek-v4-flash and
+                                                      deepseek-v4-flash-vision-exp are still
+                                                      accepted. It does NOT name
+                                                      deepseek-chat, which this preset used
+                                                      to default to: see Preset.model below
     mistral_api     https://api.mistral.ai/v1         VERIFIED: mistralai/client-python
                                                       (README "global" server;
                                                       chat.py path /v1/chat/completions)
@@ -85,9 +95,14 @@ it is reached, and the approval card shows how much is left. Prices change,
 so the amount is an estimate from a price list the owner can see and
 correct, and the card says 'about'."
   * The price list: DEFAULT_PRICES below, dollars per million word-pieces
-    (tokens) in and out, per service AND model. EVERY DEFAULT IS UNVERIFIED -
-    written from memory on PRICES_WRITTEN with no price page reachable - and
-    every place that shows one says so. The owner corrects one on the PC:
+    (tokens) in and out, per service AND model. EVERY DEFAULT EXCEPT DeepSeek's
+    is UNVERIFIED - written from memory on PRICES_WRITTEN with no price page
+    reachable - and every place that shows one says so. DeepSeek's two were
+    read from its own price page on 2026-10-06 and are deliberately its
+    PEAK, cache-MISS numbers: the worst case, so a wrong guess stops the
+    month EARLY rather than letting it run past the limit (a too-low price is
+    the unsafe direction for a spending limit). Off-peak is exactly half.
+    The owner corrects one on the PC:
     `py -3 jarvis_chatbot_api.py price openai 0.25 2.00`. A model with no
     price (a model line the list does not know) cannot be used until the
     owner sets one: without a price there is no way to keep to the limit.
@@ -150,11 +165,22 @@ it is used.")
                       Chat Completions request to <base>/chat/completions, base
                       https://api.x.ai/v1; xai-org/xai-sdk-python's chat.py
                       names the same (gRPC)
-      deepseek_api    UNVERIFIED - NO CAP IS SENT. DeepSeek's API reference was
-                      blocked and it has no SDK for this API on GitHub (its own
-                      deepseek-harness speaks the Anthropic-style endpoint, a
-                      different API). The worst-case check below stays its only
-                      guard.
+      deepseek_api    max_tokens             DeepSeek's own API reference, "Create Chat
+                      Completion" (api-docs.deepseek.com/api/
+                      create-chat-completion, checked 2026-10-06):
+                      "max_tokens ... The maximum number of tokens
+                      that can be generated in the chat completion.
+                      The total length of input tokens and generated
+                      tokens is limited by the model's context length.
+                      The value must be between 1 and 384K (393216)."
+                      Hidden reasoning: kept "not_stated" on purpose.
+                      DeepSeek's thinking mode is ON BY DEFAULT ("The
+                      default effort is high") and its docs do not say in
+                      so many words whether what it thinks is billed
+                      inside that cap, so the check keeps REASONING_ROOM
+                      on top of it - the same cautious reading the other
+                      "not_stated" services get, and never an
+                      under-estimate.
   * Hidden reasoning ("thinking"): OpenAI's own words put reasoning INSIDE
     max_completion_tokens, so for openai_api the cap bounds the whole bill
     (Preset.reasoning "inside"). For every other service its own code does
@@ -162,13 +188,16 @@ it is used.")
     the check keeps REASONING_ROOM word-pieces of room for it on top of the
     cap: the cap bounds the visible answer, and the room is a guess for the
     rest.
-  * A service with no confirmed field (DeepSeek) keeps the old worst-case
-    check only: everything resent plus MOST_REPLY_TOKENS of answer plus
-    REASONING_ROOM must fit in what is left.
+  * A service with no confirmed field keeps the old worst-case check only:
+    everything resent plus MOST_REPLY_TOKENS of answer plus REASONING_ROOM
+    must fit in what is left. (Since 2026-10-06 no *shipped* preset is in
+    that state: DeepSeek's field was confirmed from its API reference, so
+    all six now send a cap.)
   * Honest limits: it is still an ESTIMATE. A price may be wrong until the
-    owner corrects it; for the "not_stated" services and DeepSeek, hidden
-    reasoning longer than REASONING_ROOM, or an answer longer than the most
-    (DeepSeek, uncapped), can carry a month a little over the limit.
+    owner corrects it, and prices change - DeepSeek's own page says so and
+    recommends checking it regularly; for every "not_stated" service hidden
+    reasoning longer than REASONING_ROOM can carry a month a little over the
+    limit.
 
 ERRORS, IN PLAIN WORDS (raised from read_reply as ApiUnavailable, whose
 `owner_words` jarvis_chatbot.run() shows): the key refused (401/403), no
@@ -246,13 +275,21 @@ PRESETS: dict = {p.id: p for p in (
                        "completion_create_params.py (checked 2026-09-28)"),
            reasoning="inside"),
     Preset("deepseek_api", "deepseek", "DeepSeek (API)", "DeepSeek",
-           "https://api.deepseek.com", "deepseek-chat",
+           "https://api.deepseek.com", "deepseek-flash",
            "https://platform.deepseek.com/api_keys",
-           "unverified",
+           "api-docs.deepseek.com/quick_start/pricing (checked 2026-10-06)",
+           note=("DeepSeek's own price page names its current models deepseek-flash and "
+                 "deepseek-v4-pro, and says the legacy names deepseek-v4-flash and "
+                 "deepseek-v4-flash-vision-exp are still accepted - but it no longer names "
+                 "deepseek-chat, which this preset used to default to. The default was "
+                 "changed to deepseek-flash on 2026-10-06 for that reason. Thinking mode is "
+                 "on by default, so an answer can be slower and cost more than its words "
+                 "alone suggest."),
            price_page="https://api-docs.deepseek.com/quick_start/pricing",
-           cap_field="",
-           cap_source=("unverified: DeepSeek's API reference could not be opened and it has "
-                       "no SDK for this API on GitHub")),
+           cap_field="max_tokens",
+           cap_source=("DeepSeek's own API reference, \"Create Chat Completion\" "
+                       "(api-docs.deepseek.com/api/create-chat-completion, checked "
+                       "2026-10-06): max_tokens, 1 to 384K")),
     Preset("mistral_api", "mistral", "Mistral (API)", "Mistral AI",
            "https://api.mistral.ai/v1", "mistral-small-latest",
            "https://console.mistral.ai/api-keys",
@@ -544,19 +581,55 @@ def _retry_after(headers: dict) -> Optional[float]:
 # ============================================================================
 
 #: The day the default prices below were written. NOT checked against any
-#: price page (none could be reached from where this was written).
+#: price page (none could be reached from where this was written) - EXCEPT
+#: DeepSeek's two, which the owner read off DeepSeek's own page on
+#: DEEPSEEK_PRICES_READ and which say so in their own comment.
 PRICES_WRITTEN = "2026-09-28"
 
+#: The day DeepSeek's two prices below were read off DeepSeek's own price
+#: page. Prices change; that page says so itself and asks to be checked
+#: regularly, so this date is part of the number.
+DEEPSEEK_PRICES_READ = "2026-10-06"
+
 #: (service id, model) -> (dollars per million word-pieces IN, per million
-#: OUT). EVERY ONE IS UNVERIFIED: written from memory on PRICES_WRITTEN,
-#: with no price page reachable. Check each against the company's price page
-#: (Preset.price_page) and correct it on the PC:
+#: OUT). EVERY ONE EXCEPT DeepSeek's is UNVERIFIED: written from memory on
+#: PRICES_WRITTEN, with no price page reachable. Check each against the
+#: company's price page (Preset.price_page) and correct it on the PC:
 #:     py -3 jarvis_chatbot_api.py price openai <in> <out>
 #: A model this list does not know has NO price: it cannot be used until
 #: the owner sets one (without a price there is no way to keep to a limit).
+#:
+#: DEEPSEEK'S TWO ARE PRICED AT THE WORST CASE, ON PURPOSE (2026-10-06).
+#: DeepSeek's "Models & Pricing" page (api-docs.deepseek.com/quick_start/
+#: pricing/, read DEEPSEEK_PRICES_READ) gives, per 1M tokens:
+#:     deepseek-flash    cache-miss in $0.30 peak / $0.15 off-peak,
+#:                       out $1.20 peak / $0.60 off-peak
+#:     deepseek-v4-pro   cache-miss in $1.32 peak / $0.66 off-peak,
+#:                       out $3.96 peak / $1.98 off-peak
+#:     cache HIT input is far cheaper ($0.006 peak for flash)
+#:     peak = 01:00-04:00 and 06:00-10:00 UTC, Monday to Friday,
+#:     excluding Chinese public holidays; everything else (weekends and
+#:     those holidays in full) is off-peak, and off-peak is EXACTLY HALF.
+#: These are the PEAK, CACHE-MISS numbers - the most a token can cost.
+#: That direction is deliberate: a price that is too LOW is the unsafe one
+#: for a spending limit, because the month runs past the cap before Jarvis
+#: stops. A worst-case price stops it early instead. So the real bill is
+#: usually LESS than Jarvis counts, by up to about half off-peak - and this
+#: line said exactly that before 2026-10-06, when it held $0.28/$0.42,
+#: which UNDER-estimated output ($0.42 against a real $0.60-$1.20).
+#: "Exact" is not achievable: the page states plainly that prices may change.
 DEFAULT_PRICES = {
     ("openai_api", "gpt-5-mini"): (0.25, 2.00),             # UNVERIFIED
-    ("deepseek_api", "deepseek-chat"): (0.28, 0.42),        # UNVERIFIED
+    # DeepSeek, worst case (peak, cache MISS). Read 2026-10-06:
+    # https://api-docs.deepseek.com/quick_start/pricing/ - off-peak is half.
+    ("deepseek_api", "deepseek-flash"): (0.30, 1.20),
+    ("deepseek_api", "deepseek-v4-pro"): (1.32, 3.96),
+    # The legacy name DeepSeek's page does not list any more. Kept priced
+    # because a jarvis-framework.toml model line may still name it: the page
+    # says requests for the retired models are served by DeepSeek-V4.1-Flash
+    # and billed at the Flash price, so that is what it is priced at. A
+    # NEW name nobody here knows has no price at all, on purpose.
+    ("deepseek_api", "deepseek-chat"): (0.30, 1.20),
     ("mistral_api", "mistral-small-latest"): (0.10, 0.30),  # UNVERIFIED
     # No price is remembered for this model name at all: Grok 4's (the
     # highest here) is used as a cautious guess. UNVERIFIED.
@@ -847,7 +920,8 @@ def reset_price(pid: str, model: str) -> dict:
         back = price_of(pid, model, data)
     return {"ok": True, "said": f"{PRESETS[pid].company}, model {model}: back to "
                                 + (f"the default price (${back[0]:g} in, ${back[1]:g} out, "
-                                   f"UNVERIFIED)." if back else
+                                   + (verified_price(pid, model) or "UNVERIFIED")
+                                   + ")." if back else
                                    "no price, so it cannot be used until you set one.")}
 
 
@@ -1422,6 +1496,148 @@ def point_at(pid: str, base_url: str) -> Preset:
 
 
 # ============================================================================
+#   The cloud escalation lanes - the transport this code ALREADY has
+# ============================================================================
+#
+# WHAT THIS ANSWERS (owner's decision, docs/ACCOUNT-KEYS-DESIGN.md section 5
+# and part C, 2026-10-06). `/api/chat` on the PC answers a hard question
+# locally by default and only offers the cloud when the owner says yes to
+# that one question (`jarvis_router.choose()`). The lanes it offers were
+# names read out of `litellm-proxy.yaml` - the config of a LiteLLM proxy
+# that is not installed and never was - and the request for one of those
+# lanes went to `JARVIS_URL` (OpenJarvis's own port), so the offer was
+# literally unimplemented. `ollama-direct.patch` called that one place "the
+# one place that needs a real answer".
+#
+# THE ANSWER: those lanes now go through the adapter family above - HTTPS to
+# the service's own pinned host, the key from Windows Credential Manager
+# only, the same monthly money limit, the same answer-length cap, the same
+# redirect refusal. Nothing new was invented for it; the lane just names a
+# service this module already has.
+#
+# THE MAPPING IS DECLARED, NOT INVENTED. A lane name is a label in
+# jarvis-framework.toml's `degrade_chain`, so it has to keep meaning
+# whatever the owner's file says. Three are named here because they are the
+# three that file ships with; every other non-local lane falls to
+# DEFAULT_LANE, with its own line saying so in the refusal words below.
+CLOUD_LANES = {
+    # The owner's decision (2026-10-06) is that the service behind the cloud
+    # lane is DeepSeek. The model per lane is this project's choice, not
+    # DeepSeek's: the cheapest and fastest for the lane that runs most, the
+    # strongest for the one whose job is to check an answer. Change a line
+    # here (or the [chatbot] deepseek_api_model line) to change it.
+    "jarvis-escalate": ("deepseek_api", "deepseek-flash"),
+    "jarvis-bulk": ("deepseek_api", "deepseek-flash"),
+    "jarvis-critic": ("deepseek_api", "deepseek-v4-pro"),
+}
+
+#: (service, model) for any other non-local lane name - a name left in the
+#: owner's `degrade_chain` that this table does not know. DeepSeek's cheap,
+#: current model, because "offered a lane we do not recognise" must still
+#: mean something real rather than a silent nothing.
+DEFAULT_LANE = ("deepseek_api", "deepseek-flash")
+
+#: The most characters of one message the check assumes when a lane is asked
+#: whether it can be used at all, before any message exists. Deliberately
+#: larger than a usual question (jarvis_chatbot.MAX_GOAL_CHARS, the longest
+#: goal either app can send): the point is to refuse a lane whose month is
+#: nearly spent BEFORE a request is built around it, and to err toward
+#: "cannot" rather than toward spending past the limit.
+LANE_ASSUMED_CHARS = 20_000
+
+
+def _owner_model_set(pid: str) -> bool:
+    """Whether the owner's own `[chatbot] <id>_model` line is set. This is
+    what decides whether a cloud lane keeps the model its lane means
+    (jarvis-critic: the stronger one) or uses the model the owner typed for
+    that whole service: an explicit choice always wins, and a lane's own
+    model is a default, not a second opinion."""
+    try:
+        return CB._cfg().get(MODEL_KEY(pid)) is not None
+    except Exception:
+        return False
+
+
+def lane_service(lane: str) -> tuple:
+    """(service id, model) for a cloud lane name. Never raises, never reads
+    anything: this is the table above, the owner's own model line when it is
+    set, and nothing else."""
+    pid, model = CLOUD_LANES.get(str(lane or ""), DEFAULT_LANE)
+    if _owner_model_set(pid):
+        try:
+            chosen, problem = model_for(pid)
+        except Exception:
+            chosen, problem = "", "the model line could not be read"
+        if chosen and not problem:
+            return pid, chosen
+    return pid, model
+
+
+def cloud_lane(lane: str, *, chars: int = LANE_ASSUMED_CHARS, messages: int = 1) -> Optional[dict]:
+    """How to send ONE cloud lane, or None when it cannot be sent.
+
+    None means: no key is saved for the service behind it, or the model has
+    no price, or this month's money limit is reached, or a message of `chars`
+    characters could not be paid for. In every one of those cases the CALLER
+    must not send anything to a cloud service - the lane is simply not
+    available, and the caller answers locally instead (or says so). The
+    reasons are the same plain sentences the rest of this module uses
+    (`ready_for`, `money_check`), so nothing new has to be explained.
+
+    The returned dict: pid, model, host, url (that service's own completions
+    address - https, its own pinned host), cap (the answer-length cap to
+    send, 0 for none) and why ("" when it can be used). Opens no socket and
+    reads no message: only Credential Manager (whether a key is SAVED) and
+    the money file."""
+    pid, model = lane_service(lane)
+    p = PRESETS[pid]
+    chars, messages = max(0, int(chars)), max(1, int(messages))
+    why = ready_for(pid)
+    cap = 0
+    if not why:
+        why, cap = money_check(pid, model, next_chars=chars, next_messages=messages)
+    if why:
+        return None
+    return {"pid": pid, "model": model, "host": p.host,
+            "url": p.base_url.rstrip("/") + "/chat/completions", "cap": int(cap), "why": ""}
+
+
+def lane_key(lane: str) -> Optional[str]:
+    """The key for the service behind a cloud lane, or None. Read ONLY when a
+    request is actually being built, straight from Windows Credential
+    Manager (rule 3: never logged, never written to disk in plain text,
+    never sent anywhere but that service's own host)."""
+    pid, _ = lane_service(lane)
+    return _read_key(pid)
+
+
+def lane_status() -> dict:
+    """What the PC can say about the cloud lanes without sending anything:
+    the lane names, the service and model each one means, and whether each
+    can be used right now. Counts and names only - never a key, never a
+    message. This is what "What Jarvis can reach", the health light and the
+    apps' own status read; it opens no socket."""
+    lanes = []
+    for lane in list(CLOUD_LANES) + [""]:
+        if not lane:
+            continue
+        pid, model = lane_service(lane)
+        why = ready_for(pid)
+        info = CB.ADAPTERS.get(pid)
+        lanes.append({
+            "lane": lane, "pid": pid, "model": model,
+            "company": PRESETS[pid].company, "host": PRESETS[pid].host,
+            "name": info.name if info is not None else PRESETS[pid].name,
+            "ready": not why, "why": why,
+            "money": money_view(pid),
+        })
+    return {"available": True, "lanes": lanes,
+            "ready": [r["lane"] for r in lanes if r["ready"]],
+            "fallback_model": DEFAULT_LANE[1],
+            "default_pid": DEFAULT_LANE[0]}
+
+
+# ============================================================================
 #   The owner's command line
 # ============================================================================
 
@@ -1450,6 +1666,19 @@ def _amount(raw: str) -> Optional[float]:
     return v if math.isfinite(v) else None
 
 
+def verified_price(pid: str, model: str) -> str:
+    """Where the DEFAULT price for this service and model came from, or ""
+    when it was never checked. DeepSeek's two (and the legacy name billed at
+    the Flash price) were read off DeepSeek's own price page; every other
+    default is still the from-memory guess."""
+    if pid == "deepseek_api" and model in ("deepseek-flash", "deepseek-v4-pro",
+                                           "deepseek-chat"):
+        return (f"checked against DeepSeek's own price page on "
+                f"{DEEPSEEK_PRICES_READ}, worst case (peak, cache miss; off-peak is about "
+                f"half): {PRESETS[pid].price_page}")
+    return ""
+
+
 def spent_lines() -> list:
     """What `spent` prints: per service, this month's estimate, the limit,
     and the price in use - each default price marked UNVERIFIED."""
@@ -1475,8 +1704,11 @@ def spent_lines() -> list:
         elif pr[2] == "yours":
             price = f"${pr[0]:g} in, ${pr[1]:g} out per million word-pieces (your price)"
         else:
-            price = (f"${pr[0]:g} in, ${pr[1]:g} out per million word-pieces (default written "
-                     f"{PRICES_WRITTEN}, UNVERIFIED - check {p.price_page})")
+            checked = verified_price(pid, model)
+            price = (f"${pr[0]:g} in, ${pr[1]:g} out per million word-pieces (default, "
+                     + (checked if checked else
+                        f"written {PRICES_WRITTEN}, UNVERIFIED - check {p.price_page}")
+                     + ")")
         out.append(f"{p.short}: {p.name}, model {model or problem}: {lim}. Price: {price}. "
                    f"{cap_words(p)}")
     out.append("Prices change: check each against the company's price page and correct it "
