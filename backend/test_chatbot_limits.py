@@ -608,13 +608,17 @@ def t_no_other_module_raises_a_chatbot_money_card():
     hits = []
     for path in (REPO / "backend").glob("*.py"):
         if path.name in ("jarvis_chatbot_limits.py", "jarvis_owner_check.py",
-                         "jarvis_card_words.py"):
-            # The limit module is the one path; the owner-check names the raise
-            # because that is where PC_ONLY_ACTIONS lives; and card-words names
-            # both only to give each a plain-English phrase for the card the
-            # owner sees ("raise a chatbot's monthly spending limit"). None of
-            # them is a second path to the decision, and this test itself is full
-            # of these names on purpose.
+                         "jarvis_card_words.py", "jarvis_asks_first.py"):
+            # The limit module is the one path to the DECISION. The other three
+            # only NAME the actions, and each is required to by a suite of its
+            # own: the owner-check because that is where PC_ONLY_ACTIONS lives;
+            # card-words to give each a plain-English phrase for the card the
+            # owner sees ("raise a chatbot's monthly spending limit"); and
+            # asks-first because its page must list every action a card can name
+            # (test_asks_first.py) - which is how a person finds out that raising
+            # a limit asks and lowering one does not. None of them can change a
+            # limit, so none is a second path, and this test itself is full of
+            # these names on purpose.
             continue
         if path.name.startswith("test_"):
             continue
