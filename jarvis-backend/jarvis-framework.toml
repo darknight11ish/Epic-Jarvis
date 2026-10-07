@@ -1,0 +1,1642 @@
+# ==============================================================================
+# JARVIS OPERATING FRAMEWORK — enforced config
+#
+# This is what the code actually reads. JARVIS-FRAMEWORK.md is what you read
+# and approve — every section name here matches a section heading there.
+# If you change a number in one, change the matching sentence in the other in
+# the same sitting. jarvis_router.py loads [budget] and the complexity
+# threshold from here today; the rest are specified for the pieces that still
+# need wiring into OpenJarvis itself (see each section's "day to day" note in
+# the .md file).
+# ==============================================================================
+
+[meta]
+version = "1.0"
+owner = "Mario"
+commercial = false          # this build is not a commercial product
+
+
+# ------------------------------------------------------------------------
+# 1. PRIVACY BOUNDARIES
+# ------------------------------------------------------------------------
+[privacy]
+# Matching any of these keeps a turn local, no matter the complexity score.
+# jarvis_router.py reads this list on every turn and adds it to its own
+# built-in words, so a word added here takes effect without editing any code
+# (and without a restart). An underscore matches a space or a hyphen too:
+# "files_on_disk" catches "files on disk". The router also has a built-in list
+# of its own (_PRIVATE_TERMS) covering most of these; this list only adds to
+# it, never takes away.
+never_leaves_device = [
+    "email", "inbox", "calendar",
+    "password", "api_key", "token", "secret", "credential",
+    "ssh_key", "private_key",
+    "bank", "invoice", "tax", "financial",
+    "medical",
+    "stored_memory", "knowledge_graph",
+    "files_on_disk",
+]
+# Once true for a conversation, stays true for every later turn in it.
+taint_persists_for_conversation = true
+# Free ":free" OpenRouter models may take public research questions, but
+# never anything on the list above and never stored memory.
+allow_free_tier_models_for_research = true
+
+
+# ------------------------------------------------------------------------
+# 2. AUTONOMY LIMITS
+# ------------------------------------------------------------------------
+# auto = just do it | notify = do it, tell you after | ask = wait for yes,
+# every time | never = refuse; changing this requires editing this file,
+# not asking in conversation. The one exception (the owner's decision of
+# 2026-09-26): the apps' "What asks first" page may set seven lines of
+# [autonomy.tiers] to "ask" (from either app, at once), and set them back
+# (on the PC only, one approval card plus Windows Hello). It changes that
+# one line and keeps every other character of this file, comments included.
+[autonomy]
+# Enforcement now EXISTS: jarvis_gate.py reads the tiers below, queues an
+# "ask" action, and blocks the tool call until a human answers in the HUD (or
+# denies it by letting it time out). "never" is refused outright, without
+# asking anyone.
+#
+# It is not CONNECTED until you run the patcher, because the auto-approving
+# callback lives in OpenJarvis, not in this repo:
+#
+#     python patch_openjarvis.py --dry-run     # see what it would change
+#     python patch_openjarvis.py               # apply, then restart Jarvis
+#     python patch_openjarvis.py --revert      # undo
+#
+# Then set the flag below to true. Leave it false while it is still false -
+# a flag claiming a protection you do not have is worse than no flag.
+enforcement_available = true
+wired_into_approval_endpoint = false
+
+# What happens to an action that is not listed in [autonomy.tiers] at all, or
+# to a confirmation prompt the gate cannot map onto one of these names. "ask"
+# is the only defensible answer: an action nobody classified is not thereby
+# safe. Seconds to wait for that answer before refusing.
+unknown_action_tier = "ask"
+approval_timeout_seconds = 180
+
+[autonomy.tiers]
+web_research              = "auto"
+read_calendar             = "auto"
+# The five tools of backend/README.md "What each one needs in jarvis_gate.py
+# and jarvis-framework.toml" (2026-09-26: they were missing here, and a
+# missing line means "ask" - every calendar, email, notes or home READ raised
+# a card, the morning briefing left calendar and email out, and "tell me
+# when" refused to be set up). Reads stay on the owner's own accounts and
+# change nothing; turning a device on or off still asks.
+calendar_read             = "auto"
+email_read                = "auto"
+notes_search              = "auto"
+home_read                 = "auto"
+home_control              = "ask"
+# News headlines in the morning briefing (jarvis_news.py, the owner's
+# decision of 2026-09-27, feasibility I49): reading a feed the owner
+# already approved with its own card. Must be "auto" or "notify" for the
+# briefing to show the section at all - a stricter tier just leaves it out
+# and says why, the same as the reads above; it never blocks adding a feed
+# (that is its own card, action change_own_config, always "ask").
+news_read                 = "auto"
+# "Tell me when this page changes" (a source of jarvis_tellme.py, the
+# owner's decision of 2026-09-27, feasibility I67): fetching the one
+# address the owner already approved with its own card (schedule_repeat).
+# Must be "auto", exactly like email_read/home_read above, or a look every
+# 30 minutes would mean a card every 30 minutes.
+page_read                 = "auto"
+# A conversation with an AI chatbot (jarvis_chatbot.py; the owner's
+# decisions of 2026-09-27 and 2026-09-28): ONE approval card per
+# conversation, showing the chatbot, the goal word for word, the most
+# messages, the longest time and the never-send words; a changed limit is a
+# new card. Must stay "ask": anything else and no conversation starts;
+# "never" switches the feature off. Built but not reachable from the apps
+# yet, and no real chatbot is built yet.
+chatbot_session           = "ask"
+# A chat with a company's customer support (jarvis_support.py; the owner's
+# decisions of 2026-09-28): ONE card per chat, listing every detail Jarvis
+# may give (support_chat), and ONE card per offer - a refund, a credit, a
+# cancellation, a change - showing the exact reply (support_offer). Both
+# must stay "ask": anything else and no support chat starts; "never"
+# switches the feature off. A file without these lines asks too
+# (unknown_action_tier).
+support_chat              = "ask"
+support_offer             = "ask"
+# Reading a YouTube video's captions for a quiz (jarvis_youtube.py; the
+# owner's decision of 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 5):
+# ONE card per link, showing the exact address. It breaks YouTube's terms and
+# may be blocked - the card says so. Caption text only, never video or audio.
+# Must stay "ask": anything else and no captions are fetched; "never"
+# switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+youtube_captions_read     = "ask"
+# Reading ONE web page the owner hands over, out loud (jarvis_readpage.py;
+# the owner's request of 2026-10-05, JARVIS-API section 115): ONE card per
+# address, showing it in full and raised BEFORE any fetch. Only that one
+# page's own address is fetched, never a link on it, and its words are
+# outside text. Must stay "ask": anything else and no page is fetched;
+# "never" switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+read_web_page              = "ask"
+# "Grade this better" on a quiz (jarvis_quiz_cloud.py; the owner's decision of
+# 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7): ONE card per request,
+# listing EXACTLY what leaves this PC (the quiz's questions, your answers and
+# the passages as shown) and which service gets it. Bends rule 1 for that one
+# quiz only. Must stay "ask": anything else and nothing is sent; "never"
+# switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+quiz_cloud_grade          = "ask"
+# GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
+# owner's choice of 2026-09-28): one read-only GET to api.github.com per look
+# - a workflow run list or one pull request - for a watch the owner already
+# approved with its own card (schedule_repeat). Must be "auto", like
+# page_read above, or a look every 10 minutes would mean a card every 10
+# minutes. Without this line GitHub watches are refused, with the reason.
+github_read               = "auto"
+# Reading files: the file_read tool, and since 2026-09-26 the my_files tool
+# too (finding, searching and reading files ONLY in "Folders Jarvis may look
+# in", which is empty until you add a folder on the PC with an approval
+# card). "ask" gives a card for every look.
+read_files_readonly       = "auto"
+# Saving an email draft (jarvis_email_draft.py, draft-email.patch; the
+# owner's decision of 2026-09-27, "a card every time, showing the full
+# draft"; I53). A draft goes up to the mail provider's servers (an IMAP
+# APPEND), so it asks every time. Must stay "ask": anything else and every
+# draft is refused, never saved unasked; "never" switches drafts off. It is
+# on the never-loosened list (jarvis_asks_first.HARD_LIMITS): no app can
+# make it "auto". The model is offered the tool only once "draft_email" is
+# in [tools].enabled.
+draft_email               = "ask"
+# Sending one email (jarvis_email_send.py, the owner's decision of
+# 2026-09-25): ONE approval card per email, showing who it goes to, the
+# subject and every word. Must stay "ask": anything else and every email is
+# refused, never sent unasked; "never" switches sending off. The model is
+# offered the tool only once "send_email" is in [tools].enabled.
+send_email                = "ask"
+# Tidying the inbox (jarvis_inbox_tidy.py, inbox-tidy.patch; the owner's
+# decision of 2026-09-28, "inbox tidy by voice"): archive, star, mark as
+# read or move to Trash, ONE approval card listing every email, then 10
+# minutes to Undo. It changes the mailbox on the provider's server, so it asks
+# every time. Must stay "ask": anything else and every tidy is refused, never
+# done unasked; "never" switches it off. It is on the never-loosened list
+# (jarvis_asks_first.HARD_LIMITS): no app can make it "auto". The model is
+# offered the tool only once "tidy_inbox" is in [tools].enabled - and only
+# while email_read (above) lets Jarvis look at the inbox without a card of its
+# own, because the card has to list every email.
+tidy_inbox                = "ask"
+edit_calendar_event       = "ask"
+delete_calendar_event     = "ask"
+delete_file               = "ask"
+run_shell_on_host         = "ask"
+spend_money               = "ask"
+control_computer          = "ask"
+change_own_config         = "ask"
+# Loosening one line of this table from the desktop's "What asks first" page
+# (the owner's decision of 2026-09-26): one card, approved on this PC only,
+# with Windows Hello. Only calendar_read, email_read, notes_search,
+# home_read, append_obsidian_daily, append_logseq_journal and
+# create_joplin_note can be loosened that way. Must stay "ask": anything
+# else and loosening from the app is refused. Making a line stricter from
+# either app ("ask") needs no card.
+loosen_what_asks_first    = "ask"
+# enable_reading_tool - offering calendar_read, email_read, notes_search or
+# home_read to the AI model at all (adding it to [tools].enabled, below) from
+# the PC's "What asks first" page. Must stay "ask", like the line above: it
+# is a DIFFERENT thing from loosening whether a tool asks first - jarvis_
+# asks_first.py refuses it unless it comes from this PC, with Windows Hello,
+# whatever this line says.
+enable_reading_tool       = "ask"
+# "Check for tool updates" (jarvis_tool_updates.py, the owner's own
+# request): the FIRST run ever asks PyPI, crates.io and GitHub over the
+# internet, so it needs a person's yes once. Must stay "ask": anything else
+# and the first run is refused rather than treated as a standing yes.
+# Nothing here loosens or tightens it afterwards - jarvis_tool_updates.py
+# remembers the answer itself (tool_updates.json), not this line.
+check_tool_updates        = "ask"
+modify_own_code           = "ask"        # additional gate — see [self_modification]
+post_to_external_service  = "never"
+open_public_tunnel        = "never"      # see [security].allow_public_tunnel
+
+# --- Notes: two stores, deliberately different rules -------------------
+# Joplin is the personal vault, so it is the strict one: reading is free
+# because it is yours, creating announces itself, overwriting a personal
+# record waits for you, and deleting is not reachable by asking at all.
+read_joplin_note          = "auto"
+create_joplin_note        = "notify"
+edit_joplin_note          = "ask"
+delete_joplin_note        = "never"
+
+# Logseq is the dev hub and the agent's own scratchpad. An agent that must
+# ask permission to write its own log will not keep a log, so writing is
+# auto - but note that create_or_update_page APPENDS by default. Only the
+# overwrite path destroys anything, and that is edit_logseq_page.
+read_logseq_page          = "auto"
+append_logseq_journal     = "auto"
+create_logseq_page        = "auto"
+edit_logseq_page          = "ask"
+delete_logseq_page        = "never"
+
+# Obsidian's daily note (#obs), same reasoning as the Logseq journal: it only
+# ever ADDS to the end of today's note, a file on this PC, so it is saved
+# straight away (owner decision, 2026-09-24). Change it to "ask" to get a
+# card every time.
+append_obsidian_daily     = "auto"
+
+# ...except after outside text (owner decision, 2026-09-24, after the safety
+# research). In a turn where Jarvis has read an email, a web page, a file or
+# other tool output - or the conversation already had, or your message was
+# pasted, shared or from the clipboard - a note Jarvis wants to write to
+# Obsidian, Logseq or Joplin is asked under this name instead, and waits for
+# your yes. Must stay "ask": anything else and the note is refused rather
+# than written unasked. A file without this line asks too (unknown_action_tier).
+write_notes_after_outside_text = "ask"
+
+# --- Models: three separate decisions, deliberately not bundled --------
+# Reading public catalogues says nothing about you (see the privacy note in
+# jarvis_models.py) so it is free. A download spends bandwidth and disk. A
+# switch changes which model reads your email - a different question, asked
+# separately, so approving the download cannot smuggle it in. Reverting is
+# "auto" because a revert that waits for permission arrives too late to be
+# a revert.
+browse_model_catalog      = "auto"
+download_model            = "ask"
+switch_model              = "ask"
+rollback_model            = "auto"
+# Making a tuned copy of a model you already downloaded (jarvis-chat,
+# jarvis-long, jarvis-vision), for one of the three setups in Settings,
+# Hardware and models (docs/HARDWARE-PROFILES.md). Ollama makes it on this
+# PC; nothing downloads. Must stay "ask": anything else and it refuses. A
+# file without this line asks too (unknown_action_tier).
+models_create             = "ask"
+
+# --- Timers, alarms and reminders (jarvis_schedule.py) ------------------
+# A timer, an alarm or a reminder that goes off ONCE needs no card - the
+# owner's decision, 2026-09-25 - so it has no line here. Since 2026-09-26
+# (the approvals audit) a plain REPEATING alarm or reminder ("every weekday
+# at 7") and the standby schedule need no card either, and do not read this
+# line. What still repeats through ONE card, which lists the next three
+# times: the morning briefing and "tell me when" (they read your email or
+# calendar). Must stay "ask": anything else and those are refused, not set
+# up. A file without this line asks too (unknown_action_tier).
+schedule_repeat           = "ask"
+
+# --- Web search (jarvis_search.py, the owner's decisions of 2026-09-25) -----
+# A search straight from your own question, in a conversation where Jarvis
+# has read nothing from outside, runs WITHOUT a card and does not read this
+# line. After Jarvis has read email, files, notes, saved memories or other
+# outside text - or with "Ask before every web search" on - the search is a
+# card showing its exact words, asked under this name. Must stay "ask":
+# anything else and such a search is refused rather than sent unasked.
+# "never" switches web search off altogether. A file without this line asks
+# too (unknown_action_tier).
+search_the_web            = "ask"
+# Turning "Ask before every web search" OFF is one card (turning it on is
+# immediate). Must stay "ask": anything else and the setting stays on.
+stop_asking_before_every_web_search       = "ask"
+# Turning web search back ON, after the owner switched it off in Settings, Web
+# search, is one card (turning it off is immediate). Must stay "ask": anything
+# else and the switch stays off.
+web_search_enable                         = "ask"
+
+# --- Power: turning the assistant down, at two depths --------------------
+# Putting Jarvis into quiet/standby, or waking it, is the safe direction
+# either way, so it does not interrupt you for a yes. Changing the rules
+# that put it under on their OWN (quiet hours, the idle timer) is a config
+# change and waits - see change_own_config above.
+power_manage              = "auto"
+
+# --- The second graphics card -------------------------------------------
+# Turning on any second-card switch (the desktop's Settings, or the phone's
+# Mind screen) is one approval card. It starts a second copy of Ollama on this PC, reachable from this PC
+# only (127.0.0.1), on the second card. Turning a switch OFF never asks. Must
+# stay "ask": anything else and the switch refuses to turn on at all.
+second_card_enable        = "ask"
+# "Browser control" has its own line: turning it on also lets Jarvis offer its
+# browser tool, which works real web pages on the internet (each plan of
+# steps it would take there is its own approval card). Must stay "ask", the
+# same as above. A toml without this line treats it as an unknown action
+# ([autonomy] unknown_action_tier, never more than "ask").
+second_card_browser_enable = "ask"
+# "One bigger model on both cards" has its own line too. Off by default; it
+# starts a THIRD copy of Ollama that can see BOTH cards at once (no pin to
+# one) and loads one bigger model, split across both cards by Ollama's own
+# scheduler - never at the same time as any switch above (it needs both
+# cards to itself). Nothing leaves this PC. Must stay "ask", the same reason
+# as above.
+second_card_combined_enable = "ask"
+# Moving one of the switches above onto a THIRD graphics card (alongside
+# the second card's own lane, never instead of it) has its own line too:
+# docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says which card runs
+# which feature must always be a real, named choice - never a default, and
+# never folded into second_card_enable's own tier. Must stay "ask", the
+# same reason as above.
+second_card_third_assign = "ask"
+# WHICH CARD EVERYDAY CHAT RUNS ON (owner's decision, 2026-10-05): pinning it
+# to one card instead of leaving the choice to Ollama. Its own line - it
+# widens what Jarvis does on every answer, not only when a second-card
+# feature is on, and docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says
+# which card runs which work must always be a real, named choice, never a
+# default and never folded into another action. Turning it ON raises one
+# approval card (it sets CUDA_VISIBLE_DEVICES and OLLAMA_VULKAN for the
+# owner's own Windows user); going back to "Leave it to Ollama" is immediate
+# and needs no card. Must stay "ask", the same reason as above.
+chat_card_pin             = "ask"
+
+# Topic controls (2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md): turning a PRIVATE
+# topic (Health, Money, or one the owner marked private) back on, clearing its
+# private mark, moving a batch of its facts out to a looser topic, or any
+# loosening asked from outside text is ONE card. Nothing leaves this PC. Must
+# stay "ask": a person saying yes is what makes it safe (jarvis_topics.py
+# refuses to apply a change if this is anything else).
+topic_loosen = "ask"
+
+# Referee suggestions (2026-09-30; a second-card switch, JARVIS-API section 108):
+# "This looks done - tick it?" is ONE card per goal step whose number reached its
+# target, at most three a day. Yes ticks that one step, exactly as the owner's own
+# tick would; the model never writes a tick. Nothing leaves this PC. Must stay
+# "ask": a person's tap is the only thing that ticks (jarvis_referee.py raises no
+# card at any other tier).
+referee_tick = "ask"
+
+# Overnight suggested tags (2026-09-30; JARVIS-API section 104): turning "Suggest
+# tags overnight" ON is ONE card (it lets the LOCAL model read a few kept chats);
+# each suggested tag for a chat is ONE more card, at most three a night. The chat
+# is filed only when a person taps Approve. Nothing leaves this PC. Both must stay
+# "ask": jarvis_tag_suggest.py files nothing and switches nothing on at any other tier.
+chat_tags_suggest_on = "ask"
+chat_tag_suggest = "ask"
+
+# --- Picture mode for "Look at this" and "Watch with me" (2026-09-29) -----
+# Lets a small picture model, running on the PROCESSOR (never the graphics
+# card) in its own copy of Ollama that only this PC can reach, also look at
+# the picture of the screen - slowly - on a PC with one graphics card. Off
+# until the owner turns it on (Settings on the PC, or the phone), which is one
+# approval card; turning it off never asks. The model is downloaded by a line
+# the owner pastes themselves, never by Jarvis. Must stay "ask": anything else
+# and the switch refuses to turn on at all.
+screen_picture_enable = "ask"
+
+# --- The headless browser, Obscura (2026-09-29) ------------------------------
+# Lets Jarvis choose a browser with no window (Obscura, open source,
+# Apache-2.0) instead of the visible one for plain reading and quick lookups.
+# It is a new program on this PC that reaches the web, so turning it on is one
+# approval card (Settings on the PC, or the phone); turning it off never asks
+# and stops the program. Every page, click and box it fills is still listed
+# on its own card first, exactly as for the visible browser. Obscura is
+# downloaded by a line the owner pastes themselves, never by Jarvis. Must stay
+# "ask": anything else and the switch refuses to turn on at all.
+obscura_enable = "ask"
+
+# --- "Fill in the form, show me, then send it" (2026-09-30) ---------------
+# A browser plan whose last click is marked final (the click that sends a
+# form): Jarvis fills the fields, stops, and raises THIS card - the site,
+# every word typed and a picture of the page - before that click. One card
+# per form; never "always allow"; decided by tapping only. Must stay "ask":
+# anything else and the form is not sent at all (jarvis_form_review.py).
+browser_form_submit = "ask"
+
+# --- The wiki builder (Brain window or phone: "Add to wiki") -------------
+# Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
+# that Jarvis Wiki folder, on this PC, using the model on the second card -
+# or the big model instead, if you switched the big model on for the wiki.
+# Nothing leaves this PC, and the earlier copy of any page it changes is
+# kept in Jarvis Wiki/.versions. "ask" shows you the card (every page it
+# would write) first. Must stay "ask": since the security audit (L1)
+# jarvis_wiki.py writes pages only on a person's yes, so "notify" or "auto"
+# refuses every "Add to wiki" rather than writing without asking (this
+# comment used to say you may lower it - that stopped being true then).
+# "never" turns "Add to wiki" off.
+wiki_update               = "ask"
+
+# --- The big model (slow), with colibri (docs/BIG-MODEL.md) --------------
+# Turning on a big-model switch (the desktop's Settings, or the phone's
+# Mind screen) is one approval card. It lets Jarvis start colibri on this PC when a background job needs
+# it, reachable from this PC only (127.0.0.1). Turning a switch OFF never
+# asks. Must stay "ask": anything else and the switch refuses to turn on.
+big_model_enable          = "ask"
+# Turning background learning ON (Brain window or phone Mind). One card;
+# turning it off never asks. It must stay "ask": jarvis_learning_switch.py
+# refuses any other tier rather than let this line become your yes.
+learning_enable           = "ask"
+# Turning chat history back ON after it was turned off (Brain window or
+# phone). It is on by default: your chats, voice included, kept on this PC,
+# encrypted. One card; turning it off never asks. It must stay "ask":
+# jarvis_chat_log.py refuses any other tier rather than let this line
+# become your yes.
+history_enable            = "ask"
+# Automatic learning (docs/JARVIS-API.md section 19). It is ON by default:
+# facts from what you type or say to Jarvis are saved without a card each,
+# and listed in both apps with Forget. Turning it back ON after it was
+# turned off is one card; so is "Also remember sensitive topics
+# automatically" (off by default). Turning either off never asks. Both must
+# stay "ask": jarvis_auto_learn.py refuses any other tier rather than let a
+# line here become your yes.
+learning_auto_enable      = "ask"
+learning_sensitive_enable = "ask"
+# "Forget a time frame" (docs/JARVIS-API.md section 64, the owner's decision
+# of 2026-09-28): forgetting what Jarvis learned, and deleting your chats,
+# from the days you chose - ONE card listing every fact and chat, with 10
+# minutes to Undo afterwards. Must stay "ask": jarvis_forget_range.py
+# refuses any other tier rather than let this line become your yes. A file
+# without this line asks too (unknown_action_tier).
+memory_forget_range       = "ask"
+
+# --- Custom voices (docs/JARVIS-API.md section 15) -----------------------
+# Adding a voice (a recording of someone reading a sentence, kept on this
+# PC) is one approval card, and switching Jarvis to speak in one is
+# another. Switching back to the built-in voice, or deleting a voice, never
+# asks. Must stay "ask": anything else and both refuse to go ahead.
+custom_voice              = "ask"
+# The better voice: F5-TTS on the second graphics card, started only when
+# Jarvis speaks in a custom voice. Turning it on is one card; off never
+# asks. Must stay "ask", the same as above.
+better_voice_enable       = "ask"
+# Letting Jarvis's notifications show on a paired smartwatch too, instead of
+# staying on the phone only (the owner's decision, 2026-09-25; reconfirmed
+# 2026-09-27, Q17). Off by default. Turning it on is one card; off never
+# asks. Must stay "ask": jarvis_watch_notify.py refuses any other tier
+# rather than let this line become your yes.
+watch_notifications_enable = "ask"
+
+# --- Backups (jarvis_backup.py, the owner's decision of 2026-09-27) ------
+# Restoring from a locked backup file replaces memory, chat history,
+# settings and notes with what was saved then, so it is ONE card, always
+# with Windows Hello and always from this PC (jarvis_owner_check.
+# PC_ONLY_ACTIONS), whatever this line says. Must stay "ask": anything else
+# and a restore refuses to go ahead. "Back up now" itself asks nothing - the
+# owner already approved the folder it writes into (change_own_config).
+restore_backup            = "ask"
+
+# --- Devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28) -----
+# Connecting a new phone gives it a key of its own; bringing the old shared
+# key back lets other devices use it again. Both are ONE card, always with
+# Windows Hello and always from this PC (jarvis_owner_check.PC_ONLY_ACTIONS),
+# whatever these lines say. Must stay "ask": anything else and pairing (or
+# bringing the key back) refuses to go ahead. Removing a device and retiring
+# the old shared key never ask - they only take access away. And letting a
+# paired phone approve risky cards with its own fingerprint or PIN
+# (register_approval_key, phase 2): also ONE card, PC only, Windows Hello.
+pair_device               = "ask"
+unretire_shared_key       = "ask"
+register_approval_key     = "ask"
+
+# Adding a task's change to a Jarvis-built app inside Projects (jarvis_apps.py,
+# apps-in-projects.patch, docs/APPS-IN-PROJECTS-DESIGN.md): ONE card per
+# change, showing every file and the whole change. A RISKY card (Windows Hello
+# on the PC, the screen lock on the phone), decided on either device; it never
+# becomes a standing rule. Must stay "ask": anything else and jarvis_apps.py
+# refuses to raise the card at all, so no change is added.
+app_merge_change          = "ask"
+
+
+# ------------------------------------------------------------------------
+# 3. SELF-MODIFICATION RULES
+# ------------------------------------------------------------------------
+# Reading phone notifications (jarvis_phone_notifications.py, the owner's
+# decision of 2026-09-26): off by default, turning it on is one approval
+# card, turning it off is immediate. Named here explicitly - audit 05,
+# 2026-10-04 - because until then it had no line at all and quietly took
+# unknown_action_tier ("ask"). The value is the one it already resolved to.
+phone_notifications_read = "ask"
+[self_modification]
+enabled = true
+# All must pass before a change is even offered to you for approval. Any
+# single failure blocks it outright — it never reaches the approval step.
+required_checks = [
+    "runs_in_isolated_shadow_copy_first",
+    "existing_tests_still_pass",
+    "diff_reviewed_by_critic_lane",
+    "no_new_network_egress_introduced",
+    "no_change_to_this_framework_file_itself",
+]
+# Passing every check above still isn't enough — always ask, no exceptions,
+# no auto-apply-after-N-clean-runs shortcut.
+tier_override = "ask"
+human_approval_required = true
+rollback_directory = "~/.openjarvis/self-mod-backups/"
+max_rollback_generations = 20
+
+# NOT YET ENFORCED: no shadow-copy runner or critic-lane review pipeline
+# exists in the codebase yet. This section specifies the target, not
+# something already running.
+pipeline_implemented = false
+
+
+# ------------------------------------------------------------------------
+# 4. SECURITY & EXPOSURE
+# ------------------------------------------------------------------------
+[security]
+require_server_auth_key = true
+max_tokens = 2048
+# NOW ENFORCED (it was read by nothing until this pass - the bind was
+# hardcoded to loopback regardless of what this said). Anything other than
+# loopback here makes the proxy reachable from other machines, so the server
+# REFUSES TO START on a non-loopback bind unless HUD_TOKEN is set.
+#
+# For a phone over Tailscale you want the tailnet address rather than
+# 0.0.0.0 - "0.0.0.0" also exposes the port on any coffee-shop wifi the
+# laptop happens to join.
+bind_address = "127.0.0.1"
+allow_public_tunnel = false                # `jarvis tunnel` permanently forbidden
+remote_access_method = "tailscale_serve_only"
+# NOT IMPLEMENTED - there is no sandbox (security audit L8, 2026-09-25).
+# Four `sandbox_*` settings stood here, all `true`: sandbox_web_research,
+# sandbox_code_execution, sandbox_file_work and sandbox_email_calendar.
+# Nothing ever read them. An approved shell command and a file read run
+# directly on this PC, as you; what protects you is the approval card, the
+# tier table in [autonomy], and (since the same audit) a shell command no
+# longer inheriting Jarvis's passwords and tokens. A setting that looks like
+# protection and gives none is worse than no setting (ARCHITECTURE.md,
+# invariant 6), so they were taken out. If your own copy of this file still
+# has them, they do nothing there either; you can delete them.
+computer_control_containerized = false     # not possible on Windows (WSL2 has no desktop)
+computer_control_always_on = false         # host-side, started on demand only
+
+
+# ------------------------------------------------------------------------
+# 5. COST & RATE BUDGETS
+# ------------------------------------------------------------------------
+# Enforced today in jarvis_router.py (Budget class). Real OpenRouter free
+# tier is 20/min, 1000/day — these stay under it on purpose.
+[budget]
+requests_per_minute = 15
+requests_per_day = 800
+on_minute_limit_hit = "degrade_to_next_lane_silently"
+on_day_limit_hit = "hold_local_until_reset_and_notify"
+degrade_chain = ["jarvis-escalate", "jarvis-bulk", "jarvis-critic"]
+
+# Also enforced today (jarvis_router.py `choose()` gate 2).
+[routing]
+complexity_threshold = 0.40
+
+
+# ------------------------------------------------------------------------
+# 6. LOGGING & AUDIT TRAIL
+# ------------------------------------------------------------------------
+[logging]
+enabled = true
+log_directory = "~/.openjarvis/logs/"
+# How many days of audit log to keep. After this many days a whole day's file
+# (jarvis-<date>.jsonl) is deleted, not trimmed or compressed. 0 or less keeps
+# everything. Kept by jarvis_framework.prune_logs(), which jarvis_events.py's
+# event pump calls once a day; today's file is never deleted, even if it is
+# quiet enough to look old.
+retention_days = 90
+log_every_routing_decision = true      # lane, gate, reason, complexity score
+log_every_tool_call = true
+log_every_self_modification_attempt = true   # pass or fail, applied or not
+redact_private_content_in_logs = true  # log that a gate fired, never the private text
+
+# PARTIALLY ENFORCED. Written today, one JSON line each, to log_directory:
+#   - every routing decision (lane, gate, reason, complexity, taint)
+#   - every gate event: auto, notify, asked, approved, denied, expired, refused
+# Not written yet: self-modification attempts, since no self-mod pipeline
+# exists to attempt anything (see pipeline_implemented above).
+# A failed log write now prints once to stderr instead of vanishing.
+# retention_days is now enforced too (2026-10-05): until then nothing called
+# prune_logs(), so the log grew with no cap - about 0.4 MB a day, ~130 MB a
+# year, for ever.
+persistence_implemented = true
+log_write_failures_are_visible = true
+
+# OFF by default, and it should stay off except while you are deliberately
+# tuning the classifier. The gate maps a free-text confirmation prompt onto an
+# action name; when it cannot, it falls back to "ask", which is safe but tells
+# you nothing about WHICH phrasing it failed on. Turning this on records the
+# prompt text of unclassified actions only, so `python jarvis_gate.py --review`
+# can show you what to add to _ACTION_PATTERNS.
+#
+# It logs prompt text. That is the one thing redact_private_content_in_logs
+# otherwise guarantees never lands on disk, which is why this is a separate
+# switch and not part of normal logging. Turn it off when you are done.
+log_unclassified_prompts = false
+
+
+# ------------------------------------------------------------------------
+# 6b. LEDGER - the record of what was done, and whether it has been edited
+# ------------------------------------------------------------------------
+# The log above answers "did this happen". It cannot answer "has anyone
+# changed this since", because a JSON-lines file is editable with any text
+# editor and says nothing about it. The ledger is the other half: a chain
+# where altering one past entry alters every hash after it.
+#
+# WHAT IS CHAINED IS THE DECISION, NOT THE CONTENT. Sequence, time, event,
+# action, tier, lane, the rule that fired, which memories were retrieved -
+# BY TITLE AND TIME - and which were skipped and why. The content itself, the
+# command or the mail body or the retrieved text, is encrypted into a
+# separate table that can be dropped on its own. Chaining the content too
+# would be un-redactable by construction, and "forget this" would mean
+# destroying the chain. With the split, a redacted entry still verifies and
+# reads honestly: content removed on <date>, decision preserved.
+#
+# IT IS MACed WITH A LOCAL KEY, NOT SIGNED. Ed25519 was considered and
+# rejected. A signature a third party can verify makes this log credible
+# AGAINST you - to a court, an employer, whoever is holding the laptop.
+# Non-repudiation is not a feature that was skipped; it is one that was
+# declined. The key is on this machine, so code running as you can forge a
+# chain; what this catches is someone editing the record afterwards, which
+# is the threat that actually exists.
+#
+# PAYLOAD ENCRYPTION IS STDLIB-ONLY and says so in the module: SHA-256 in
+# counter mode, encrypt-then-MAC with HMAC-SHA256, tag checked before
+# decryption. It protects a copy of the database - a backup, a synced
+# folder, a disk image - and protects nothing at all from someone who also
+# has ~/.openjarvis/ledger.key. Swap it for a real AEAD if a dependency is
+# ever allowed.
+[ledger]
+enabled = true
+
+# How long a payload is kept before expire() drops it. The metadata link is
+# never dropped, so old history keeps verifying; it just stops holding
+# content. Without a number here "kept encrypted" quietly means "forever",
+# and an encrypted copy of every command from three years ago is a breach
+# waiting for a key to leak. 0 means keep payloads indefinitely - a real
+# choice for a full record, and NOT read as "expire everything now".
+retention_days = 30
+
+# How often the head hash is appended to ledger-anchors.jsonl, a file this
+# process only ever opens in append mode. It bounds the window in which a
+# rewrite goes unnoticed: to alter entry 300 you would have to match every
+# anchor that already covers it. An anchor file copied off this disk, or a
+# medium that physically cannot be rewritten, is the strong version of this;
+# append mode on the same filesystem is the practical one.
+anchor_every_entries = 25
+anchor_every_minutes = 60
+
+# A long string in the metadata is almost always a body that belongs in the
+# payload, where it can be encrypted and later dropped. Over this length the
+# record is REFUSED rather than truncated - a half-record that looks whole is
+# worse than an error at the call site.
+max_meta_value_chars = 500
+max_payload_kb = 512
+
+# Which metadata field groups entries into one turn, for the why-trace.
+turn_key = "turn"
+
+
+# ------------------------------------------------------------------------
+# 7. NOTES
+# ------------------------------------------------------------------------
+# Two stores with one dividing line: Joplin holds things about your life,
+# Logseq holds things about the work. That line is what decides both the
+# autonomy tiers above and whether a turn may leave the machine.
+
+[notes.joplin]
+enabled = true
+port = 41184
+token_env = "JOPLIN_TOKEN"        # Joplin: Tools > Options > Web Clipper
+timeout_seconds = 3.0
+# Touching Joplin pins the conversation to the local model for the rest of
+# the turn, no exceptions. Enforced in three places, because one is not
+# enough: the tool marks its own results, jarvis_router._PRIVATE matches
+# "joplin", and jarvis_gate latches a timed flag the proxy reads even when
+# the tool's output never reaches it.
+always_taint_conversation = true
+taint_latch_minutes = 30
+# NOT indexed into RAG, on purpose. See exclude_from_rag below.
+exclude_from_rag = true
+
+[notes.logseq]
+enabled = true
+# Leave empty to fall back to <config dir>/notes.
+graph_directory = ""
+auto_index_rag = true
+recent_journal_days_indexed = 14
+max_rag_chars_per_file = 2000
+
+[notes.obsidian]
+# The vault folder: the one that has a ".obsidian" folder inside it, e.g.
+# 'C:\Users\you\Documents\MyVault' (single quotes, so the backslashes are
+# kept as they are). Leave empty for no Obsidian. JARVIS_OBSIDIAN_VAULT, if
+# set, wins. Read as plain files on this PC - no Obsidian plugin, no API key.
+# #obs adds to today's daily note (Obsidian's Daily notes core plugin
+# decides its folder and name); Jarvis's notes search reads the .md files.
+# Neither ever creates a vault, and nothing from it goes to a cloud model.
+vault_directory = ""
+
+
+# ------------------------------------------------------------------------
+# 8. MEMORY
+# ------------------------------------------------------------------------
+# Four layers, chosen together. Hybrid search and the temporal store are
+# always on. Auto-extraction and sleep-time consolidation are the two that
+# write to memory on their own, so they are the two with switches.
+
+[memory]
+# Meaning-based search runs on the CPU with this model (33M params, ~130MB
+# on disk, downloaded once from Hugging Face). If it is missing, search is
+# keyword-only and status() says so; nothing fails.
+embedding_model = "BAAI/bge-small-en-v1.5"
+# One-time import of the old memory_facts.jsonl into the temporal store.
+import_legacy_on_start = true
+
+[memory.extraction]
+# mem0-style: watch conversations and propose durable facts by itself.
+# Only ever runs on the LOCAL model - extraction is reading your words,
+# and that never goes to a cloud lane. Proposals land in a review queue;
+# nothing enters memory until you accept it.
+#
+# auto_accept IS NOT LOAD-BEARING. It reads as the reason nothing enters
+# memory unattended, but memory-safety.patch removed that code path from
+# propose() entirely - there is no longer anywhere in the extractor that
+# reads this key. Flipping it, in either direction, changes nothing.
+# setup_status() reports it as the constant `false` for exactly this
+# reason - not a live check, a fact about the code. Kept here rather
+# than deleted so an old value on disk does not become a KeyError.
+#
+# SETUP REQUIRED. This is a working scaffold, not a tuned system: the
+# prompt, the accept threshold, and what counts as "durable" all need
+# tuning against real conversations once Jarvis is actually running.
+# The boot banner will say so until setup_complete is flipped.
+enabled = true
+auto_accept = false
+setup_complete = false
+review_queue_max = 200
+
+[memory.entities]
+# "Who is my sister?" (memory wave 3, 2026-09-25): every saved fact is
+# linked to the people and things it names by fixed rules, with no model,
+# always. model_pass = true ALSO asks this PC's local model, once per
+# learning pass, to name who and what the saved facts mention
+# (jarvis_entities.py) - only a model on this PC, and only names that are in
+# a fact word for word are kept. OFF because nobody has measured whether it
+# helps yet. JARVIS_ENTITY_MODEL=1 in the environment does the same.
+model_pass = false
+
+[memory.sleep_time]
+# The idea (Letta/MemGPT-style): while you are not talking, use the idle
+# GPU to re-read memory and SUGGEST tidying it - merging repeats, pointing
+# out facts that contradict each other. Suggest only: any version of this
+# that is ever built may raise review cards, one fact per card, and must
+# never retire or change a stored fact by itself. Nothing in memory is
+# retired or changed without your yes on that one fact.
+#
+# BUILT ON 2026-09-28, AS REVIEW CARDS ONLY (jarvis_tidy.py): once a day it
+# may ask "Still true?" about a fact whose own end date has passed, and
+# "Which is true now?" about two facts that may not both be true (found with
+# the learner's model on this PC). At most five cards a night. It merges
+# nothing and never retires or changes a fact by itself. There is still no
+# "deterministic part that runs either way": nothing runs while this is off.
+enabled = false
+# While disabled, a once-a-day card in the Brain window's Memory tab (and
+# on the phone's Brain screen) offers to switch it on. Set remind = false
+# to stop being asked.
+remind = true
+remind_hour_local = 9
+# When enabled: the day's look starts at window_start_hour and tries once
+# an hour until it has run that day - held back while you chat, in Quiet
+# or Standby, or while other offers wait (jarvis_backoff.py).
+# window_end_hour and idle_minutes_required are not read yet.
+window_start_hour = 2
+window_end_hour = 6
+idle_minutes_required = 30
+
+# ------------------------------------------------------------------------
+# 9. COMPUTE
+# ------------------------------------------------------------------------
+# Nothing else hardcodes a VRAM number. jarvis_compute.py asks nvidia-smi
+# what is installed and plans model tiers from that, so adding a second
+# card changes the plan without changing code.
+[compute]
+# "speed": the current-size model on the fastest card at full speed, the
+#          second card carries vision + voice resident so nothing swaps.
+# "capability": the biggest model the pair can hold, generation bounded
+#          by the slower card (a P100 is Pascal: ~2-3x slower per token).
+prefer = "speed"
+# Which card everyday chat runs on. Empty: the card a monitor is plugged
+# into, else nvidia-smi's first card. To choose by hand, put the card's id
+# here - run `nvidia-smi -L` in a terminal and copy the part that starts
+# "GPU-". A number (0, 1) works too, but numbers can change; the id cannot.
+primary_gpu = ""
+
+# ------------------------------------------------------------------------
+# 9b. THE SECOND GRAPHICS CARD (docs/SECOND-CARD.md)
+# ------------------------------------------------------------------------
+# HOW the second card is used, not WHETHER: the on/off switches are not in
+# this file. They are set from the desktop's Settings or the phone's Mind
+# screen, each one through an approval card, and kept in second-card.json next to this file.
+# Everything is off until then, and nothing can be turned on until Jarvis
+# sees a capable second card (Turing or newer, 10 GB or more).
+[second_card]
+# The second copy of Ollama listens on 127.0.0.1 (this PC only - that part
+# cannot be changed) on this port. Not 11434: that is the everyday Ollama.
+port = 11435
+# How long a model stays loaded on the second card after its last use.
+keep_alive = "30m"
+# "auto" leaves it to Ollama, which is what docs/MODEL-TOPOLOGY.md says to
+# do. "on" forces it. "off" is refused (the second card then does not
+# start, and says why): its compact q8_0 conversation memory needs flash
+# attention, and llama.cpp will not load a model that way with it off
+# (docs/HARDWARE-PROFILES.md, section 2.2).
+flash_attention = "auto"
+# A THIRD graphics card's own lane (2026-09-28) can run at the SAME TIME as
+# the second card's own lane above - one feature on each card at once - so
+# it needs its own port, never this file's `port` (which the second card's
+# lane and "One bigger model on both cards" already share safely, because
+# those two are never running at the same time). Not 11434 (the everyday
+# Ollama) or the `port` above.
+third_port = 11436
+
+# ------------------------------------------------------------------------
+# 9b1. PICTURE MODE FOR THE SCREEN (jarvis_screen_picture.py)
+# ------------------------------------------------------------------------
+# Every line here is optional; the built-in value is shown. The picture
+# reader is a separate copy of Ollama on 127.0.0.1 (this PC only - that part
+# cannot be changed) that cannot see the graphics card. UNVERIFIED: the model
+# tag below (Ollama's site could not be reached when this was written), its
+# size and its speed - the line the owner pastes measures the speed.
+[screen_picture]
+# The Ollama model tag. A model whose name ends in -cloud or :cloud is
+# refused: it would send the screen off this PC.
+# model = "minicpm-v:4.6"
+# Not 11434 (the everyday Ollama), 11435 or 11436 (the second and third card).
+# port = 11437
+# Seconds one look may spend on the picture before it is given up, and how
+# long a question waits for it after the words are ready.
+# timeout_s = 240
+# wait_s = 60
+# The longest side of the picture the model is given, in pixels.
+# max_px = 1024
+# Processor threads for the picture model; 0 means half of this PC's threads.
+# threads = 0
+# How long the model stays in memory after a look.
+# keep_alive = "5m"
+
+# ------------------------------------------------------------------------
+# 9b1b. THE HEADLESS BROWSER (jarvis_obscura.py, jarvis_browser_engine.py)
+# ------------------------------------------------------------------------
+# Optional. Obscura is started over standard input and output, so it opens no
+# port; there is NO proxy setting and none can be added here. The owner's
+# install line puts it in <settings folder>\obscura, which is where Jarvis
+# looks. A full path to obscura.exe here overrides that (a relative path is
+# ignored).
+[obscura]
+# path = "C:\\Tools\\obscura\\obscura.exe"
+
+# ------------------------------------------------------------------------
+# 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)
+# ------------------------------------------------------------------------
+# Gemini is reached through its website (jarvis_chatbot_gemini.py), in a
+# browser window you can see, with its own browser profile - signed in once,
+# by hand, to the spare Google account used only by Jarvis:
+#     py -3 jarvis_chatbot_gemini.py sign-in
+# Nothing about that is set in this file.
+[chatbot]
+# The full version (both graphics cards: longer conversations, the driver
+# model on the second card's "Longer conversations" lane). Leave false until
+# the second card is installed AND measured with this feature; even when
+# true, the full version runs only while that lane is running, and the
+# limited one-card version runs otherwise.
+full_version = false
+# The API adapters (jarvis_chatbot_api.py) each use a cheap model by
+# default; one line changes it (read when Jarvis starts). The key itself
+# is never here - it goes into Windows Credential Manager with:
+#     py -3 jarvis_chatbot_api.py key openai    (or deepseek, mistral, xai,
+#                                                 openrouter, groq)
+# openai_api_model     = "gpt-5-mini"
+# deepseek_api_model   = "deepseek-chat"
+# mistral_api_model    = "mistral-small-latest"
+# xai_api_model        = "grok-4.6"
+# openrouter_api_model = "openai/gpt-5-mini"
+# groq_api_model       = "openai/gpt-oss-20b"
+# "A second AI on this PC" (jarvis_chatbot_local.py): which model it is -
+# a name `ollama list` shows, never a cloud one. On one graphics card only
+# the everyday model itself is allowed; any model on the second card.
+# local_model = "qwen3:8b"
+
+# ------------------------------------------------------------------------
+# 9c. THE BIG MODEL, SLOW (docs/BIG-MODEL.md)
+# ------------------------------------------------------------------------
+# A very large model run by colibri, for background jobs only: the wiki
+# builder and deep questions. Never chat, voice or approvals. HOW it runs,
+# not WHETHER: the switches are set from the desktop's Settings or the
+# phone's Mind screen, each through an approval card, and kept in big-model.json next to this
+# file. Everything is off until then.
+#
+# Windows folders go in SINGLE quotes ('D:\models\x'): in double quotes a
+# backslash means something else and the file would not be read.
+[big_model]
+# The folder you unpacked colibri's Windows release into - the one that
+# holds coli.cmd. Empty: look for coli.cmd on PATH.
+coli_path = ''
+# colibri listens on 127.0.0.1 (this PC only - that part cannot be changed)
+# on this port. Not 11434 or 11435: those are the two Ollamas.
+port = 8765
+# colibri is started when a job needs it and stopped this many minutes
+# after the last one. The medium model holds about 24 GB of memory while
+# it runs, so it is not left running.
+idle_minutes = 10
+# How much text (in tokens) the model is given room for.
+ctx = 16384
+# "off": colibri never touches a graphics card (the default). "on": it may
+# use the SECOND card only - never the main one - and only when Jarvis sees
+# a capable second card whose own features are not running. The prebuilt
+# Windows release has no graphics-card support for RTX 20 cards: see
+# docs/BIG-MODEL.md, "The graphics card" before setting this.
+cuda = "off"
+# Which model each job uses, by its id below. Empty: the wiki uses the
+# first "medium" model and deep questions the first "giant" one.
+wiki_model = ""
+deep_model = ""
+# Giant models: how much memory colibri may plan to use (GB, at least 16).
+giant_ram_gb = 16
+# How long a deep question's answer may be (tokens), and how long Jarvis
+# waits for a model to load and for an answer (minutes).
+deep_max_tokens = 2048
+load_minutes = 20
+answer_minutes = 60
+
+# The models, one [[big_model.models]] block each. Remove the # in front of
+# a block's lines once that model is downloaded, and put its real folder in
+# `dir`. `kind` is "medium" (needs about 24 GB of memory) or "giant".
+#
+# [[big_model.models]]
+# id = "qwen36"
+# name = "Qwen3.6-35B-A3B"
+# dir = 'D:\models\qwen36_i4_gs64'
+# kind = "medium"
+#
+# [[big_model.models]]
+# id = "dsv4-flash"
+# name = "DeepSeek V4 Flash"
+# dir = 'E:\models\DeepSeek-V4-Flash'
+# kind = "giant"
+
+# ------------------------------------------------------------------------
+# 10. INITIATIVE - acting without being asked
+# ------------------------------------------------------------------------
+# Every finding or event that turns into an ACTION still goes through the
+# autonomy gate. A proactive Jarvis is not a Jarvis with fewer rules.
+[initiative]
+enabled = true
+heartbeat_minutes = 30
+# NOT BUILT YET (checked 2026-09-23). The engine runs and its timer ticks,
+# but it has NO checks: the original check list was lost and the rebuilt
+# jarvis_initiative.py deliberately does not invent unattended ones. Nothing
+# reads the four settings below, and no HEARTBEAT.md is created. This file
+# used to say "HEARTBEAT.md ... is created with sensible defaults the first
+# time the engine runs" - that was not true. So the apps' "What Jarvis
+# noticed" list stays empty, and the phone now says why.
+watch_folders = []                 # not read yet
+calendar_folder = ""               # not read yet
+calendar_lead_minutes = 10         # not read yet
+# (Planned: mail would need JARVIS_IMAP_HOST / _USER / _PASSWORD, and only
+# subjects and senders would be read.)
+mail_enabled = false               # not read yet
+
+# ------------------------------------------------------------------------
+# 11. MODEL STEWARD - finding, judging and adopting local models
+# ------------------------------------------------------------------------
+# The privacy shape of this feature, because it is the part worth checking:
+# discovery fetches a fixed set of PUBLIC urls - trending GGUF models, the
+# Ollama library page, the EvalPlus results file - identical no matter who
+# is asking. Nothing about your work is ever a search term. The profile that
+# personalises the ranking is built on this machine, from the memory store
+# and the Logseq graph, and is used only to sort a catalogue already in
+# hand. jarvis_models.outbound_requests() lists every url so the claim can
+# be checked rather than believed, and test_models.py asserts that no token
+# from the profile appears in any of them.
+#
+# The Joplin vault is deliberately NOT read for the profile. It is the
+# personal store; what you write there should not steer what gets suggested.
+[models]
+enabled = true
+
+# How often the heartbeat looks for something newer. Weekly. Discovery
+# never installs or switches on its own - it produces cards and stops.
+check_every_hours = 168
+suggest_count = 3
+
+# VRAM headroom kept free. The estimate is a floor (weights + KV cache +
+# ~1.5 GB of runtime overhead), and the cost of being wrong is a model
+# that spills into system RAM and runs at a fraction of the speed.
+vram_margin = 0.10
+# Context length assumed when sizing the KV cache for a model that is not
+# installed yet. Raise it if you routinely feed Jarvis long documents -
+# the cache, not the weights, is what grows.
+assume_context = 8192
+
+# The bar a "you'd be better off on X for this" suggestion has to clear.
+# It exists because the honest answer is usually no: switching costs a
+# download, disk, and a 5-15 second swap on every request if the new model
+# is bigger than the resident one.
+min_benefit = 0.05          # measured points, 0..1 (e.g. 0.05 = 5 pts HumanEval+)
+max_download_gb = 12
+
+# ------------------------------------------------------------------------
+# 12. SKILLS - capabilities Jarvis writes for itself, and ones from elsewhere
+# ------------------------------------------------------------------------
+# A skill is a folder with a SKILL.md: frontmatter naming it, then a body
+# of instructions the agent reads only when the skill is relevant. That is
+# also, exactly, a file of instructions the agent will follow - so the
+# scanner in jarvis_skills.py runs on the raw bytes BEFORE any of it reaches
+# a model, and a "refuse" verdict never reaches the approval queue.
+#
+# It refuses on the patterns actually used to distribute malware through the
+# OpenClaw skill marketplaces in 2025-26: curl-pipe-bash droppers, base64'd
+# setup steps, fake password prompts, "ignore your instructions", and files
+# padded past a scanner's size limit. A clean or warned skill still needs
+# your approval to install (modify_own_code) - clean does not mean automatic.
+#
+# Bundled scripts are NEVER run by the loader. If a skill tells the agent to
+# run one, that is an ordinary shell call and goes through the gate like any
+# other.
+[skills]
+enabled = true
+# third_party is the strictest trust level: bundled executables are a
+# warning on their own, and warned skills need accept_warnings before they
+# are even offered for approval. self = skills Jarvis wrote; local = ones
+# you wrote by hand.
+default_trust = "third_party"
+max_skill_md_kb = 64            # a skill padded past this is refused as evasion
+auto_write_after_complex_task = false   # Jarvis proposes; you approve each one
+
+# ------------------------------------------------------------------------
+# 12b. CONTENT RISK - what to do about text that arrived from outside
+# ------------------------------------------------------------------------
+# Skill bodies, MCP tool descriptions, tool results, connector text: all of it
+# is written by someone who is not you and read by a model that treats it as
+# instructions. Three rules, none of which asks a model anything.
+[content_risk]
+enabled = true
+
+# 1. Rushing language raises the tier of whatever comes next, for this long.
+#    Ten minutes is long enough to cover the action the rushing text was
+#    setting up, short enough that one hostile web page does not put the whole
+#    evening behind an approval prompt.
+rush_latch_minutes = 10
+
+# What a raised tier becomes. Never below the table's own answer - this rule
+# can only ever raise. Setting this to "auto" does not lower anything; it
+# simply makes the rule do nothing.
+rush_raises_to = "ask"
+
+# 2. How far a skill or tool description may drift, cumulatively, across
+#    re-approvals before a diff stops being an honest basis for saying yes and
+#    you are asked to read the whole thing again. 0.35 = roughly a third of
+#    the text changed since the first approval. Salami-slicing - twenty benign
+#    deltas summing to a hostile whole - is what this number exists to stop.
+full_reread_drift = 0.35
+
+# ------------------------------------------------------------------------
+# 13. CONNECTORS - your own life, read from where it already sits
+# ------------------------------------------------------------------------
+# Mail, calendar, browser history and documents. The one rule: reading any
+# of them pins the conversation to the local model (belt: the result is
+# stamped; braces: the gate's timed taint flag is latched), so personal data
+# reaches a cloud lane by no path. Jarvis never signs in to your Google or
+# iCloud account - the calendar here is a LOCAL CalDAV server's .ics files.
+# (Separately, the calendar_read tool can read a Google calendar through its
+# private link, when you set one: backend/README.md, "Google Calendar".)
+[connectors]
+enabled = true
+
+[connectors.mail]
+enabled = false                # set true and fill the env vars to turn on
+# Reads headers into a local SQLite mirror; a body is fetched live, for one
+# message, only on an explicit request - never bulk-stored.
+# Needs JARVIS_IMAP_HOST / _USER / _PASSWORD in the environment.
+sync_limit = 200
+
+[connectors.browser]
+enabled = true
+# Reads each browser's own history DB by COPYING it first, because Chrome
+# and Firefox hold an exclusive lock while running. Chrome, Edge, Brave,
+# Firefox, on Windows/macOS/Linux.
+default_hours = 24
+
+[connectors.documents]
+enabled = true
+# Docling (MIT), CPU-only, so a receipt or PDF is read here and nothing
+# about it leaves the machine. Falls back to a plain PDF text pull if
+# Docling is not installed.
+
+# Plug-in programs (MCP) - jarvis_mcp.py; backend/README.md, "Smarter tools,
+# part 2". Off until you list a program AND set enabled = true. Programs on
+# this PC only (stdio - no web addresses), installed once (never npx/uvx),
+# read-only tools only, and every tool use asks you. Starting a program asks
+# when it is new or has changed. The model reaches these tools only by
+# asking for "plugins" (jarvis_agent's more_tools). To see a program's
+# tools and the pin lines to copy in:
+#   py -3 jarvis_mcp.py inspect jarvis-framework.toml <name>
+# Shape of one entry (full paths; a key only as "credman:<entry name>"):
+#   [mcp.servers.repo]
+#   command = 'C:\Program Files\Python312\python.exe'
+#   args = ['-m', 'mcp_server_git', '--repository', 'C:\Users\you\code\project']
+#   [mcp.servers.repo.tools."git_status"]
+#   pin = "sha256:..."
+#   read_only = true      # only once you have checked it only reads
+[mcp]
+enabled = false
+
+# ------------------------------------------------------------------------
+# 14. VOICE - who may talk to Jarvis, and how it wakes
+# ------------------------------------------------------------------------
+# Two gates in front of the mic. WAKE: nothing is transcribed until the
+# openWakeWord "hey jarvis" model fires (CPU-only, never phones home;
+# Picovoice is ruled out - its free tier ended June 2026 and it calls home).
+# VOICE: the captured turn is checked against your enrolled voice-print
+# (SpeechBrain ECAPA, ~20 MB) before any command runs.
+#
+# This matters because the tiers govern what a command may DO, not who may
+# give one. An assistant that reads your email and answers anyone in earshot
+# is a hole the tiers cannot close. The voice-print is what makes "only me"
+# real - and it fails CLOSED: no model, no profile, or a processing error
+# all mean "not the owner", never "assume it is".
+[voice]
+enabled = true
+# "owner" = only your enrolled voice may command it (the default, because
+# the safe failure is to ignore a stranger). "broad" = accept anyone.
+mode = "owner"
+wake_phrase = "hey_jarvis"
+wake_threshold = 0.5
+# Similarity bar for accepting a voice as yours, on the small voice-ID model.
+# Since 2026-09-24 nothing lowers it below that model's own measured floor
+# (training used to lower it to fit your loosest recording - one noisy clip
+# could make Jarvis accept almost anyone). Each model has its own measured
+# bars in jarvis_voice.py (MODEL_BARS); this can only make them stricter.
+threshold = 0.35
+# How strict ("very_strict", the default, or "balanced") and whether private
+# answers may be read aloud are NOT set here: they live in
+# voice\voice-settings.json, and are changed from the apps - tightening at
+# once, loosening only through an approval card. Very strict needs a second,
+# stronger voice-ID model beside the first:
+# speaker_model_strong = "C:/path/to/strong.onnx"   # default: voice-models/speaker/strong.onnx
+awake_timeout_s = 8            # a wake with no speech goes back to sleep
+
+# --- The PHONE's ears -----------------------------------------------------
+# Push-to-talk always works and needs nothing here. The wake word on a phone
+# is a separate decision and ships OFF.
+#
+# Why it is not simply "the same as the desktop": your desktop microphone
+# sits in one room you control. Your phone's goes wherever you do - pocket,
+# car, other people's houses, work. "Always listening for hey jarvis" means
+# something materially different on a device that travels, so it is a choice
+# you make rather than one you inherit.
+#
+# Nothing is lost by leaving it off. Both modes post one complete utterance
+# to the same endpoint; the wake word is only a different way to START the
+# capture. Turning it on is gated as change_own_config, because widening
+# where Jarvis listens is a change to its exposure and not a preference.
+wake_word_enabled = false
+
+# Speech to text runs HERE, never on the phone. The owner voice-print gate
+# above can only check a voice if it is given the voice; a client that
+# transcribed locally would send text and the gate would have nothing left to
+# check. CPU by default: the local model already holds most of the card, and
+# a push-to-talk clip is transcribed after the fact rather than streamed, so
+# spending VRAM to finish a two-second clip sooner is the wrong trade here.
+#
+# sherpa-onnx is the only engine Jarvis has code for. This line used to say
+# "faster-whisper" (with stt_model = "small.en"), which no code in Jarvis
+# ever spoke - so push-to-talk could never be transcribed. The model is
+# found by its files in <this folder>/voice-models/stt; backend/README.md,
+# "Voice: install the models", has the one-line download for each.
+stt_engine = "sherpa-onnx"
+# sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
+# stt_threads = 4                       # CPU threads for speech-to-text (default: 4, or 2 on a small PC)
+# tts_threads = 4                       # CPU threads for the voice (the same default)
+# tts_speaker_id = 0                    # Kokoro voice, in the OLD numbering only: 0 = American female; 9 = British male (bm_george). Better: pick a voice by name in either app (Settings / Voices) - that choice wins over this line
+# tts_lang_british = "en-gb-x-rp"       # Kokoro v1.0 only: the espeak-ng voice the British voices (bf_*, bm_*) are asked for
+# vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
+#
+# Custom voices (jarvis_voices.py). All optional; these are the defaults.
+# custom_voice_margin = 0.10            # refuse a voice scoring within this of YOUR voice print's bar
+# custom_voice_max_rtf = 1.5            # slower than this (seconds per second of speech), 3 times running: built-in voice for 10 minutes
+# zipvoice_threads = 4                  # processor threads for ZipVoice
+# zipvoice_steps = 4                    # more is slower and a little smoother
+# zipvoice_dir = ''                     # default: <this folder>\voice-models\zipvoice
+# f5_dir = ''                           # default: <this folder>\voice-models\f5-tts (the better voice)
+# f5_python = ''                        # a Python with PyTorch + f5-tts; default: the one running Jarvis
+# f5_idle_minutes = 10                  # the better voice stops after this long with nothing to say
+# f5_steps = 32                         # F5-TTS's steps per sentence
+#
+# The voice flow (jarvis_voice_flow.py, 2026-09-24). All on unless set false
+# here; the apps cannot change these, only use them or not.
+# barge_in_enabled = true               # while Jarvis talks, YOUR voice (or "stop") stops it - never the TV, never its own voice; never transcribed
+# one_moment_enabled = true             # make a short "One moment." clip, in the voice in use, for the apps to play while you wait
+# warm_engines = true                   # load the voice engines in the background before your first spoken turn needs them
+
+
+# ------------------------------------------------------------------------
+# 15. POWER - sleep, at two depths
+# ------------------------------------------------------------------------
+# A 24/7 assistant does work you ask for and work it does on its own. Sleep
+# turns the second kind down. QUIET stops everything Jarvis does on its own
+# - heartbeat, watchers, background model checks, sleep-time memory work -
+# while still answering you the instant you speak; the model stays loaded,
+# so no wake-up delay. STANDBY adds unloading the local model from the GPU:
+# the real drop in power and VRAM, at the cost of a slower first reply
+# (~5-15 s to reload) after waking.
+#
+# NOTE the name clash: [memory.sleep_time] does the OPPOSITE of this - it
+# uses the idle GPU to do MORE while you are away. Entering STANDBY is what
+# suspends that pass.
+#
+# Four ways in and out, and a person's explicit choice always beats an
+# automatic one: a manual/voice wake during quiet hours holds until the
+# window ends rather than snapping back a moment later.
+[power]
+enabled = true
+# What "auto after idle" and "quiet hours" were meant to drop TO. NOT READ
+# (checked 2026-09-23): in the rebuilt jarvis_power.py quiet hours always
+# mean Quiet, and the idle check (should_standby) always means Standby,
+# whatever these two say.
+schedule_mode = "quiet"            # not read
+idle_mode = "quiet"                # not read
+
+# Scheduled quiet hours. Local time, and a window may cross midnight.
+schedule_enabled = false
+quiet_start = "23:00"
+quiet_end = "07:00"
+
+# Drop to sleep on its own after this long with no interaction. Off by
+# default - turn it on if you want screensaver behaviour.
+idle_enabled = false
+idle_minutes = 45
+
+# ------------------------------------------------------------------------
+# 16. PERSONALITY MODES
+# ------------------------------------------------------------------------
+# A mode is a lens on top of the pipeline, not a fork of it. The privacy
+# router, the autonomy gate, the self-modification checks and the budget
+# ceilings run identically in every mode; a mode only shapes what happens
+# AFTER those gates have already cleared an action.
+#
+# What a mode may change: length, tone, whether it shows reasoning, whether
+# it asks clarifying questions about the task, how readily it interrupts you
+# with background findings, how much memory it pulls, and how a caveat is
+# WORDED.
+#
+# What no mode may change - and these are enforced by the schema having no
+# field for them, not by a policy note: autonomy tiers, the privacy
+# boundary, whether it tells you it is unsure, whether it is willing to
+# disagree with you, and audit logging. A "personality" that could turn
+# those off would be a security hole with a friendly name: the mode you
+# reach for when you are tired and rushed must not be the mode that stops
+# telling you the truth.
+#
+# NAMING: the persona mode is NIGHT, never "quiet" - [power] above already
+# owns QUIET/STANDBY as compute states. They are independent axes: an
+# all-nighter wants POWER=ACTIVE with NIGHT persona.
+[persona]
+enabled = true
+default_mode = "standard"
+# Built-ins: standard, work, field, sounding-board, tutor, red-team,
+# off-duty, night. Your own live in ~/.openjarvis/personas/*.json and may
+# only set the same whitelisted fields - a custom file containing a
+# forbidden knob is rejected, not ignored.
+allow_custom = true
+# Context may propose a mode; it may never apply one. Silent personality
+# switching is an injection surface, since this system reads email subjects
+# and calendar titles.
+suggest_on_context = true
+auto_switch = false        # not settable to true; set_mode refuses non-human callers
+
+
+# ------------------------------------------------------------------------
+# 17. LONG FUSE - jobs that outlive the conversation
+# ------------------------------------------------------------------------
+# "Research this and tell me tomorrow." "Watch that repo." A job is started
+# in one conversation and finishes in another, usually while nobody is
+# looking, and that changes three things.
+#
+# Permission moves forward in time: the actions a job may take are written
+# onto its row when it is scheduled and frozen there. Execution may use that
+# set and may never exceed it — an action outside the set queues a one-shot
+# grant and the job parks until someone answers, rather than escalating.
+# Nothing widens the set, so an action set to "never" in [autonomy.tiers]
+# cannot be frozen onto a job in the first place.
+#
+# Privacy moves with the job, not with the clock: if the conversation that
+# scheduled it was tainted (mail, files, credentials, memory), the row is
+# tainted for the job's whole life. The gate's taint latch is a timer and
+# will have expired long before Wednesday; the row has not.
+#
+# And results never speak. A job that finishes at 03:00 leaves its result on
+# the row; the delivery arbiter collects it and decides at breakfast whether
+# it is worth a line. jarvis_jobs.py has no voice path at all.
+[jobs]
+enabled = true
+
+# How many due jobs one scheduler tick runs, in the tick's own thread. Small
+# on purpose: a tick that runs everything it finds is a tick that blocks the
+# heartbeat behind a slow web fetch.
+max_jobs_per_tick = 4
+
+# A running job with no progress report for this long is assumed to have
+# died with its process, and is taken back on the next start. ctx.progress()
+# is the liveness signal, so a handler whose steps are longer than this must
+# call it inside them.
+stale_running_seconds = 900
+
+# How many times a job may be reclaimed from a dead process before it is
+# failed instead. Reclaim retries; an exception inside a handler does not —
+# a job body that threw will throw again, and a retried job that already
+# sent half of something sends it twice.
+max_attempts = 3
+
+# How soon a job parked on a capability grant is looked at again. It re-runs
+# from the top of its handler, so handlers must be idempotent up to their
+# first side effect.
+approval_retry_seconds = 30
+
+# A parked job waits for ever by default. That is the point: if nobody is
+# there to approve the extra capability, the job stays queued rather than
+# proceeding without it.
+waiting_expires_hours = 0
+
+# Progress events are published to the shared event stream (kind "job") at
+# most this often per job, so a tight loop cannot flood three clients. State
+# changes always publish, whatever this says.
+progress_event_seconds = 1.0
+
+# SQLite: one writer thread serves every thread in this process (see
+# jarvis_jobs.py for why a connection per thread was rejected), and these
+# two cover the other process writing to the same file.
+busy_timeout_seconds = 10
+write_timeout_seconds = 15
+
+# ------------------------------------------------------------------------
+# 18. UNDO SHELF - the machinery behind the word "reversible"
+# ------------------------------------------------------------------------
+# Every approval card says what an action costs to get wrong, and until
+# jarvis_undo.py existed "reversible: yes" was a claim with nothing behind
+# it. Now every action lands on a shelf, and three of the six categories -
+# files, git, config key-values - can actually be put back, because this
+# module keeps its own before-image of each. Email and browser actions
+# cannot be undone by anyone, and they stay ON the shelf marked
+# non-revertible with the reason: a shelf that listed only the recoverable
+# things would read as a complete record of the evening and be wrong in
+# exactly the direction that matters.
+#
+# The shelf is a second copy of everything you deleted today, so it is
+# treated as sensitive data, not as a cache. It never leaves this machine
+# (the phone sees the list and can press revert; the bytes stay here), and
+# it refuses outright to shelf a write whose purpose was removing a
+# credential - undoing "strip the API key" would put the API key back.
+[undo]
+enabled = true
+
+# How long a before-image is kept. A CLOCK, not a count: the risk is the
+# window in which deleted content exists twice, and that is measured in
+# hours, not in how many other things happened since. Expired entries are
+# deleted - index row and bytes together - at the top of every call, not by
+# a background sweeper that only runs while something is up. 0 means keep
+# nothing, and is read as exactly that.
+ttl_hours = 24
+
+# Files bigger than this are not shadowed; the action is still shelved, and
+# says it has no undo. Copying a 2GB file on every write is how a shelf
+# becomes a disk-filling attack rather than a safety net.
+max_shadow_mb = 8
+
+# A disk backstop, NOT the expiry policy - ttl_hours above is that. Only
+# here so a runaway loop cannot fill the volume inside one TTL window; set
+# high enough that ordinary use never reaches it.
+max_entries = 500
+
+# Characters of the before-image a LOCAL card may show, so you can see what
+# would come back. Never sent to a remote client, and credential-shaped
+# strings are stripped even from this. 0 turns previews off.
+local_preview_chars = 120
+
+# ------------------------------------------------------------------------
+# 19. PREVIEW - the pane you read before you say yes
+# ------------------------------------------------------------------------
+# [autonomy] decides whether you are asked. This decides what you are shown
+# when you are, and jarvis_preview.py computes every word of it with code.
+# Nothing on the authoritative pane is written by a model, because the text
+# being judged is the text an attacker controls, and the sentence directly
+# above the Approve button is the whole prize. A model gloss may be attached
+# in a separate labelled field and rendered below a fold; this module never
+# writes one.
+#
+# The pane always reports its own COVERAGE - "resolved 3 of 5 tokens". A
+# pane that looks confident about a command it half parsed is worse than no
+# pane, because afterwards you believe you checked.
+[preview]
+enabled = true
+
+# A command the parser could not finish reading splits in two, because not
+# everything unreadable is unreadable in the same way.
+#
+# SHAPES WITH NO HONEST VERSION -- a pipe into an interpreter, a fetched
+# script run in place, an -EncodedCommand payload, a substitution that
+# reaches the network ("rm -rf $(curl ...)" lets a server choose what gets
+# deleted). There is nothing here for you to weigh up, so you are not
+# offered a button. This is unknown_tier, and "never" means only an edit to
+# this file unblocks it.
+unknown_tier = "never"
+
+# MERELY UNREAD -- a variable standing where a path should be, a plain
+# $(...) or backtick, an unterminated quote, three grammars disagreeing.
+# You can read these and decide; what you must not be handed is a pane that
+# hides how little of it was parsed, and the coverage line is what fixes
+# that. The first version of this module sent all of the above to "never"
+# too, which reads as rigour and behaves as breakage: "ls $(pwd)" is an
+# ordinary thing to type, and a rule that refuses it teaches you to widen
+# the setting, which is how a safety rule ends up switched off.
+# Cannot be lowered below "ask" whatever you put here.
+unread_tier = "ask"
+
+# Which shell grammar to assume when the caller does not declare one.
+# Leave it empty and the command is parsed under all three (posix,
+# powershell, cmd): if they agree the ambiguity had no consequence and
+# nothing is reported, and if they disagree that disagreement IS the
+# finding, because one of those readings is what the machine will do and
+# the pane cannot say which.
+default_grammar = ""
+
+# Paths that may be touched without ceremony. EMPTY MEANS NOTHING IS
+# DECLARED SAFE, not that everything is - an allowlist that starts
+# permissive is a setting nobody ever tightens. Paths are compared
+# component-wise, so "~/docs" does not also admit "~/docs-old".
+path_allowlist = []
+
+# How many files to count under a path before the card says "at least".
+# The count is what turns "destructive" into "412 files, 2.1 GB", and it is
+# also a directory walk on the path a hostile command chose, so it stops.
+max_walk_entries = 20000
+
+# The phone card: three lines, and this many characters each. The budget is
+# the point. A wall of diff on a six-inch screen gets swipe-approved unread,
+# which is worse than showing nothing, because now you believe you checked.
+card_line_chars = 72
+
+# Unified diffs are against what is on DISK, never against what the caller
+# remembers writing - the two differ exactly when something else changed the
+# file since, which is when a diff matters most.
+diff_context_lines = 3
+max_diff_kb = 200
+
+# How many addresses to list per header before the card says "and N more".
+# To, Cc and Bcc are always counted separately and never summed: a Bcc of
+# 200 is the fact that should stop you, and it is the one a combined
+# "203 recipients" hides.
+recipients_shown = 5
+
+# THE SEND-HOLD. SMTP has no unsend, so the only honest undo is to not have
+# handed the message over yet. A message sits here for this long and
+# cancel_hold() throws it away; only what survives the window reaches a
+# transport. The queue is in memory on purpose - a hold that survived a
+# restart would mean "the machine rebooted so your mail went out anyway".
+default_hold_seconds = 30
+
+# commit_before(): make "you can revert this" a fact rather than a claim.
+# It refuses a dirty tree (committing someone's unrelated work-in-progress
+# to make room for yours is a second uninvited edit, not a safety feature)
+# and refuses when the commit would stage a credential - the obvious
+# `git add -A` in a repo with an untracked .env and a remote is an
+# exfiltration waiting for the next push. Set marker_commits = false to
+# report HEAD as the restore point instead of writing a named empty commit.
+marker_commits = true
+secret_scan_kb = 64
+
+# ------------------------------------------------------------------------
+# 20. ATTENTION - how much of your day Jarvis is allowed to spend
+# ------------------------------------------------------------------------
+# Every feature here can want you. The heartbeat finds something, a Long Fuse
+# job finishes, the steward spots a newer model, the gate raises a card. Each
+# is reasonable alone; together they are a machine for interrupting you all
+# day, and what people do with that is turn the whole lot off - which costs
+# them the one notification that mattered along with the forty that did not.
+#
+# So there is one budget, in one place, and every feature respects it. What
+# does not fit drains into one daily digest.
+#
+# Anything you ASKED for is exempt and is not counted. A card for the action
+# you just requested is foreground: you are already here, waiting.
+[arbiter]
+enabled = true
+
+# Spoken, unprompted interruptions per day. Not notifications - a tray badge
+# or a phone count costs nothing until you look at it. This number is the one
+# that makes noise in the room.
+spoken_per_day = 3
+
+# When the digest arrives, as an hour of the day, 0-23. It arrives once, and
+# only if there is something in it: a brief that turns up empty teaches you it
+# is not worth opening, and then the one that matters is not opened either.
+digest_hour = 18
+
+# Minutes of no keyboard or mouse before you count as away. While you are away
+# - or the session is locked, or power mode is quiet or standby - the spoken
+# budget is zero and everything goes to the digest.
+#
+# This is what replaced the webcam. An earlier design used face detection to
+# decide whether to speak; it was killed because the operating system already
+# knows the answer, and asking it costs no camera handle for a compromise to
+# inherit and creates no record of who else was in the room. 0 turns the idle
+# part off and leaves only the session lock.
+away_after_idle_minutes = 15
+
+# How long a delivered or dropped item stays on file. Only affects history;
+# anything still waiting is never dropped by this, however old, because old
+# and still waiting is exactly the case a digest exists for.
+keep_delivered_days = 14
+
+# ------------------------------------------------------------------------
+# 21. TRIPWIRE - a smoke test when the model changes
+# ------------------------------------------------------------------------
+# Eight small probes, run against the outgoing model before a swap and the
+# incoming one after it. They catch a model that is BROKEN: answering in
+# another language, looping instead of stopping, unable to produce JSON,
+# refusing ordinary requests, returning nothing.
+#
+# They cannot tell you the new model is better, and the screen says so in
+# those words. The original design was an evaluation suite scored by a judge
+# model against tasks taken from your own transcripts; it was cut twice over.
+# Thirty to fifty tasks judged locally has a noise floor of two or three, so
+# no number it printed would be real - and a suite built from your transcripts
+# is a frozen second copy of your life sitting outside everything the memory
+# system does about forgetting.
+#
+# The probes here are written into the module, about nothing in particular.
+# Nothing in that file reads a transcript.
+[tripwire]
+enabled = true
+
+# ------------------------------------------------------------------------
+# 22. STYLE - sounding like you, without changing any weights
+# ------------------------------------------------------------------------
+# Before drafting something in your voice, Jarvis retrieves a few examples of
+# how you have written about similar things and shows them to the model.
+#
+# Two rules make that safe. It goes through the memory store, so it trips the
+# same privacy latch as reading your mail and the turn stays on the local
+# model. And names, addresses, amounts and long numbers are stripped first:
+# examples are picked by how similar they are, not by how sensitive, so the
+# phrasing of a private message will sometimes be the closest match for a note
+# to a colleague.
+#
+# Deliberately absent: fine-tuning. An adapter does not fit on 8 GB, it
+# memorises your writing in a way nobody can extract or audit, and rolling
+# back a search index is free where rolling back weights is not.
+[style]
+enabled = true
+exemplars = 3          # how many examples to show the model
+min_words = 6          # shorter than this carries no style worth copying
+
+# ------------------------------------------------------------------------
+# 23. WATCH - what is new on GitHub for the things you care about
+# ------------------------------------------------------------------------
+# You name a topic. Jarvis searches GitHub for it, remembers what it has
+# already shown you, and tells you what is new and what has moved THE NEXT
+# TIME YOU ASK.
+#
+# It is a pull, deliberately, and that is the default rather than a setting
+# you have to find. "Keep me updated if I ask" is a different feature from
+# "tell me when something happens", and building the second and calling it the
+# first is how a tool ends up muted. A single topic can be marked notify and
+# then it reaches the daily brief - but never the room: it goes through the
+# arbiter with can_defer set, because nothing about a new repository was ever
+# urgent.
+#
+# A repository description is written by whoever published it and lands in
+# front of a model that reads it as if you had typed it, so every field goes
+# through the same scanner as a skill. A repository whose text is refused is
+# still LISTED - being attacked is not a reason to hide that it exists - but
+# its text is replaced with the reason and never reaches a model. A search
+# also never raises your approval tier, whatever a README says: otherwise
+# anyone could make your next action harder by publishing a repository.
+#
+# The token is read from the environment (JARVIS_GITHUB_TOKEN, GITHUB_TOKEN
+# or GH_TOKEN) and from nowhere else. Without one you get 10 searches a
+# minute instead of 30, which is enough for a handful of topics.
+[watch]
+enabled = true
+
+# What counts as "this repository grew". Proportional with a floor, so 40
+# stars going to 400 is news and 40,000 going to 40,060 is not. A plain
+# threshold would report the popular projects every week and never the small
+# one that suddenly mattered.
+star_jump = 0.5        # fraction of the current count
+star_floor = 25        # ...but never fewer than this many
+
+# Always reported regardless of the above, because each one changes whether
+# you can use the thing at all: a licence change, being archived, a new
+# release, a changed description.
+
+
+# ------------------------------------------------------------------------
+# TOOLS - which ones the model is offered at all
+# ------------------------------------------------------------------------
+# jarvis_agent.offered_tools() offers the model only a tool named here -
+# see that module's own docstring, and backend/README.md's "What each one
+# needs in jarvis_gate.py and jarvis-framework.toml" for the full list and
+# how to add more. A tool left out of this list still works everywhere
+# else (its settings, its "which search should I use?"-style fast paths),
+# it is simply never put in front of the model. This changes nothing about
+# what asks first - that is still [autonomy.tiers] - only whether the
+# model is offered the tool at all.
+#
+# `web_search` ships ON (the owner's decision of 2026-09-25, "Web search
+# with a choice of providers", reconfirmed 2026-09-27, "Web search ships
+# switched on"): SearXNG was already the chosen default provider, so a
+# fresh install that could not search the web despite that was this file,
+# not the owner, still saying no. Nothing else here is on by that decision
+# - send_email, browser_control, my_files and the rest stay opt-in, each
+# for the reasons its own row of backend/README.md gives.
+[tools]
+enabled = ["web_search"]

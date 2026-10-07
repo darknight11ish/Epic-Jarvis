@@ -98,23 +98,23 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
 
 ## Install it
 
-**Read this first: the backend is not public, so nobody else can install this.**
-The Python program that does the work (`jarvis_hud.py` and the files beside
-it) is not in this repository and is not downloadable anywhere - it exists on
-the author's PC and nowhere else (INSTALL.md, step 1.3). That is not a
-missing link to be found later: there is no such file to publish, so a second
-person cannot install Jarvis today, however carefully they follow the page.
-This repository holds the changes for that program, the parts of it that were
-rebuilt, and the two apps - which have nothing to connect to without it. If
-you are not the author, this is where the install stops.
+**You can install this now.** The Python program that does the work
+(`jarvis_hud.py` and the 180 files beside it) is published in this repository,
+in [`jarvis-backend/`](jarvis-backend/README.md), as plain source. Until
+2026-10-06 it existed only on the author's PC — fifteen of its modules existed
+nowhere else on Earth — so nobody else could run Jarvis at all, however
+carefully they followed the install page.
 
 Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
 
 1. **The backend on the PC** - the Python program that does the work, plus
-   the model in Ollama. One script, `scripts/install-backend.ps1`, writes
-   down where your backend folder is (one line; the live check and the test
-   suites read it from then on); then `scripts/apply-patches.ps1` puts this
-   repository's changes into it (INSTALL.md part 1 has both exact commands).
+   the model in Ollama. Copy `jarvis-backend\` to a folder of your own
+   (INSTALL.md step 1.3); one script, `scripts/install-backend.ps1`, writes
+   down where that folder is (one line; the live check and the test
+   suites read it from then on); then `scripts/apply-patches.ps1` installs the
+   Python packages, puts the settings file in place and runs the tests. On the
+   published folder it changes no code, because that folder is already the
+   state after the patches (INSTALL.md part 1 has both exact commands).
 2. **The desktop app** - for now you build it yourself on the PC
    (INSTALL.md part 2). A ready-made installer appears under
    [Releases](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest)
@@ -132,13 +132,20 @@ backend never had, so it cannot talk to Jarvis at all. It no longer
 publishes a download, so the two cannot be mixed up - installing the wrong
 one would look like "my phone is broken" rather than "wrong app".
 
+**What is still unproven, said plainly:** nobody has yet taken a fresh clone on
+a clean PC through all three parts and started Jarvis. The patch step has been
+measured against the published folder - it exits 0 and changes no code - and
+the other steps are the ones INSTALL.md already described. If you are the first
+to try it, the page is the place to report what it got wrong.
+
 ## Where things are
 
 | Folder | What is in it |
 |---|---|
 | `jarvis-desktop/` | The Windows app (Tauri). Rust in `src-tauri/`, the windows in `src/`. |
 | `jarvis-client/` | The Android app. |
-| `backend/` | Changes (patches) for the backend on the PC, the modules it needs, and a test for each. The backend itself lives on the PC, not here. |
+| `jarvis-backend/` | **The backend itself**, as plain source: a checked copy of the author's, 181 files. [`jarvis-backend/README.md`](jarvis-backend/README.md) says where it came from and what it is not. |
+| `backend/` | Changes (patches) for the backend, the modules it needs, and a test for each. The patches are written against the author's own backend folder. [`backend/README.md`](backend/README.md) has the table. |
 | `docs/` | How it all works. [`docs/README.md`](docs/README.md) says which documents are current. |
 | `scripts/`, `tools/` | The patch script, and tools that generate test data and notices. |
 | `keystore/` | How the phone app's signing key is restored on GitHub's build machines. The key itself is never committed. |
