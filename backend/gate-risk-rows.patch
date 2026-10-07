@@ -1,0 +1,10 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -263,7 +263,5 @@
+     "read_logseq_page":    ("yes", "local", "opens the page; the graph is unchanged"),
+     "browse_model_catalog":("yes", "outbound", "a fixed public query; downloads nothing"),
+-    "draft_email":         ("yes", "local", "a draft is not a sent message"),
+ 
+     # additive writes to things you own
+-    "create_joplin_note":     ("yes", "local", "delete it and it is gone"),
+     "create_logseq_page":     ("yes", "local", "delete it and it is gone"),

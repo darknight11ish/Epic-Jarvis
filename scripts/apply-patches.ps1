@@ -1080,6 +1080,18 @@ $PATCHES = @(
     # It needs jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below);
     # without them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
+    # The gate's risk table held draft_email TWICE: the owner's own original
+    # line ("a draft is not a sent message", rated local) and draft-email.patch's
+    # row ("saves the draft ... to your own Drafts folder", rated outbound -
+    # which is right, because saving a draft goes to the mail server). Python
+    # keeps the LAST of two equal keys, so outbound won today; but only by luck
+    # of ordering, and the natural cleanup - deleting the later line - would
+    # have made an email draft swipe-approvable with nobody noticing, because
+    # the two had already collapsed into one key in the file. This removes the
+    # stale original line, so there is one row, the right one, on any reading.
+    # Tested by test_gate_risk_rows.py; the apply itself is proven by this
+    # script's dry run, as for every patch here.
+    'gate-risk-rows.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1178,6 +1190,8 @@ $SHIPPED = @(
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
     'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
     'jarvis_inbox_tidy.py'       # tool "tidy_inbox": archive, star, mark as read or move to Trash, ONE card listing every email, 10 minutes to Undo, no permanent delete; inbox-tidy.patch
+    'jarvis_energy.py'           # what one answer cost the card (jarvis_agent.py records a row at the end of a turn; off by default)
+    'jarvis_injection.py'        # the "sneaky instruction" table (jarvis_agent._TurnWatch.took_in turns a hit into a card flag; advisory only)
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch

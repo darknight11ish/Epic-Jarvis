@@ -523,6 +523,55 @@ def complexity(query: str) -> float:
     return round(min(score, 1.0), 3)
 
 
+#: How far the answer budget may move from the configured one, as a share of
+#: it. The floor is 0.75 and the cap 2.0: a hard question may be answered at
+#: up to twice the configured length, an easy one at no less than
+#: three-quarters. Both bounds exist because the model's room is shared:
+#: `jarvis_agent.budget()` subtracts this number from the prompt's room, so
+#: an unbounded raise would silently squeeze the conversation out.
+TOKEN_FLOOR_SHARE = 0.75
+TOKEN_CAP_SHARE = 2.0
+
+
+def tokens_for_turn(query: str, base: int, *, cap: int = 0) -> int:
+    """`base` (the configured answer length) adjusted by how hard the question
+    looks - the idea from OpenJarvis's `adjust_tokens_for_model` in its
+    complexity router (Apache-2.0); the numbers and the bounds are ours.
+
+    Deliberately narrow, and it can never hurt the prompt:
+
+    * the result is always between ``max(512, 0.75 * base)`` and
+      ``min(2 * base, cap or 2 * base)``;
+    * a low complexity never takes the budget below the floor, and a high one
+      never takes it above the cap, so the caller's own limit still wins;
+    * anything unreadable returns `base` unchanged - this is a tuning knob,
+      never a reason for a turn to fail.
+    """
+    try:
+        base = int(base)
+    except (TypeError, ValueError):
+        return 1024
+    if base <= 0:
+        return 1024
+    lo = max(512, int(base * TOKEN_FLOOR_SHARE))
+    hi = int(base * TOKEN_CAP_SHARE)
+    if cap and cap > 0:
+        hi = min(hi, int(cap))
+    if hi < lo:
+        hi = lo
+    try:
+        c = complexity(query)
+    except Exception:
+        return base
+    # 0.40 is the shipped `[routing] complexity_threshold`: below it the
+    # question is ordinary and keeps the configured length; above it the
+    # answer grows, in proportion, up to the cap.
+    if c <= 0.40:
+        return max(lo, min(base, hi))
+    grown = int(base * (1.0 + (c - 0.40) / 0.60))
+    return max(lo, min(grown, hi))
+
+
 def lockdown_on() -> bool:
     """Is Lockdown on (jarvis_asks_first.py, 2026-09-28)? False without that
     module - the feature is not there. Its own reading fails closed (a

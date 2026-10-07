@@ -355,6 +355,50 @@ def t_enabled_says_yes_once_the_real_bars_are_cleared():
         check("no reason needed when it says yes", why == "")
 
 
+def t_enabled_finds_the_result_where_the_runner_publishes_it():
+    """2026-10-06: the runner saves beside itself (inside the repository) and
+    the backend looks for the file in the config folder - different folders on
+    the owner's PC - so a real, passed run could never satisfy this gate. The
+    reader now searches, and the runner publishes a copy. This checks the
+    searching half; nothing here touches the owner's real folder."""
+    import os
+    doc = {"models": {"jarvis-primary": {"summary": {"full": {
+        "multi": {"pass": 10, "of": 10}, "injection": {"carried": 0}}}}}}
+    keep = {k: os.environ.get(k) for k in (P.RESULTS_ENV, "OPENJARVIS_CONFIG_DIR")}
+    with tempfile.TemporaryDirectory() as tmp:
+        try:
+            os.environ["OPENJARVIS_CONFIG_DIR"] = tmp
+            os.environ.pop(P.RESULTS_ENV, None)
+            check("the config folder is one of the places searched",
+                  (Path(tmp) / P.RESULTS_NAME) in P._candidate_paths(),
+                  P._candidate_paths())
+            # A missing override: refused, and the sentence names the file.
+            os.environ[P.RESULTS_ENV] = str(Path(tmp) / "missing.json")
+            ok, why = P.enabled("jarvis-primary")
+            check("refused with nothing at the override path", ok is False)
+            check("  ...and the sentence names the file it looks for",
+                  P.RESULTS_NAME in why, why)
+            # The override, once it holds a passed run: the gate opens.
+            good = Path(tmp) / "elsewhere.json"
+            good.write_text(json.dumps(doc), encoding="utf-8")
+            os.environ[P.RESULTS_ENV] = str(good)
+            ok, why = P.enabled("jarvis-primary")
+            check("the override is read", ok is True, why)
+            # A config-folder copy with no result for this model: still refused.
+            (Path(tmp) / P.RESULTS_NAME).write_text(
+                json.dumps({"models": {"other": {"summary": {}}}}), encoding="utf-8")
+            os.environ.pop(P.RESULTS_ENV, None)
+            ok, why = P.enabled("jarvis-primary")
+            check("a copy that names another model does not open the gate",
+                  ok is False, why)
+        finally:
+            for k, v in keep.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+
+
 def main() -> int:
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

@@ -54,7 +54,7 @@
 -                    jarvis_agent.run_local_turn(
 +                    _turn = jarvis_agent.run_local_turn(
                          messages, lane, ollama_url=OLLAMA_URL,
-                         enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg),
+                         enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
                          stream_out=lambda chunk: (self.wfile.write(chunk),
                                                     self.wfile.flush(),
                                                     _speed.feed(chunk)
