@@ -30,7 +30,8 @@ the detail - it carries the date and the reason.
   reverses the 2026-09-28 "the PC has one chat box" decision. Typing there is
   its own conversation, kept in History as HUD, and that window has no
   Temporary chat, no New conversation, no "Used in this answer" and no crisis
-  panel. The owner was told those limits and accepted them.
+  panel. The owner was told those limits and accepted them. The "Open the
+  Jarvis bar" button stays in that window, beside the box.
 - **2026-10-06 - anything needing a key or a sign-in should be settable in the
   Jarvis app itself**, desktop only, stored under rule 3 (Windows Credential
   Manager for a secret; never a plain-text key file). The phone is never asked
