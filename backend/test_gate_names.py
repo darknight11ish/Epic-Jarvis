@@ -142,11 +142,19 @@ NOT_VIA_THE_TABLE = {
 #: audit-05-gate-names.md` for which of them are documented decisions and which
 #: is an open finding.
 RECORDED_FALL_THROUGHS = {
-    "control_browser",          # README: the line "belongs with whoever writes that patch"
-    "control_phone",            # README: "add explicit lines for both ... rather than
-                                # relying on the fallback silently"
-    "research_authenticated",   # the same README note, the same shape
-    "run_plan",                 # jarvis_plan.py ships switched off until tools/tool_eval clears it
+    # 2026-10-06: control_browser, control_phone, research_authenticated and
+    # run_plan NOW have explicit "ask" lines in rebuilt/jarvis-framework.toml,
+    # at the tier they were already taking by fall-through. They stay listed
+    # here because THIS check reads the LIVE tier table, and the live file is
+    # the owner's own (`apply-patches.ps1` never overwrites it) - so until the
+    # next apply-patches has reconciled it, they may still resolve through
+    # `unknown_action_tier` on the PC. Once the live table names them, the
+    # project's own check 4 ("a recorded fall-through is only recorded because
+    # it really does fall through") says they can come off this list.
+    "control_browser",
+    "control_phone",
+    "research_authenticated",
+    "run_plan",
     "phone_notifications_read", # jarvis_phone_notifications.py's own ACTION; OPEN FINDING,
                                 # see the audit note - no toml line anywhere in either copy
     "unclassified_tool",        # not an action at all: the fallback name itself

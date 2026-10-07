@@ -8,6 +8,24 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 - **Settings → Accounts now collects the server ADDRESSES, so email and Home Assistant work from the app itself (2026-10-06).** The card already held the four secrets (the IMAP username and password, the private calendar link, the Home Assistant token) in Windows Credential Manager - but no server address, so email answered "JARVIS_IMAP_HOST is not set - there is no mail server to read" and Home Assistant answered "not set up on this PC" unless the addresses were plain-text Windows environment variables. Eight addresses and one choice now have their own boxes (the mail server, its port and mailbox; the sending server, its port and how email is encrypted; the Home Assistant address; the calendar's CalDAV address); they are read from and written to the PC's own route and kept in `accounts.json` beside `web-search.json`, because an address is not a secret - it is a plain settings file, and the box shows what is saved. A key, password or token can never reach it: the route refuses every name but the eight. An environment variable you already set still wins, and the row says so.
 
+- **The big HUD window has its own chat box again (2026-10-06).** This
+  reverses the decision of 2026-09-28 that the desktop HUD's own box should
+  open the Jarvis bar instead, "so the PC has one chat box". The box and its
+  Send are shown and work exactly as the page always made them: type or press
+  Enter, the answer streams in, and the window's own conversation is kept in
+  History with its own id and the tag **HUD**. The **Open the Jarvis bar**
+  button stays, now beside the box rather than instead of it, and the mic
+  button is unchanged. What the box does not have - and the Jarvis bar does -
+  is a **Temporary chat**, **New conversation**, the "Used in this answer"
+  list and the crisis panel; those are now known limits of that window, not a
+  reason to hide it. Only the packaged app was hiding it: the HUD page served
+  on its own in a plain browser always showed its box, and still does. The
+  suite's own check was inverted honestly rather than dropped - it now
+  asserts the box and Send are *visible and working* (a message typed into
+  them really reaches `/api/chat`), and still asserts the button exists and
+  still asks the shell for `hud_open_bar`. Not yet typed in by hand on a real
+  desktop run.
+
 - **The phone's face photographs job was red because the runner had no sound
   library, not because anything here was broken (2026-10-06).** The job that
   renders the animal faces downloads Android's emulator and starts it. The

@@ -183,6 +183,7 @@ SHIPPED = (
     "jarvis_email_send.py",
     "jarvis_email_draft.py",
     "jarvis_inbox_tidy.py",
+    "jarvis_energy.py", "jarvis_injection.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
     # the ADDRESSES of the owner's accounts - the mail server, its port and
