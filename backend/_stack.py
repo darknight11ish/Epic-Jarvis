@@ -78,9 +78,27 @@ GAP = "# gap"
 #: (Left as it is, so nobody re-derives it: `jarvis_gate.py` is 2 under its
 #: pin. Tightening a pin is its own decision - test_installed_stand_in.py
 #: prints the same note.)
+#:
+#: RAISED 2026-10-06, 22 -> 24, for `jarvis_gate.py`, and both extra hunks are
+#: honest rather than drift - the two names are in `by_patch`:
+#:
+#:   * `chatbot-limits.patch` (this pass) +1. Its `_RISK` hunk sits directly
+#:     after quiz-cloud.patch's own `quiz_cloud_grade` row, whose lines are
+#:     themselves a materialised pre-image, so the context is text only the
+#:     owner's PC holds. There is no earlier patch this could anchor to
+#:     instead: `_RISK`'s last entry before quiz-cloud is 800 lines earlier.
+#:     Its `_NO_RULE_FROM_DENIAL` hunk materialised nothing, so this patch
+#:     costs the walk exactly one hunk.
+#:   * `readpage.patch` +1, already on this branch before this pass. Its third
+#:     hunk anchors to an `_TOOL_ACTIONS` line `inbox-tidy.patch` writes, and
+#:     that patch is not in this branch's 116-entry walk - the same
+#:     different-stacks gap described above, not a patch that drifted.
+#:
+#: Neither can be fixed by editing a patch: what is missing is the owner's own
+#: lines. The pin may come back down when `inbox-tidy.patch` joins the walk.
 RATCHET = {
     "jarvis_hud.py": 45,
-    "jarvis_gate.py": 22,
+    "jarvis_gate.py": 24,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,

@@ -6,6 +6,19 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Anything needing a key is settable in the app now (2026-10-06).** Settings
+  has a new "Chatbot API keys" card for the six chatbot API services (OpenAI,
+  DeepSeek, Mistral, xAI, OpenRouter, Groq): each key is typed on the PC and
+  written straight into Windows Credential Manager from Rust, never over HTTP
+  and never to the phone, exactly like the Accounts page's four secrets. The
+  same card carries each service's monthly money limit and its price list,
+  because a key with no limit leaves the service unusable: raising a limit is a
+  loosening, so it gets one approval card and Windows Hello, while lowering one,
+  removing one and correcting a price change at once with no card. Every default
+  price says it is unverified and when it was written; every price says whether
+  it is yours and the date you set it. `docs/ACCOUNT-KEYS-DESIGN.md` is the
+  design.
+
 - **The phone's face photographs job was red because the runner had no sound
   library, not because anything here was broken (2026-10-06).** The job that
   renders the animal faces downloads Android's emulator and starts it. The

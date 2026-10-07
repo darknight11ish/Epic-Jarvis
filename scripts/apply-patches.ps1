@@ -1044,6 +1044,23 @@ $PATCHES = @(
     # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'quiz-cloud.patch'
+    # "Chatbot money limits", set from the app (the owner's approval of
+    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
+    # section 87.4.1): GET /api/chatbot/money reads every API service's monthly
+    # limit, what is spent, what is left and its model's price WITH where that
+    # number came from; POST sets ONE change. Raising a limit is a loosening, so
+    # it raises ONE approval card (`raise_api_limit`) plus Windows Hello on the
+    # PC, and is refused from any other device. Lowering one, removing one,
+    # correcting a price and resetting one tighten or correct, so they need no
+    # card - the reason there are TWO action names, since the owner-check
+    # attaches Windows Hello to the action and not to the direction. TWO files:
+    # in jarvis_gate.py the two names join the "acts only on tier ask" set and
+    # get their _RISK lines (both right after quiz-cloud.patch's own, so it goes
+    # after it); in jarvis_hud.py ONE install block after quiz-cloud.patch's own.
+    # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
+    # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
+    # banner says so and the route is simply not there.
+    'chatbot-limits.patch'
     # The gate renamed an action on its way out (2026-10-03). For the 58
     # _TOOL_ACTIONS entries whose value is a TIER literal ("calculator": "auto"),
     # action_for_tool() returned f"tool:{name}" as the action name. That string
@@ -1272,6 +1289,7 @@ $SHIPPED = @(
     'jarvis_chatbot_lechat.py'   # Le Chat by Mistral AI (chat.mistral.ai): a thin site file
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
+    'jarvis_chatbot_limits.py'   # chatbot-limits.patch: the monthly money limits and the price list, set from the PC's app - a raise is ONE card plus Windows Hello, a lowering and a price correction are not; GET/POST /api/chatbot/money, PC only
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
     # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py

@@ -249,6 +249,29 @@ fn main() {
             "get_account_secrets",
             "save_account_secret",
             "forget_account_secret",
+            // Settings' "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md
+            // steps 1-2, 2026-10-06): the six API services the chatbot
+            // driver can use (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
+            // Groq), each key written straight into Credential Manager on
+            // this PC under the name `jarvis_chatbot_api.KEY_TARGETS` builds
+            // - never sent over HTTP, never to the phone, never shown again.
+            // The names cannot drift from the Python side:
+            // backend/test_chatbot_keys.py and token_store.rs's own
+            // `the_six_chatbot_targets_are_the_python_sides_own` both fail
+            // if they do. Settings window only - rule 3.
+            "get_chatbot_api_keys",
+            "save_chatbot_api_key",
+            "forget_chatbot_api_key",
+            // The monthly money limits and the price list of those same six
+            // services (docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, 2026-10-06):
+            // a key with no limit leaves the service unusable, so the two
+            // were built together. Raising a limit is a loosening - the
+            // BACKEND raises ONE approval card (raise_api_limit) plus
+            // Windows Hello and refuses it from another device; lowering
+            // one, removing one and correcting a price need no card. Every
+            // write is held on a stale link. Settings window only.
+            "chatbot_money",
+            "set_chatbot_money",
             // Settings' "What Jarvis can reach" (backend/reach.patch): every
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.

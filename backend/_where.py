@@ -337,6 +337,11 @@ SHIPPED = (
     # second AI on this PC" (another Ollama model, loopback only). No patch
     # of their own: jarvis_chatbot.py loads both.
     "jarvis_chatbot_api.py",
+    # The monthly money limits and the price list, set from the PC's own app
+    # (chatbot-limits.patch; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3):
+    # GET/POST /api/chatbot/money, PC only. A raise is ONE card plus Windows
+    # Hello; a lowering, a removal and a price correction are not.
+    "jarvis_chatbot_limits.py",
     "jarvis_chatbot_local.py",
     # "Look at this" and "Watch with me": the session rules, pause rules,
     # caps, the Never look at list and the routes (screen.patch installs

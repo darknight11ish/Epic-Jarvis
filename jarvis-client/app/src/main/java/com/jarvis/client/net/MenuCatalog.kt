@@ -54,6 +54,7 @@ object MenuCatalog {
         Menu("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.web-search", "Web search", "Which search provider Jarvis uses.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.account-secrets", "Accounts", "Keys and account details kept on this PC.", true, false, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.chatbot-api-keys", "Chatbot API keys", "The six chatbot services' API keys, kept on this PC.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.hardware", "Hardware and models", "Your graphics cards and the three setups.", true, true, "settings", "", "card", "group.graphics-cards", null, true, true, ""),
         Menu("settings.second-card", "Second graphics card", "The second card's switches and its own copy of Ollama.", true, true, "settings", "", "card", "group.graphics-cards", null, true, true, ""),
         Menu("settings.second-card.study-helper", "Study helper (second card switch)", "One row inside the second graphics card.", true, true, "settings", "", "row", "group.graphics-cards", "settings.second-card", true, false, ""),

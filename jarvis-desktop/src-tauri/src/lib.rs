@@ -28,6 +28,7 @@ pub mod autostart;
 pub mod backup;
 pub mod brain;
 pub mod browser_engine;
+pub mod chatbot_money;
 pub mod clipboard_privacy;
 pub mod commands;
 pub mod crash_notes;
@@ -1028,6 +1029,23 @@ pub fn run() {
             account_secrets::get_account_secrets,
             account_secrets::save_account_secret,
             account_secrets::forget_account_secret,
+            // The six chatbot API services' keys (docs/ACCOUNT-KEYS-DESIGN.md
+            // steps 1-2, 2026-10-06): each written straight into Credential
+            // Manager on this PC, under the name the Python side builds -
+            // never sent over HTTP, never to the phone, never shown again.
+            // Settings window only - rule 3.
+            account_secrets::get_chatbot_api_keys,
+            account_secrets::save_chatbot_api_key,
+            account_secrets::forget_chatbot_api_key,
+            // The monthly money limits and the price list of those same six
+            // services (docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, 2026-10-06): a
+            // key with no limit leaves the service unusable, so the two were
+            // built together. A RAISE is one approval card plus Windows Hello,
+            // decided by the backend; a lowering, a removal and a price
+            // correction need no card. Every write is held on a stale link.
+            // Settings window only.
+            chatbot_money::chatbot_money,
+            chatbot_money::set_chatbot_money,
             reach::get_reach,
             asks_first::get_asks_first,
             asks_first::set_asks_first,
