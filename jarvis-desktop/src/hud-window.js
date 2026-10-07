@@ -40,14 +40,11 @@
 /** The `localStorage` key. Namespaced like this window's other keys. */
 export const OPEN_BAR_KEY = "jarvis.hud.openBar";
 
-/** The switch's name in Settings, and the words both apps' tests quote. */
-export const OPEN_BAR_NAME = "Show the \"Open the Jarvis bar\" button";
-
-/** What the switch means, under its name in Settings. */
-export const OPEN_BAR_DETAIL =
-  "On: the button sits beside the big window's own chat box, and opens the Jarvis bar " +
-  "ready to type. Off: the button is not drawn there. The chat box, its Send and the " +
-  "microphone button are unchanged, and Alt+Space still opens the Jarvis bar.";
+/* The switch's own name and its detail are NOT here: a static toggle's words
+ * live in settings.html, the one place they are drawn, exactly as the floating
+ * face's and the notification switches' do. Only what the page cannot write by
+ * hand is in this module - the reading, the saving, and the line below, which
+ * follows the switch's state. */
 
 /**
  * Whether the button shows: ON unless this computer has saved it off, and ON
