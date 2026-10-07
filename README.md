@@ -107,16 +107,30 @@ carefully they followed the install page.
 
 Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
 
-0. **Or one command.** From the folder you downloaded this into:
+0. **Or two commands.** From the folder you downloaded this into. First time
+   on this PC:
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\scripts\setup-jarvis.ps1
    ```
 
    It copies `jarvis-backend\` into place, runs both scripts below, checks
-   Ollama and the model, and starts Jarvis. It prints the 5 GB model command
-   rather than downloading it for you, and `-Print` shows every command it
-   would run while changing nothing.
+   Ollama and the model, installs the desktop app, starts Jarvis and runs the
+   live check. It prints the 5 GB model command rather than downloading it for
+   you, and `-Print` shows every command it would run while changing nothing.
+
+   Every time after that, one command updates **both halves** - the backend and
+   the desktop app:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\scripts\update-jarvis.ps1
+   ```
+
+   It stops Jarvis, patches the backend, installs the newer desktop app, starts
+   Jarvis again and checks it. Both are safe to run again, both keep a log in
+   `_jarvis-logs` inside your backend folder, and both change nothing at all
+   when something is wrong. What is still by hand is the phone (part 3 below)
+   and two switches in the desktop app's own Settings.
 
 1. **The backend on the PC** - the Python program that does the work, plus
    the model in Ollama. Copy `jarvis-backend\` to a folder of your own
@@ -126,12 +140,13 @@ Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
    Python packages, puts the settings file in place and runs the tests. On the
    published folder it changes no code, because that folder is already the
    state after the patches (INSTALL.md part 1 has both exact commands).
-2. **The desktop app** - for now you build it yourself on the PC
-   (INSTALL.md part 2). A ready-made installer appears under
+2. **The desktop app** - the update command above does this too: it installs the
+   published installer from
    [Releases](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/desktop-latest)
-   once the update signing key is set up - about ten minutes, in
-   [`docs/INSTALL.md`](docs/INSTALL.md), "The desktop installer, and the
-   update signing key".
+   when there is one (that is what the update signing key unlocks - about ten
+   minutes, in [`docs/INSTALL.md`](docs/INSTALL.md), "The desktop installer, and
+   the update signing key"), and builds the app from this folder when there is
+   not (INSTALL.md part 2). `-FromSource` builds it from this folder either way.
 3. **The phone app** - download the `.apk` from the
    [`client-latest` release](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest)
    and open it on the phone, or run `adb install -r <file>.apk` from the PC.

@@ -98,6 +98,17 @@ def t_everything_it_needs_is_in_the_download():
           INSTALL.is_file() and PATCHER.is_file())
     check("it names the Modelfile for the model step, and that file is here",
           "jarvis-primary.Modelfile" in body and MODELFILE.is_file())
+    # The desktop app is the last step, and it is the one thing this script does
+    # not do itself: scripts\update-jarvis.ps1 does it, so that the installer,
+    # the release page and the "build it here instead" fallback live in one
+    # place both commands share.
+    check("it hands the desktop app to update-jarvis.ps1", "update-jarvis.ps1" in body)
+    check("... and that script is in this repository",
+          (REPO / "scripts" / "update-jarvis.ps1").is_file())
+    # Without this the patcher would run twice on a first install - once in step
+    # 3 here, once inside update-jarvis.ps1 - and a second run rehearses all 121
+    # patches again for no new information.
+    check("... and asks it not to patch the backend a second time", "-SkipPatches" in body)
 
 
 def t_it_works_on_a_pc_that_is_not_the_authors():
@@ -150,6 +161,25 @@ def t_print_mode_changes_nothing():
               "jarvis_hud.py" in out)
         check("-Print says plainly that nothing was changed",
               "PRINT" in out or "nothing" in out.lower())
+        # The desktop step is a command it would run, not something it ran: if
+        # the update script had been started, its own banner would be in this
+        # output.
+        check("-Print shows the desktop step as a command, with the reader's path",
+              "update-jarvis.ps1" in out and "would run" in out)
+        check("-Print did not actually run the desktop step",
+              "ALL DONE" not in out and "Patching the backend" not in out)
+
+
+def t_the_desktop_step_can_be_left_alone():
+    """-SkipDesktop is checked where it matters: the guard is read BEFORE the
+    line that runs the update script, so the switch cannot be quietly ignored."""
+    body = SCRIPT.read_text(encoding="utf-8")
+    check("there is a -SkipDesktop switch", "[switch] $SkipDesktop" in body)
+    guard = body.find("if ($SkipDesktop)")
+    run = body.find("& powershell @updateArgs")
+    check("... and the guard comes before the desktop step runs",
+          0 <= guard < run,
+          f"guard at {guard}, the run at {run}")
 
 
 def t_a_missing_download_is_refused_before_anything_changes():
@@ -172,6 +202,7 @@ if __name__ == "__main__":
                t_it_works_on_a_pc_that_is_not_the_authors,
                t_it_never_downloads_the_model_itself,
                t_print_mode_changes_nothing,
+               t_the_desktop_step_can_be_left_alone,
                t_a_missing_download_is_refused_before_anything_changes):
         print(f"\n--- {fn.__name__} ---")
         try:

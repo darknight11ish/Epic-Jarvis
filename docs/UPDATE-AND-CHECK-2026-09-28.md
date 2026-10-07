@@ -5,6 +5,13 @@ Written after the audits of 2026-09-28
 It builds on [`INSTALL.md`](INSTALL.md) ("Updating everything"); where the two
 differ, this page is newer.
 
+**Since 2026-10-06 there is a one-line way to do Round 1's steps 1, 2 and 4:
+`scripts\update-jarvis.ps1`, one command from the folder you downloaded**
+([`INSTALL.md`](INSTALL.md), "Updating everything"). It stops Jarvis, patches
+the backend, updates the desktop app, starts Jarvis again and runs the live
+check. The steps below still work exactly as written, and they are what that
+script does, in that order.
+
 **Read this first (updated after pull requests #23 and #25 were merged).**
 Everything the sessions had built by the evening of 2026-09-28 is now on
 `main`: the five branches (chatbot compare, Jarvis Live, Goals, phone
