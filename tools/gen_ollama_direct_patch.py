@@ -6,15 +6,17 @@ Run this when it has to change:
 
 WHAT IT PUTS IN THE HUD, AND WHAT IT DELIBERATELY LEAVES OUT
 
-`_completions_url(lane)` is the one line of `_open` this work may change, so it
-does four small things and nothing else:
+`_completions_url(lane, body)` is the one line of `_open` this work may change,
+so it does four small things and nothing else:
 
   1. adds the helper itself, which used to send EVERY lane to `JARVIS_URL` -
      OpenJarvis's own port, a program this setup never installs;
   2. sends the local lane to Ollama's own OpenAI-compatible endpoint;
   3. for a non-local lane, ASKS `jarvis_chatbot_api.lane_state(lane)` where the
-     request should go, puts the answer's model on the request body, and
-     returns that service's own pinned https address;
+     request should go, puts the answer's model ON THE BODY IT IS HANDED (the
+     copy of `payload` that `_open` is about to serialise - a parameter, never
+     a name read from around here: see the helper's own comment), and returns
+     that service's own pinned https address;
   4. adds nothing else. Which service, which model, which key and why a lane
      cannot be used are the MODULE's answer; the HUD only carries it. That is
      the whole point of `lane_state`/`last_lane_state`: this patch is ~40 added
@@ -31,9 +33,17 @@ WHAT IS NOT REBUILT HERE
 
   * `cloud-one-turn.patch` - its added lines are read back by tests, and its
     context is `body = dict(payload); body["model"] = lane` and the
-    `urllib.request.urlopen(` call. So the call site stays the single
-    `_completions_url(lane),` line it anchors on, and this patch may not
-    rewrite any of it.
+    `urllib.request.urlopen(` call. Its LAST context line is the call itself,
+    and that is the one line this patch changes on purpose: the helper is
+    handed the body it must put the model on, so the call reads
+    `_completions_url(lane, body),`. Because cloud-one-turn.patch's context
+    covers that line, its copy was re-anchored in the same commit (2026-10-06)
+    rather than left broken; every other line of that context - the
+    `body = dict(payload)` line, which chat-history.patch and
+    rules-first-relay.patch also anchor on, and the whole `urlopen(...)` call -
+    is untouched, and this patch may not rewrite any of it.
+    `test_cloud_one_turn.py` and `test_ollama_direct.py` are what catch a
+    mistake in either rule; run them first.
   * THE 503's CLOUD WORDING. The message a failed cloud lane shows is
     `chat-stream.patch`'s: it rewrites that whole block later in the stack. So
     the block is only LIFTED into `unreachable_msg` here, with the words it
@@ -82,7 +92,21 @@ OLD_ANCHOR = '''        route_header["memory_side"] = (
 
 #: The helper, and everything this patch has to say about a lane's transport.
 #: The module's `lane_state()` does the deciding - this asks once, puts the
-#: answer's model on the request and returns the answer's address.
+#: answer's model on the body it is HANDED and returns the answer's address.
+#:
+#: `body` is a PARAMETER, and that is the whole of the 2026-10-06 fix. This
+#: function is nested in do_POST, where a bare `body` is do_POST's own parsed
+#: request (`body = json.loads(raw or b"{}")`), while the object `_open`
+#: serialises is its own `body = dict(payload)` copy - a sibling function's
+#: local, not an enclosing one's, so it was never in scope here. The first
+#: version of this helper wrote `body["model"] = _state["model"]` with no
+#: parameter at all, so the service's model landed on do_POST's parsed request
+#: and the request that actually went out kept the LANE's name
+#: (`jarvis-escalate`): the cloud lane reached DeepSeek and asked it for a
+#: model that does not exist. The caller now passes the very dict it is about
+#: to hand to `json.dumps`, one argument to the left of it in the same call, so
+#: the same resolution that decides the address also names the model asked of
+#: it - and a lane this PC cannot pay for writes nothing, exactly as before.
 #:
 #: The empty lane name is passed for the LOCAL lane on purpose: `lane_state`
 #: STORES what it resolves on this thread, and the empty one clears it, so a
@@ -90,7 +114,7 @@ OLD_ANCHOR = '''        route_header["memory_side"] = (
 #: next `_auth_headers` call would pick it up and send it to Ollama.
 #:
 #: Nothing here reads a key, decides a price, or knows a service's name.
-NEW_FUNCTION = '''        def _completions_url(lane: str) -> str:
+NEW_FUNCTION = '''        def _completions_url(lane: str, body: dict) -> str:
             # The local lane talks to Ollama directly, which has spoken this
             # exact OpenAI-compatible shape for a long time - no separate
             # agent process required.
@@ -102,6 +126,16 @@ NEW_FUNCTION = '''        def _completions_url(lane: str) -> str:
             # request goes to the LOCAL endpoint and nothing is spent. The local
             # lane is passed as the empty name, which clears this thread's
             # answer - a hop back down cannot leave a cloud key behind (rule 3).
+            #
+            # `body` is the request `_open` is about to send - its own copy of
+            # `payload`, handed in as a parameter on purpose. This function is
+            # nested in do_POST, where a bare `body` is do_POST's PARSED
+            # REQUEST, and `_open`'s copy is a sibling's local, never in scope
+            # here: writing `body["model"]` without the parameter put the
+            # service's model on an object nothing serialises and left the
+            # LANE's own name on the request that went out. The caller passes
+            # the dict it is about to give `json.dumps`, in the same call, so
+            # the address and the model asked of it can never disagree.
             try:
                 import jarvis_chatbot_api as _api
                 _state = _api.lane_state(lane if lane != local_model else "")
@@ -117,12 +151,14 @@ NEW_FUNCTION = '''        def _completions_url(lane: str) -> str:
 NEW_ANCHOR = OLD_ANCHOR + NEW_FUNCTION
 
 #: The request `_open` builds used to name `JARVIS_URL` itself; it asks the
-#: helper now. This is also the line cloud-one-turn.patch's own context ends
-#: on, so it stays exactly `_completions_url(lane),`.
+#: helper now, and hands it the body the helper must put the resolved model on.
+#: This line is also the last line of cloud-one-turn.patch's own context, so
+#: that patch's copy of it is re-anchored to this text (2026-10-06, same
+#: commit) - and it must stay exactly `_completions_url(lane, body),`.
 OLD_CALL = '''                    f"{JARVIS_URL}/v1/chat/completions",
 '''
 
-NEW_CALL = '''                    _completions_url(lane),
+NEW_CALL = '''                    _completions_url(lane, body),
 '''
 
 OLD_AUTH = '''def _auth_headers(extra: dict | None = None) -> dict:

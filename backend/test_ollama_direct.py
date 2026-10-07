@@ -36,25 +36,42 @@ the answer's model on the request; `_auth_headers` reads the key back from the
 same place rather than from a name in the HUD. `FakeApi` below is that seam,
 which is why it stands in for two functions rather than four.
 
-This test executes the real `_completions_url` and the real `_auth_headers`,
-lifted from the source with ast - the same technique test_degrade_filter.py
-already uses on this exact file, for this exact reason. It cannot start a real
-HTTP server or reach a real Ollama or DeepSeek; that part only the owner's own
-machine can prove. What it does instead is run the lifted text with a stand-in
-`jarvis_chatbot_api` in `sys.modules`, so the whole decision can be exercised
-here, with no socket.
+AND WHICH `body` THE MODEL GOES ON (2026-10-06, the same day). "Puts the
+answer's model on the request" was not true of the first version of that
+sentence's code: `_completions_url` is nested in `do_POST`, where a bare `body`
+is do_POST's OWN PARSED REQUEST - so `body["model"] = _state["model"]` wrote the
+service's model onto an object nothing serialises, and the request that went out
+kept the LANE's name (`jarvis-escalate`). DeepSeek was reached correctly and
+asked for a model that does not exist. That is why `_completions_url` takes the
+body as a PARAMETER now, and why `_sent_by_open()` below runs the file's two
+functions WHERE THEY REALLY LIVE: lifted on its own, `body` becomes a namespace
+global (which is the wrong object by construction), and with no `body` at all
+the lift dies with `NameError: name 'body' is not defined` - the same accident,
+seen from the other side. `t_the_model_is_put_on_a_body_the_helper_owns()` is
+the half that still runs on a machine with no `jarvis_hud.py`.
+
+This test executes the real `_completions_url`, the real `_open` and the real
+`_auth_headers`, lifted from the source with ast - the same technique
+test_degrade_filter.py already uses on this exact file, for this exact reason.
+It cannot start a real HTTP server or reach a real Ollama or DeepSeek; that part
+only the owner's own machine can prove. What it does instead is run the lifted
+text with a stand-in `jarvis_chatbot_api` in `sys.modules`, so the whole
+decision can be exercised here, with no socket.
 
     python3 test_ollama_direct.py
 """
 import ast
 import json
 import sys
+import textwrap
 import traceback
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import BACKEND, missing, explain
+import _stack
 SRC = BACKEND / "jarvis_hud.py"
 
 FAILED, PASSED = [], []
@@ -146,12 +163,88 @@ def _completions(source, api, lane=LANE):
     """(url, body, api) after running the REAL `_completions_url` for `lane`.
 
     `body` is the request body the real `_open` has in hand - the same dict the
-    helper may put the service's model on."""
+    helper is handed and may put the service's model on. It is passed in, as
+    the file passes it, because it must be: the helper reads no `body` from
+    around itself (see `_sent_by_open`)."""
     ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "JARVIS_URL": "http://127.0.0.1:8000",
           "local_model": LOCAL, "body": {"model": lane}}
     _with_api(api, lambda: exec(_lifted(source, "_completions_url"), ns))
-    url = _with_api(api, lambda: ns["_completions_url"](lane))
+    url = _with_api(api, lambda: ns["_completions_url"](lane, ns["body"]))
     return url, ns["body"], api
+
+
+def _nested(source, name):
+    """(verbatim source, line) of the one `def name(` nested inside do_POST."""
+    lines = source.splitlines()
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.FunctionDef) and node.name == "do_POST":
+            for kid in node.body:
+                if isinstance(kid, ast.FunctionDef) and kid.name == name:
+                    return "\n".join(lines[kid.lineno - 1:kid.end_lineno]), kid.lineno
+    raise AssertionError(f"{name} is not nested in do_POST")
+
+
+class _Request:
+    """The one thing `_open` does with `urllib.request.Request`."""
+
+    def __init__(self, url, data=None, headers=None, method=None):
+        self.full_url, self.data, self.headers, self.method = url, data, headers, method
+
+
+class _Sent:
+    """Stands in for `urllib.request`: it keeps the request `_open` builds."""
+
+    def __init__(self):
+        self.url, self.headers, self.raw = None, {}, ""
+        self.body = None
+
+    def open(self, req, timeout=None):
+        self.url, self.headers, self.raw = req.full_url, req.headers, req.data.decode("utf-8")
+        self.body = json.loads(self.raw)
+        return {"sent": True}
+
+
+def _sent_by_open(source, api, lane=LANE):
+    """(sent, outer_body) - the REAL `_open` run WHERE IT REALLY LIVES.
+
+    `_completions_url` and `_open` are pasted back, verbatim, inside a stand-in
+    outer function that holds do_POST's own parsed `body` - because that is the
+    scope the file gives them, and the whole point of this check. Lifting
+    `_completions_url` on its own (what every other cloud check here does) puts
+    `body` in the namespace as a GLOBAL: the wrong object by construction, and
+    the reason the first version of this helper could write the service's model
+    onto do_POST's parsed request while a lift-only test watched the right dict
+    and passed.
+
+    `outer_body` is that parsed request, so a check can say the write did NOT
+    land on it."""
+    comp, _ = _nested(source, "_completions_url")
+    opn, _ = _nested(source, "_open")
+    sent = _Sent()
+    request = json.dumps({"model": lane, "stream": True, "messages": [
+        {"role": "user", "content": "explain in detail how they compare"}]})
+    # Eight spaces in: these are methods' bodies, so the definitions go back at
+    # exactly the depth they have in the file, and `body` is the outer local the
+    # real do_POST has.
+    wrapper = ("class _Handler:\n"
+               "    def do_POST(self):\n"
+               f"        raw = {request!r}.encode('utf-8')\n"
+               "        body = json.loads(raw or b\"{}\")\n"
+               f"{comp}\n"
+               f"{opn}\n"
+               f"        _open({lane!r})\n"
+               "        return body\n")
+    ns = {"OLLAMA_URL": "http://127.0.0.1:11434", "JARVIS_URL": "http://127.0.0.1:8000",
+          "local_model": LOCAL, "JARVIS_API_KEY": PAIRING_TOKEN, "json": json,
+          "isinstance": isinstance, "_CHAT_CLIENT_FIELDS": set(),
+          "_chat_client_fields_off": lambda msgs: msgs,
+          "payload": json.loads(request),
+          "urllib": types.SimpleNamespace(
+              request=types.SimpleNamespace(Request=_Request, urlopen=sent.open))}
+    _with_api(api, lambda: exec(_lifted(source, "_auth_headers"), ns))
+    _with_api(api, lambda: exec(compile(wrapper, "<do_POST-like>", "exec"), ns))
+    outer = _with_api(api, lambda: ns["_Handler"]().do_POST())
+    return sent, outer
 
 
 def _auth(source, api):
@@ -252,6 +345,92 @@ def t_the_request_uses_the_lane_key_not_the_pairing_token():
           _auth(src, unpaid)({}))
 
 
+def t_the_bytes_on_the_wire_name_the_services_model():
+    """The headline of the whole cloud lane, checked on the bytes `_open`
+    builds - not on a body handed to the helper by the test.
+
+    `jarvis-escalate` is meant to reach DeepSeek and be asked for DeepSeek's own
+    model. Until 2026-10-06 the request that really went out carried the LANE's
+    name (`"model": "jarvis-escalate"`), because the helper wrote the resolved
+    model onto do_POST's parsed request - an object nothing serialises - while
+    every lift-only check here watched the dict it had passed in and passed.
+    This runs the two functions in their own scope and reads the JSON."""
+    if missing("jarvis_hud.py"):
+        return skip(explain())
+    src = SRC.read_text(encoding="utf-8")
+    api = FakeApi()
+    sent, outer = _sent_by_open(src, api)
+    check("the bytes that go out ask the SERVICE for its model, not the lane's name",
+          sent.body.get("model") == "deepseek-flash", sent.body)
+    check("... and that is the model the module resolved for the lane it was asked about",
+          api.calls == [LANE] and api.last_lane_state()["model"] == sent.body["model"],
+          (api.calls, api.last_lane_state()))
+    check("... so the lane's own name is on nothing that leaves the process",
+          LANE not in sent.raw, sent.raw)
+    check("... and the request is the cloud one, at the service's own address",
+          sent.url == DEEPSEEK_URL, sent.url)
+    check("... carrying the service's own key",
+          sent.headers.get("Authorization") == "Bearer the-deepseek-key", sent.headers)
+    check("... and do_POST's own parsed request was left alone (the model is not written to it)",
+          outer.get("model") == LANE, outer)
+
+
+def t_a_local_turn_is_completely_unchanged_by_that():
+    """The same run for the LOCAL lane: Ollama's address, the local model's own
+    name on the bytes, Jarvis's own pairing token, and nothing written to
+    do_POST's parsed request either."""
+    if missing("jarvis_hud.py"):
+        return skip(explain())
+    src = SRC.read_text(encoding="utf-8")
+    api = FakeApi()
+    sent, outer = _sent_by_open(src, api, lane=LOCAL)
+    check("a local turn still goes to Ollama's own endpoint",
+          sent.url == "http://127.0.0.1:11434/v1/chat/completions", sent.url)
+    check("... keeps the local model's own name on the bytes",
+          sent.body.get("model") == LOCAL, sent.body)
+    check("... and still carries Jarvis's pairing token",
+          sent.headers.get("Authorization") == f"Bearer {PAIRING_TOKEN}", sent.headers)
+    check("... and nothing was written to do_POST's parsed request",
+          outer.get("model") == LOCAL, outer)
+
+
+def t_the_model_is_put_on_a_body_the_helper_owns():
+    """The shape of that bug, read from the PATCH'S own text - the one check
+    here that also runs on a machine with no `jarvis_hud.py`.
+
+    A `body[...]` write inside `_completions_url` is only the request that is
+    sent if `body` is one of the function's OWN parameters. With no parameter,
+    the name is read from around the function - do_POST's parsed request - and
+    the request goes out under the lane's name. Read from
+    `ollama-direct.patch`'s added lines, this fails on the text that shipped the
+    bug and passes on the fix."""
+    direct = (HERE / "ollama-direct.patch").read_text(encoding="utf-8")
+    added = [(hunk, lines) for hunk, lines in
+             ((h, [l[1:] for l in h.splitlines() if l.startswith("+")])
+              for h, _pre in _stack.hunks(direct, "jarvis_hud.py"))
+             if any("def _completions_url(" in l for l in lines)]
+    if not added:
+        return check("ollama-direct.patch adds a `_completions_url`", False,
+                     "no added `def _completions_url(` line in the patch")
+    helper = ast.parse(textwrap.dedent("\n".join(added[0][1])))
+    fn = [n for n in ast.walk(helper)
+          if isinstance(n, ast.FunctionDef) and n.name == "_completions_url"][0]
+    params = {a.arg for a in fn.args.args}
+    writes = [n for n in ast.walk(fn)
+              if isinstance(n, ast.Assign)
+              and any(isinstance(t, ast.Subscript) and getattr(t.value, "id", "") == "body"
+                      for t in n.targets)]
+    check("the helper writes the resolved model to a name", bool(writes),
+          "no `body[...] = ...` line found in the added helper")
+    check("... and that name is the helper's OWN parameter, not a name read from around it",
+          bool(writes) and "body" in params, f"parameters are {sorted(params)}")
+    check("... and _open hands it the body it is about to send",
+          "_completions_url(lane, body)," in "".join(
+              l[1:] + "\n" for l in direct.splitlines()
+              if l.startswith("+") and not l.startswith("+++")),
+          "expected the call to read `_completions_url(lane, body),`")
+
+
 def t_the_error_message_names_the_right_service():
     """The 503 the owner sees when a lane cannot be answered. The local half's
     advice has always been there; the cloud half's real wording belongs to
@@ -288,6 +467,9 @@ if __name__ == "__main__":
                t_a_cloud_lane_goes_to_the_service_behind_it,
                t_a_lane_that_cannot_be_paid_for_is_answered_locally,
                t_the_request_uses_the_lane_key_not_the_pairing_token,
+               t_the_bytes_on_the_wire_name_the_services_model,
+               t_a_local_turn_is_completely_unchanged_by_that,
+               t_the_model_is_put_on_a_body_the_helper_owns,
                t_the_error_message_names_the_right_service):
         print(f"\n--- {fn.__name__} ---")
         try:

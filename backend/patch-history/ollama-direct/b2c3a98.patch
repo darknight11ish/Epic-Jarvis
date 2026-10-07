@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -1219,9 +1219,19 @@
+@@ -1142,9 +1142,19 @@
  
  
  def _auth_headers(extra: dict | None = None) -> dict:
@@ -22,11 +22,11 @@
      return headers
  
  
-@@ -2842,6 +2852,38 @@
+@@ -2690,6 +2700,28 @@
              "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
          )
  
-+        def _completions_url(lane: str, body: dict) -> str:
++        def _completions_url(lane: str) -> str:
 +            # The local lane talks to Ollama directly, which has spoken this
 +            # exact OpenAI-compatible shape for a long time - no separate
 +            # agent process required.
@@ -38,16 +38,6 @@
 +            # request goes to the LOCAL endpoint and nothing is spent. The local
 +            # lane is passed as the empty name, which clears this thread's
 +            # answer - a hop back down cannot leave a cloud key behind (rule 3).
-+            #
-+            # `body` is the request `_open` is about to send - its own copy of
-+            # `payload`, handed in as a parameter on purpose. This function is
-+            # nested in do_POST, where a bare `body` is do_POST's PARSED
-+            # REQUEST, and `_open`'s copy is a sibling's local, never in scope
-+            # here: writing `body["model"]` without the parameter put the
-+            # service's model on an object nothing serialises and left the
-+            # LANE's own name on the request that went out. The caller passes
-+            # the dict it is about to give `json.dumps`, in the same call, so
-+            # the address and the model asked of it can never disagree.
 +            try:
 +                import jarvis_chatbot_api as _api
 +                _state = _api.lane_state(lane if lane != local_model else "")
@@ -61,16 +51,16 @@
          # A rate-limited lane should step down, not surface a 429 to the user.
          # jarvis_router.degrade() has always described that chain; nothing
          # ever called it, so the documented behaviour did not exist. Try the
-@@ -2851,7 +2893,7 @@
+@@ -2699,7 +2731,7 @@
              body = dict(payload); body["model"] = lane
              return urllib.request.urlopen(
                  urllib.request.Request(
 -                    f"{JARVIS_URL}/v1/chat/completions",
-+                    _completions_url(lane, body),
++                    _completions_url(lane),
                      data=json.dumps(body).encode("utf-8"),
                      headers=_auth_headers({"Content-Type": "application/json"}),
                      method="POST",
-@@ -2990,9 +3032,15 @@
+@@ -2838,9 +2870,15 @@
              return
          except Exception as exc:
              try:
