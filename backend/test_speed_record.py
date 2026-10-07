@@ -410,6 +410,111 @@ def t_tools_and_summaries():
           and v2["recent"] == [] and v2["last_switch"] is None, f"{v2}")
 
 
+def t_latency_statistics():
+    """The three pure functions over a list of answer times: percentiles(),
+    steady_state() and compare_latency(). Numbers in, numbers (or one plain
+    sentence) out - no file, no clock, no network. compare_latency() is what
+    the Tripwire says out loud, so the wording is checked word for word.
+
+    It is `compare_latency`, not `compare`: this file already had a `compare`
+    for the switch's probe summaries, and a second definition under that name
+    silently won - the latency one was unreachable and its callers crashed on
+    a list (the same clash, found and fixed in jarvis_speed.py itself).
+    """
+    # --- percentiles() ---
+    check("no readings at all gives an empty answer, not a zero",
+          S.percentiles([]) == {}, S.percentiles([]))
+    check("no usable readings gives an empty answer too",
+          S.percentiles([None, "700", float("nan"), float("inf"), -5]) == {},
+          S.percentiles([None, "700", float("nan"), float("inf"), -5]))
+    one = S.percentiles([1000])
+    check("one reading is its own middle and its own tail",
+          one == {50: 1000.0, 95: 1000.0}, one)
+    four = S.percentiles([400, 600, 800, 1000])
+    check("the middle of four readings is between the middle two",
+          four[50] == 700.0, four)
+    check("the bad tail sits above the middle",
+          four[95] == 970.0 > four[50], four)
+    check("both points are worked out in one pass",
+          set(four) == {50, 95}, four)
+    check("the points asked for are the points given",
+          set(S.percentiles([1, 2, 3], points=(25, 90))) == {25, 90})
+    check("a nonsense point is skipped, not raised on",
+          S.percentiles([1, 2, 3], points=(50, "half", None)) == {50: 2.0},
+          S.percentiles([1, 2, 3], points=(50, "half", None)))
+    check("CONTROL: a negative reading would drag a mean below both figures, "
+          "and is dropped instead",
+          S.percentiles([400, 600, -10000]) == {50: 500.0, 95: 590.0},
+          S.percentiles([400, 600, -10000]))
+
+    # --- steady_state() ---
+    check("nothing to average gives None, not 0",
+          S.steady_state([]) is None)
+    check("one reading is not a steady state when two are dropped",
+          S.steady_state([5000]) is None)
+    check("the cold first readings are the ones dropped",
+          S.steady_state([5000, 4000, 1000, 1200, 1100]) == 1100.0,
+          S.steady_state([5000, 4000, 1000, 1200, 1100]))
+    check("dropping nothing averages everything",
+          S.steady_state([5000, 4000], drop=0) == 4500.0,
+          S.steady_state([5000, 4000], drop=0))
+    check("usable numbers only, and it still says None when none are left",
+          S.steady_state([None, "x"]) is None
+          and S.steady_state([None, "x", 1000]) is None
+          # Two unusable entries are not the two dropped readings: [1000, 2000,
+          # 3000] arrives, the first two are dropped, and 3000 is the answer.
+          and S.steady_state([None, "x", 1000, 2000, 3000]) == 3000.0,
+          (S.steady_state([None, "x"]), S.steady_state([None, "x", 1000]),
+           S.steady_state([None, "x", 1000, 2000, 3000])))
+    check("whole numbers count as readings, not only decimals (a screen hands "
+          "over 700, not 700.0)",
+          S.steady_state([1000, 2000, 3000, 4000, 5000]) == 4000.0
+          and S.steady_state([1000.0, 2000.0, 3000.0, 4000.0, 5000.0]) == 4000.0
+          and S.percentiles([800, 1000, 1200]) == {50: 1000.0, 95: 1180.0}
+          and S.compare_latency([1800, 1850, 1900], [1500, 1550, 1450])
+          == "first word: before p50 1.9 s, after p50 1.5 s (faster)",
+          (S.steady_state([1000, 2000, 3000, 4000, 5000]),
+           S.percentiles([800, 1000, 1200])))
+
+    # --- compare_latency() ---
+    check("two lists of one say nothing at all",
+          S.compare_latency([1800], [1500]) == "not enough numbers to compare yet",
+          S.compare_latency([1800], [1500]))
+    check("nor does one long list against one short one",
+          S.compare_latency([1800] * 20, [1500, 1400]) == "not enough numbers to compare yet",
+          S.compare_latency([1800] * 20, [1500, 1400]))
+    check("nor two empty lists",
+          S.compare_latency([], []) == "not enough numbers to compare yet")
+    check("a clear improvement is called faster, with both figures in it",
+          S.compare_latency([1800, 1900, 1850], [1500, 1550, 1450])
+          == "first word: before p50 1.9 s, after p50 1.5 s (faster)",
+          S.compare_latency([1800, 1900, 1850], [1500, 1550, 1450]))
+    check("a clear regression is called slower, and never dressed up",
+          S.compare_latency([1200, 1250, 1230], [2400, 2500, 2450])
+          == "first word: before p50 1.2 s, after p50 2.5 s (slower)",
+          S.compare_latency([1200, 1250, 1230], [2400, 2500, 2450]))
+    check("a tenth of a second either way is about the same",
+          S.compare_latency([1800, 1820, 1780], [1850, 1840, 1830])
+          == "first word: before p50 1.8 s, after p50 1.8 s (about the same)",
+          S.compare_latency([1800, 1820, 1780], [1850, 1840, 1830]))
+    _one = S.compare_latency([1800, 1900, 1850], [1500, 1550, 1450])
+    check("it is one sentence on one line, not a paragraph",
+          "\n" not in _one and _one.startswith("first word: ") and _one.count(". ") == 0,
+          _one)
+    check("CONTROL: the middle is used, so one answer that waited on an "
+          "approval card does not decide the verdict",
+          S.compare_latency([1800, 1850, 1900, 60000], [1500, 1550, 1450, 60000])
+          == "first word: before p50 1.9 s, after p50 1.5 s (faster)",
+          S.compare_latency([1800, 1850, 1900, 60000], [1500, 1550, 1450, 60000]))
+    check("CONTROL: unusable readings do not count towards the three needed",
+          S.compare_latency([1800, None, "x"], [1500, None, "x"])
+          == "not enough numbers to compare yet")
+    check("no words from a conversation could arrive here at all - the "
+          "arguments are numbers",
+          S.compare_latency([1800, 1850, 1900], ["a secret sentence"])
+          == "not enough numbers to compare yet")
+
+
 def t_the_file_never_breaks_an_answer():
     d = Path(tempfile.mkdtemp())
     (d / "afile").write_text("x")
@@ -591,6 +696,7 @@ if __name__ == "__main__":
                t_prompt_reuse_is_recorded, t_the_tool_loop_asks_for_and_hands_over_prompt_reuse,
                t_reuse_share_on_the_screens,
                t_the_other_stream_shapes, t_tools_and_summaries,
+               t_latency_statistics,
                t_the_file_never_breaks_an_answer, t_the_switch_speed_check,
                t_measure_stays_on_this_pc, t_the_patch_context, t_the_real_file):
         print(f"\n--- {fn.__name__} ---")

@@ -1100,19 +1100,48 @@ TOOLS_HAND_EDIT = ("Your settings file (jarvis-framework.toml) is written in a w
                   "in Notepad, then restart Jarvis")
 
 
-def rewrite_tools(text: str, tool: str, on: bool) -> str:
+def rewrite_tools(text: str, tool: str, on: bool, *, seed=()) -> str:
     """`text` with `tool` added to (on) or removed from (not on) the single
     `enabled = [...]` line under [tools]. Pure: no file is read or written
     here. Raises TierFileError. Mirrors rewrite() above, for an array
-    instead of a scalar."""
+    instead of a scalar.
+
+    NO [tools] TABLE YET (2026-10-06). The owner's own settings file has none,
+    so this used to answer "edit it by hand" and change nothing - on the one
+    switch the owner is told they can use, while the turn was in fact being
+    offered tools from the inherited `config.toml` list. When the table has
+    to be created, `seed` is what is already in use, so creating it cannot
+    turn the tools in use today off: the new line is the seed plus this tool.
+    """
     if not re.fullmatch(r"[a-z][a-z0-9_]{1,60}", tool or ""):
         raise TierFileError("That is not a tool name")
     before = _parse(text)
     nl = "\r\n" if "\r\n" in text else "\n"
     lines = text.split(nl)
     heads = [i for i, line in enumerate(lines) if _TOOLS_HEADER.match(line)]
-    if len(heads) != 1:
+    if len(heads) > 1:
         raise TierFileError(TOOLS_HAND_EDIT)
+    if not heads:
+        if not on:
+            return text  # nothing to remove from a table that does not exist
+        want = sorted({str(x) for x in seed if x} | {tool})
+        quoted = ", ".join('"%s"' % x for x in want)
+        lines.extend(["", "[tools]", f"enabled = [{quoted}]{_INSERTED_NOTE}"])
+
+        def _norm_new(doc):
+            d = json.loads(json.dumps(doc, default=str))
+            d.setdefault("tools", {})["enabled"] = sorted(
+                str(x) for x in (d.get("tools", {}).get("enabled") or []))
+            return d
+
+        after = _parse(nl.join(lines))
+        if set(after.get("tools", {}).get("enabled") or []) != set(want):
+            raise TierFileError(TOOLS_HAND_EDIT)
+        b = _norm_new(before)
+        b["tools"]["enabled"] = sorted(want)
+        if _norm_new(after) != b:
+            raise TierFileError(TOOLS_HAND_EDIT)
+        return nl.join(lines)
     start = heads[0] + 1
     end = next((i for i in range(start, len(lines)) if _ANY_HEADER.match(lines[i])),
                len(lines))
@@ -1160,6 +1189,18 @@ def rewrite_tools(text: str, tool: str, on: bool) -> str:
     return out
 
 
+def _seed_tools(tool: str):
+    """The tool names in use right now, minus the one being changed: what a
+    `[tools]` table that has to be created must start from, so switching one
+    reading tool on cannot turn the tools in use today off. Best effort - an
+    unreadable answer seeds nothing, which is exactly the old behaviour."""
+    try:
+        import jarvis_agent
+        return sorted(n for n in jarvis_agent.enabled_tools_for_turn() if n != tool)
+    except Exception:
+        return []
+
+
 def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> dict:
     """Add or remove ONE tool from [tools].enabled, atomically - the same
     write discipline as set_tier (parse, change, parse again and compare,
@@ -1182,7 +1223,7 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
             text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
         except UnicodeDecodeError:
             raise TierFileError(TOOLS_HAND_EDIT)
-        new = rewrite_tools(text, tool, on)
+        new = rewrite_tools(text, tool, on, seed=_seed_tools(tool))
         # An older build wrote the row's action name ("email_read") instead of
         # the tool's name. Whatever the owner does now, that stale entry goes.
         for old, real in LEGACY_TOOL_NAMES.items():

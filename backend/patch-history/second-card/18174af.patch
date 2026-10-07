@@ -86,7 +86,7 @@
 +                    if hasattr(jarvis_agent, "choose_lane"):
 +                        _lane2 = jarvis_agent.choose_lane(
 +                            messages, lane, ollama_url=OLLAMA_URL, request=payload,
-+                            enabled_tools=jarvis_agent.enabled_tools_for_turn(cfg))
++                            enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []))
 +                except Exception:
 +                    _lane2 = None
 +                if _lane2 is not None:

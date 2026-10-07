@@ -608,8 +608,14 @@ def t_the_patch_and_the_lists():
     # The checks below are what really says so - the stacked jarvis_gate.py has
     # to build with referee.patch's own hunks applied to real context, and its
     # risk line has to still read as it did.
+    # gate-risk-rows.patch (2026-10-06) goes after those too: it rewrites the
+    # stale duplicate rows of jarvis_gate.py's _RISK table, in the part of the
+    # table above the action names referee.patch's own risk line sits in, and it
+    # touches no list referee.patch's hunks anchor on. The checks below are what
+    # really says so.
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
-             "gate-action-name.patch", "tutorials.patch", "readpage.patch"}
+             "gate-action-name.patch", "tutorials.patch", "readpage.patch",
+             "gate-risk-rows.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")
