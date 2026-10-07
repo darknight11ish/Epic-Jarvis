@@ -101,8 +101,10 @@ object OpenPlace {
      * Registry ids with no phone equivalent at all: keyboard shortcuts,
      * account secrets (the owner is never asked for one on the phone), the
      * PC's tool-update check, "More options" (startup and logs), starting
-     * Jarvis with Windows, and the first-run setup page (2026-10-06), which
-     * is a card on the PC's Settings screen only.
+     * Jarvis with Windows, the first-run setup page (2026-10-06), which
+     * is a card on the PC's Settings screen only, and "The big HUD window"
+     * (2026-10-06), which is a switch for a button in a window only the PC
+     * has - the big "Jarvis" window and its own chat box are the PC's.
      */
     val PC_ONLY: Set<String> = setOf(
         "shortcuts",
@@ -114,6 +116,7 @@ object OpenPlace {
         "spending",
         "notifications",
         "first-run",
+        "hud-window",
     )
 
     /** Every id this file has made a decision about - for the test. */

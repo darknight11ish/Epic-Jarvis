@@ -79,6 +79,7 @@ object MenuCatalog {
         Menu("settings.floating-avatar", "Floating Jarvis", "The floating face or bubble.", false, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.quick-tiles", "Quick Settings tiles", "The tiles in the phone's quick panel.", false, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.menu-visibility", "Show or hide menus", "The list you are looking at.", true, true, "settings", "", "card", null, null, false, false, "Otherwise nothing hidden could be shown again."),
+        Menu("settings.hud-window", "The big HUD window", "Its own chat box, and the button that opens the Jarvis bar.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("brain.tab.memory", "Memory", "What Jarvis knows and how it learns.", true, false, "brain", "memory", "tab", null, null, true, false, ""),
         Menu("brain.tab.history", "History", "Your past chats.", true, false, "brain", "history", "tab", null, null, true, false, ""),
         Menu("brain.tab.faculties", "Model", "The models, compute and skills.", true, false, "brain", "faculties", "tab", null, null, true, false, ""),

@@ -1033,9 +1033,46 @@
    * a plain browser, has no Jarvis bar to open. There the button is not
    * added and the box was never hidden - the page's own composer, exactly
    * as it ships.
+   *
+   * AND A SWITCH FOR THE BUTTON (the owner's request of 2026-10-06). Looking
+   * at this window, the owner asked for its "Open the Jarvis bar" button to be
+   * replaced by a text box he could type into, and then chose: keep the button
+   * beside the box, AND add a Settings option controlling whether the button
+   * shows in this window at all. That option is "The big HUD window" in
+   * Settings (settings.html, src/hud-window.js), ON by default - the state the
+   * owner already approved ("The 'Open the Jarvis bar' button stays in that
+   * window, beside the box").
+   *
+   * Cosmetic, so it changes at once and raises no approval card (CLAUDE.md):
+   * the box, its Send and the mic button are untouched, and Alt+Space still
+   * opens the Jarvis bar. It is per computer, in this window origin's
+   * localStorage, like the floating face and "Interrupt Jarvis while it
+   * talks".
+   *
+   * This file cannot `import` src/hud-window.js: it is injected as a plain
+   * script, before the page's own. So the key and the reading are spelled a
+   * second time here, deliberately, and tests/hud-window.mjs reads this file
+   * and fails unless the two agree - value by value, by running this code.
    * ---------------------------------------------------------------- */
   var OPEN_BAR = "Open the Jarvis bar";
   var OPEN_BAR_SAID = "Chat with Jarvis in the Jarvis bar - it opens now.";
+
+  /* The localStorage key src/hud-window.js exports as OPEN_BAR_KEY. */
+  var OPEN_BAR_KEY = "jarvis.hud.openBar";
+
+  /* Whether the button shows: ON unless this computer saved it off, and ON
+   * when storage cannot be read at all - the reading notifications-prefs.js's
+   * loadBool and src/hud-window.js's openBarShown both use ("true"/"on" is on,
+   * nothing stored is on, any other stored value is off). */
+  function openBarShown() {
+    try {
+      var saved = window.localStorage.getItem(OPEN_BAR_KEY);
+      if (saved === null) return true;
+      return saved === "true" || saved === "on";
+    } catch (err) {
+      return true;
+    }
+  }
 
   function openBarFromHud() {
     var tauri = window.__TAURI__;
@@ -1055,15 +1092,10 @@
   }
   window.__jarvisOpenBar = openBarFromHud;
 
-  /* The HUD's box and Send stay exactly as the page made them: visible, in
-   * the tab order, and working. This only adds the button that opens the
-   * Jarvis bar, before the box. */
-  function hudChatBox() {
-    var tauri = window.__TAURI__;
-    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+  /* Adds the button, once, before the box. Silent if it is already there. */
+  function addOpenBarButton() {
     var input = document.getElementById("input");
-    var send = document.getElementById("send");
-    if (!input || !send || document.getElementById("hud-open-bar")) return;
+    if (!input || !input.parentNode || document.getElementById("hud-open-bar")) return;
     var open = document.createElement("button");
     open.type = "button";
     open.id = "hud-open-bar";
@@ -1077,6 +1109,38 @@
     open.title = OPEN_BAR_SAID;
     open.addEventListener("click", openBarFromHud);
     input.parentNode.insertBefore(open, input);
+  }
+
+  /* The setting, applied: drawn when it is on, gone when it is off. */
+  function applyOpenBar() {
+    var drawn = document.getElementById("hud-open-bar");
+    if (openBarShown()) {
+      if (!drawn) addOpenBarButton();
+    } else if (drawn && drawn.parentNode) {
+      drawn.parentNode.removeChild(drawn);
+    }
+  }
+
+  /* The HUD's box and Send stay exactly as the page made them: visible, in
+   * the tab order, and working. This only adds the button that opens the
+   * Jarvis bar, before the box - when the owner's setting says to. */
+  function hudChatBox() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    var input = document.getElementById("input");
+    var send = document.getElementById("send");
+    if (!input || !send) return;
+    applyOpenBar();
+    // A change made in Settings while this window is open. This computer's
+    // localStorage is shared by every Jarvis window on this origin, and a
+    // write in one of them fires `storage` in the others - so the button
+    // appears or goes at once rather than at the next launch. Where a browser
+    // does not deliver that event, the window obeys the setting the next time
+    // it loads.
+    window.addEventListener("storage", function (event) {
+      if (event && event.key && event.key !== OPEN_BAR_KEY) return;
+      applyOpenBar();
+    });
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", hudChatBox, { once: true });

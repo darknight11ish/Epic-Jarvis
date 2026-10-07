@@ -63,6 +63,7 @@
           <a href="#briefing-settings">Morning briefing</a>
           <a href="#notifications">Notifications</a>
           <a href="#menu-visibility">Show or hide menus</a>
+          <a href="#hud-window">The big HUD window</a>
         </div>
         <div class="settings-jump-group">
           <span class="settings-jump-label">Rare</span>
@@ -1162,6 +1163,48 @@
         <div class="row" style="margin-top: 16px;">
           <button type="button" class="btn ghost" id="menu-visibility-reset">Show everything</button>
         </div>
+      </section>
+
+      <!-- ── The big HUD window ─────────────────────────────────────────────
+           The owner's request of 2026-10-06, looking at the big "Jarvis"
+           window: keep the "Open the Jarvis bar" button beside the window's
+           own chat box (PR #85), AND add a Settings option controlling
+           whether that button shows in that window at all.
+
+           Cosmetic: it changes nothing about what Jarvis does, asks or
+           remembers - the window's own chat box, its Send and the
+           microphone button are untouched, and Alt+Space still opens the
+           Jarvis bar - so it changes at once and raises no approval card
+           (CLAUDE.md), exactly like the floating face's own switch in
+           Appearance. On by default: that is the state the owner already
+           approved ("The 'Open the Jarvis bar' button stays in that window,
+           beside the box").
+
+           This computer only, in localStorage (hud-window.js OPEN_BAR_KEY);
+           the HUD window's injected bootstrap reads the same key. The phone
+           has no such row - the registry marks this section "desktop", and
+           OpenPlace.kt says so there. -->
+      <section class="card" id="hud-window">
+        <h2>The big HUD window</h2>
+        <p class="note">
+          The big "Jarvis" window has its own chat box, and a button beside it
+          that opens the Jarvis bar ready to type. This is for this computer
+          only, and it changes at once.
+        </p>
+
+        <label class="toggle">
+          <input id="hud-open-bar-show" type="checkbox" />
+          <span>
+            Show the "Open the Jarvis bar" button
+            <span class="toggle-detail" id="hud-open-bar-detail">
+              On: the button sits beside the big window's own chat box, and
+              opens the Jarvis bar ready to type. Off: the button is not drawn
+              there. The chat box, its Send and the microphone button are
+              unchanged, and Alt+Space still opens the Jarvis bar.
+            </span>
+          </span>
+        </label>
+        <p class="note" id="hud-open-bar-status" role="status"></p>
       </section>
 
       <h2 class="settings-group-heading">Rare</h2>
@@ -2522,5 +2565,6 @@
     <script type="module" src="manner-settings.js"></script>
     <script type="module" src="thinking-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
+    <script type="module" src="hud-window-settings.js"></script>
   </body>
 </html>
