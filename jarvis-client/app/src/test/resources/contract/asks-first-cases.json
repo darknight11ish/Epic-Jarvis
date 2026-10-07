@@ -928,6 +928,24 @@
        "title": "File one chat under a tag it suggests"
       },
       {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2012,6 +2030,24 @@
        "title": "File one chat under a tag it suggests"
       },
       {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -3091,6 +3127,24 @@
        "title": "File one chat under a tag it suggests"
       },
       {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -4165,6 +4219,24 @@
        "title": "File one chat under a tag it suggests"
       },
       {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -5237,6 +5309,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "File one chat under a tag it suggests"
+      },
+      {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
       },
       {
        "action": "modify_own_code",
@@ -6327,6 +6417,24 @@
        "title": "File one chat under a tag it suggests"
       },
       {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -7404,6 +7512,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "File one chat under a tag it suggests"
+      },
+      {
+       "action": "raise_api_limit",
+       "fixed": false,
+       "id": "raise_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Raise a chatbot's monthly spending limit"
+      },
+      {
+       "action": "lower_api_limit",
+       "fixed": false,
+       "id": "lower_api_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Lower a chatbot's monthly spending limit"
       },
       {
        "action": "modify_own_code",

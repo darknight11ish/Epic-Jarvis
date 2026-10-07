@@ -479,27 +479,66 @@ def t_never_raises():
         R.KINDS = saved
 
 
-def t_cloud_lanes_are_the_servers_own():
-    fake = types.ModuleType("jarvis_hud")
-    fake._lane_names = lambda: ["jarvis-escalate", "jarvis-bulk"]
-    sys.modules["jarvis_hud"] = fake
+def t_cloud_lanes_are_the_modules_own():
+    """The cloud escalation lane's real state, from the module that owns it.
+
+    This used to read `litellm-proxy.yaml` - the config of a proxy that is not
+    installed - and to trust the server's own `_lane_names()`. Since
+    2026-10-06 (docs/ACCOUNT-KEYS-DESIGN.md section 5 and part C) a lane is a
+    service and a model in jarvis_chatbot_api, so that is what the row asks.
+    """
+    import jarvis_chatbot_api as A
+
+    saved = R._cloud_lane_status
     try:
+        R._cloud_lane_status = lambda: {
+            "available": True,
+            "lanes": [{"lane": "jarvis-escalate", "pid": "deepseek_api",
+                       "model": "deepseek-flash", "host": "api.deepseek.com",
+                       "company": "DeepSeek", "ready": True, "why": "", "money": None},
+                      {"lane": "jarvis-critic", "pid": "deepseek_api",
+                       "model": "deepseek-v4-pro", "host": "api.deepseek.com",
+                       "company": "DeepSeek", "ready": True, "why": "", "money": None}],
+            "ready": ["jarvis-escalate", "jarvis-critic"]}
         r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("a ready cloud lane names the service it really reaches, and the model",
+              r["on"] and r["where"] == "api.deepseek.com"
+              and "jarvis-escalate" in r["line"] and "deepseek-flash" in r["line"]
+              and "jarvis-critic" in r["line"] and "deepseek-v4-pro" in r["line"], r)
+        check("... and says a lane whose limit is reached is not offered at all",
+              "is not offered at all" in r["line"], r["line"])
+        check("... and never names the proxy file it used to read",
+              "litellm" not in json.dumps(r).lower(), r)
+
+        R._cloud_lane_status = lambda: {
+            "available": True,
+            "lanes": [{"lane": "jarvis-escalate", "pid": "deepseek_api",
+                       "model": "deepseek-flash", "host": "api.deepseek.com",
+                       "company": "DeepSeek", "ready": False,
+                       "why": A.no_limit_words(A.PRESETS["deepseek_api"]), "money": None}],
+            "ready": []}
+        r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("no lane can be used: not set up, in the module's own words, once",
+              r["state"] == "not_set_up" and "No monthly money limit is set for DeepSeek"
+              in r["line"] and r["line"].count("No monthly money limit") == 1, r)
+
+        R._cloud_lane_status = lambda: {"available": True, "lanes": [], "ready": []}
+        r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("no lane at all: every answer is written on this PC",
+              r["state"] == "not_set_up"
+              and "every answer is written on this PC" in r["line"], r)
+
+        R._cloud_lane_status = lambda: {"available": False, "lanes": [], "ready": []}
+        r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("the module is not on this PC: the same plain 'not set up' line",
+              r["state"] == "not_set_up", r)
     finally:
-        sys.modules.pop("jarvis_hud", None)
-    check("inside the server: _lane_names(), the chat route's own list",
-          r["on"] and "jarvis-escalate, jarvis-bulk" in r["line"], r)
-    (_TMP / "config" / "litellm-proxy.yaml").write_text(
-        "model_list:\n  - model_name: jarvis-critic\n    litellm_params:\n"
-        "      model: openrouter/some-model\n      api_key: os.environ/OPENROUTER_API_KEY\n",
-        encoding="utf-8")
-    try:
-        r = row(R.view(ctx(lanes=None, providers=None)), "cloud_model")
-    finally:
-        (_TMP / "config" / "litellm-proxy.yaml").unlink()
-    check("outside it: the same file, read for names and providers only",
-          r["on"] and "jarvis-critic" in r["line"] and r["where"] == "openrouter"
-          and "OPENROUTER_API_KEY" not in json.dumps(r), r)
+        R._cloud_lane_status = saved
+    # A caller that hands in its own lanes still gets exactly what it passed -
+    # the seam most of this suite and the contract generator use.
+    r = row(R.view(ctx(lanes=["jarvis-escalate"], providers=["deepseek"])), "cloud_model")
+    check("a caller's own lanes are still used as given",
+          r["on"] and "jarvis-escalate" in r["line"] and r["where"] == "deepseek", r)
 
 
 class _Sched:
@@ -772,7 +811,7 @@ if __name__ == "__main__":
                t_phone_push_needs_an_owner_chosen_destination,
                t_asks_follows_the_rules,
                t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
-               t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
+               t_never_raises, t_cloud_lanes_are_the_modules_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,
                t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract):
         print(f"\n--- {fn.__name__} ---")

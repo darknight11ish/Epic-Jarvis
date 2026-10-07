@@ -6,6 +6,41 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The cloud lane asks the service for the service's own model now, not for
+  its own lane name (2026-10-06).** The lane built the day before reached
+  DeepSeek correctly - right address, right key, right limit - and then asked
+  it for a model called `jarvis-escalate`, which no service has. The one line
+  that resolves a lane had written the model it had just looked up onto the
+  HUD's *parsed request* (`do_POST`'s own `body`) instead of onto the copy of
+  the request that is actually sent, because inside that helper a bare `body`
+  is the parsed request and the copy is a sibling function's local - so the
+  escalation could never answer. The resolved model now goes on the very dict
+  the request is built from: `_completions_url(lane, body)`, with `body` a
+  parameter rather than a name read from around the function. That call is also
+  the last line of `cloud-one-turn.patch`'s context, so that patch's copy of the
+  line was re-anchored in the same change rather than left broken. No test here
+  had caught it: lifting `_completions_url` out of the file to run it turns the
+  enclosing name into a global, which is the wrong object by construction, so a
+  new check runs the HUD's `_completions_url` and `_open` **where they really
+  live** - pasted back inside a stand-in `do_POST` - and reads the JSON that
+  would go out; a second, smaller check reads the same shape from the patch's
+  own text, so it runs without the owner's file too.
+
+- **The cloud escalation lane has a real transport now, and DeepSeek is behind it (2026-10-06).** "Try the cloud model" sent its one question to `JARVIS_URL`, the port of a program this setup never installed; a lane name such as `jarvis-escalate` now resolves to a real service and model through the same code the chatbot API keys use - DeepSeek's own pinned host over HTTPS, the key from Windows Credential Manager, the monthly money limit, and the answer-length cap - and a lane the limit cannot pay for is answered on this PC instead, so the offer can disappear rather than overspend. DeepSeek's address, current model names and worst-case (peak, cache-miss) prices were read from its own pricing page on 2026-10-06, so the limit stops early rather than late; the desktop's "LiteLLM" health light now reads the lane's real state, and "What Jarvis can reach" no longer reads lane names out of `litellm-proxy.yaml`. `docs/ACCOUNT-KEYS-DESIGN.md` section 5 says what to remove from the PC by hand.
+
+- **Anything needing a key is settable in the app now (2026-10-06).** Settings
+  has a new "Chatbot API keys" card for the six chatbot API services (OpenAI,
+  DeepSeek, Mistral, xAI, OpenRouter, Groq): each key is typed on the PC and
+  written straight into Windows Credential Manager from Rust, never over HTTP
+  and never to the phone, exactly like the Accounts page's four secrets. The
+  same card carries each service's monthly money limit and its price list,
+  because a key with no limit leaves the service unusable: raising a limit is a
+  loosening, so it gets one approval card and Windows Hello, while lowering one,
+  removing one and correcting a price change at once with no card. Every default
+  price says it is unverified and when it was written; every price says whether
+  it is yours and the date you set it. `docs/ACCOUNT-KEYS-DESIGN.md` is the
+  design.
+
 - **The desktop tutorial no longer says the PC has one chat box
   (2026-10-06).** `backend/jarvis_tutorials.py` now teaches the big HUD
   window's own chat box and the **Open the Jarvis bar** button still beside it,

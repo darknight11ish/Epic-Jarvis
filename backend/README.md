@@ -2437,16 +2437,45 @@ own history of a subtle bug already found and fixed once (see
 lane's completion request goes to: Ollama already speaks the exact
 OpenAI-compatible shape this code was already sending, at
 `{OLLAMA_URL}/v1/chat/completions` - no new dependency, no new format, one
-new small function (`_completions_url`) deciding which lane goes where. A
-non-local (cloud) lane still goes to `JARVIS_URL`, unchanged - not because
-that's believed to work, but because there is no other cloud-lane transport
-in this codebase yet to redirect it to, and pretending otherwise would trade
-one silent failure for a different one. In practice this doesn't affect the
-owner today: `_lane_names()` reads cloud lane names from `PROXY_FILE`
-(`litellm-proxy.yaml`), which does not exist on this machine, so `lanes` is
-always empty and every turn is already local-only. The moment a real
-cloud-lane transport exists, `_completions_url` is the one place that needs
-to learn about it.
+new small function (`_completions_url`) deciding which lane goes where.
+
+**The cloud half of that function was a placeholder, and is not one any more
+(2026-10-06).** A non-local (cloud) lane used to go to `JARVIS_URL`, unchanged
+- not because that was believed to work, but because there was no other
+cloud-lane transport in this codebase to redirect it to. That was the "one
+place that needs a real answer" this section used to name. The owner answered
+it (`docs/ACCOUNT-KEYS-DESIGN.md` section 5 and part C): the lane goes through
+`jarvis_chatbot_api.py`'s own adapter family, and the service behind it is
+**DeepSeek**. `_completions_url` now resolves the lane, in `jarvis_hud.py`'s
+own `_open`:
+
+- a lane that can be paid for goes to that service's own pinned https address,
+  asks for that SERVICE's model name (not the lane's), and carries that
+  service's key - read out of Windows Credential Manager on the spot and left
+  where the very next call, `_auth_headers`, picks it up (rule 3: never
+  logged, never written to disk, sent only to that host);
+- a lane the month cannot pay for - no key saved, a model with no price, the
+  limit reached, or a message the limit cannot cover - is answered on this PC
+  instead, with no key attached and the reason remembered for the sentence the
+  owner sees. That is the strict reading of the owner's own rule, "a money
+  limit comes before API chatbots are used for real": the offer can disappear
+  rather than overspend;
+- a cloud lane that fails to answer now says so with the host it really tried
+  (`The cloud model is not answering at api.deepseek.com.`), instead of
+  blaming `JARVIS_URL` and telling the owner to pick the local model.
+
+The whole resolution lives inside `_completions_url` on purpose: `_open`'s own
+body is `cloud-one-turn.patch`'s context, and a change there would stop that
+patch applying to the file it was written for. That patch therefore runs
+BEFORE this one in `apply-patches.ps1`'s list, and the two are textually
+independent in that order.
+
+The lane-to-service mapping (three lane names from the shipped
+`degrade_chain`, plus a fallback for any other) lives in
+`jarvis_chatbot_api.CLOUD_LANES`/`DEFAULT_LANE`, with its own tests in
+`test_chatbot_api.py`. `jarvis_reach.py` and the desktop's health light ask
+the same module instead of reading `litellm-proxy.yaml` or probing
+`127.0.0.1:4000`, neither of which exists on any machine.
 
 **Tool-calling is a separate, deliberately un-bundled next step.** This patch
 only fixes the local lane's completion transport - the model does not yet
@@ -2527,12 +2556,17 @@ $env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Deskt
 ```
 
 Structural checks, over the source, that the endpoint fix is what it claims
-to be and touches nothing else: `_completions_url` returns the Ollama URL for
-the local lane and the JARVIS_URL for any other lane, the error message names
-the right service for each case, and the surrounding routing/privacy/degrade
-code - `is_cloud`, the recalled-facts block, `jarvis_router.degrade` - is
+to be and touches nothing else: the local lane resolves to Ollama's own
+endpoint; a cloud lane that can be paid for resolves to the service's own
+https endpoint, asks for that SERVICE's model and carries that service's key;
+a cloud lane the month cannot pay for is answered locally with no key
+attached; `_auth_headers` sends the service's key instead of Jarvis's pairing
+token exactly when a lane resolved; and the failure message names the right
+service for each case. The surrounding routing/privacy/degrade code -
+`is_cloud`, the recalled-facts block, `jarvis_router.degrade` - is
 byte-for-byte unchanged by this patch. Cannot start a real HTTP server here to
-prove Ollama actually answers; that part is the owner's own machine to try.
+prove Ollama or DeepSeek actually answers; that part is the owner's own
+machine to try.
 
 ---
 

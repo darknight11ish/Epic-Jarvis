@@ -107,6 +107,11 @@ object OpenPlace {
     val PC_ONLY: Set<String> = setOf(
         "shortcuts",
         "account-secrets",
+        // "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md steps 1-2,
+        // 2026-10-06): the six chatbot services' keys. They go straight into
+        // Windows Credential Manager from the PC's own Rust, so there is no
+        // version of this screen that could work on the phone.
+        "chatbot-api-keys",
         "tool-updates",
         "more-options",
         "crash-notes",
