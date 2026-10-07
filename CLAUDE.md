@@ -54,6 +54,14 @@ the detail - it carries the date and the reason.
   test failure. The owner should never be the one to notice a red or cancelled
   job, and should never have to ask for the re-run. Say what was done
   afterwards, plainly - the diagnosis, the fix and the new result.
+- **2026-10-07 - the agent owns the pull requests, and merges them.** The owner
+  asked for the work rather than doing it himself, so the agent keeps the whole
+  board: watches every PR, resolves conflicts (every PR appends a CHANGELOG
+  bullet at the same spot, so each merge makes the others conflict), refreshes
+  the published base when a shipped module changed, re-runs a job killed by the
+  concurrency setting or by a runner fault, and presses Merge in the order that
+  costs the fewest fix-ups. This replaces the 2026-09-26 note that the owner
+  presses Merge; he can still press it himself whenever he wants.
 
 ## Whenever a choice is needed, give multiple choice
 
