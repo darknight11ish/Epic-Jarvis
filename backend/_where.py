@@ -46,14 +46,23 @@ jarvis_memory` works without each test repeating it.
 """
 from __future__ import annotations
 
+import inspect as _inspect
 import os
 import sys
 from pathlib import Path
 
-# Python < 3.10 compatibility: Path.write_text did not accept newline
-try:
-    Path("").write_text("", newline="\n")
-except TypeError:
+# Python < 3.10 compatibility: Path.write_text did not accept newline.
+#
+# The probe used to be `Path("").write_text("", newline="\n")`, which asks the
+# filesystem rather than the signature: `Path("")` is the current directory,
+# so opening it for writing raises IsADirectoryError or PermissionError, never
+# the TypeError being tested for. On a Python 3.9 machine the shim therefore
+# never installed, and all 84 `write_text(..., newline=...)` call sites raised
+# TypeError. Asking the signature directly cannot be defeated by a permission
+# or a path, and it never touches a file.
+if "newline" in _inspect.signature(Path.write_text).parameters:
+    pass
+else:
     _orig_write_text = Path.write_text
 
     def _compat_write_text(self, data, encoding=None, errors=None, newline=None):
@@ -63,8 +72,6 @@ except TypeError:
         return _orig_write_text(self, data, encoding=encoding, errors=errors)
 
     Path.write_text = _compat_write_text
-except Exception:
-    pass
 
 _HERE = Path(__file__).resolve().parent
 

@@ -366,10 +366,20 @@ def _apply(api, body: dict, *, here: bool) -> tuple:
             got = api.reset_price(pid, model)
         else:
             pin, pout = _num(body.get("in")), _num(body.get("out"))
-            if pin is None or pout is None or pin > api.MOST_PRICE or pout > api.MOST_PRICE:
+            # A price must be POSITIVE. Zero used to be accepted, and zero is
+            # not a correction - it is a way to switch the money limit off:
+            # every answer is then counted as $0.000000, so the month never
+            # advances and the limit can never stop anything (measured: three
+            # huge answers left the month at $0.000000 of $1.0). A price of
+            # exactly nothing would also make the card's own estimate
+            # meaningless. 2026-10-07 bug audit, finding E5.
+            if (pin is None or pout is None or pin <= 0 or pout <= 0
+                    or pin > api.MOST_PRICE or pout > api.MOST_PRICE):
                 return _refuse("bad_price", 400,
-                               "Each price is dollars per million word-pieces, from 0 to "
-                               f"{api.MOST_PRICE:,.0f}.")
+                               "Each price is dollars per million word-pieces, above 0 and "
+                               f"up to {api.MOST_PRICE:,.0f}. To stop paying for a service, "
+                               "remove its limit or take its key out - a price of 0 would "
+                               "just stop the limit counting.")
             got = api.set_price(pid, model, pin, pout)
         if not got.get("ok"):
             return _refuse("price_not_set", 400, str(got.get("error") or ""))
@@ -391,11 +401,29 @@ def _apply(api, body: dict, *, here: bool) -> tuple:
             return _refuse("bad_amount", 400,
                            "The limit is a number of dollars a month, from 0 to "
                            f"{api.MOST_LIMIT:,.0f}.")
-    if action == "raise_limit" and old is not None and amount is not None and amount <= old:
-        # Asked to raise, to no more than it already is: that is a lowering (or
-        # nothing), and a lowering must not be dressed up as a raise to get a
-        # card. Send it down the tightening path instead.
-        action = "lower_limit"
+    # WHICH WAY IS THIS, REALLY? The amount decides, not the label the caller
+    # sent. Both directions are checked, because the request comes from a page
+    # (and, on this PC, from anything else that can reach the route) and a
+    # label is not evidence.
+    #
+    # Only one direction used to be guarded, and the unguarded one was the one
+    # that matters: `{"action": "lower_limit", "dollars": 500}` against a $1
+    # limit walked straight to `set_limit(..., 500)` - a LOOSENING applied
+    # with no card and no Windows Hello, up to MOST_LIMIT. The module's own
+    # docstring already promised the opposite ("The BACKEND decides which of
+    # the two a request is, from the amount against the limit it already
+    # holds - never this file, and never the page"), so this is the code
+    # catching up with the promise. 2026-10-07 bug audit, finding E2.
+    if old is not None and amount is not None:
+        if amount > old:
+            # Anything above the current limit is a raise, whatever it called
+            # itself. A raise needs the card.
+            action = "raise_limit"
+        elif action == "raise_limit":
+            # A "raise" to no more than it already is: that is a lowering (or
+            # nothing), and a lowering must not be dressed up as a raise to
+            # get a card. Send it down the tightening path instead.
+            action = "lower_limit"
     if action == "remove_limit" and old is None:
         # Nothing to take away. Not an error in the API module, but answering
         # "removed" for a limit that was never there would be a lie.

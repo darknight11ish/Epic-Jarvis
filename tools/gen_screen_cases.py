@@ -129,7 +129,12 @@ _MEASURED_NONE = ("Not measured yet: nobody knows how slow this is on your PC. R
                   "before you rely on it.")
 _MEASURED_SOME = ("Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture "
                   "- a busy real screen may take longer).")
-_LINE = ("ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; "
+#: Read from the module, never spelled out here: this line used to hard-code
+#: "minicpm-v:4.6", and when that tag turned out not to exist the generated
+#: fixture and the app kept telling the owner to pull a model that 404s. The
+#: tag has one home (jarvis_screen_picture.DEFAULT_MODEL) and this is a reader
+#: of it (2026-10-07 bug audit, finding F1).
+_LINE = (f"ollama pull '{SP.DEFAULT_MODEL}'; Push-Location -LiteralPath 'C:\\Jarvis'; "
          "py -3 .\\jarvis_screen_picture.py --measure; Pop-Location")
 PICTURE_PAYLOADS = [
     ("off, never measured", {
@@ -143,7 +148,7 @@ PICTURE_PAYLOADS = [
     ("on but the model is not installed", {
         "enabled": True, "waiting": False,
         "line": SP.state_line(enabled=True, waiting=False, last_look=None,
-                              not_ready=SP.WHY_WORDS["not_installed"].format(model="minicpm-v:4.6")),
+                              not_ready=SP.WHY_WORDS["not_installed"].format(model=SP.DEFAULT_MODEL)),
         "measured_words": _MEASURED_NONE, "install_line": _LINE}),
     ("on, working, not measured yet", {
         "enabled": True, "waiting": False,

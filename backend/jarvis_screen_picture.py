@@ -130,10 +130,19 @@ import jarvis_local_http  # noqa: E402 - shipped beside it; never through a prox
 ACTION = "screen_picture_enable"
 PATH = "/api/screen/picture"
 
-#: The Ollama tag of the picture model. UNVERIFIED (ollama.com is not
-#: reachable from where this was written): the owner's one line pulls it, and
-#: `[screen_picture] model` in jarvis-framework.toml changes it.
-DEFAULT_MODEL = "minicpm-v:4.6"
+#: The Ollama tag of the picture model. VERIFIED 2026-10-07 against two
+#: independent pages: ollama.com/library/minicpm-v4.6 answers 200 and reads
+#: "MiniCPM-V 4.6", vision, 1b, 1.6 GB, 256K context, `ollama run
+#: minicpm-v4.6`. The owner's one line pulls it, and `[screen_picture] model`
+#: in jarvis-framework.toml changes it.
+#:
+#: It used to be "minicpm-v:4.6", which was a guess (this comment said so) and
+#: is wrong: ollama.com/library/minicpm-v:4.6 is a 404, and that model's tags
+#: are `latest, 8b, 8b-2.6-q2_K ... 8b-2.6-fp16` - no `4.6` at all. The
+#: owner pasting the line the screen showed got "model not found", so picture
+#: mode's install could never complete. 4.6 is a different model NAME upstream,
+#: not a tag of the older one (2026-10-07 bug audit, finding F1).
+DEFAULT_MODEL = "minicpm-v4.6"
 MODEL_NAME = "MiniCPM-V 4.6"
 #: A checksum to pin the downloaded model to (the manifest digest Ollama lists
 #: in /api/tags), or "" while it has not been read from a real download. The

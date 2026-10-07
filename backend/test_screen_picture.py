@@ -350,9 +350,9 @@ def t_off_is_immediate_and_stops_the_reader():
 
 
 def t_a_cloud_model_name_is_refused_before_a_card():
-    fresh({"screen_picture": {"model": "minicpm-v:4.6-cloud"}})
+    fresh({"screen_picture": {"model": "minicpm-v4.6-cloud"}})
     c = Card()
-    CFG["screen_picture"] = {"model": "minicpm-v:4.6-cloud"}
+    CFG["screen_picture"] = {"model": "minicpm-v4.6-cloud"}
     code, out = c.req(True)
     check("a cloud model is refused with no card (rule 1)", code == 400 and c.later == []
           and "cloud" in out["error"], (code, out))
@@ -361,7 +361,7 @@ def t_a_cloud_model_name_is_refused_before_a_card():
           SP.model() == SP.DEFAULT_MODEL)
     for name in ("a:cloud", "a-cloud", "a-cloud:latest", "A:CLOUD"):
         check(f"{name!r} is a cloud model", SP.is_cloud_model(name))
-    check("an ordinary tag is not", not SP.is_cloud_model("minicpm-v:4.6"))
+    check("an ordinary tag is not", not SP.is_cloud_model("minicpm-v4.6"))
 
 
 # ==========================================================================
@@ -993,8 +993,8 @@ class StubOllama:
 
     def __init__(self):
         outer = self
-        self.chats, self.tags = [], [{"name": "minicpm-v:4.6", "digest": "abc123def456"}]
-        self.ps = [{"name": "minicpm-v:4.6", "size": 1000, "size_vram": 0}]
+        self.chats, self.tags = [], [{"name": "minicpm-v4.6", "digest": "abc123def456"}]
+        self.ps = [{"name": "minicpm-v4.6", "size": 1000, "size_vram": 0}]
         self.ps_everyday = [{"name": "jarvis-primary:latest", "size": 5000, "size_vram": 5000}]
         self.chat_status, self.think_fails = 200, False
         self.answer = FAKE_SAW
@@ -1086,7 +1086,7 @@ def t_a_whole_look_over_real_http():
         g.picture.ready.wait(10)
         check("a look over real HTTP works", g.picture.ok(), (g.picture.why, g.picture.text))
         check("the request reached the picture reader's port, once, for the description",
-              len(stub.chats) == 1 and stub.chats[0]["model"] == "minicpm-v:4.6")
+              len(stub.chats) == 1 and stub.chats[0]["model"] == "minicpm-v4.6")
         body = stub.chats[0]
         check("it asked for the processor (num_gpu 0), a capped answer, no streaming",
               body["options"]["num_gpu"] == 0 and body["options"]["num_predict"] == SP.NUM_PREDICT
@@ -1166,7 +1166,7 @@ def t_a_request_to_this_pc_never_goes_through_a_proxy():
             os.environ.pop(k, None)
         os.environ["HTTP_PROXY"] = os.environ["http_proxy"] = f"http://127.0.0.1:{trap.server_port}"
         SP._INSTALL_CACHE.update(at=-1e9)
-        got = SP.installed_info("minicpm-v:4.6", fresh=True)
+        got = SP.installed_info("minicpm-v4.6", fresh=True)
         check("with HTTP_PROXY pointing at a trap, the read still reaches the real Ollama",
               got == (True, "abc123def456"), got)
         check("... and the trap received NOTHING", trapped == [], trapped)
@@ -1187,15 +1187,15 @@ def t_installed_info_reads_the_everyday_ollama():
     stub = real_http_world()
     try:
         SP._INSTALL_CACHE.update(at=-1e9)
-        check("installed and its checksum", SP.installed_info("minicpm-v:4.6", fresh=True)
+        check("installed and its checksum", SP.installed_info("minicpm-v4.6", fresh=True)
               == (True, "abc123def456"))
         check("a tag without :latest matches its :latest",
               SP._norm_tag("Foo") == "foo:latest" and SP._norm_tag("a/b:1") == "a/b:1")
         stub.tags = [{"name": "other:1", "digest": "x"}]
-        check("not in the list: False", SP.installed_info("minicpm-v:4.6", fresh=True)[0] is False)
+        check("not in the list: False", SP.installed_info("minicpm-v4.6", fresh=True)[0] is False)
         os.environ["OLLAMA_URL"] = "http://192.168.1.9:11434"
         check("an Ollama that is not on this PC is never asked: None",
-              SP.installed_info("minicpm-v:4.6", fresh=True) == (None, ""))
+              SP.installed_info("minicpm-v4.6", fresh=True) == (None, ""))
         os.environ["OLLAMA_URL"] = "http://127.0.0.1:1"
         check("an Ollama that is not running: None", SP.installed_info("q:1", fresh=True)
               == (None, ""))
@@ -1245,7 +1245,7 @@ def t_the_measuring_line_prints_and_saves_real_numbers():
               "made-up test picture" in text and "never your screen" in text)
         m = SP.measured()
         check("the numbers are saved and read back", m is not None and m["seconds"] > 0
-              and m["model"] == "minicpm-v:4.6" and m["digest"] == "abc123def456"
+              and m["model"] == "minicpm-v4.6" and m["digest"] == "abc123def456"
               and m["tokens_with"] == 900 and m["tokens_without"] == 30 and m["size_vram"] == 0,
               m)
         check("it offers the checksum for pinning", "abc123def456" in text)
@@ -1253,14 +1253,14 @@ def t_the_measuring_line_prints_and_saves_real_numbers():
         check("the setting now shows the measured number",
               v["measured"]["seconds"] == round(m["seconds"], 1) and "Measured on" in v["measured_words"]
               and "made-up test picture" in v["measured_words"], v["measured_words"])
-        stub.ps = [{"name": "minicpm-v:4.6", "size": 1000, "size_vram": 400}]
+        stub.ps = [{"name": "minicpm-v4.6", "size": 1000, "size_vram": 400}]
         lines.clear()
         os.remove(SP.measure_path())
         rearm(stub)
         code = SP.measure(lines.append)
         check("a picture model found on the graphics card is NOT saved as a working number",
               code == 1 and SP.measured() is None and "NOT good" in "\n".join(lines), lines[-4:])
-        stub.ps = [{"name": "minicpm-v:4.6", "size": 1000, "size_vram": 0}]
+        stub.ps = [{"name": "minicpm-v4.6", "size": 1000, "size_vram": 0}]
         stub.tags = []
         lines.clear()
         SP._INSTALL_CACHE.update(at=-1e9)
@@ -1268,7 +1268,7 @@ def t_the_measuring_line_prints_and_saves_real_numbers():
         code = SP.measure(lines.append)
         text = "\n".join(lines)
         check("not installed: it says how to install (from Ollama) and measures nothing",
-              code == 1 and "ollama pull minicpm-v:4.6" in text and "ollama.com" in text
+              code == 1 and "ollama pull minicpm-v4.6" in text and "ollama.com" in text
               and SP.measured() is None, text)
     finally:
         end_real_http_world(stub)
@@ -1311,7 +1311,7 @@ def t_the_one_line_is_one_line_and_safe_for_powershell():
     line = SP.download_line()
     check("one line, no newline", "\n" not in line and "\r" not in line)
     check("the pull comes first, then the measure, in this backend's own folder",
-          line.startswith("ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath '")
+          line.startswith("ollama pull 'minicpm-v4.6'; Push-Location -LiteralPath '")
           and line.endswith("--measure; Pop-Location")
           and str(Path(SP.__file__).resolve().parent).replace("'", "''") in line,
           line)

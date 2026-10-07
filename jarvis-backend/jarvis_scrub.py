@@ -107,6 +107,16 @@ def _mark(kind: str) -> str:
 #: "yes" everywhere would wreck the log and protect nothing.
 _MIN_KNOWN = 8
 
+#: The floor for a secret whose NAME says it is one (`HUD_TOKEN`,
+#: `JARVIS_IMAP_PASSWORD`). Four, not eight: the eight-character rule exists
+#: to stop a short *unlabelled* value from being replaced everywhere, and a
+#: name-marked secret is not that - the name is the evidence. Before this,
+#: a genuinely short token or password (measured: `HUD_TOKEN=abc1234`) was
+#: passed through to the log in clear by every one of the checks below, which
+#: is exactly what rule 3 forbids. Four rather than one still keeps a
+#: one-character value (or an empty one) out of the replacement table.
+_MIN_NAMED = 4
+
 _REGISTERED: set = set()
 _REG_LOCK = threading.Lock()
 _TOKEN_FILE_CACHE: Tuple[Optional[Tuple[str, float]], str] = (None, "")
@@ -185,10 +195,10 @@ def _known_values() -> List[Tuple[str, str]]:
     for name, value in env.items():
         if _secret_name(name):
             v = (value or "").strip()
-            if len(v) >= _MIN_KNOWN:
+            if len(v) >= _MIN_NAMED:
                 raw.setdefault(v, name)
     tok = _token_file_value()
-    if len(tok) >= _MIN_KNOWN:
+    if len(tok) >= _MIN_NAMED:
         raw.setdefault(tok, "HUD_TOKEN")
     with _REG_LOCK:
         for v in _REGISTERED:
@@ -208,7 +218,7 @@ def _known_values() -> List[Tuple[str, str]]:
     # header shape catches "Basic <blob>"; this catches the bare blob.
     user = (env.get("JARVIS_CALDAV_USER") or "").strip()
     pw = (env.get("JARVIS_CALDAV_PASSWORD") or "").strip()
-    if user and len(pw) >= _MIN_KNOWN:
+    if user and len(pw) >= _MIN_NAMED:
         try:
             b = base64.b64encode(f"{user}:{pw}".encode("utf-8")).decode("ascii")
             out.setdefault(b, "JARVIS_CALDAV_PASSWORD value")

@@ -803,6 +803,10 @@ const S = {
   state: "idle",              // idle | listening | thinking | speaking
   level: 0,                   // mic amplitude 0..1
   messages: [],
+  // How many messages off the front have been left out of the prompt, so the
+  // boundary only moves when the conversation outgrows KEEP_MESSAGES - see
+  // windowForPrompt. Reset to 0 with `messages` on a new conversation.
+  dropped: 0,
   // Chat history on the PC (JARVIS-API.md section 18). One conversation per
   // time this page is opened: this page has no "New conversation", and its
   // messages live only as long as the page does.
@@ -828,10 +832,86 @@ const S = {
 /** 8-64 characters of [A-Za-z0-9_-], what the PC accepts as an id. */
 function newConversationId(){
   const c = window.crypto;
-  if(c && typeof c.randomUUID === "function") return c.randomUUID();
+  if(typeof c.randomUUID === "function") return c.randomUUID();
   const b = new Uint8Array(16);
   c.getRandomValues(b);
   return Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * The messages to send, TRIMMED IN BLOCKS rather than one at a time.
+ *
+ * This page used to send `S.messages.slice(-12)`. Past the twelfth message a
+ * slice like that drops the oldest one on EVERY turn, so the message part of
+ * the prompt differed from its first token every single turn: nothing could be
+ * reused from the model's cache, and the whole conversation was re-read each
+ * time. Measured on 2026-10-07 over a twelve-turn exchange, 5,822 of 7,279
+ * message tokens - 80% - were re-read for no reason at all.
+ *
+ * The Jarvis bar and the phone already keep their history in BLOCKS
+ * (`chat-history.js`'s MAX_EXCHANGES/MAX_CHARS, and `ChatHistory.kt`): a turn
+ * is added, and nothing is dropped until the window is genuinely too big, at
+ * which point a whole block goes at once. Between drops the sent prefix is
+ * byte-identical from one turn to the next, which is what a cache needs. This
+ * is the same idea for the flat `{role, content}` array this page keeps.
+ *
+ * Whole EXCHANGES are dropped, never a lone message: an assistant turn with no
+ * question before it reads as Jarvis talking to itself. Messages are therefore
+ * removed two at a time from the front, after the first system turn if there
+ * is one (the caller adds its own system turns, and one here would be the
+ * conversation's opening instruction).
+ */
+const KEEP_MESSAGES = 12;   // the window that is always sent
+const DROP_TO_MESSAGES = 8; // once past the window, fall back to this
+
+/**
+ * `{ window, drop }` for a conversation, given how many messages the last call
+ * already dropped (`drop`, 0 for the first call).
+ *
+ * The point of passing `drop` in is that it is STICKY: the returned window only
+ * changes when the conversation has grown past KEEP_MESSAGES again, and between
+ * those moments the messages sent are byte-identical from one turn to the next,
+ * which is what lets the model's cache be reused. Deriving the amount to drop
+ * from the current length alone would move the boundary every single turn -
+ * which is exactly the sliding window this replaced.
+ *
+ * Whole exchanges only, and never the newest message: when the kept region is
+ * odd the last message is a question with no answer yet (the turn being sent
+ * right now), so one fewer is dropped rather than stepping onto an answer.
+ */
+function windowForPrompt(messages, drop){
+  const all = Array.isArray(messages) ? messages : [];
+  const head = all[0] && all[0].role === "system" ? 1 : 0;
+  // Drop an EVEN number of messages: the first message sent is then always a
+  // question (or the system turn) and never an answer, because the array
+  // alternates question, answer, question, answer from index 0. Dropping an
+  // odd number would start the window on an answer, which reads to the model
+  // as Jarvis replying to nothing.
+  const boundary = (n) => {
+    // Never past the newest message: a remembered count that is somehow bigger
+    // than the conversation must not send an EMPTY prompt, which is what
+    // clamping to the array length would do.
+    let at = Math.min(Math.max(n | 0, 0), Math.max(all.length - 1, 0));
+    if(at % 2 !== 0) at -= 1;
+    return at < 0 ? 0 : at;
+  };
+  // `drop` is remembered between turns, so the boundary only moves when the
+  // conversation has outgrown the window - that is what makes the messages
+  // sent byte-identical from turn to turn and lets the model's cache be used.
+  let at = boundary(drop);
+  if(all.length - head - at > KEEP_MESSAGES) at = boundary(all.length - head - DROP_TO_MESSAGES);
+  return { window: all.slice(0, head).concat(all.slice(head + at)), drop: at };
+}
+
+/**
+ * [`windowForPrompt`] with this conversation's sticky count remembered on `S`.
+ * Every send goes through here - the chat turn and the reconnect catch-up - so
+ * the count can never be left behind by one path and not the other.
+ */
+function promptWindow(){
+  const got = windowForPrompt(S.messages, S.dropped);
+  S.dropped = got.drop;
+  return got;
 }
 
 const GROUPS = {
@@ -1784,7 +1864,7 @@ async function send(){
     auto: S.lane === "auto",
     lane: S.lane === "auto" ? null
         : (S.lane === "local" ? (S.defaultModel || "local") : S.lane),
-    messages: S.messages.slice(-12),
+    messages: promptWindow().window,
     // JARVIS-API.md section 18: which conversation, and that it was this
     // page. The PC takes these and each message's provenance off before
     // anything reaches a model.

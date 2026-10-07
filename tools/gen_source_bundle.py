@@ -11,11 +11,35 @@ So it is generated, from `git ls-files`, with the commit stamped at the top —
 and anything that cannot be read as text is listed rather than silently
 dropped, because "this file is not in the bundle" and "this file does not
 exist" must not look the same to whoever reads it.
+
+    py -3 tools/gen_source_bundle.py            # write docs/SOURCE-BUNDLE.md
+    py -3 tools/gen_source_bundle.py --check    # say whether the copy on disk is
+                                                # still what the tree would make; write nothing
+
+WHY `--check` EXISTS AND WHY ARGUMENTS ARE REFUSED. This script used to ignore
+`sys.argv` completely, so ANY argument did the full write: `--check`, a typo, a
+flag from a different tool - all of them silently produced the 15.9 MB
+gitignored `docs/SOURCE-BUNDLE.md`. That matters here more than it would
+elsewhere, because the file's ABSENCE is itself a checked claim:
+`docs/CLAIMS.tsv` row D01 is `no-file:docs/SOURCE-BUNDLE.md`, and
+`tools/check_claims.py` judges it against the working tree. So a stray
+argument used to turn the `audit` CI job red from a command that looked like a
+read-only check. Every other `tools/gen_*.py` here answers `--check`; this one
+now does too, and an argument it does not know is an error rather than a write.
 """
 import subprocess, sys, os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODULE = "jarvis-client"
+OUT = os.path.join("docs", "SOURCE-BUNDLE.md")
+
+USAGE = """usage: gen_source_bundle.py [--check]
+
+  (no argument)  write docs/SOURCE-BUNDLE.md from the tree as it is now
+  --check        compare the copy on disk with what the tree would make,
+                 print the answer, write nothing, and exit 1 if it differs
+  -h, --help     this text
+"""
 
 # Text we deliberately leave out, with the reason, printed into the document.
 SKIP_SUFFIX = {
@@ -37,7 +61,12 @@ def tracked(*paths):
     return [p for p in out.split("\n") if p]
 
 
-def main():
+def render():
+    """(the document the tree would make right now, the files it included).
+
+    Pure apart from reading the tree and asking git what is tracked, so
+    `--check` can compare against it without any risk of writing.
+    """
     sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                          capture_output=True, text=True, check=True).stdout.strip()
     branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=ROOT,
@@ -104,11 +133,7 @@ def main():
         w(fence)
         w("")
 
-    out = os.path.join(ROOT, "docs", "SOURCE-BUNDLE.md")
-    with open(out, "w", encoding="utf-8") as fh:
-        fh.write("\n".join(lines))
-    size = os.path.getsize(out)
-    print(f"{out}: {len(included)} files, {size:,} bytes")
+    return "\n".join(lines), included
 
 
 def _runs(text):
@@ -126,5 +151,43 @@ def _runs(text):
     return out
 
 
+def main(argv=()):
+    args = [a for a in argv]
+    if any(a in ("-h", "--help") for a in args):
+        print(USAGE, end="")
+        return 0
+    unknown = [a for a in args if a != "--check"]
+    if unknown:
+        # Refused, not ignored: ignoring it is what made a read-only-looking
+        # command write 15.9 MB and break the D01 claim (see the docstring).
+        print(f"gen_source_bundle.py: unknown argument {unknown[0]!r}\n", file=sys.stderr)
+        print(USAGE, end="", file=sys.stderr)
+        return 2
+
+    body, included = render()
+    out = os.path.join(ROOT, OUT)
+    if "--check" in args:
+        try:
+            with open(out, encoding="utf-8") as fh:
+                on_disk = fh.read()
+        except OSError:
+            print(f"{OUT}: missing - nothing is on disk. Run "
+                  f"`py -3 tools/gen_source_bundle.py` if you want one.")
+            return 1
+        if on_disk == body:
+            print(f"{OUT}: current ({len(included)} files, {len(body):,} bytes) "
+                  f"- unchanged, and nothing was written.")
+            return 0
+        print(f"{OUT}: STALE - the tree would make {len(body):,} bytes and the copy "
+              f"on disk is {len(on_disk):,}. Nothing was written; run "
+              f"`py -3 tools/gen_source_bundle.py` to refresh it.")
+        return 1
+
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write(body)
+    print(f"{out}: {len(included)} files, {os.path.getsize(out):,} bytes")
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv[1:]))
