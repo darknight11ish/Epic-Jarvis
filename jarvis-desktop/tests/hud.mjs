@@ -248,11 +248,12 @@ async function openHud(browser, status, pageOptions = {}) {
 }
 
 /**
- * The page's own chat, driven by script. Since the chat audit (2026-09-28)
- * the shell hides the HUD's box and Send (hud_bootstrap.js oneChatBox: the
- * PC has one chat box, the Jarvis bar), so there is nothing to click - but
- * the vendored page's chat code is still there, and still goes through the
- * shell (audit M2), which is what these checks are about.
+ * The page's own chat, driven through its own box. The shell no longer hides
+ * the HUD's box and Send (hud_bootstrap.js hudChatBox: the owner reversed the
+ * 2026-09-28 "one chat box" decision on 2026-10-06), but the checks below
+ * drive the page's chat from script anyway, so a change to the composer's
+ * markup cannot make them test nothing. It still goes through the shell
+ * (audit M2), which is what these checks are about.
  */
 async function send(page, text) {
   await page.evaluate((t) => {
@@ -282,24 +283,52 @@ await check("the HUD's main script runs under Tauri's header CSP", async () => {
   assert.deepEqual(problems, []);
 });
 
-// One chat box on the PC (the owner's decision of 2026-09-28, "Chats, after
-// the chat audit"): with the shell, the HUD's box and Send are hidden and a
-// button opens the Jarvis bar ready to type - it sends nothing itself.
-await check("with the shell, the HUD's chat box opens the Jarvis bar instead", async () => {
+// The HUD's own chat box (the owner's decision of 2026-10-06, reversing the
+// 2026-09-28 "the PC has one chat box"): with the shell, the box and Send are
+// shown and usable - its turns are its own conversation, filed in History as
+// HUD - and the button beside them still opens the Jarvis bar, which sends
+// nothing itself.
+await check("with the shell, the HUD's own chat box is usable, and the button still opens the Jarvis bar", async () => {
   const { page, problems, chats } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
-  const before = await page.evaluate(() => ({
-    input: document.getElementById("input").hidden,
-    send: document.getElementById("send").hidden,
+  const composed = await page.evaluate(() => ({
+    inputHidden: document.getElementById("input").hidden,
+    sendHidden: document.getElementById("send").hidden,
+    inputTabIndex: document.getElementById("input").tabIndex,
+    sendTabIndex: document.getElementById("send").tabIndex,
     button: document.getElementById("hud-open-bar")?.textContent || "",
   }));
+  // Shown, not merely present: Playwright's own visibility test, which is
+  // false for display:none, visibility:hidden and a zero box.
+  const visible = {
+    input: await page.locator("#input").isVisible(),
+    send: await page.locator("#send").isVisible(),
+    button: await page.locator("#hud-open-bar").isVisible(),
+  };
+  // The box is the page's own chat, driven as the owner drives it.
+  await page.fill("#input", "typed in the HUD");
+  await page.click("#send");
+  await page.waitForTimeout(800);
+  const afterTyping = await page.evaluate(() => ({
+    value: document.getElementById("input").value,
+    said: [...document.querySelectorAll("#log > *")].map((el) => el.querySelector(".body")?.textContent),
+  }));
+  // The button beside it opens the Jarvis bar, and still sends nothing.
   await page.click("#hud-open-bar");
   await page.waitForTimeout(200);
   const invoked = await page.evaluate(() => window.__invokes.map((c) => c[0]));
   await page.close();
-  assert.ok(before.input && before.send, `the HUD's own box is still shown: ${JSON.stringify(before)}`);
-  assert.equal(before.button, "Open the Jarvis bar");
+
+  assert.equal(composed.inputHidden, false, "the HUD's own box is hidden again");
+  assert.equal(composed.sendHidden, false, "the HUD's Send is hidden again");
+  assert.equal(composed.inputTabIndex, 0, "the box is out of the tab order");
+  assert.equal(composed.sendTabIndex, 0, "Send is out of the tab order");
+  assert.deepEqual(visible, { input: true, send: true, button: true }, "a control is not shown");
+  assert.equal(composed.button, "Open the Jarvis bar");
+  assert.ok(chats.length >= 1, "typing in the HUD's own box never reached /api/chat");
+  assert.equal(chats.at(-1).messages.at(-1).content, "typed in the HUD");
+  assert.equal(afterTyping.value, "", "the box was not cleared after sending");
+  assert.ok(afterTyping.said.includes("typed in the HUD"), JSON.stringify(afterTyping.said));
   assert.ok(invoked.includes("hud_open_bar"), JSON.stringify(invoked));
-  assert.equal(chats.length, 0, "opening the bar sent something");
   assert.deepEqual(problems, []);
 });
 
