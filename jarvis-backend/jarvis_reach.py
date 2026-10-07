@@ -1,0 +1,1365 @@
+"""jarvis_reach.py - "What can Jarvis reach right now?", written by CODE from
+the PC's real settings, never by the AI model.
+
+NEW MODULE, shipped whole. reach.patch adds `GET /api/reach` (both apps
+show its list: the desktop in Settings, "What Jarvis can reach"; the phone
+on Mind), and jarvis_quick.py answers "what can you reach?" / "what can
+Jarvis access?" from sentence() below, without the model.
+
+WHY (the Muse audit, docs/COMPETITORS-MUSE-2026-09-25.md, idea 1)
+Meta's Muse described its own access wrongly, and its settings screen
+disagreed with the user's choice. A model can say anything about itself;
+this list cannot, because nothing in it is written by a model. Every line
+is built here from the same settings the rest of Jarvis reads:
+  * which tools the model is offered: `[tools].enabled` in
+    jarvis-framework.toml, through jarvis_agent.offered_tools() - the list
+    the chat's tool loop uses (read the way jarvis_briefing.py reads it);
+  * whether each tool asks first: its gate action (jarvis_gate's own table
+    when it is there, else the same names backend/README.md lists) and that
+    action's tier in [autonomy.tiers]; the tools jarvis_agent.py only
+    ever runs on a person's yes (NEEDS_A_PERSON) say "every time" whatever
+    the tier;
+  * which accounts are set up: the same environment variables each module
+    reads (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...) - for
+    the IMAP username and password, the private calendar link, and the Home
+    Assistant token, `_env` asks the module that owns each one
+    (`jarvis_email.imap_user()`, ...), so a value saved in Windows
+    Credential Manager instead of typed as an environment variable
+    (ease-of-use audit row 15) shows here too;
+  * web search: jarvis_search.settings() and whether a key is SAVED;
+  * the cloud lanes: the chat route's own `_lane_names()` when this runs
+    inside the server, else the same file it reads (litellm-proxy.yaml);
+  * the second card and the big model: their switch files (read only -
+    nothing is started, woken or probed).
+
+WHAT IT NEVER SHOWS
+No password, key, token, private calendar link, ntfy topic or full address.
+"Where it goes" is a HOST name only ("imap.example.com", "calendar.google.com",
+"this PC"). Whether a key is saved is yes or no. test_reach.py builds fake
+secrets and checks none of them reaches the list, the sentence or the route.
+
+IT READS, AND ONLY READS
+No socket, no file written, no switch changed, nothing woken. Never raises:
+a part that cannot be read says so on its own line.
+
+ADDING A WAY OUT
+One entry in KINDS below: an id and a function that returns one row. (The
+email-sending row is `_email_send`.)
+
+    python3 test_reach.py
+"""
+from __future__ import annotations
+
+import os
+import re
+import sys
+import urllib.parse
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Callable, Optional
+
+PATH = "/api/reach"
+
+#: The words both apps show above the list.
+TITLE = "What Jarvis can reach"
+DETAIL = ("Every way Jarvis can reach something outside itself, and whether each one is "
+          "on right now. The PC writes this list from its own settings - the AI model does "
+          "not write it, so it cannot be talked into saying something else. Passwords, keys "
+          "and private links are never shown.")
+MISSING = ("Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 on "
+           "the PC.")
+WHERE_LABEL = "Goes to"
+ASKS_LABEL = "Asks you first"
+TOOLS_TITLE = "Tools the AI model is offered"
+TOOLS_NONE = "None: the AI model is offered no tools, so it can only write answers."
+EVERYTHING_ELSE = "Anything not on this list stays on this PC."
+
+#: How each state is shown.
+STATE_WORDS = {
+    "on": "On",
+    "off": "Off",
+    "not_set_up": "Not set up",
+    "blocked": "Blocked by your settings",
+}
+
+ASK_EVERY = "Yes, every time"
+ASK_NO = "No"
+ASK_TOLD = "No - you are told afterwards"
+ASK_NEVER = "Never allowed (your settings say never)"
+ASK_NA = "-"
+
+#: The tools, in plain words (jarvis_agent.TOOLS' names).
+TOOL_NAMES = {
+    "calculator": "Calculator",
+    "memory_search": "Searching what it has learned about you",
+    "file_read": "Reading files on this PC",
+    "shell_exec": "Running commands on this PC",
+    "control_computer": "Computer control",
+    "control_phone": "Phone control",
+    "browser_control": "Browser control",
+    "github_search": "GitHub research",
+    "web_search": "Web search",
+    "read_web_page": "Reading one web page out loud (one card each)",
+    "send_email": "Send an email (one card each)",
+    "draft_email": "Save an email draft (one card each)",
+    "tidy_inbox": "Tidy your inbox (one card lists every email)",
+    "calendar_read": "Reading your calendar",
+    "email_check": "Reading your email",
+    "notes_search": "Searching your notes",
+    "my_files": "Finding and reading files in the folders you listed",
+    "my_spending": "Adding up spending from your bank files (shown on screen only)",
+    "retirement_whatif": "A retirement what-if from numbers you type (shown on screen only)",
+    "home_read": "Reading Home Assistant",
+    "home_control": "Changing things in Home Assistant",
+    "append_logseq_journal": "Adding to your Logseq journal",
+    "append_obsidian_daily": "Adding to your Obsidian daily note",
+    "create_joplin_note": "Making a Joplin note",
+    "set_timer": "Timers",
+    "set_reminder": "Reminders",
+    "todo_add": "Adding to the to-do list",
+    "todo_done": "Ticking off the to-do list",
+    "coming_up": "Coming up (timers, alarms, reminders)",
+    "propose_plan": "Running a short plan of its own tools (one card, several steps)",
+}
+
+#: A tool's gate lookup name -> the action it is decided under, as
+#: backend/README.md lists it - used only when jarvis_gate (on the PC) cannot
+#: be asked. jarvis_gate's own table wins when it is there.
+_FALLBACK_ACTIONS = {
+    "jarvis_ui_control_run": "control_computer",
+    "jarvis_android_control_run": "control_phone",
+    "jarvis_browser_control_run": "control_browser",
+    "jarvis_research_run": "web_research",
+    "jarvis_research_run_authenticated": "research_authenticated",
+    "jarvis_calendar_read_run": "calendar_read",
+    "jarvis_email_read_run": "email_read",
+    "jarvis_notes_search_run": "notes_search",
+    "jarvis_home_read_run": "home_read",
+    "jarvis_home_control_run": "home_control",
+    "shell_exec": "run_shell_on_host",
+    "file_read": "read_files_readonly",
+}
+
+#: Tools jarvis_agent.py runs only on a person's yes, if it cannot be read.
+_NEEDS_A_PERSON = frozenset({"github_search", "browser_control", "control_computer",
+                             "control_phone", "shell_exec", "home_control",
+                             "send_email", "draft_email", "tidy_inbox"})
+_NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
+                          "create_joplin_note"})
+
+# --------------------------------------------------------------------------
+#   What is read, replaceable for the tests
+# --------------------------------------------------------------------------
+
+
+def _fw():
+    try:
+        import jarvis_framework as fw
+        return fw
+    except Exception:
+        return None
+
+
+def _tools_enabled() -> set:
+    fw = _fw()
+    try:
+        cfg = fw.load_framework() if fw is not None else {}
+        names = set((cfg.get("tools") or {}).get("enabled") or [])
+        # An older build saved the email row's action name ("email_read") for
+        # the tool "email_check": read it as the tool (jarvis_asks_first).
+        if "email_read" in names:
+            names.add("email_check")
+        return names
+    except Exception:
+        return set()
+
+
+def _tier(action: str) -> str:
+    fw = _fw()
+    try:
+        return str(fw.action_tier(action)) if fw is not None else "ask"
+    except Exception:
+        return "ask"
+
+
+#: Four of "which accounts are set up"'s environment variables can also live
+#: in Windows Credential Manager instead (ease-of-use audit row 15) -
+#: `_env`'s default reads each through the module that actually owns it
+#: (`imap_user`/`imap_password`/`_feed_url`/`_token`, all of which already
+#: check the environment variable first) rather than a second copy of
+#: `jarvis_token_store.resolve_secret`'s own order, so this can never drift
+#: from what a real read actually does. A test's own `env=` callable (most
+#: of test_reach.py's) replaces this whole function and is unaffected.
+def _env(name: str) -> str:
+    try:
+        if name in ("JARVIS_IMAP_USER", "JARVIS_IMAP_PASSWORD"):
+            import jarvis_email as _E
+            return str((_E.imap_user() if name == "JARVIS_IMAP_USER" else _E.imap_password())
+                       or "").strip()
+        if name == "JARVIS_CALENDAR_ICS_SECRET_URL":
+            import jarvis_calendar as _C
+            return str(_C._feed_url() or "").strip()
+        if name == "JARVIS_HOME_TOKEN":
+            import jarvis_home as _H
+            return str(_H._token() or "").strip()
+    except Exception:
+        pass
+    return str(os.environ.get(name, "") or "").strip()
+
+
+def _server_lanes() -> Optional[list]:
+    """The chat route's own `_lane_names()`, when this runs inside the
+    server (jarvis_hud.py); None otherwise."""
+    for name in ("jarvis_hud", "__main__"):
+        mod = sys.modules.get(name)
+        fn = getattr(mod, "_lane_names", None) if mod is not None else None
+        if callable(fn):
+            try:
+                return [str(x) for x in (fn() or [])]
+            except Exception:
+                return None
+    return None
+
+
+def _proxy_file() -> Optional[Path]:
+    fw = _fw()
+    try:
+        base = Path(fw.CONFIG_DIR) if fw is not None else Path.home() / ".openjarvis"
+    except Exception:
+        return None
+    return base / "litellm-proxy.yaml"
+
+
+def _file_lanes(path: Optional[Path]) -> tuple:
+    """([lane names], [providers]) from litellm-proxy.yaml, read as plain
+    lines (no YAML library): `model_name:` lines, and the provider part of
+    `model: provider/...` lines. ([], []) when there is no file."""
+    if path is None or not path.is_file():
+        return [], []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return [], []
+    names = re.findall(r"^\s*-?\s*model_name\s*:\s*[\"']?([^\"'#\s]+)", text, re.M)
+    provs = re.findall(r"^\s*model\s*:\s*[\"']?([A-Za-z0-9_.-]+)/", text, re.M)
+    return names, provs
+
+
+@dataclass
+class Ctx:
+    """Everything a row reads. The tests and tools/gen_reach_cases.py build
+    their own; the server uses the defaults."""
+    enabled: set = field(default_factory=_tools_enabled)
+    tier: Callable[[str], str] = _tier
+    env: Callable[[str], str] = _env
+    lanes: Optional[list] = None            # cloud lanes; None: read them
+    providers: Optional[list] = None
+    search: Optional[dict] = None           # {"provider", "searxng_url", "ask_every_time", "why"}
+    key_saved: Optional[Callable[[str], Optional[bool]]] = None
+    second_card: Optional[dict] = None      # {"master": bool, "features": {id: bool}}
+    big_model: Optional[dict] = None        # {"master": bool, ...}
+    gate_action: Optional[Callable[[str], Optional[str]]] = None
+    # The plug-in programs (jarvis_mcp.reach_status): {"servers", "running",
+    # "problem", "card_every_start"}; None: read them.
+    plugins: Optional[dict] = None
+    # Chatbot conversations (jarvis_chatbot.py): {"routed": bool, "chatbots":
+    # jarvis_chatbot.choices()}; None: read them.
+    chatbot: Optional[dict] = None
+    # Customer-support chats (jarvis_support.py): {"routed": bool, "ready":
+    # "" or why not, "companies": [names]}; None: read them.
+    support: Optional[dict] = None
+    # Picture mode for the screen (jarvis_screen_picture.py): {"enabled": bool,
+    # "model": tag}; None: read the switch file.
+    screen_picture: Optional[dict] = None
+    # The headless browser (jarvis_browser_engine.py): {"enabled": bool,
+    # "ready": bool, "mode": str}; None: read it.
+    browser_engine: Optional[dict] = None
+    # YouTube captions for a quiz (jarvis_youtube.py): {"ready": True | False |
+    # None} - the module is here and its caption reader installed / the module
+    # is here but the reader is not / the module is not here; None: look.
+    youtube: Optional[dict] = None
+    # "Grade this better" on a quiz (jarvis_quiz_cloud.py): {"ready": True | False |
+    # None} - the module is here and a cloud service is set up (a saved key AND a
+    # monthly limit) / the module is here but no service is set up / the module
+    # is not here; None: look.
+    quiz_cloud: Optional[dict] = None
+
+
+def _gate_action(lookup: str) -> Optional[str]:
+    try:
+        import jarvis_gate
+        action, _ = jarvis_gate.action_for_tool(lookup, {})
+        return str(action) if action else None
+    except Exception:
+        return None
+
+
+def _agent():
+    try:
+        import jarvis_agent
+        return jarvis_agent
+    except Exception:
+        return None
+
+
+def action_of(tool: str, ctx: Ctx) -> str:
+    """The gate action `tool` is decided under."""
+    ag = _agent()
+    lookup = tool
+    try:
+        t = ag.TOOLS.get(tool) if ag is not None else None
+        if t is not None and t.gate_lookup_name:
+            lookup = str(t.gate_lookup_name({}))
+    except Exception:
+        pass
+    got = (ctx.gate_action or _gate_action)(lookup)
+    if got:
+        return got
+    return _FALLBACK_ACTIONS.get(lookup, lookup)
+
+
+#: home_control while the owner's "Lights, plugs and fans without a card" is on.
+ASK_LIGHTS = ("Yes, every time - except the lights, plugs and fans you name yourself "
+              "(your setting)")
+
+
+def _lights_on() -> bool:
+    try:
+        import jarvis_asks_first
+        return bool(jarvis_asks_first.lights_on())
+    except Exception:
+        return False
+
+
+def _needs_a_person(tool: str) -> bool:
+    ag = _agent()
+    try:
+        return tool in ag.NEEDS_A_PERSON if ag is not None else tool in _NEEDS_A_PERSON
+    except Exception:
+        return tool in _NEEDS_A_PERSON
+
+
+def asks(tool: str, ctx: Ctx, *, after_outside: bool = False) -> tuple:
+    """(tier, words) for whether `tool` asks the owner first."""
+    action = action_of(tool, ctx)
+    try:
+        tier = str(ctx.tier(action))
+    except Exception:
+        tier = "ask"
+    if tier == "never":
+        return tier, ASK_NEVER
+    if tool == "home_control" and _lights_on():
+        # "Lights, plugs and fans without a card" (jarvis_asks_first.py,
+        # 2026-09-26): on, and off by default.
+        return tier, ASK_LIGHTS
+    if _needs_a_person(tool) or tier == "ask":
+        return tier, ASK_EVERY
+    if after_outside:
+        return tier, ("No - but yes after Jarvis has read an email, a web page, a file "
+                      "or other outside text")
+    if tier == "notify":
+        return tier, ASK_TOLD
+    return tier, ASK_NO
+
+
+def host_of(url) -> str:
+    """The host alone - never a path, a query, a user or a password."""
+    try:
+        h = (urllib.parse.urlsplit(str(url or "").strip()).hostname or "").lower().rstrip(".")
+    except ValueError:
+        return ""
+    return h
+
+
+def where_words(host: str) -> str:
+    if not host:
+        return ""
+    if host in ("127.0.0.1", "localhost", "::1"):
+        return "this PC"
+    return host
+
+
+def _row(id_: str, name: str, state: str, where: str, asks_words: str, line: str) -> dict:
+    return {"id": id_, "name": name, "state": state, "on": state == "on",
+            "state_words": STATE_WORDS.get(state, state), "where": where,
+            "asks": asks_words, "line": line}
+
+
+def _tool_row(id_: str, name: str, tool: str, ctx: Ctx, *, configured: bool,
+              where: str, on_line: str, not_set_up: str, off_line: str,
+              after_outside: bool = False) -> dict:
+    """The common shape: on only when the model is offered the tool AND the
+    account is set up; blocked when its tier is "never"."""
+    tier, words = asks(tool, ctx, after_outside=after_outside)
+    offered = tool in ctx.enabled
+    if offered and configured and tier == "never":
+        return _row(id_, name, "blocked", where, words,
+                    "Set up and switched on, but your settings say never, so it never runs.")
+    if offered and configured:
+        return _row(id_, name, "on", where, words, on_line)
+    if not configured:
+        return _row(id_, name, "not_set_up", "", ASK_NA, not_set_up)
+    return _row(id_, name, "off", "", ASK_NA, off_line)
+
+
+def _tool_switchable(tool: str) -> bool:
+    """Can this tool be offered to the model from an app at all - the owner's
+    answer of 2026-09-27 ("Reading tools ... can be switched on from the PC
+    app") - or only in the settings file, like every other tool? `tool` is the
+    TOOL's name ("email_check"), not the gate action's ("email_read")."""
+    try:
+        import jarvis_asks_first
+        return tool in jarvis_asks_first.SWITCHABLE_TOOL_NAMES
+    except Exception:
+        return False
+
+
+#: What each tool that is not switched on from an app CAN DO - the reason it
+#: stays a deliberate step in the settings file. Plain words, for the owner.
+_CAN_DO = {
+    "send_email": "send email from your account",
+    "draft_email": "save drafts into your mailbox",
+    "tidy_inbox": "change your mailbox (archive, star, move to Trash)",
+    "home_control": "change things in your home, such as lights and locks",
+    "github_search": "send search words to GitHub",
+    "browser_control": "open web pages and click and type in them",
+    "web_search": "send search words to the internet",
+    "control_computer": "click and type in other programs on this PC",
+    "control_phone": "tap and type on your phone",
+    "shell_exec": "run commands on this PC",
+    "append_obsidian_daily": "write into your notes",
+    "append_logseq_journal": "write into your notes",
+    "create_joplin_note": "write into your notes",
+}
+
+
+def _only_in_file(tool: str) -> str:
+    """The plain sentence for a tool the apps cannot switch on: where it is
+    switched on, and why only there (the owner's choice of 2026-09-27: only
+    reading tools - calendar, email, notes, home status - switch on from an
+    app; the rest can act, so they stay a deliberate step on the PC)."""
+    what = _CAN_DO.get(tool, "act for you")
+    return (f"It can only be switched on in the settings file on your PC "
+            f"(jarvis-framework.toml: add \"{tool}\" to the [tools] enabled list). You "
+            f"chose that only reading tools (calendar, email, notes, home status) can be "
+            f"switched on from an app; this one can {what}, so it stays a step you take "
+            f"on the PC.")
+
+
+def _enable_line(tool: str) -> str:
+    if _tool_switchable(tool):
+        return ("Set up on this PC, but the AI model is not offered it yet. Switch it on in "
+                "Settings, \"What asks first\", on your PC (one approval card and Windows "
+                "Hello).")
+    return "Set up on this PC, but the AI model is not offered it. " + _only_in_file(tool)
+
+
+def _off_line(tool: str) -> str:
+    if _tool_switchable(tool):
+        return ("Off. Switch it on in Settings, \"What asks first\", on your PC (one "
+                "approval card and Windows Hello).")
+    return "Off. " + _only_in_file(tool)
+
+
+def _join(items: list) -> str:
+    items = [str(i) for i in items if i]
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+# --------------------------------------------------------------------------
+#   The rows, one function each
+# --------------------------------------------------------------------------
+
+
+def _cloud_model(ctx: Ctx) -> dict:
+    lanes, provs = ctx.lanes, ctx.providers
+    if lanes is None:
+        server = _server_lanes()
+        f_lanes, f_provs = _file_lanes(_proxy_file())
+        lanes = server if server is not None else f_lanes
+        provs = f_provs if provs is None else provs
+    lanes = [str(x)[:60] for x in (lanes or [])][:6]
+    provs = sorted({str(p)[:40] for p in (provs or [])})
+    name = "Cloud model"
+    if not lanes:
+        return _row("cloud_model", name, "not_set_up", "", ASK_NA,
+                    "No cloud model is set up, so every answer is written on this PC.")
+    where = ", ".join(provs) if provs else "the cloud service named in litellm-proxy.yaml"
+    return _row("cloud_model", name, "on", where, "Yes, every question",
+                f"Jarvis may offer to send one question to a cloud model ({', '.join(lanes)}). "
+                f"It goes only if you say yes to that one question, and never with your "
+                f"memory, a picture, or a conversation that has read private or outside text.")
+
+
+def _search_where(provider: Optional[str], url: str) -> str:
+    try:
+        import jarvis_search as WS
+        hosts = {"duckduckgo": WS.DDG_HOST, "exa": host_of(WS.EXA_URL),
+                 "tavily": host_of(WS.TAVILY_URL), "brave": host_of(WS.BRAVE_URL)}
+    except Exception:
+        hosts = {}
+    if provider == "searxng":
+        w = where_words(host_of(url))
+        return (f"{w} (SearXNG, which asks other search engines)" if w
+                else "SearXNG (its address could not be read)")
+    return hosts.get(provider or "", "")
+
+
+def _web_search(ctx: Ctx) -> dict:
+    name = "Web search"
+    try:
+        import jarvis_search as WS
+    except Exception:
+        return _row("web_search", name, "not_set_up", "", ASK_NA,
+                    "Web search is not installed on this PC.")
+    s = ctx.search if ctx.search is not None else WS.settings()
+    provider = s.get("provider")
+    if s.get("enabled", True) is not True:
+        return _row("web_search", name, "off", "", ASK_NA,
+                    "Off: you switched web search off. Turn it back on in Settings, Web "
+                    "search (a card asks you first).")
+    if "web_search" not in ctx.enabled:
+        return _row("web_search", name, "off", "", ASK_NA,
+                    "Off: \"web_search\" is missing from the tool list in the settings file "
+                    "on your PC (jarvis-framework.toml, [tools] enabled), so the AI model is "
+                    "not offered it. Adding it back is done in that file on the PC.")
+    if provider is None:
+        return _row("web_search", name, "blocked", "", ASK_NA,
+                    "Its settings file is damaged, so Jarvis searches nothing until it is "
+                    "fixed in Settings, Web search.")
+    label = WS.LABEL.get(provider, provider)
+    key = ""
+    if provider in WS.NEEDS_KEY:
+        saved = (ctx.key_saved or WS.key_saved)(provider)
+        key = (" A key is saved on this PC." if saved is True else
+               " No key is saved yet, so searches fail until one is." if saved is False else
+               " Whether a key is saved could not be checked.")
+    if s.get("ask_every_time"):
+        ask_words = "Yes, every search (you chose \"Ask before every web search\")"
+    else:
+        ask_words = ("Only when private things could slip in - after Jarvis has read email, "
+                     "files, notes, saved memories or other outside text")
+    return _row("web_search", name, "on", _search_where(provider, s.get("searxng_url") or ""),
+                ask_words,
+                f"Searches with {label}. Only the search words are sent, and never to "
+                f"another search quietly.{key}")
+
+
+def _calendar(ctx: Ctx) -> dict:
+    ics = ctx.env("JARVIS_CALENDAR_ICS_SECRET_URL")
+    caldav = ctx.env("JARVIS_CALDAV_URL")
+    if ics:
+        host = host_of(ics)
+        where = where_words(host) or "the calendar's private link"
+        what = ("your Google Calendar through its private link"
+                if host in ("calendar.google.com", "www.google.com") else
+                "your calendar through its private link")
+    else:
+        where = where_words(host_of(caldav))
+        what = "your calendar (CalDAV)"
+    return _tool_row(
+        "calendar", "Calendar (reading)", "calendar_read", ctx, configured=bool(ics or caldav),
+        where=where,
+        on_line=(f"Reads {what}: events in the days asked for. It never changes an event. "
+                 f"The morning briefing reads it too, when one is set up."),
+        not_set_up="No calendar is set up on this PC.",
+        off_line=_enable_line("calendar_read"))
+
+
+def _email_read(ctx: Ctx) -> dict:
+    host = ctx.env("JARVIS_IMAP_HOST")
+    user = ctx.env("JARVIS_IMAP_USER")
+    where = where_words(host_of("imap://" + host)) if host else ""
+    if where and user:
+        where = f"{where} (as {user[:80]})"
+    return _tool_row(
+        "email_read", "Email (reading)", "email_check", ctx, configured=bool(host),
+        where=where,
+        on_line=("Reads the sender, subject, date and a short preview of recent emails, with "
+                 "one-time codes and sign-in links hidden. It never marks anything as read, "
+                 "moves, deletes or sends anything. The morning briefing reads the count and "
+                 "senders too, when one is set up."),
+        not_set_up="No email account is set up on this PC.",
+        off_line=_enable_line("email_check"))
+
+
+def _email_send(ctx: Ctx) -> dict:
+    """Sending email (jarvis_email_send.py): the same account as reading, the
+    outgoing server named in JARVIS_SMTP_HOST or worked out from the reading
+    one (imap.X -> smtp.X), and one approval card per email."""
+    user = ctx.env("JARVIS_IMAP_USER")
+    configured = bool(user) and bool(ctx.env("JARVIS_IMAP_PASSWORD"))
+    host = ctx.env("JARVIS_SMTP_HOST").strip().lower().rstrip(".")
+    if not host:
+        try:
+            import jarvis_email_send as ES
+            host = ES._guess_smtp_host(ctx.env("JARVIS_IMAP_HOST"))
+        except Exception:
+            host = ""
+    where = where_words(host)
+    if where and user:
+        where = f"{where} (as {user})"
+    return _tool_row(
+        "email_send", "Email (sending)", "send_email", ctx, configured=configured and bool(host),
+        where=where,
+        on_line=("Sends one email at a time from your own account, only after you approve "
+                 "a card showing the recipients, the subject and every word. No attachments."),
+        not_set_up="No email account is set up on this PC for sending.",
+        off_line=_enable_line("send_email"))
+
+
+def _email_tidy(ctx: Ctx) -> dict:
+    """Tidying the inbox (jarvis_inbox_tidy.py): the same account as reading,
+    one approval card that lists every email, then 10 minutes to Undo. It
+    changes the mailbox on the owner's mail server - archive, star, mark as
+    read, or move to Trash - and deletes nothing for good."""
+    host = ctx.env("JARVIS_IMAP_HOST")
+    user = ctx.env("JARVIS_IMAP_USER")
+    configured = bool(user) and bool(ctx.env("JARVIS_IMAP_PASSWORD")) and bool(host)
+    where = where_words(host_of("imap://" + host)) if host else ""
+    if where and user:
+        where = f"{where} (as {user[:80]})"
+    return _tool_row(
+        "email_tidy", "Email (tidying)", "tidy_inbox", ctx, configured=configured,
+        where=where,
+        on_line=("Archives, stars, marks as read or moves to Trash the emails you name, in "
+                 "your own mailbox, only after you approve a card that lists every one of "
+                 "them - and for 10 minutes you can undo it with one tap. Nothing is ever "
+                 "deleted for good, and Jarvis never empties Trash."),
+        not_set_up="No email account is set up on this PC for tidying.",
+        off_line=_enable_line("tidy_inbox"))
+
+
+def _home_read(ctx: Ctx) -> dict:
+    url = ctx.env("JARVIS_HOME_URL")
+    return _tool_row(
+        "home_read", "Home Assistant (reading)", "home_read", ctx, configured=bool(url),
+        where=where_words(host_of(url)),
+        on_line=("Reads the state of things in your home (lights, sensors, locks), and the "
+                 "weather forecast your Home Assistant already has. Changes nothing."),
+        not_set_up="Home Assistant is not set up on this PC.",
+        off_line=_enable_line("home_read"))
+
+
+def _home_control(ctx: Ctx) -> dict:
+    url = ctx.env("JARVIS_HOME_URL")
+    return _tool_row(
+        "home_control", "Home Assistant (changing things)", "home_control", ctx,
+        configured=bool(url), where=where_words(host_of(url)),
+        on_line="Can switch lights, locks and other things in your home - each change only "
+                "after you say yes to it.",
+        not_set_up="Home Assistant is not set up on this PC.",
+        off_line=_enable_line("home_control"))
+
+
+def _notes_where(ctx: Ctx) -> tuple:
+    """(configured, where) for the notes Jarvis can read."""
+    try:
+        import jarvis_notes as N
+        vault_ok = not N.vault_problem(N.obsidian_vault())
+        joplin = bool(N.joplin_token())
+        obsidian_api = bool(ctx.env(N.OBSIDIAN_KEY_ENV))
+        places = []
+        if vault_ok:
+            places.append("this PC (your Obsidian vault folder)")
+        if joplin:
+            places.append(f"{where_words(host_of(N.joplin_base()))} (Joplin)")
+        if obsidian_api:
+            url = ctx.env(N.OBSIDIAN_URL_ENV) or N._DEFAULT_OBSIDIAN_URL
+            places.append(f"{where_words(host_of(url))} (Obsidian)")
+        return bool(places), ", ".join(places)
+    except Exception:
+        return False, ""
+
+
+def _notes_read(ctx: Ctx) -> dict:
+    configured, where = _notes_where(ctx)
+    return _tool_row(
+        "notes_read", "Notes (searching)", "notes_search", ctx, configured=configured,
+        where=where,
+        on_line="Searches your own notes (Obsidian, Logseq or Joplin) and reads short pieces "
+                "of the ones it finds.",
+        not_set_up="No notes are set up on this PC (Obsidian, Logseq or Joplin).",
+        off_line=_enable_line("notes_search"))
+
+
+def _notes_write(ctx: Ctx) -> dict:
+    name = "Notes (writing)"
+    on = [t for t in ("append_obsidian_daily", "append_logseq_journal", "create_joplin_note")
+          if t in ctx.enabled]
+    if not on:
+        return _row("notes_write", name, "off", "", ASK_NA,
+                    "The AI model is not offered any way to write notes.")
+    tiers = [asks(t, ctx, after_outside=True) for t in on]
+    if all(t == "never" for t, _ in tiers):
+        return _row("notes_write", name, "blocked", "this PC", ASK_NEVER,
+                    "Switched on, but your settings say never, so no note is written.")
+    words = ASK_EVERY if any(w == ASK_EVERY for _, w in tiers) else tiers[0][1]
+    what = {"append_obsidian_daily": "your Obsidian daily note",
+            "append_logseq_journal": "your Logseq journal",
+            "create_joplin_note": "new Joplin notes"}
+    return _row("notes_write", name, "on", "this PC (your notes apps)", words,
+                "Can write to " + _join([what[t] for t in on]) + ".")
+
+
+def _github(ctx: Ctx) -> dict:
+    name = "GitHub research"
+    try:
+        import jarvis_research as R
+        token = R.authenticated()
+    except Exception:
+        token = bool(ctx.env("JARVIS_GITHUB_TOKEN"))
+    if "github_search" not in ctx.enabled:
+        return _row("github", name, "off", "", ASK_NA, _off_line("github_search"))
+    tier, words = asks("github_search", ctx)
+    if tier == "never":
+        return _row("github", name, "blocked", "api.github.com", words,
+                    "Switched on, but your settings say never, so it never runs.")
+    return _row("github", name, "on", "api.github.com", words,
+                "Searches GitHub for existing code libraries, with the search words shown "
+                "on the card." + (" A GitHub token is saved on this PC." if token else
+                                  " No GitHub token is set, so it searches without one."))
+
+
+def _youtube_ready() -> Optional[bool]:
+    """Is jarvis_youtube here, and is its caption reader installed? None = the
+    module itself is not on this PC. Opens no connection."""
+    try:
+        import importlib.util
+        import jarvis_youtube  # noqa: F401
+    except Exception:
+        return None
+    try:
+        return importlib.util.find_spec("youtube_transcript_api") is not None
+    except Exception:
+        return False
+
+
+def _youtube(ctx: Ctx) -> dict:
+    """"Quiz me on a YouTube video" (jarvis_youtube.py, the owner's decision of
+    2026-09-30): ONE approval card per link, then the video's CAPTION TEXT
+    only is fetched from YouTube. It breaks YouTube's terms and may be blocked."""
+    name = "YouTube captions (for a quiz)"
+    ready = ctx.youtube.get("ready") if ctx.youtube is not None else _youtube_ready()
+    if ready is None:
+        return _row("youtube", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have the YouTube quiz yet - run "
+                    "apply-patches.ps1.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("youtube_captions_read"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("youtube", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never reads a video's captions.")
+    if not ready:
+        return _row("youtube", name, "not_set_up", "", ASK_NA,
+                    "Not set up: the caption reader (youtube-transcript-api) is not installed "
+                    "on this PC yet - run apply-patches.ps1.")
+    return _row("youtube", name, "on", "youtube.com", ASK_EVERY,
+                "Reads the caption text (never the video or its sound) of a YouTube link you "
+                "paste in the Quiz page, then quizzes you on it. One approval card per link "
+                "shows the exact link. This breaks YouTube's terms and may be blocked. The "
+                "captions are outside text.")
+
+
+def _phone_push(ctx: Ctx) -> dict:
+    """Where phone notifications go. Nowhere, unless the owner chose a place.
+
+    Two settings, and both are the owner's: JARVIS_NTFY_TOPIC says which
+    channel, JARVIS_NTFY_SERVER says where that channel lives. The server
+    used to default to https://ntfy.sh, a public broker, so an owner who set
+    only a topic - which is all the setup notes asked for - had every card
+    title posted to a place he never chose. Rule 1 says private things stay
+    on this PC, and a destination nobody picked is not one anybody agreed to.
+    So both must be set, and this row says plainly that the default is
+    nowhere. Changed 2026-10-05 (backend/gate-push.patch, _push's own guard).
+    """
+    name = "Phone notifications (ntfy)"
+    topic = (ctx.env("JARVIS_NTFY_TOPIC") or "").strip()
+    server = (ctx.env("JARVIS_NTFY_SERVER") or "").strip()
+    if not topic or not server:
+        missing = ("no ntfy topic is set" if not topic else "no ntfy server is set")
+        return _row(
+            "phone_push", name, "not_set_up", "", ASK_NA,
+            "Not set up: " + missing + ", so nothing is pushed anywhere. The default is "
+            "NOWHERE, so that alerts about this PC cannot leave it by accident: set both "
+            "JARVIS_NTFY_TOPIC (which channel) and JARVIS_NTFY_SERVER (where that channel "
+            "lives) to turn phone notifications on.")
+    return _row("phone_push", name, "on", where_words(host_of(server)), ASK_NA,
+                "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the "
+                "details, and never while the conversation holds private text.")
+
+
+def _control(tool: str, id_: str, name: str, where: str, line: str):
+    def row(ctx: Ctx) -> dict:
+        if tool not in ctx.enabled:
+            return _row(id_, name, "off", "", ASK_NA,
+                        _off_line(tool))
+        tier, words = asks(tool, ctx)
+        if tier == "never":
+            return _row(id_, name, "blocked", where, words,
+                        "Switched on, but your settings say never, so it never runs.")
+        return _row(id_, name, "on", where, words, line)
+    return row
+
+
+_computer = _control("control_computer", "computer", "Computer control",
+                     "other programs on this PC",
+                     "Can click and type in other programs on this PC, one approved plan at "
+                     "a time. It never touches Jarvis's own windows.")
+_phone = _control("control_phone", "phone_control", "Phone control",
+                  "your phone, over adb",
+                  "Can tap and type on your phone plugged into this PC, one approved plan at "
+                  "a time. It stops while a Jarvis app is in front.")
+_shell = _control("shell_exec", "shell", "Commands on this PC",
+                  "this PC (a command can reach the internet)",
+                  "Can run a command on this PC after you say yes to that exact command.")
+
+
+def _browser_engine_status() -> dict:
+    try:
+        import jarvis_browser_engine as BE
+        return BE.reach_status()
+    except Exception:
+        return {"enabled": False, "ready": False, "mode": "auto", "missing": True}
+
+
+def _browser(ctx: Ctx) -> dict:
+    name = "Browser control"
+    sw = ctx.second_card if ctx.second_card is not None else _second_card_switches()
+    feats = sw.get("features") or {}
+    lane_on = bool(sw.get("master") and feats.get("browser_control")
+                   and feats.get("long_context"))
+    eng = ctx.browser_engine if ctx.browser_engine is not None else _browser_engine_status()
+    headless_on = bool(eng.get("enabled") and eng.get("ready"))
+    if "browser_control" not in ctx.enabled:
+        return _row("browser", name, "off", "", ASK_NA,
+                    _off_line("browser_control"))
+    if not lane_on and not headless_on:
+        return _row("browser", name, "off", "", ASK_NA,
+                    "Off: it needs the second graphics card's \"Browser control\" switch (a "
+                    "browser window you can see), or a browser with no window (Obscura), "
+                    "and both are off.")
+    tier, words = asks("browser_control", ctx)
+    if tier == "never":
+        return _row("browser", name, "blocked", "websites", words,
+                    "Switched on, but your settings say never, so it never runs.")
+    if lane_on and headless_on:
+        how = ("in a browser window you can see or in a browser with no window (Obscura). "
+               "Jarvis picks for each task and names which on the card")
+    elif headless_on:
+        how = ("in a browser with no window (Obscura), for plain reading "
+               "only. A task that needs you to sign in or take over needs the visible browser, "
+               "which needs the second graphics card")
+    else:
+        how = "in a browser window you can see, only while the second graphics card is working"
+    return _row("browser", name, "on", "the websites on each approved plan", words,
+                f"Can work a web page {how}. Each step is approved first, one at a time. What "
+                f"it types there reaches that website.")
+
+
+def _second_card_switches() -> dict:
+    try:
+        import jarvis_second_card as SC
+        return SC._read_switches()
+    except Exception:
+        return {"master": False, "features": {}}
+
+
+def _big_model_switches() -> dict:
+    try:
+        import jarvis_big_model as BM
+        return BM._read_switches()
+    except Exception:
+        return {"master": False}
+
+
+def _second_card(ctx: Ctx) -> dict:
+    name = "Second graphics card"
+    sw = ctx.second_card if ctx.second_card is not None else _second_card_switches()
+    if not sw.get("master"):
+        return _row("second_card", name, "off", "", ASK_NA,
+                    "Off. Switching it on asks you with an approval card.")
+    try:
+        import jarvis_second_card as SC
+        names = {f["id"]: f["name"] for f in SC.FEATURES}
+    except Exception:
+        names = {}
+    on = [names.get(k, k) for k, v in (sw.get("features") or {}).items() if v]
+    what = ", ".join(on) if on else "no feature yet"
+    return _row("second_card", name, "on", "this PC (a second copy of Ollama)", ASK_NA,
+                f"Switched on for: {what}. It is a second model on this PC: nothing it "
+                f"handles leaves the PC.")
+
+
+def _big_model(ctx: Ctx) -> dict:
+    name = "Big model (slow)"
+    sw = ctx.big_model if ctx.big_model is not None else _big_model_switches()
+    if not sw.get("master"):
+        return _row("big_model", name, "off", "", ASK_NA,
+                    "Off. Switching it on asks you with an approval card.")
+    jobs = [j for j in ("wiki", "deep_questions") if sw.get(j)]
+    words = {"wiki": "the wiki builder", "deep_questions": "deep questions"}
+    what = ", ".join(words[j] for j in jobs) if jobs else "no job yet"
+    return _row("big_model", name, "on", "this PC (colibri)", ASK_NA,
+                f"Switched on for: {what}. It runs on this PC: nothing it handles leaves the PC.")
+
+
+def _screen_picture_status() -> dict:
+    try:
+        import jarvis_screen_picture as SP
+        return {"enabled": bool(SP.settings()["enabled"]), "model": SP.model()}
+    except Exception:
+        return {"enabled": False, "model": "", "missing": True}
+
+
+def _screen_picture(ctx: Ctx) -> dict:
+    """Picture mode (jarvis_screen_picture.py, the owner's decision of
+    2026-09-29): a small picture model on the PROCESSOR, in its own copy of
+    Ollama on this PC, that also looks at the picture of the screen. Not a way
+    out of the PC - like the second card and the big model, it is listed so the
+    page is honest about every model Jarvis runs."""
+    name = "Picture mode"
+    st = ctx.screen_picture if ctx.screen_picture is not None else _screen_picture_status()
+    if st.get("missing"):
+        return _row("screen_picture", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis is missing this feature. In PowerShell on the PC, in the "
+                    "Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
+    if not st.get("enabled"):
+        return _row("screen_picture", name, "off", "", ASK_NA,
+                    "Off: Jarvis reads only the words on your screen. "
+                    "Switching it on asks you with an approval card.")
+    return _row("screen_picture", name, "on", "this PC (its own copy of Ollama, on your main "
+                                              "chip, the CPU)", ASK_NA,
+                "Switched on: when you ask Jarvis to look at your screen, a small picture reader "
+                "also looks at the picture, slowly. Secrets in it are blacked out first, it runs "
+                "on your main chip (the CPU) and nothing leaves the PC or is saved.")
+
+
+def _plugin_status() -> dict:
+    try:
+        import jarvis_mcp
+        return jarvis_mcp.reach_status()
+    except Exception:
+        return {"servers": [], "running": [], "problem": "", "card_every_start": False,
+                "missing": True}
+
+
+def _plugins(ctx: Ctx) -> dict:
+    """Plug-in programs (MCP, jarvis_mcp.py): programs on this PC the owner
+    listed under [mcp]. Names only - never anything a program wrote."""
+    name = "Plug-in programs (MCP)"
+    st = ctx.plugins if ctx.plugins is not None else _plugin_status()
+    servers = [str(n) for n in st.get("servers") or []]
+    if st.get("problem"):
+        return _row("plugins", name, "off", "", ASK_NA,
+                    "Off: the [mcp] part of jarvis-framework.toml has a mistake - "
+                    + str(st["problem"]))
+    if not servers:
+        return _row("plugins", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no plug-in programs are listed under [mcp] in "
+                    "jarvis-framework.toml.")
+    if not ctx.enabled:
+        return _row("plugins", name, "off", "", ASK_NA,
+                    "Off: the AI model is offered no tools, so it cannot ask for these.")
+    running = [n for n in st.get("running") or [] if n in servers]
+    start = ("Starting one asks you every time." if st.get("card_every_start") else
+             "Starting one asks you when it is new or has changed.")
+    return _row("plugins", name, "on", "programs on this PC: " + _join(servers),
+                ASK_EVERY,
+                "Read-only tools from programs on this PC that you listed. " + start
+                + " Every use asks you, every time, and what they send back is treated as "
+                  "outside text. The programs themselves run with your account's "
+                  "permissions." + (f" Running now: {_join(running)}." if running else ""))
+
+
+def _chatbot_status() -> dict:
+    """jarvis_chatbot's own list of chatbots and whether it is routed. Opens
+    nothing: each adapter's ready() only looks for Playwright and the
+    browser profile folder."""
+    try:
+        import jarvis_chatbot as CB
+        return {"routed": bool(getattr(CB, "ROUTED", False)), "chatbots": CB.choices()}
+    except Exception:
+        return {"routed": False, "chatbots": [], "missing": True}
+
+
+def _chatbot(ctx: Ctx) -> dict:
+    """Chatbot conversations (jarvis_chatbot.py and its website adapters -
+    jarvis_chatbot_web.py and one site file per website, Gemini first; the
+    owner's decisions of 2026-09-27/28): Jarvis talks to an AI chatbot
+    WEBSITE for the owner, one card per conversation. One row for all of
+    them; `where` names every host that is set up, each its own way out.
+    The API adapters have their own row (_chatbot_api); "a second AI on this
+    PC" has none - it reaches nothing outside the PC."""
+    name = "Chatbot conversations"
+    st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")
+            and str(b.get("kind") or "website") == "website"]
+    if st.get("missing") or not bots:
+        return _row("chatbot", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no chatbot is built into this PC's Jarvis yet.")
+    names = _join([str(b.get("name") or b.get("id")) for b in bots])
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("chatbot_session"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("chatbot", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never talks to a chatbot for you.")
+    ready = [b for b in bots if b.get("ready")]
+    if not ready:
+        why = str(bots[0].get("note") or "")
+        if len(bots) > 1 and any(str(b.get("note") or "") != why for b in bots):
+            # Each website is signed in on its own: say so, with the first
+            # one's line, rather than let one site's words speak for all.
+            why = ("none of them is set up on this PC yet; each is signed in on its own. "
+                   + str(bots[0].get("name") or bots[0].get("id")) + ": " + why)
+        return _row("chatbot", name, "not_set_up", "", ASK_NA,
+                    ("Not set up (" + names + "): " + why).strip())
+    ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
+    if not st.get("routed"):
+        return _row("chatbot", name, "off", "", ASK_NA,
+                    "Ready on this PC (" + ready_names + "), but neither app can start a "
+                    "conversation yet - that comes in a later step.")
+    where = _join([str(b.get("host") or "") for b in ready]) + " (a browser window you can see)"
+    return _row("chatbot", name, "on", where, ASK_EVERY,
+                "Holds a conversation with an AI chatbot website for you: one approval card "
+                "per conversation shows the goal word for word and the most messages and "
+                "minutes. Nothing private is sent, and it stops and asks you at any captcha "
+                "or sign-in page. What the chatbot says is outside text.")
+
+
+def _support_status() -> dict:
+    """jarvis_support's own companies and whether its window can open here
+    (Playwright only - opens nothing)."""
+    try:
+        import jarvis_chatbot as CB
+        import jarvis_support as S
+        try:
+            import jarvis_support_widget as SW
+            why = str(SW.ready() or "")
+        except Exception as exc:
+            why = f"the support window is not on this PC ({type(exc).__name__})"
+        return {"routed": bool(getattr(CB, "ROUTED", False)), "ready": why,
+                "companies": [c.name for c in S.COMPANIES.values()]}
+    except Exception:
+        return {"routed": False, "ready": "", "companies": [], "missing": True}
+
+
+def _support_chat(ctx: Ctx) -> dict:
+    """Customer-support chats (jarvis_support.py and jarvis_support_widget.py,
+    the owner's decisions of 2026-09-28): Jarvis chats with a company's
+    customer support in the owner's name, on the owner's own account, in a
+    browser window the owner can see. One named way out: the help page of
+    the company the owner picks on the card (Groupon first) and its chat
+    maker's host."""
+    name = "Customer-support chats"
+    st = ctx.support if ctx.support is not None else _support_status()
+    if st.get("missing"):
+        return _row("support_chat", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no customer-support chats yet.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("support_chat"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("support_chat", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never chats with customer support "
+                    "for you.")
+    why = str(st.get("ready") or "")
+    if why:
+        return _row("support_chat", name, "not_set_up", "", ASK_NA,
+                    ("Not set up: " + why).strip())
+    if not st.get("routed"):
+        return _row("support_chat", name, "off", "", ASK_NA,
+                    "Ready on this PC, but neither app can start a support chat yet - run "
+                    "apply-patches.ps1 on the PC.")
+    companies = _join([str(c) for c in st.get("companies") or []]) or "a company you pick"
+    return _row("support_chat", name, "on",
+                "the help page of the company on the card (" + companies + ", or one whose "
+                "help page you type) and its chat window's own host (a browser window you "
+                "can see)", ASK_EVERY,
+                "Chats with a company's customer support for you, in your name, on your own "
+                "account there: one approval card per chat lists every detail Jarvis may "
+                "give, and every offer (a refund, a credit, a cancellation) gets its own card "
+                "- nothing is accepted without it. Identity checks and \"are you a bot?\" are "
+                "handed to you. The company's words are outside text.")
+
+
+#: jarvis_chatbot_api's own notes: no_key_words(), CANNOT_READ and
+#: no_limit_words() (a key but no monthly money limit yet: not used until
+#: one is set - the owner's decision of 2026-09-28).
+_NO_KEY = re.compile(r"^No .+ API key\b")
+_NO_STORE = re.compile(r"^Jarvis cannot read Windows Credential Manager\b")
+_NO_LIMIT = re.compile(r"^No monthly money limit is set for\b")
+
+
+def _chatbot_api(ctx: Ctx) -> dict:
+    """Chatbot conversations through an official API with a key
+    (jarvis_chatbot_api.py, the owner's decision of 2026-09-28): one named
+    way out per service - each service's host is listed once its key is
+    saved. Whether a key is saved is yes or no; the key is never read here
+    beyond that."""
+    name = "Chatbot conversations with a key (API)"
+    st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")
+            and str(b.get("kind") or "") == "api"]
+    if st.get("missing") or not bots:
+        return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no chatbot API adapters yet.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("chatbot_session"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("chatbot_api", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never talks to a chatbot for you.")
+    ready = [b for b in bots if b.get("ready")]
+    if not ready:
+        # Say the TRUE reason: "no key" only for the services whose own
+        # note says so. A bad model line under [chatbot], or a Credential
+        # Manager (the Windows password store) that cannot be read, is
+        # named in that service's own words (jarvis_chatbot_api.ready_for).
+        def names(group):
+            return _join([str(b.get("name") or b.get("id")) for b in group])
+        notes = [(b, str(b.get("note") or "").strip()) for b in bots]
+        no_key = [b for b, n in notes if _NO_KEY.match(n)]
+        no_store = [b for b, n in notes if _NO_STORE.match(n)]
+        no_limit = [b for b, n in notes if _NO_LIMIT.match(n)]
+        parts = [n for b, n in notes
+                 if b not in no_key and b not in no_store and b not in no_limit and n]
+        if no_store:
+            parts.append("Jarvis cannot read Windows Credential Manager (the Windows password "
+                         "store) on this computer, where the key for " + names(no_store)
+                         + " would be kept.")
+        if no_limit:
+            parts.append(("no monthly money limit" if not parts else "No monthly money limit")
+                         + " is set on this PC for " + names(no_limit) + ", so Jarvis does not "
+                         "use it yet. A limit comes first, and is set on the PC only.")
+        if no_key:
+            parts.append(("no key" if not parts else "No key") + " is saved on this PC for "
+                         + names(no_key) + ". Keys are added on the PC only.")
+        return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
+                    "Not set up: " + " ".join(parts))
+    ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
+    if not st.get("routed"):
+        return _row("chatbot_api", name, "off", "", ASK_NA,
+                    "A key is saved on this PC for " + ready_names + ", but neither app "
+                    "can start a conversation yet - that comes in a later step.")
+    return _row("chatbot_api", name, "on", _join([str(b.get("host") or "") for b in ready]),
+                ASK_EVERY,
+                "Holds a conversation with an AI chatbot through its official API, with the "
+                "key saved on this PC, sent only to that service: one approval card per "
+                "conversation shows the service, the model, the goal word for word and the "
+                "most messages and minutes, and about how much of the monthly money limit is "
+                "left. Each message costs a little on that account; Jarvis stops using a "
+                "service when the monthly limit you set on the PC is reached (an estimate from "
+                "a price list you can correct there), and asks each service it can to keep "
+                "every answer short enough to stay within it. Nothing private is sent, and "
+                "what the chatbot says is outside text.")
+
+
+def _sky_weather(ctx: Ctx) -> dict:
+    """The weather behind the animal faces (jarvis_sky.py, 2026-09-28): off
+    by default; from the owner's own Home Assistant, or from Open-Meteo on
+    the internet - the one choice that is a new way out (ARCHITECTURE
+    section 4). Its settings file only: nothing is read or woken here."""
+    name = "Weather behind the face"
+    try:
+        import jarvis_sky as SKY
+        s = SKY.load()
+    except Exception:
+        return _row("sky_weather", name, "off", "", ASK_NA,
+                    "Off: the sky settings are not on this PC.")
+    if s["weather"] == "open_meteo":
+        return _row("sky_weather", name, "on", SKY.OPEN_METEO_HOST,
+                    "Asked once, when you switched it on",
+                    "Sends only your rough position (about 11 km) to Open-Meteo, about every "
+                    "20 minutes while a face is showing, and draws rain, snow or wind behind "
+                    "the face. Nothing else is sent.")
+    if s["weather"] == "home_assistant":
+        url = ctx.env("JARVIS_HOME_URL")
+        return _row("sky_weather", name, "on" if url else "not_set_up",
+                    where_words(host_of(url)), ASK_NA,
+                    "Reads the weather device your Home Assistant already has, on your home "
+                    "network, and draws it behind the face." if url else
+                    "Chosen, but Home Assistant is not set up on this PC, so no weather is "
+                    "drawn.")
+    return _row("sky_weather", name, "off", "", ASK_NA,
+                "Off: no weather is drawn behind the face. The sun and moon never go "
+                "online - they are worked out on your own devices.")
+
+
+def _quiz_cloud_ready() -> Optional[bool]:
+    """Is jarvis_quiz_cloud here, and is a cloud service set up for it (a key
+    saved on this PC AND a monthly limit)? None = the module itself is not on
+    this PC. Opens no connection."""
+    try:
+        import jarvis_quiz_cloud as QC
+    except Exception:
+        return None
+    try:
+        return bool(QC.status()[1].get("ready"))
+    except Exception:
+        return False
+
+
+def _quiz_cloud(ctx: Ctx) -> dict:
+    """"Grade this better" on a quiz (jarvis_quiz_cloud.py, the owner's decision of
+    2026-09-30): ONE approval card per request lists exactly what would leave
+    this PC; the quiz is then sent to the cheapest cloud service the chatbot
+    driver has set up. Never for a private quiz or after a crisis answer."""
+    name = "Quiz grading in the cloud"
+    ready = ctx.quiz_cloud.get("ready") if ctx.quiz_cloud is not None else _quiz_cloud_ready()
+    if ready is None:
+        return _row("quiz_cloud", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have \"Grade this better\" yet - "
+                    "run apply-patches.ps1.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("quiz_cloud_grade"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("quiz_cloud", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so a quiz is never sent to a cloud service.")
+    if not ready:
+        return _row("quiz_cloud", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no cloud service has a saved key AND a monthly money limit on "
+                    "this PC yet. See the chatbot API lines on the AI chatbots row.")
+    return _row("quiz_cloud", name, "on", "your chosen AI service", ASK_EVERY,
+                "Sends one quiz you have answered - the questions, your answers and the "
+                "passages, shown word for word on the card - to the cheapest AI service you "
+                "have set up, to be marked better. One card per request. Never for a quiz "
+                "about money, health or anything private, and never after a crisis message. "
+                "It costs a little, within your monthly limit.")
+
+
+def _read_web_page(ctx: Ctx) -> dict:
+    """"Read one web page out loud" (jarvis_readpage.py, the owner's request of
+    2026-10-05; JARVIS-API section 115): ONE approval card per address, then ONE
+    plain GET of that one page and its words read back as outside text. A way
+    out of this PC (ARCHITECTURE section 4), so it has its row."""
+    return _tool_row(
+        "read_web_page", "Read one web page out loud", "read_web_page", ctx,
+        configured=True,
+        where="the one address the card shows",
+        on_line=("Fetches the one address the card shows, once, and reads its words back as "
+                 "outside text. Only the address is sent - no memory, no email, no files go "
+                 "with it - and it never follows a link on the page or fetches a second one."),
+        # Off because the model is not offered it yet: the owner's own one-line
+        # step, said in the same words every other tool off for that reason uses
+        # (the settings file only - it is a way out, so no app can switch it on).
+        not_set_up=_off_line("read_web_page"), off_line=_off_line("read_web_page"))
+
+
+#: Every way Jarvis can reach something outside itself, in the order both
+#: apps show them. A new way out is ONE entry here.
+KINDS = (
+    ("cloud_model", _cloud_model),
+    ("web_search", _web_search),
+    ("read_web_page", _read_web_page),
+    ("calendar", _calendar),
+    ("email_read", _email_read),
+    ("email_send", _email_send),
+    ("email_tidy", _email_tidy),
+    ("home_read", _home_read),
+    ("home_control", _home_control),
+    ("notes_read", _notes_read),
+    ("notes_write", _notes_write),
+    ("github", _github),
+    ("youtube", _youtube),
+    ("quiz_cloud", _quiz_cloud),
+    ("phone_push", _phone_push),
+    ("computer", _computer),
+    ("browser", _browser),
+    ("chatbot", _chatbot),
+    ("chatbot_api", _chatbot_api),
+    ("support_chat", _support_chat),
+    ("phone_control", _phone),
+    ("shell", _shell),
+    ("plugins", _plugins),
+    ("second_card", _second_card),
+    ("big_model", _big_model),
+    ("screen_picture", _screen_picture),
+    ("sky_weather", _sky_weather),
+)
+
+
+def tools_offered(ctx: Ctx) -> list:
+    """[{"id", "name"}] - the tools the model is offered, in TOOLS order."""
+    ag = _agent()
+    enabled = set(ctx.enabled)
+    try:
+        names = ag.offered_tools(enabled - {"browser_control"}) if ag is not None \
+            else sorted(enabled)
+    except Exception:
+        names = sorted(enabled)
+    names = list(names)
+    browser = _browser(ctx)
+    if browser["state"] == "on":
+        names.append("browser_control")
+    return [{"id": n, "name": TOOL_NAMES.get(n, n)} for n in names]
+
+
+def view(ctx: Optional[Ctx] = None) -> dict:
+    """GET /api/reach. Never raises: a row that cannot be read says so."""
+    ctx = ctx or Ctx()
+    rows = []
+    for id_, fn in KINDS:
+        try:
+            r = fn(ctx)
+        except Exception as exc:
+            r = _row(id_, id_.replace("_", " ").capitalize(), "off", "", ASK_NA,
+                     f"Could not be read ({type(exc).__name__}).")
+        rows.append(r)
+    try:
+        tools = tools_offered(ctx)
+    except Exception:
+        tools = []
+    return {"available": True, "title": TITLE, "detail": DETAIL, "rows": rows,
+            "tools": tools, "tools_title": TOOLS_TITLE,
+            "tools_none": TOOLS_NONE, "everything_else": EVERYTHING_ELSE,
+            "where_label": WHERE_LABEL, "asks_label": ASKS_LABEL,
+            "on": sum(1 for r in rows if r["on"]),
+            "written_by": "code"}
+
+
+def handle_get() -> tuple:
+    return 200, view()
+
+
+def sentence(v: Optional[dict] = None) -> str:
+    """The same list, as a short answer for "what can you reach?"
+    (jarvis_quick.py). Host names only - no account names."""
+    v = v or view()
+    on, off = [], []
+    for r in v["rows"]:
+        if r["on"]:
+            where = r["where"].split(" (as ")[0]
+            asks_ = r["asks"]
+            bit = r["name"]
+            if where:
+                bit += f": {where}"
+            if asks_.startswith("Yes"):
+                bit += ", asking you first every time"
+            elif asks_.startswith("Only when"):
+                bit += ", asking first when private things could slip in"
+            elif asks_.startswith("No - but yes after"):
+                bit += ", asking first after outside text"
+            on.append(bit)
+        else:
+            off.append(r["name"])
+    head = ("Right now Jarvis can reach: " + "; ".join(on) + "." if on else
+            "Right now Jarvis reaches nothing outside this PC.")
+    tail = (" Off or not set up: " + ", ".join(off) + ".") if off else ""
+    return (head + tail + " " + EVERYTHING_ELSE + " This list is written by the PC from "
+            "its settings, not by the AI model - the full list is in Settings, "
+            "\"What Jarvis can reach\" (Brain on the phone).")
