@@ -735,8 +735,8 @@ fn main() {
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",
-            // The HUD's chat box opens the Jarvis bar instead (the chat
-            // audit, 2026-09-28). Sends nothing. The HUD only.
+            // The HUD's "Open the Jarvis bar" button, beside that window's
+            // own chat box (reversed 2026-10-06). Sends nothing. The HUD only.
             "hud_open_bar",
             // Lip-sync: hands the Jarvis bar's mouth track and playback
             // clock to every window's face (voice.rs `face_voice`). Checked
