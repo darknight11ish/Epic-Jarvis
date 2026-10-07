@@ -293,10 +293,19 @@ function Invoke-Native {
     } finally {
         $ErrorActionPreference = $prev
     }
-    if ($LogTo) {
-        try { $out | Out-File -LiteralPath $LogTo -Append -Encoding utf8 } catch { }
+    # A line that came in on stderr is an ErrorRecord, and "$errorRecord" gives
+    # back its TYPE NAME - so npm's and cargo's messages were written into the
+    # log as "System.Management.Automation.RemoteException" followed by a
+    # PowerShell error block. A real run showed it. Its message is what is
+    # wanted, and that is what both the screen and the log get.
+    $text = foreach ($line in $out) {
+        if ($line -is [System.Management.Automation.ErrorRecord]) { "$($line.Exception.Message)" }
+        else { "$line" }
     }
-    foreach ($line in $out) { Write-Host "$line" }
+    if ($LogTo) {
+        try { $text | Out-File -LiteralPath $LogTo -Append -Encoding utf8 } catch { }
+    }
+    foreach ($line in $text) { Write-Host $line }
     return $code
 }
 
@@ -421,12 +430,13 @@ function Get-InstalledDesktop {
     if ($run -and $run.Path -and (Test-Path -LiteralPath $run.Path)) {
         return @{ Exe = "$($run.Path)"; Version = ''; Where = 'the running app' }
     }
-    # The two folders a per-user Tauri install uses. jarvis-desktop.exe under
-    # %LOCALAPPDATA%\JarvisDesktop is what a real install put down; the others
-    # are older or hand-built layouts.
+    # The folders a per-user Tauri install uses. A real install put down
+    # `Jarvis Desktop\jarvis-desktop.exe` and the registry's InstallLocation
+    # found it; these are the fallbacks for a missing or stale registry entry.
     foreach ($cand in @(
-        (Join-Path $env:LOCALAPPDATA 'JarvisDesktop\jarvis-desktop.exe'),
+        (Join-Path $env:LOCALAPPDATA 'Jarvis Desktop\jarvis-desktop.exe'),
         (Join-Path $env:LOCALAPPDATA 'Jarvis Desktop\Jarvis Desktop.exe'),
+        (Join-Path $env:LOCALAPPDATA 'JarvisDesktop\jarvis-desktop.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\Jarvis Desktop\Jarvis Desktop.exe'))) {
         if ($cand -and (Test-Path -LiteralPath $cand)) {
             return @{ Exe = $cand; Version = ''; Where = 'the usual install folder' }
