@@ -238,21 +238,30 @@ backend change fixes).
 
 ## Launch video
 
-[![Jarvis launch video v6: your AI](videos/v6/jarvis-launch-v6.jpg)](videos/v6/jarvis-launch-v6.mp4)
+[![Jarvis launch video v6: your AI](videos/v6/jarvis-launch-v6.jpg)](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v6.mp4)
 
 **Tap the picture to watch v6** (26 seconds, sound on; every line is on
-screen). It opens the video file, and GitHub plays it in the browser. On a
-phone held upright, watch [the 14-second cut](videos/v6/jarvis-launch-v6-vertical.mp4).
+screen). On a phone held upright, watch
+[the 14-second cut](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v6-vertical.mp4).
 
 A real AI model on your own PC, at work: it looks things up and shows its
 sources, checks it's your voice first, stops when you say stop, lets you swap
 its brain from your phone, and still asks first. Every desktop screen is the
 real app, with made-up examples.
 
-Every version is kept in [`videos/`](videos/), with the plan and the project
-needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
-[v2](videos/v2/jarvis-launch-v2.mp4), [v3](videos/v3/jarvis-launch-v3.mp4),
-[v4](videos/v4/jarvis-launch-v4.mp4), [v5](videos/v5/jarvis-launch-v5.mp4).
+The ten video files are kept in the
+[**launch-videos release**](https://github.com/darknight11ish/Epic-Jarvis/releases/tag/launch-videos)
+rather than in the repository: together they were 184 MB, and `videos/` was 67%
+of everything here. Git also keeps a whole new copy on every re-render, so the
+cost only grows. Nothing was lost - each version's plan, composition brief and
+project files stay in [`videos/`](videos/), so any of them can be rendered
+again:
+[v1](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v1.mp4),
+[v2](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v2.mp4),
+[v3](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v3.mp4),
+[v4](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v4.mp4),
+[v5](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v5.mp4),
+[v6](https://github.com/darknight11ish/Epic-Jarvis/releases/download/launch-videos/jarvis-launch-v6.mp4).
 
 ## How it is built
 
