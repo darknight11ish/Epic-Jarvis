@@ -384,9 +384,70 @@ def run(p: Plan, *, run_step: Callable[[PlanStep], dict],
 #   The safety gate: measured, not promised
 # --------------------------------------------------------------------------
 
-def _results_path() -> Path:
+def _config_dir() -> Path:
+    """Where the owner's settings and data live - the same rule every other
+    module in this repository uses. `jarvis_framework`'s own CONFIG_DIR wins
+    when it is importable, because that is what the running backend uses."""
+    import os
+    env = os.environ.get("OPENJARVIS_CONFIG_DIR") or os.environ.get("JARVIS_CONFIG_DIR")
+    if env:
+        return Path(os.path.expanduser(env))
+    if fw is not None:
+        try:
+            return Path(fw.CONFIG_DIR)
+        except Exception:
+            pass
+    return Path(os.path.expanduser("~")) / ".openjarvis"
+
+
+#: The results file's name. One name, so the runner and this reader cannot
+#: disagree about it.
+RESULTS_NAME = "tool_eval_results.json"
+
+#: A one-line override, for a run kept somewhere else entirely.
+RESULTS_ENV = "JARVIS_TOOL_EVAL_RESULTS"
+
+
+def _primary_results_path() -> Path:
+    """Where a future run is expected to leave the file: the config folder.
+    The runner publishes a copy there precisely because the backend and the
+    repository are different folders on the owner's PC."""
+    return _config_dir() / RESULTS_NAME
+
+
+def _candidate_paths() -> list:
+    """Every place a results file may be, best first. `JARVIS_TOOL_EVAL_RESULTS`
+    wins; then the config folder (where the runner now publishes a copy);
+    then a checkout with `tools/` beside the backend folder, in it, or beside
+    this module - the three shapes that existed before."""
+    import os
     here = Path(__file__).resolve().parent
-    return here.parent / "tools" / "tool_eval" / "tool_eval_results.json"
+    out = []
+    env = (os.environ.get(RESULTS_ENV) or "").strip()
+    if env:
+        out.append(Path(os.path.expanduser(env)))
+    out.append(_primary_results_path())
+    out.append(here.parent / "tools" / "tool_eval" / RESULTS_NAME)
+    out.append(here / "tools" / "tool_eval" / RESULTS_NAME)
+    out.append(here / RESULTS_NAME)
+    return out
+
+
+def _results_path() -> Path:
+    """The file to READ: the first candidate that exists. When none does, the
+    place the next run is expected to write (so `enabled()` can name where it
+    looked, not only that something is missing).
+
+    WHY THIS IS MORE THAN ONE PATH. Until 2026-10-06 this was only
+    `here.parent / "tools" / "tool_eval"` - beside the *backend's parent*.
+    The runner writes the file next to itself, inside the repository
+    checkout, and on the owner's PC the backend lives in a different folder
+    (`...\\Open jarvis files\\Desktop program`). So a real, passed run could
+    never satisfy the gate, and `propose_plan` could never turn on."""
+    for p in _candidate_paths():
+        if p.is_file():
+            return p
+    return _primary_results_path()
 
 
 def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = None) -> tuple:
@@ -397,8 +458,11 @@ def enabled(model: str = "jarvis-primary", *, results_path: Optional[Path] = Non
     import json
     path = results_path or _results_path()
     if not path.is_file():
+        # Name the place the next run will publish to, so "not run yet" and
+        # "run somewhere I cannot see" cannot look the same (2026-10-06).
         return False, ("The multi-step safety test has not been run on this PC yet. Run "
-                       "tools/tool_eval/ollama_tool_eval.py, then try again.")
+                       "tools/tool_eval/ollama_tool_eval.py, then try again - it saves "
+                       f"the result as {path}.")
     try:
         doc = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:

@@ -18,6 +18,19 @@ This module keeps one small row per answer:
 and, when the model is switched, one row comparing the old model's speed with
 the new one's (item 12 - the Tripwire speed check, `SwitchSpeed` below).
 
+THE LATENCY STATISTICS (the last section before "What the screens read")
+
+The name of this module is misleading: what it records is how fast answers
+WERE, so the arithmetic over a list of them belongs here too. Three pure
+functions, each taking and returning numbers and nothing else:
+
+    percentiles(values)          the middle (p50) and the bad tail (p95)
+    steady_state(values)         the mean after the cold first answers
+    compare_latency(before, after)   one plain sentence for the Tripwire
+
+Down here rather than in a screen, so both screens and the Tripwire work the
+same numbers out the same way. Nothing about what is recorded changes.
+
 WHAT IT NEVER KEEPS
 
 No words of the conversation. Not the question, not the answer, not a
@@ -48,6 +61,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 import statistics
 import threading
@@ -504,6 +518,177 @@ def on_gpu_percent(model: str) -> Optional[int]:
             if isinstance(pct, int) and not isinstance(pct, bool):
                 return pct
     return None
+
+
+# ==========================================================================
+#   Latency statistics - the middle and the steady state, not the average
+# ==========================================================================
+#
+# Everything above records ONE answer. These three are the arithmetic over a
+# list of them, and they are pure: they take numbers and give numbers back.
+# They are here, next to the recording, because the module's name is
+# misleading - what it keeps is how fast each answer WAS - and a percentile
+# of those answers belongs beside them rather than in whatever screen happens
+# to want one.
+#
+# WHY THE MIDDLE AND NOT THE MEAN: one answer that waited on a tool call, a
+# model load or the owner's approval is minutes long, and a mean has no
+# defence against it. p50 is the answer a person actually experiences; p95 is
+# how bad the bad ones are.
+#
+# WHY A STEADY STATE: an answer after a fresh load pays seconds for the model
+# coming back onto the card. Those first readings are not the model being
+# slow, so a like-for-like comparison drops them rather than averaging them
+# in. `switch(...)`'s own `_side()` already does this by hand for Tripwire
+# probes (samples[1:]); `steady_state()` is the same idea for answer times,
+# and `compare_latency()` is what the Tripwire sentence is built from.
+
+#: Seconds per millisecond - the stored figures are milliseconds, and a
+#: person reading a sentence thinks in seconds above about one.
+_MS_PER_S = 1000.0
+#: How much of a change counts as a change at all. Below this, two lists are
+#: called "about the same" rather than being talked up into a win or a loss.
+COMPARE_TOLERANCE = 0.05
+#: How many readings each side needs before `compare_latency()` will say
+#: anything.
+#: Three, because two lists of two can differ by 40% from noise alone and a
+#: single reading is a coin toss - "never a win from one sample".
+MIN_EACH = 3
+
+
+def _usable(values: Iterable) -> list:
+    """The numbers in `values` that a timing may be worked out from: finite,
+    not booleans, not negative. Anything else is dropped rather than allowed
+    to poison an average.
+
+    Whole numbers count. A list handed in from a screen often holds `700`
+    rather than `700.0`, and a filter that took only floats would quietly
+    throw most of a real list away - which is exactly the kind of silent
+    wrong answer these three functions exist to avoid.
+    """
+    out = []
+    for v in values or []:
+        if isinstance(v, bool) or not isinstance(v, (int, float)):
+            continue
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(f) and f >= 0:
+            out.append(f)
+    return out
+
+
+def percentiles(values: Iterable, *, points=(50, 95)) -> dict:
+    """`{50: p50, 95: p95}` over the usable numbers in `values`.
+
+    Usable means finite and not negative - a `None` from an answer that never
+    reported a first word, a `nan`, an infinity or a `"700"` is dropped, not
+    treated as zero. `{}` when nothing usable is left.
+
+    Linear interpolation between the two nearest readings (the same rule
+    numpy and statistics.quantiles use), so p50 of [400, 600] is 500 and p95
+    of ten readings lands between the ninth and the tenth. A point outside
+    0-100 is clamped, and a nonsense point is skipped rather than raising.
+    """
+    vals = sorted(_usable(values))
+    out: dict = {}
+    if not vals:
+        return out
+    for p in points or ():
+        if isinstance(p, bool) or not isinstance(p, (int, float)):
+            continue
+        if not math.isfinite(float(p)):
+            continue
+        frac = min(100.0, max(0.0, float(p))) / 100.0
+        if len(vals) == 1:
+            val = vals[0]
+        else:
+            pos = frac * (len(vals) - 1)
+            lo = int(math.floor(pos))
+            hi = min(lo + 1, len(vals) - 1)
+            val = vals[lo] + (pos - lo) * (vals[hi] - vals[lo])
+        out[int(round(float(p)))] = round(float(val), 1)
+    return out
+
+
+def steady_state(values: Iterable, *, drop: int = 2) -> Optional[float]:
+    """The mean of `values` after dropping the first `drop` readings.
+
+    The first answers after a model is loaded pay for it coming back onto the
+    graphics card (and for the first prompt being read cold), so they are not
+    the model being slow. Dropping them gives a like-for-like number.
+
+    `None` when nothing usable is left - an empty list, a single reading with
+    the default drop of 2, or `drop` so large it eats the list. The count is
+    taken over the USABLE readings, not the raw list, so a `None` left by an
+    answer that reported no first word is not one of the two dropped and does
+    not push a real reading out of the average. A `drop` of 0 or less means
+    the whole list. Never raises.
+    """
+    vals = _usable(values)
+    try:
+        n = int(drop)
+    except (TypeError, ValueError):
+        n = 2
+    if n > 0:
+        vals = vals[n:]
+    if not vals:
+        return None
+    return round(float(statistics.fmean(vals)), 1)
+
+
+def compare_latency(before: Iterable, after: Iterable) -> str:
+    """One plain sentence for the Tripwire: how two lists of first-word times
+    compare, in seconds.
+
+    NAMED `compare_latency`, NOT `compare` (2026-10-06): this file already has
+    a `compare(old, new, old_model, new_model)` for the switch's own probe
+    summaries, and a second definition under the same name silently won -
+    leaving this one unreachable and its callers crashing on a list. One name,
+    one job.
+
+        "first word: before p50 1.8 s, after p50 1.5 s (faster)"
+
+    The middle (p50) of each list is used, not the mean - one answer that
+    waited on a model load or an approval card would carry a mean anywhere.
+    Lower is better here: a first word that takes less time is faster.
+
+    "not enough numbers to compare yet" until BOTH lists hold `MIN_EACH`
+    (three) usable readings. A comparison from one sample each is a coin toss,
+    so it is refused rather than guessed at - this never claims a win from one
+    sample. A change smaller than `COMPARE_TOLERANCE` (5%) is "about the
+    same", because a tenth of a second either way is noise.
+
+    Always one sentence, never a number on its own: the verdict is spelled
+    out after it in brackets, so no screen has to invent the wording.
+    """
+    b = _usable(before)
+    a = _usable(after)
+    if len(b) < MIN_EACH or len(a) < MIN_EACH:
+        return "not enough numbers to compare yet"
+
+    def p50(xs: list) -> float:
+        pos = 0.5 * (len(xs) - 1)
+        lo = int(math.floor(pos))
+        hi = min(lo + 1, len(xs) - 1)
+        return xs[lo] + (pos - lo) * (xs[hi] - xs[lo])
+
+    was, now = p50(sorted(b)), p50(sorted(a))
+    if not was:
+        # Before was zero, so a ratio is meaningless; give the two figures and
+        # say so, rather than dividing by nothing.
+        return (f"first word: before p50 {was / _MS_PER_S:.1f} s, "
+                f"after p50 {now / _MS_PER_S:.1f} s (no percentage: the earlier figure was zero)")
+    change = (now - was) / was
+    if abs(change) < COMPARE_TOLERANCE:
+        verdict = "about the same"
+    elif change < 0:
+        verdict = "faster"
+    else:
+        verdict = "slower"
+    return (f"first word: before p50 {was / _MS_PER_S:.1f} s, "
+            f"after p50 {now / _MS_PER_S:.1f} s ({verdict})")
 
 
 # ==========================================================================
