@@ -249,6 +249,17 @@ fn main() {
             "get_account_secrets",
             "save_account_secret",
             "forget_account_secret",
+            // Settings' "Accounts", the ADDRESS half (backend/accounts.patch,
+            // jarvis_accounts.py, 2026-10-06): the mail server, its port and
+            // mailbox, the sending server, its port and how the email is
+            // encrypted, the Home Assistant address and the calendar's CalDAV
+            // address - read, and ONE address saved at a time over the PC's
+            // own route, which keeps them in accounts.json beside
+            // web-search.json. ADDRESSES ONLY: the four secrets above are
+            // never carried by these two, and this side refuses any other
+            // name before a request is even built. Settings window only.
+            "get_account_addresses",
+            "save_account_address",
             // Settings' "What Jarvis can reach" (backend/reach.patch): every
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.

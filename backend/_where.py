@@ -185,6 +185,13 @@ SHIPPED = (
     "jarvis_inbox_tidy.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
+    # the ADDRESSES of the owner's accounts - the mail server, its port and
+    # mailbox, the sending server, its port and how the email is encrypted, the
+    # Home Assistant address and the calendar's CalDAV address - in
+    # accounts.json beside web-search.json (accounts.patch, the owner's
+    # decision of 2026-10-06). ADDRESSES ONLY: the four secrets stay in
+    # Windows Credential Manager and this file refuses to carry one.
+    "jarvis_accounts.py",
     # Stop everything (stop-all.patch)
     "jarvis_stop_all.py",
     # "tell me when ..." - a kind of job on the one scheduler (not a tool)
