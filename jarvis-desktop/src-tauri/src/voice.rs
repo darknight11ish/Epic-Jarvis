@@ -746,11 +746,12 @@ pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// The HUD's chat box: bring up the Jarvis bar with its box ready to type in
-/// (the owner's decision of 2026-09-28, "Chats, after the chat audit": the PC
-/// has ONE chat box - the Jarvis bar, with New conversation, Temporary chat,
-/// "Used in this answer" and the crisis panel - so the HUD's own box opens it
-/// instead of chatting on its own). Sends nothing and records nothing: the
+/// The HUD's "Open the Jarvis bar" button: bring the Jarvis bar up with its
+/// box ready to type in, beside the HUD's own chat box (the owner's decision
+/// of 2026-10-06, reversing the 2026-09-28 one-box rule). That window's own
+/// box chats as itself, filed in History as HUD; it deliberately has no
+/// Temporary chat, no New conversation, no "Used in this answer" and no crisis
+/// panel, which is what the bar is for. Sends nothing and records nothing: the
 /// worst a page can do with it is open a window, like the mic button.
 #[tauri::command]
 pub fn hud_open_bar(app: AppHandle) -> Result<(), String> {
