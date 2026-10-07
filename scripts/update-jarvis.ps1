@@ -144,6 +144,10 @@ $script:InstallLine = $null
 # the end of the run - by Finish-Run, which is the one place every ending goes
 # through, because the copy is still being read while the backend is patched.
 $script:TempSource = $null
+# A file the children's own output is appended to. A transcript does not capture
+# a child process's output, so without this a failing npm or cargo left no trace
+# in the log the owner is asked to send.
+$script:ChildLog = $null
 # What happened to the desktop half: 'done', 'skipped', 'failed' or 'none'.
 # The closing banner is built from this rather than from what was asked for, so
 # a run that skipped or failed the app can never print "the desktop app is up to
@@ -232,6 +236,12 @@ function Finish-Run {
         Write-Host "Log of this run (this script's own output; apply-patches.ps1 keeps its" -ForegroundColor Gray
         Write-Host "own log of what it changed):" -ForegroundColor Gray
         Write-Host "    $($script:RunLog)" -ForegroundColor Gray
+        # A transcript does not capture a child process's output, so npm, cargo,
+        # git and the patcher write theirs here as well.
+        if ($script:ChildLog -and (Test-Path -LiteralPath $script:ChildLog)) {
+            Write-Host "What the programs it ran printed (npm, cargo, git):" -ForegroundColor Gray
+            Write-Host "    $($script:ChildLog)" -ForegroundColor Gray
+        }
     }
     # The throwaway source copy, if this run made one. Silently best-effort: a
     # leftover folder in %TEMP% is not worth failing a finished update over.
@@ -254,22 +264,40 @@ trap {
 
 # --- small helpers -------------------------------------------------------------
 
-# Run a program and give back its exit code, with its output left on screen.
+# Run a program and give back its exit code, with its output on screen.
 #
 # Native programs write to stderr when they fail, and a run with
 # $ErrorActionPreference='Stop' turns the first stderr line into a terminating
 # error that hides the real message (the trap CLAUDE.md records). So the
 # preference is loosened around the call and put back afterwards.
+#
+# THE CHILD'S OUTPUT IS CAPTURED AND PRINTED, NEVER RETURNED. This used to be
+# `& $Exe @Arguments; return $LASTEXITCODE`, which hands the caller the child's
+# output AND the exit code as one array - and `$code -ne 0` on an array is TRUE
+# whenever the array holds anything, so a child that PRINTED something was
+# always read as a failure. A real first install found it: npm ci finished with
+# "exit 0" in npm's own log and this script reported "npm ci failed", then
+# skipped the build. Anything that prints while succeeding - npm, cargo, git -
+# hit the same trap.
+#
+# -LogTo appends the output to a file as well. That exists because a transcript
+# does NOT capture a child process's output (measured, not assumed): without it
+# a failing npm left no trace at all in the log the owner is asked to send.
 function Invoke-Native {
-    param([string] $Exe, [string[]] $Arguments)
+    param([string] $Exe, [string[]] $Arguments, [string] $LogTo = '')
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try {
-        & $Exe @Arguments
-        return $LASTEXITCODE
+        $out = @(& $Exe @Arguments 2>&1)
+        $code = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $prev
     }
+    if ($LogTo) {
+        try { $out | Out-File -LiteralPath $LogTo -Append -Encoding utf8 } catch { }
+    }
+    foreach ($line in $out) { Write-Host "$line" }
+    return $code
 }
 
 # One value out of the registry, read fresh rather than from this process.
@@ -348,11 +376,19 @@ function Get-RunningBackend($Backend) {
     return $found
 }
 
-# The desktop app, if it is running, and what it is called on this PC.
+# The desktop app, if it is running.
+#
+# THREE NAMES, because a real first install showed the one-name version was
+# wrong: tauri.conf.json calls the product "Jarvis Desktop", but the file the
+# installer puts down is jarvis-desktop.exe, so the process is `jarvis-desktop`.
+# Looking only for 'Jarvis Desktop' meant a running app was never seen - so this
+# script would never close it, and never knew to start it again either.
 function Get-DesktopApp {
-    $app = @(Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -eq 'Jarvis Desktop' })
-    if ($app.Count -eq 0) { return $null }
-    return $app[0]
+    foreach ($name in @('Jarvis Desktop', 'jarvis-desktop', 'JarvisDesktop')) {
+        $found = @(Get-Process -Name $name -ErrorAction SilentlyContinue)
+        if ($found.Count -gt 0) { return $found[0] }
+    }
+    return $null
 }
 
 # Where the desktop app is installed, and which version, from the entry the
@@ -371,8 +407,10 @@ function Get-InstalledDesktop {
             $exe = $null
             if ($v.DisplayIcon) { $exe = ("$($v.DisplayIcon)" -replace ',\d+$', '').Trim('"') }
             if (-not $exe -and $v.InstallLocation) {
-                $cand = Join-Path "$($v.InstallLocation)" 'Jarvis Desktop.exe'
-                if (Test-Path -LiteralPath $cand) { $exe = $cand }
+                foreach ($leaf in @('jarvis-desktop.exe', 'Jarvis Desktop.exe')) {
+                    $cand = Join-Path "$($v.InstallLocation)" $leaf
+                    if (Test-Path -LiteralPath $cand) { $exe = $cand; break }
+                }
             }
             if ($exe -and (Test-Path -LiteralPath $exe)) {
                 return @{ Exe = $exe; Version = "$($v.DisplayVersion)"; Where = 'the installed app' }
@@ -383,7 +421,11 @@ function Get-InstalledDesktop {
     if ($run -and $run.Path -and (Test-Path -LiteralPath $run.Path)) {
         return @{ Exe = "$($run.Path)"; Version = ''; Where = 'the running app' }
     }
+    # The two folders a per-user Tauri install uses. jarvis-desktop.exe under
+    # %LOCALAPPDATA%\JarvisDesktop is what a real install put down; the others
+    # are older or hand-built layouts.
     foreach ($cand in @(
+        (Join-Path $env:LOCALAPPDATA 'JarvisDesktop\jarvis-desktop.exe'),
         (Join-Path $env:LOCALAPPDATA 'Jarvis Desktop\Jarvis Desktop.exe'),
         (Join-Path $env:LOCALAPPDATA 'Programs\Jarvis Desktop\Jarvis Desktop.exe'))) {
         if ($cand -and (Test-Path -LiteralPath $cand)) {
@@ -635,12 +677,12 @@ function Build-AndInstallDesktop($Repo, [switch] $DryRun) {
     Push-Location -LiteralPath $dir
     try {
         Info "running npm ci (a minute or two the first time)"
-        if ((Invoke-Native 'npm' @('ci', '--no-audit', '--no-fund')) -ne 0) {
+        if ((Invoke-Native 'npm' @('ci', '--no-audit', '--no-fund') -LogTo $script:ChildLog) -ne 0) {
             Bad "npm ci failed - the app was not rebuilt"
             return $false
         }
         Info "building the app (several minutes; you can leave this window alone)"
-        if ((Invoke-Native 'npm' @('run', 'tauri', 'build')) -ne 0) {
+        if ((Invoke-Native 'npm' @('run', 'tauri', 'build') -LogTo $script:ChildLog) -ne 0) {
             Bad "the build failed - the app was not replaced"
             return $false
         }
@@ -757,6 +799,7 @@ if (-not $Print) {
         $logDir = Join-Path $BackendPath '_jarvis-logs'
         New-Item -ItemType Directory -Force -Path $logDir | Out-Null
         $script:RunLog = Join-Path $logDir "update-jarvis-$Stamp.txt"
+        $script:ChildLog = Join-Path $logDir "update-jarvis-$Stamp-children.txt"
         Start-Transcript -LiteralPath $script:RunLog -Append | Out-Null
     } catch {
         $script:RunLog = $null
@@ -778,11 +821,24 @@ Step 2 $Total 'Getting the newest code'
 $SourceRoot = $RepoRoot
 $isGit = Test-Path -LiteralPath (Join-Path $RepoRoot '.git')
 if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
-    if ($Print) {
+    # Is there anywhere to pull FROM? A branch made on this PC - which is what a
+    # first install is run from - has no upstream, and `git pull` then answers
+    # with three lines about tracking information. A real first install showed
+    # exactly that, and it reads like a failure. Asked about first, so the plain
+    # answer replaces git's.
+    $upstream = ''
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try { $up = @(& git -C $RepoRoot rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>$null) } finally { $ErrorActionPreference = $prevEap }
+    if ($up -and $up.Count -gt 0) { $upstream = "$($up[0])".Trim() }
+    if (-not $upstream) {
+        Info "this branch has no remote to pull from (it was made on this PC), so the"
+        Info "code already in this folder is used"
+    } elseif ($Print) {
         Info "would run: git pull (in $RepoRoot)"
     } else {
         Info "git pull (the code in this folder is what patches your backend)"
-        $code = Invoke-Native 'git' @('-C', $RepoRoot, 'pull', '--ff-only')
+        $code = Invoke-Native 'git' @('-C', $RepoRoot, 'pull', '--ff-only') -LogTo $script:ChildLog
         if ($code -ne 0) {
             Warn "git pull did not finish cleanly, so the code already in this folder is used"
             Info "that is what happens on a branch with local changes, or with no network"
@@ -889,8 +945,14 @@ if ($Print) {
         Say ""
         Say "  Jarvis has to be closed while the update is applied - it holds the files" Yellow
         Say "  the patches change. Please close it now:" Yellow
-        if ($app) { Say "      desktop app: right-click its tray icon, then 'Quit Jarvis'" Yellow }
-        if ($running.Count -gt 0) { Say "      or the PowerShell window running jarvis_hud.py" Yellow }
+        # What was FOUND, named one by one. The old wording printed the desktop
+        # app line only when the app process existed, so a run that found only a
+        # left-behind python window printed "Please close it now:" followed by a
+        # bare line starting with "or" - which reads like a missing sentence.
+        if ($app) { Say "      the desktop app: right-click its tray icon, then 'Quit Jarvis'" Yellow }
+        foreach ($r in $running) {
+            Say "      $($r.What) - close the window that started it, or end that process" Yellow
+        }
         Say "  Waiting up to 90 seconds for that..." Yellow
         $deadline = (Get-Date).AddSeconds(90)
         while ((Get-Date) -lt $deadline) {
@@ -901,6 +963,8 @@ if ($Print) {
         }
         if ($app -or $running.Count -gt 0) {
             Bad "Jarvis is still running, so the update has not started."
+            if ($app) { Say "          the desktop app is still running" Red }
+            foreach ($r in $running) { Say "          $($r.What)" Red }
             Say "  Close it, then run this command again. Or add  -Force  and this will" Cyan
             Say "  close it for you (anything it was doing at that moment is cut off)." Cyan
             Add-Problem 'Jarvis was still running, so the update did not start.'
@@ -945,7 +1009,7 @@ if ($SkipPatches) {
     # the closing screen came to say "Nothing on your PC was changed" about a
     # backend that had just been patched.
     $script:Changed = $true
-    $code = Invoke-Native 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $apply) + $applyArgs)
+    $code = Invoke-Native 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $apply) + $applyArgs) -LogTo $script:ChildLog
     Say ""
     if ($code -ne 0) {
         # The desktop app is NOT touched: it is a client of this backend, and

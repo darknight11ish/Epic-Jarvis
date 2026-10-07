@@ -1079,8 +1079,13 @@ jobs:
             if (-not $Cond) { throw "FAILED: $Why" }
             "  ok    $Why"
           }
+          # A stand-in for one of the scripts the two new ones call. It PRINTS
+          # something on purpose: a child that prints is what the exit-code bug
+          # below needed in order to show itself, so these end-to-end cases now
+          # fail too if it ever comes back.
           function Write-Stub([string] $Path, [string] $Label) {
             $body = "`$ErrorActionPreference = 'Continue'`n" +
+                    "Write-Output 'the $Label stand-in ran'`n" +
                     "Add-Content -LiteralPath (Join-Path `$PSScriptRoot 'stub-calls.txt') -Value ('$Label|' + (`$args -join ' '))`n" +
                     "exit 0`n"
             Set-Content -LiteralPath $Path -Value $body -Encoding ASCII
@@ -1269,6 +1274,26 @@ jobs:
           Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaC) -eq $false) 'a commit that exists here but is NOT in this branch means: the release is ahead, download it'
           Assert-True ((Test-LocalAtLeastAsNew $gitRepo '0123456789abcdef0123456789abcdef01234567') -eq $false) 'a commit this folder has never seen means: do not claim the folder is newer'
           Assert-True ((Test-LocalAtLeastAsNew $notARepo $shaB) -eq $false) 'a folder that is not a git checkout cannot be newer than a release'
+
+          # 8. The helper that reads a child program's exit code. THIS IS THE
+          #    CHECK FOR A BUG A REAL FIRST INSTALL FOUND: it used to be
+          #    `& $Exe @Arguments; return $LASTEXITCODE`, which hands the caller
+          #    the child's OUTPUT and the exit code as ONE ARRAY - and
+          #    `$code -ne 0` on an array is true whenever it holds anything. So a
+          #    successful npm ci, which prints "added 2 packages", was reported
+          #    as "npm ci failed" and the desktop app was never built. npm's own
+          #    log said "exit 0" the whole time. Everything below fails if the
+          #    output is ever returned again.
+          $inv = [regex]::Match((Get-Content -LiteralPath $update -Raw), '(?s)function Invoke-Native \{.*?\n\}')
+          if (-not $inv.Success) { throw "could not find Invoke-Native in update-jarvis.ps1" }
+          Invoke-Expression $inv.Value
+          $quiet = Invoke-Native 'cmd' @('/c', 'exit /b 0') 2>$null
+          $loud = Invoke-Native 'cmd' @('/c', 'echo a child that prints & exit /b 0') 2>$null
+          $loudBad = Invoke-Native 'cmd' @('/c', 'echo a child that fails & exit /b 3') 2>$null
+          Assert-True ($quiet -is [int] -and $quiet -eq 0) 'a silent child that exits 0 is read as success'
+          Assert-True ($loud -is [int]) 'a child that PRINTS returns one exit code, not its output'
+          Assert-True ($loud -eq 0) 'a child that prints and exits 0 is read as SUCCESS (the npm ci bug)'
+          Assert-True ($loudBad -eq 3) 'a child that prints and fails is read as its own exit code'
           # The runner takes the LAST native exit code of the step.
           exit 0
 
