@@ -535,6 +535,27 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # devices.patch's register_approval_key lines. The
                                 # later_rewriting() condition after this set is what
                                 # really proves that half; this set is only the shortlist.
+                                # gate-risk-rows.patch (2026-10-06) rewrites the
+                                # stale duplicate rows of jarvis_gate.py's _RISK
+                                # table, in the part of the table above
+                                # devices.patch's register_approval_key risk line,
+                                # and leaves that line alone.
+                                "gate-risk-rows.patch",
+                                # chatbot-limits.patch (2026-10-06) adds the two
+                                # api-limit actions to the same jarvis_gate.py
+                                # lists readpage.patch writes. It puts no _RISK
+                                # row on devices.patch's register_approval_key
+                                # line and does not change the line itself; the
+                                # later_rewriting() condition below is what
+                                # proves that half.
+                                "chatbot-limits.patch",
+                                # chatbot-limits-hud.patch (2026-10-06) is the
+                                # install-block half of the same change: ONE
+                                # block in jarvis_hud.py right after
+                                # quiz-cloud.patch's own. It touches
+                                # jarvis_gate.py not at all, so it adds no list
+                                # entry and no risk row.
+                                "chatbot-limits-hud.patch",
                                 "readpage.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

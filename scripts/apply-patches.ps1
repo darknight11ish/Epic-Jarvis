@@ -1044,23 +1044,26 @@ $PATCHES = @(
     # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'quiz-cloud.patch'
-    # "Chatbot money limits", set from the app (the owner's approval of
+    # "Chatbot money limits" - the INSTALL BLOCK half (the owner's approval of
     # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
-    # section 87.4.1): GET /api/chatbot/money reads every API service's monthly
-    # limit, what is spent, what is left and its model's price WITH where that
-    # number came from; POST sets ONE change. Raising a limit is a loosening, so
-    # it raises ONE approval card (`raise_api_limit`) plus Windows Hello on the
-    # PC, and is refused from any other device. Lowering one, removing one,
-    # correcting a price and resetting one tighten or correct, so they need no
-    # card - the reason there are TWO action names, since the owner-check
-    # attaches Windows Hello to the action and not to the direction. TWO files:
-    # in jarvis_gate.py the two names join the "acts only on tier ask" set and
-    # get their _RISK lines (both right after quiz-cloud.patch's own, so it goes
-    # after it); in jarvis_hud.py ONE install block after quiz-cloud.patch's own.
+    # section 87.4.1). ONE block in jarvis_hud.py, wrapped round Handler right
+    # after quiz-cloud.patch's own, before anything listens.
+    #
+    # This is a SEPARATE PATCH from chatbot-limits.patch below, and that is
+    # load-bearing rather than tidiness: the two halves need different positions
+    # in this list. This hunk's context is quiz-cloud.patch's own printed lines,
+    # so it must run straight after quiz-cloud; put later, the tutorials.patch
+    # and readpage.patch blocks land between its anchor and that context, so it
+    # is materialised at the END of the file instead - which duplicates the
+    # `_loopback_companion(bind, HUD_PORT, Handler)` line it uses as trailing
+    # context (test_installed_stand_in.py, test_bind_wildcard.py,
+    # test_loopback_too.py). The gate half must run after readpage.patch, for
+    # its own reason. One patch cannot sit in two places, so there are two.
+    #
     # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
     # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
     # banner says so and the route is simply not there.
-    'chatbot-limits.patch'
+    'chatbot-limits-hud.patch'
     # The gate renamed an action on its way out (2026-10-03). For the 58
     # _TOOL_ACTIONS entries whose value is a TIER literal ("calculator": "auto"),
     # action_for_tool() returned f"tool:{name}" as the action name. That string
@@ -1097,6 +1100,40 @@ $PATCHES = @(
     # It needs jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below);
     # without them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
+    # "Chatbot money limits" - the GATE half (the owner's approval of
+    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
+    # section 87.4.1). Raising a limit is a loosening, so it raises ONE
+    # approval card (`raise_api_limit`) plus Windows Hello on the PC, and is
+    # refused from any other device. Lowering one, removing one, correcting a
+    # price and resetting one tighten or correct, so they need no card - the
+    # reason there are TWO action names, since the owner-check attaches Windows
+    # Hello to the action and not to the direction. TWO hunks in jarvis_gate.py:
+    # the names join the "acts only on tier ask" set and get their _RISK lines,
+    # both right after quiz-cloud.patch's own.
+    #
+    # It sits HERE, after readpage.patch, and that position is load-bearing:
+    # written straight after quiz-cloud.patch it stopped readpage.patch applying
+    # at all, because readpage's own jarvis_gate.py hunks anchor on the same two
+    # lists these two names join. test_readpage.py and
+    # test_installed_stand_in.py are what prove the order is right. The install
+    # block half is chatbot-limits-hud.patch above, which must stay where it is.
+    #
+    # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
+    # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
+    # banner says so and the route is simply not there.
+    'chatbot-limits.patch'
+    # The gate's risk table held draft_email TWICE: the owner's own original
+    # line ("a draft is not a sent message", rated local) and draft-email.patch's
+    # row ("saves the draft ... to your own Drafts folder", rated outbound -
+    # which is right, because saving a draft goes to the mail server). Python
+    # keeps the LAST of two equal keys, so outbound won today; but only by luck
+    # of ordering, and the natural cleanup - deleting the later line - would
+    # have made an email draft swipe-approvable with nobody noticing, because
+    # the two had already collapsed into one key in the file. This removes the
+    # stale original line, so there is one row, the right one, on any reading.
+    # Tested by test_gate_risk_rows.py; the apply itself is proven by this
+    # script's dry run, as for every patch here.
+    'gate-risk-rows.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1195,6 +1232,8 @@ $SHIPPED = @(
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
     'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
     'jarvis_inbox_tidy.py'       # tool "tidy_inbox": archive, star, mark as read or move to Trash, ONE card listing every email, 10 minutes to Undo, no permanent delete; inbox-tidy.patch
+    'jarvis_energy.py'           # what one answer cost the card (jarvis_agent.py records a row at the end of a turn; off by default)
+    'jarvis_injection.py'        # the "sneaky instruction" table (jarvis_agent._TurnWatch.took_in turns a hit into a card flag; advisory only)
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch

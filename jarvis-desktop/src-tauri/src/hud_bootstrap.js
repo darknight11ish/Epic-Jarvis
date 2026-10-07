@@ -1011,16 +1011,28 @@
   }
 
   /* ---------------------------------------------------------------- *
-   * One chat box on the PC (the owner's decision of 2026-09-28, "Chats,
-   * after the chat audit"). The HUD's own box chatted on its own: no New
-   * conversation, no Temporary chat, no "Used in this answer", no crisis
-   * panel - but it was recorded in History all the same. So the box and
-   * its Send are hidden, and in their place one button opens the Jarvis
-   * bar ready to type (`hud_open_bar`, voice.rs - it shows a window and
-   * sends nothing). The mic button stays: it already opens the bar.
+   * The HUD's own chat box, with one button beside it
+   *
+   * The owner's decision of 2026-09-28 ("Chats, after the chat audit") was
+   * that the HUD's box should open the Jarvis bar instead, so the PC had
+   * one chat box; this hid the box and its Send and put a button in their
+   * place. The owner has since reversed that, and the box and its Send are
+   * back: they work as the page always made them, and a button beside the
+   * box still opens the Jarvis bar ready to type (`hud_open_bar`, voice.rs
+   * - it shows a window and sends nothing). The mic button stays: it
+   * already opens the bar.
+   *
+   * Why the reversal was possible: what was held against the box is now a
+   * KNOWN LIMITATION of this window, not a reason to hide it. It is its
+   * own conversation, with its own id, and it is filed in History as HUD
+   * (jarvis_hud.html sends `device: "hud"` and a conversation id of its
+   * own). What it does NOT have, and the Jarvis bar does: no Temporary
+   * chat, no New conversation, no "Used in this answer", no crisis panel.
    *
    * Only with the shell (window.__TAURI__): the page served on its own, in
-   * a plain browser, has no Jarvis bar to open, and keeps its box.
+   * a plain browser, has no Jarvis bar to open. There the button is not
+   * added and the box was never hidden - the page's own composer, exactly
+   * as it ships.
    * ---------------------------------------------------------------- */
   var OPEN_BAR = "Open the Jarvis bar";
   var OPEN_BAR_SAID = "Chat with Jarvis in the Jarvis bar - it opens now.";
@@ -1043,33 +1055,32 @@
   }
   window.__jarvisOpenBar = openBarFromHud;
 
-  function oneChatBox() {
+  /* The HUD's box and Send stay exactly as the page made them: visible, in
+   * the tab order, and working. This only adds the button that opens the
+   * Jarvis bar, before the box. */
+  function hudChatBox() {
     var tauri = window.__TAURI__;
     if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
     var input = document.getElementById("input");
     var send = document.getElementById("send");
     if (!input || !send || document.getElementById("hud-open-bar")) return;
-    input.hidden = true;
-    input.setAttribute("aria-hidden", "true");
-    input.tabIndex = -1;
-    send.hidden = true;
-    send.tabIndex = -1;
     var open = document.createElement("button");
     open.type = "button";
     open.id = "hud-open-bar";
     open.className = "act primary hud-open-bar";
     open.textContent = OPEN_BAR;
     // The page's `.act` is a square icon button; this one carries words.
+    // hud-link.css could not be used for it: that file has rules for the
+    // mark and the link line only, and no width rule for this id.
     open.style.width = "auto";
-    open.style.flex = "1";
     open.style.padding = "0 14px";
     open.title = OPEN_BAR_SAID;
     open.addEventListener("click", openBarFromHud);
     input.parentNode.insertBefore(open, input);
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", oneChatBox, { once: true });
+    document.addEventListener("DOMContentLoaded", hudChatBox, { once: true });
   } else {
-    oneChatBox();
+    hudChatBox();
   }
 })();

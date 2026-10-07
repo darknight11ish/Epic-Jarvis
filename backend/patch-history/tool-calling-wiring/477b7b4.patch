@@ -1,0 +1,166 @@
+--- a/jarvis_hud.py	2026-09-18 01:41:25.358559185 +0000
++++ b/jarvis_hud.py	2026-09-18 01:40:38.019309277 +0000
+@@ -2724,10 +2724,31 @@
+         lane = decision.lane
+         upstream = None
+         first_error = None
+-        # One hop per lane plus one for local: three cloud lanes all
+-        # rate-limiting used to exhaust range(3) and leave upstream None,
+-        # which surfaced as a 503 blaming Jarvis while the header said local.
+-        for _hop in range(len(lanes) + 2):
++        # Tools only on the local lane, never on a cloud one - a tool result
++        # (a file's contents, a shell command's output, what is on screen)
++        # handed to a cloud provider is exactly the leak rule 1 forbids, and
++        # jarvis_agent.py's own docstring says the same thing. `[tools]
++        # enabled = [...]` is the same config key collect_tools() and
++        # /api/status already read, so turning tools off here is the same
++        # switch that already existed, not a new one.
++        use_tools = (lane == local_model
++                     and bool((cfg.get("tools") or {}).get("enabled")))
++        # The degrade loop below opens its own connection to negotiate a
++        # lane; jarvis_agent.run_local_turn makes its own requests entirely,
++        # so running both would mean two live completions for one turn. Not
++        # run at all when tools are in play - which also means a tool-
++        # enabled turn does not yet retry or step down on a 429/500 the way
++        # a plain one does. Local Ollama rate-limiting itself is not a
++        # pattern this project has hit; if that changes, this is the gap to
++        # close, not a silent one.
++        # `()` when tools are in play - re-indenting the whole loop body for
++        # one guard would turn a one-line change into fifty, in the exact
++        # function whose comments already describe two privacy bugs found in
++        # this loop before. A skipped loop is `upstream = None`,
++        # `first_error = None`, unchanged from just above - the same state
++        # the `try:` block below already branches on.
++        _degrade_hops = () if use_tools else range(len(lanes) + 2)
++        for _hop in _degrade_hops:
+             try:
+                 upstream = _open(lane)
+                 break
+@@ -2812,38 +2833,105 @@
+         try:
+             if first_error is not None:
+                 raise first_error
+-            with upstream:
++            if use_tools:
++                # No `upstream` exists in this branch - jarvis_agent makes
++                # its own request(s) to Ollama entirely on its own, so there
++                # is no single response object to read a Content-Type from.
+                 self.send_response(200)
+-                self.send_header("Content-Type",
+-                                 upstream.headers.get("Content-Type", "application/json"))
++                self.send_header("Content-Type", "application/json")
+                 self.send_header("X-Jarvis-Route", json.dumps(route_header))
+                 self.send_header("Access-Control-Expose-Headers", "X-Jarvis-Route")
+                 self.send_header("Cache-Control", "no-store")
+                 self.end_headers()
+                 self._headers_sent = True
+-                # From here the model is producing words. Every other client -
+-                # a tray icon, a second window, the phone - learns that from
+-                # the event bus and from nowhere else, so if this is not said
+-                # here it is not known anywhere.
+                 _activity("speaking")
+                 try:
+-                    while True:
+-                        chunk = upstream.read(1024)
+-                        if not chunk:
+-                            break
+-                        self.wfile.write(chunk)
+-                        self.wfile.flush()
++                    import jarvis_agent
++                    jarvis_agent.run_local_turn(
++                        messages, lane, ollama_url=OLLAMA_URL,
++                        enabled_tools=set((cfg.get("tools") or {}).get("enabled") or []),
++                        stream_out=lambda chunk: (self.wfile.write(chunk),
++                                                   self.wfile.flush()),
++                        # The same doorbell every other capability uses to
++                        # say what it is doing while it does it - see
++                        # jarvis_ui_control.py/jarvis_android_control.py's
++                        # own `announce` parameter, built for this exact
++                        # hook.
++                        announce=lambda text: _activity("working", text))
+                 except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
+-                    # The phone dropped off mid-stream. Headers are already
+-                    # sent, so there is nothing to report down a socket that
+-                    # no longer exists. The `with` does close upstream on the
+-                    # way out - but a graceful close on a half-read response
+-                    # can sit there draining, and meanwhile the GPU is still
+-                    # generating tokens nobody will ever read. Reset the
+-                    # connection instead, so Ollama sees the peer vanish and
+-                    # cancels the generation immediately.
+-                    _abort(upstream)
++                    # Unlike the plain-relay branch below, there is no
++                    # single `upstream` left open to abort - jarvis_agent's
++                    # own request(s) may still finish server-side with
++                    # nobody reading the result. Accepted for this first
++                    # pass; the plain-relay branch's cancellation trick does
++                    # not translate directly to a multi-request loop.
++                    return
++                except Exception as exc:
++                    # Anything else - Ollama refusing the connection, a bug
++                    # in the tool loop itself - used to reach the generic
++                    # `except Exception` far below and try to send a 503.
++                    # That message never arrived: headers here are already
++                    # committed (line above), and `_send()` sees
++                    # `_headers_sent` and just cuts the connection, so the
++                    # client learned nothing happened. main.js already
++                    # understands a mid-stream `{"error": ...}` line
++                    # (`if (chunk.error) showError(...)`) - the same shape
++                    # jarvis_router.py's own degrade path relies on - so
++                    # write one instead of leaving the client to guess.
++                    #
++                    # The message used to flatly claim "Ollama is not
++                    # answering" for this whole except, but this catches a
++                    # bug in the tool loop itself just as often as it
++                    # catches Ollama actually being down - and the two need
++                    # different fixes. Naming the real exception first, and
++                    # offering the Ollama-restart step as one possibility
++                    # rather than the diagnosis, means a bug in jarvis_agent
++                    # doesn't send the owner to restart a service that was
++                    # never the problem.
++                    message = (
++                        f"Something went wrong while using a tool: "
++                        f"{type(exc).__name__}: {exc}. If Ollama itself is "
++                        f"not running on {OLLAMA_URL}, start it with "
++                        f"`ollama serve`.")
++                    try:
++                        self.wfile.write(json.dumps({"error": message}).encode("utf-8") + b"\n")
++                        self.wfile.flush()
++                    except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
++                        pass
+                     return
++            else:
++                with upstream:
++                    self.send_response(200)
++                    self.send_header("Content-Type",
++                                     upstream.headers.get("Content-Type", "application/json"))
++                    self.send_header("X-Jarvis-Route", json.dumps(route_header))
++                    self.send_header("Access-Control-Expose-Headers", "X-Jarvis-Route")
++                    self.send_header("Cache-Control", "no-store")
++                    self.end_headers()
++                    self._headers_sent = True
++                    # From here the model is producing words. Every other client -
++                    # a tray icon, a second window, the phone - learns that from
++                    # the event bus and from nowhere else, so if this is not said
++                    # here it is not known anywhere.
++                    _activity("speaking")
++                    try:
++                        while True:
++                            chunk = upstream.read(1024)
++                            if not chunk:
++                                break
++                            self.wfile.write(chunk)
++                            self.wfile.flush()
++                    except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):
++                        # The phone dropped off mid-stream. Headers are already
++                        # sent, so there is nothing to report down a socket that
++                        # no longer exists. The `with` does close upstream on the
++                        # way out - but a graceful close on a half-read response
++                        # can sit there draining, and meanwhile the GPU is still
++                        # generating tokens nobody will ever read. Reset the
++                        # connection instead, so Ollama sees the peer vanish and
++                        # cancels the generation immediately.
++                        _abort(upstream)
++                        return
+         except urllib.error.HTTPError as exc:
+             self._send(exc.code, {
+                 "error": exc.read().decode("utf-8", "replace")[:600],

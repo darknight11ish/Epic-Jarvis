@@ -2088,7 +2088,7 @@ backend routes, in both directions; the rest are listed here only.
 | The animal on the floating face: its sleeping Zs, "Keep the animal still", the serious pose (2026-09-28) and the sun, moon and weather behind it (2026-09-28) | Written with the features. The desktop's floating face draws the real animal (`faces.html` in display mode), so it gets all three, like every other desktop face. The phone's "Floating Jarvis" is the app's own icon with a status dot (`AvatarOverlayService.kt`), not the animal - there is no animal there to sleep, keep still or go serious, or to put a sky behind. On the phone the Zs and Still reach every place the animal is drawn (Home and the Appearance preview), and the serious pose reaches Home (the preview shows the state being edited, not what Jarvis is doing). The same holds for the animal behaviour switches of "Animal options" (2026-09-28; shared by both apps, `/api/animal`): they reach wherever each app draws the animal, which on the phone is not "Floating Jarvis". |
 | The fade when switching faces to or from Tokamak or Membrane (the face switch's goodbye and hello, 2026-09-28) | Written 2026-09-28, after the animal-behaviours audit. On the desktop every face, the two mesh faces included, is drawn into the one canvas whose opacity carries the fade (`faces.html`, display mode's `switchFace`), so they fade like any face that is not a character. On the phone those two draw on their own GL surface (`GLFaceSurface`), which Compose's layer alpha cannot fade: leaving, a mesh face goes at once instead of sitting still for a second (`FaceView`'s switch skips its goodbye), and arriving it shows at once. Every other face - the animals and the robot included - says goodbye and hello the same way on both apps. |
 | Typing the town for "Show the sun and moon behind the face" (`POST /api/sky {"place"}`; the owner's decision of 2026-09-28: "a town the owner types once on the PC (the phone gets it from the PC)") | Written with the feature. The backend refuses a town from any device but this PC (`jarvis_owner_check.from_this_pc`), so a stolen token cannot move where Jarvis thinks the owner lives. Everything else is on both apps, in the PC's words (`/api/sky`, `ported` in `tools/check_parity.py`): the switch, which town is set and today's rise and set times (each app's own maths), "Forget my town" (at once, from either), and the weather source (Open-Meteo's card answered on either). |
-| A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
+| A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control. The desktop's temporary chat is in the Jarvis bar, where its chat is. Both apps have the feature (JARVIS-API §4). Since the owner's decision of 2026-10-06 the HUD's own chat box is shown and usable again, and a button beside it still opens the Jarvis bar; the box's turns are their own conversation, filed in History as HUD. |
 | "Chat history…" in the tray, and the Jarvis bar's "Esc: end chat" with "Chat ended. Kept chats are in Brain > History." (the chat audit, 2026-09-28) | A tray menu and an Esc key are the PC's. The phone's way to History is "Earlier chats" on Home (next to Temporary chat), which the bar has too; the phone's chat ends on New conversation, a temporary chat, Live, 30 quiet minutes or the app's process ending - it has no Esc. |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
@@ -2233,22 +2233,45 @@ neither: nothing safe to build it on exists yet (§10).
 
 ## 9. Where the backend lives
 
-**Not in this repo.** The owner keeps `jarvis_hud.py`, `jarvis_memory.py`,
-`jarvis_gate.py` and the rest on their machine. `backend/` holds **patches**
-against them plus the tests that prove the patches do what they claim.
-`backend/.gitignore` refuses the sources, because a stale copy in git is worse
-than no copy — the next reader would not know which is real.
+**The owner's live copies are not in this repo.** The owner keeps
+`jarvis_hud.py`, `jarvis_memory.py`, `jarvis_gate.py` and the rest on their
+machine. `backend/` holds **patches** against them plus the tests that prove
+the patches do what they claim. `backend/.gitignore` refuses the sources,
+because a stale copy in git is worse than no copy — the next reader would not
+know which is real, and the patches are written against *that* folder.
 
-**Twenty-six modules, and there is no second copy.** No public upstream has
-been found; the evidence is that the files were produced in assistant
-conversations and saved to disk, which makes that chat history the only
-backup. `scripts/check-backend.ps1` lists what a folder is missing — run it
-before the patches, because a patch failing against an absent file reports
-"patch does not apply" and reads as a bad patch.
+**Since 2026-10-06 there is also a published copy: `jarvis-backend/`.** It is
+a checked snapshot of the owner's folder, taken so that a stranger can clone
+this repository and have a backend to run rather than a folder of patches
+against a folder they do not have: 181 files, 10.59 MB, LF endings.
+`jarvis-backend/README.md` has the rule that produced it and what it
+deliberately leaves out; `docs/BACKEND-PUBLISH-INVENTORY-2026-10-06.md` has the
+measurement behind it, file by file. `backend/test_base_matches_repo.py` keeps
+the copy equal to
+this repository's own modules, and says plainly what it cannot prove: **the
+patch stack does not reverse off the base** — it stops at
+`approval-notice.patch`, because `backend/rebuilt/jarvis_events.py` already
+contains that patch's code — so the base is checked against `backend/`, never
+against the stack.
 
-That asymmetry is worth stating once: **this repo is version-controlled and the
-thing it patches is not.** A patch here can always be recovered. The file it
-edits cannot.
+**Five modules had no second copy anywhere until 2026-10-06.**
+`jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py`, `jarvis_models.py` and
+`jarvis_skills.py` — 605 KB — existed only in the one folder on the owner's PC,
+and `jarvis_backup.py`'s archive read his data and no `.py` file at all. Two of
+their neighbours, `jarvis_memory.py` and `jarvis_events.py`, already had a
+deliberate exception, in `backend/rebuilt/`. No public upstream has ever been
+found for any of the twenty-six: the evidence is that the files were produced
+in assistant conversations and saved to disk, which makes that chat history
+their only origin. Those five are now in `jarvis-backend/`, and the archive
+writes the backend's own `.py` files into a backup under `source/`.
+
+`scripts/check-backend.ps1` lists what a folder is missing — run it before the
+patches, because a patch failing against an absent file reports "patch does
+not apply" and reads as a bad patch.
+
+That asymmetry has narrowed, not gone: **this repo is version-controlled and the
+folder the patches edit is still not.** A patch here can always be recovered.
+The file it edits still cannot, on its own.
 
 Fifty-three patches (counted in `scripts/apply-patches.ps1`'s list on
 2026-09-24, after `chat-history.patch`, `auto-learn.patch`, `memory-erase.patch`, `past-recall.patch` and `memory-profile.patch`), applied in that list's order. The order matters: many patches

@@ -9,6 +9,7 @@ approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b
 apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54Z	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42Z	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37Z	Backend: repeats without a card, lights setting, "What asks first"
+auto-learn.patch	auto-learn/5a32e3a.patch	5a32e3abb26e30582e729295c455be850cb7e241	2026-09-29T00:11:03Z	Backend: continued chats re-register their own words, games stay games, hand-accepted facts keep their chat
 auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08Z	Memory review, backend half: bugs B1-B15 and B17, improvements measured
 auto-learn.patch	auto-learn/1f2f70f.patch	1f2f70f6654c9f70f2851848f65b3791868a9f7c	2026-09-24T23:00:16Z	Say what always waits for a yes: birthdays, phone numbers and email addresses too
 auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23Z	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
@@ -29,6 +30,8 @@ chat-history.patch	chat-history/d42ede8.patch	d42ede85239584fdb8f7e68db54924ced2
 chat-history.patch	chat-history/d1d2515.patch	d1d2515f681cdee0e95267f3c64b41f2e2294df1	2026-09-25T01:15:59Z	Voice in both apps: interrupt by talking, "One moment.", "I heard you"
 chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35Z	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h
 chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53Z	Backend: keep chat history on the PC, encrypted (chat-history.patch)
+chat-stream.patch	chat-stream/997bfa1.patch	997bfa1dbd0acc61ab7d6d831c7f3f7c59797d27	2026-09-24T00:22:48Z	Chat: every local turn streamed once, with the right Content-Type, kept alive through approvals
+chatbot-limits.patch	chatbot-limits/581cda8.patch	581cda87af0da89dd45f9d069d93f342f1858b95	2026-10-06T17:59:57-07:00	the six chatbot API keys and their monthly money limits were one job, and neither was in the app
 chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef1620052d2437275	2026-09-28T02:09:55Z	Merge branch 'studio-chatbot-screens' into claude/jarvis-ai-assistant-research-ff37vy
 chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34Z	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
 devices.patch	devices/bd55634.patch	bd55634d1d0bc149d4ae0236c443f90265db6e5f	2026-09-28T21:11:27Z	backend: devices.patch, before every token_ok=_token_ok; ship jarvis_devices.py
@@ -76,6 +79,7 @@ memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51Z	Memory: stop the destructive paths, and start the event pump
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
+ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 quiz.patch	quiz/663f61e.patch	663f61e22e0f4ce76ab4c24d278b1d07bd2c293f	2026-09-30T05:12:04Z	WIP: Quiz me on a text (Slice A), builders still working
 readpage.patch	readpage/f84ce5d.patch	f84ce5d435e0e326e1a9b84d19b697bc063e487b	2026-10-05T20:54:36-07:00	He could not hand Jarvis a web page and hear it read out, so build exactly that one thing
@@ -92,6 +96,7 @@ screen.patch	screen/2915125.patch	291512500a68410187aea64bafa68a81eff8c6d1	2026-
 second-card-suggest.patch	second-card-suggest/5540058.patch	55400589332bd2028eed95bc142bf3b9c57c396e	2026-09-27T14:18:45Z	Fix backend audit findings #6, #7, #9 and #10
 second-card-suggest.patch	second-card-suggest/ed7b4b3.patch	ed7b4b3dce2b9439e2a603591af385999cf4434b	2026-09-27T08:55:01Z	Fix the backend audit's six real findings, and the phone's own scroll bug
 second-card-suggest.patch	second-card-suggest/476be02.patch	476be02a5a254b7f6868f3aef75fc00288e3aa73	2026-09-27T04:50:08Z	Suggest the bigger model when the second card could help
+second-card.patch	second-card/18174af.patch	18174af03f94ad2d7c0755e8bafba7364a2b722c	2026-10-05T21:52:12-07:00	Jarvis told the owner chat was on a card it had never checked, so "leave it to Ollama" was not true in words or in behaviour
 second-card.patch	second-card/5cc47a9.patch	5cc47a9c42b1ff1c3f7e5656ff53ca038e71d683	2026-09-28T04:50:33Z	Third graphics card: its own lane, an assign switch, and UI on both apps
 second-card.patch	second-card/8f672ce.patch	8f672cef4d26b1b88abd13cf156202706c5b0fac	2026-09-27T00:39:10Z	Add "One bigger model on both cards": a third, off-by-default second-card mode
 second-card.patch	second-card/e1ab659.patch	e1ab6598a8784df14f084fac3150e719e920e78e	2026-09-24T06:52:58Z	Merge fix-b3: bug audit 3 fixes
@@ -100,12 +105,14 @@ second-card.patch	second-card/15a7f27.patch	15a7f27ebe5d5bb6bfad2f7cdd962f0c0aa1
 second-card.patch	second-card/a0f23da.patch	a0f23dad6d3e20eee783f05a77ab4921da96818a	2026-09-24T02:37:56Z	Second graphics card: the switches, the second Ollama, and /api/second-card
 skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02Z	Three sentences that were not true, and an ungated insight pool
 sky.patch	sky/2295491.patch	229549120176aec4a8b896feb698af7a2874e97e	2026-09-28T10:54:13Z	A fourth animal (the monkey), sun and moon and weather behind the animals, and two face fixes
+speed-record.patch	speed-record/0d1c469.patch	0d1c469e95d24e06fdf6221a06bc032bc0da7586	2026-09-23T08:53:10Z	Backend ops items 11-14: answer speed record, switch speed check, doctor step, owned documents table
 spending.patch	spending/86a889d.patch	86a889dfe8a64d2e796e0d53058dc4cfcd8aff2a	2026-09-30T06:07:36Z	Chat tags: audit fixes (focus, error sentences, names, counts, docs) and tagging while history is off
 support-chat.patch	support-chat/d85b573.patch	d85b573f18b1bf34b3b4d966e8e9f8d9dd02db60	2026-09-28T17:46:12Z	Customer-support chats, backend: the details card, the support last check, offers, the window
 tag-suggest.patch	tag-suggest/041fe41.patch	041fe41726dd559e344c8c03efaea431a992374b	2026-09-30T09:10:52Z	WIP: Money-Off, sayable topics, model_free; overnight tags backend in progress
 temporary-chat.patch	temporary-chat/5c7124b.patch	5c7124b19b248a28fc65797044f0ea352b9ce81f	2026-09-28T20:37:36Z	Games stay out of chat history; Live's mark never reaches a model
 temporary-chat.patch	temporary-chat/de9a768.patch	de9a768a8035e8512472b988d4579074bc527e3c	2026-09-25T01:29:50Z	temporary-chat.patch: re-anchor on chat-history's field list, which now includes "interrupted"
 temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a5039378a5264e50	2026-09-25T01:17:50Z	Temporary chat and "Used in this answer", in both apps and on the PC
+tool-calling-wiring.patch	tool-calling-wiring/477b7b4.patch	477b7b4383c9d192725f7b8971bfc47a67370e44	2026-09-18T01:45:42Z	backend: fix 5 findings from a second, independent code-review pass
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27Z	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47Z	backend: jarvis_agent.py - the model can finally use a tool, local lane only
 topics.patch	topics/bb25795.patch	bb2579561ee03d659482a2462a3fa56cba841a46	2026-09-30T06:53:12Z	Heatmap and balance chart: phone side (Progress.kt compiled and 16 tests run locally; Compose unverified)

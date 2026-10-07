@@ -220,23 +220,39 @@ files relative to it. To get back here in a new window:
 
 ### 1.3 Get the backend files
 
-**This is the one part no script can do for you, because there is no
-download link.** The backend is not a public project. Searching for it found
-two unrelated things — `open-jarvis/OpenJarvis` keeps its code under
-`src/openjarvis/` with no flat `jarvis_*.py` at all, and `Twsman1/JARVIS` has
-a `jarvis_hud.py` that is a wake-word overlay, not an HTTP server. Neither has
-`jarvis_memory.py` or `jarvis_gate.py`.
+**This is now a copy, not a search.** The Python program that does the work —
+`jarvis_hud.py` and the 180 files beside it — is published in this repository,
+in [`jarvis-backend/`](../jarvis-backend/README.md), as plain source under the
+same licence as everything else here. Step 1.2's clone already fetched it.
 
-What the files are, as far as the evidence goes: they were produced in
-assistant conversations and saved to disk, under `Documents\Claude\` on the
-owner's PC. **Those conversations are the only copy** of the files this
-repository does not ship (`jarvis_hud.py`, `jarvis_gate.py`,
-`jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py` and a few more).
-Keep that folder somewhere backed up.
+Copy it to a folder of your own, because the next steps write into it and a git
+clone is a bad place for a program that rewrites itself:
+
+```powershell
+Copy-Item -Recurse -Force .\jarvis-backend "$env:USERPROFILE\Documents\jarvis-backend"
+```
+
+**Wherever this page says "your backend folder", use
+`C:\Users\<you>\Documents\jarvis-backend`.**
+
+**If you are the author**, this section is not for you. Your backend is the
+folder you have always used, and the patches in `backend\` are written against
+it; keep using its path in the steps below.
+
+**Why this took until 2026-10-06.** The backend existed in exactly one place on
+Earth — the author's PC. Searching for a public copy found two unrelated things
+(`open-jarvis/OpenJarvis` keeps its code under `src/openjarvis/` with no flat
+`jarvis_*.py` at all, and `Twsman1/JARVIS`'s `jarvis_hud.py` is a wake-word
+overlay, not an HTTP server), and fifteen modules — `jarvis_hud.py`,
+`jarvis_gate.py`, `jarvis_extract.py`, `jarvis_models.py`, `jarvis_skills.py`
+and ten others — had no copy anywhere. They were produced in assistant
+conversations and saved to disk, which made those conversations their only
+origin. `jarvis-backend/README.md` says where the published copy came from and
+what it deliberately leaves out.
 
 Ten modules that were lost *have* been rebuilt, and live in this repository
 (`backend\rebuilt\`), along with every newer module. You do not copy those by
-hand: step 1.5 does.
+hand: step 1.5 does, and the published folder already has them.
 
 ### 1.4 Check the backend folder
 
@@ -244,14 +260,15 @@ One line. It reads every file in your backend folder, works out which
 modules they need, and says which are there. It changes nothing.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+powershell -ExecutionPolicy Bypass -File .\scripts\check-backend.ps1 -BackendPath "$env:USERPROFILE\Documents\jarvis-backend"
 ```
 
 (`-ExecutionPolicy Bypass` lets Windows run this one script file without
 changing any setting. Without it, Windows refuses script files by default.)
 
 - **`ok`** - there.
-- **`not yet`** - this repository ships it; step 1.5 copies it in. Fine.
+- **`not yet`** - this repository ships it; step 1.5 copies it in. On the
+  published folder from 1.3 there should be none of these.
 - **`MISSING`** - not there, and this repository does not have it either.
   Find it before going on (the list is most-needed first, and one missing
   file hides the others). It lists the files that need each one.
@@ -263,12 +280,13 @@ project needs to know which folder your backend is in, and this writes it
 down once, for your Windows account:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+powershell -ExecutionPolicy Bypass -File .\scripts\install-backend.ps1 -BackendPath "$env:USERPROFILE\Documents\jarvis-backend"
 ```
 
-(That path between the quotes is the author's own - **replace it with
-yours**, the folder holding `jarvis_hud.py`. Every command on this page with
-that path in it needs the same replacement.)
+(That is the folder you made in 1.3. If you are the author it is your own
+backend folder instead — **replace the path with yours**, the folder holding
+`jarvis_hud.py`. Every command on this page with that path in it needs the same
+replacement.)
 
 It checks the folder really is a backend folder (it must hold
 `jarvis_hud.py`) **before** it changes anything, so a wrong path cannot be
@@ -285,8 +303,21 @@ the new setting is picked up.
 **Then the script that does the work.** One line:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "$env:USERPROFILE\Documents\jarvis-backend"
 ```
+
+**On the published folder this script changes nothing, and that is the correct
+result.** Run against a copy of `jarvis-backend/` on 2026-10-06 it exited 0,
+left `jarvis_hud.py`'s SHA-256 identical, and reported `Checked again on the
+real files: all 120 patches are on` and `All 160 modules this repository ships
+are there and up to date`: the published folder is the state *after* the
+patches, so a fresh copy never needs them applied. It still does its other
+work — the Python packages, the settings file, and the test suites.
+
+(If it stops and says a Jarvis program is running, close Jarvis first —
+right-click the tray icon and choose "Stop the backend" — then run the line
+again. `-Force` skips that check; only use it when you know the folder is not
+in use.)
 
 **Keep `-BackendPath` on this one, with your own folder in it.** The setting
 you just saved is read by the live check and the test suites; this script

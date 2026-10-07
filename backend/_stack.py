@@ -97,8 +97,33 @@ GAP = "# gap"
 #: Neither can be fixed by editing a patch: what is missing is the owner's own
 #: lines. The pin may come back down when `inbox-tidy.patch` joins the walk.
 RATCHET = {
-    "jarvis_hud.py": 45,
-    "jarvis_gate.py": 24,
+    #: 47, raised from 45 on 2026-10-06, when this branch and PR #80 met. Both
+    #: sides add a hunk to jarvis_hud.py whose context is text only the owner's
+    #: PC holds, so the walk materialises it rather than reading it as drift:
+    #: PR #80's `gate-risk-rows.patch` install block, and this branch's
+    #: `chatbot-limits.patch` install block. 45 was the measure before either
+    #: existed, and neither side alone would have moved it by two. A ratchet: it
+    #: may still only go down.
+    "jarvis_hud.py": 47,
+    #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
+    #: one new patch this walk adds for this file, and its single hunk's context
+    #: is text only the owner's PC holds: the short `"delete it and it is gone"`
+    #: rows of `_RISK`, which no other patch in `order()` writes (checked by
+    #: searching every patch for those sentences - `gate-risk-rows.patch` is the
+    #: only match). So the hunk is MATERIALISED honestly, not drifted, and the
+    #: pin moves with it. The note above already records that this stack reads
+    #: 20 for this file against the old pin of 22 - the pin was loose either way.
+    #: 23 is what the walk measures now. A ratchet: it may still only go down.
+    #:
+    #: Raised once more, to 25, when this branch and PR #80 met: the two patches
+    #: are independent, so the walk now carries BOTH materialised `_RISK` hunks.
+    #: This branch's own `chatbot-limits.patch` adds the two api-limit actions,
+    #: each needing a `_RISK` row, and the nearest non-materialised `_RISK`
+    #: anchor in this walk is ~800 lines away - the same honest reason as
+    #: `gate-risk-rows.patch`'s, not a patch that drifted. The number below is
+    #: what the walk measures with both patches in it; `test_installed_stand_in.py`
+    #: is what says so, and it may still only go down.
+    "jarvis_gate.py": 25,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,
