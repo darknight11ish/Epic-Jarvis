@@ -133,14 +133,15 @@ Follow [`docs/INSTALL.md`](docs/INSTALL.md), in order. It has three parts:
    Jarvis was doing at that moment). If Jarvis was running, it is started again
    for you; if it was not, it prints the one line to start it.
 
-   Both commands are safe to run again and both change nothing at all when
-   something is wrong. The update command keeps a log in `_jarvis-logs` inside
-   your backend folder; the install command shows that same log when it reaches
-   the update step. `-FromSource` builds the desktop app from this folder
-   instead of downloading the published installer; `-SkipDesktop` leaves the
-   app alone. What is still by hand is the phone (part 3 below) and two switches
-   in the desktop app's own Settings: **Let Jarvis Desktop start and stop
-   Jarvis**, and **Start Jarvis Desktop when Windows starts**.
+   Both commands are safe to run again, and both stop and say plainly what they
+   did and did not change when something is wrong. The update command keeps a log
+   of its own output in `_jarvis-logs` inside your backend folder, and
+   `apply-patches.ps1` keeps its own log of what it changed. `-FromSource` builds
+   the desktop app from this folder instead of downloading the published
+   installer; `-SkipDesktop` leaves the app alone. What is still by hand is the
+   phone (part 3 below) and two switches in the desktop app's own Settings: **Let
+   Jarvis Desktop start and stop Jarvis**, and **Start Jarvis Desktop when
+   Windows starts**.
 
 1. **The backend on the PC** - the Python program that does the work, plus
    the model in Ollama. Copy `jarvis-backend\` to a folder of your own

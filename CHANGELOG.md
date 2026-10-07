@@ -27,18 +27,22 @@ number as the last part - `0.2.57` is a build of 0.2.
   `-SkipPatches` switch ("do not run the patch script this time"), so the
   patcher is not run twice on a first install. Where the desktop app is
   concerned the update command prefers the published signed installer and
-  builds from this folder when there is none; it builds rather than
-  downloading when this folder already holds that release's commit or newer,
-  so a branch's own newer build is never replaced by an older release.
+  builds from this folder when there is none; when this folder IS a git
+  checkout holding that release's commit or newer, it builds rather than
+  downloading, so a branch's own newer build is never replaced by an older
+  release. A folder that was unzipped rather than cloned has no history to
+  compare, and the script says so instead of guessing.
 
-- **Both commands are safe to run again, and neither changes anything when
-  something is wrong.** The update command keeps a log in `_jarvis-logs`
-  inside the backend folder (the install command shows that same log when it
-  reaches the update step). Neither ever prints a token or a key. Both take
-  `-Print`, which means "show me the plan and change nothing". What stays by
-  hand is printed on screen: the phone (INSTALL.md part 3) and two switches in
-  the desktop app's own Settings - "Let Jarvis Desktop start and stop Jarvis",
-  and "Start Jarvis Desktop when Windows starts".
+- **Both commands are safe to run again, and both are honest about what they
+  changed.** The update command keeps a log of its own output in `_jarvis-logs`
+  inside the backend folder, and `apply-patches.ps1` keeps its own log of what
+  it changed. Neither ever prints a token or a key. Both take `-Print`, which
+  means "show me the plan and change nothing" - it writes no file, starts no
+  process and installs nothing; it does make one read of the release page (a few
+  hundred bytes, and it says so on screen) so the plan can say which route it
+  would take. What stays by hand is printed on screen: the phone (INSTALL.md part
+  3) and two switches in the desktop app's own Settings - "Let Jarvis Desktop
+  start and stop Jarvis", and "Start Jarvis Desktop when Windows starts".
 
 - **One limit of the desktop half, said on screen and in INSTALL.md.** When it
   downloads an installer it cannot check the signature published beside it -

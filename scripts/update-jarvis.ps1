@@ -140,9 +140,37 @@ $script:Notes    = New-Object System.Collections.ArrayList
 $script:Changed  = $false
 $script:RunLog   = $null
 $script:InstallLine = $null
+# A throwaway source copy, when this folder had no git pull to do. Deleted at
+# the end of the run - by Finish-Run, which is the one place every ending goes
+# through, because the copy is still being read while the backend is patched.
+$script:TempSource = $null
+# What happened to the desktop half: 'done', 'skipped', 'failed' or 'none'.
+# The closing banner is built from this rather than from what was asked for, so
+# a run that skipped or failed the app can never print "the desktop app is up to
+# date".
+$script:DesktopState = 'none'
 
 function Add-Problem($msg) { [void]$script:Problems.Add([string]$msg) }
 function Add-Note($msg)    { [void]$script:Notes.Add([string]$msg) }
+
+# Start Jarvis Desktop again, but only when THIS run closed it. Used by the two
+# failure paths that end before the normal restart: without it, a run that
+# stopped after closing the app leaves the owner with no app running and a line
+# that says the app was "left alone".
+function Restart-AppIfWeClosedIt {
+    if (-not $script:AppWasRunning) { return }
+    $again = Get-InstalledDesktop
+    if ($again -and $again.Exe -and (Test-Path -LiteralPath $again.Exe)) {
+        try {
+            Start-Process -FilePath $again.Exe | Out-Null
+            Ok "started the desktop app again (this run had closed it)"
+        } catch {
+            Warn "the desktop app was closed by this run and could not be started again"
+        }
+    } else {
+        Warn "the desktop app was closed by this run - start it from the Start menu"
+    }
+}
 
 # The end of every run. Never returns.
 function Finish-Run {
@@ -157,10 +185,11 @@ function Finish-Run {
         foreach ($p in $script:Problems) { $n++; Write-Host "  $n. $p" -ForegroundColor Red }
         if ($script:Changed) {
             Write-Host ""
-            Write-Host "Some of this run's changes were already made - the note above says which." -ForegroundColor Yellow
+            Write-Host "Files WERE changed before this went wrong - the notes below say which, and" -ForegroundColor Yellow
+            Write-Host "apply-patches.ps1's own last screen and log say exactly what it did." -ForegroundColor Yellow
         } else {
             Write-Host ""
-            Write-Host "Nothing on your PC was changed by this run." -ForegroundColor Green
+            Write-Host "Nothing was changed by this run." -ForegroundColor Green
         }
     } elseif ($Kind -eq 'print') {
         Write-Host $bar -ForegroundColor Yellow
@@ -168,12 +197,25 @@ function Finish-Run {
         Write-Host $bar -ForegroundColor Yellow
     } elseif ($Kind -eq 'stopped') {
         Write-Host $bar -ForegroundColor Red
-        Write-Host " NOT DONE - nothing was changed" -ForegroundColor Red
+        if ($script:Changed) {
+            Write-Host " NOT DONE - Jarvis was left as it was (see the notes)" -ForegroundColor Red
+        } else {
+            Write-Host " NOT DONE - nothing was changed" -ForegroundColor Red
+        }
         Write-Host $bar -ForegroundColor Red
     } else {
         Write-Host $bar -ForegroundColor Green
-        if ($SkipPatches) {
+        $patched = -not $SkipPatches
+        if (-not $patched -and $script:DesktopState -eq 'skipped') {
+            Write-Host " DONE - nothing to do: both halves were skipped by your switches" -ForegroundColor Green
+        } elseif (-not $patched -and $script:DesktopState -eq 'failed') {
+            Write-Host " DONE - the desktop app was NOT updated (see the notes)" -ForegroundColor Yellow
+        } elseif (-not $patched) {
             Write-Host " ALL DONE - the desktop app is up to date" -ForegroundColor Green
+        } elseif ($script:DesktopState -eq 'skipped') {
+            Write-Host " ALL DONE - the backend is patched (the desktop app was left alone)" -ForegroundColor Green
+        } elseif ($script:DesktopState -eq 'failed') {
+            Write-Host " DONE - the backend is patched, but the desktop app was NOT updated" -ForegroundColor Yellow
         } else {
             Write-Host " ALL DONE - the backend is patched and the desktop app is up to date" -ForegroundColor Green
         }
@@ -187,8 +229,14 @@ function Finish-Run {
     }
     if ($script:RunLog) {
         Write-Host ""
-        Write-Host "Log of this run (everything printed above):" -ForegroundColor Gray
+        Write-Host "Log of this run (this script's own output; apply-patches.ps1 keeps its" -ForegroundColor Gray
+        Write-Host "own log of what it changed):" -ForegroundColor Gray
         Write-Host "    $($script:RunLog)" -ForegroundColor Gray
+    }
+    # The throwaway source copy, if this run made one. Silently best-effort: a
+    # leftover folder in %TEMP% is not worth failing a finished update over.
+    if ($script:TempSource) {
+        Remove-Item -LiteralPath $script:TempSource -Recurse -Force -ErrorAction SilentlyContinue
     }
     if ($script:Problems.Count -gt 0) { exit 1 }
     if ($Kind -eq 'stopped') { exit 1 }
@@ -199,6 +247,8 @@ trap {
     Write-Host ""
     Write-Host "  FAIL  The script stopped unexpectedly: $($_.Exception.Message)" -ForegroundColor Red
     Add-Problem "The script stopped unexpectedly: $($_.Exception.Message)"
+    # This run may be the reason nothing is running any more.
+    Restart-AppIfWeClosedIt
     Finish-Run
 }
 
@@ -504,6 +554,9 @@ function Install-DesktopFromRelease($Release, [switch] $DryRun) {
     Info "Settings -> Updates button is the route that checks a signature."
     if (-not (Invoke-SilentInstaller $dest)) { return $false }
     Ok "the desktop app was replaced with version $($Release.Version)"
+    # The installer has run, so the copy in %TEMP% has done its job. Best
+    # effort: a leftover file is not worth failing a finished update over.
+    Remove-Item -LiteralPath $dest -Force -ErrorAction SilentlyContinue
     return $true
 }
 
@@ -735,6 +788,10 @@ if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
             Info "that is what happens on a branch with local changes, or with no network"
         } else {
             Ok "this folder is up to date"
+            # A git pull does rewrite files in this folder, so a run that stops
+            # later must not claim nothing was touched.
+            $script:Changed = $true
+            Add-Note "this run updated the repository folder with git pull (your backend and apps were not touched by that)"
         }
     }
 } elseif ($isGit) {
@@ -768,6 +825,11 @@ if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
         $tmp = Join-Path ([IO.Path]::GetTempPath()) "jarvis-source-$unique"
         try {
             New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+            # Handed to Finish-Run, which is where every ending goes through, so
+            # the copy is deleted after the patching and the live check have
+            # finished reading it rather than now. (A comment here used to say it
+            # was deleted and nothing deleted it.)
+            $script:TempSource = $tmp
             $file = Join-Path $tmp 'source.zip'
             Info "downloading the newest source (this folder was unzipped, so there is no git pull)"
             Invoke-WebRequest -Uri $zip -OutFile $file -UseBasicParsing -TimeoutSec 600
@@ -801,7 +863,7 @@ $running = @(Get-RunningBackend $BackendPath)
 # Read once, here, because the answer decides whether the app is started again
 # at the end - and by then this detection has already been re-run and found
 # nothing running.
-$appWasRunning = [bool]$app
+$script:AppWasRunning = [bool]$app
 
 if ($app) { Ok "the desktop app is running (it will be closed, then started again)" }
 if ($running.Count -eq 0 -and -not $app) { Ok "nothing is using the backend" }
@@ -838,7 +900,7 @@ if ($Print) {
             if (-not $app -and $running.Count -eq 0) { break }
         }
         if ($app -or $running.Count -gt 0) {
-            Bad "Jarvis is still running, so nothing has been changed."
+            Bad "Jarvis is still running, so the update has not started."
             Say "  Close it, then run this command again. Or add  -Force  and this will" Cyan
             Say "  close it for you (anything it was doing at that moment is cut off)." Cyan
             Add-Problem 'Jarvis was still running, so the update did not start.'
@@ -876,19 +938,28 @@ if ($SkipPatches) {
 } else {
     Info "running apply-patches.ps1 (it rehearses every patch on a copy first)"
     Say ""
+    # From here on this run may have changed the backend's files, and that has
+    # to be said even when the patcher exits non-zero - which is the ORDINARY
+    # case of "every patch went on, then a test suite failed" (apply-patches.ps1
+    # applies first and tests afterwards). Setting this only on success is how
+    # the closing screen came to say "Nothing on your PC was changed" about a
+    # backend that had just been patched.
+    $script:Changed = $true
     $code = Invoke-Native 'powershell' (@('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $apply) + $applyArgs)
     Say ""
     if ($code -ne 0) {
         # The desktop app is NOT touched: it is a client of this backend, and
         # updating it against a backend that just failed would be the one
         # combination that cannot work.
-        Bad "apply-patches.ps1 exited $code - the backend was not fully updated"
-        Info "the desktop app was left alone on purpose. Read the output above, fix"
-        Info "the first problem, then run this command again."
-        Add-Problem "the backend update failed (apply-patches.ps1 exited $code)"
+        Bad "apply-patches.ps1 exited $code - read its own last screen above"
+        Info "that can mean two different things, and its own screen says which: it"
+        Info "refused and changed nothing, or it put the patches on and a test failed."
+        Info "Do not start Jarvis until that screen has been read; if it says the files"
+        Info "may be half updated, paste the restore line it printed."
+        Add-Problem "the backend update did not finish cleanly (apply-patches.ps1 exited $code) - its own screen above says whether any file was changed"
+        Restart-AppIfWeClosedIt
         Finish-Run
     }
-    $script:Changed = $true
     Ok "the backend was patched (details and the log are in apply-patches.ps1's own output)"
 }
 
@@ -906,6 +977,7 @@ if ($installed) {
 $desktopDone = $false
 if ($SkipDesktop) {
     Warn "the desktop app was left alone (-SkipDesktop)"
+    $script:DesktopState = 'skipped'
 } else {
     $release = $null
     if ($FromSource) {
@@ -915,6 +987,12 @@ if ($SkipDesktop) {
         if (-not $endpoint) {
             Warn "this repository's copy of the desktop app names no update address"
         } else {
+            if ($Print) {
+                # Said out loud, because it is the one thing a plan run does over
+                # the network: -Print changes nothing, but it does read this one
+                # small file so the plan can say which route it would take.
+                Info "asking the release page for the newest desktop version (a read, not a download)"
+            }
             $release = Get-DesktopRelease $endpoint
             if (-not $release) {
                 Warn "no published desktop installer was found (or GitHub was not reachable)"
@@ -926,6 +1004,15 @@ if ($SkipDesktop) {
                     Info "this folder already holds $($release.Commit) or newer (your own build), so"
                     Info "installing that release over it would go backwards - building instead"
                     $release = $null
+                } elseif ($release.Commit -and -not (Test-Path -LiteralPath (Join-Path $RepoRoot '.git'))) {
+                    # The comparison above needs git history, and an unzipped
+                    # download has none. Saying so is the difference between "this
+                    # release is newer" and "I cannot tell" - the second one is
+                    # what is true here, and a folder holding newer code than the
+                    # release would otherwise be quietly replaced by it.
+                    Warn "this folder is not a git checkout, so I cannot tell whether it is newer"
+                    Info "than published version $($release.Version). Installing the published one;"
+                    Info "add -FromSource to build this folder's own copy instead"
                 }
             }
         }
@@ -936,9 +1023,14 @@ if ($SkipDesktop) {
     } else {
         $desktopDone = Install-DesktopFromRelease $release -DryRun:$Print
     }
-    if (-not $Print -and $desktopDone) { $script:Changed = $true }
-    if (-not $Print -and -not $desktopDone) {
-        Add-Note 'the desktop app was NOT updated - the backend was. Read the lines above.'
+    if (-not $Print) {
+        if ($desktopDone) {
+            $script:Changed = $true
+            $script:DesktopState = 'done'
+        } else {
+            $script:DesktopState = 'failed'
+            Add-Note 'the desktop app was NOT updated - the backend was. Read the lines above.'
+        }
     }
 }
 
@@ -946,12 +1038,16 @@ if ($SkipDesktop) {
 Step 6 $Total 'Starting Jarvis and checking it'
 
 if ($Print) {
-    if ($appWasRunning -or $installed) { Info "would start the desktop app again" }
-    Info "would wait for Jarvis to answer, then run backend\selftest.py --preflight"
+    if ($script:AppWasRunning -or $installed) { Info "would start the desktop app again" }
+    if ($NoCheck) { Info "would not wait for Jarvis or run the live check (-NoCheck)" }
+    else { Info "would wait for Jarvis to answer, then run backend\selftest.py --preflight" }
 } else {
     $started = $false
-    if ($appWasRunning -or ($desktopDone -and $installed)) {
-        $again = Get-InstalledDesktop
+    # Re-read, rather than deciding from the version read before the install: on
+    # a FIRST install the app did not exist then, so `$installed` is $null and
+    # this branch used to be skipped - the app was installed and never started.
+    $again = Get-InstalledDesktop
+    if ($script:AppWasRunning -or ($desktopDone -and $again)) {
         if ($again -and $again.Exe) {
             try {
                 Start-Process -FilePath $again.Exe | Out-Null
@@ -963,20 +1059,25 @@ if ($Print) {
         }
     }
     if (-not $started) {
-        Info "start Jarvis Desktop from the Start menu (tray icon, then 'Show or hide the Jarvis bar')"
-    }
-
-    if (Wait-BackendUp -Seconds 45) {
-        Ok "Jarvis is answering on this PC"
-    } else {
-        Warn "Jarvis is not answering on 127.0.0.1:4719 yet"
-        Info "the desktop app starts it when 'Let Jarvis Desktop start and stop Jarvis' is on;"
-        Info "docs\INSTALL.md step 1.8 starts it by hand"
+        if ($again -and $again.Exe) {
+            Info "start it with: `"$($again.Exe)`""
+        } else {
+            Info "start Jarvis Desktop from the Start menu (tray icon, then 'Show or hide the Jarvis bar')"
+        }
     }
 
     if ($NoCheck) {
-        Warn "the live check was skipped (-NoCheck)"
+        # Nothing is going to look at the backend, so there is no reason to sit
+        # here for 45 seconds waiting for it to answer.
+        Warn "the live check was skipped (-NoCheck), so this did not wait for Jarvis to answer"
     } else {
+        if (Wait-BackendUp -Seconds 45) {
+            Ok "Jarvis is answering on this PC"
+        } else {
+            Warn "Jarvis is not answering on 127.0.0.1:4719 yet"
+            Info "the desktop app starts it when 'Let Jarvis Desktop start and stop Jarvis' is on;"
+            Info "docs\INSTALL.md step 1.8 starts it by hand"
+        }
         $py = Find-Python
         $selftest = Join-Path $SourceRoot 'backend\selftest.py'
         if (-not $py) {

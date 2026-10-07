@@ -67,9 +67,13 @@
   proven - the patcher says so in its own words when it finishes.
 
 .PARAMETER Force
-  Passed to apply-patches.ps1 only: run it even while a Jarvis program looks
-  like it is running. Use it when you know the folder is not in use. It does not
-  mean "overwrite the folder" - this script never overwrites the backend folder.
+  Passed to both scripts this one runs, where it means two different things:
+  to apply-patches.ps1, "run even while a Jarvis program looks like it is
+  running" (use it when you know the folder is not in use); to
+  update-jarvis.ps1, "close a running Jarvis rather than asking you to" - which
+  stops the app and the backend process, cutting off anything Jarvis was doing
+  at that moment. It does not mean "overwrite the backend folder": this script
+  never overwrites one.
 
 .EXAMPLE
   From the folder you downloaded this repository into. -ExecutionPolicy Bypass
@@ -165,7 +169,13 @@ $installLine = "powershell -ExecutionPolicy Bypass -File `"$installScript`" -Bac
 Say "  $installLine" DarkGray
 if (-not $Print) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $installScript -BackendPath $BackendPath
-    if ($LASTEXITCODE -ne 0) { Say ""; Say "  FAIL  install-backend.ps1 exited $LASTEXITCODE - read what it printed above. Nothing later was attempted." Red; exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        Say ""
+        Say "  FAIL  install-backend.ps1 exited $LASTEXITCODE - read what it printed above." Red
+        Say "  Already done: the backend folder $BackendPath was created and filled. Nothing" Yellow
+        Say "  later was attempted. Run this command again once that is fixed." Yellow
+        exit $LASTEXITCODE
+    }
 }
 
 # ------------------------------------------- 3. packages, settings and tests
@@ -179,7 +189,15 @@ if ($patchArgs.Count -gt 0) { $patchLine += ' ' + ($patchArgs -join ' ') }
 Say "  $patchLine" DarkGray
 if (-not $Print) {
     & powershell -NoProfile -ExecutionPolicy Bypass -File $patchScript -BackendPath $BackendPath @patchArgs
-    if ($LASTEXITCODE -ne 0) { Say ""; Say "  FAIL  apply-patches.ps1 exited $LASTEXITCODE - read what it printed above. Nothing later was attempted." Red; exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        Say ""
+        Say "  FAIL  apply-patches.ps1 exited $LASTEXITCODE - read what it printed above; its own" Red
+        Say "  last screen says whether it changed any file." Red
+        Say "  Already done: the backend folder is in place and JARVIS_BACKEND is set for your" Yellow
+        Say "  account. Nothing later was attempted - in particular the desktop app was not" Yellow
+        Say "  installed. Run this command again once the first problem is fixed." Yellow
+        exit $LASTEXITCODE
+    }
 }
 
 # ------------------------------------------------------------- 4. the model
@@ -189,10 +207,10 @@ $modelLine = "[Environment]::SetEnvironmentVariable('OLLAMA_KV_CACHE_TYPE', 'q8_
 $modelReady = $false
 if (-not $ollama) {
     Say "  Ollama is not installed. Install it from ollama.com, then click its tray icon once." Red
-} elseif ($Print) {
-    Say ("  ollama found: {0}" -f $ollama.Source) Green
-    Say "  would run : ollama list   (to see whether jarvis-primary is built)"
 } else {
+    # Asked for real, in -Print too: `ollama list` only reads, and a plan that
+    # skipped this step said "Jarvis needs its model first" - and printed the
+    # 5 GB command - on a PC that already had the model.
     Say ("  ollama found: {0}" -f $ollama.Source) Green
     $listed = & ollama list 2>$null
     if ($LASTEXITCODE -eq 0 -and ($listed -join "`n") -match 'jarvis-primary') {
@@ -241,7 +259,13 @@ $updateArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $updateScri
                 '-BackendPath', $BackendPath, '-SkipPatches')
 if ($FromSource) { $updateArgs += '-FromSource' }
 if ($Force)      { $updateArgs += '-Force' }
-$updateLine = 'powershell ' + ($updateArgs -join ' ')
+# Built for PRINTING, not for running: both paths here and the backend folder
+# can hold spaces (this repository's own folder does), and a printed line that
+# cannot be pasted is no use to the person reading it.
+$updateLine = 'powershell -NoProfile -ExecutionPolicy Bypass -File "' + $updateScript +
+              '" -BackendPath "' + $BackendPath + '" -SkipPatches'
+if ($FromSource) { $updateLine += ' -FromSource' }
+if ($Force)      { $updateLine += ' -Force' }
 
 if ($SkipDesktop) {
     Say "  -SkipDesktop was given, so the desktop app was left exactly as it is." DarkGray

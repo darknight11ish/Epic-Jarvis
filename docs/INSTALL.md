@@ -1175,11 +1175,13 @@ Jarvis again and runs the live check:
 powershell -ExecutionPolicy Bypass -File .\scripts\update-jarvis.ps1
 ```
 
-It is safe to run again, keeps a log in `_jarvis-logs` inside your backend
-folder, changes nothing at all if something is wrong, and prints the whole plan
-first with `-Print` ("show me the plan and change nothing"). It is steps 1, 2 and
-4 below, in the one order that works - do those by hand instead when it stops and
-says why. The phone is still step 3.
+It is safe to run again, keeps a log of its own output in `_jarvis-logs` inside
+your backend folder, stops and says plainly what it did and did not change when
+something is wrong, and prints the whole plan first with `-Print` ("show me the
+plan and change nothing": no file, no app, nothing installed - it does read the
+release page once, a few hundred bytes, so the plan can say which route it would
+take). It is steps 1, 2 and 4 below, in the one order that works - do those by
+hand instead when it stops and says why. The phone is still step 3.
 
 **You do not have to close Jarvis first.** The command waits up to 90 seconds for
 you to close it (it says what to click), or closes it for you if you add `-Force`

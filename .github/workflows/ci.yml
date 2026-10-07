@@ -1059,8 +1059,10 @@ jobs:
           # is the calling and the chaining: the install script's copy landing
           # where it said, the right folder handed on, the desktop step asking
           # the update script NOT to patch the backend a second time, -Print
-          # changing nothing anywhere, and update's own log landing inside the
-          # backend folder beside apply-patches.ps1's logs.
+          # leaving the backend folder and the registry alone and running no
+          # child script, and update's own log landing inside the backend folder
+          # beside apply-patches.ps1's logs. (A plan run does make one read of
+          # the release page, which it now says out loud; case 6 checks that.)
           #
           # backend\test_setup_script.py checks what setup-jarvis.ps1 says about
           # itself; this checks that the two scripts really do chain the way
@@ -1109,10 +1111,14 @@ jobs:
           New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'backend') | Out-Null
           Copy-Item backend\jarvis-primary.Modelfile (Join-Path $tmp 'backend')
           New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'jarvis-desktop\src') | Out-Null
-          # No tauri.conf.json on purpose: without it update-jarvis.ps1 cannot
-          # work out a release or a source ZIP address, so this step never
-          # reaches the network.
           Copy-Item jarvis-desktop\src\jarvis_hud.html (Join-Path $tmp 'jarvis-desktop\src')
+          # A stand-in tauri.conf.json whose update address cannot be reached.
+          # The desktop step then takes its "no release, build from this folder"
+          # route every time, so this step never touches the real release page
+          # and never needs the signing key. Port 9 (discard) refuses at once.
+          New-Item -ItemType Directory -Force -Path (Join-Path $tmp 'jarvis-desktop\src-tauri') | Out-Null
+          Set-Content -LiteralPath (Join-Path $tmp 'jarvis-desktop\src-tauri\tauri.conf.json') -Encoding ASCII -Value (
+            '{"plugins":{"updater":{"endpoints":["https://127.0.0.1:9/latest.json"],"pubkey":""}}}')
           Write-Stub (Join-Path $tmp 'scripts\apply-patches.ps1') 'apply-patches'
           Write-Stub (Join-Path $tmp 'scripts\install-backend.ps1') 'install-backend'
           # Two things are under test, and they need opposite stand-ins, so the
@@ -1193,27 +1199,45 @@ jobs:
           Assert-True ((Get-Calls $tmp) -notmatch 'apply-patches') '-SkipPatches did not run the patcher'
           Assert-True ($r.Out -match 'the backend was left as it is') '-SkipPatches said so on screen'
 
-          # 6. -Print on the update script: the plan, and nothing else.
+          # 6. -Print on the update script: the whole plan, and nothing else.
+          #    The desktop step is ENABLED here on purpose, unlike cases 4 and 5:
+          #    it is the one part of a plan that reads something (the release
+          #    page) and the part whose -Print guard could go missing.
           Reset-Calls $tmp
           $be6 = Join-Path $root 'backend-update-print'
           New-Item -ItemType Directory -Force -Path $be6 | Out-Null
           Set-Content -LiteralPath (Join-Path $be6 'jarvis_hud.py') -Value 'print("stand-in")'
           $before = Get-Tree $be6
           $r = Invoke-PS @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $update,
-                           '-BackendPath', $be6, '-SkipDesktop', '-NoCheck', '-Print')
+                           '-BackendPath', $be6, '-NoCheck', '-Print')
           if ($r.Code -ne 0) { throw "update-jarvis.ps1 -Print exited $($r.Code)`n$($r.Out)" }
           Assert-True ((Get-Tree $be6) -eq $before) 'update -Print changed nothing in the backend folder'
           Assert-True ((Get-Calls $tmp) -eq '') 'update -Print ran apply-patches.ps1'
           Assert-True ($r.Out -match 'PRINTED ONLY') 'update -Print ended on the printed-only banner'
+          # -Print changes nothing, and it says out loud the one thing a plan run
+          # does over the network, so "change nothing" is never read as "touches
+          # nothing".
+          Assert-True ($r.Out -match 'asking the release page') 'update -Print said it would read the release page'
+          Assert-True ($r.Out -match 'no published desktop installer was found') 'update -Print carried on when that address could not be reached'
+          Assert-True ($r.Out -match 'would run|the desktop app cannot be built here') 'update -Print said what it would do about the desktop app'
 
-          # 7. The one decision in the update script that is neither a call nor
-          #    a download: when this folder already holds the release's commit
-          #    or newer, BUILD instead of installing that release - otherwise a
+          # 7. The one decision in the update script that is neither a call nor a
+          #    download: when this folder already holds the release's commit or
+          #    newer, BUILD instead of installing that release - otherwise a
           #    branch's own newer app would be replaced by an older published
-          #    one. Get the answer wrong in the other direction and a genuinely
-          #    newer release is never installed, so it is checked both ways.
-          #    The function is lifted out of the script as it is written, and
-          #    run against a real two-commit repository.
+          #    one. The function is lifted out of the script as it is written and
+          #    run against a real repository with a side branch.
+          #
+          #    WHAT THIS COVERS, AND WHAT IT DOES NOT. It pins the ANSWER for
+          #    four inputs, including a commit that exists in the repository but
+          #    is NOT in this branch's history - which is the case the decision
+          #    exists for. It does NOT run the caller that acts on the answer
+          #    (that needs a release manifest, and so the network), and it does
+          #    not pin the two guards at the top of the function: a commit that
+          #    does not exist and a folder that is not a git checkout come back
+          #    false whether those guards are there or not, because git itself
+          #    fails. Those two are pinned as the ANSWER the caller relies on,
+          #    not as coverage of the guards.
           $gitRepo = Join-Path $root 'ancestor'
           New-Item -ItemType Directory -Force -Path $gitRepo | Out-Null
           & git -C $gitRepo init -q
@@ -1226,6 +1250,14 @@ jobs:
           & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
           & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm second
           $shaB = (& git -C $gitRepo rev-parse HEAD).Trim()
+          & git -C $gitRepo checkout -q -b side
+          Set-Content -LiteralPath (Join-Path $gitRepo 'c.txt') -Value 'on the side branch'
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t add -A
+          & git -C $gitRepo -c user.email=t@example.invalid -c user.name=t commit -qm side
+          $shaC = (& git -C $gitRepo rev-parse HEAD).Trim()
+          & git -C $gitRepo checkout -q master 2>$null
+          if ($LASTEXITCODE -ne 0) { & git -C $gitRepo checkout -q main }
+          if ((& git -C $gitRepo rev-parse HEAD).Trim() -ne $shaB) { throw "the test repository did not go back to its second commit" }
           $src = Get-Content -LiteralPath $update -Raw
           $found = [regex]::Match($src, '(?s)function Test-LocalAtLeastAsNew.*?\n\}')
           if (-not $found.Success) { throw "could not find Test-LocalAtLeastAsNew in update-jarvis.ps1" }
@@ -1234,9 +1266,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $notARepo | Out-Null
           Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaA) -eq $true) 'a release commit this folder already contains means: build here, do not download'
           Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaB) -eq $true) 'a release commit equal to HEAD means the same'
-          Assert-True ((Test-LocalAtLeastAsNew $gitRepo '0123456789abcdef0123456789abcdef01234567') -eq $false) 'a commit this folder has never seen means: the release is ahead, download it'
-          Assert-True ((Test-LocalAtLeastAsNew $gitRepo '') -eq $false) 'no commit named at all means: do not claim the folder is newer'
-          Assert-True ((Test-LocalAtLeastAsNew $notARepo $shaA) -eq $false) 'a folder that is not a git checkout cannot be newer than a release'
+          Assert-True ((Test-LocalAtLeastAsNew $gitRepo $shaC) -eq $false) 'a commit that exists here but is NOT in this branch means: the release is ahead, download it'
+          Assert-True ((Test-LocalAtLeastAsNew $gitRepo '0123456789abcdef0123456789abcdef01234567') -eq $false) 'a commit this folder has never seen means: do not claim the folder is newer'
+          Assert-True ((Test-LocalAtLeastAsNew $notARepo $shaB) -eq $false) 'a folder that is not a git checkout cannot be newer than a release'
           # The runner takes the LAST native exit code of the step.
           exit 0
 
