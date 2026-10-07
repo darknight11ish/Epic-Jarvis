@@ -1,6 +1,8 @@
 # Keys and accounts set up inside Jarvis — a design note to approve
 
-**Status: a proposal. Nothing has been built. No code changes with this file.**
+**Status: the owner approved it, and parts A and B are built** (branch
+`next-account-keys-design`, 2026-10-06). Part C — giving the idle cloud lane a
+real transport — still needs one decision, and §7 says which.
 
 You asked (CLAUDE.md, the short list, 2026-10-06) that "anything needing a key or
 a sign-in should be settable in the Jarvis app itself", desktop only. This note
@@ -449,8 +451,8 @@ No file in this list was changed by this note. This note is documentation only.
 
 ## 10. What this note is not
 
-- It is not an approval to build. It is a proposal, and §7 is what needs your
-  answer first.
+- It was an approval request rather than an approval. The owner has since
+  approved it, parts A and B are built, and §7's remaining question is part C.
 - It does not propose reviving `cloud-keys.env`, or any plain-text key file.
 - It does not propose putting any of this on the phone.
 - It does not claim that any of the six services has been tried. None has.
