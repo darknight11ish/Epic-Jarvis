@@ -5,6 +5,41 @@ they worked on separate branches. This is the reconciled version, now that
 both have merged into `main` — read this one, not an old copy on a deleted
 branch.
 
+## The short list (read this first)
+
+Everything below is the full record, with dates and the reasoning behind each
+choice. This section is the short version: the rules that must never be broken,
+and the newest decisions, **one plain sentence each**. The owner adds a rule by
+saying it in chat; it goes here, newest first, and the owner sees the sentence
+before it is saved. Where this list and the detail below seem to disagree, read
+the detail - it carries the date and the reason.
+
+### The five that are not negotiable
+
+1. Email, files, credentials and stored memory stay on the local model.
+2. Never open a public tunnel.
+3. API keys are allowed, and get the care the pairing token gets: never logged,
+   sent only to the one service they authenticate against, never written to
+   disk in plain text.
+4. Never auto-approve anything, and stop acting when the event stream is stale.
+5. Non-commercial, sideloaded, never on Play.
+
+### Decisions, newest first
+
+- **2026-10-06 - the big Jarvis window gets its own chat box back.** This
+  reverses the 2026-09-28 "the PC has one chat box" decision. Typing there is
+  its own conversation, kept in History as HUD, and that window has no
+  Temporary chat, no New conversation, no "Used in this answer" and no crisis
+  panel. The owner was told those limits and accepted them.
+- **2026-10-06 - anything needing a key or a sign-in should be settable in the
+  Jarvis app itself**, desktop only, stored under rule 3 (Windows Credential
+  Manager for a secret; never a plain-text key file). The phone is never asked
+  for an account secret.
+- **2026-10-06 - the chatbot API keys and the monthly money limits are one
+  piece of work, not two.** A key with no limit leaves the service unusable, so
+  the keys box and the limits ship together. Raising a limit is a loosening and
+  takes a card plus Windows Hello; lowering one does not.
+
 ## Whenever a choice is needed, give multiple choice
 
 The owner has said it again and again ("Give me multiple choice", 2026-09-29
