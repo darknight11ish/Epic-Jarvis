@@ -32,8 +32,11 @@ is built here from the same settings the rest of Jarvis reads:
     jarvis_accounts.py; accounts.patch, 2026-10-06), so a row stops saying
     "not set up" the moment the owner fills that box in;
   * web search: jarvis_search.settings() and whether a key is SAVED;
-  * the cloud lanes: the chat route's own `_lane_names()` when this runs
-    inside the server, else the same file it reads (litellm-proxy.yaml);
+  * the cloud lanes: `jarvis_chatbot_api.lane_status()` - each lane's real
+    service and model, and whether the key and the month's limit allow it.
+    (Until 2026-10-06 this read lane names out of `litellm-proxy.yaml`, the
+    config of a proxy that was never installed; the lane is a service and a
+    model in that module now - docs/ACCOUNT-KEYS-DESIGN.md section 5, part C);
   * the second card and the big model: their switch files (read only -
     nothing is started, woken or probed).
 
@@ -495,24 +498,68 @@ def _join(items: list) -> str:
 # --------------------------------------------------------------------------
 
 
+def _cloud_lane_status() -> dict:
+    """What jarvis_chatbot_api can say about the cloud escalation lanes
+    without sending anything: the lane names, the service and model each one
+    means, and whether each can be used right now.
+
+    THIS REPLACED READING `litellm-proxy.yaml` (2026-10-06, the owner's
+    decision, docs/ACCOUNT-KEYS-DESIGN.md section 5 and part C). That file is
+    the config of a LiteLLM proxy that was never installed, and the lane names
+    in it went to JARVIS_URL - a request that could not work. The lane now
+    goes through this module's own adapter family, so this is the only honest
+    place left to ask. Opens no socket: ready_for() only checks a saved key,
+    a price and this month's limit."""
+    try:
+        import jarvis_chatbot_api as A
+        return A.lane_status()
+    except Exception:
+        return {"available": False, "lanes": [], "ready": []}
+
+
 def _cloud_model(ctx: Ctx) -> dict:
-    lanes, provs = ctx.lanes, ctx.providers
-    if lanes is None:
-        server = _server_lanes()
-        f_lanes, f_provs = _file_lanes(_proxy_file())
-        lanes = server if server is not None else f_lanes
-        provs = f_provs if provs is None else provs
-    lanes = [str(x)[:60] for x in (lanes or [])][:6]
-    provs = sorted({str(p)[:40] for p in (provs or [])})
     name = "Cloud model"
-    if not lanes:
+    # A caller that hands in its own lanes (most of test_reach.py's cases, and
+    # tools/gen_reach_cases.py) still gets exactly what it passed. Only the
+    # real reading - ctx.lanes is None - asks the module.
+    if ctx.lanes is not None:
+        lanes = [str(x)[:60] for x in (ctx.lanes or [])][:6]
+        provs = sorted({str(p)[:40] for p in (ctx.providers or [])})
+        if not lanes:
+            return _row("cloud_model", name, "not_set_up", "", ASK_NA,
+                        "No cloud model is set up, so every answer is written on this PC.")
+        where = ", ".join(provs) if provs else "the cloud service named in its settings"
+        return _row("cloud_model", name, "on", where, "Yes, every question",
+                    f"Jarvis may offer to send one question to a cloud model ({', '.join(lanes)}). "
+                    f"It goes only if you say yes to that one question, and never with your "
+                    f"memory, a picture, or a conversation that has read private or outside text.")
+    st = _cloud_lane_status()
+    lanes = st.get("lanes") or []
+    ready = [r for r in lanes if r.get("ready")]
+    if not st.get("available") or not lanes:
         return _row("cloud_model", name, "not_set_up", "", ASK_NA,
                     "No cloud model is set up, so every answer is written on this PC.")
-    where = ", ".join(provs) if provs else "the cloud service named in litellm-proxy.yaml"
+    if not ready:
+        # The TRUE reason, once, from the module that owns the rule.
+        why = str((lanes[0].get("why") or "").strip())
+        return _row("cloud_model", name, "not_set_up", "", ASK_NA,
+                    ("Not set up: " + why) if why else
+                    "No cloud model is set up, so every answer is written on this PC.")
+    where = _join(sorted({str(r.get("host") or "") for r in ready}))
+    models = sorted({f"{r.get('lane')} is {r.get('model')}" for r in ready})
+    note = ""
+    if len(ready) != len(lanes):
+        note = (f" {len(lanes) - len(ready)} other lane(s) cannot be used yet; the line "
+                f"beside each one says why.")
     return _row("cloud_model", name, "on", where, "Yes, every question",
-                f"Jarvis may offer to send one question to a cloud model ({', '.join(lanes)}). "
-                f"It goes only if you say yes to that one question, and never with your "
-                f"memory, a picture, or a conversation that has read private or outside text.")
+                f"Jarvis may offer to send one question to a cloud model "
+                f"({_join(sorted(str(r.get('lane')) for r in ready))}). "
+                f"Each lane means a real service and model - {_join(models)} - reached through "
+                f"that service's own official API with the key saved on this PC, with the "
+                f"same monthly money limit as any other chatbot conversation. A lane whose "
+                f"limit is reached is not offered at all. It goes only if you say yes to that "
+                f"one question, and never with your memory, a picture, or a conversation that "
+                f"has read private or outside text." + note)
 
 
 def _search_where(provider: Optional[str], url: str) -> str:

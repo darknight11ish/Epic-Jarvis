@@ -76,6 +76,13 @@ TITLES = {
     "search_the_web": "search the web",
     # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
     "chatbot_session": "hold a conversation with an AI chatbot for you",
+    # jarvis_chatbot_limits.py (2026-10-06): raising a monthly API limit is a
+    # loosening, so it raises ONE card plus Windows Hello; lowering one,
+    # removing one, correcting a price and resetting one tighten or correct, so
+    # they need no card at all. Two names for one direction of travel, because
+    # the owner-check attaches Windows Hello to the action, not the direction.
+    "raise_api_limit": "raise a chatbot's monthly spending limit",
+    "lower_api_limit": "lower a chatbot's monthly spending limit",
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",

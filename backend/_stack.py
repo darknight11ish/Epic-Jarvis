@@ -78,8 +78,39 @@ GAP = "# gap"
 #: (Left as it is, so nobody re-derives it: `jarvis_gate.py` is 2 under its
 #: pin. Tightening a pin is its own decision - test_installed_stand_in.py
 #: prints the same note.)
+#:
+#: RAISED 2026-10-06, 22 -> 24, for `jarvis_gate.py`, and both extra hunks are
+#: honest rather than drift - the two names are in `by_patch`:
+#:
+#:   * `chatbot-limits.patch` (this pass) +1. Its `_RISK` hunk sits directly
+#:     after quiz-cloud.patch's own `quiz_cloud_grade` row, whose lines are
+#:     themselves a materialised pre-image, so the context is text only the
+#:     owner's PC holds. There is no earlier patch this could anchor to
+#:     instead: `_RISK`'s last entry before quiz-cloud is 800 lines earlier.
+#:     Its `_NO_RULE_FROM_DENIAL` hunk materialised nothing, so this patch
+#:     costs the walk exactly one hunk.
+#:   * `readpage.patch` +1, already on this branch before this pass. Its third
+#:     hunk anchors to an `_TOOL_ACTIONS` line `inbox-tidy.patch` writes, and
+#:     that patch is not in this branch's 116-entry walk - the same
+#:     different-stacks gap described above, not a patch that drifted.
+#:
+#: Neither can be fixed by editing a patch: what is missing is the owner's own
+#: lines. The pin may come back down when `inbox-tidy.patch` joins the walk.
 RATCHET = {
-    "jarvis_hud.py": 45,
+    #: 46, LOWERED from 47 on 2026-10-06, when `ollama-direct.patch` stopped
+    #: carrying the cloud lane's whole resolution in the HUD and left
+    #: `body["model"]`, the key and the reason to `jarvis_chatbot_api.py`'s
+    #: `lane_state()`. Measured, not argued: with the patch as it was, the walk
+    #: materialised 47 hunks and THREE patches were in `by_patch` for this file
+    #: - `ollama-direct.patch` 3, and then `cloud-one-turn.patch` 1 and
+    #: `chat-stream.patch` 1, both of which had to invent context that
+    #: ollama-direct was supposed to have written and did not. With the smaller
+    #: patch the walk materialises 46 and only `ollama-direct.patch` is there,
+    #: at 4: its one added hunk still needs the owner's own lines, and the other
+    #: two no longer drift. 3 + 1 + 1 became 4 + 0 + 0, which is one hunk less
+    #: and, more to the point, two patches that now anchor on real text. A
+    #: ratchet: it may still only go down.
+    "jarvis_hud.py": 46,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
@@ -89,6 +120,34 @@ RATCHET = {
     #: pin moves with it. The note above already records that this stack reads
     #: 20 for this file against the old pin of 22 - the pin was loose either way.
     #: 23 is what the walk measures now. A ratchet: it may still only go down.
+    #:
+    #: Raised once more, to 25, when this branch and PR #80 met: the two patches
+    #: are independent, so the walk now carries BOTH materialised `_RISK` hunks.
+    #: This branch's own `chatbot-limits.patch` adds the two api-limit actions,
+    #: each needing a `_RISK` row, and the nearest non-materialised `_RISK`
+    #: anchor in this walk is ~800 lines away - the same honest reason as
+    #: `gate-risk-rows.patch`'s, not a patch that drifted. The number below is
+    #: what the walk measures with both patches in it; `test_installed_stand_in.py`
+    #: is what says so, and it may still only go down. (SUPERSEDED below.)
+    #:
+    #: LOWERED 2026-10-06, 25 -> 23, when the walk was read again while this
+    #: branch and PR #89's `main` were merged. The note above called
+    #: `chatbot-limits.patch`'s two materialised hunks honest, and they were not:
+    #: BOTH hunks were anchored on the entry each list held when that patch was
+    #: written - `"youtube_captions_read"` in `_RISK`, `"quiz_cloud_grade"` in
+    #: `_NO_RULE_FROM_DENIAL` - and neither was the last entry any more, because
+    #: `quiz-cloud.patch` and `readpage.patch` add their own entries after them
+    #: and both run earlier in this walk. A hunk that cannot match is
+    #: materialised at the END of the file (see the module docstring), so the
+    #: `_RISK` hunk re-emitted its context lines - `youtube_captions_read` among
+    #: them - and `jarvis_gate.py`'s `_RISK` held that action TWICE. The last row
+    #: wins, so the first was dead code; `test_gate_risk_words.py`'s duplicate
+    #: check is what caught it. Both hunks now name `read_web_page`,
+    #: `readpage.patch`'s own last entry in each of those two lists, so both
+    #: apply to real context: neither is in `by_patch` and the walk reads 23.
+    #: This was never a missing-line problem of the owner's PC's, which is what
+    #: the note above assumed - it was a patch anchored one entry too early. A
+    #: ratchet: it may still only go down.
     "jarvis_gate.py": 23,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,

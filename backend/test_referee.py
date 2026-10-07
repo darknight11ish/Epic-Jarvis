@@ -613,12 +613,21 @@ def t_the_patch_and_the_lists():
     # table above the action names referee.patch's own risk line sits in, and it
     # touches no list referee.patch's hunks anchor on. The checks below are what
     # really says so.
+    # chatbot-limits.patch (2026-10-06) goes after those too, and for a
+    # stronger reason than the order it happened to be written in: its two
+    # jarvis_gate.py hunks add the api-limit actions to the same two lists
+    # readpage.patch's own hunks do, so whichever of the two runs second must
+    # run against the other's finished text. readpage goes first; written the
+    # other way round it stopped applying at all (test_readpage.py). It adds no
+    # gate list entry referee.patch's hunks anchor on.
+    #
     # accounts.patch (2026-10-06) goes after those too: its two hunks are in
     # jarvis_hud.py, anchored on web-search.patch's own added lines, and it
     # adds no gate list entry, no risk row and no _TOOL_ACTIONS line - it
     # rewrites nothing referee.patch's hunks anchor on.
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
              "gate-action-name.patch", "tutorials.patch", "readpage.patch",
+             "chatbot-limits.patch", "chatbot-limits-hud.patch",
              "gate-risk-rows.patch", "accounts.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])

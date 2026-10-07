@@ -471,6 +471,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.chatbot-api-keys",
+    "title": "Chatbot API keys",
+    "about": "The six chatbot services' API keys, kept on this PC.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "chatbot api keys",
+      "the api keys",
+      "chatbot keys"
+    ]
+  },
+  {
     "id": "settings.hardware",
     "title": "Hardware and models",
     "about": "Your graphics cards and the three setups.",
@@ -2366,6 +2387,7 @@ export const ALIASES = {
   "always keep in mind": "brain.memory.profile",
   "animal options": "settings.animal-options",
   "animal settings": "settings.animal-options",
+  "api keys": "settings.chatbot-api-keys",
   "app lock": "settings.security",
   "app updates": "settings.updates",
   "appearance": "settings.appearance-card",
@@ -2396,7 +2418,9 @@ export const ALIASES = {
   "chat tags": "brain.history.tags",
   "chat with customer support for me": "brain.work.support",
   "chatbot": "group.chatbots",
+  "chatbot api keys": "settings.chatbot-api-keys",
   "chatbot driver": "brain.work.chatbot",
+  "chatbot keys": "settings.chatbot-api-keys",
   "chatbots": "group.chatbots",
   "check for tool updates": "settings.tool-updates",
   "coming up": "brain.work.coming-up",

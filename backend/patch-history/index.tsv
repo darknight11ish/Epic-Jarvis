@@ -31,8 +31,11 @@ chat-history.patch	chat-history/d1d2515.patch	d1d2515f681cdee0e95267f3c64b41f2e2
 chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35Z	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h
 chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53Z	Backend: keep chat history on the PC, encrypted (chat-history.patch)
 chat-stream.patch	chat-stream/997bfa1.patch	997bfa1dbd0acc61ab7d6d831c7f3f7c59797d27	2026-09-24T00:22:48Z	Chat: every local turn streamed once, with the right Content-Type, kept alive through approvals
+chatbot-limits.patch	chatbot-limits/4e3963f.patch	4e3963fbc469aba4690e8ab8a137d4e0444b058d	2026-10-06T22:05:29-07:00	the keys work joins main, and the patch that needed two places is now two patches
+chatbot-limits.patch	chatbot-limits/581cda8.patch	581cda87af0da89dd45f9d069d93f342f1858b95	2026-10-06T17:59:57-07:00	the six chatbot API keys and their monthly money limits were one job, and neither was in the app
 chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef1620052d2437275	2026-09-28T02:09:55Z	Merge branch 'studio-chatbot-screens' into claude/jarvis-ai-assistant-research-ff37vy
 chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34Z	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
+cloud-one-turn.patch	cloud-one-turn/7fda1b7.patch	7fda1b7a7ad8bd26508e0e7bae5a4539ede50410	2026-09-23T22:32:19Z	Follow-ups remember the conversation, on the phone and the quickbar
 devices.patch	devices/bd55634.patch	bd55634d1d0bc149d4ae0236c443f90265db6e5f	2026-09-28T21:11:27Z	backend: devices.patch, before every token_ok=_token_ok; ship jarvis_devices.py
 email-send.patch	email-send/ab2eb89.patch	ab2eb8925786245dca22da666433ce25f1b22678	2026-09-25T22:40:42Z	Email sending: one approval card per email, the whole text on it (backend)
 extraction-wiring.patch	extraction-wiring/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18Z	Routes to read, edit, forget and export what Jarvis has learned
@@ -79,6 +82,9 @@ memory-safety.patch	memory-safety/fcdba5d.patch	fcdba5d698e7c6c0e21f224cb87734a9
 memory-safety.patch	memory-safety/6ccc6e0.patch	6ccc6e015278a0ef2d9a1798426112d43fd288ad	2026-09-14T23:42:51Z	Memory: stop the destructive paths, and start the event pump
 note-capture.patch	note-capture/92fa868.patch	92fa8686833d4ef1bf6240f51c8877f1ac0fdd4e	2026-09-24T01:51:49Z	Backend: Obsidian as a note target (#obs) and its vault searched as a folder
 note-capture.patch	note-capture/d37739c.patch	d37739c4ce0790869ce61aa3081983fed57908a2	2026-09-23T23:03:28Z	Logseq and Joplin notes that are really filed
+ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b301f5d7db	2026-10-06T23:24:11-07:00	the cloud lane's resolution leaves the HUD, and the six rehearsals find their text again
+ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340d566ef05	2026-10-06T20:32:34-07:00	The cloud lane gets a real transport, and DeepSeek is behind it
+ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 quiz.patch	quiz/663f61e.patch	663f61e22e0f4ce76ab4c24d278b1d07bd2c293f	2026-09-30T05:12:04Z	WIP: Quiz me on a text (Slice A), builders still working
 readpage.patch	readpage/f84ce5d.patch	f84ce5d435e0e326e1a9b84d19b697bc063e487b	2026-10-05T20:54:36-07:00	He could not hand Jarvis a web page and hear it read out, so build exactly that one thing

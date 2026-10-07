@@ -36,6 +36,38 @@
 //! the backend (`resolve_secret`'s own rule) whatever is or is not saved
 //! here - saving a value here never overwrites or clears it, and this page
 //! cannot either.
+//!
+//! # The six chatbot API keys (2026-10-06)
+//!
+//! `docs/ACCOUNT-KEYS-DESIGN.md` steps 1-2, the owner's decision 1: "keys
+//! and limits together". The chatbot driver's six API services (OpenAI,
+//! DeepSeek, Mistral, xAI, OpenRouter, Groq) used to be settable only from
+//! the PC's own command line - `py -3 jarvis_chatbot_api.py key <service>` -
+//! and this app never mentioned them at all. The same three commands, in the
+//! same shape, now cover their keys:
+//!
+//! * [`get_chatbot_api_keys`] - for each of the six, whether Credential
+//!   Manager holds a key (never the key).
+//! * [`save_chatbot_api_key`] / [`forget_chatbot_api_key`] - one key into (or
+//!   out of) Credential Manager on this PC.
+//!
+//! Two differences from the four account secrets, both deliberate:
+//!
+//! * **No environment variable wins here.** `jarvis_chatbot_api.py` has
+//!   never read one for a key (its own docstring: "No environment variable,
+//!   no file, no new store"), so the status answer always carries
+//!   `env_set: false` and a box is never disabled for that reason.
+//! * **No approval card**, matching the Accounts page above and
+//!   `docs/JARVIS-API.md:8471-8475`: saving the owner's own key for the
+//!   owner's own account is the owner configuring their own accounts. It is
+//!   the *money limit* that raises a card, and that is a separate route.
+//!
+//! Rule 3 is the whole point of the shape: the key is typed here, written
+//! straight into Credential Manager by [`crate::token_store`], and never
+//! sent over HTTP, never to the phone, and never shown again. There is no
+//! backend route for a key, on purpose - `jarvis_chatbot_api.save_key`'s own
+//! docstring says so, and `backend/test_chatbot_keys.py` fails if one
+//! appears.
 
 use crate::token_store;
 
@@ -99,9 +131,71 @@ pub async fn forget_account_secret(name: String) -> Result<serde_json::Value, St
     }))
 }
 
+/// One chatbot service's status for the page: never the key itself.
+fn chatbot_status(service: &str) -> serde_json::Value {
+    // There is no environment variable for a chatbot API key (the module
+    // note above), so this is always false - kept in the answer so the page
+    // reads one shape for both kinds of box.
+    let saved = token_store::chatbot_api_key_saved(service).ok().flatten();
+    serde_json::json!({
+        "service": service,
+        "env_set": false,
+        "saved": saved,
+    })
+}
+
+/// The six chatbot API keys' status: `GET`-shaped, but never leaves this PC.
+#[tauri::command]
+pub async fn get_chatbot_api_keys() -> Result<serde_json::Value, String> {
+    let services: Vec<serde_json::Value> = token_store::CHATBOT_API_KEY_TARGETS
+        .iter()
+        .map(|(service, company)| {
+            let mut row = chatbot_status(service);
+            row["company"] = serde_json::json!(company);
+            row
+        })
+        .collect();
+    Ok(serde_json::json!({ "services": services }))
+}
+
+/// Saves one chatbot API key in Credential Manager on this PC. Returns words
+/// only - never the key.
+#[tauri::command]
+pub async fn save_chatbot_api_key(
+    service: String,
+    value: String,
+) -> Result<serde_json::Value, String> {
+    if token_store::chatbot_api_service(&service).is_none() {
+        return Err("That is not one of the six chatbot services.".to_string());
+    }
+    if let Some(why) = token_store::chatbot_api_key_problem(&value) {
+        return Err(why.to_string());
+    }
+    token_store::write_chatbot_api_key(&service, &value)
+        .map_err(|e| crate::plain_errors::key_store_words(&e.to_string()))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "said": "Saved in Windows Credential Manager on this PC. Quit Jarvis Desktop from \
+                 the tray icon and start it again so the backend picks it up.",
+    }))
+}
+
+/// Removes one chatbot API key from Credential Manager on this PC.
+#[tauri::command]
+pub async fn forget_chatbot_api_key(service: String) -> Result<serde_json::Value, String> {
+    if token_store::chatbot_api_service(&service).is_none() {
+        return Err("That is not one of the six chatbot services.".to_string());
+    }
+    token_store::delete_chatbot_api_key(&service).map_err(|e| format!("Not removed: {e}."))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "said": "Removed from Windows Credential Manager on this PC.",
+    }))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::status;
+    use super::{chatbot_status, status};
 
     #[test]
     fn the_status_never_carries_a_value_field() {
@@ -118,5 +212,33 @@ mod tests {
         let v = status("not_one_of_them");
         assert_eq!(v["env_set"], false);
         assert!(v["saved"].is_null());
+    }
+
+    /// The same rule for the six chatbot keys: a status never carries the
+    /// key, and there is no environment variable that could win here.
+    #[test]
+    fn a_chatbot_status_carries_the_service_and_never_the_key() {
+        let v = chatbot_status("openai");
+        assert!(v.get("value").is_none());
+        assert!(v.get("key").is_none());
+        assert_eq!(v["service"], "openai");
+        assert_eq!(v["env_set"], false);
+        let v = chatbot_status("not_one_of_them");
+        assert_eq!(v["env_set"], false);
+        assert!(v["saved"].is_null());
+    }
+
+    /// The four account secrets are still exactly four, and the six chatbot
+    /// keys are still exactly six: two tables, neither one grown by accident.
+    #[test]
+    fn the_two_tables_hold_four_and_six() {
+        use crate::token_store::{ACCOUNT_SECRET_TARGETS, CHATBOT_API_KEY_TARGETS};
+        assert_eq!(ACCOUNT_SECRET_TARGETS.len(), 4);
+        assert_eq!(CHATBOT_API_KEY_TARGETS.len(), 6);
+        // No name is claimed by both tables: the two pages would then fight
+        // over one Credential Manager entry.
+        let account: Vec<&str> = ACCOUNT_SECRET_TARGETS.iter().map(|(n, _, _)| *n).collect();
+        let chatbot: Vec<&str> = CHATBOT_API_KEY_TARGETS.iter().map(|(s, _)| *s).collect();
+        assert!(account.iter().all(|n| !chatbot.contains(n)));
     }
 }

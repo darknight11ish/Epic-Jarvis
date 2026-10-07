@@ -6,7 +6,42 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
-- **Settings' "Jump to:" list is grouped, so a setting can be found (2026-10-06).** The owner opened Settings and said "can you organize the jump to settings in the settings menu? This is really disorganized" - about forty links in eleven flat rows that did not say what any row was. Each link now sits under a short plain-English row inside the band it already belonged to: Everyday holds Start here, Your devices, Help, Look, Talk and voice, Schedules and This page; Rare holds On this PC, Voice and sound, The AI and its tools, More on this PC, The model and cards, Where things are kept and Keeping it up to date; What Jarvis does holds What Jarvis may do and About this build. Look and feel are unchanged - same card, same small muted labels, same link colour - and so is every link: the same 32 hrefs, in the same order, with the same words and the same card ids. Nothing was added and nothing removed. The grouping is the page's own: the three bands are its own three headings, and the short rows are the six groups `docs/ease-audit-2026-09-27/customize.md` proposed and `critic.md:199` kept as "the target order of the jump list" for both apps. The registry records no group and no order (only an id, its spoken names, `app` and `where`), and `jarvis_menus.py`'s groups are feature groups for the hide-a-menu list, so rather than give the backend a second, quieter opinion about where a card sits on one page, a new check holds the list to the page instead: `backend/test_settings_registry.py`'s `t_jump_list_matches_the_page` fails if a link is not a real card, is listed twice, is missing, or has floated to another band. Playwright is not installed on this machine, so `tests/ia.mjs` still exits without running a single check, and the list has not been seen rendered in a browser. `menu-visibility-settings.js` also hides a row whose every link is hidden.
+- **Settings' "Jump to:" list is grouped, so a setting can be found (2026-10-06).** The owner opened Settings and said "can you organize the jump to settings in the settings menu? This is really disorganized" - about forty links in eleven flat rows that did not say what any row was. Each link now sits under a short plain-English row inside the band it already belonged to: Everyday holds Start here, Your devices, Help, Look, Talk and voice, Schedules and This page; Rare holds On this PC, Voice and sound, The AI and its tools, More on this PC, The model and cards, Where things are kept and Keeping it up to date; What Jarvis does holds What Jarvis may do and About this build. Look and feel are unchanged - same card, same small muted labels, same link colour - and so is every link: the same 32 hrefs, in the same order, with the same words and the same card ids; the 33rd, `#chatbot-api-keys`, is the API-keys work landing in main underneath this one, and it sits in the More on this PC row beside Accounts, where the flat list had it. Nothing else was added and nothing removed. The grouping is the page's own: the three bands are its own three headings, and the short rows are the six groups `docs/ease-audit-2026-09-27/customize.md` proposed and `critic.md:199` kept as "the target order of the jump list" for both apps. The registry records no group and no order (only an id, its spoken names, `app` and `where`), and `jarvis_menus.py`'s groups are feature groups for the hide-a-menu list, so rather than give the backend a second, quieter opinion about where a card sits on one page, a new check holds the list to the page instead: `backend/test_settings_registry.py`'s `t_jump_list_matches_the_page` fails if a link is not a real card, is listed twice, is missing, or has floated to another band. Playwright is not installed on this machine, so `tests/ia.mjs` still exits without running a single check, and the list has not been seen rendered in a browser. `menu-visibility-settings.js` also hides a row whose every link is hidden.
+
+- **The cloud lane asks the service for the service's own model now, not for
+  its own lane name (2026-10-06).** The lane built the day before reached
+  DeepSeek correctly - right address, right key, right limit - and then asked
+  it for a model called `jarvis-escalate`, which no service has. The one line
+  that resolves a lane had written the model it had just looked up onto the
+  HUD's *parsed request* (`do_POST`'s own `body`) instead of onto the copy of
+  the request that is actually sent, because inside that helper a bare `body`
+  is the parsed request and the copy is a sibling function's local - so the
+  escalation could never answer. The resolved model now goes on the very dict
+  the request is built from: `_completions_url(lane, body)`, with `body` a
+  parameter rather than a name read from around the function. That call is also
+  the last line of `cloud-one-turn.patch`'s context, so that patch's copy of the
+  line was re-anchored in the same change rather than left broken. No test here
+  had caught it: lifting `_completions_url` out of the file to run it turns the
+  enclosing name into a global, which is the wrong object by construction, so a
+  new check runs the HUD's `_completions_url` and `_open` **where they really
+  live** - pasted back inside a stand-in `do_POST` - and reads the JSON that
+  would go out; a second, smaller check reads the same shape from the patch's
+  own text, so it runs without the owner's file too.
+
+- **The cloud escalation lane has a real transport now, and DeepSeek is behind it (2026-10-06).** "Try the cloud model" sent its one question to `JARVIS_URL`, the port of a program this setup never installed; a lane name such as `jarvis-escalate` now resolves to a real service and model through the same code the chatbot API keys use - DeepSeek's own pinned host over HTTPS, the key from Windows Credential Manager, the monthly money limit, and the answer-length cap - and a lane the limit cannot pay for is answered on this PC instead, so the offer can disappear rather than overspend. DeepSeek's address, current model names and worst-case (peak, cache-miss) prices were read from its own pricing page on 2026-10-06, so the limit stops early rather than late; the desktop's "LiteLLM" health light now reads the lane's real state, and "What Jarvis can reach" no longer reads lane names out of `litellm-proxy.yaml`. `docs/ACCOUNT-KEYS-DESIGN.md` section 5 says what to remove from the PC by hand.
+
+- **Anything needing a key is settable in the app now (2026-10-06).** Settings
+  has a new "Chatbot API keys" card for the six chatbot API services (OpenAI,
+  DeepSeek, Mistral, xAI, OpenRouter, Groq): each key is typed on the PC and
+  written straight into Windows Credential Manager from Rust, never over HTTP
+  and never to the phone, exactly like the Accounts page's four secrets. The
+  same card carries each service's monthly money limit and its price list,
+  because a key with no limit leaves the service unusable: raising a limit is a
+  loosening, so it gets one approval card and Windows Hello, while lowering one,
+  removing one and correcting a price change at once with no card. Every default
+  price says it is unverified and when it was written; every price says whether
+  it is yours and the date you set it. `docs/ACCOUNT-KEYS-DESIGN.md` is the
+  design.
 
 - **The desktop tutorial no longer says the PC has one chat box
   (2026-10-06).** `backend/jarvis_tutorials.py` now teaches the big HUD

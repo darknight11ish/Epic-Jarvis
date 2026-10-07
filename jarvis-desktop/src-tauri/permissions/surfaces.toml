@@ -474,6 +474,24 @@ permissions = [
   "allow-get-account-secrets",
   "allow-save-account-secret",
   "allow-forget-account-secret",
+  # "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md steps 1-2, 2026-10-06):
+  # the six API services the chatbot driver can use, each key written
+  # straight into Credential Manager on this PC by save_chatbot_api_key -
+  # never sent to the backend or the phone, never read back to a page. The
+  # Credential Manager names are the Python side's own
+  # (jarvis_chatbot_api.KEY_TARGETS); a cross-check test fails if the two
+  # ever drift. Settings window only - rule 3.
+  "allow-get-chatbot-api-keys",
+  "allow-save-chatbot-api-key",
+  "allow-forget-chatbot-api-key",
+  # "Chatbot money limits" (docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, 2026-10-06):
+  # the same six services' monthly limits and each model's price, read from
+  # the PC and set from here. The RAISE is the loosening - the PC raises ONE
+  # approval card and asks Windows Hello for it, and refuses it from any other
+  # device; a lowering, a removal and a price correction change at once. Every
+  # write is held on a stale link in Rust (rule 4). Settings window only.
+  "allow-chatbot-money",
+  "allow-set-chatbot-money",
   # "Accounts", the ADDRESS half (backend/accounts.patch, jarvis_accounts.py,
   # 2026-10-06): the mail server, its port and mailbox, the sending server,
   # its port and how the email is encrypted, the Home Assistant address and
