@@ -40,6 +40,13 @@ the detail - it carries the date and the reason.
   piece of work, not two.** A key with no limit leaves the service unusable, so
   the keys box and the limits ship together. Raising a limit is a loosening and
   takes a card plus Windows Hello; lowering one does not.
+- **2026-10-06 - the agent runs the patcher; the owner does not.** When the
+  owner says "patch Jarvis", the agent does the whole thing: quits Jarvis,
+  brings `C:\Users\pcadmin\Documents\jarvis-update` up to `main`, runs
+  `scripts/apply-patches.ps1` against the installed backend, reads the verdict,
+  restarts Jarvis and re-runs the preflight. He had been pasting that command
+  by hand for a long time and was never told it could be delegated; offer it,
+  never wait to be asked.
 
 ## Whenever a choice is needed, give multiple choice
 
