@@ -216,6 +216,13 @@ export function applyVisibility() {
     }
   }
 
+  // ...and a jump row (settings.html's short groups inside a band, 2026-10-06)
+  // whose every link is hidden goes with them, rather than leaving a label
+  // pointing at nothing.
+  for (const place of document.querySelectorAll("#settings-jump .settings-jump-place")) {
+    place.hidden = ![...place.querySelectorAll("a")].some((a) => !a.hidden);
+  }
+
   // Update "N hidden - Show" bar
   const count = menuManager.hiddenCount();
   const bar = $("menus-hidden-bar");
