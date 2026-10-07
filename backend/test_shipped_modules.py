@@ -376,9 +376,17 @@ def t_no_patch_edits_a_shipped_file():
     # The script copies shipped files whole, every run. A patch that edited
     # one would be undone by the next copy - and the order of copying and
     # patching would start to matter. On the list the script actually
-    # applies (split halves for the six superseded patches), none does.
+    # applies (split halves for the superseded patches), none does.
+    #
+    # Seven, not six: `tutorials.patch` joined the table on 2026-10-07, after
+    # the published base was found to carry the tutorials work itself. It was
+    # missing, so the patcher tried to apply a patch whose work is already in
+    # `jarvis-backend/jarvis_hud.py`, and REFUSED THE WHOLE RUN on the owner's
+    # PC ("1 patch(es) will not apply. NOTHING HAS BEEN CHANGED"). The count is
+    # the guard that makes this class of omission fail here instead.
     superseded = ps1_superseded()
-    check("six patches are superseded by the rebuilt modules", len(superseded) == 6, f"{superseded}")
+    check("seven patches are superseded by the published base and the rebuilt modules",
+          len(superseded) == 7, f"{superseded}")
     for name in ps1_list("PATCHES"):
         path = HERE / name
         if name in superseded:

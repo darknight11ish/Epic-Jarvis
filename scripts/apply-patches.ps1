@@ -1435,6 +1435,17 @@ $REBUILT_SUPERSEDES = @{
     'embedding-guard.patch'   = 'jarvis_memory.py only - nothing else to apply'
     'event-allowlist.patch'   = 'jarvis_events.py only - nothing else to apply'
     'approval-notice.patch'   = 'jarvis_events.py, already in the rebuild'
+    # Found 2026-10-07, when updating the owner's own PC: the published base
+    # (jarvis-backend/) now carries the tutorials work itself - jarvis_hud.py
+    # holds the `import jarvis_tutorials` block AND jarvis_tutorials.py is in
+    # SHIPPED - so this patch has nothing left to apply. It was missing from
+    # this table, which is not a cosmetic omission: the patcher tried to apply
+    # a patch whose work is already there, tutorials.patch failed to apply, and
+    # apply-patches.ps1 refused the WHOLE run ("1 patch(es) will not apply.
+    # NOTHING HAS BEEN CHANGED"). Every other update on that PC stopped dead on
+    # it. Marking it superseded is what the other six rows do, for the same
+    # reason.
+    'tutorials.patch'         = 'jarvis_hud.py and jarvis_tutorials.py, already in the published base'
 }
 
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
