@@ -32,6 +32,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, normalize } from "node:path";
 import * as K from "./uikit.mjs";
+import { OPEN_BAR_KEY } from "../src/hud-window.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
@@ -340,6 +341,63 @@ await check("in a plain browser (no shell) the HUD keeps its own box", async () 
   }));
   await page.close();
   assert.deepEqual(shown, { input: false, button: false });
+});
+
+// The button has a switch of its own (the owner's request of 2026-10-06,
+// "The big HUD window" in Settings, src/hud-window.js): ON by default, and
+// OFF takes the button out of this window without touching the box, its Send
+// or the mic. tests/hud-window.mjs runs the injected bootstrap itself in a
+// hand-made DOM, because Playwright is not installed everywhere; this is the
+// same setting driven through the REAL page, where it is available.
+await check("the button's own setting: on by default, and off takes only the button away", async () => {
+  const { page, problems, chats } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const stored = () => page.evaluate((key) => {
+    try { return localStorage.getItem(key); } catch (e) { return "unreadable"; }
+  }, OPEN_BAR_KEY);
+  const state = () => page.evaluate(() => ({
+    button: Boolean(document.getElementById("hud-open-bar")),
+    inputHidden: document.getElementById("input").hidden,
+    sendHidden: document.getElementById("send").hidden,
+    inputTabIndex: document.getElementById("input").tabIndex,
+    mic: Boolean(document.getElementById("mic")),
+  }));
+  const atStart = await state();
+  const nothingStored = await stored();
+  // A change made while the window is open is obeyed at once, through the
+  // `storage` event this computer's windows share.
+  await page.evaluate((key) => localStorage.setItem(key, "false"), OPEN_BAR_KEY);
+  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), OPEN_BAR_KEY);
+  await page.waitForTimeout(150);
+  const live = await state();
+  // ...and it is obeyed on a fresh load of the page, not only live.
+  await page.reload();
+  await page.waitForTimeout(900);
+  const reloaded = await state();
+  // The box still works with the button gone: its own chat, not the bar's.
+  await page.fill("#input", "typed with the button off");
+  await page.click("#send");
+  await page.waitForTimeout(800);
+  const sent = chats.at(-1)?.messages?.at(-1)?.content;
+  // Back on again, the button comes back rather than needing a relaunch.
+  await page.evaluate((key) => localStorage.setItem(key, "true"), OPEN_BAR_KEY);
+  await page.reload();
+  await page.waitForTimeout(900);
+  const back = await state();
+  await page.close();
+
+  assert.equal(nothingStored, null, "a fresh install must have stored nothing at all");
+  assert.equal(atStart.button, true, "the button is not there by default");
+  assert.equal(live.button, false, "the button stayed after the setting was turned off");
+  assert.equal(reloaded.button, false, "a reload drew the button again");
+  assert.equal(sent, "typed with the button off", "the box stopped working with the button hidden");
+  assert.equal(back.button, true, "the button did not come back when the setting was turned on");
+  for (const [name, s] of [["live", live], ["reloaded", reloaded], ["back", back]]) {
+    assert.equal(s.inputHidden, false, `the box was hidden (${name})`);
+    assert.equal(s.sendHidden, false, `Send was hidden (${name})`);
+    assert.equal(s.inputTabIndex, 0, `the box left the tab order (${name})`);
+    assert.equal(s.mic, true, `the mic button went with the button (${name})`);
+  }
+  assert.deepEqual(problems, []);
 });
 
 await check("with Ollama up and no OpenJarvis, Send reaches /api/chat and shows the reply", async () => {

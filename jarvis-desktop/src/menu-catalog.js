@@ -1015,6 +1015,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.hud-window",
+    "title": "The big HUD window",
+    "about": "Its own chat box, and the button that opens the Jarvis bar.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "the big hud window",
+      "big hud window",
+      "the hud window",
+      "hud window",
+      "the big jarvis window",
+      "big jarvis window"
+    ]
+  },
+  {
     "id": "brain.tab.memory",
     "title": "Memory",
     "about": "What Jarvis knows and how it learns.",
@@ -2404,6 +2428,8 @@ export const ALIASES = {
   "backup settings": "settings.backup",
   "backups": "settings.backup",
   "between us": "brain.memory.between-us",
+  "big hud window": "settings.hud-window",
+  "big jarvis window": "settings.hud-window",
   "big model": "settings.big-model",
   "big model (slow)": "settings.big-model",
   "briefing": "brain.work.briefing",
@@ -2475,6 +2501,7 @@ export const ALIASES = {
   "home": "group.home",
   "hotkeys": "settings.shortcuts",
   "how jarvis talks": "settings.manner",
+  "hud window": "settings.hud-window",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
   "jarvis's voice": "settings.voices",

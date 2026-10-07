@@ -231,6 +231,17 @@ SECTIONS: tuple = (
     # "Show or hide menus" (2026-09-30): a card on the desktop and Settings row on the phone.
     Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
                                 "the menus", "menus")),
+    # "The big HUD window" (the owner's request of 2026-10-06): the one switch
+    # that shows or hides the "Open the Jarvis bar" button in the big "Jarvis"
+    # window. Desktop only - the phone has no such row, so OpenPlace.kt lists it
+    # PC-only. Cosmetic, so it is "open"-only here: the change itself is made by
+    # the page (jarvis-desktop/src/hud-window.js, in this computer's
+    # localStorage) the moment the switch is clicked, with no route, no approval
+    # card and nothing for a spoken "adjust" to call - the same treatment the
+    # floating face and "Interrupt Jarvis while it talks" get.
+    Section("hud-window", ("the big hud window", "big hud window", "the hud window",
+                           "hud window", "the big jarvis window", "big jarvis window"),
+            app="desktop"),
     # Spending (2026-09-30): a card on the desktop.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
             app="desktop"),
