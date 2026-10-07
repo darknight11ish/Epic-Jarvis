@@ -47,6 +47,13 @@ the detail - it carries the date and the reason.
   restarts Jarvis and re-runs the preflight. He had been pasting that command
   by hand for a long time and was never told it could be delegated; offer it,
   never wait to be asked.
+- **2026-10-07 - the agent watches CI, fixes it and re-runs it without being
+  asked.** A red job is diagnosed, fixed if the fault is ours, and re-run by the
+  agent; a run cancelled by the concurrency setting (`cancel-in-progress: true`,
+  which shows its killed jobs as failures) is re-run rather than reported as a
+  test failure. The owner should never be the one to notice a red or cancelled
+  job, and should never have to ask for the re-run. Say what was done
+  afterwards, plainly - the diagnosis, the fix and the new result.
 
 ## Whenever a choice is needed, give multiple choice
 
