@@ -67,7 +67,16 @@ def _patch_names() -> list:
 def t_the_patch_is_registered_last():
     names = _patch_names()
     check("the patch file is in $PATCHES", "gate-risk-rows.patch" in names)
-    check("it is LAST, like every new patch here", names and names[-1] == "gate-risk-rows.patch",
+    # "Last" means last but for the patches written after it - the same rule
+    # test_referee.py and test_devices.py use. Every new patch is appended, so
+    # the next one pushes this one up the list, and that is not a defect in
+    # either of them.
+    # screen-attach.patch (2026-10-07) comes after it: one hunk in jarvis_hud.py's
+    # tutorials install block, touching jarvis_gate.py not at all, so it cannot
+    # rewrite the rows this patch fixes.
+    later = {"screen-attach.patch"}
+    check("it is LAST, like every new patch here, bar the ones written after it",
+          [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
     check("and every name in the list has a file",
           all((HERE / n).is_file() for n in names),
