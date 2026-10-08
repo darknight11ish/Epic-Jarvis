@@ -110,18 +110,26 @@ class SettingsJumpTest {
 
         // The position the screen really has, and the number the old fixed map
         // handed to `animateScrollToItem` - which is what this test is about.
-        val oldMapNumber = SettingsJump.ENTRIES.indexOfFirst { it.key == "asks-first" }
-        val realPosition = drawn.indexOf("asks-first")
-        assertTrue("What asks first is still on the screen", realPosition >= 0)
-        assertTrue(
-            "hiding one menu has to move the rows below it, or the old " +
-                "index-based jump would have been harmless",
-            realPosition != oldMapNumber,
+        //
+        // The row to compare is the one BELOW the hidden menu: hiding a menu
+        // moves the rows after it up by one and leaves the ones before it
+        // alone. The first version of this check happened to name
+        // "asks-first", which sits ABOVE Voice - so it proved nothing and
+        // failed on CI (2026-10-08).
+        val hiddenAt = SettingsJump.ENTRIES.indexOfFirst { it.key == name }
+        val below = SettingsJump.ENTRIES[hiddenAt + 1].key
+        val realPosition = drawn.indexOf(below)
+        val beforeHiding = rows("SettingsScreen.kt").indexOf(below)
+        assertTrue("$below is still on the screen", realPosition >= 0)
+        assertEquals(
+            "hiding the menu above has to move $below up by exactly one",
+            beforeHiding - 1, realPosition,
         )
+        val oldMapNumber = SettingsJump.ENTRIES.indexOfFirst { it.key == below }
         assertTrue(
-            "the old number now points at a different panel: " +
-                "${drawn.getOrNull(oldMapNumber)} rather than asks-first",
-            drawn.getOrNull(oldMapNumber) != "asks-first",
+            "the old fixed number for $below no longer matches the screen: " +
+                "$oldMapNumber rather than $realPosition",
+            oldMapNumber != realPosition,
         )
         assertFalse("the hidden key is not drawn anywhere", drawn.contains(name))
 

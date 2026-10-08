@@ -46,15 +46,25 @@ class TouchTargetAndInsetsTest {
         var inBlock = false
         for (line in text.lines()) {
             val t = line.trimStart()
+            // Comments become EMPTY LINES, not dropped ones: the call-site
+            // search below reads code, and the reason it demands is written in
+            // a comment - keeping the line count is what lets it look at the
+            // same window in the raw text. Dropping them (as this did until
+            // 2026-10-08) deleted the very explanation it then asked for.
             if (inBlock) {
                 if (t.contains("*/")) inBlock = false
+                out.add("")
                 continue
             }
             if (t.startsWith("/*")) {
                 if (!t.contains("*/")) inBlock = true
+                out.add("")
                 continue
             }
-            if (t.startsWith("//")) continue
+            if (t.startsWith("//")) {
+                out.add("")
+                continue
+            }
             out.add(line)
         }
         return out.joinToString("\n")
@@ -108,13 +118,19 @@ class TouchTargetAndInsetsTest {
             .walkTopDown()
             .filter { it.isFile && it.extension == "kt" }
             .forEach { file ->
-                val lines = code(file.readText()).lines()
+                val src = file.readText()
+                val lines = code(src).lines()
+                // The REASON is a comment and `code()` blanks comments, so the
+                // window is read from the raw text. The line numbers are the
+                // same, because `code()` now keeps every line (2026-10-08:
+                // dropping them deleted the explanation this then asked for).
+                val raw = src.lines()
                 lines.forEachIndexed { i, line ->
                     // A call site, not the declaration itself - whose feature
                     // list is where the escape hatch is offered, not taken.
                     if (!line.contains(".pressable(") || line.trimStart().startsWith("fun ")) return@forEachIndexed
                     calls++
-                    val window = lines.drop(i).take(12).joinToString("\n").trimEnd()
+                    val window = raw.drop(i).take(12).joinToString("\n").trimEnd()
                     if (!window.contains("minTouchTarget")) return@forEachIndexed
                     optOuts++
                     // FaceEditor's palette swatches: a 48dp target there is a

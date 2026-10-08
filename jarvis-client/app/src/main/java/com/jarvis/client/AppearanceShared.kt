@@ -68,8 +68,8 @@ object AppearanceShared {
                 "leaves the phone."
         Status.NOT_SENT ->
             "Not sent to your desktop - Jarvis could not reach it, so for now " +
-                "the face and the state colours are on this phone only. They are " +
-                "sent again the next time a change is made with the link up. " +
+                "the face and the state colours are on this phone only. They go " +
+                "over again the next time a change is made with the link up. " +
                 "Nothing else on this screen leaves the phone."
         Status.MAYBE_NEXT ->
             "Not sent yet: the face and the state colours are shared with your " +
