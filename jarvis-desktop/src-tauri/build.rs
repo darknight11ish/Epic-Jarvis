@@ -168,6 +168,10 @@ fn main() {
             "set_theme_follow_system",
             // Settings' "Open Faces" button.
             "open_faces",
+            // Settings' "Everything Jarvis can do" button, and the same row in
+            // the tray menu (2026-10-08, docs/FEATURES-LIST-DESIGN.md). The page
+            // this opens holds no command of its own.
+            "open_features",
             // The right/wrong mark on one answer (feedback.patch). Quickbar.
             "mark_answer",
             // The first-run walkthrough — one command, closes itself.

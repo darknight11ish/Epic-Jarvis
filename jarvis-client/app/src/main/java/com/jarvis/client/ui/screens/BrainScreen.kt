@@ -260,6 +260,12 @@ fun BrainScreen(
      */
     onOpenSettings: (() -> Unit)? = null,
     /**
+     * Opens "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the
+     * owner's request of 2026-10-08) - the whole feature list, read-only,
+     * drawn beside the Tutorials section. Null draws no way in.
+     */
+    onOpenFeatures: (() -> Unit)? = null,
+    /**
      * "Open <a place>" by voice or chat ([com.jarvis.client.ui.OpenPlace]):
      * the item key to bring into view once - "briefing", "hardware",
      * "second-card", "big-model" or "capabilities" - or null for the top.
@@ -922,6 +928,18 @@ fun BrainScreen(
                 MenuFrame(menus, "brain.model.pc-help") {
                     PcHelpSection()
                 }
+            }
+
+            // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the
+            // owner's request of 2026-10-08): the whole feature list, in plain
+            // words, read-only on this phone. Right after Tutorials, because
+            // this is the phone's Tutorials row and the two belong together -
+            // Tutorials answer "how do I do this", this answers "what can it
+            // do, and does it ask first". No key: there is nothing here to hide
+            // or fold, and a keyed item is a menu "Show or hide menus" must
+            // offer (MenuVisibilityTest).
+            onOpenFeatures?.let { open ->
+                item { FeaturesEntrySection(onOpen = open) }
             }
 
             // backend/second-card.patch. Right under Model, because a feature

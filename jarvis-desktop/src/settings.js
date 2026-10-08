@@ -825,6 +825,19 @@ $("open-faces").addEventListener("click", async () => {
   }
 });
 
+// "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the owner's request
+// of 2026-10-08). The window it opens reads one bundled list of text and draws
+// it; there is no return value to render and nothing to wait for but the window
+// itself, so this is the same three lines as the Faces button above.
+$("open-features").addEventListener("click", async () => {
+  try {
+    await invoke("open_features");
+    report($("features-status"), "Opened.", "ok");
+  } catch (error) {
+    report($("features-status"), String((error && error.message) || error), "bad");
+  }
+});
+
 /**
  * "Show me where" (plain-errors.js), and, since 2026-09-27, "open <a
  * settings section>" by voice or chat (jarvis_settings_registry.py,
