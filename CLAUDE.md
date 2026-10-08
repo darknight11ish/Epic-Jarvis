@@ -715,6 +715,14 @@ testers, scouts and integration scouts; `.claude/agents/`):
   minutes**; 7. talk-to-type on the PC, **held Right Ctrl** by default
   (changeable in Settings); 8. QR pairing with per-device keys; 9. the
   sneaky-instruction detector test.
+  **Corrected 2026-10-08, after a feature review measured it:** talk-to-type
+  ships on **Alt+Shift+T**, not Right Ctrl, and `docs/JARVIS-API.md` section 72
+  says the same. A bare Ctrl key cannot be a global hotkey in this build - the
+  hotkey library wants a real key plus a modifier, and the parser refuses an
+  accelerator with no modifier at all - so "held Right Ctrl" was never
+  buildable as written. The owner chose on 2026-10-08 to keep Alt+Shift+T and
+  have this note corrected, rather than add low-level keyboard-hook code for
+  one key. It stays rebindable in Settings.
   **Jarvis Live extras, all yes:** a phone Quick Settings tile (start/end);
   a headset button (press = stop talking, long press = mic off, never
   approves); a 10-minute "Live ended - Resume" notification; a PC hotkey to

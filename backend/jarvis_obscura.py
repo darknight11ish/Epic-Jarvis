@@ -419,18 +419,41 @@ def child_env(base: Optional[dict] = None) -> dict:
 _popen = subprocess.Popen
 
 
+def _taskkill(pid: int) -> bool:
+    """Windows' own tree-kill, and its OWN answer: True only when it worked.
+
+    The answer is the point. This used to be a bare `subprocess.run(...)` whose
+    return code nobody read, so a REFUSED taskkill - no rights over the
+    process, or an environment that denies the call - was indistinguishable
+    from a successful one, and the caller then waited out the full timeout on a
+    program that was still running. The measured symptom (2026-10-08) is a
+    suite that hangs to its ceiling with one failure, "stop kills it", and
+    nothing else wrong. Split out so a test can hand back a refusal without
+    needing one."""
+    r = subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
+                       capture_output=True, timeout=10)
+    return r.returncode == 0
+
+
 def _kill_tree(p) -> None:
+    gone = False
     try:
         if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
-                           capture_output=True, timeout=10)
+            gone = _taskkill(p.pid)
         else:
             import signal
             try:
                 os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+                gone = True
             except Exception:
-                p.kill()
+                gone = False
     except Exception:
+        gone = False
+    if not gone:
+        # A refused taskkill, or no process group to signal: kill the process
+        # we started. Its own children may outlive it - but a program that is
+        # still running is worse than one whose children are, and before this
+        # the refusal fell through to a five-second wait and nothing else.
         try:
             p.kill()
         except Exception:

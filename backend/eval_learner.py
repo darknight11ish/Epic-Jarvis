@@ -3,8 +3,16 @@
     python eval_memory.py                              # runs this too
     python eval_memory.py --learner-model qwen3:8b     # ... with the model
 
-Run by eval_memory.py; not on its own. It is not copied to the backend
-folder.
+Run by eval_memory.py, and on its own:
+
+    python eval_memory.py                              # runs this too
+    python eval_memory.py --learner-model qwen3:8b     # ... with the model
+    python eval_learner.py                             # just the learner cases
+    python eval_learner.py --learner-model qwen3:8b    # ... with the real learner
+
+It was run only by eval_memory.py until 2026-10-08, so the command the docs
+named printed nothing and exited 0 - see `main()` at the foot of this file.
+It is not copied to the backend folder.
 
 WHY A LEARNER TEST
 
@@ -728,3 +736,67 @@ def markdown(res: dict) -> list:
     else:
         lines += ["", f"The real learner: not run - {mp.get('why')}."]
     return lines
+
+
+# ------------------------------------------------------------------ the CLI --
+
+def main(argv=None) -> int:
+    """`python eval_learner.py` - the command the docs name.
+
+    WHY THIS EXISTS. This module was run by `eval_memory.py` and by nothing
+    else, so the command `CLAUDE.md` and `docs/MEMORY-SCOREBOARD.md` both name
+    as one of the two memory self-tests printed nothing at all and exited 0.
+    Silence and success looked exactly alike, and a person following the docs
+    by hand had no way to tell them apart. This prints the same table
+    `eval_memory.py` prints for the learner half, and exits non-zero when a
+    case is wrong - so the number can be recorded on the scoreboard.
+
+    Nothing is downloaded and nothing is sent anywhere unless
+    `--learner-model` names a local model; every case runs on a scratch store
+    in a temporary folder, removed afterwards unless `--keep` says otherwise."""
+    import argparse
+    import shutil
+
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--learner-model", default=None,
+                    help="also run the real learner on the made-up conversations with "
+                         "this local Ollama model (needs JARVIS_BACKEND pointing at a "
+                         "backend carrying jarvis_extract.py). Off by default: the "
+                         "default run needs no model")
+    ap.add_argument("--ollama", default=LOCAL,
+                    help=f"this PC's Ollama, for --learner-model (loopback only; {LOCAL})")
+    ap.add_argument("--out", default=None,
+                    help="folder to write learner-eval.md and learner-eval.json into")
+    ap.add_argument("--keep", action="store_true", help="keep the scratch store")
+    a = ap.parse_args(argv)
+
+    scratch = Path(tempfile.mkdtemp(prefix="jarvis-learner-"))
+    try:
+        import eval_memory                       # the store the cases must share
+        M, _P = eval_memory._load_memory(scratch)
+        res = run(M, scratch, model=a.learner_model, ollama=a.ollama)
+        lines = markdown(res)
+        print("\n".join(lines))
+        if a.out:
+            out = Path(a.out)
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "learner-eval.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            (out / "learner-eval.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+            print(f"\nwritten: {out / 'learner-eval.md'} and learner-eval.json")
+        if not res.get("available"):
+            print(f"\nthe learner self-test could not run: {res.get('why')}")
+            return 2
+        wrong = [r for r in res["cases"] if not r["ok"]]
+        total = len(res["cases"])
+        print(f"\n{total - len(wrong)} of {total} case(s) right")
+        if wrong:
+            print("failed: " + ", ".join(r["id"] for r in wrong))
+            return 1
+        return 0
+    finally:
+        if not a.keep:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

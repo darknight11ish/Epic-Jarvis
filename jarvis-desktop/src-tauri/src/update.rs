@@ -21,12 +21,18 @@
 //! ## Why a tampered download cannot run
 //!
 //! Every artifact is signed with a private key that is not in this repository
-//! and never will be, and `tauri.conf.json` carries the matching public key.
-//! The updater verifies the signature before it hands the bytes to the
-//! installer, so a release replaced at the CDN, a hijacked DNS answer or a
-//! proxy rewriting the response all fail closed. A build with no public key
-//! configured cannot update at all, which is the correct behaviour rather than
-//! a degraded one — see `available()`.
+//! and never will be, and `tauri.conf.json` is where the matching public key
+//! goes. **This build has none yet** — `"pubkey": ""` there, with
+//! `"createUpdaterArtifacts": false` beside it — so it cannot update itself at
+//! all: `configured()` below is false, `spawn_startup_check` returns before it
+//! makes a request, and Settings says "Not set up yet" rather than offering an
+//! update it could not verify. Filling that key in is what switches this module
+//! on, and the release workflow already refuses to sign or publish without it.
+//! Once it is there: the updater verifies the signature before it hands the
+//! bytes to the installer, so a release replaced at the CDN, a hijacked DNS
+//! answer or a proxy rewriting the response all fail closed — and a build with
+//! no public key configured cannot update at all, which is the correct
+//! behaviour rather than a degraded one (see `available()`).
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};

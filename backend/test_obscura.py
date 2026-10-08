@@ -727,6 +727,33 @@ def t_the_owners_check():
     check("with nothing installed the check says so in words", code == 1 and "not installed" in "\n".join(out))
 
 
+def t_a_refused_taskkill_still_kills_the_program():
+    """`_kill_tree` must act on taskkill's answer, not merely run it.
+
+    On Windows it ran `taskkill /T /F`, ignored what that said, and then waited
+    five seconds. When the call is refused - no rights over the process, or an
+    environment that denies it - the program is still running, the wait times
+    out, and the only symptom is a suite that hangs to its ceiling with exactly
+    one failure, "stop kills it" (measured on 2026-10-08: test_obscura.py and
+    test_browser_engine.py each carried that one failure and nothing else). A
+    refusal must fall back to killing the process we started."""
+    import subprocess as _sp
+    p = _sp.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
+                  stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+    saved = OB._taskkill
+    try:
+        OB._taskkill = lambda pid: False            # exactly what a refusal is
+        t0 = time.time()
+        OB._kill_tree(p)
+        took = time.time() - t0
+    finally:
+        OB._taskkill = saved
+        if p.poll() is None:
+            p.kill()
+    check("a refused taskkill still kills the program", p.poll() is not None, p.poll())
+    check("...and returns at once, instead of waiting out the timeout", took < 4.0, took)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

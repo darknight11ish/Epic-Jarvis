@@ -43,8 +43,12 @@ Not a test (no `test_` prefix). Standard library and git only.
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _gitapply  # noqa: E402  (beside this file; see its docstring)
 
 HERE = Path(__file__).resolve().parent
 PS1 = HERE.parent / "scripts" / "apply-patches.ps1"
@@ -235,11 +239,11 @@ def hunks(patch_text: str, target: str) -> list:
     return [("\n".join(h) + "\n", pre) for h, pre in out]
 
 
-def _apply(git: str, d: Path, target: str, hunk: str, *extra: str) -> bool:
+def _apply(git: str, d: Path, target: str, hunk: str, *extra: str, env: dict = None) -> bool:
     p = d / "one.patch"
     p.write_text(f"--- a/{target}\n+++ b/{target}\n{hunk}", encoding="utf-8")
     r = subprocess.run([git, "apply", *extra, "--include", target, str(p)], cwd=d,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     return r.returncode == 0
 
 
@@ -260,6 +264,11 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
         return None, ["git is not installed"]
     patches = order() if patches is None else list(patches)
     d = Path(tempfile.mkdtemp(prefix="jarvis-stack-"))
+    # A scratch folder inside a git work tree makes every `git apply` below
+    # resolve its paths against the repository root instead of `d` - and then a
+    # bare `--include <name>` matches nothing while git still exits 0. See
+    # _gitapply.py: this is what keeps a stand-in from coming back empty.
+    env = _gitapply.env_for(git, d)
     log = []
     gaps = 0
     seen = 0
@@ -273,7 +282,7 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
                 text_of = (HERE / name).read_text(encoding="utf-8")
             for hunk, pre in hunks(text_of, target):
                 seen += 1
-                if _apply(git, d, target, hunk):
+                if _apply(git, d, target, hunk, env=env):
                     continue
                 gaps += 1
                 by_patch[name] = by_patch.get(name, 0) + 1
@@ -282,11 +291,20 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
                     text += "\n"
                 f.write_text(text + f"{GAP} {gaps}\n" + "\n".join(pre) + "\n",
                              encoding="utf-8")
-                if not _apply(git, d, target, hunk):
+                if not _apply(git, d, target, hunk, env=env):
                     return None, log + [f"{name}: a hunk does not apply even to its own "
                                         f"pre-image:\n{hunk[:400]}"]
                 log.append(f"{name}: materialised {len(pre)} line(s) of the original")
-        return f.read_text(encoding="utf-8"), log
+        text = f.read_text(encoding="utf-8")
+        if seen and not text.strip():
+            # The walk applied hunks and produced nothing: the stand-in is a
+            # lie, and returning it would let a suite assert against "". Say so
+            # instead - a review on 2026-10-08 lost an hour to exactly this.
+            return None, log + [
+                f"{target}: the walk applied {seen} hunk(s) and built an EMPTY file. "
+                "`git apply` matched no path - usually a scratch folder inside a git "
+                "work tree (see _gitapply.py)."]
+        return text, log
     finally:
         if stats is not None:
             stats.update(target=target, hunks=seen, materialised=gaps,
