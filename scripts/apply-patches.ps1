@@ -1407,6 +1407,15 @@ $SHIPPED = @(
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
+    # --- The page `GET /` serves (2026-10-07) ---
+    # Not a module: jarvis_hud.py reads it from its own folder at request time,
+    # so it has to sit beside the server. It was in the base and in neither
+    # SHIPPED list, so the patcher never copied it and the backend answered
+    # `GET /` with 500 "jarvis_hud.html is missing from this folder" - which is
+    # why the desktop app had never connected on the owner's PC and fell back to
+    # its demo data. test_shipped_modules.py keeps this list and _where.py's
+    # SHIPPED in step.
+    'jarvis_hud.html'            # the HUD page itself: the server hands it to a browser at GET / - no patch, no route of its own
 )
 
 # The settings file. Installed only where none exists; never overwritten.

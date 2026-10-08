@@ -579,21 +579,20 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 // ---------------------------------------------------------------------------
 // The settings window's screen-capture guard (design 7.1)
 // ---------------------------------------------------------------------------
-
-/// Hides the settings window from screenshots, screen recordings and screen
-/// sharing (`on`), or puts it back. Tauri's own `set_content_protected`,
-/// which on Windows is `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`
-/// (tao 0.35's `set_content_protection`, read in its source) - a black box
-/// instead of the code on Windows 10 2004 and newer. A cheap guard against
-/// the easiest copy, not a wall (ARCHITECTURE section 3). No window, or a
-/// refusal, is logged and otherwise ignored: the code is still shown.
-fn guard_capture(app: &AppHandle, on: bool) {
-    if let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) {
-        if let Err(e) = window.set_content_protected(on) {
-            eprintln!("[jarvis] could not change the settings window's capture guard: {e}");
-        }
-    }
-}
+//
+// The guard is set once, where the window is built
+// (`windows.rs::show_settings_unlocked`, `.content_protected(true)`), and is not
+// touched again.
+//
+// There used to be a helper here that toggled it - on when the pairing code
+// appeared, off when the panel closed (design 7.1, "put back when the panel
+// closes"). It was removed on 2026-10-07 for a real bug: `set_content_protected`
+// reaches `SetWindowDisplayAffinity`, which tao applies on Windows by RECREATING
+// the window, so pressing "Pair a phone" closed the Settings window exactly as
+// the pairing succeeded.
+//
+// Kept as a comment rather than deleted silently, because the design section
+// still describes the toggle and someone will come looking for it.
 
 // ---------------------------------------------------------------------------
 // The commands
@@ -681,8 +680,11 @@ pub async fn pair_start(app: AppHandle, address: String) -> Result<serde_json::V
         }
     };
     remember_address(&app, &address_text(&host, port));
-    // Before the code reaches the page, never after.
-    guard_capture(&app, true);
+    // No capture-guard call here any more. The settings window is created with
+    // `content_protected(true)` (windows.rs), so the code was already hidden from
+    // a screenshot before this command could return - and toggling the guard on
+    // a window that is already open made Windows recreate it, which closed
+    // Settings the moment pairing succeeded. See windows.rs for the detail.
     Ok(serde_json::json!({
         "ok": true,
         "qr_svg": picture,
@@ -699,17 +701,15 @@ pub async fn pair_session(app: AppHandle) -> Result<serde_json::Value, String> {
     let (status, text) = get_raw(&app, PAIR_SESSION_PATH).await?;
     let view = session_answer(status, &text)?;
     let state = view.get("state").and_then(|s| s.as_str()).unwrap_or("none");
-    if !session_active(state) {
-        guard_capture(&app, false);
-    }
+    // The capture guard is permanent now (windows.rs), so a session ending needs
+    // no call here. `state` is still read: it is what the answer carries.
+    let _ = state;
     Ok(view)
 }
 
-/// Ends the pairing session (and withdraws its card, if one waits). The
-/// capture guard comes off whatever the PC answers.
+/// Ends the pairing session (and withdraws its card, if one waits).
 #[tauri::command]
 pub async fn pair_cancel(app: AppHandle) -> Result<serde_json::Value, String> {
-    guard_capture(&app, false);
     let (status, text) = post_raw(&app, PAIR_CANCEL_PATH, serde_json::json!({})).await?;
     change_answer(status, &text)
 }

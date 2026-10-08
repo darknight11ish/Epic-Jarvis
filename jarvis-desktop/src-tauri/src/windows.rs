@@ -471,6 +471,28 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     // so it does not flash up centred first and then jump.
     .visible(false)
     .theme(Some(tauri::Theme::Dark))
+    // The settings window is kept out of screenshots, screen recordings and
+    // screen sharing for its whole life, set HERE at creation rather than
+    // toggled later.
+    //
+    // Why it is not toggled: pairing shows a QR code that IS the key, so
+    // devices.rs used to call `set_content_protected(true)` when the code
+    // appeared and `(false)` when the panel closed (PAIRING-DESIGN section 7.1,
+    // "put back when the panel closes"). On Windows that call reaches
+    // `SetWindowDisplayAffinity(hwnd, WDA_EXCLUDEFROMCAPTURE)`, which tao
+    // applies by RECREATING the window. So pressing "Pair a phone" made the
+    // Settings window vanish: the pairing succeeded, the code never appeared,
+    // and nothing was logged - the window was rebuilt, not crashed.
+    //
+    // The owner's report, 2026-10-07: "when i go to devices in the settings to
+    // pair a phone and click pair it closes the settings on desktop".
+    //
+    // Setting it once at build time costs nothing and cannot recreate anything,
+    // because the window does not exist yet. The trade is that Settings is
+    // hidden from capture even when no code is on screen - and it is the window
+    // holding the pairing code, the device list and the account fields, so
+    // keeping it out of a screen share is the safer default anyway.
+    .content_protected(true)
     .build()
     .map_err(|e| format!("unable to open settings: {e}"))?;
     crate::window_memory::restore(&window, true);

@@ -515,16 +515,28 @@ await check("CONTROL: the Devices commands are in the settings window's set only
   }
 });
 
-await check("CONTROL: the window is hidden from capture BEFORE the code is handed over", async () => {
+await check("CONTROL: the settings window is hidden from capture, set once at creation", async () => {
+  // It used to be toggled: `guard_capture(&app, true)` as the code was handed
+  // over, `(false)` when the panel closed. That is what closed the Settings
+  // window on the owner's PC (2026-10-07) - `set_content_protected` reaches
+  // `SetWindowDisplayAffinity`, which tao applies on Windows by RECREATING the
+  // window, so the successful pairing made the window vanish.
+  //
+  // The guard is now permanent and set where the window is built, which cannot
+  // recreate anything because the window does not exist yet.
   const start = fnBody(RUST, "pair_start");
-  const guard = start.indexOf("guard_capture(&app, true)");
-  const answer = start.indexOf('"code": started.code');
-  assert.ok(guard > 0 && answer > guard, "guard_capture(true) must come before the answer");
+  assert.ok(!/guard_capture/.test(RUST), "the toggling guard is gone");
+  // The guard lives on the settings window now, so the check reads the file that
+  // builds it. `fnBody` cannot be used for it: that finds `pub async fn`, and
+  // this builder is a plain `pub(crate) fn`.
+  const WINDOWS = read("src-tauri/src/windows.rs");
+  assert.match(WINDOWS, /\.content_protected\(true\)/,
+    "the settings window is created with the capture guard on");
   assert.ok(!/"qr"\s*:/.test(start), "the QR text must never be in the answer");
   assert.match(start, /if stale\(&app\)/, "starting a pairing is held on a stale link");
-  assert.match(fnBody(RUST, "pair_cancel"), /guard_capture\(&app, false\)/);
-  assert.match(fnBody(RUST, "pair_session"), /guard_capture\(&app, false\)/);
-  assert.match(RUST, /set_content_protected\(on\)/);
+  // Still true, and now the only mechanism: the answer carries the drawn
+  // picture, never the text the QR was drawn from.
+  assert.match(start, /"qr_svg": picture/);
 });
 
 await check("CONTROL: only a loosening waits for a live link", async () => {
