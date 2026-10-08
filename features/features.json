@@ -522,10 +522,10 @@
     "id": "look-at-this",
     "group": "Screen and pictures",
     "title": "Look at this",
-    "what": "Jarvis looks at the window in front of you, once, and answers about it.",
-    "where": "Press Alt+Shift+S on the PC, or say \"look at this\". On the phone, the assistant gesture.",
-    "asks": "No card. Nothing is saved.",
-    "limit": "With one graphics card it reads the screen's words; picture mode can read the picture too, slowly, and is off by default.",
+    "what": "Jarvis looks at the window in front of you, once, and answers about it - and hands you the cleaned picture of that look, so you can ask about a chart or an error message.",
+    "where": "Press Alt+Shift+S on the PC, or say \"look at this\". On the phone, the assistant gesture. The picture waits in the question box.",
+    "asks": "No card. The picture is never saved; the question and the answer are kept like any other chat.",
+    "limit": "Passwords, keys and card numbers are painted solid black first, and if Jarvis's own window is in front - or the cleaner cannot check the picture - none is attached and Jarvis says why. With one graphics card it reads the screen's words; picture mode can read the picture too, slowly, and is off by default.",
     "surface": "both",
     "covers": [
       "settings.screen-look"
