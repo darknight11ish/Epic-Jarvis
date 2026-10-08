@@ -15,19 +15,26 @@ private const val MAX_STEPS = 60
  * Brings the item whose `item(key = ...)` is [key] into view, once per new
  * [key], then calls [onDone] - whether or not it was found. Null does nothing.
  *
- * For "open <a place>" by voice or chat ([com.jarvis.client.ui.OpenPlace]).
- * SettingsScreen keeps its own fixed index map, which works because every
- * row there is always drawn. Brain, Help and Checks draw some items only
- * sometimes (a notice, a job list, a warning), so a fixed index would point
- * at the wrong item as soon as one of those appeared. A lazy list only knows
- * the keys of the items on screen, so this walks down a screenful at a time
- * until the key is laid out, then settles on it. An item that is not there
- * at all (a card this phone is not showing) just ends at the bottom.
+ * For "open <a place>" by voice or chat ([com.jarvis.client.ui.OpenPlace]) and
+ * for Settings' own "Jump to:" list. SettingsScreen keeps a fixed index map
+ * too, but only as the layout record OpenPlaceTest reads: a hidden menu
+ * (2026-09-30) shifts every item below it, so both go by key.
+ *
+ * A lazy list only knows the keys of the items on screen, so this walks down a
+ * screenful at a time until the key is laid out, then settles on it. An item
+ * that is not there at all - a card this phone is not showing, or a menu the
+ * owner has hidden - just ends at the bottom rather than settling on whatever
+ * happens to sit at a remembered position.
+ *
+ * [tick] is for a caller that can ask for the SAME key twice - Settings' jump
+ * list, where tapping "Voice" again after scrolling away must scroll again.
+ * The effect keys on [key] and [tick] together, so a new tick re-runs it while
+ * [key] stays the plain `item(key = ...)` it looks up.
  */
 @Composable
-fun ScrollToKeyOnce(state: LazyListState, key: String?, onDone: () -> Unit) {
+fun ScrollToKeyOnce(state: LazyListState, key: String?, tick: Int = 0, onDone: () -> Unit) {
     val done by rememberUpdatedState(onDone)
-    LaunchedEffect(key) {
+    LaunchedEffect(key, tick) {
         val target = key ?: return@LaunchedEffect
         // Nothing is laid out on the very first frame; wait for it.
         snapshotFlow { state.layoutInfo.totalItemsCount }.first { it > 0 }

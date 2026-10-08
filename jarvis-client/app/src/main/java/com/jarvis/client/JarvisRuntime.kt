@@ -2899,19 +2899,54 @@ object JarvisRuntime {
     }
 
     /**
+     * Whether the last `POST /api/appearance` this phone made actually landed:
+     * true once one answered OK, false once one failed, null until one is
+     * tried.
+     *
+     * Not reset by a handshake, unlike [appearanceRoute] - a handshake only
+     * re-asks whether the route exists, and this answer is about what a send
+     * already did. A send to a backend that has since gone away shows up here
+     * the moment the next send fails, which is the honest moment to say so.
+     *
+     * Read by the Appearance screen, which used to tell the owner the face and
+     * colours "are sent to your desktop" whenever the backend had the
+     * `appearance` capability - while [pushAppearance] threw the `ApiResult`
+     * away, so a dead link or a refused POST still got the claim (UI audit
+     * 2026-10-05, finding A1). The words now come from
+     * [com.jarvis.client.AppearanceShared], which needs this answer.
+     */
+    private val _appearanceSent = MutableStateFlow<Boolean?>(null)
+    val appearanceSent: StateFlow<Boolean?> = _appearanceSent.asStateFlow()
+
+    /**
      * Pushes this device's face/bindings so the owner's other device picks
-     * it up - called after any local change to either. Same silent-on-
-     * failure reasoning as [refreshAppearance]: this is a convenience sync,
-     * not a decision, and nothing on this screen depends on it succeeding.
+     * it up - called after any local change to either. Silent on screen: this
+     * is a convenience sync, not a decision, and nothing on this screen acts
+     * on it. It is NOT silent about the answer any more - the Appearance
+     * screen's own paragraph says whether the desktop has the change, so the
+     * owner is never told a send happened that did not (finding A1).
      */
     suspend fun pushAppearance() {
         if (!can("appearance")) {
             // Ask first, without applying what comes back: applying it here
             // would overwrite the change this push is about to send.
             if (appearanceRoute == null) noteAppearanceRoute(api.getAppearance())
-            if (appearanceRoute != true) return
+            if (appearanceRoute != true) {
+                // No route, so nothing was sent. False rather than null: the
+                // screen's group has to be able to say the change is on this
+                // phone only, and "Not synced: your desktop doesn't support it
+                // yet" is the same answer said with the capability it lacks.
+                _appearanceSent.value = false
+                return
+            }
         }
-        api.postAppearance(appearance.toSyncDocument().toString())
+        val result = api.postAppearance(appearance.toSyncDocument().toString())
+        // The one line that was the whole bug: the result used to be dropped
+        // on the floor. `noteAppearanceRoute` still learns whether the route
+        // exists; this learns whether the send arrived, which is a different
+        // question and the one the owner was being lied to about.
+        noteAppearanceRoute(result)
+        _appearanceSent.value = result is ApiResult.Ok
     }
 
     /**

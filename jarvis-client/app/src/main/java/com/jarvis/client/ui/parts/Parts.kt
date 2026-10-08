@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
 import com.jarvis.client.net.MenuWords
@@ -84,11 +85,25 @@ import androidx.compose.ui.graphics.compositeOver
  * thing you touched moves, and nothing else does.
  *
  * Honours reduced motion by not scaling at all — the click still works.
+ *
+ * Carries the 48dp touch minimum itself (UI audit 2026-10-05, finding A4).
+ * `JarvisTheme` already promised "every control in Parts.kt keeps its 48dp
+ * minimum in Compact too", and the components here kept it one at a time -
+ * but `pressable` did not, and it had 34 call sites, five of them bare text
+ * (FaqScreen's GitHub link and third-party notices among them, about 19dp
+ * tall when the audit read the source). The minimum was then a rule every
+ * new call site had to remember, which is how twelve of them came to be too
+ * small. [minTouchTarget] is applied before `clickable` so it grows the area
+ * that answers a tap and the press animation's centre, never a painted pill
+ * (the a11y-12 ordering note in AppearanceScreen's chips) and never a
+ * swatch's own square (FaceEditor's palette passes 0.dp, see there).
  */
 @Composable
 fun Modifier.pressable(
     enabled: Boolean = true,
     role: Role = Role.Button,
+    /** 48.dp, Android's own minimum; a call site that cannot fit one opts out. */
+    minTouchTarget: Dp = 48.dp,
     onClick: () -> Unit,
 ): Modifier {
     val motion = LocalMotion.current
@@ -104,6 +119,9 @@ fun Modifier.pressable(
     )
     return this
         .graphicsLayer { scaleX = scale; scaleY = scale }
+        // The invisible minimum. heightIn, not size: a control already taller
+        // than 48dp keeps its height, so nothing that was big enough grows.
+        .heightIn(min = minTouchTarget)
         .clickable(
             interactionSource = interaction,
             // Null, deliberately: see above.

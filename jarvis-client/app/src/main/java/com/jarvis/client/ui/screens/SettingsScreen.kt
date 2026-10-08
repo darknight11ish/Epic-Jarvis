@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -24,7 +25,6 @@ import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
@@ -38,7 +38,6 @@ import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.theme.LocalChrome
-import kotlinx.coroutines.launch
 
 /**
  * "Settings" - the ease-of-use audit's row 16 (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`):
@@ -73,11 +72,14 @@ import kotlinx.coroutines.launch
  */
 
 /**
- * Every `item(key = ...)` below, by its position in the `LazyColumn` - kept
- * as one small map rather than computed, so a reordering of the items below
- * is a visible two-line diff here too, not a silent mismatch. "Open <a
- * settings section>" (docs/JARVIS-API.md section 58.1) is this map's only
- * reader.
+ * Every `item(key = ...)` below, by its position in the `LazyColumn` with
+ * nothing hidden - kept as one small map rather than computed, so a
+ * reordering of the items below is a visible two-line diff here too, not a
+ * silent mismatch. Nothing scrolls by these numbers: "Open <a settings
+ * section>" (docs/JARVIS-API.md section 58.1) and the "Jump to:" list both go
+ * BY KEY, because a hidden menu shifts every item below it. OpenPlaceTest and
+ * `backend/test_settings_registry.py` read this map as the record of which
+ * rows exist, and `SettingsJumpTest` holds it to their real order.
  *
  * Bug audit 2026-09-27: this went stale the moment "floating-avatar" was
  * inserted at position 3 by a concurrent piece of work - every index from
@@ -86,10 +88,10 @@ import kotlinx.coroutines.launch
  * conflict here. Fixed by re-reading the real `item(key = ...)` order
  * below rather than hand-adjusting the old numbers.
  *
- * Since "Show or hide menus" (2026-09-30) the screen no longer scrolls by these
- * positions: a hidden menu (or the "N hidden - Show" line at the top) shifts every item below
- * it, so it scrolls BY KEY ([MenuPlaces.SETTINGS]). This map is the layout with nothing hidden,
- * kept so OpenPlaceTest can still check each target against a real row.
+ * UI audit 2026-10-05 (finding A3): the "Jump to:" handler was the last
+ * reader of these numbers, so with Voice hidden - `settings.voice` is
+ * hideable - "What asks first" landed on "What Jarvis can reach". It now
+ * scrolls to [SettingsJump.key] like the voice-and-chat jumps always have.
  */
 private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "voice" to 1,
@@ -115,14 +117,6 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "devices" to 17,
     "quick-tiles" to 18,
 )
-
-/**
- * The jump list's own keys are the screen's item keys, except that the
- * Appearance row is "appearance" on the screen and "appearance-card" in the
- * map above (the desktop's id for the same card).
- */
-private fun jumpIndex(key: String): Int? =
-    SETTINGS_ITEM_INDEX[if (key == "appearance") "appearance-card" else key]
 
 /**
  * The Voice section's line about Android 17's assistant volume slider. Said
@@ -190,9 +184,9 @@ fun SettingsScreen(
      * Brain or "Jarvis's voice", or says the place is only on the PC - but
      * an unknown id (one newer than this app) is still a harmless no-op
      * here. Voice, Security and Appearance (above) are real
-     * `item(key = ...)` rows too, with their own entries in
-     * [SETTINGS_ITEM_INDEX], so an id naming one of them scrolls to it like
-     * any other section - it does not fall into that no-op case.
+     * `item(key = ...)` rows too, listed in [SETTINGS_ITEM_INDEX] like every
+     * other row, so an id naming one of them scrolls to it like any other
+     * section - it does not fall into that no-op case.
      */
     initialSection: String? = null,
     /**
@@ -218,7 +212,6 @@ fun SettingsScreen(
     onOpenLookSwitch: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
-    val jumpScope = rememberCoroutineScope()
     // The same gate every other write on this screen already uses
     // (Manner/WebSearch/AsksFirst/WatchNotify all take it) - rule 4.
     val canAct = link == LinkState.CONNECTED && !stale
@@ -232,7 +225,8 @@ fun SettingsScreen(
         TopBar("Settings", onBack)
 
         // Scrolls BY KEY, not by position: a hidden menu (docs/JARVIS-API.md section 109) moves
-        // every item below it, so SETTINGS_ITEM_INDEX above is only the map OpenPlaceTest reads.
+        // every item below it, so SETTINGS_ITEM_INDEX above is only a record of the
+        // rows that exist (OpenPlaceTest and backend/test_settings_registry.py read it).
         val target = initialSection?.let { MenuPlaces.SETTINGS_ALIAS[it] ?: it }
         val known = target != null && target in MenuPlaces.SETTINGS.keys
         ScrollToKeyOnce(listState, if (known) target else null, onSectionConsumed)
@@ -242,7 +236,13 @@ fun SettingsScreen(
         }
         // "3 hidden - Show" jumps to the list below.
         var jumpTo by remember { mutableStateOf<String?>(null) }
-        ScrollToKeyOnce(listState, jumpTo) { jumpTo = null }
+        // Bumped on every tap and handed to ScrollToKeyOnce as `tick`: returning
+        // to the SAME row after scrolling away - tapping "Voice" again from the
+        // bottom of the screen - is a new value for the effect, so the second
+        // tap scrolls instead of doing nothing. 0 while idle, so nothing runs
+        // on opening the screen.
+        var jumpTick by remember { mutableIntStateOf(0) }
+        ScrollToKeyOnce(listState, jumpTo, tick = jumpTick) { jumpTo = null }
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -252,11 +252,25 @@ fun SettingsScreen(
         ) {
             item(key = "jump-list") {
                 if (menus.hiddenCount > 0) {
-                    HiddenMenusLine(menus.hiddenCount) { jumpTo = "menu-visibility" }
+                    HiddenMenusLine(menus.hiddenCount) {
+                        jumpTo = "menu-visibility"
+                        jumpTick += 1
+                    }
                     Gap(12)
                 }
                 SettingsJumpList { key ->
-                    jumpIndex(key)?.let { i -> jumpScope.launch { listState.animateScrollToItem(i) } }
+                    // BY KEY, like every other jump on this screen - a hidden
+                    // menu above this one shifts every item below it, so the
+                    // old `animateScrollToItem(jumpIndex(key))` quietly landed
+                    // on a DIFFERENT panel: with Voice hidden, "What asks first"
+                    // stopped on "What Jarvis can reach" and said nothing
+                    // (UI audit 2026-10-05, finding A3). The comment at the top
+                    // of this screen has promised BY KEY since 2026-09-30; this
+                    // is the handler that had not been changed with it. A key
+                    // that is not drawn - the owner hid that very menu - now
+                    // scrolls nowhere instead of somewhere wrong.
+                    jumpTo = key
+                    jumpTick += 1
                 }
             }
 
