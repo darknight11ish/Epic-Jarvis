@@ -141,6 +141,7 @@ const dom = {
   backendDetail: $("backend-detail"),
   findPython: $("find-python"),
   findPythonStatus: $("find-python-status"),
+  appearanceStatus: $("appearance-status"),
 
   autostart: $("autostart"),
   autostartNote: $("autostart-note"),
@@ -189,6 +190,20 @@ function report(target, text, tone) {
   else delete target.dataset.tone;
 }
 
+/** An error in words, never a bridge error, JSON or a literal `null`.
+ *
+ * The same filter the other cards use (`account-secrets-settings.js`,
+ * `animal-settings.js`, ...). Without it a raw `error.message` put
+ * "Cannot read properties of null (reading 'found')" on screen from More
+ * options in the click audit of 2026-10-08, which tells the owner nothing. */
+function problemWords(error) {
+  const said = String((error && error.message) || error || "").trim();
+  if (!said || /[{}<>]|::|not allowed|undefined|null/i.test(said) || said.length > 400) {
+    return "Try again in a moment, or restart Jarvis Desktop.";
+  }
+  return said;
+}
+
 /** Runs an action, reporting whatever it says or throws in the same place. */
 let busy = false;
 
@@ -203,7 +218,7 @@ async function act(button, target, work) {
     const outcome = await work();
     report(target, outcome || "Saved.", "ok");
   } catch (error) {
-    report(target, String((error && error.message) || error), "bad");
+    report(target, problemWords(error), "bad");
   } finally {
     busy = false;
     lock.forEach((b) => (b.disabled = false));
@@ -442,11 +457,14 @@ dom.stopBackend.addEventListener("click", () =>
 dom.findPython.addEventListener("click", () =>
   act(dom.findPython, dom.findPythonStatus, async () => {
     const result = await invoke("find_python");
-    if (result.found) {
+    // Guarded: an answer with no shape at all used to throw inside `act`, and
+    // the raw "Cannot read properties of null (reading 'found')" went on
+    // screen (click audit, 2026-10-08).
+    if (result && result.found) {
       dom.program.value = result.path;
       return `Found Python ${result.version}, from ${result.source}. Check it, then press Save.`;
     }
-    return result.hint || "Couldn't find a working Python on this PC.";
+    return (result && result.hint) || "Couldn't find a working Python on this PC.";
   })
 );
 
@@ -551,12 +569,24 @@ async function readThemePrefs() {
 
 async function pickTheme(id) {
   // Paint at once when it will show, so the control feels connected; the
-  // fan-out from set_theme corrects it either way.
+  // fan-out from set_theme corrects it either way. If the save is REFUSED the
+  // paint has to come back off: `applyTheme` writes `data-theme` and the
+  // anti-flash cache, so leaving it would show a theme the PC never took -
+  // every other window on the old one, the tick on the new one, and nothing
+  // said (settings-audit, 2026-10-08).
+  const before = document.documentElement.getAttribute("data-theme");
   if (!themePrefs || !themePrefs.follow_system) applyTheme(id);
   try {
     const shown = await invoke("set_theme", { theme: id });
     if (typeof shown === "string") applyTheme(shown);
+    if (dom.appearanceStatus) report(dom.appearanceStatus, "");
   } catch (error) {
+    if (before) applyTheme(before);
+    if (dom.appearanceStatus) {
+      report(dom.appearanceStatus,
+        `Could not change the theme, so it is still ${before || "the one you had"}. `
+        + problemWords(error), "bad");
+    }
     console.error("[settings] could not save the theme:", error);
   }
   await readThemePrefs();
@@ -574,6 +604,13 @@ if (followSystem) {
       }
     } catch (error) {
       followSystem.checked = !followSystem.checked;
+      // The box goes back on its own - say so as well, or the owner watches a
+      // switch snap back with no words at all (settings-audit, 2026-10-08).
+      if (dom.appearanceStatus) {
+        report(dom.appearanceStatus,
+          `Could not save "Match Windows", so the theme is unchanged. ${problemWords(error)}`,
+          "bad");
+      }
       console.error("[settings] could not save Match Windows:", error);
     }
     paintThemeRows(document.documentElement.getAttribute("data-theme"));
@@ -756,8 +793,14 @@ if (floatingEnabled) {
       await invoke("set_floating", { enabled: want });
     } catch (error) {
       // The checkbox is the only record of intent here - put it back so it
-      // never claims a state the window is not actually in.
+      // never claims a state the window is not actually in - and say so, or the
+      // switch just snaps back with no words (settings-audit, 2026-10-08).
       floatingEnabled.checked = !want;
+      if (dom.appearanceStatus) {
+        report(dom.appearanceStatus,
+          `Could not ${want ? "show" : "hide"} the floating face. ${problemWords(error)}`,
+          "bad");
+      }
       console.error("[settings] could not change the floating face:", error);
     }
   });
