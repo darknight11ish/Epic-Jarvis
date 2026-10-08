@@ -105,10 +105,14 @@ def state_cases() -> list:
         _run_case("a never-hideable menu is refused", "desktop", e,
                   [("hide", "settings.security"), ("hide", "brain.tab.watch"),
                    ("hide", "settings.menu-visibility"), ("hide", "brain.work.coming-up")]),
+        # "group.home" is the empty group that was removed on 2026-10-08 (the
+        # cohesion audit). The input stays on purpose, in both places: an app
+        # that stored it before that date must still get a plain refusal, and
+        # sanitize must still drop it silently.
         _run_case("an unknown id, and an id the other app has, are refused", "desktop", e,
                   [("hide", "settings.no-such-menu"), ("hide", "brain.memory.people-things"),
                    ("hide", "group.home")]),
-        _run_case("a group with no member here is refused", "desktop", e,
+        _run_case("a group id that is gone is refused like any other", "desktop", e,
                   [("hide", "group.home")]),
         _run_case("folding and opening", "phone", e,
                   [("collapse", "brain.work.goals"), ("collapse", "brain.work.quiz"),

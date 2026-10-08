@@ -37,7 +37,6 @@ object MenuCatalog {
         Group("group.graphics-cards", "Graphics cards", "Hardware, the second card's switches and the big model."),
         Group("group.chatbots", "Chatbots", "Talk to a chatbot for me, and customer-support chats."),
         Group("group.finance", "Finance", "Spending summaries and the retirement what-if."),
-        Group("group.home", "Home", "Home status and smart-home settings."),
     )
 
     val MENUS: List<Menu> = listOf(
@@ -86,7 +85,7 @@ object MenuCatalog {
         Menu("brain.tab.faculties", "Model", "The models, compute and skills.", true, false, "brain", "faculties", "tab", null, null, true, false, ""),
         Menu("brain.tab.work", "Work", "Focus, chatbots, today, goals, quiz and the rest.", true, false, "brain", "work", "tab", null, null, true, false, ""),
         Menu("brain.tab.projects", "Projects", "Projects, their notes and benchmarks.", true, true, "brain", "projects", "tab", "group.goals-projects", null, true, false, ""),
-        Menu("brain.tab.tutorials", "Tutorials", "How Jarvis works, step by step, and the answers to the usual questions.", true, false, "brain", "tutorials", "tab", null, null, true, false, ""),
+        Menu("brain.tab.tutorials", "Tutorials and the FAQ", "How Jarvis works, step by step, and the answers to the usual questions.", true, false, "brain", "tutorials", "tab", null, null, true, false, ""),
         Menu("brain.tab.galaxy", "Galaxy", "The map of what Jarvis knows.", true, false, "brain", "galaxy", "tab", null, null, true, false, ""),
         Menu("brain.tab.now", "Now", "What Jarvis is doing right now.", true, false, "brain", "now", "tab", null, null, true, false, ""),
         Menu("brain.tab.trust", "Trust", "Content risk and the audit chain.", true, false, "brain", "trust", "tab", null, null, false, false, "It holds pending attention, so it can never be hidden."),
