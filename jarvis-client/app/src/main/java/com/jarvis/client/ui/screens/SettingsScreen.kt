@@ -229,7 +229,7 @@ fun SettingsScreen(
         // rows that exist (OpenPlaceTest and backend/test_settings_registry.py read it).
         val target = initialSection?.let { MenuPlaces.SETTINGS_ALIAS[it] ?: it }
         val known = target != null && target in MenuPlaces.SETTINGS.keys
-        ScrollToKeyOnce(listState, if (known) target else null, onSectionConsumed)
+        ScrollToKeyOnce(listState, if (known) target else null, onDone = onSectionConsumed)
         LaunchedEffect(initialSection, known) {
             // An id newer than this app has no row here: nothing to scroll to, but it is done.
             if (initialSection != null && !known) onSectionConsumed()
