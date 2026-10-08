@@ -156,9 +156,25 @@ def t_the_view_says_what_each_fact_is():
           by[leeds]["text"] == "Owner lives in Harrogate" and not by[leeds]["current"]
           and by[leeds]["valid_to"], by[leeds])
     check("a pinned fact is marked pinned", by[veg]["pinned"] and by[veg]["current"], by[veg])
+    # The answer's own WORDS, never the whole JSON - and the store's own row,
+    # where the marker (and nothing else) is what is left.
+    #
+    # WHY (2026-10-08, the intermittent backend-windows failure). `out` carries
+    # epoch timestamps - created, valid_to, erased_at - and the secret here is
+    # a PIN, "4455": four digits that turn up inside one of those floats by
+    # chance. Measured on this PC over 1500 runs of this exact fixture: THREE
+    # flips, every one of them this sub-condition, with the erased fact itself
+    # correct every time (text "", erased_at set, current false). That is the
+    # CI failure - the suite failed in 2.2 s with this one check red and its
+    # other 74 green, and the FAIL line's own detail (the row below) reads
+    # `{'text': '', 'erased_at': 1791445500.0, 'current': False}`. Forced onto
+    # an epoch containing those digits it fails every time on code that erases
+    # perfectly, which is what makes it a test bug rather than a memory bug.
+    words = json.dumps([f["text"] for f in out["facts"]])
     check("an erased fact: no words - not even the marker - and when it was erased",
           by[gone]["text"] == "" and by[gone]["erased_at"] and not by[gone]["current"]
-          and "4455" not in json.dumps(out) and "[erased]" not in json.dumps(out), by[gone])
+          and "4455" not in words and "[erased]" not in words
+          and st.get(gone)["text"] == M.ERASED_TEXT, by[gone])
     check("a fact that ends in the future is still current (valid_to > now)",
           by[later]["current"], by[later])
 
