@@ -1,0 +1,76 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2471,7 +2471,26 @@
+             except Exception as exc:
+                 return self._send(503, {"available": False,
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
++        if path == "/api/tasks":
++            # tasks.patch - the job list: work that outlives one chat turn.
++            # Counted only: ids, tool names, states and step counts, never
++            # the text of a note - the same rule jarvis_task_control above
++            # follows, so this cannot become a new way for private words to
++            # reach a lock screen. The readable feed for the PC's own window
++            # is jarvis_tasks.JobList().feed().
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                import jarvis_tasks
++                jarvis_tasks.boot_once()
++                return self._send(200, jarvis_tasks.JobList().status())
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++
+         if path == "/api/notes/capture":
+             # note-capture.patch - how a note the owner filed ended (waiting,
+             # filed, not filed and why, failed), never its text; with no id,
+@@ -3478,7 +3478,46 @@
+                 except Exception:
+                     pass
+             return self._send(code, out)
+ 
++        if route in ("/api/tasks/act", "/api/tasks/input"):
++            # tasks.patch - Pause, Resume, Cancel and Retry a job, and answer
++            # a question it stopped on. The rules are jarvis_tasks.JobList's
++            # own (`_move` and `answer`); this only checks who is asking.
++            # **Nothing here approves anything**: Resume puts a job back in
++            # the queue and every step of it still raises its own card when
++            # its turn comes. Cancel and Pause are immediate, because
++            # stopping is never gated.
++            if not _origin_ok(self):
++                return self._send(403, {"error": "cross-origin request refused"})
++            if not _token_ok(self):
++                return self._send(401, {"error": "bad or missing X-Jarvis-Token"})
++            try:
++                body = json.loads(_read_body(self) or b"{}")
++            except (ValueError, json.JSONDecodeError) as exc:
++                return self._send(400, {"error": str(exc)})
++            try:
++                import jarvis_tasks
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            jobs = jarvis_tasks.JobList()
++            tid = str(body.get("id") or "")
++            try:
++                if route.endswith("/input"):
++                    got = jobs.answer(tid, str(body.get("answer") or ""))
++                else:
++                    act = str(body.get("act") or "")
++                    if act not in ("pause", "resume", "cancel", "retry"):
++                        return self._send(400, {"error": "act must be pause, resume, "
++                                                         "cancel or retry"})
++                    got = getattr(jobs, act)(tid)
++            except jarvis_tasks.Refused as exc:
++                return self._send(409, {"error": str(exc)})
++            except Exception as exc:
++                return self._send(503, {"available": False,
++                                        "error": f"{type(exc).__name__}: {exc}"})
++            return self._send(200, {"id": got.id, "state": got.status})
++
+         if route in ("/api/task/pause", "/api/task/resume", "/api/task/stop",
+                      "/api/task/note") or (route.startswith("/api/pending/")
+                                            and route.endswith("/amend")):

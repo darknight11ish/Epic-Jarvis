@@ -1169,6 +1169,16 @@ $PATCHES = @(
     # in; without it, or on any error, the banner says so and a look is exactly
     # what it was before (the words only, no picture).
     'screen-attach.patch'
+    # --- The job list (2026-10-08, JARVIS-API section 118) ---
+    # tasks.patch: GET /api/tasks (counted only - ids, tool names, states and step
+    # counts, never the text of a note) plus POST /api/tasks/act (pause, resume,
+    # cancel, retry) and POST /api/tasks/input (answer a question a job stopped on).
+    # Two hunks in jarvis_hud.py whose context is task-control.patch's own added
+    # lines, so it goes after task-control. It needs jarvis_tasks.py copied in (in
+    # SHIPPED below); without it both routes answer 503 and nothing enqueues a job.
+    # No gate hunk: this module approves nothing, and the rehearsal in
+    # test_tasks.py asserts that no steering route reaches the gate at all.
+    'tasks.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1448,6 +1458,8 @@ $SHIPPED = @(
     # jarvis_jobs, and jarvis_watch imports jarvis_content_risk.
     'jarvis_jobs.py'             # Long Fuse: work that outlives the conversation; imported by jarvis_arbiter.py and jarvis_watch.py - no patch
     'jarvis_content_risk.py'     # one pipeline for text that arrived from outside; imported by jarvis_watch.py - no patch
+    # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 118) ---
+    'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
 )
 
 # The settings file. Installed only where none exists; never overwritten.

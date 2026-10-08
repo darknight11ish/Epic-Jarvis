@@ -587,7 +587,7 @@ const VIEW_SECTIONS = {
   // stream already polls for the live queue, read again here for its
   // `history` half - see brain/routes.rs's own comment on why one more GET
   // to that route is the right way to reach it.
-  work: ["jobs", "undo", "gate_history"],
+  work: ["jobs", "tasks", "undo", "gate_history"],
   // Read through its own command (brain/projects.rs), by projects-panel.js.
   projects: [],
   trust: ["content_risk", "ledger"],
@@ -11207,10 +11207,145 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadBriefing);
 }
 
+/**
+ * The job list (2026-10-08, JARVIS-API section 116): work that outlives one
+ * chat turn, shown under the Long Fuse jobs.
+ *
+ * WHAT THE BACKEND SENDS, AND WHAT IT DOES NOT. `/api/tasks` is counted
+ * only: ids, states, kinds, step counts and tool names. There is no task
+ * title and no step text in the reply at all, which is why this pane cannot
+ * show what a job is about - the same rule `jarvis_task_control.status()`
+ * follows, so a job list never becomes a new way for private words to reach
+ * a screen. The readable feed (`JobList().feed()`) is the PC's own window's,
+ * not this one's.
+ *
+ * NOTHING HERE APPROVES ANYTHING. Pause and Cancel are immediate - stopping
+ * is never gated. Resume and Retry only put the job back in the queue, and
+ * every step of it still raises its own approval card when its turn comes,
+ * through the same gate as any ordinary tool call. The reply to a question
+ * carries the owner's own words into the job list and nowhere else.
+ */
+function renderTaskList() {
+  const why = unavailable("tasks");
+  if (why && sectionState("tasks").kind === "absent") {
+    // An older PC: say so plainly rather than showing an empty list that
+    // looks like "no jobs".
+    return whyNode("tasks");
+  }
+  const body = state.data.tasks || {};
+  const tasks = Array.isArray(body.tasks) ? body.tasks : [];
+  const block = el("div", "tasks-block");
+  const head = el("p", "row-meta", "");
+  const waiting = Number(body.waiting) || 0;
+  const running = Number(body.running) || 0;
+  const blocked = Number(body.blocked) || 0;
+  const bits = [`${waiting} waiting`, `${running} running`];
+  if (blocked) bits.push(`${blocked} needs you`);
+  if (body.stop) bits.push("stopped");
+  head.textContent = `Job list: ${bits.join(" · ")}`;
+  if (why) {
+    // No rows to draw, so the heading survives: nothing clears the block here.
+    block.append(head);
+    block.append(whyNode("tasks"));
+    return block;
+  }
+  if (!tasks.length) {
+    block.append(head);
+    block.append(el("p", "empty", "No jobs."));
+    return block;
+  }
+
+  /** Pause/Cancel/Resume/Retry, and the answer to a question. */
+  const act = (id, what, value) => async () => {
+    try {
+      const args = { id: String(id), act: what };
+      if (value !== undefined) args.value = value;
+      await invoke("brain_task_act", args);
+      await load(["tasks"], { quiet: true });
+      render("work");
+    } catch (error) {
+      toast(String((error && error.message) || error), "bad");
+    }
+  };
+
+  rows(
+    block,
+    tasks,
+    (t) => {
+      const jobState = String(t.state || "queued");
+      const steps = Number(t.steps) || 0;
+      const at = Number(t.step) || 0;
+      const tools = Array.isArray(t.tools) ? t.tools.filter(Boolean) : [];
+      const on = jobState === "running" || jobState === "queued"
+        || jobState === "waiting_approval" || jobState === "waiting_input";
+      const actions = [];
+      if (on) {
+        actions.push(button("Pause", act(t.id, "pause", undefined), { live: true }));
+        actions.push(button("Cancel", act(t.id, "cancel", undefined),
+          { danger: true, live: true, title: "Stops this job. A cancelled job is not resumable." }));
+      }
+      if (jobState === "paused") {
+        actions.push(button("Resume", act(t.id, "resume", undefined), { live: true }));
+        actions.push(button("Cancel", act(t.id, "cancel", undefined), { danger: true, live: true }));
+      }
+      if (jobState === "blocked" || jobState === "failed" || jobState === "cancelled") {
+        actions.push(button("Retry", act(t.id, "retry", undefined), { live: true }));
+      }
+      const entry = row({
+        tag: jobState,
+        state: jobState,
+        // No title is sent for a job, on purpose. What can be named is the
+        // shape of the work: how far it got and which tools it will use.
+        title: `${at && steps ? `step ${at} of ${steps}` : `${steps} step(s)`}${
+          tools.length ? ` — ${tools.join(", ")}` : ""}`,
+        meta: [
+          t.kind ? `kind: ${t.kind}` : "",
+          t.attempts ? `tries: ${t.attempts}` : "",
+          t.needs_attention && t.question ? t.question : "",
+        ],
+        actions,
+      });
+      // A job that stopped to ask gets a box, and only that job. This is the
+      // one place here that carries the owner's own words - into the job list,
+      // never out of the PC.
+      if (jobState === "waiting_input") {
+        const box = el("div", "row-actions");
+        const field = el("input", "task-answer");
+        field.type = "text";
+        field.placeholder = "Your answer";
+        field.setAttribute("aria-label", "Your answer");
+        const send = button("Send answer", async () => {
+          const value = field.value.trim();
+          if (!value) return;
+          await act(t.id, "input", value)();
+        }, { live: true });
+        send.disabled = true;
+        field.addEventListener("input", () => {
+          send.disabled = !field.value.trim();
+        });
+        box.append(field, send);
+        entry.append(box);
+      }
+      return entry;
+    },
+    "No jobs."
+  );
+  // `rows()` CLEARS the container before painting, so the heading goes in
+  // afterwards - appended before the call it was silently wiped, and the pane
+  // showed rows with no name and no counts (caught by the DOM half of
+  // tests/job-list.mjs, which is the half that had never run).
+  block.prepend(head);
+  return block;
+}
+
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
-  if (why) return rows(dom.jobs, [], null, whyNode("jobs"));
+  if (why) {
+    rows(dom.jobs, [], null, whyNode("jobs"));
+    dom.jobs.append(renderTaskList());
+    return;
+  }
   const list = Array.isArray(body.jobs) ? body.jobs : [];
 
   rows(
@@ -11268,6 +11403,11 @@ function renderJobs() {
     },
     "No background jobs."
   );
+  // Appended AFTER the Long Fuse list is painted, so this adds a section to
+  // the same card without touching a line of the code above. `rows()` clears
+  // the container, so the block has to be rebuilt on every render - which is
+  // why this is here and not in a render of its own.
+  dom.jobs.append(renderTaskList());
 }
 
 function renderUndo() {
