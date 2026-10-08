@@ -422,6 +422,10 @@ pub fn apply(app: &AppHandle) -> Vec<Bound> {
     }
 
     app.state::<HotkeyState>().replace(out.clone());
+    // The tray rows print a key as a hint and the menu is built once, so a
+    // rebind has to re-label them here or the row advertises the key the owner
+    // just replaced. Ignored when no tray exists yet (startup).
+    crate::tray::hotkeys_changed(app);
     out
 }
 

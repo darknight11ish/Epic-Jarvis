@@ -137,6 +137,16 @@ struct Rows {
     backend: MenuItem<tauri::Wry>,
     /// Shown only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
+    // The rows that PRINT a hotkey. Kept so a rebind can re-label them:
+    // `accel()` was only ever read while the menu was built, so a row went on
+    // advertising the key the owner had just replaced - the exact thing the
+    // `toggle_spotlight` comment below exists to prevent (click audit,
+    // 2026-10-08: the tooltip, rebuilt live, showed the new key while the row
+    // showed the old one).
+    stop_everything: MenuItem<tauri::Wry>,
+    toggle_spotlight: MenuItem<tauri::Wry>,
+    toggle_widget: MenuItem<tauri::Wry>,
+    toggle_floating: MenuItem<tauri::Wry>,
 }
 
 /// What was last painted: the two colours, the notch count, the state, and
@@ -254,9 +264,24 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     )?;
 
     // Jarvis Live: never greyed - starting is refused with a reason (a stale
-    // link, App lock, no voice print), and ending always works.
-    let live = MenuItem::with_id(app, ID_LIVE, live_label(), true, None::<&str>)?;
-    let watch = MenuItem::with_id(app, ID_WATCH, watch_label(), true, None::<&str>)?;
+    // link, App lock, no voice print), and ending always works. Both rows print
+    // their hotkey when the owner has set one: the tray is where most people
+    // learn a key exists (see the shield icon's own note), and these two shipped
+    // unbound, so the row said nothing at all about them.
+    let live = MenuItem::with_id(
+        app,
+        ID_LIVE,
+        live_label(),
+        true,
+        accel(app, "toggle_live").as_deref(),
+    )?;
+    let watch = MenuItem::with_id(
+        app,
+        ID_WATCH,
+        watch_label(),
+        true,
+        accel(app, "toggle_watch").as_deref(),
+    )?;
 
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
@@ -388,6 +413,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             watch,
             backend,
             update,
+            stop_everything,
+            toggle_spotlight,
+            toggle_widget,
+            toggle_floating,
         });
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
@@ -1218,6 +1247,40 @@ fn tooltip(app: &AppHandle, link: &LinkState) -> String {
 fn accel(app: &AppHandle, id: &str) -> Option<String> {
     let bound = crate::hotkeys::configured(app);
     bound.get(id).cloned().filter(|s| !s.trim().is_empty())
+}
+
+/// Re-labels every tray row that prints a hotkey, after one is set, reset or
+/// refused. The menu is built ONCE, so without this a row kept showing the key
+/// the owner had just replaced for the rest of the session - while the hover
+/// tooltip, which IS rebuilt live (`tooltip()`, called from `repaint()`), showed
+/// the new one. The comment on `toggle_spotlight` says why that row exists at
+/// all: a tray advertising "Alt+Space" after PowerToys took it points the owner
+/// at the one key that cannot work.
+///
+/// Called from `hotkeys::apply`, the single funnel every hotkey change passes
+/// through. At startup there is no tray yet, and the rows are built with their
+/// keys already, so a missing tray is simply left alone.
+pub fn hotkeys_changed(app: &AppHandle) {
+    let handles = app.state::<TrayHandles>();
+    let guard = handles
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(rows) = guard.as_ref() else {
+        return; // no tray was built (startup, or create_tray failed)
+    };
+    for (id, item) in [
+        ("stop_everything", &rows.stop_everything),
+        ("toggle_quickbar", &rows.toggle_spotlight),
+        ("toggle_widget", &rows.toggle_widget),
+        ("toggle_floating", &rows.toggle_floating),
+        ("toggle_live", &rows.live),
+        ("toggle_watch", &rows.watch),
+    ] {
+        if let Err(err) = item.set_accelerator(accel(app, id).as_deref()) {
+            eprintln!("[jarvis] tray: could not re-label the row for {id}: {err}");
+        }
+    }
 }
 
 fn first_sentence(text: &str) -> String {

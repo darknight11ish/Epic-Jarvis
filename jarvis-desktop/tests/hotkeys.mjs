@@ -94,9 +94,28 @@ await check("Stop everything is in the tray menu too, the same command, never gr
   assert.doesNotMatch(html, /Everything here is also in the tray menu/);
   assert.match(html.replace(/\s+/g, " "),
     /The Jarvis bar, the widget, the floating face and Stop everything are also in the tray menu\./);
-  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything", "toggle_floating"]) {
+  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything", "toggle_floating",
+    // These two shipped unbound, so their rows printed nothing about them at
+    // all; the tray is where most people learn a key exists (click audit,
+    // 2026-10-08).
+    "toggle_live", "toggle_watch"]) {
     assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
   }
+  // And the rows FOLLOW a rebind. The menu is built once, so a key changed in
+  // Settings used to leave the row advertising the one the owner had replaced -
+  // while the hover tooltip, rebuilt live, showed the new one. The tray rows
+  // that print a key are re-labelled from `hotkeys::apply`, the one funnel every
+  // change goes through.
+  assert.match(tray, /pub fn hotkeys_changed\(app: &AppHandle\)/,
+    "nothing re-labels the tray rows after a rebind");
+  for (const id of ["stop_everything", "toggle_quickbar", "toggle_widget", "toggle_floating",
+    "toggle_live", "toggle_watch"]) {
+    assert.match(tray.slice(tray.indexOf("pub fn hotkeys_changed")),
+      new RegExp(`\\("${id}", &rows\\.`), `${id} is not re-labelled`);
+  }
+  const hk = read("src-tauri/src/hotkeys.rs");
+  assert.match(hk.slice(hk.indexOf("pub fn apply(")), /crate::tray::hotkeys_changed\(app\)/,
+    "apply() never tells the tray the keys changed");
 });
 
 await check("Stop everything says the same sentences as the phone's button", async () => {
