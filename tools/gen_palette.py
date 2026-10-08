@@ -86,5 +86,10 @@ lines.append("}")
 lines.append("")
 
 OUT.parent.mkdir(parents=True, exist_ok=True)
-OUT.write_text("\n".join(lines))
+# encoding= is not decoration on Windows. Without it Python writes the console's
+# own code page (cp1252 here), so every em dash in the comments this file
+# generates became U+FFFD in the Kotlin it wrote: a run of this generator
+# damaged the phone's Palette.kt exactly that way on 2026-10-08. The newline is
+# spelled out for the same reason - a file this repository holds is LF.
+OUT.write_text("\n".join(lines), encoding="utf-8", newline="\n")
 print(f"wrote {OUT} ({len(colors)} colours, {len(FAMILIES)} families)")

@@ -181,6 +181,39 @@ def t_each_installed_file_suite_passes_on_the_stand_in():
             shutil.rmtree(d, ignore_errors=True)
 
 
+def t_a_scratch_folder_inside_the_checkout_still_builds_the_stand_in():
+    """TMPDIR inside the repository must not empty the stand-in.
+
+    `git apply`, run anywhere inside a work tree, resolves the paths in the
+    patch against the work-tree ROOT rather than the current directory. So a
+    scratch folder under the checkout made a bare `--include jarvis_gate.py`
+    match nothing - and git still exits 0 - leaving an EMPTY file that a dozen
+    suites then asserted against. A review on 2026-10-08 pointed its temp
+    folder inside the repository and spent an hour on the wreckage. The ceiling
+    in `_gitapply.py` is what makes the answer the same either way; this check
+    fails if it is ever dropped, and it is the reason the count below is the
+    real one rather than zero."""
+    inside = HERE.parent / "_stand_in_scratch"
+    inside.mkdir(exist_ok=True)
+    saved = tempfile.tempdir
+    try:
+        tempfile.tempdir = str(inside)
+        text, log = _stack.stand_in("jarvis_gate.py")
+    finally:
+        tempfile.tempdir = saved
+        shutil.rmtree(inside, ignore_errors=True)
+    check("a scratch folder inside the checkout still builds the stand-in",
+          bool(text and text.strip()), (log or ["(no log)"])[-1])
+    check("...and it is the whole file, not an empty string",
+          bool(text) and len(text) > 10000, f"{len(text or '')} characters")
+    if text:
+        stats = {}
+        _stack.stand_in("jarvis_gate.py", stats=stats)
+        check("...with the hunks the ratchet pins, not zero",
+              stats.get("materialised") == _stack.RATCHET["jarvis_gate.py"],
+              stats)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
