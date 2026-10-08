@@ -1249,17 +1249,18 @@ fn accel(app: &AppHandle, id: &str) -> Option<String> {
     bound.get(id).cloned().filter(|s| !s.trim().is_empty())
 }
 
-/// Re-labels every tray row that prints a hotkey, after one is set, reset or
-/// refused. The menu is built ONCE, so without this a row kept showing the key
-/// the owner had just replaced for the rest of the session - while the hover
-/// tooltip, which IS rebuilt live (`tooltip()`, called from `repaint()`), showed
-/// the new one. The comment on `toggle_spotlight` says why that row exists at
-/// all: a tray advertising "Alt+Space" after PowerToys took it points the owner
-/// at the one key that cannot work.
+/// Re-labels every tray row that prints a hotkey, after one is set or reset.
+/// The menu is built ONCE, so without this a row kept showing the key the owner
+/// had just replaced for the rest of the session - while the hover tooltip,
+/// which IS rebuilt live (`tooltip()`, called from `repaint()`), showed the new
+/// one. The comment on `toggle_spotlight` says why that row exists at all: a
+/// tray advertising "Alt+Space" after PowerToys took it points the owner at the
+/// one key that cannot work.
 ///
-/// Called from `hotkeys::apply`, the single funnel every hotkey change passes
-/// through. At startup there is no tray yet, and the rows are built with their
-/// keys already, so a missing tray is simply left alone.
+/// Called from the two hotkey commands, deferred to the event loop
+/// (`hotkeys::relabel_tray`) - NOT from `apply()`, which also runs during setup
+/// where touching the native menu hangs the main thread. A missing tray is
+/// simply left alone; at startup the rows are built with their keys already.
 pub fn hotkeys_changed(app: &AppHandle) {
     let handles = app.state::<TrayHandles>();
     let guard = handles
@@ -1269,6 +1270,13 @@ pub fn hotkeys_changed(app: &AppHandle) {
     let Some(rows) = guard.as_ref() else {
         return; // no tray was built (startup, or create_tray failed)
     };
+    // What the OS actually ACCEPTED, from the state `apply()` has just written:
+    // a row must never print a key that was refused, or it points the owner at
+    // the one key that cannot work. That is not hypothetical - this PC's
+    // Alt+Space is held by another program, and the Jarvis bar's row said
+    // "Alt+Space" while the key was refused (2026-10-08).
+    let applied = app.state::<crate::hotkeys::HotkeyState>().snapshot();
+    let registered = |id: &str| applied.iter().find(|b| b.id == id).map(|b| b.registered);
     for (id, item) in [
         ("stop_everything", &rows.stop_everything),
         ("toggle_quickbar", &rows.toggle_spotlight),
@@ -1277,7 +1285,11 @@ pub fn hotkeys_changed(app: &AppHandle) {
         ("toggle_live", &rows.live),
         ("toggle_watch", &rows.watch),
     ] {
-        if let Err(err) = item.set_accelerator(accel(app, id).as_deref()) {
+        let key = match registered(id) {
+            Some(false) => None, // refused by the OS: print nothing at all
+            _ => accel(app, id),
+        };
+        if let Err(err) = item.set_accelerator(key.as_deref()) {
             eprintln!("[jarvis] tray: could not re-label the row for {id}: {err}");
         }
     }

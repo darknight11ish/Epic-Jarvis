@@ -422,11 +422,24 @@ pub fn apply(app: &AppHandle) -> Vec<Bound> {
     }
 
     app.state::<HotkeyState>().replace(out.clone());
-    // The tray rows print a key as a hint and the menu is built once, so a
-    // rebind has to re-label them here or the row advertises the key the owner
-    // just replaced. Ignored when no tray exists yet (startup).
-    crate::tray::hotkeys_changed(app);
     out
+}
+
+/// Re-labels the tray rows that print a hotkey, after the keys were applied.
+///
+/// DEFERRED TO THE EVENT LOOP, and never called from [`apply`] itself. `apply`
+/// also runs during setup, before that loop is turning, and touching the native
+/// menu from there HANGS the main thread: the app came up with its windows,
+/// registered its hotkeys, and never reached the line that starts the backend -
+/// the tray re-labelling was the last thing it did (found 2026-10-08 by running
+/// the built app with its output captured and A/B-ing it against the previous
+/// build). Re-labelling is only needed when a key actually CHANGED, and that
+/// only happens from the two commands below, which run off the loop.
+fn relabel_tray(app: &AppHandle) {
+    let handle = app.clone();
+    if let Err(err) = app.run_on_main_thread(move || crate::tray::hotkeys_changed(&handle)) {
+        eprintln!("[jarvis] could not re-label the tray rows: {err}");
+    }
 }
 
 /// Which action a fired shortcut belongs to, or `None` if it is not ours.
@@ -491,7 +504,9 @@ pub fn set_hotkeys(
     }
     validate(&next)?;
     persist(&app, &next)?;
-    Ok(apply(&app))
+    let out = apply(&app);
+    relabel_tray(&app);
+    Ok(out)
 }
 
 /// Puts every binding back to what the app shipped with.
@@ -502,7 +517,9 @@ pub fn reset_hotkeys(app: AppHandle) -> Result<Vec<Bound>, String> {
         .map(|a| (a.id.to_string(), a.default.to_string()))
         .collect();
     persist(&app, &defaults)?;
-    Ok(apply(&app))
+    let out = apply(&app);
+    relabel_tray(&app);
+    Ok(out)
 }
 
 #[cfg(test)]
