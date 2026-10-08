@@ -1158,6 +1158,17 @@ $PATCHES = @(
     # Tested by test_gate_risk_rows.py; the apply itself is proven by this
     # script's dry run, as for every patch here.
     'gate-risk-rows.patch'
+    # "Look at this" can hand the owner the CLEANED picture of the look, for the
+    # question box (the owner's decision of 2026-10-07;
+    # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,
+    # whose context is tutorials.patch's own block (the last one before
+    # `_loopback_companion`), so it goes last, like every new patch. Its wrapper
+    # takes over POST /api/screen so the request body is read once, and hands
+    # every other verb to jarvis_screen.handle_post - so it MUST come after
+    # screen.patch, whose route it wraps. Needs jarvis_screen_attach.py copied
+    # in; without it, or on any error, the banner says so and a look is exactly
+    # what it was before (the words only, no picture).
+    'screen-attach.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1359,6 +1370,12 @@ $SHIPPED = @(
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
     'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
     'jarvis_screen_picture.py'   # slow picture mode for one graphics card: a small picture model on the PROCESSOR in its own copy of Ollama; off by default, ON is one card, OFF is instant; secrets blacked out first or no picture; GET/POST /api/screen/picture (routes in jarvis_screen.py, gate lines in screen-picture.patch)
+    # "look at this" can hand back the CLEANED picture of the look, for the question box
+    # (the owner's decision of 2026-10-07, .dsh-scratch/SCREEN-ATTACH-DESIGN.md;
+    # screen-attach.patch installs its wrapper round jarvis_screen.py's route). It takes
+    # no picture of its own: the look is jarvis_screen.Screen._grab's, in its one order,
+    # and the bytes handed on are jarvis_picture.clean's own output - never the capture.
+    'jarvis_screen_attach.py'
     # --- the headless browser, Obscura (2026-09-29, browser-engine.patch) ---
     'jarvis_obscura.py'          # the driver for Obscura, a browser with no window: started over standard input/output (no port), --stealth always, no proxy, allow-listed tools only, one program at a time, hard limits; the owner's install line and check
     'jarvis_browser_engine.py'   # which browser Jarvis uses (visible or headless), the switch (off by default, ON is one card), the mode rule, GET/POST /api/browser/engine (browser-engine.patch)

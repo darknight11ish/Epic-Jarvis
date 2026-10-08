@@ -129,10 +129,25 @@ const lib = read("src-tauri/src/lib.rs");
 
 await check("nothing on the desktop side reads the screen, keeps a picture or shows the screen's words", () => {
   // look.rs asks the PC; it never captures, decodes or stores an image.
-  for (const banned of ["xcap", "capture_primary_display", "Monitor::", "image::", "base64", "data:image",
+  //
+  // CHANGED 2026-10-07 (the owner's decision; SCREEN-ATTACH-DESIGN.md): the key
+  // now hands the CLEANED picture of the look to the question box, so
+  // "base64" and "data:image" are allowed in look.rs - but ONLY as the PC's own
+  // cleaner's PNG, passed on whole. What stays banned is everything that would
+  // make this app a second reader of the screen: the capture crate, a capture
+  // of its own, the image crate, and the text reader. tests/screen-attach.mjs
+  // and look.rs's own `only_the_pcs_own_cleaned_png_becomes_an_attachment` hold
+  // the picture path itself to the PNG, the size cap and the signature.
+  for (const banned of ["xcap", "capture_primary_display", "Monitor::", "image::",
     "read_text", "ocr"]) {
     assert.ok(!lookRs.toLowerCase().includes(banned.toLowerCase()), `look.rs mentions ${banned}`);
   }
+  const images = lookRs.match(/data:image\/[a-z+]+/g) || [];
+  assert.deepEqual([...new Set(images)], ["data:image/png"],
+    "the only picture look.rs builds is the cleaner's PNG");
+  assert.match(lookRs, /"mime"\)[\s\S]{0,80}!= Some\("image\/png"\)/,
+    "a picture the PC did not call image/png must be refused");
+  assert.match(lookRs, /starts_with\(PNG_SIG\)/, "the bytes must really be a PNG");
   // Nothing from the screen is read out of an answer: only the fixed keys.
   const line = lookRs.slice(lookRs.indexOf("pub(crate) fn look_line("));
   assert.ok(!/"part"/.test(line.slice(0, line.indexOf("\n}\n"))), "look_line reads a `part`");
@@ -158,7 +173,11 @@ await check("the hotkeys: Look at this keeps its key, Watch with me is off until
 
 await check("Look at this looks BEFORE the bar comes up, and is held on a stale link and under App lock", () => {
   const then = lookRs.slice(lookRs.indexOf("async fn look_then_bar("), lookRs.indexOf("/// \"Watch with me\": a question is about to start"));
-  const posted = then.indexOf("look_body(false)");
+  // CHANGED 2026-10-07: the key asks for the CLEANED picture as well
+  // (`attach_body`, which is `look_body` plus `want: "picture"`), so the picture
+  // is in the question box by the time the bar appears. It is still ONE look,
+  // taken before the bar comes up.
+  const posted = then.indexOf("attach_body(false)");
   const shown = then.indexOf("show_quickbar(app)");
   assert.ok(posted > 0 && shown > posted, "the bar must come up after the look, not before");
   assert.match(then, /held\(app\)/);
