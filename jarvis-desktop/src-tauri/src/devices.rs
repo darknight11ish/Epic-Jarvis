@@ -107,8 +107,16 @@ const READ_TIMEOUT: Duration = Duration::from_secs(15);
 /// "if the Tailscale command answers within 2 s").
 const TAILSCALE_LIMIT: Duration = Duration::from_secs(2);
 
-/// The session states in which a code or the four words are on screen, so
-/// the window stays hidden from screen capture (design 3).
+/// The session states in which a code or the four words are on screen (design
+/// 3).
+///
+/// Test-only since 2026-10-07: this used to drive the settings window's
+/// capture guard, which is now set once when the window is built
+/// (`windows.rs::show_settings_unlocked`) instead of toggled per session, so
+/// nothing outside the unit test below asks which states are active. Left at
+/// `#[cfg(test)]` rather than deleted because the test is the written record of
+/// the rule - and an unused item is a build error under `clippy -D warnings`.
+#[cfg(test)]
 const ACTIVE: [&str; 3] = ["waiting_for_phone", "waiting_for_card", "approved"];
 
 /// The fields of `GET /api/pair/session` the page gets - all of them in the
@@ -501,6 +509,10 @@ pub(crate) fn session_answer(status: u16, body: &str) -> Result<serde_json::Valu
 }
 
 /// Whether a session in `state` still shows a code or the words.
+///
+/// Test-only since 2026-10-07, for the same reason as [`ACTIVE`]: the capture
+/// guard no longer depends on the session's state.
+#[cfg(test)]
 pub(crate) fn session_active(state: &str) -> bool {
     ACTIVE.contains(&state)
 }
