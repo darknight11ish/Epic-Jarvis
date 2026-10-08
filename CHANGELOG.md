@@ -6,6 +6,164 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A job that stopped to ask now has something to answer (2026-10-08).** Found
+  while wiring the phone: `JobList.status()` flagged a job as needing the owner
+  only when it was `blocked` by an interrupted step, so a job that stopped to
+  ask a question arrived as **"needs an answer" with nothing to answer** - a
+  dead end that only ever shows up on a screen. Both states carry the question
+  now, and each app shows it. The question must be the caller's own words about
+  what is missing, never the text of a note, an email or a message, which the
+  code says where the payload is built. On the desktop the answer appears as a
+  box on the row that asked, with Send answer held until something is typed;
+  `POST /api/tasks/input` therefore moved from "still to port" to ported for
+  the phone too.
+
+- **The job list reaches the phone's Brain (2026-10-08).** Brain → Work →
+  jobs, in an item of its own so the list shows even when there are no Long
+  Fuse jobs, and guarded by the **same `brain.work.jobs`** menu id - so hiding
+  "Background jobs" hides both halves of *what the PC is working on*, with no
+  new menu entry and no catalogue change. `net/Tasks.kt` parses the payload,
+  names all ten states in words, knows which steers each state offers, and
+  builds both request bodies - refusing a blank answer rather than sending one.
+  `JarvisRuntime.tasks()`, `taskAct()` and `taskAnswer()` are three thin calls;
+  `TasksPlate.kt` shows each job's state, `step N of M`, its tool names, the
+  PC's own sentence when it needs the owner, a text box for a job that stopped
+  to ask, and the steers held back while the link cannot be confirmed live.
+  **It never says a job is paused or resumed on a click** - it re-reads and
+  reports only what the PC then says. **It cannot show what a job is about, and
+  cannot approve anything** - the reply is counted only, and `net/Tasks.kt` has
+  no field for a title because the PC does not send one. New `TasksTest.kt`
+  reads `contract/tasks-cases.json`, which `tools/gen_tasks_cases.py` writes by
+  building a **real** `JobList` with jobs in real states (including one that
+  stopped to ask) and recording exactly what `status()` returned - the desktop
+  reads the same generated file, so the two clients cannot drift.
+  `check_parity.py` now records all three routes as ported (phone: 222 → 225
+  routes). **Kotlin is not compiled in this checkout** - no Gradle or Android
+  SDK here - so the phone half is verified by CI, not by this session.
+
+- **The job list reaches the phone's Brain too (2026-10-08).** Brain → Work →
+  jobs, in an item of its own so the list shows even when there are no Long
+  Fuse jobs, and guarded by the **same `brain.work.jobs`** menu id - so hiding
+  "Background jobs" hides both halves of *what the PC is working on*, with no
+  new menu entry and no catalogue change. `net/Tasks.kt` parses the payload,
+  names all ten states in words, knows which steers each state offers, and
+  builds the request body; `JarvisRuntime.tasks()` and `taskAct()` are two thin
+  calls; `TasksPlate.kt` shows each job's state, `step N of M`, its tool names
+  and the PC's own sentence for a blocked one, with the steers held back while
+  the link cannot be confirmed live. **It never says a job is paused or
+  resumed on a click** - it re-reads and reports only what the PC then says.
+  **It cannot show what a job is about, and cannot approve anything** - the
+  reply is counted only, and `net/Tasks.kt` has no field for a title because
+  the PC does not send one. New `TasksTest.kt` reads
+  `contract/tasks-cases.json`, which `tools/gen_tasks_cases.py` writes by
+  building a **real** `JobList` and recording exactly what `status()` returned
+  - the desktop reads the same generated file, so the two clients cannot drift.
+  `check_parity.py` now records `/api/tasks` and `/api/tasks/act` as ported
+  (phone: 222 → 224 routes) and `/api/tasks/input` as still to port, with the
+  reason. **Kotlin is not compiled in this checkout** - no Gradle or Android
+  SDK here - so the phone half is verified by CI, not by this session.
+
+- **The job list reaches the desktop's Work tab (2026-10-08).** Not a new card
+  and not a new menu entry: it is drawn under the Long Fuse jobs in the card
+  that already answers "what is the PC working on". The Brain reads
+  `/api/tasks` through its read allowlist (`brain/routes.rs`), steers a job
+  through one new command (`brain_task_act`: pause, resume, cancel, retry, and
+  the answer to a question a job stopped on), and the grant
+  (`allow-brain-task-act`) sits in the `brain-act` set beside cancel and
+  revert. **The pane cannot show what a job is about, and that is deliberate:**
+  the reply is counted only - ids, states, kinds, step counts and tool names -
+  so there is no task title and no step text in it to display, and the test
+  suite fails if either is ever added to the payload. **It cannot approve
+  anything either:** `brain_task_act` has no branch that reaches
+  `/api/approve` or `/api/deny`, and the read allowlist's own test now asserts
+  from the other side that `/api/tasks/act` and `/api/tasks/input` are never
+  reachable through a read grant. New suite
+  `jarvis-desktop/tests/job-list.mjs` (13 checks that need no browser, plus
+  DOM checks that run in CI), added to `test:ui`. **Verified here:** `cargo
+  test --lib` 689 passed, with the same two failures that are the sandbox
+  refusing a temp folder (`commands::wiki_tests`) and a scratch round-trip
+  writing nothing (`crash_notes`) - neither touches this feature. The phone
+  still has no plate for it.
+
+- **The split: a chat turn now hands the work to a job (2026-10-08).** The
+  point of the job list, and it is two functions in
+  `backend/jarvis_tasks.py`. `from_plan(job_list, plan, approved=False,
+  plan_key=None)` takes a plan shaped exactly like `jarvis_plan.propose()`'s
+  output and enqueues it as one job. **An unapproved plan adds nothing** - the
+  same fail-closed default as `jarvis_plan.run` and `run_action` - and a
+  `plan_key` makes it idempotent, so the same plan approved twice makes one
+  job rather than two. Nothing is softened on the way in: every `risky` and
+  `from_step` flag is carried over exactly, so a risky step still asks on its
+  own card when its turn comes and a result-filled step is asked again with
+  the value it will really use. Two things a `PlanStep` does not say are
+  filled the safe way - every plan step defaults to **acting**, so an
+  interruption blocks rather than retries, and none is **retry_safe**, so no
+  step is ever replaced by a recorded result. `gate_ask(gate_check)` is the
+  only place the job list and the approval gate meet, and it goes one way: the
+  step is handed to the gate that already exists, `allowed is True` is the
+  only thing that lets it run, `None` means "not decided yet" so the job waits
+  and asks again rather than holding a card inside a tick, and **a gate that
+  raises also means "not decided"** - a gate that cannot answer has not
+  answered, and treating silence as permission is the one wrong reading
+  available here. `allowed` also outranks the outcome word, so a refusal can
+  never be logged with a word that reads as approval. The module still imports
+  nothing of the gate, and `test_tasks.py` asserts that. **133 checks now**,
+  including the whole path run end to end with the gate injected exactly as
+  the real one is. The one line the backend needs - `from_plan(...)` after the
+  plan card is approved - belongs with the plan card's switch-on, which is
+  still gated on its measured safety test. No screen draws the list yet.
+
+- **The address check learned the ranges that are not a destination, and
+  NAT64 (2026-10-08).** Reading OpenMuse's own egress allowlist
+  ([the comparison](docs/COMPETITORS-OPENMUSE-2026-10-08.md), and its
+  correction) turned up two real holes in `jarvis_local_http.py`, the module
+  that has pinned the address it checks at connect time since the 2026-09-27
+  security audit. It did not know about ranges the internet sets aside for
+  things that are never a destination - `192.0.0.0/24`, the three TEST-NET
+  blocks, the benchmarking block `198.18.0.0/15`, multicast `224.0.0.0/4`,
+  reserved `240.0.0.0/4` (which holds `255.255.255.255`), IPv6 multicast
+  `ff00::/8` and documentation `2001:db8::/32` - and it did not unwrap
+  **NAT64** (`64:ff9b::/96`), where `127.0.0.1` is spelled
+  `64:ff9b::7f00:1` and `ipaddress` reports no `.ipv4_mapped` for it, so a
+  private address written that way was invisible to the check. Both are
+  fixed, and the NAT64 range itself is deliberately **not** refused: a NAT64
+  address carrying a genuinely public IPv4 is how an IPv6-only machine
+  reaches the open internet, so the code unwraps it and judges what it
+  carries. `backend/test_local_http.py` gained 16 checks, 82 in all, and
+  still passes. **The report that prompted this also claimed the whole
+  mechanism was missing; the correction written into it says plainly that it
+  was not, because that is the third time this project has gone looking for
+  something it already had.**
+
+- **The job list: work that now outlives one chat turn (2026-10-08).** Every
+  turn Jarvis took was a single chat turn with a hard 7-request ceiling, and
+  nothing about it survived the turn ending - which is why "one card, several
+  steps" sat switched off, Projects could not run a test suite, and the
+  overnight tidy ran nothing. `backend/jarvis_tasks.py` is a small job list on
+  the PC's own disk (`tasks.db`: tasks, runs, run-events, actions and a
+  memo), reached by `GET /api/tasks` and steered by `POST /api/tasks/act`
+  (pause, resume, cancel, retry) and `POST /api/tasks/input` (`tasks.patch`).
+  It is **built and tested, and no screen draws it yet**: the apps' job
+  screens and the chat/jobs split come next. Five protections came with it,
+  copied in shape from
+  OpenMuse ([the comparison](docs/COMPETITORS-OPENMUSE-2026-10-08.md)) and
+  each with its own test: a **lease** so a crashed job is picked up again and
+  never run twice at once (an interrupted step that ACTS goes to `blocked`
+  with a question; one that only reads is simply done again); a **checkpoint
+  after every step**, one step per tick, so a job never freezes the Jarvis
+  bar; **`outcome_unknown`** for a send interrupted by a restart - never
+  `failed`, which invites a retry, and never `succeeded`, which would be a
+  guess; an **idempotency key**, so the same request twice makes one action;
+  and a **decision bound to the words on the card**, so a card that changed
+  under you cannot be approved. `owner-check.patch` proves WHO approved; this
+  proves WHAT. A card nobody answered leaves the job waiting rather than
+  killing it, where a real "no" stops it. Stopping is never gated, and the
+  route returns counts and tool names only, never the text of a note.
+  `backend/test_tasks.py` is 109 checks; `tasks.patch` is rehearsed forwards
+  and backwards on the text `task-control.patch` wrote, and the rehearsal
+  also proves no steering route can reach the gate. **Nothing here has
+  run on the owner's PC** - the backend is not in this repository.
+
 - **The phone's face photographs job was red because the runner had no sound
   library, not because anything here was broken (2026-10-06).** The job that
   renders the animal faces downloads Android's emulator and starts it. The

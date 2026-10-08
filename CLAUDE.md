@@ -5,6 +5,51 @@ they worked on separate branches. This is the reconciled version, now that
 both have merged into `main` — read this one, not an old copy on a deleted
 branch.
 
+## The short list (read this first)
+
+Everything below is the full record, with dates and the reasoning behind each
+choice. This section is the short version: the rules that must never be broken,
+and the newest decisions, **one plain sentence each**. The owner adds a rule by
+saying it in chat; it goes here, newest first, and the owner sees the sentence
+before it is saved. Where this list and the detail below seem to disagree, read
+the detail - it carries the date and the reason.
+
+### The five that are not negotiable
+
+1. Email, files, credentials and stored memory stay on the local model.
+2. Never open a public tunnel.
+3. API keys are allowed, and get the care the pairing token gets: never logged,
+   sent only to the one service they authenticate against, never written to
+   disk in plain text.
+4. Never auto-approve anything, and stop acting when the event stream is stale.
+5. Non-commercial, sideloaded, never on Play.
+
+### Decisions, newest first
+
+- **2026-10-08 - the job list comes first, and a turn hands work to it.** Work
+  that outlives one chat turn is built (`backend/jarvis_tasks.py`, `tasks.patch`,
+  JARVIS-API section 116): a job is a named list of steps, one step runs per
+  tick, each step still raises its own approval card, and the list remembers
+  where it got to through a restart. A chat turn delegates to a job with
+  `jarvis_tasks.from_plan` after the plan card is approved, and the gate is
+  reached only through `gate_ask`, so nothing bypasses it. Five protections came
+  with it, copied in shape from OpenMuse
+  (`docs/COMPETITORS-OPENMUSE-2026-10-08.md`): a lease so a crashed job is picked
+  up again and never run twice at once, a checkpoint after every step,
+  `outcome_unknown` for a send interrupted by a restart (never `failed`, which
+  invites a retry), an idempotency key so the same request makes one action, and
+  a card whose decision must carry the hash of the words that were shown. Both
+  apps show the list on Brain -> Work. Nothing new leaves the PC.
+- **2026-10-06 - the big Jarvis window gets its own chat box back.** This
+  reverses the 2026-09-28 "the PC has one chat box" decision. Typing there is
+  its own conversation, kept in History as HUD, and that window has no
+  Temporary chat, no New conversation, no "Used in this answer" and no crisis
+  panel. The owner was told those limits and accepted them.
+- **2026-10-06 - anything needing a key or a sign-in should be settable in the
+  Jarvis app itself**, desktop only, stored under rule 3 (Windows Credential
+  Manager for a secret; never a plain-text key file). The phone is never asked
+  for an account secret.
+
 ## Whenever a choice is needed, give multiple choice
 
 The owner has said it again and again ("Give me multiple choice", 2026-09-29

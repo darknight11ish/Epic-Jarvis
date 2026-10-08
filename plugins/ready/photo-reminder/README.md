@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_photo_remind.install()` (takes the core's Handler)
 - The patch this replaces: `backend/photo-reminder.patch`
-- Position in the old patch stack: 89 of 122
+- Position in the old patch stack: 89 of 123
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_photo_remind.py`), copied into the backend by

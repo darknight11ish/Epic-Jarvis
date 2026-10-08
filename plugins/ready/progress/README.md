@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_progress.install()` (takes the core's Handler)
 - The patch this replaces: `backend/progress.patch`
-- Position in the old patch stack: 111 of 122
+- Position in the old patch stack: 111 of 123
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_progress.py`), copied into the backend by

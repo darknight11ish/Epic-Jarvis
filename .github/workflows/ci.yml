@@ -262,6 +262,16 @@ jobs:
         run: |
           python tools/gen_animal_cases.py --check
           node jarvis-desktop/tests/animal-settings.mjs
+      # The job list (2026-10-08, JARVIS-API section 116): work that outlives
+      # one chat turn. tasks-cases.json is what jarvis_tasks.JobList().status()
+      # really answers, with jobs in real states, for BOTH apps - the phone's
+      # TasksTest reads it and the desktop's job-list.mjs checks its own fields
+      # against the same file, so the two clients cannot drift apart and the
+      # payload cannot change shape without it being a decision.
+      - name: Job list - both apps' contract matches jarvis_tasks.py
+        run: |
+          python tools/gen_tasks_cases.py --check
+          node jarvis-desktop/tests/job-list.mjs
       # The animals' new behaviours as the desktop feeds them (the moments'
       # relay, the lock rules) and the faces at every speed of Jarvis's
       # voice (the phrase-end finder, the robot's eye pulse). Both also run,

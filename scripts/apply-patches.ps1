@@ -1089,6 +1089,16 @@ $PATCHES = @(
     # Tested by test_gate_risk_rows.py; the apply itself is proven by this
     # script's dry run, as for every patch here.
     'gate-risk-rows.patch'
+    # --- The job list (2026-10-08, JARVIS-API section 116) ---
+    # tasks.patch: GET /api/tasks (counted only - ids, tool names, states and step
+    # counts, never the text of a note) plus POST /api/tasks/act (pause, resume,
+    # cancel, retry) and POST /api/tasks/input (answer a question a job stopped on).
+    # Two hunks in jarvis_hud.py whose context is task-control.patch's own added
+    # lines, so it goes after task-control. It needs jarvis_tasks.py copied in (in
+    # SHIPPED below); without it both routes answer 503 and nothing enqueues a job.
+    # No gate hunk: this module approves nothing, and the rehearsal in
+    # test_tasks.py asserts that no steering route reaches the gate at all.
+    'tasks.patch'
     # --- drop-in modules (feat/plug-and-play-modules) ------------------------
     # Last, like every new patch, and its context is tutorials.patch's own
     # install block - the last one in the file. It adds ONE more block of the
@@ -1362,6 +1372,8 @@ $SHIPPED = @(
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
     # --- Drop-in modules (feat/plug-and-play-modules) ---
     'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
+    # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 116) ---
+    'jarvis_tasks.py'            # tasks.patch: GET /api/tasks, counted only - ids, tool names, states and step counts, never the text of a note (jarvis_task_control's own rule). Work that outlives one chat turn: tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
 )
 
 # The settings file. Installed only where none exists; never overwritten.

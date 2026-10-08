@@ -701,10 +701,19 @@ permissions = ["allow-brain-read"]
 # together and apart from the set below.
 [[set]]
 identifier = "brain-act"
-description = "Revert an undo entry, cancel a Long Fuse job, stop a message inside its send window, and manage the GitHub watchlist."
+description = "Revert an undo entry, cancel a Long Fuse job, steer the job list, stop a message inside its send window, and manage the GitHub watchlist. None of these approves anything: resuming or retrying a job only puts it back in the queue, where every step still raises its own approval card."
 permissions = [
   "allow-brain-revert-undo",
   "allow-brain-cancel-job",
+  # The job list (2026-10-08, JARVIS-API section 116): pause, resume, cancel,
+  # retry, and answer a question a job stopped on. It sits in this set rather
+  # than one of its own because it has the same shape as the two above it -
+  # Pause and Cancel stop something unfinished, Retry moves back toward a state
+  # the owner already had, and Resume re-queues work whose steps still ask one
+  # at a time. It holds no way to answer an approval: brain_task_act has no
+  # branch that reaches /api/approve or /api/deny, and the read allowlist in
+  # brain/routes.rs asserts the same thing from the other side.
+  "allow-brain-task-act",
   "allow-brain-cancel-hold",
   "allow-brain-watch-add",
   "allow-brain-watch-remove",

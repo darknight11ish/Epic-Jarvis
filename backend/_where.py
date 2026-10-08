@@ -443,6 +443,17 @@ SHIPPED = (
     # plugins/registry.json says which features fit and why the rest do not.
     # Standard library only, no network, no child process, writes nothing.
     "jarvis_plugins.py",
+    # The job list (2026-10-08, tasks.patch, JARVIS-API section 116): work
+    # that outlives one chat turn - a task is a named job with steps, each
+    # step still goes through the one gate, and the list remembers where it
+    # got to through a restart. Copied in shape from OpenMuse's task worker
+    # (docs/COMPETITORS-OPENMUSE-2026-10-08.md): a lease so a crashed job is
+    # picked up again and never run twice at once, a checkpoint after every
+    # step, `outcome_unknown` for an interrupted send, an idempotency key so
+    # one request makes one action, and a card whose decision must carry the
+    # hash of the words that were shown. Local SQLite only, standard library
+    # only, no network, no child process, and it approves nothing.
+    "jarvis_tasks.py",
 )
 
 

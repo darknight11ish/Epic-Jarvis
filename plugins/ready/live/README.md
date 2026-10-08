@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_live.install()` (takes the core's Handler)
 - The patch this replaces: `backend/live.patch`
-- Position in the old patch stack: 94 of 122
+- Position in the old patch stack: 94 of 123
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_live.py`), copied into the backend by

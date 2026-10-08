@@ -1982,6 +1982,37 @@ object JarvisRuntime {
      */
     suspend fun pcHelp(): PcHelp.Read = PcHelp.readOf(api.pcHelp())
 
+    // -------------------------------------------------------- job list -----
+
+    /**
+     * Reads `/api/tasks` ([Tasks]): work that outlives one chat turn. Counted
+     * only - ids, states, step counts and tool names, never a title or a
+     * step's text. The screen that asked holds the answer, like PC help: the
+     * list is small and there is nothing in it worth keeping in memory.
+     */
+    suspend fun tasks(): Tasks.Read = Tasks.readOf(api.tasks())
+
+    /**
+     * Steers one job: pause, resume, cancel or retry ([Tasks.ACTS]).
+     *
+     * **Approves nothing.** Resume puts the job back in the queue and Retry
+     * tries an interrupted step again; every step still raises its own
+     * approval card when its turn comes, through the same gate as any ordinary
+     * tool call. The screen must never report the job as paused or resumed on
+     * a click - only when a later read says so.
+     */
+    suspend fun taskAct(id: String, act: String): ApiResult<JsonObject> =
+        api.taskAct(id, act)
+
+    /**
+     * Answers a question a job stopped on. **Approves nothing**: the answer
+     * goes into the job list, and whatever the job does next still raises its
+     * own approval card when its turn comes. A blank answer is refused before
+     * anything is sent.
+     */
+    suspend fun taskAnswer(id: String, answer: String): ApiResult<JsonObject> =
+        api.taskAnswer(id, answer)
+
     // -------------------------------------------------------- tutorials ----
 
     /**
