@@ -300,7 +300,20 @@ def t_every_import_is_accounted_for():
         } | {
             p.name for p in lib_dir.iterdir() if (p / "__init__.py").is_file()
         } | {"tomllib", "zoneinfo", "winreg", "msvcrt", "winsound", "_winapi"}
-    sources = {p: imports_of_source((HERE / p).read_text(encoding="utf-8")) for p in SHIPPED}
+    # A shipped entry is usually a Python module, but not always: `SHIPPED` also
+    # carries resources a shipped module reads from its own folder (for example
+    # jarvis_hud.html, which jarvis_hud.py serves at `GET /`). Parsing one as
+    # Python raised, so the check now treats anything it cannot parse as having
+    # no imports rather than blowing up - the point of this check is what a
+    # module imports, and a resource imports nothing.
+    sources = {}
+    for p in SHIPPED:
+        try:
+            sources[p] = imports_of_source((HERE / p).read_text(encoding="utf-8"))
+        except (SyntaxError, ValueError):
+            sources[p] = set()
+        except UnicodeDecodeError:
+            sources[p] = set()
     patches = sorted(HERE.glob("*.patch")) + sorted((HERE / "rebuilt-patches").glob("*.patch"))
     for pp in patches:
         sources[str(pp.relative_to(HERE))] = imports_of_patch(pp)
@@ -359,9 +372,14 @@ def t_the_exemptions_are_real():
     for pip in sorted(set(THIRD_PARTY.values())):
         check(f"{pip} is named in requirements.txt", pip.lower() in requirement_names())
     # And the other way: nothing in requirements.txt that nothing imports.
+    # A shipped entry may be a resource rather than a module (see
+    # t_every_import_is_accounted_for): it parses as nothing rather than raising.
     used = set()
     for p in SHIPPED:
-        used |= imports_of_source((HERE / p).read_text(encoding="utf-8"))
+        try:
+            used |= imports_of_source((HERE / p).read_text(encoding="utf-8"))
+        except (SyntaxError, ValueError, UnicodeDecodeError):
+            continue
     by_pip = {v.lower(): k for k, v in THIRD_PARTY.items()}
     for pip in sorted(requirement_names()):
         if pip in INDIRECT:

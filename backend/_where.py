@@ -456,6 +456,21 @@ SHIPPED = (
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",
+    # The page this server hands to a browser at `GET /` (2026-10-07).
+    #
+    # Found while debugging a desktop app that had NEVER connected: the backend
+    # answered `GET /` with 500 "jarvis_hud.html is missing from this folder",
+    # because the file was in the published base but in neither SHIPPED list and
+    # in no patch - so the patcher never copied it. The app lost the connection
+    # menu and fell back to its demo data, which reads as "Jarvis is not
+    # connected" however healthy the backend is.
+    #
+    # This is not a module: it is a resource the shipped `jarvis_hud.py` reads
+    # from `HERE` at request time, so it has to sit beside the server. Adding it
+    # here is all that is needed - `test_shipped_modules.py` requires a shipped
+    # entry to be a file in `backend/` as well as in the base, which is why it is
+    # copied there too.
+    "jarvis_hud.html",
     # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
     # Found by comparing a working backend against this list: all five were
     # already IN jarvis-backend/, and a SHIPPED module imports each of them, but

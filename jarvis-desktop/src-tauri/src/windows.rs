@@ -471,6 +471,15 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     // so it does not flash up centred first and then jump.
     .visible(false)
     .theme(Some(tauri::Theme::Dark))
+    // No capture guard is set here. The settings window's guard is toggled by
+    // devices.rs (`guard_capture`): on while a pairing code is on screen, off
+    // when the session ends or the panel closes (PAIRING-DESIGN 7.1).
+    //
+    // It is deliberately NOT Tauri's content-protection builder setting, here
+    // or later: on Windows that reaches `SetWindowDisplayAffinity`, which tao
+    // applies by RECREATING the window - so toggling it closed Settings the
+    // moment pairing succeeded (the owner, 2026-10-07). devices.rs calls the
+    // Win32 function directly instead. See its comment for the whole story.
     .build()
     .map_err(|e| format!("unable to open settings: {e}"))?;
     crate::window_memory::restore(&window, true);

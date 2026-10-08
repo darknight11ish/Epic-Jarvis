@@ -579,19 +579,65 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 // ---------------------------------------------------------------------------
 // The settings window's screen-capture guard (design 7.1)
 // ---------------------------------------------------------------------------
+//
+// ON while a pairing code or the four words are on screen, OFF once the session
+// ends or the panel closes - the design's own shape ("put back when the panel
+// closes").
+//
+// Why this is not Tauri's `set_content_protected`, which is the obvious call:
+// on Windows that reaches `SetWindowDisplayAffinity`, and tao applies it by
+// RECREATING the window. Pressing "Pair a phone" therefore closed the Settings
+// window exactly as the pairing succeeded - the code never appeared and nothing
+// was logged, because the window was rebuilt rather than crashed. The owner's
+// report, 2026-10-07: "when i go to devices in the settings to pair a phone and
+// click pair it closes the settings on desktop".
+//
+// The first fix removed the toggle and set the guard once at window creation.
+// The owner asked for the toggle back the same day, on condition that it cannot
+// close the window - so the Win32 call is made directly, on the window this app
+// already owns. `SetWindowDisplayAffinity` changes an attribute of an existing
+// window; it does not touch how the window was created, so nothing is rebuilt
+// and Settings stays open. `WDA_EXCLUDEFROMCAPTURE` needs Windows 10 2004 or
+// newer; where it is refused the code is still shown, which is the same failure
+// the old helper had (a cheap guard against the easiest copy, not a wall -
+// ARCHITECTURE section 3).
 
 /// Hides the settings window from screenshots, screen recordings and screen
-/// sharing (`on`), or puts it back. Tauri's own `set_content_protected`,
-/// which on Windows is `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`
-/// (tao 0.35's `set_content_protection`, read in its source) - a black box
-/// instead of the code on Windows 10 2004 and newer. A cheap guard against
-/// the easiest copy, not a wall (ARCHITECTURE section 3). No window, or a
-/// refusal, is logged and otherwise ignored: the code is still shown.
+/// sharing (`on`), or puts it back. No window, or a refusal, is logged and
+/// otherwise ignored: the code is still shown.
 fn guard_capture(app: &AppHandle, on: bool) {
-    if let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) {
-        if let Err(e) = window.set_content_protected(on) {
-            eprintln!("[jarvis] could not change the settings window's capture guard: {e}");
+    let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) else {
+        return;
+    };
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+        };
+        let Ok(handle) = window.hwnd() else {
+            eprintln!("[jarvis] could not read the settings window's handle for the capture guard");
+            return;
+        };
+        // SAFETY: `handle` is this app's own settings-window handle, read back
+        // from Tauri. SetWindowDisplayAffinity only sets an attribute on it -
+        // unlike set_content_protected, it cannot rebuild the window.
+        let ok = unsafe {
+            SetWindowDisplayAffinity(
+                handle.0 as _,
+                if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE },
+            )
+        };
+        if ok == 0 {
+            eprintln!(
+                "[jarvis] could not {} the settings window's capture guard: {}",
+                if on { "set" } else { "clear" },
+                std::io::Error::last_os_error()
+            );
         }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (window, on);
     }
 }
 
@@ -681,7 +727,7 @@ pub async fn pair_start(app: AppHandle, address: String) -> Result<serde_json::V
         }
     };
     remember_address(&app, &address_text(&host, port));
-    // Before the code reaches the page, never after.
+    // Before the code reaches the page, never after (design 7.1).
     guard_capture(&app, true);
     Ok(serde_json::json!({
         "ok": true,

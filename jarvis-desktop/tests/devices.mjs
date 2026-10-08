@@ -516,15 +516,36 @@ await check("CONTROL: the Devices commands are in the settings window's set only
 });
 
 await check("CONTROL: the window is hidden from capture BEFORE the code is handed over", async () => {
+  // The guard is toggled - on as the code is handed over, off when the session
+  // ends or Cancel is pressed (PAIRING-DESIGN 7.1, "put back when the panel
+  // closes"). It must NOT go through Tauri's `set_content_protected`: on Windows
+  // that reaches `SetWindowDisplayAffinity`, which tao applies by RECREATING the
+  // window, and that is what closed Settings the moment pairing succeeded (the
+  // owner's report, 2026-10-07). devices.rs calls the Win32 function directly,
+  // which sets an attribute on the window this app already owns and rebuilds
+  // nothing.
   const start = fnBody(RUST, "pair_start");
   const guard = start.indexOf("guard_capture(&app, true)");
   const answer = start.indexOf('"code": started.code');
   assert.ok(guard > 0 && answer > guard, "guard_capture(true) must come before the answer");
-  assert.ok(!/"qr"\s*:/.test(start), "the QR text must never be in the answer");
-  assert.match(start, /if stale\(&app\)/, "starting a pairing is held on a stale link");
   assert.match(fnBody(RUST, "pair_cancel"), /guard_capture\(&app, false\)/);
   assert.match(fnBody(RUST, "pair_session"), /guard_capture\(&app, false\)/);
-  assert.match(RUST, /set_content_protected\(on\)/);
+  // The guard itself: the direct Win32 attribute call...
+  assert.match(RUST, /SetWindowDisplayAffinity/);
+  // ...and never the call that rebuilt - and so closed - the window. The
+  // pattern needs the call's own bracket, so the comments above that explain
+  // why this call is not used do not satisfy the check.
+  assert.ok(!/set_content_protected\s*\(/.test(RUST), "the recreating call must not come back");
+  // And the window is not built with a permanent guard either: the owner chose
+  // the toggle, on condition it cannot close the window.
+  const WINDOWS = read("src-tauri/src/windows.rs");
+  assert.ok(!/\.content_protected\s*\(/.test(WINDOWS),
+    "the settings window must not carry a permanent capture guard");
+  assert.ok(!/"qr"\s*:/.test(start), "the QR text must never be in the answer");
+  assert.match(start, /if stale\(&app\)/, "starting a pairing is held on a stale link");
+  // Still true, and now the only mechanism: the answer carries the drawn
+  // picture, never the text the QR was drawn from.
+  assert.match(start, /"qr_svg": picture/);
 });
 
 await check("CONTROL: only a loosening waits for a live link", async () => {
