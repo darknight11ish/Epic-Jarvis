@@ -601,19 +601,38 @@ def function_text(marker: str) -> str:
     raise AssertionError(marker)
 
 
-def on_backend_verdict(lines: list) -> dict:
+def on_backend_verdict(lines: list, shift: int = 0, drift: bool = False) -> dict:
     """What Test-PatchOnBackend answers for tutorials.patch against a made-up
     file of about 6,500 lines holding `lines` where the patch's own block goes,
-    so its added lines land at about the line the hunk header names."""
+    so its added lines land at about the line the hunk header names.
+
+    `shift` puts that many extra lines in ABOVE the block - a backend with
+    later patches applied above it: the same work, thousands of lines below the
+    line its own hunk header names.
+
+    `drift` edits the context line right above the block, which is what the
+    owner's own jarvis_hud.py has (a hand-edit of two lines' indents is enough,
+    and later patches step on each other's context). Without it `git apply
+    --reverse --check` finds the block anyway and applies it at an offset, so
+    the fallback below is never what answered and the checks prove nothing.
+    """
+    block = list(lines)
+    if drift:
+        block[0] = block[0] + "  # hand-edited since: the context has moved on"
     tmp = tmpdir()
-    (tmp / "jarvis_hud.py").write_text("".join(f"line {i}\n" for i in range(1, 6490))
-                                       + "\n".join(lines) + "\n",
+    (tmp / "jarvis_hud.py").write_text("".join(f"line {i}\n" for i in range(1, 6490 + shift))
+                                       + "\n".join(block) + "\n",
                                        encoding="utf-8", newline="\n")
     harness = tmp / "verdict.ps1"
     harness.write_text(
         f"$BackendPath = '{tmp}'\n"
         "$UseGit = $true\n"
         f"$script:GitCeiling = '{tmp.parent}'\n"
+        # The control has to be measured on the SAME files as the verdict, or it
+        # proves nothing: with no Set-Location here, git was answering about the
+        # repository's own backend folder (where there is no jarvis_hud.py at
+        # all), so it always said no and the fallback's part was never shown.
+        f"Set-Location -LiteralPath '{tmp}'\n"
         + function_text("function Invoke-Patch {") + "\n"
         + function_text("    function Test-PatchOnBackend {") + "\n"
         # a control: the canonical evidence must FAIL here, or the fallback
@@ -643,12 +662,17 @@ def t_already_on_is_proved_by_the_patchs_own_bytes():
     file, near the line the hunk names. This check is about what that evidence
     must and must not accept. It FAILS on the script as it was before the fix,
     which has no such rule at all.
+
+    The block is built with its context line already edited (`drift=True`) -
+    the state the owner's own file is in, and the only state in which the
+    fallback is the thing answering: left clean, `git apply --reverse --check`
+    finds the block itself.
     """
     if not shutil.which("git"):
         print("SKIP  git is not installed, so no patch can be taken off here")
         return
 
-    good = on_backend_verdict(TUTORIALS_HUNK)
+    good = on_backend_verdict(TUTORIALS_HUNK, drift=True)
     check("CONTROL: git's own reverse-check answers NO on this file, so it is "
           "the fallback that answers below", not good["reverse"], good["out"][-900:])
     check("a patch whose every added line is in the file, where the hunk puts "
@@ -656,9 +680,58 @@ def t_already_on_is_proved_by_the_patchs_own_bytes():
 
     # One added line missing: the work is NOT all there, and this MUST refuse.
     missing = [ln for ln in TUTORIALS_HUNK if "jarvis_tutorials.install" not in ln]
-    gone = on_backend_verdict(missing)
+    gone = on_backend_verdict(missing, drift=True)
     check("... a patch missing even ONE of its added lines does NOT",
           not gone["present"], gone["out"][-900:])
+
+
+def t_a_shifted_stack_is_still_recognised_as_on():
+    """A patch that IS on, thousands of lines below its own hunk header.
+
+    The owner's run of 2026-10-08 named 112 patches "will not apply" while they
+    were on the backend. `git apply --reverse --check` cannot say so - every one
+    of those that touches jarvis_hud.py fails it, and on a copy of the same
+    backend with jarvis_hud.py in LF the second rehearsal takes 122 of them off
+    the copy cleanly, which is proof they are on. So the rule that has to answer
+    is the fallback, and on the real files it answered "not on" for 112 of them.
+
+    WHY. Its first rule asked for each added line within $Tolerance (200) lines
+    of the line its hunk header names. That line is where the patch was WRITTEN,
+    and the real backend has other patches applied above it, so the work sits
+    wherever they pushed it: measured on the owner's own files, 593 to 3,673
+    lines away. A patch tool working on a stack cannot anchor to an absolute
+    line number; it has to be told the ORDER and SHAPE of a hunk.
+
+    This check FAILS on the rule as the first version wrote it - after a 3,000
+    line shift, `far["present"]` is False - and passes on the corrected one.
+    """
+    if not shutil.which("git"):
+        print("SKIP  git is not installed, so no patch can be taken off here")
+        return
+
+    here = on_backend_verdict(TUTORIALS_HUNK, drift=True)
+    check("CONTROL: the same block AT the line its hunk names, context drifted, "
+          "still reads as on", here["present"], here["out"][-900:])
+
+    far = on_backend_verdict(TUTORIALS_HUNK, shift=3000, drift=True)
+    check("CONTROL: git's own reverse-check answers NO on the shifted file too, "
+          "so it is the fallback that answers below",
+          not far["reverse"], far["out"][-900:])
+    check("a patch that IS on, 3,000 lines below the line its hunk header names, "
+          "still reads as already applied", far["present"], far["out"][-900:])
+
+    # The corrected rule must not be one that says yes to anything. Same shift:
+    # one line of the hunk missing is not the work, and the first version's own
+    # false positive - one added line that also exists elsewhere, with nothing
+    # of its hunk around it - is not the work either.
+    gone = on_backend_verdict([ln for ln in TUTORIALS_HUNK
+                              if "jarvis_tutorials.install" not in ln],
+                             shift=3000, drift=True)
+    check("... one added line of the hunk missing, at the same shift, does NOT",
+          not gone["present"], gone["out"][-900:])
+    lone = on_backend_verdict([TUTORIALS_HUNK[8]], shift=3000, drift=True)
+    check("... one added line alone, with nothing of its own hunk around it, does NOT",
+          not lone["present"], lone["out"][-900:])
 
 
 def main():
@@ -671,7 +744,8 @@ def main():
                t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
-               t_mini_revert_ends_plainly, t_already_on_is_proved_by_the_patchs_own_bytes):
+               t_mini_revert_ends_plainly, t_already_on_is_proved_by_the_patchs_own_bytes,
+               t_a_shifted_stack_is_still_recognised_as_on):
         try:
             fn()
         except Exception:

@@ -2455,9 +2455,10 @@ try {
     #
     # 2. Then the patch's own bytes, read out of the .patch file itself and
     #    from no other copy of it: EVERY line the patch ADDS is in the target
-    #    file, verbatim, AND ROUGHLY WHERE THE PATCH PUTS IT - within
-    #    $Tolerance lines of the line the hunk header names, which is the
-    #    distance the file has drifted since the patch was written. And every
+    #    file, verbatim, AND THE HUNK IT BELONGS TO IS IN THE SHAPE THE PATCH
+    #    WRITES IT - each added line after the one before it in the patch's own
+    #    order, and no further from it than the patch itself puts it, plus
+    #    $Tolerance for what later patches inserted between them. And every
     #    line the patch takes out is gone. Every hunk of every file it names,
     #    or a patch only half on would pass - and a half-applied backend is
     #    the worst outcome this script exists to prevent, so that one MUST
@@ -2471,7 +2472,22 @@ try {
     #    three-patch stack whose middle patch was NOT on the backend answered
     #    "already on" for it, its added line being repeated further down by the
     #    patch above it, and the run then refused anyway - the very refusal
-    #    this fallback exists to remove.
+    #    this fallback exists to remove. So a hunk that adds only ONE line is
+    #    not answered by that line being somewhere in the file: it also needs a
+    #    NEIGHBOUR out of its own hunk - a line the patch prints around it -
+    #    found as near to it as the patch puts it.
+    #
+    #    AND THE POSITION IS NOT AN ABSOLUTE LINE NUMBER (the correction of
+    #    2026-10-08, the same day as the first attempt at this rule). The first
+    #    version asked for each added line within $Tolerance lines of the line
+    #    its HUNK HEADER names. That line is where the patch was WRITTEN. A
+    #    real backend has other patches applied above it, and they push the
+    #    work down, so the number means nothing: measured on the owner's own
+    #    files, the hunks' work sat 593 to 3,673 lines below the line its
+    #    header named, and the rule answered "not on" for 112 patches that ARE
+    #    on - proof: on a copy of that same backend with jarvis_hud.py in LF,
+    #    the strip loop above takes 122 of them off cleanly. Order and shape
+    #    survive that drift; a line number does not.
     #
     #    This is weaker than taking the patch off, and it is meant to be: it
     #    answers "the work is in the file", not "the file is exactly the
@@ -2479,6 +2495,10 @@ try {
     #    already failed to put on, and only to decide that the patch may be
     #    LEFT ALONE - never to decide that a patch may be left off.
     function Test-PatchOnBackend {
+        # $Tolerance is no longer a distance from the hunk header's line: it is
+        # the slack allowed BETWEEN the added lines of one hunk, over and above
+        # the gap the patch itself writes. 200 lines is generous for a later
+        # patch that inserted into the middle of a block.
         param([string] $File, [int] $Tolerance = 200)
         $here = (Get-Location).Path
         try {
@@ -2489,13 +2509,18 @@ try {
             # takes out, per target file. A header names the file as
             # `b/<name>`; the date some of these patches carry sits after a
             # tab, exactly as in the missing-file check at the top of this
-            # script.
+            # script. Every line also carries the HUNK it belongs to, because a
+            # hunk is the unit the patch writes and the unit the rule below
+            # judges; a context line is kept too, as the neighbour a one-line
+            # hunk has to have.
             $adds = @{}
             $dels = @{}
+            $ctxs = @{}
             $cur = $null
             $rem = 0
             $addLeft = 0
             $at = 0
+            $hunk = 0
             foreach ($line in (Get-Content -LiteralPath $File)) {
                 if ($rem -gt 0 -or $addLeft -gt 0) {
                     # The body of a patch line, whatever its prefix. An empty
@@ -2504,48 +2529,113 @@ try {
                     $body = ''
                     if ($line.Length -gt 1) { $body = $line.Substring(1) }
                     if ($line.StartsWith('+')) {
-                        $adds[$cur] += , @{ Line = $body; At = $at }
+                        $adds[$cur] += , @{ Line = $body; At = $at; Hunk = $hunk }
                         $addLeft--
                         $at++
                     }
                     elseif ($line.StartsWith('-')) { $dels[$cur] += , $body; $rem-- }
-                    else { $rem--; $addLeft--; $at++ }
+                    else {
+                        $ctxs[$cur] += , @{ Line = $body; At = $at; Hunk = $hunk }
+                        $rem--; $addLeft--; $at++
+                    }
                     continue
                 }
                 if ($line.StartsWith('+++ ')) {
                     $cur = $line.Substring(4).Split("`t")[0].Trim()
                     if ($cur.StartsWith('b/')) { $cur = $cur.Substring(2) }
-                    if (-not $adds.ContainsKey($cur)) { $adds[$cur] = @(); $dels[$cur] = @() }
+                    if (-not $adds.ContainsKey($cur)) {
+                        $adds[$cur] = @(); $dels[$cur] = @(); $ctxs[$cur] = @()
+                    }
                     continue
                 }
                 if ($line -match '^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
                     $rem     = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
                     $addLeft = if ($Matches[3]) { [int]$Matches[3] } else { 1 }
                     $at      = [int]$Matches[2]
+                    $hunk++
                 }
             }
 
             $anyAdded = $false
             $seen = @{}
+            $where = @{}
             foreach ($name in $adds.Keys) {
                 # Every file it names must be there, or this cannot be answered
                 # about it.
                 if (-not (Test-Path -LiteralPath (Join-Path (Get-Location).Path $name))) { return $false }
                 # Read once per file: a patch may name the same file in several
                 # headers (the first screen.patch did), and re-reading it for
-                # every line is what makes this slow on a 6,500-line file.
+                # every line is what makes this slow on a 6,500-line file. The
+                # line numbers each distinct line sits at are indexed beside it,
+                # so a hunk can be followed down the file without walking it
+                # once per added line.
                 if (-not $seen.ContainsKey($name)) {
-                    $seen[$name] = @(Get-Content -LiteralPath (Join-Path $BackendPath $name))
+                    $text = @(Get-Content -LiteralPath (Join-Path $BackendPath $name))
+                    $seen[$name] = $text
+                    $index = @{}
+                    for ($i = 0; $i -lt $text.Count; $i++) {
+                        $key = $text[$i]
+                        if (-not $index.ContainsKey($key)) {
+                            $index[$key] = [System.Collections.Generic.List[int]]::new()
+                        }
+                        $index[$key].Add($i + 1)
+                    }
+                    $where[$name] = $index
                 }
                 $lines = $seen[$name]
-                foreach ($a in @($adds[$name])) {
-                    $lo = [Math]::Max(1, $a.At - $Tolerance)
-                    $hi = [Math]::Min($lines.Count, $a.At + $Tolerance)
-                    $found = $false
-                    for ($i = $lo; $i -le $hi; $i++) {
-                        if ($lines[$i - 1] -ceq $a.Line) { $found = $true; break }
+                $index = $where[$name]
+                # One hunk at a time, in the order the patch writes them.
+                $list = @($adds[$name])
+                $k = 0
+                while ($k -lt $list.Count) {
+                    $h = $list[$k].Hunk
+                    $run = @()
+                    while ($k -lt $list.Count -and $list[$k].Hunk -eq $h) {
+                        $run += $list[$k]; $k++
                     }
-                    if (-not $found) { return $false }
+                    # Follow the hunk's added lines down the file: each one
+                    # there, after the line before it in the patch's own order,
+                    # no further from it than the patch itself puts it (plus
+                    # $Tolerance for what a later patch inserted in between).
+                    # A line missing, or out of order, or on the far side of the
+                    # file, means the work is not there in the shape the patch
+                    # writes it.
+                    $prev = 0
+                    for ($j = 0; $j -lt $run.Count; $j++) {
+                        $gap = $Tolerance
+                        if ($j -gt 0) {
+                            $gap = $Tolerance + [Math]::Abs($run[$j].At - $run[$j - 1].At)
+                        }
+                        if (-not $index.ContainsKey($run[$j].Line)) { return $false }
+                        $spots = $index[$run[$j].Line]
+                        $idx = $spots.BinarySearch($prev)
+                        if ($idx -lt 0) { $idx = -$idx - 1 }
+                        else { while ($idx -lt $spots.Count -and $spots[$idx] -le $prev) { $idx++ } }
+                        if ($idx -ge $spots.Count) { return $false }
+                        $spot = $spots[$idx]
+                        if ($prev -gt 0 -and ($spot - $prev) -gt $gap) { return $false }
+                        $prev = $spot
+                    }
+                    # A hunk of ONE added line has no order to prove anything
+                    # with: the line being somewhere in the file is what a later
+                    # patch repeating it looks like too (measured 2026-10-08).
+                    # So it needs a neighbour out of its own hunk - a context
+                    # line the patch prints around it - and that neighbour has to
+                    # be as near to it as the patch puts it.
+                    if ($run.Count -lt 2) {
+                        $anchored = $false
+                        foreach ($c in @($ctxs[$name])) {
+                            if ($c.Hunk -ne $h) { continue }
+                            if ($c.Line.Trim().Length -lt 3) { continue }
+                            if (-not $index.ContainsKey($c.Line)) { continue }
+                            $near = [Math]::Abs($c.At - $run[0].At) + $Tolerance
+                            foreach ($p in $index[$c.Line]) {
+                                if ([Math]::Abs($p - $prev) -le $near) { $anchored = $true; break }
+                            }
+                            if ($anchored) { break }
+                        }
+                        if (-not $anchored) { return $false }
+                    }
                     $anyAdded = $true
                 }
                 # And the lines it takes out are gone. Only the distinctive
@@ -2788,6 +2878,26 @@ try {
             Say "its name, and this script gets the case added." Cyan
         }
         else {
+            # THE LINE ENDINGS COME FIRST, when they are there (2026-10-08).
+            # The owner's run of that day ended with 112 patch names and the
+            # message below, on a backend whose jarvis_hud.py had Windows line
+            # endings throughout: a patch written with LF can neither go on nor
+            # come off a file like that, so the rehearsal cannot tell "on"
+            # from "drifted" and blames 112 patches for one file's endings. The
+            # check at the top of this script already knows which files they
+            # are; saying it here is the difference between an afternoon of
+            # regenerating patches and one command.
+            if ($crlfFiles.Count -gt 0) {
+                Say "START HERE: $($crlfFiles.Count) of the files these patches change have" Cyan
+                Say "Windows line endings, and the patches are written with LF. A patch" Cyan
+                Say "cannot go on or come off a file like that, so the list above is mostly" Cyan
+                Say "that one thing, not $($broken.Count) broken patches:" Cyan
+                foreach ($cf in $crlfFiles) { Say "  $($cf.Name) ($($cf.Count) CRLF lines)" Yellow }
+                Say "Run this same command again with  -FixLineEndings  on the end: each file" Cyan
+                Say "is copied into _jarvis-backup-<date>-endings first, then only its line" Cyan
+                Say "endings change. Nothing else about it is touched." Cyan
+                Say ""
+            }
             Say "Usually this means the backend file has moved on since the patch was" Cyan
             Say "written, or was edited by hand. (Older versions of these patches that" Cyan
             Say "this repository ever published were already tried and would have" Cyan
