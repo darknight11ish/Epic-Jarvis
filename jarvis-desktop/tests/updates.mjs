@@ -16,6 +16,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import * as K from "./uikit.mjs";
+import { DESKTOP_FAQ } from "../src/desktop-help.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
@@ -127,14 +128,12 @@ await check("a build with no key says so instead of offering a dead button", asy
   assert.equal(disabled, true, "a Check button that can only fail is still pressable");
 });
 
-await check("\"not set up yet\" follows the build's key, in Updates and in the FAQ", async () => {
+await check("\"not set up yet\" follows the build's key in Updates, and the FAQ sends you here", async () => {
   const read = async (supported) => {
     const page = await open({ update: { ...K.UPDATE_NONE, supported } });
     const out = await page.evaluate(() => ({
       off: !document.getElementById("update-intro-off").hidden,
       on: !document.getElementById("update-intro-on").hidden,
-      faqOff: !document.getElementById("faq-update-off").hidden,
-      faqOn: !document.getElementById("faq-update-on").hidden,
       offText: document.getElementById("update-intro-off").textContent,
     }));
     await page.close();
@@ -142,12 +141,28 @@ await check("\"not set up yet\" follows the build's key, in Updates and in the F
   };
   const without = await read(false);
   const withKey = await read(true);
-  assert.deepEqual([without.off, without.on, without.faqOff, without.faqOn], [true, false, true, false],
+  assert.deepEqual([without.off, without.on], [true, false],
     "a build with no key must say updates are not set up");
   assert.match(without.offText, /Not set up yet/);
   assert.match(without.offText, /Turning on updates/);
-  assert.deepEqual([withKey.off, withKey.on, withKey.faqOff, withKey.faqOn], [false, true, false, true],
+  assert.deepEqual([withKey.off, withKey.on], [false, true],
     "a build WITH a key still said updates were not set up");
+  // THE FAQ HALF OF THIS. The old Settings card swapped a live line into its
+  // "Will Jarvis update itself without asking?" answer from `paintUpdate()`,
+  // and this check used to read the two spans that did it. The answer moved to
+  // the Brain's Help tab on 2026-10-08, where the live swap is deliberately
+  // GONE: a page that no longer renders beside the Updates card must not claim
+  // to know that card's state. So what is held here is the more useful pair of
+  // facts - the answer never promises a self-install, and it sends the owner to
+  // the one place that really knows, which is the card this suite drives.
+  const answer = DESKTOP_FAQ.find((q) => q.id === "updates-itself");
+  assert.ok(answer, "desktop-help.js no longer holds the update FAQ answer");
+  assert.match(answer.a, /never installs one on its own/i,
+    `the FAQ no longer says Jarvis never installs by itself: "${answer.a}"`);
+  assert.match(answer.a, /Updates card/,
+    "the FAQ no longer sends the owner to the Updates card for whether this copy can check");
+  assert.doesNotMatch(answer.a, /not set up yet/i,
+    "the FAQ claims the live update state from a page that cannot see it");
 });
 
 await check("before the window has read anything, it says not set up", async () => {

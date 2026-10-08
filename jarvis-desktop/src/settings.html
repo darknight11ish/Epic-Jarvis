@@ -90,10 +90,6 @@
             <a href="#devices">Devices</a>
           </div>
           <div class="settings-jump-place">
-            <span class="settings-jump-place-label">Help</span>
-            <a href="#faq">FAQ</a>
-          </div>
-          <div class="settings-jump-place">
             <span class="settings-jump-place-label">Look</span>
             <a href="#appearance-card">Appearance</a>
             <a href="#animal-options">Animal options</a>
@@ -418,274 +414,15 @@
         </div>
       </section>
 
-      <section class="card" id="faq">
-        <h2>Frequently asked questions</h2>
-        <p class="note">
-          Answers specific to this program, the one running on this computer.
-          Jarvis on your phone is a different app with its own FAQ, because
-          the two run into different problems.
-        </p>
-
-        <!-- "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the
-             owner's request of 2026-10-08): every feature, in plain words,
-             each one extending to what it does, how to reach it, whether it
-             asks first, and one real limit.
-
-             WHY IT SITS IN THIS CARD. The FAQ and this list are the two halves
-             of one question - "how do I do this" and "what can it do, and does
-             it ask first" - and this card is where "Help" already points in
-             the jump list. A card of its own would also have to be registered
-             in `backend/jarvis_settings_registry.py` before
-             `backend/test_settings_registry.py` would pass, which is a backend
-             decision and not this button's to make. -->
-        <p class="note">
-          For the whole feature set rather than one question: every feature, in
-          plain words, in nine groups, each with what it does, how to reach it,
-          whether it asks first and one real limit. It only reads.
-        </p>
-        <div class="row">
-          <button class="btn" id="open-features" type="button">Everything Jarvis can do</button>
-          <span class="status" id="features-status" role="status"></span>
-        </div>
-
-        <div class="faq-list">
-          <details class="faq-item">
-            <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>
-            <p class="faq-a">
-              Only along a few named routes. Jarvis answers using a
-              language model that runs on this machine. It reaches the
-              internet for a web search, and for your own calendar, email
-              and Home Assistant once you have set them up on this PC. A
-              search that comes straight from your own question goes
-              without asking; after Jarvis has read an email, a file or
-              other outside text, or when the search words would repeat
-              something private, it shows you the exact words and waits
-              for your yes. Sending an email, or a question to a cloud
-              model, always asks first. "What Jarvis can reach" (further down this page)
-              lists which routes are on right now, and this program never
-              opens a public tunnel to itself.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">Where do I approve or deny what Jarvis wants to do?</summary>
-            <p class="faq-a">
-              On a card. When Jarvis wants to do something that is not
-              completely safe, it stops, and a card waits for you
-              <span class="approve-where">in the Jarvis bar, on the widget, or on your phone's Home screen</span>
-              (<kbd>Alt</kbd>+<kbd>Space</kbd> opens the Jarvis bar). For
-              anything important Windows also shows a notification. Press Approve or Deny on the card; the
-              notification can only Deny. Nothing runs until you decide, one
-              thing at a time. An email Jarvis wants to send is approved in
-              the Jarvis bar, where you can read all of it first.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">What is Jarvis Live, and how do I end it?</summary>
-            <p class="faq-a">
-              A back-and-forth voice conversation. Click <strong>Live</strong>
-              in the Jarvis bar (or say "Hey Jarvis, let's talk") and just
-              talk: no "Hey Jarvis" before each sentence. Every sentence is
-              still checked for your voice on this PC before any words are
-              made of it, and a card that comes up still waits for your
-              click. A red dot on the tray icon and a small sign at the top
-              of the screen show while it is on. To end it, click
-              <strong>End Live</strong> on the sign, say "Okay Jarvis,
-              that's all for now", or just stop talking for 90 seconds.
-              <strong>Mic off</strong> closes the microphone without ending
-              it. Live needs your voice trained first (Settings, then Voice).
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">Why is there no "approve everything" button?</summary>
-            <p class="faq-a">
-              On purpose. Anything Jarvis wants to do that is not
-              completely safe stops and asks first, one action at a time.
-              A single button to wave all of those through would undo that
-              protection, so this program is built with no way to add one,
-              anywhere in it.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">My Alt+Space shortcut does not do anything.</summary>
-            <p class="faq-a">
-              Something else on this computer has already claimed that
-              combination — usually PowerToys Run, or on recent Windows 11
-              builds, the Copilot app. Open Shortcuts, further down this page: a binding that
-              is not working says <em>in use</em> there. Pick a different
-              combination and press Save shortcuts.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q" id="faq-what-can-i-say">What can I say?</summary>
-            <p class="faq-a" id="faq-what-can-i-say-body">
-              Jarvis answers some sentences straight away, without the AI
-              model - so they work even when the model is slow, unloaded or
-              asleep. A few real ones: "Set a timer for 10 minutes." "What
-              did I miss?" "Tell me when an email from Alex arrives." "Focus
-              for 30 minutes." "Remind me to call Mom at 6pm." "Add milk to
-              the shopping list." "Brief me now." "Label this chat
-              Work." "Open my topics." "Stop using my Money topic."
-              Type "what can you do?"
-              any time to see this list again. Anything else goes to the AI
-              model as before.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">Can my phone talk to Jarvis?</summary>
-            <p class="faq-a">
-              Yes, over Tailscale or NordVPN Meshnet — a private network
-              between only the devices you own, never the open internet.
-              Turn it on above, in Connection, under "Let my phone reach
-              this", by typing this computer's own address on that network
-              (the <code>100.x.x.x</code> number). Then, on the phone, type
-              this computer's <em>name</em>, not the number: the Tailscale
-              name ending in <code>.ts.net</code>, or the Meshnet name ending
-              in <code>.nord</code> (like
-              <code>my-pc.nord</code>), followed by
-              <code>:4719</code>. The phone also needs the token: press
-              <strong>Show the token for my phone</strong> above.
-              Leave the box blank and nothing changes: Jarvis stays reachable
-              from this computer alone.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">How does talking to Jarvis work?</summary>
-            <p class="faq-a">
-              Hold the microphone button in the Jarvis bar and speak, then
-              let go to send. With the button selected, holding Space or
-              Enter works too. The microphone button in the big HUD window
-              opens the Jarvis bar with its microphone ready, so both lead to
-              the same place. The recording is made on this computer and
-              goes only to Jarvis on this computer — never to Microsoft,
-              Google or anyone else. Listening for "hey Jarvis", the button
-              next to the microphone, is off until you turn it on; the first
-              time, it shows you an approval card instead of listening. While
-              it is on, what the microphone hears goes only to Jarvis on this
-              computer, which ignores anything that does not start with
-              "hey Jarvis". Windows dictation
-              is not used, because it sends your voice to a company's
-              servers to turn it into text. To have Jarvis type what you say
-              into another program instead, turn on Talk-to-type in Voice
-              below, then hold Alt+Shift+T and speak.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">Jarvis suddenly got slow. What happened?</summary>
-            <p class="faq-a">
-              Open the Brain window → Model → Models. If the language model has
-              fallen off the graphics card onto the processor instead,
-              there is a yellow line at the top of that list saying so,
-              with the percentage. That is almost always the cause — a
-              graphics card doing the work is fast, a processor doing the
-              same work is not.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">What is the difference between Quiet and Standby?</summary>
-            <p class="faq-a">
-              Both are ways for Jarvis to use less power while you are not
-              using it. Quiet stops the things Jarvis does on its own in
-              the background, but keeps the model loaded, so it still
-              answers you instantly. Standby also unloads the model from
-              the graphics card — the real drop in power use — at the cost
-              of a slower first answer (five to fifteen seconds) after you
-              wake it back up. To switch, right-click the Jarvis icon in the
-              taskbar corner and choose Change power mode, or use the
-              buttons on the phone's Brain screen. This needs the backend's
-              power-mode patch; without it, you are told so. Waking from
-              Standby loads the model again straight away, so the first
-              answer after waking is quick. To go on Standby every night
-              and wake every morning, set up a Standby schedule in the
-              Brain, Work tab, under Coming up (the phone has it under
-              Coming up on its Brain screen); it is set up at once, with no
-              approval card, and deleting it is instant.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">Will Jarvis update itself without asking?</summary>
-            <p class="faq-a">
-              No. <span id="faq-update-off">Update checks are not set up yet
-              for this copy (see Updates, further down this page), and even once they are,
-              Jarvis</span><span id="faq-update-on" hidden>Jarvis</span> only
-              tells you a newer version exists. It never installs one on its
-              own. Installing is always the Install button, pressed by you.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">I closed the window, but Jarvis is still running. Is that a bug?</summary>
-            <p class="faq-a">
-              No — that is how this program is built. Closing any window,
-              including the main assistant window's own close button, just
-              hides it; Jarvis keeps running so it can still answer you
-              instantly. To actually quit, use "Quit" on the tray icon,
-              near your clock.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">Is my pairing token safe?</summary>
-            <p class="faq-a">
-              It is kept in Windows Credential Manager, the part of Windows
-              that holds saved passwords - not in a plain-text file. This app
-              sends it only to the Jarvis address set above, and never writes
-              it to its logs. <strong>Show the token for my phone</strong>
-              shows it for a minute so you can type it into the phone; there
-              is no Copy button, because anything copied stays in Windows'
-              clipboard history. Anyone signed in to this computer as you can
-              read it, the same as your other saved passwords, so keep your
-              Windows account password-protected. One exception: if the
-              Token line above says Jarvis's own token is still in its old
-              plain-text file, run apply-patches.ps1 to update the backend,
-              which moves it into Credential Manager.
-            </p>
-          </details>
-
-          <!-- The one answer the "run apply-patches.ps1" messages point to
-               (ease-of-use audit 2026-09-27, #8e). The phone's FAQ says the
-               same. -->
-          <details class="faq-item">
-            <summary class="faq-q">How do I update Jarvis?</summary>
-            <p class="faq-a">
-              Three parts, in this order. Jarvis on this PC: stop it, then in
-              PowerShell, in your copy of the Jarvis files, get the newest
-              files (<code>git pull</code>) and run
-              <code>apply-patches.ps1</code> again - it keeps your settings
-              file, backs up what it replaces and saves a log of the run in
-              <code>_jarvis-logs</code> in your Jarvis folder - then start
-              Jarvis again. This app: build and install it again (there is no
-              automatic update yet). The phone app: install the newest file
-              from the release page over the old one; it stays paired.
-              docs/INSTALL.md, "Updating everything", has each step as one
-              line to copy.
-            </p>
-          </details>
-
-          <details class="faq-item">
-            <summary class="faq-q">I lost my phone. What do I do?</summary>
-            <p class="faq-a">
-              Whoever has it unlocked could use Jarvis with the pairing key
-              it holds. First take the phone off your private network
-              (Tailscale's admin page, Machines, the phone, Remove - or remove
-              it from your NordVPN Meshnet), so it cannot reach this PC at
-              all. Then make a new pairing key, which stops the old one
-              working: docs/INSTALL.md, "If you lose your phone", has the
-              steps. Your other devices then pair again with the new key.
-            </p>
-          </details>
-        </div>
-      </section>
-
+      <!-- The "Help and FAQ" card lived here until 2026-10-08. Help is now ONE
+           place, the Brain's own "Tutorials and the FAQ" tab (brain.html,
+           tutorials.js): the card's questions moved there word for word
+           (jarvis-desktop/src/desktop-help.js keeps them, and tests/faq.mjs
+           pins every one), and the "Everything Jarvis can do" button moved with
+           them. Nothing was deleted: the card was a second way in to help, and
+           the owner chose to fold it properly rather than keep two. The
+           questions BOTH apps answer were never here - the backend serves those
+           (`GET /api/faq`), and the phone still reads them exactly as before. -->
       <section class="card" id="appearance-card">
         <h2>Appearance</h2>
 
@@ -2609,12 +2346,13 @@
       </section>
 
       <!-- ── About ─────────────────────────────────────────────────────────
-           Identity, not instructions - the FAQ above already answers "how
-           does this behave"; this answers "what is this, and where did it
-           come from." The version comes from the same `update_status` read
-           the Updates section above already makes, in `paintUpdate()` -
-           never a second, separately-maintained copy of the number that
-           could drift from the one actually running. -->
+           Identity, not instructions - the "Tutorials and the FAQ" tab in the
+           Brain (where the FAQ moved on 2026-10-08) already answers "how does
+           this behave"; this answers "what is this, and where did it come
+           from." The version comes from the same `update_status` read the
+           Updates section above already makes, in `paintUpdate()` - never a
+           second, separately-maintained copy of the number that could drift
+           from the one actually running. -->
       <section class="card" id="about">
         <h2>About Jarvis</h2>
         <p class="note">

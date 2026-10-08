@@ -23,6 +23,12 @@
  * @module tutorials
  */
 
+// The desktop's OWN questions - the fifteen the Settings card "Help and FAQ"
+// held until 2026-10-08, moved here so the one Help place answers them too
+// (desktop-help.js says why in full). The backend still serves the questions
+// both apps ask; `mergeQuestions` is what puts the two halves on one screen.
+import { DESKTOP_FAQ, WORDS as HELP_WORDS, mergeQuestions } from "./desktop-help.js";
+
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
@@ -39,6 +45,9 @@ export const LABELS = {
   resume: "Continue at step",
   restart: "Start again",
   search: "Search the answers",
+  // The button's own label is markup in brain.html (the CSP check counts the
+  // static controls); this is only the line it says once the window is open.
+  featuresOpened: "Opened.",
   stepOf: "Step",
   of: "of",
   done: "Done",
@@ -51,6 +60,17 @@ export const LABELS = {
 
 /** The two sections, in the order the backend sends them. */
 export const SECTION_ORDER = ["pc", "phone"];
+
+/**
+ * Where the place key sends the Brain for this page - "Tutorials and the FAQ".
+ *
+ * Since 2026-10-08 this is also where Help goes: the palette's own Help row
+ * (`entry.help`) and anything else that leaves `TUTORIALS_PLACE` under
+ * `jarvis.brain.place` opens this tab rather than the Settings card "Help and
+ * FAQ", which no longer exists. It is the view's own key in brain.js's `VIEWS`,
+ * which is what lets the Brain open it the same way it opens History.
+ */
+export const TUTORIALS_PLACE = "tutorials";
 
 /**
  * The tutorials of one section, plus the shared ones.
@@ -217,36 +237,97 @@ export async function showTutorials(root) {
 
   const faqBox = el("section", "tutorial-faq");
   faqBox.append(el("h3", null, LABELS.faqHeading));
+  // The shared questions come from the PC; the desktop's own fifteen come from
+  // desktop-help.js and are drawn whether or not the PC answered. So a backend
+  // that is down, or one older than /api/faq, still leaves the owner with the
+  // half only this app can answer - rather than an empty help page. A failure
+  // is still said out loud, above those fifteen.
   let questions = [];
   try {
-    const answer = await loadFaq();
-    questions = (answer && answer.questions) || [];
+    questions = mergeQuestions(await loadFaq());
   } catch (error) {
     faqBox.append(el("p", "problem", problemWords(error)));
+    questions = mergeQuestions(null);
   }
   const search = el("input", "tutorial-search");
   search.type = "search";
   search.placeholder = LABELS.search;
   const answers = el("div", "tutorial-answers");
+  // Where the desktop's own half begins, said plainly rather than left to be
+  // guessed at from one question about the pairing token. It is appended by
+  // `paint`, between the two halves, so a search that finds only shared answers
+  // does not leave an "On this computer" heading over an empty list.
+  const localHead = el("div", "tutorial-faq-local");
+  localHead.append(el("h4", null, HELP_WORDS.heading));
+  localHead.append(el("p", "note", HELP_WORDS.note));
+  // The shared half is whatever the PC answered; the rest is this file's own.
+  // Counted against the local length rather than assumed, so a backend that
+  // answered nothing (or with fewer questions than the last build) still
+  // splits the two halves in the right place.
+  const localOnly = mergeQuestions(null).length;
+  const sharedQuestions = questions.slice(0, questions.length - localOnly);
   const paint = (typed) => {
     answers.textContent = "";
-    const found = searchFaq(questions, typed);
-    if (!found.length && questions.length) {
+    const draw = (list) => {
+      for (const item of searchFaq(list, typed)) {
+        const one = el("details", "tutorial-question");
+        one.append(el("summary", null, item.q));
+        one.append(el("p", null, item.a));
+        if (item.where) one.append(el("p", "where", item.where));
+        answers.append(one);
+      }
+    };
+    const local = searchFaq(DESKTOP_FAQ, typed);
+    const shared = searchFaq(sharedQuestions, typed);
+    if (!local.length && !shared.length) {
       answers.append(el("p", "empty", LABELS.nothingFound));
       return;
     }
-    for (const item of found) {
-      const one = el("details", "tutorial-question");
-      one.append(el("summary", null, item.q));
-      one.append(el("p", null, item.a));
-      if (item.where) one.append(el("p", "where", item.where));
-      answers.append(one);
-    }
+    const hasLocal = sharedQuestions.length > 0 && local.length > 0;
+    draw(shared);
+    if (hasLocal) answers.append(localHead);
+    draw(local);
   };
   search.addEventListener("input", () => paint(search.value));
   faqBox.append(search, answers);
   paint("");
   body.append(faqBox);
+
+  // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the owner's
+  // request of 2026-10-08): the whole feature set, opened from the one Help
+  // place. This is PR #106's page, moved here on 2026-10-08 with the FAQ - the
+  // button was NOT deleted with the Settings card, because the Brain is now the
+  // only way in that is not the tray icon (tests/features.mjs holds that).
+  mountFeaturesButton();
+}
+
+/**
+ * The "Everything Jarvis can do" button, and the live line that says what
+ * happened when it is pressed.
+ *
+ * The same three lines the Settings card used for the same command
+ * (`open_features`, in the `features-open` permission set): the window it opens
+ * reads one bundled list of text and draws it, there is nothing to wait for but
+ * the window itself, and a refusal is said out loud rather than swallowed - the
+ * failure mode this project has shipped before, where a button calls a command
+ * the ACL does not grant and simply does nothing.
+ *
+ * Wired here, in the tab that draws the FAQ, rather than in brain.js: this is
+ * the one Help place, and the button is part of it.
+ */
+function mountFeaturesButton() {
+  const open = document.getElementById("open-features");
+  const status = document.getElementById("features-status");
+  if (!open || !status) return;
+  open.addEventListener("click", async () => {
+    status.textContent = "";
+    try {
+      await invoke("open_features");
+      status.textContent = LABELS.featuresOpened;
+    } catch (error) {
+      status.textContent = problemWords(error);
+    }
+  });
 }
 
 /** One tutorial's step card, inside its own section column. */

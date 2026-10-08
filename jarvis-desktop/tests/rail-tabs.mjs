@@ -205,21 +205,28 @@ await check("clicking a rail tab is wired from the same list, not one id at a ti
 
 /* ── 5. The tab this file was written for ─────────────────────────────── */
 
-await check("Tutorials is on the rail, wired like its siblings", async () => {
+await check("Tutorials and the FAQ is on the rail, wired like its siblings", async () => {
   assert.ok(VIEWS.includes("tutorials"), "tutorials is not a view in brain.js");
   const item = ITEMS.find((i) => i.id === "tutorials");
   assert.ok(item, "tab-tutorials is missing from the rail");
-  assert.match(item.markup, /<span class="rail-label">Tutorials<\/span>/);
+  // The label names both halves since 2026-10-08 (PR #108's own retitle): the
+  // desktop's FAQ moved into this tab, so it is no longer only tutorials.
+  assert.match(item.markup, /<span class="rail-label">Tutorials and the FAQ<\/span>/);
   assert.match(item.markup, /role="tab"/);
   assert.equal(item.hidden, false,
-    "Tutorials is an everyday tab, not one of the four behind Advanced");
-  // Everyday tabs are drawn above the hidden group, so Tutorials is too.
+    "Tutorials and the FAQ is an everyday tab, not one of the four behind Advanced");
+  // Everyday tabs are drawn above the hidden group, so this one is too.
   const here = ITEMS.indexOf(item);
   const advancedAt = ITEMS.map((i, n) => (ADVANCED.includes(i.id) ? n : -1)).filter((n) => n > -1);
   assert.ok(here > ITEMS.findIndex((i) => i.id === "projects") && here < Math.min(...advancedAt),
-    "Tutorials belongs with the everyday tabs, above the Advanced group");
+    "Tutorials and the FAQ belongs with the everyday tabs, above the Advanced group");
   assert.match(JS, /case "tutorials":[\s\S]{0,600}?showTutorials\(\$\("tutorials-root"\)\)/,
     "the tutorials view is on the rail but nothing draws it");
+  // One Help place: the tab is also where Help goes, so the view must be
+  // openable by name (the palette writes exactly this string).
+  assert.match(JS, /TUTORIALS_PLACE/, "brain.js no longer names the Help place");
+  assert.match(HTML, /id="open-features"/,
+    "the Help tab no longer draws the button that moved there with the FAQ");
 });
 
 if (fails.length) {
