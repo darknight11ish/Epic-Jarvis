@@ -93,6 +93,7 @@ import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
 import com.jarvis.client.ui.screens.FaceVoiceOfferFromPc
 import com.jarvis.client.ui.screens.FaqScreen
+import com.jarvis.client.ui.screens.FeaturesScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
@@ -2541,6 +2542,11 @@ class MainActivity : FragmentActivity() {
                             // audit row 16, 2026-09-27), where the old
                             // "Settings" group moved to.
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
+                            // "Everything Jarvis can do" (docs/FEATURES-LIST-
+                            // DESIGN.md, the owner's request of 2026-10-08):
+                            // its own read-only screen, opened from the row
+                            // beside Tutorials.
+                            onOpenFeatures = { nav.go(Screen.FEATURES) },
                             // "Open the morning briefing", "hardware", ... by
                             // voice or chat (OpenPlace).
                             initialSection = sectionFor(Screen.BRAIN),
@@ -2615,6 +2621,16 @@ class MainActivity : FragmentActivity() {
                         // "Open about" by voice or chat (OpenPlace).
                         initialSection = sectionFor(Screen.FAQ),
                         onSectionConsumed = sectionConsumed,
+                    )
+
+                    // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md,
+                    // the owner's request of 2026-10-08): every feature, in
+                    // plain words, read from this app's own copy of
+                    // features/features.json. Read-only, no card, no request to
+                    // the PC.
+                    Screen.FEATURES -> FeaturesScreen(
+                        onBack = { nav.back() },
+                        modifier = root,
                     )
 
                     Screen.SECURITY -> {
