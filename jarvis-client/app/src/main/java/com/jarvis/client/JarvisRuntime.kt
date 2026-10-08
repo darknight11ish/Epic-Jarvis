@@ -34,6 +34,7 @@ import com.jarvis.client.net.PcHelp
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.net.Tasks
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
