@@ -108,28 +108,31 @@ class SettingsJumpTest {
         assertFalse("Voice is not drawn", drawn.contains("voice"))
         assertTrue("the row below it still is", drawn.contains("security"))
 
-        // The position the screen really has, and the number the old fixed map
-        // handed to `animateScrollToItem` - which is what this test is about.
+        // Which row really MOVED, and by how much - which is what this test is
+        // about: a fixed number handed to `animateScrollToItem` no longer names
+        // the row it used to.
         //
-        // The row to compare is the one BELOW the hidden menu: hiding a menu
-        // moves the rows after it up by one and leaves the ones before it
-        // alone. The first version of this check happened to name
-        // "asks-first", which sits ABOVE Voice - so it proved nothing and
-        // failed on CI (2026-10-08).
-        val hiddenAt = SettingsJump.ENTRIES.indexOfFirst { it.key == name }
-        val below = SettingsJump.ENTRIES[hiddenAt + 1].key
-        val realPosition = drawn.indexOf(below)
-        val beforeHiding = rows("SettingsScreen.kt").indexOf(below)
-        assertTrue("$below is still on the screen", realPosition >= 0)
-        assertEquals(
-            "hiding the menu above has to move $below up by exactly one",
-            beforeHiding - 1, realPosition,
-        )
-        val oldMapNumber = SettingsJump.ENTRIES.indexOfFirst { it.key == below }
+        // The two lists are compared directly, because a menu id and a row key
+        // are different namespaces: a row's own guard names the MENU. The first
+        // two versions of this check assumed otherwise and compared the wrong
+        // row - first one ABOVE the hidden menu (which never moves), then, when
+        // the menu id was looked up in the row-key list, the hidden row itself
+        // ("voice is still on the screen", 2026-10-08).
+        val full = rows("SettingsScreen.kt")
+        val firstGone = full.indexOfFirst { it !in drawn }
+        assertTrue("hiding $name has to remove its own row", firstGone >= 0)
+        val gone = full.count { it !in drawn }
+        // The first row that SURVIVES the hiding, which is the one whose
+        // position moved. Indexed rather than `getOrNull`, so it is a plain
+        // String for `indexOf` below.
+        assertTrue("a row has to survive hiding $name", firstGone + gone < full.size)
+        val wasAt = firstGone + gone
+        val row = full[wasAt]
+        val nowAt = drawn.indexOf(row)
+        assertEquals("$row moves up by $gone when $name is hidden", wasAt - gone, nowAt)
         assertTrue(
-            "the old fixed number for $below no longer matches the screen: " +
-                "$oldMapNumber rather than $realPosition",
-            oldMapNumber != realPosition,
+            "the old number ($wasAt) now names ${full.getOrNull(nowAt)} rather than $row",
+            wasAt != nowAt,
         )
         assertFalse("the hidden key is not drawn anywhere", drawn.contains(name))
 
