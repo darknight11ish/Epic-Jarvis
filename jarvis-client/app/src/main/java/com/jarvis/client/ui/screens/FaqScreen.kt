@@ -303,7 +303,7 @@ fun FaqScreen(
 ) {
     val chrome = LocalChrome.current
     val listState = rememberLazyListState()
-    ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
+    ScrollToKeyOnce(listState, initialSection, onDone = onSectionConsumed)
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         // Titled with the word on the button that opened it. Home's nav says
         // "Help", and a beginner who taps "Help" and lands on "Frequently

@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -1111,6 +1112,11 @@ class MainActivity : FragmentActivity() {
         val deciding by JarvisRuntime.deciding.collectAsState()
         val attention by JarvisRuntime.attention.collectAsState()
         val notice by JarvisRuntime.notice.collectAsState()
+        // Whether the last POST of the shared face/colours landed - null until
+        // one is tried. The Appearance screen's own paragraph says whether the
+        // desktop has them (finding A1), and a flow rather than `.value`
+        // because the send finishes after the frame that drew the claim.
+        val appearanceSent by JarvisRuntime.appearanceSent.collectAsState()
         // The failure behind the notice, in plain words, with its fix button
         // and scrubbed Details - only while the notice on screen IS it.
         val noticeProblem by JarvisRuntime.problem.collectAsState()
@@ -1758,6 +1764,16 @@ class MainActivity : FragmentActivity() {
                 // cut while everything drawn on it faded.
                 .background(LocalChrome.current.surface0)
                 .windowInsetsPadding(WindowInsets.systemBars)
+                // The keyboard inset, on the root so every screen gets it
+                // (UI audit 2026-10-05, finding A2). `enableEdgeToEdge` means
+                // this app owns the IME inset, and the root only asked for the
+                // system bars - so on 11 of 14 screens the keyboard covered
+                // the field being typed into: every Brain plate, the support
+                // form, pairing's address and token. Three screens had added
+                // `imePadding` for themselves (Home, Live, Handoff), which is
+                // how the gap was found; one inset on the root covers those
+                // too, and a screen never repeats another screen's inset.
+                .imePadding()
             // Calm motion for the face: the owner's Motion choice, or the
             // phone's own "remove animations", read from the same flag the
             // theme's Motion already reads. Only ever slows the face.
@@ -2762,7 +2778,15 @@ class MainActivity : FragmentActivity() {
                         // Sets the dark theme and leaves Follow the system on,
                         // unlike a normal theme pick, which turns it off.
                         onPickDarkTheme = appearance::setPreferredDark,
-                        desktopSyncs = version?.can("appearance") == true,
+                        // Both halves, not just the capability: the screen's
+                        // own words follow whether the last send actually
+                        // landed (UI audit 2026-10-05, finding A1). `capable`
+                        // alone used to make it claim a send that a dead link
+                        // had dropped on the floor.
+                        sharedStatus = AppearanceShared.statusOf(
+                            capability = version?.can("appearance") == true,
+                            sendOk = appearanceSent,
+                        ),
                         onUndoBindings = { appearance.setBindings(it) },
                         // On the runtime's scope, not a composition one: this can
                         // fire from the screen's onDispose as it leaves, and on a

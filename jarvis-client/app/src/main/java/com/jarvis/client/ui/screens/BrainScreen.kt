@@ -321,7 +321,7 @@ fun BrainScreen(
         // that line is on, and that plate is on screen when it is tapped.
         val listState = rememberLazyListState()
         val listScope = rememberCoroutineScope()
-        ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
+        ScrollToKeyOnce(listState, initialSection, onDone = onSectionConsumed)
         // A jump inside Brain: the "facts kept, hidden" link under Saved automatically
         // brings Topics into view (docs/TOPIC-CONTROLS-DESIGN.md C4).
         var jumpTo by remember { mutableStateOf<String?>(null) }

@@ -163,7 +163,7 @@ fun ReadinessScreen(
 ) {
     val chrome = LocalChrome.current
     val listState = rememberLazyListState()
-    ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
+    ScrollToKeyOnce(listState, initialSection, onDone = onSectionConsumed)
     // Split rather than re-sorted, so within each group the order stays the
     // one PlatformReadiness wrote.
     val warnings = remember(items) { items.filter { it.state == ReadinessItem.State.WARN } }
