@@ -17577,3 +17577,101 @@ card itself, including that a stale link greys every Save.
   separate processes. The value is read fresh on every call, so a backend
   started after the save picks it up with no further step - and the four
   secret boxes already say the same thing.
+
+## 117. "Look at this" hands the owner the picture (added 2026-10-07)
+
+The owner's decision of 2026-10-07 (`.dsh-scratch/SCREEN-ATTACH-DESIGN.md`):
+"yes, they want to attach a screenshot to a question - a chart, an error
+message, something they want to ask about", and the shape they chose - **one
+action**: press the key, the PC takes one look, and the cleaned picture lands
+in the question box with a thumbnail of exactly what will be sent. Then they
+type the question, or bin the picture.
+
+### 117.1 Not the retired whole-monitor grab
+
+The old `capture_screen` (desktop `commands.rs`) grabbed the whole monitor
+itself with `xcap` and attached the raw JPEG as an `image_url`; its own comment
+says that if it is ever wired to a model "the same cleaning must come first".
+It knew nothing about the Never look at list, could not spot a password box and
+painted nothing black. **Nothing takes a picture but the PC**, and the picture
+handed back is `jarvis_picture.clean(..., want_png=True)`'s own output - the
+ONE cleaner every picture of the screen already goes through (section 62.13),
+which paints every key, password and card number SOLID BLACK. There is no
+second cleaner and no path that can bypass that one.
+
+### 117.2 The route: the picture rides on the look
+
+`POST /api/screen` with `{"do": "look", "want": "picture"}` - the same route
+and the same look as section 62, plus one field. It is answered by
+`backend/jarvis_screen_attach.py` (a SHIPPED module; its wrapper is installed
+by `screen-attach.patch`, and it must come after `screen.patch`, whose route it
+wraps).
+
+| Field | What it is |
+|---|---|
+| `picture.data` | The cleaner's own PNG, base64. Absent when there is none. |
+| `picture.mime` | Always `image/png`. |
+| `picture.width`, `picture.height` | Read from the PNG's own IHDR. |
+| `picture.bytes` | Its length. |
+| `picture_why` | One plain sentence when there is no picture. |
+
+Everything else in the answer is byte-for-byte what an ordinary look answers
+(`ok`, `note`, the status keys, `why`/`said` for a look that was refused), and
+the look itself is the engine's own: `Screen._grab` - the pause rules in their
+one order, checked before the picture and again after it - then the one
+cleaner, decoded ONCE (`_read_with_picture` replaces `Screen._read`'s six
+lines of field-setting so the words and the picture come from the same pass).
+The look's words are still held for two minutes and still go to the marked
+question as outside text: nothing about a look without `want` changed.
+
+### 117.3 The security decision, made explicit
+
+`clean_picture` can answer `ok: False`, `unchecked: True` or `blocked: True` -
+it could not verify that it had painted everything. **On any of those, no
+picture is handed back**, the answer carries `picture_why`, and the app
+attaches nothing. The look's words still happened and are still held, because
+refusing the picture must not take away the look the owner already had; they
+can still type their question without a picture. A `png` that is missing, is
+not a PNG (its signature is checked) or has no size is refused the same way.
+The alternative - attach it with a warning - is the exact failure the old grab
+was retired for.
+
+### 117.4 The desktop half
+
+`look.rs`'s Look at this key sends `attach_body(false)` (the look, plus
+`want`), which is still taken BEFORE the bar comes up, on a link that is not
+stale and never while App lock would ask. `capture_payload` then accepts only
+what the PC called `image/png`, which really decodes as base64, starts with a
+PNG signature, and is under 8 MB (the PC already caps its own capture at the
+text reader's limit and writes a bigger one half size, or nothing) - anything
+else is refused. `main.js`'s existing `attachCapture` puts it in the box with
+its thumbnail, and the question carries that same data URI as an `image_url`.
+`capture-failed` carries the PC's own reason, shown in the watch strip and
+never as an error banner. **The picture is that one question's**: it is cleared
+once the question has gone, so it cannot ride on the next, unrelated one.
+
+### 117.5 Tests, and the known gaps
+
+`backend/test_screen_attach.py`: that the picture handed over is the cleaner's
+own bytes with the secret's place SOLID BLACK and every other pixel untouched;
+that the raw capture never crosses; every refusal shape; the pause rules; the
+route's origin, token, this-PC-only and non-`want` behaviour; the words held
+for the question with the picture riding on the same message; and that the
+module opens no file, prints nothing and uses the one cleaner, once.
+`jarvis-desktop/tests/screen-attach.mjs` drives the real window, and
+`tests/look-rules.mjs` reads the wiring out of `look.rs`.
+
+* **Nothing here has been run on the owner's PC.** The picture is made by
+  `jarvis_screen_win.png_from_bgra`, which is Windows; every suite here uses a
+  made-up PNG. Whether a real look's picture is the size the owner expects, and
+  how long the key takes to answer on a real screen, are unmeasured.
+* **The app's patience is 20 s for this look** (`look.rs`'s `ATTACH_TIMEOUT`),
+  against 4 s for an ordinary one, because the PC now reads the words AND
+  paints the picture before answering. A PC slower than that hands back no look
+  at all. Measured nowhere yet.
+* **A password shown with a show-password eye, or in a box with nothing
+  written beside it, is still not caught** - unchanged, and said plainly in
+  section 62.13.
+* **The phone gets no picture.** This is the PC's own screen; the phone's
+  camera is a separate, already-designed thing, and the route refuses a request
+  from anything but this PC.

@@ -1,0 +1,20 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6506,3 +6506,17 @@
+         print(f"  tutorials  NOT ON ({type(exc).__name__}) - the tutorials and FAQ are off")
+         print("             until jarvis_tutorials.py is back: run apply-patches.ps1 again")
++    # screen-attach.patch (the owner's decision of 2026-10-07;
++    # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): "look at this" can hand the owner
++    # the CLEANED picture of the look, for the question box. The look itself is
++    # unchanged - the same pause rules, in their one order - and the bytes are
++    # jarvis_picture.clean's own output, never the capture. Wrapped round Handler
++    # here, before anything listens, like tutorials above; it MUST come after
++    # screen.patch, whose own route it takes over so the body is read once.
++    try:
++        import jarvis_screen_attach
++        print(jarvis_screen_attach.install(Handler, origin_ok=_origin_ok,
++                                           token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  screen     NOT ON ({type(exc).__name__}) - a look cannot hand back a picture")
++        print("             until jarvis_screen_attach.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.

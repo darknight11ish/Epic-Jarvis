@@ -628,7 +628,11 @@ def t_the_patch_and_the_lists():
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
              "gate-action-name.patch", "tutorials.patch", "readpage.patch",
              "chatbot-limits.patch", "chatbot-limits-hud.patch",
-             "gate-risk-rows.patch", "accounts.patch"}
+             "gate-risk-rows.patch", "accounts.patch",
+             # screen-attach.patch (2026-10-07): one hunk in jarvis_hud.py's
+             # tutorials install block. It touches jarvis_gate.py not at all, so
+             # it rewrites nothing referee.patch's hunks anchor on.
+             "screen-attach.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

@@ -368,6 +368,13 @@ SHIPPED = (
     # a small picture model on the processor, off by default, ON is one card
     # (screen-picture.patch adds the gate lines); the routes are jarvis_screen.py's
     "jarvis_screen_picture.py",
+    # ... and a look handing its CLEANED picture to the question box: "look at
+    # this" with a chart or an error message, the one key, nothing saved (the
+    # owner's decision of 2026-10-07, .dsh-scratch/SCREEN-ATTACH-DESIGN.md;
+    # screen-attach.patch installs its wrapper round jarvis_screen.py's own
+    # route). No second cleaner: the picture handed on is
+    # jarvis_picture.clean(..., want_png=True)'s own output, never the capture.
+    "jarvis_screen_attach.py",
     # The headless browser, Obscura (2026-09-29): the driver (started over
     # standard input/output, --stealth always, no port, no proxy) and the
     # engine choice, the switch (off by default, ON is one card) and its

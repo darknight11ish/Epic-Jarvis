@@ -117,9 +117,12 @@ pub mod events {
     pub const FOCUS_INPUT: &str = "focus-input";
     /// Payload: `String` — clipboard text to pre-load into the quickbar.
     pub const CLIPBOARD_INJECT: &str = "clipboard-inject";
-    /// Payload: [`crate::commands::CapturePayload`] — a JPEG data URI.
+    /// Payload: [`crate::commands::CapturePayload`] — the CLEANED picture of a
+    /// "Look at this" look, as a PNG data URI (the PC's own
+    /// `jarvis_picture.clean` output; see `look.rs`).
     pub const SCREEN_CAPTURED: &str = "screen-captured";
-    /// Payload: `String` — a human readable failure message.
+    /// Payload: `String` — a human readable failure message, or the plain
+    /// reason there was no picture to attach to the question.
     pub const CAPTURE_FAILED: &str = "capture-failed";
     /// Payload: [`crate::commands::HealthReport`].
     pub const HEALTH_REPORT: &str = "health-report";

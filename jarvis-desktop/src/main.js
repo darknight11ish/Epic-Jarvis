@@ -3557,6 +3557,20 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
     // true, the same rule it already follows for `temporary`.
     cloudYes,
   };
+  // The picture is this ONE question's, and it goes with it (the owner's
+  // decision of 2026-10-07; SCREEN-ATTACH-DESIGN.md's flow, step 5). The
+  // design described the old attachment as already working this way; it did
+  // not - a capture stayed in the box until it was removed or the bar closed,
+  // so a screenshot taken for a chart would quietly ride on the next,
+  // unrelated question. Cleared AFTER `content`, `turnProvenance` and
+  // `hasImage` are built from it, and never on the path that holds the words
+  // back (the "your model can't see pictures" notice returns above, with the
+  // picture still attached and still on screen).
+  if (state.capture) {
+    state.capture = null;
+    dom.captureThumb.removeAttribute("src");
+    syncAttachments();
+  }
   // What this answer used, and what the PC said about a temporary one,
   // start from nothing (answer-memory.js).
   answerMemory.begin(temporaryChat.on);
@@ -5266,8 +5280,15 @@ listen("quick-note-summon", (event) => {
   dom.prompt.setSelectionRange(caret, caret);
 });
 
+// A look the PC could not hand a picture back for (the owner's decision of
+// 2026-10-07; SCREEN-ATTACH-DESIGN.md): the reason is said in the watch strip,
+// in the PC's own plain words, and NOT as an error banner - the look itself
+// worked, the answer box and the owner's words are left exactly as they are,
+// and nothing about the screen is shown. `screenNotice` is the strip's own
+// notice, the same place a refused look speaks.
 listen("capture-failed", (event) => {
-  showError(`Desktop capture failed: ${String(event.payload || "unknown error")}`);
+  const why = String(event.payload || "").trim();
+  screenNotice(why || "Jarvis could not attach a picture of your screen.");
 });
 
 listen("health-report", (event) => applyHealth(event.payload));
