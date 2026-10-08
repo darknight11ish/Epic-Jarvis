@@ -132,6 +132,8 @@ NOT_SHIPPED = {
     "_where.py": "test plumbing",
     "_skeleton.py": "a template for new suites",
     "_stack.py": "test plumbing: the whole patch stack's stand-in for an owner's file",
+    "_gitapply.py": "test plumbing: `git apply` from a scratch folder inside a work tree, used "
+                    "by _stack.py and _skeleton.py (2026-10-08)",
     "_fake_imap.py": "test plumbing: an in-memory IMAP server for the inbox-tidy suite and "
                      "tools/gen_inbox_tidy_cases.py",
     "_config_diff.py": "run by apply-patches.ps1 from this repository",
@@ -141,7 +143,8 @@ NOT_SHIPPED = {
     "run_suites.py": "CI's test runner",
     "selftest.py": "run from this repository against the backend",
     "eval_memory.py": "the memory self-test, run from this repository on a scratch store",
-    "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py",
+    "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py - and on "
+                       "its own since 2026-10-08, which is what the docs always said",
     "eval_tidy.py": "the memory self-test's \"where did I put\" and overnight-tidy half, "
                     "run by eval_memory.py",
     "eval_topics.py": "the memory self-test's topic-controls half (leaks, parity, sorting), "
