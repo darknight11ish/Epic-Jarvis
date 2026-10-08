@@ -107,16 +107,8 @@ const READ_TIMEOUT: Duration = Duration::from_secs(15);
 /// "if the Tailscale command answers within 2 s").
 const TAILSCALE_LIMIT: Duration = Duration::from_secs(2);
 
-/// The session states in which a code or the four words are on screen (design
-/// 3).
-///
-/// Test-only since 2026-10-07: this used to drive the settings window's
-/// capture guard, which is now set once when the window is built
-/// (`windows.rs::show_settings_unlocked`) instead of toggled per session, so
-/// nothing outside the unit test below asks which states are active. Left at
-/// `#[cfg(test)]` rather than deleted because the test is the written record of
-/// the rule - and an unused item is a build error under `clippy -D warnings`.
-#[cfg(test)]
+/// The session states in which a code or the four words are on screen, so
+/// the window stays hidden from screen capture (design 3).
 const ACTIVE: [&str; 3] = ["waiting_for_phone", "waiting_for_card", "approved"];
 
 /// The fields of `GET /api/pair/session` the page gets - all of them in the
@@ -509,10 +501,6 @@ pub(crate) fn session_answer(status: u16, body: &str) -> Result<serde_json::Valu
 }
 
 /// Whether a session in `state` still shows a code or the words.
-///
-/// Test-only since 2026-10-07, for the same reason as [`ACTIVE`]: the capture
-/// guard no longer depends on the session's state.
-#[cfg(test)]
 pub(crate) fn session_active(state: &str) -> bool {
     ACTIVE.contains(&state)
 }
@@ -592,19 +580,66 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 // The settings window's screen-capture guard (design 7.1)
 // ---------------------------------------------------------------------------
 //
-// The guard is set once, where the window is built
-// (`windows.rs::show_settings_unlocked`, `.content_protected(true)`), and is not
-// touched again.
+// ON while a pairing code or the four words are on screen, OFF once the session
+// ends or the panel closes - the design's own shape ("put back when the panel
+// closes").
 //
-// There used to be a helper here that toggled it - on when the pairing code
-// appeared, off when the panel closed (design 7.1, "put back when the panel
-// closes"). It was removed on 2026-10-07 for a real bug: `set_content_protected`
-// reaches `SetWindowDisplayAffinity`, which tao applies on Windows by RECREATING
-// the window, so pressing "Pair a phone" closed the Settings window exactly as
-// the pairing succeeded.
+// Why this is not Tauri's `set_content_protected`, which is the obvious call:
+// on Windows that reaches `SetWindowDisplayAffinity`, and tao applies it by
+// RECREATING the window. Pressing "Pair a phone" therefore closed the Settings
+// window exactly as the pairing succeeded - the code never appeared and nothing
+// was logged, because the window was rebuilt rather than crashed. The owner's
+// report, 2026-10-07: "when i go to devices in the settings to pair a phone and
+// click pair it closes the settings on desktop".
 //
-// Kept as a comment rather than deleted silently, because the design section
-// still describes the toggle and someone will come looking for it.
+// The first fix removed the toggle and set the guard once at window creation.
+// The owner asked for the toggle back the same day, on condition that it cannot
+// close the window - so the Win32 call is made directly, on the window this app
+// already owns. `SetWindowDisplayAffinity` changes an attribute of an existing
+// window; it does not touch how the window was created, so nothing is rebuilt
+// and Settings stays open. `WDA_EXCLUDEFROMCAPTURE` needs Windows 10 2004 or
+// newer; where it is refused the code is still shown, which is the same failure
+// the old helper had (a cheap guard against the easiest copy, not a wall -
+// ARCHITECTURE section 3).
+
+/// Hides the settings window from screenshots, screen recordings and screen
+/// sharing (`on`), or puts it back. No window, or a refusal, is logged and
+/// otherwise ignored: the code is still shown.
+fn guard_capture(app: &AppHandle, on: bool) {
+    let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) else {
+        return;
+    };
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+        };
+        let Ok(handle) = window.hwnd() else {
+            eprintln!("[jarvis] could not read the settings window's handle for the capture guard");
+            return;
+        };
+        // SAFETY: `handle` is this app's own settings-window handle, read back
+        // from Tauri. SetWindowDisplayAffinity only sets an attribute on it -
+        // unlike set_content_protected, it cannot rebuild the window.
+        let ok = unsafe {
+            SetWindowDisplayAffinity(
+                handle.0 as _,
+                if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE },
+            )
+        };
+        if ok == 0 {
+            eprintln!(
+                "[jarvis] could not {} the settings window's capture guard: {}",
+                if on { "set" } else { "clear" },
+                std::io::Error::last_os_error()
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (window, on);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // The commands
@@ -692,11 +727,8 @@ pub async fn pair_start(app: AppHandle, address: String) -> Result<serde_json::V
         }
     };
     remember_address(&app, &address_text(&host, port));
-    // No capture-guard call here any more. The settings window is created with
-    // `content_protected(true)` (windows.rs), so the code was already hidden from
-    // a screenshot before this command could return - and toggling the guard on
-    // a window that is already open made Windows recreate it, which closed
-    // Settings the moment pairing succeeded. See windows.rs for the detail.
+    // Before the code reaches the page, never after (design 7.1).
+    guard_capture(&app, true);
     Ok(serde_json::json!({
         "ok": true,
         "qr_svg": picture,
@@ -713,15 +745,17 @@ pub async fn pair_session(app: AppHandle) -> Result<serde_json::Value, String> {
     let (status, text) = get_raw(&app, PAIR_SESSION_PATH).await?;
     let view = session_answer(status, &text)?;
     let state = view.get("state").and_then(|s| s.as_str()).unwrap_or("none");
-    // The capture guard is permanent now (windows.rs), so a session ending needs
-    // no call here. `state` is still read: it is what the answer carries.
-    let _ = state;
+    if !session_active(state) {
+        guard_capture(&app, false);
+    }
     Ok(view)
 }
 
-/// Ends the pairing session (and withdraws its card, if one waits).
+/// Ends the pairing session (and withdraws its card, if one waits). The
+/// capture guard comes off whatever the PC answers.
 #[tauri::command]
 pub async fn pair_cancel(app: AppHandle) -> Result<serde_json::Value, String> {
+    guard_capture(&app, false);
     let (status, text) = post_raw(&app, PAIR_CANCEL_PATH, serde_json::json!({})).await?;
     change_answer(status, &text)
 }

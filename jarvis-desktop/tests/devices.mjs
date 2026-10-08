@@ -515,23 +515,32 @@ await check("CONTROL: the Devices commands are in the settings window's set only
   }
 });
 
-await check("CONTROL: the settings window is hidden from capture, set once at creation", async () => {
-  // It used to be toggled: `guard_capture(&app, true)` as the code was handed
-  // over, `(false)` when the panel closed. That is what closed the Settings
-  // window on the owner's PC (2026-10-07) - `set_content_protected` reaches
-  // `SetWindowDisplayAffinity`, which tao applies on Windows by RECREATING the
-  // window, so the successful pairing made the window vanish.
-  //
-  // The guard is now permanent and set where the window is built, which cannot
-  // recreate anything because the window does not exist yet.
+await check("CONTROL: the window is hidden from capture BEFORE the code is handed over", async () => {
+  // The guard is toggled - on as the code is handed over, off when the session
+  // ends or Cancel is pressed (PAIRING-DESIGN 7.1, "put back when the panel
+  // closes"). It must NOT go through Tauri's `set_content_protected`: on Windows
+  // that reaches `SetWindowDisplayAffinity`, which tao applies by RECREATING the
+  // window, and that is what closed Settings the moment pairing succeeded (the
+  // owner's report, 2026-10-07). devices.rs calls the Win32 function directly,
+  // which sets an attribute on the window this app already owns and rebuilds
+  // nothing.
   const start = fnBody(RUST, "pair_start");
-  assert.ok(!/guard_capture/.test(RUST), "the toggling guard is gone");
-  // The guard lives on the settings window now, so the check reads the file that
-  // builds it. `fnBody` cannot be used for it: that finds `pub async fn`, and
-  // this builder is a plain `pub(crate) fn`.
+  const guard = start.indexOf("guard_capture(&app, true)");
+  const answer = start.indexOf('"code": started.code');
+  assert.ok(guard > 0 && answer > guard, "guard_capture(true) must come before the answer");
+  assert.match(fnBody(RUST, "pair_cancel"), /guard_capture\(&app, false\)/);
+  assert.match(fnBody(RUST, "pair_session"), /guard_capture\(&app, false\)/);
+  // The guard itself: the direct Win32 attribute call...
+  assert.match(RUST, /SetWindowDisplayAffinity/);
+  // ...and never the call that rebuilt - and so closed - the window. The
+  // pattern needs the call's own bracket, so the comments above that explain
+  // why this call is not used do not satisfy the check.
+  assert.ok(!/set_content_protected\s*\(/.test(RUST), "the recreating call must not come back");
+  // And the window is not built with a permanent guard either: the owner chose
+  // the toggle, on condition it cannot close the window.
   const WINDOWS = read("src-tauri/src/windows.rs");
-  assert.match(WINDOWS, /\.content_protected\(true\)/,
-    "the settings window is created with the capture guard on");
+  assert.ok(!/\.content_protected\s*\(/.test(WINDOWS),
+    "the settings window must not carry a permanent capture guard");
   assert.ok(!/"qr"\s*:/.test(start), "the QR text must never be in the answer");
   assert.match(start, /if stale\(&app\)/, "starting a pairing is held on a stale link");
   // Still true, and now the only mechanism: the answer carries the drawn
