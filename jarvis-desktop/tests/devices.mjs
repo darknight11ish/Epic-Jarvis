@@ -475,6 +475,60 @@ await check("a devices event from the other app re-reads the list", async () => 
   assert.equal(after, before + 1);
 });
 
+await check("CONTROL: the 2-second pairing poll is gone - the event and an ageing wait carry the page", async () => {
+  // The 2026-10-08 cohesion audit, finding 1: `POLL_MS = 2000` in a flat
+  // `setInterval` for the whole life of a pairing, against the 15-20 s the
+  // rest of the app polls at. The LIST is not polled either way - the check
+  // above proves the event is what re-reads it - so what is pinned here is the
+  // cadence decision itself, in `devices-pair-poll.js`.
+  const { POLL_MS_COOL, POLL_MS_HOT, HOT_WINDOW_MS, pairWaitMs } =
+    await import("../src/devices-pair-poll.js");
+  assert.equal(POLL_MS_HOT, 2000, "the QR moment keeps the old fast read");
+  assert.equal(POLL_MS_COOL, 15000, "after it, the cadence brain.js polls its own panels at");
+  assert.equal(HOT_WINDOW_MS, 60000);
+  const t0 = 1_700_000_000_000;
+  assert.equal(pairWaitMs(t0, t0 + 1000), 2000, "the first minute stays fast");
+  assert.equal(pairWaitMs(t0, t0 + 60000), 15000, "and then it backs off");
+  assert.equal(pairWaitMs(t0, t0 + 600000), 15000, "for the rest of the code's life");
+  assert.equal(pairWaitMs(0, t0), 2000, "a session we just learned about is not made to wait");
+
+  const src = read("src/devices.js");
+  assert.ok(!/setInterval\(poll, POLL_MS\)/.test(src), "the flat 2 s poll is back");
+  assert.ok(!/\bPOLL_MS\b\s*=\s*2000/.test(src), "the old POLL_MS constant is back");
+  assert.match(src, /pairWaitMs\(codeShownAt/, "the wait must come from the session's age");
+  assert.match(src, /onEvent\(\(frame\) => \{[\s\S]{0,80}loadList\(\)/,
+    "the devices event must still re-read the list");
+});
+
+await check("the pairing poll really does read 30 times in the first minute, then 4", async () => {
+  // Measured, not assumed: two minutes of stepped time with a code on screen.
+  // Before this change it was 30 and 30 (tests/timers.mjs reports the same
+  // numbers for the two source sets).
+  const page = await open({ devices: {
+    list: list(), address: { address: "jarvis-pc.tail1234.ts.net", source: "tailscale" },
+    start: START,
+    sessions: [{ state: "waiting_for_phone", expires_in: 2900, tries_left: 3, device_name: null,
+                 words: null, wrong_tries_from: [], message: "Waiting for your phone..." }],
+  } });
+  await page.clock.install();
+  await page.waitForTimeout(400);
+  await page.locator("#dv-pair").click();
+  await page.waitForTimeout(300);
+  const reads = () => calls(page, "pair_session").then((c) => c.length);
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 500)));
+  const first0 = await reads();
+  for (let i = 0; i < 60; i++) { await page.clock.runFor(1000); await page.waitForTimeout(1); }
+  const first1 = await reads();
+  for (let i = 0; i < 60; i++) { await page.clock.runFor(1000); await page.waitForTimeout(1); }
+  const second1 = await reads();
+  await page.close();
+  const first = first1 - first0;
+  const second = second1 - first1;
+  assert.ok(first >= 25 && first <= 32, `the first minute read ${first} times`);
+  assert.ok(second <= 6, `the second minute read ${second} times`);
+  assert.ok(second < first / 3, `the cadence did not back off: ${first} then ${second}`);
+});
+
 await check("a reloaded window with a pairing open shows its state, never its code", async () => {
   const page = await open({ devices: {
     list: list(), openAtLoad: true,

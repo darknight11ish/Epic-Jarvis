@@ -9,8 +9,10 @@
  *    page never holds the text inside it), the typed backup code, the
  *    countdown. Rust hides this window from screen capture before it
  *    answers. Held on a stale link (it ends in an approval card).
- *  - pair_session: read every 2 s while a pairing is open - the state, the
- *    phone's name and the four words, and the PC's own sentence.
+ *  - pair_session: read every 2 s for the first minute a pairing is open,
+ *    then every 15 s (2026-10-08 cohesion audit, finding 1) - the state, the
+ *    phone's name and the four words, and the PC's own sentence. See
+ *    [`POLL_MS_HOT`] for why the first minute is not the whole session.
  *  - pair_cancel: ends it; never held.
  *  - devices_list / devices_remove({id}) / devices_shared({retired}):
  *    the list; Remove ONE device (immediate, after "are you sure?"); Retire
@@ -26,6 +28,7 @@
  */
 
 import { onLink, onEvent, currentLink, linkWords } from "./jarvis-link.js";
+import { pairWaitMs } from "./devices-pair-poll.js";
 import {
   CODE_GONE,
   NEEDS_ADDRESS,
@@ -45,7 +48,6 @@ import {
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 const $ = (id) => document.getElementById(id);
-const POLL_MS = 2000;
 
 const el = {
   section: $("devices"),
@@ -84,6 +86,7 @@ let address = { value: "", editing: true };
 let busy = false;
 let pollTimer = null;
 let tickTimer = null;
+let codeShownAt = 0; // when the code went on screen - see pairWaitMs
 let secondsLeft = 0;
 let showingCode = false;
 
@@ -312,7 +315,7 @@ async function bringBack() {
 /* ── Pairing a phone ─────────────────────────────────────────────────── */
 
 function stopTimers() {
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer) clearTimeout(pollTimer);
   if (tickTimer) clearInterval(tickTimer);
   pollTimer = null;
   tickTimer = null;
@@ -369,12 +372,37 @@ async function poll() {
 
 function startTimers() {
   stopTimers();
-  pollTimer = setInterval(poll, POLL_MS);
+  codeShownAt = Date.now();
+  armPoll();
+  // The countdown under the code: 1 s while the code is on screen. It needs
+  // no self-aligning tick, unlike the approval clocks - it is repainted by
+  // the same second it counts, so it drifts by nothing a reader can see.
   tickTimer = setInterval(() => {
     if (!showingCode) return;
     secondsLeft = Math.max(0, secondsLeft - 1);
     el.countdown.textContent = countdown(secondsLeft);
   }, 1000);
+}
+
+/**
+ * One read of the pairing state, then the next one at the wait
+ * [`pairWaitMs`] asks for (2026-10-08 cohesion audit, finding 1). `setTimeout`
+ * rather than a flat 2 s `setInterval`, so the wait can follow the session -
+ * 2 s while the phone is still likely to be pointed at the code, 15 s after
+ * that, which is the cadence `brain.js` polls its own panels at.
+ *
+ * The DEVICE LIST is not polled at all: it is re-read by the `devices` event
+ * below (`loadList()` on every `devices` frame), which is the freshness this
+ * page actually needs. This timer only carries the pairing panel, where the
+ * phone's four words arrive with the PC's approval card.
+ */
+function armPoll() {
+  pollTimer = setTimeout(runPoll, pairWaitMs(codeShownAt, Date.now()));
+}
+
+function runPoll() {
+  pollTimer = null;
+  poll().finally(armPoll);
 }
 
 async function pairPhone() {

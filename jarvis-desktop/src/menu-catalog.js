@@ -172,23 +172,6 @@ export const GROUPS = [
       "desktop": true,
       "phone": true
     }
-  },
-  {
-    "id": "group.home",
-    "title": "Home",
-    "about": "Home status and smart-home settings.",
-    "names": [
-      "home",
-      "smart home"
-    ],
-    "members": {
-      "desktop": [],
-      "phone": []
-    },
-    "listed": {
-      "desktop": false,
-      "phone": false
-    }
   }
 ];
 export const MENUS = [
@@ -2480,7 +2463,6 @@ export const ALIASES = {
   "history entry": "entry.history",
   "history entry in brain": "entry.history",
   "history import": "brain.memory.history-import",
-  "home": "group.home",
   "hotkeys": "settings.shortcuts",
   "how jarvis talks": "settings.manner",
   "hud window": "settings.hud-window",
@@ -2555,7 +2537,6 @@ export const ALIASES = {
   "shortcuts": "settings.shortcuts",
   "show or hide": "settings.menu-visibility",
   "skills": "brain.model.skills",
-  "smart home": "group.home",
   "smartwatch notifications": "settings.watch-notify",
   "spending": "settings.spending",
   "spending summaries": "settings.spending",

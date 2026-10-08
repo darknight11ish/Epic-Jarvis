@@ -37,7 +37,6 @@ object MenuCatalog {
         Group("group.graphics-cards", "Graphics cards", "Hardware, the second card's switches and the big model."),
         Group("group.chatbots", "Chatbots", "Talk to a chatbot for me, and customer-support chats."),
         Group("group.finance", "Finance", "Spending summaries and the retirement what-if."),
-        Group("group.home", "Home", "Home status and smart-home settings."),
     )
 
     val MENUS: List<Menu> = listOf(

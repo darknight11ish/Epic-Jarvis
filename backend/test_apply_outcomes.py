@@ -88,21 +88,29 @@ def build_backend(dest: Path, crlf: bool = False) -> None:
 
 
 def mini_repo(root: Path, suites: dict | None = None, leave_out: tuple = (),
-              requirements: str | None = None) -> Path:
+              requirements: str | None = None, patches: list | None = None,
+              patch_files: dict | None = None) -> Path:
     """A repository of symlinks: the real script (patch list cut), the real
-    backend files, only two patches, and `suites` as its whole test set."""
+    backend files, only the named patches, and `suites` as its whole test set.
+
+    `patches` replaces MINI_PATCHES as the list the cut script applies, and
+    `patch_files` writes extra .patch files into its backend folder. Both are
+    for a stack built inside the test itself (see t_mini_already_on_is_not_a_refusal)."""
+    names = MINI_PATCHES if patches is None else patches
     (root / "scripts").mkdir(parents=True)
     (root / "backend").mkdir()
     text = REAL_PS1.read_text(encoding="utf-8")
     m = re.search(r"^\$PATCHES = @\(\n.*?^\)\n", text, re.S | re.M)
     assert m, "could not find the patch list in apply-patches.ps1"
-    lst = "$PATCHES = @(\n" + "".join(f"    '{n}'\n" for n in MINI_PATCHES) + ")\n"
+    lst = "$PATCHES = @(\n" + "".join(f"    '{n}'\n" for n in names) + ")\n"
     (root / "scripts" / "apply-patches.ps1").write_text(
         text[:m.start()] + lst + text[m.end():], encoding="utf-8", newline="\n")
+    for name, body in (patch_files or {}).items():
+        (root / "backend" / name).write_text(body, encoding="utf-8", newline="\n")
     for src in HERE.iterdir():
         if src.name in leave_out:
             continue
-        if src.suffix == ".patch" and src.name not in MINI_PATCHES:
+        if src.suffix == ".patch" and src.name not in names:
             continue
         if src.name.startswith("test_") and src.suffix == ".py":
             continue
@@ -551,6 +559,181 @@ def t_mini_revert_ends_plainly():
     check("-Revert: the files are what they were before", {n: md5(be / n) for n in MINI_TARGETS} == pre)
 
 
+# ------------------------------------- a patch that is already on the backend
+
+#: tutorials.patch's own block, and the two context lines right above it. The
+#: real patch's text, put into a made-up file at about the line it names, so the
+#: verdicts below are measured with the REAL patch and the REAL rule.
+TUTORIALS_HUNK = [
+    "    except Exception as exc:",
+    '        print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")',
+    '        print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")',
+    "    # tutorials.patch (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md):",
+    "    # GET /api/tutorials, POST /api/tutorials/progress and GET /api/faq - one catalogue",
+    "    # for both apps, and the owner's reading progress kept on the PC. It writes its own",
+    "    # one JSON file, raises no card and calls nothing out. Wrapped round Handler here,",
+    "    # before anything listens, like quiz-cloud above.",
+    "    try:",
+    "        import jarvis_tutorials",
+    "        print(jarvis_tutorials.install(Handler, origin_ok=_origin_ok,",
+    "                                       token_ok=_token_ok, read_body=_read_body))",
+    "    except Exception as exc:",
+    '        print(f"  tutorials  NOT ON ({type(exc).__name__}) - the tutorials and FAQ are off")',
+    '        print("             until jarvis_tutorials.py is back: run apply-patches.ps1 again")',
+    "    # Before the main socket, so the banner lists every address together.",
+]
+
+
+def function_text(marker: str) -> str:
+    """One function out of the real script, braces balanced - so the rule below
+    is the script's own and cannot drift away from a copy of it."""
+    text = REAL_PS1.read_text(encoding="utf-8")
+    i = text.find(marker)
+    assert i >= 0, f"{marker} is not in apply-patches.ps1"
+    depth = 0
+    for k in range(i, len(text)):
+        if text[k] == "{":
+            depth += 1
+        elif text[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return text[i:k + 1]
+    raise AssertionError(marker)
+
+
+def on_backend_verdict(lines: list, shift: int = 0, drift: bool = False) -> dict:
+    """What Test-PatchOnBackend answers for tutorials.patch against a made-up
+    file of about 6,500 lines holding `lines` where the patch's own block goes,
+    so its added lines land at about the line the hunk header names.
+
+    `shift` puts that many extra lines in ABOVE the block - a backend with
+    later patches applied above it: the same work, thousands of lines below the
+    line its own hunk header names.
+
+    `drift` edits the context line right above the block, which is what the
+    owner's own jarvis_hud.py has (a hand-edit of two lines' indents is enough,
+    and later patches step on each other's context). Without it `git apply
+    --reverse --check` finds the block anyway and applies it at an offset, so
+    the fallback below is never what answered and the checks prove nothing.
+    """
+    block = list(lines)
+    if drift:
+        block[0] = block[0] + "  # hand-edited since: the context has moved on"
+    tmp = tmpdir()
+    (tmp / "jarvis_hud.py").write_text("".join(f"line {i}\n" for i in range(1, 6490 + shift))
+                                       + "\n".join(block) + "\n",
+                                       encoding="utf-8", newline="\n")
+    harness = tmp / "verdict.ps1"
+    harness.write_text(
+        f"$BackendPath = '{tmp}'\n"
+        "$UseGit = $true\n"
+        f"$script:GitCeiling = '{tmp.parent}'\n"
+        # The control has to be measured on the SAME files as the verdict, or it
+        # proves nothing: with no Set-Location here, git was answering about the
+        # repository's own backend folder (where there is no jarvis_hud.py at
+        # all), so it always said no and the fallback's part was never shown.
+        f"Set-Location -LiteralPath '{tmp}'\n"
+        + function_text("function Invoke-Patch {") + "\n"
+        + function_text("    function Test-PatchOnBackend {") + "\n"
+        # a control: the canonical evidence must FAIL here, or the fallback
+        # below is never what answered and this proves nothing
+        + f'$rev = (Invoke-Patch -File \'{HERE / "tutorials.patch"}\' -Check -Reverse).Ok\n'
+        + '"reverse=$rev"\n'
+        + f'"present=$(Test-PatchOnBackend -File \'{HERE / "tutorials.patch"}\')"\n',
+        encoding="utf-8", newline="\n")
+    r = subprocess.run([PWSH, "-NoProfile", "-File", str(harness)],
+                       capture_output=True, text=True, timeout=300)
+    out = r.stdout + r.stderr
+    return {"out": out, "present": "present=True" in out, "reverse": "reverse=True" in out}
+
+
+def t_already_on_is_proved_by_the_patchs_own_bytes():
+    """tutorials.patch, on a file that carries its block, reads as ALREADY ON.
+
+    The owner's run of 2026-10-07 ended "2 patch(es) will not apply. NOTHING HAS
+    BEEN CHANGED." Both were on their backend. `git apply --reverse --check`
+    answers for the top of the stack and no deeper, so tutorials.patch - with
+    screen-attach.patch written to sit on its block - answers "not on" for a
+    patch that is on. The script's second rehearsal strips what is applied and
+    puts the whole list back on, so a patch that is on and cannot survive that
+    made the whole run refuse.
+
+    The fallback asks the patch's own bytes instead: every line it adds, in the
+    file, near the line the hunk names. This check is about what that evidence
+    must and must not accept. It FAILS on the script as it was before the fix,
+    which has no such rule at all.
+
+    The block is built with its context line already edited (`drift=True`) -
+    the state the owner's own file is in, and the only state in which the
+    fallback is the thing answering: left clean, `git apply --reverse --check`
+    finds the block itself.
+    """
+    if not shutil.which("git"):
+        print("SKIP  git is not installed, so no patch can be taken off here")
+        return
+
+    good = on_backend_verdict(TUTORIALS_HUNK, drift=True)
+    check("CONTROL: git's own reverse-check answers NO on this file, so it is "
+          "the fallback that answers below", not good["reverse"], good["out"][-900:])
+    check("a patch whose every added line is in the file, where the hunk puts "
+          "them, reads as already on", good["present"], good["out"][-900:])
+
+    # One added line missing: the work is NOT all there, and this MUST refuse.
+    missing = [ln for ln in TUTORIALS_HUNK if "jarvis_tutorials.install" not in ln]
+    gone = on_backend_verdict(missing, drift=True)
+    check("... a patch missing even ONE of its added lines does NOT",
+          not gone["present"], gone["out"][-900:])
+
+
+def t_a_shifted_stack_is_still_recognised_as_on():
+    """A patch that IS on, thousands of lines below its own hunk header.
+
+    The owner's run of 2026-10-08 named 112 patches "will not apply" while they
+    were on the backend. `git apply --reverse --check` cannot say so - every one
+    of those that touches jarvis_hud.py fails it, and on a copy of the same
+    backend with jarvis_hud.py in LF the second rehearsal takes 122 of them off
+    the copy cleanly, which is proof they are on. So the rule that has to answer
+    is the fallback, and on the real files it answered "not on" for 112 of them.
+
+    WHY. Its first rule asked for each added line within $Tolerance (200) lines
+    of the line its hunk header names. That line is where the patch was WRITTEN,
+    and the real backend has other patches applied above it, so the work sits
+    wherever they pushed it: measured on the owner's own files, 593 to 3,673
+    lines away. A patch tool working on a stack cannot anchor to an absolute
+    line number; it has to be told the ORDER and SHAPE of a hunk.
+
+    This check FAILS on the rule as the first version wrote it - after a 3,000
+    line shift, `far["present"]` is False - and passes on the corrected one.
+    """
+    if not shutil.which("git"):
+        print("SKIP  git is not installed, so no patch can be taken off here")
+        return
+
+    here = on_backend_verdict(TUTORIALS_HUNK, drift=True)
+    check("CONTROL: the same block AT the line its hunk names, context drifted, "
+          "still reads as on", here["present"], here["out"][-900:])
+
+    far = on_backend_verdict(TUTORIALS_HUNK, shift=3000, drift=True)
+    check("CONTROL: git's own reverse-check answers NO on the shifted file too, "
+          "so it is the fallback that answers below",
+          not far["reverse"], far["out"][-900:])
+    check("a patch that IS on, 3,000 lines below the line its hunk header names, "
+          "still reads as already applied", far["present"], far["out"][-900:])
+
+    # The corrected rule must not be one that says yes to anything. Same shift:
+    # one line of the hunk missing is not the work, and the first version's own
+    # false positive - one added line that also exists elsewhere, with nothing
+    # of its hunk around it - is not the work either.
+    gone = on_backend_verdict([ln for ln in TUTORIALS_HUNK
+                              if "jarvis_tutorials.install" not in ln],
+                             shift=3000, drift=True)
+    check("... one added line of the hunk missing, at the same shift, does NOT",
+          not gone["present"], gone["out"][-900:])
+    lone = on_backend_verdict([TUTORIALS_HUNK[8]], shift=3000, drift=True)
+    check("... one added line alone, with nothing of its own hunk around it, does NOT",
+          not lone["present"], lone["out"][-900:])
+
+
 def main():
     if not PWSH:
         print("SKIP  no PowerShell 7 (pwsh) here")
@@ -561,7 +744,8 @@ def main():
                t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
-               t_mini_revert_ends_plainly):
+               t_mini_revert_ends_plainly, t_already_on_is_proved_by_the_patchs_own_bytes,
+               t_a_shifted_stack_is_still_recognised_as_on):
         try:
             fn()
         except Exception:

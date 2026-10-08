@@ -75,6 +75,9 @@ import {
   paint as paintBoardBlocks,
   viewOf as boardViewOf,
 } from "./widget-board.js";
+// The approval clock's own second-level ticker (2026-10-08 cohesion audit,
+// finding 2: this file's `setInterval(..., 1000)` and main.js's).
+import { clockTimer, IDLE_MS } from "./clock-timer.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -1225,11 +1228,14 @@ function syncApprovalButtons() {
     || (state.approval && state.decided === state.approval.id);
   dom.apprNoteInput.disabled = noteBlocked;
   dom.btnApprNoteSend.disabled = noteBlocked;
+  // A card opened, closed or was replaced: the risk line is about to change,
+  // so wake its clock now instead of waiting out a slow beat.
+  nudgeApprovalClock();
 }
 
 /**
  * The risk line, plus how long the card has left or why Approve is off for a
- * request that was cut off. Re-painted every second, and only this line.
+ * request that was cut off. Re-painted by the ticker below, and only this line.
  */
 function paintApprovalClock() {
   const approval = state.approval;
@@ -1243,9 +1249,40 @@ function paintApprovalClock() {
   const text = parts.join(" · ");
   if (dom.apprRisk.textContent !== text) dom.apprRisk.textContent = text;
 }
-setInterval(() => {
+
+/**
+ * What the shown line is worth waiting for, in ms (2026-10-08 cohesion audit,
+ * finding 2).
+ *
+ * This used to be a flat `setInterval(..., 1000)`: 3,600 wake-ups an hour for
+ * a widget that is usually showing a face with no card at all, whether or not
+ * its window was on screen. Measured at 61 runs a simulated minute by
+ * `tests/timers.mjs`.
+ *
+ * The widget's line only has the "M:SS left to decide" clock (no heavy-approve
+ * countdown here - the widget cannot approve a heavy card at all, see
+ * `decide`), so the wait is a second exactly while that clock is on screen and
+ * a minute when it is not. `clock-timer.js` adds the align step.
+ */
+function clockWaitMs() {
+  if (!state.approval || dom.apprCard.hidden) return IDLE_MS;
+  return state.approval.expiresAt ? 1000 : IDLE_MS;
+}
+
+const approvalClock = clockTimer(() => {
   if (state.approval && !dom.apprCard.hidden) paintApprovalClock();
-}, 1000);
+}, { delay: clockWaitMs, name: "widget" });
+approvalClock.wake();
+
+/**
+ * The card opened, closed or was replaced: the risk line is about to change,
+ * so the clock re-arms now rather than on its next wake - which may be the
+ * idle minute away (2026-10-08 cohesion audit, finding 2). Called from
+ * `syncApprovalButtons`, the one place this window repaints a card from.
+ */
+function nudgeApprovalClock() {
+  approvalClock.wake();
+}
 
 async function decide(approved, optionId = null) {
   if (state.deciding) return;

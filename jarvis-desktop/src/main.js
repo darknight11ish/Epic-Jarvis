@@ -264,6 +264,9 @@ import {
   SEEN,
   TITLE,
 } from "./live-rules.js";
+// The approval clock's own second-level ticker (2026-10-08 cohesion audit,
+// finding 2: this file's `setInterval(..., 1000)` and widget.js's).
+import { clockTimer, IDLE_MS } from "./clock-timer.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -2670,13 +2673,16 @@ function syncApprovalButtons() {
     || (state.approval && state.decided === state.approval.id);
   dom.approvalNoteInput.disabled = noteBlocked;
   dom.approvalNoteSend.disabled = noteBlocked;
+  // A card opened, closed or was replaced: the line under the risk row is
+  // about to change, so wake its clock now instead of waiting out a slow beat.
+  nudgeApprovalClock();
 }
 
 /**
  * The line under the risk line: "Nothing runs until you decide", plus how
  * long the card has left (the gate refuses it by itself at the deadline -
  * approval-expiry.patch), or why Approve is off for a cut-off request.
- * Re-painted every second by the ticker below, and only this line: it is not
+ * Re-painted by the ticker below, and only this line: it is not
  * a live region, so the countdown is never read out.
  */
 function paintApprovalClock() {
@@ -2702,9 +2708,43 @@ function paintApprovalClock() {
   const text = parts.join(" ");
   if (line.textContent !== text) line.textContent = text;
 }
-setInterval(() => {
+
+/**
+ * What the shown line is worth waiting for, in ms (2026-10-08 cohesion audit,
+ * finding 2).
+ *
+ * This used to be a flat `setInterval(..., 1000)`: 3,600 wake-ups an hour
+ * whether or not a card was up, and whether or not this window was on screen.
+ * Measured at 61 runs a simulated minute by `tests/timers.mjs`.
+ *
+ * The wait is now the thing the text can actually do next:
+ *  - nothing on screen, or the card's clock is not running          -> IDLE_MS
+ *  - an approval is counting down, or the heavy gate is ("unlocks in 2s") -> 1 s
+ * The align step in `clock-timer.js` is added to this, so the digits turn
+ * over on the second rather than a little later every tick.
+ */
+function clockWaitMs() {
+  const line = document.querySelector("#approval .approval-reassure");
+  if (!state.approval || !line || dom.approval.hidden) return IDLE_MS;
+  if (isHeavy(state.approval) && !heavyGate.ok) return 1000;
+  return state.approval.expiresAt ? 1000 : IDLE_MS;
+}
+
+const approvalClock = clockTimer(() => {
   if (state.approval && !dom.approval.hidden) paintApprovalClock();
-}, 1000);
+}, { delay: clockWaitMs, name: "hud" });
+approvalClock.wake();
+
+/**
+ * The card opened, closed or was replaced: the line under the risk row is
+ * about to change, so the clock re-arms now rather than on its next wake -
+ * which may be the idle minute away (2026-10-08 cohesion audit, finding 2).
+ * Called from `syncApprovalButtons`, the one place every surface repaints a
+ * card from.
+ */
+export function nudgeApprovalClock() {
+  approvalClock.wake();
+}
 
 function desktopUndoNotice(approval) {
   if (!approval) return null;

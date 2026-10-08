@@ -2365,6 +2365,10 @@ try {
     # Set only by (c): the patches an earlier run left on, newest first,
     # which come off the real files before the whole list goes on.
     $undoFirst = @()
+    # Set only by (c): the patches an earlier run left on that this rehearsal
+    # cannot take off and put back on. They are on the real files already, so
+    # the real run leaves them alone - see Test-PatchOnBackend.
+    $alreadyOn = @()
 
     function Reset-Rehearsal {
         if (Test-Path -LiteralPath $rehearsal) {
@@ -2390,7 +2394,14 @@ try {
     # it is right now? True means every patch in the list is on. Used for
     # the "already applied?" question, and again after the real run: a real
     # run that reported success is checked against the files themselves.
+    #
+    # -Accept holds the patches (c) found to be on already and could not put
+    # back on top of themselves - name and file, the same shape the strip loop
+    # builds. A reverse that fails for one of those is EXPECTED, not a
+    # problem, so the check carries on past it; every other patch still has to
+    # come off, and the answer is False the moment one of those will not.
     function Test-StackReverses {
+        param([array] $Accept = @())
         Reset-Rehearsal
         Push-Location -LiteralPath $rehearsal
         $all = $true
@@ -2399,10 +2410,245 @@ try {
             foreach ($nm in $bw) {
                 $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
                 if (-not (Test-Path -LiteralPath $fp)) { $all = $false; break }
+                if ($Accept -contains $nm) {
+                    # Leaves the tree in the shape the file really is in.
+                    [void](Invoke-Patch -File $fp -Reverse)
+                    continue
+                }
                 if (-not (Invoke-Patch -File $fp -Reverse).Ok) { $all = $false; break }
             }
         } finally { Pop-Location }
         return $all
+    }
+
+    # Is this patch PROVABLY on the backend's own files, as they are right
+    # now? Two questions, asked of the real backend folder and of no other
+    # copy of it. Either one answering yes is enough.
+    #
+    # WHY THIS EXISTS (2026-10-08). The run of 2026-10-07 refused to do
+    # anything on the owner's PC: "2 patch(es) will not apply. NOTHING HAS
+    # BEEN CHANGED." Both were already on their backend. (c) below takes off
+    # what is applied and puts the whole list back on, and a patch that is on
+    # can be one it cannot do that with:
+    #
+    #   * tutorials.patch - on the backend, but the file has moved on around
+    #     its context (a hand-edit of two lines' indents is enough), so no
+    #     copy of the patch text comes off it cleanly. It is on; it just
+    #     cannot be taken off and put back on.
+    #   * screen-attach.patch - written to sit on tutorials.patch's own block,
+    #     as the last one before `_loopback_companion`. Take tutorials off and
+    #     put the whole list back on, and tutorials is materialised exactly in
+    #     the place screen-attach's own context expects to find itself: the
+    #     two are nested, so one of them cannot be put back on in that
+    #     rehearsal however the taking-off went.
+    #
+    # Either way the patch is on the backend, so putting it on again is not
+    # work that needs doing - and refusing the whole run over it is what left
+    # the owner with no way to update at all.
+    #
+    # 1. `git apply --reverse --check` against those real files. This is the
+    #    maker's canonical evidence and the answer when the patch is the top
+    #    of the stack on the backend. It is not enough on its own: a patch
+    #    with another patch sitting directly under it can never reverse, so
+    #    it answers "not on" for a patch that IS on (measured 2026-10-08:
+    #    screen-attach answers yes, tutorials answers no, and both are on).
+    #
+    # 2. Then the patch's own bytes, read out of the .patch file itself and
+    #    from no other copy of it: EVERY line the patch ADDS is in the target
+    #    file, verbatim, AND THE HUNK IT BELONGS TO IS IN THE SHAPE THE PATCH
+    #    WRITES IT - each added line after the one before it in the patch's own
+    #    order, and no further from it than the patch itself puts it, plus
+    #    $Tolerance for what later patches inserted between them. And every
+    #    line the patch takes out is gone. Every hunk of every file it names,
+    #    or a patch only half on would pass - and a half-applied backend is
+    #    the worst outcome this script exists to prevent, so that one MUST
+    #    still refuse. A patch that adds nothing at all is not evidence of
+    #    anything and answers no.
+    #
+    #    WHERE, and not just WHETHER, is load-bearing (2026-10-08). A patch's
+    #    added lines are ordinary code, and lines identical to them are
+    #    elsewhere in a long file: a later patch in the same list may even add
+    #    the same line. Measured here before the position was asked for: a
+    #    three-patch stack whose middle patch was NOT on the backend answered
+    #    "already on" for it, its added line being repeated further down by the
+    #    patch above it, and the run then refused anyway - the very refusal
+    #    this fallback exists to remove. So a hunk that adds only ONE line is
+    #    not answered by that line being somewhere in the file: it also needs a
+    #    NEIGHBOUR out of its own hunk - a line the patch prints around it -
+    #    found as near to it as the patch puts it.
+    #
+    #    AND THE POSITION IS NOT AN ABSOLUTE LINE NUMBER (the correction of
+    #    2026-10-08, the same day as the first attempt at this rule). The first
+    #    version asked for each added line within $Tolerance lines of the line
+    #    its HUNK HEADER names. That line is where the patch was WRITTEN. A
+    #    real backend has other patches applied above it, and they push the
+    #    work down, so the number means nothing: measured on the owner's own
+    #    files, the hunks' work sat 593 to 3,673 lines below the line its
+    #    header named, and the rule answered "not on" for 112 patches that ARE
+    #    on - proof: on a copy of that same backend with jarvis_hud.py in LF,
+    #    the strip loop above takes 122 of them off cleanly. Order and shape
+    #    survive that drift; a line number does not.
+    #
+    #    This is weaker than taking the patch off, and it is meant to be: it
+    #    answers "the work is in the file", not "the file is exactly the
+    #    patch's output". It is only ever asked about a patch the rehearsal has
+    #    already failed to put on, and only to decide that the patch may be
+    #    LEFT ALONE - never to decide that a patch may be left off.
+    function Test-PatchOnBackend {
+        # $Tolerance is no longer a distance from the hunk header's line: it is
+        # the slack allowed BETWEEN the added lines of one hunk, over and above
+        # the gap the patch itself writes. 200 lines is generous for a later
+        # patch that inserted into the middle of a block.
+        param([string] $File, [int] $Tolerance = 200)
+        $here = (Get-Location).Path
+        try {
+            Set-Location -LiteralPath $BackendPath
+            if ((Invoke-Patch -File $File -Check -Reverse).Ok) { return $true }
+
+            # What the patch adds (with the line each one should be at) and
+            # takes out, per target file. A header names the file as
+            # `b/<name>`; the date some of these patches carry sits after a
+            # tab, exactly as in the missing-file check at the top of this
+            # script. Every line also carries the HUNK it belongs to, because a
+            # hunk is the unit the patch writes and the unit the rule below
+            # judges; a context line is kept too, as the neighbour a one-line
+            # hunk has to have.
+            $adds = @{}
+            $dels = @{}
+            $ctxs = @{}
+            $cur = $null
+            $rem = 0
+            $addLeft = 0
+            $at = 0
+            $hunk = 0
+            foreach ($line in (Get-Content -LiteralPath $File)) {
+                if ($rem -gt 0 -or $addLeft -gt 0) {
+                    # The body of a patch line, whatever its prefix. An empty
+                    # line is an empty context line: git accepts it, and an
+                    # editor that strips trailing spaces writes it.
+                    $body = ''
+                    if ($line.Length -gt 1) { $body = $line.Substring(1) }
+                    if ($line.StartsWith('+')) {
+                        $adds[$cur] += , @{ Line = $body; At = $at; Hunk = $hunk }
+                        $addLeft--
+                        $at++
+                    }
+                    elseif ($line.StartsWith('-')) { $dels[$cur] += , $body; $rem-- }
+                    else {
+                        $ctxs[$cur] += , @{ Line = $body; At = $at; Hunk = $hunk }
+                        $rem--; $addLeft--; $at++
+                    }
+                    continue
+                }
+                if ($line.StartsWith('+++ ')) {
+                    $cur = $line.Substring(4).Split("`t")[0].Trim()
+                    if ($cur.StartsWith('b/')) { $cur = $cur.Substring(2) }
+                    if (-not $adds.ContainsKey($cur)) {
+                        $adds[$cur] = @(); $dels[$cur] = @(); $ctxs[$cur] = @()
+                    }
+                    continue
+                }
+                if ($line -match '^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
+                    $rem     = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
+                    $addLeft = if ($Matches[3]) { [int]$Matches[3] } else { 1 }
+                    $at      = [int]$Matches[2]
+                    $hunk++
+                }
+            }
+
+            $anyAdded = $false
+            $seen = @{}
+            $where = @{}
+            foreach ($name in $adds.Keys) {
+                # Every file it names must be there, or this cannot be answered
+                # about it.
+                if (-not (Test-Path -LiteralPath (Join-Path (Get-Location).Path $name))) { return $false }
+                # Read once per file: a patch may name the same file in several
+                # headers (the first screen.patch did), and re-reading it for
+                # every line is what makes this slow on a 6,500-line file. The
+                # line numbers each distinct line sits at are indexed beside it,
+                # so a hunk can be followed down the file without walking it
+                # once per added line.
+                if (-not $seen.ContainsKey($name)) {
+                    $text = @(Get-Content -LiteralPath (Join-Path $BackendPath $name))
+                    $seen[$name] = $text
+                    $index = @{}
+                    for ($i = 0; $i -lt $text.Count; $i++) {
+                        $key = $text[$i]
+                        if (-not $index.ContainsKey($key)) {
+                            $index[$key] = [System.Collections.Generic.List[int]]::new()
+                        }
+                        $index[$key].Add($i + 1)
+                    }
+                    $where[$name] = $index
+                }
+                $lines = $seen[$name]
+                $index = $where[$name]
+                # One hunk at a time, in the order the patch writes them.
+                $list = @($adds[$name])
+                $k = 0
+                while ($k -lt $list.Count) {
+                    $h = $list[$k].Hunk
+                    $run = @()
+                    while ($k -lt $list.Count -and $list[$k].Hunk -eq $h) {
+                        $run += $list[$k]; $k++
+                    }
+                    # Follow the hunk's added lines down the file: each one
+                    # there, after the line before it in the patch's own order,
+                    # no further from it than the patch itself puts it (plus
+                    # $Tolerance for what a later patch inserted in between).
+                    # A line missing, or out of order, or on the far side of the
+                    # file, means the work is not there in the shape the patch
+                    # writes it.
+                    $prev = 0
+                    for ($j = 0; $j -lt $run.Count; $j++) {
+                        $gap = $Tolerance
+                        if ($j -gt 0) {
+                            $gap = $Tolerance + [Math]::Abs($run[$j].At - $run[$j - 1].At)
+                        }
+                        if (-not $index.ContainsKey($run[$j].Line)) { return $false }
+                        $spots = $index[$run[$j].Line]
+                        $idx = $spots.BinarySearch($prev)
+                        if ($idx -lt 0) { $idx = -$idx - 1 }
+                        else { while ($idx -lt $spots.Count -and $spots[$idx] -le $prev) { $idx++ } }
+                        if ($idx -ge $spots.Count) { return $false }
+                        $spot = $spots[$idx]
+                        if ($prev -gt 0 -and ($spot - $prev) -gt $gap) { return $false }
+                        $prev = $spot
+                    }
+                    # A hunk of ONE added line has no order to prove anything
+                    # with: the line being somewhere in the file is what a later
+                    # patch repeating it looks like too (measured 2026-10-08).
+                    # So it needs a neighbour out of its own hunk - a context
+                    # line the patch prints around it - and that neighbour has to
+                    # be as near to it as the patch puts it.
+                    if ($run.Count -lt 2) {
+                        $anchored = $false
+                        foreach ($c in @($ctxs[$name])) {
+                            if ($c.Hunk -ne $h) { continue }
+                            if ($c.Line.Trim().Length -lt 3) { continue }
+                            if (-not $index.ContainsKey($c.Line)) { continue }
+                            $near = [Math]::Abs($c.At - $run[0].At) + $Tolerance
+                            foreach ($p in $index[$c.Line]) {
+                                if ([Math]::Abs($p - $prev) -le $near) { $anchored = $true; break }
+                            }
+                            if ($anchored) { break }
+                        }
+                        if (-not $anchored) { return $false }
+                    }
+                    $anyAdded = $true
+                }
+                # And the lines it takes out are gone. Only the distinctive
+                # ones (three characters or more once trimmed): a one- or
+                # two-character snip is far more likely to be some other line
+                # that happens to match.
+                foreach ($d in @($dels[$name])) {
+                    if ($d.Trim().Length -lt 3) { continue }
+                    if (@($lines) -ccontains $d) { return $false }
+                }
+            }
+            return $anyAdded
+        } finally { Set-Location -LiteralPath $here }
     }
 
     try {
@@ -2465,6 +2711,10 @@ try {
                 # Each: @{ Name = <list entry>; File = <the text that came
                 # off>; Older = <plain words, or $null for the current text> }
                 $found = @()
+                # The ones that are on but could not be taken off AND put back
+                # on by this rehearsal (Test-PatchOnBackend). Named and left
+                # exactly as they are - on both the copy and the real files.
+                $alreadyOn = @()
                 $backwards = @($PATCHES); [array]::Reverse($backwards)
                 foreach ($name in $backwards) {
                     $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
@@ -2475,23 +2725,47 @@ try {
                         }
                         continue
                     }
+                    # Not the current text. An older one, from before it was
+                    # edited? (The same order -Revert uses.)
+                    $older = $null
                     foreach ($o in @(Get-OlderVersions -Name $name)) {
-                        if ((Invoke-Patch -File $o.File -Check -Reverse).Ok) {
-                            if ((Invoke-Patch -File $o.File -Reverse).Ok) {
-                                $found += @{ Name = $name; File = $o.File; Older = $o.Label }
-                            }
-                            break
+                        if ((Invoke-Patch -File $o.File -Check -Reverse).Ok) { $older = $o; break }
+                    }
+                    if ($older) {
+                        if ((Invoke-Patch -File $older.File -Reverse).Ok) {
+                            $found += @{ Name = $name; File = $older.File; Older = $older.Label }
                         }
+                        continue
+                    }
+                    # Nothing comes off: this patch is either already on in a
+                    # form no text of it can take off, or it is not on at all.
+                    # The strip above is the ONLY question that needs the whole
+                    # copy, so it is the only place the weaker one is asked.
+                    # Answering yes takes this patch out of both the strip and
+                    # the re-apply - on the copy and on the real files - so the
+                    # two stay the same shape (see Test-PatchOnBackend).
+                    if (Test-PatchOnBackend -File $full) {
+                        $alreadyOn += @{ Name = $name; File = $full }
                     }
                 }
-                if ($found.Count -gt 0) {
+                if ($found.Count -gt 0 -or $alreadyOn.Count -gt 0) {
                     $olderFound = @($found | Where-Object { $_.Older })
                     Say ""
-                    Say "$($found.Count) of these are already on your backend from an earlier run." Cyan
-                    if ($olderFound.Count -gt 0) {
-                        Say "$($olderFound.Count) of those are an OLDER version of the patch, from before it" Cyan
-                        Say "was changed here. Each is taken off and the current version put on:" Cyan
-                        foreach ($f in $olderFound) { Say "  older        $($f.Name)  -  $($f.Older)" Yellow }
+                    if ($found.Count -gt 0) {
+                        Say "$($found.Count) of these are already on your backend from an earlier run." Cyan
+                        if ($olderFound.Count -gt 0) {
+                            Say "$($olderFound.Count) of those are an OLDER version of the patch, from before it" Cyan
+                            Say "was changed here. Each is taken off and the current version put on:" Cyan
+                            foreach ($f in $olderFound) { Say "  older        $($f.Name)  -  $($f.Older)" Yellow }
+                        }
+                    }
+                    if ($alreadyOn.Count -gt 0) {
+                        # Said plainly, because the patch does NOT come off and
+                        # go back on: this run leaves it exactly as it is.
+                        Say "$($alreadyOn.Count) more are already on your backend and cannot be taken off and" Cyan
+                        Say "put back on: the file has moved on around them. They are LEFT AS THEY" Cyan
+                        Say "ARE - not taken off, not applied again - and the run carries on:" Cyan
+                        foreach ($f in $alreadyOn) { Say "  already on   $($f.Name)" Yellow }
                     }
                     Say "Rehearsing again: take those off, newest first, then put all" Cyan
                     Say "$($PATCHES.Count) back on in order. Still on the copy." Cyan
@@ -2502,8 +2776,22 @@ try {
                             $again += @{ Name = $name; Why = "missing from $PatchDir" }
                             continue
                         }
+                        # Already on, and left exactly as it is: the strip could
+                        # not take it off, so this rehearsal cannot put it back
+                        # on either. The real run leaves it alone for the same
+                        # reason (see Test-PatchOnBackend).
+                        if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $name) { continue }
                         $r = Invoke-Patch -File $full
                         if ($r.Ok) { Say "  ok           $name" }
+                        elseif (Test-PatchOnBackend -File $full) {
+                            # Not a failure: it is on the backend already, and
+                            # this rehearsal is the thing that cannot put it
+                            # back on (see Test-PatchOnBackend). It leaves the
+                            # copy alone from here, and the real run leaves the
+                            # real files alone too - $todo below drops it.
+                            $alreadyOn += @{ Name = $name; File = $full }
+                            Say "  already on   $name  (left as it is)" Cyan
+                        }
                         else {
                             $again += @{ Name = $name; Why = $r.Output }
                             Bad "$name - will not apply"
@@ -2512,7 +2800,53 @@ try {
                     # The second answer is the one that means something: the
                     # first was measured against files half-way through.
                     $broken = $again
-                    if ($broken.Count -eq 0) { $undoFirst = $found }
+                    if ($broken.Count -eq 0) {
+                        # THE RESULT IS CHECKED BEFORE ANYTHING OF THE OWNER'S IS
+                        # TOUCHED (2026-10-08). "Take off what is applied, put the
+                        # whole list back on" only produces the state it promises
+                        # if every patch that goes on can be taken off again from
+                        # where it lands. One that cannot (measured 2026-10-08:
+                        # screen-attach.patch sits after tutorials.patch's block
+                        # on the real files, and re-applying tutorials puts that
+                        # block back exactly where screen-attach's own context
+                        # expects to find itself) is dropped from the list by the
+                        # branch above and never applied - so the copy ends up
+                        # WITHOUT work the real files already had, and the run
+                        # would report success on a backend missing a patch. That
+                        # is the half-applied backend this script exists to
+                        # prevent, so it is refused here, on the copy, while
+                        # nothing of the owner's has been changed.
+                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$Stamp"
+                        $intact = $true
+                        $why = ""
+                        try {
+                            if (Test-Path -LiteralPath $check) { Remove-Item -LiteralPath $check -Recurse -Force }
+                            New-Item -ItemType Directory -Path $check -Force | Out-Null
+                            Copy-Item -Path (Join-Path $rehearsal '*.py') -Destination $check -Force
+                            $was = (Get-Location).Path
+                            Set-Location -LiteralPath $check
+                            $bw2 = @($PATCHES); [array]::Reverse($bw2)
+                            foreach ($nm in $bw2) {
+                                $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
+                                if (-not (Test-Path -LiteralPath $fp)) { continue }
+                                $r2 = Invoke-Patch -File $fp -Reverse
+                                if (-not $r2.Ok) {
+                                    $intact = $false
+                                    $why = "$nm cannot be taken off the state this run would leave"
+                                    break
+                                }
+                            }
+                            Set-Location -LiteralPath $was
+                        } finally {
+                            Set-Location -LiteralPath $rehearsal
+                            Remove-Item -LiteralPath $check -Recurse -Force -ErrorAction SilentlyContinue
+                        }
+                        if (-not $intact) {
+                            $script:ResultRefused = $why
+                            $broken += @{ Name = "the state this run would leave"; Why = $why }
+                        }
+                        $undoFirst = $found
+                    }
                 }
                 Pop-Location
             }
@@ -2531,11 +2865,45 @@ try {
             Say $b.Why
         }
         Say ""
-        Say "Usually this means the backend file has moved on since the patch was" Cyan
-        Say "written, or was edited by hand. (Older versions of these patches that" Cyan
-        Say "this repository ever published were already tried and would have" Cyan
-        Say "been recognised.) Send the block above back and the patch gets" Cyan
-        Say "regenerated." Cyan
+        if ($script:ResultRefused) {
+            # Not a patch that has drifted: the state this run would leave does
+            # not carry every patch, so it is refused before anything is
+            # touched. What to do is different, and said plainly.
+            Say "This is not a patch that has drifted. Taking the applied ones off and" Cyan
+            Say "putting the whole list back on would leave a backend that does not carry" Cyan
+            Say "every patch in this list - and a backend missing part of a feature is" Cyan
+            Say "worse than one waiting to be updated. So nothing was changed, on" Cyan
+            Say "purpose. The patch named above is the one already on your files that" Cyan
+            Say "cannot survive that. Send this whole window back, with the line under" Cyan
+            Say "its name, and this script gets the case added." Cyan
+        }
+        else {
+            # THE LINE ENDINGS COME FIRST, when they are there (2026-10-08).
+            # The owner's run of that day ended with 112 patch names and the
+            # message below, on a backend whose jarvis_hud.py had Windows line
+            # endings throughout: a patch written with LF can neither go on nor
+            # come off a file like that, so the rehearsal cannot tell "on"
+            # from "drifted" and blames 112 patches for one file's endings. The
+            # check at the top of this script already knows which files they
+            # are; saying it here is the difference between an afternoon of
+            # regenerating patches and one command.
+            if ($crlfFiles.Count -gt 0) {
+                Say "START HERE: $($crlfFiles.Count) of the files these patches change have" Cyan
+                Say "Windows line endings, and the patches are written with LF. A patch" Cyan
+                Say "cannot go on or come off a file like that, so the list above is mostly" Cyan
+                Say "that one thing, not $($broken.Count) broken patches:" Cyan
+                foreach ($cf in $crlfFiles) { Say "  $($cf.Name) ($($cf.Count) CRLF lines)" Yellow }
+                Say "Run this same command again with  -FixLineEndings  on the end: each file" Cyan
+                Say "is copied into _jarvis-backup-<date>-endings first, then only its line" Cyan
+                Say "endings change. Nothing else about it is touched." Cyan
+                Say ""
+            }
+            Say "Usually this means the backend file has moved on since the patch was" Cyan
+            Say "written, or was edited by hand. (Older versions of these patches that" Cyan
+            Say "this repository ever published were already tried and would have" Cyan
+            Say "been recognised.) Send the block above back and the patch gets" Cyan
+            Say "regenerated." Cyan
+        }
         Add-Problem "$($broken.Count) patch(es) will not apply to your files as they are: $(($broken | ForEach-Object { $_.Name }) -join ', '). Nothing was changed."
         Finish-Run
     }
@@ -2558,7 +2926,15 @@ try {
     $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
     $script:State.Backup = $backup
     if (-not $already) {
-        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
+        # The patches this run puts on. (c) already knows which ones must NOT
+        # be: the ones it found on the backend and could not put back on, which
+        # stay on the real files - applying those again is the one thing that
+        # cannot work (see Test-PatchOnBackend). Everything else goes on,
+        # whether it was taken off above or was never on at all.
+        $todo = @($PATCHES | Where-Object {
+            $n = $_
+            -not (@($alreadyOn | ForEach-Object { $_.Name }) -contains $n)
+        } | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
         New-Item -ItemType Directory -Path $backup -Force | Out-Null
 
         # Every file named in any patch header, so a revert is always possible
@@ -2594,6 +2970,49 @@ try {
         # the same text (the current one, or the older one it found).
         if ($undoFirst.Count -gt 0) {
             Say ""
+            # ASK FIRST, ON A COPY (2026-10-08). Taking patches off the real
+            # files and putting them back on only works if the WHOLE undo can
+            # be done. (c) proved that on a copy of a copy: its strip went
+            # through the rehearsal tree, and a patch that is on the real files
+            # but cannot come off there can stop the undo in the middle - after
+            # the earlier ones are already off. That leaves a half-updated
+            # backend, which is the one outcome this script exists to prevent.
+            # So the same strip is done once more on a throwaway copy of the
+            # real files first; if it cannot finish, nothing of the owner's has
+            # been touched.
+            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$Stamp"
+            $undoOk = $false
+            $why = ""
+            try {
+                if (Test-Path -LiteralPath $undoTest) { Remove-Item -LiteralPath $undoTest -Recurse -Force }
+                New-Item -ItemType Directory -Path $undoTest -Force | Out-Null
+                Copy-Item -Path (Join-Path $BackendPath '*.py') -Destination $undoTest -Force
+                $was = (Get-Location).Path
+                Set-Location -LiteralPath $undoTest
+                $undoOk = $true
+                foreach ($u in $undoFirst) {
+                    $r = Invoke-Patch -File $u.File -Reverse
+                    if (-not $r.Ok) {
+                        $undoOk = $false
+                        $why = "$($u.Name): " + (($r.Output -split "`n")[0])
+                        break
+                    }
+                }
+                Set-Location -LiteralPath $was
+            } finally {
+                Set-Location -LiteralPath $BackendPath
+                Remove-Item -LiteralPath $undoTest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            if (-not $undoOk) {
+                Bad "The patches an earlier run applied cannot all be taken off your files."
+                Say "          $why" Red
+                Say ""
+                Say "Putting the whole list back on needs every one of them off first, so this" Cyan
+                Say "run stops HERE, before anything of yours is touched. NOTHING HAS BEEN" Cyan
+                Say "CHANGED." Cyan
+                Add-Problem "Taking the patches off would stop part-way ($why), so nothing was changed. The backend is exactly as it was."
+                Finish-Run
+            }
             Say "Taking off $($undoFirst.Count) patch(es) an earlier run applied, newest first." Cyan
             $script:State.Changed = $true
             $script:State.Patching = $true
@@ -2612,6 +3031,9 @@ try {
                 }
             }
         }
+        # The patches (c) found to be on and unable to put back on are NOT in
+        # $todo: the rehearsal applied every one of them that could go on, and
+        # the rest are on the files already.
         Say ""
         Say "Applying $($todo.Count)." Cyan
         $script:State.Changed = $true
@@ -2635,11 +3057,20 @@ try {
         # now; if it cannot, the tool reported success on files that do not
         # carry the patches (which is what a git that skipped or reshaped
         # the work would look like).
+        #
+        # A patch (c) left alone is handed to the check as accepted: it is on
+        # the backend and this run never touched it, so a reverse that fails
+        # for it is the state the owner started from, not a fault. Every other
+        # patch still has to come off.
         $verified = $false
-        try { $verified = Test-StackReverses }
+        try { $verified = Test-StackReverses -Accept @($alreadyOn | ForEach-Object { $_.Name }) }
         finally { Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue }
         if ($verified) {
             Ok "Checked again on the real files: all $($PATCHES.Count) patches are on."
+            if ($alreadyOn.Count -gt 0) {
+                Say "  $($alreadyOn.Count) of them were on already and were left as they were:" Cyan
+                foreach ($a in $alreadyOn) { Say "    $($a.Name)" Cyan }
+            }
             $script:State.Patching = $false
         } else {
             Bad "Every patch said ok, but the real files do not show them all."
