@@ -743,7 +743,14 @@ function applyExpanded(expanded) {
   state.expanded = expanded;
   dom.root.dataset.state = expanded ? "expanded" : "collapsed";
   dom.tray.hidden = !expanded;
-  dom.btnToggle.title = expanded ? "Collapse (E)" : "Expand (E)";
+  const action = expanded ? "Collapse" : "Expand";
+  dom.btnToggle.title = `${action} (E)`;
+  // The button's accessible NAME has to follow the state too, not just its
+  // tooltip: the widget boots expanded, so the static "Expand widget" in
+  // widget.html told a screen reader the opposite of what the click does
+  // (click audit, 2026-10-08). The visible-to-a-reader span IS the name.
+  const name = dom.btnToggle.querySelector(".sr-only");
+  if (name) name.textContent = `${action} widget`;
   applyFaceVisibility();
   syncBoardTimer();
   if (expanded) loadBoard();

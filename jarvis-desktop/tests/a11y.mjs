@@ -386,6 +386,30 @@ await check("the Faces picker works from the keyboard", async () => {
   assert.ok(space, "Space did not open the card");
 });
 
+await check("the widget's expand button says what the click will do", async () => {
+  // Click audit, 2026-10-08. The button boots expanded, so the static
+  // "Expand widget" sr-only span named the OPPOSITE action to a screen reader
+  // while its tooltip already said "Collapse (E)". The accessible name has to
+  // follow the state, not just the tooltip.
+  const page = await K.open(browser, base, "widget.html", {}, { width: 320, height: 460 });
+  await page.waitForTimeout(400);
+  const read = () => page.evaluate(() => {
+    const b = document.getElementById("btn-toggle-expand");
+    const sr = b && b.querySelector(".sr-only");
+    return { name: sr ? sr.textContent.trim() : null, title: b ? b.title : null };
+  });
+  const expanded = await read();
+  assert.match(expanded.title || "", /^Collapse/, "it boots expanded, so the tooltip offers Collapse");
+  assert.match(expanded.name || "", /^Collapse/,
+    `a screen reader is told "${expanded.name}" while the click collapses the widget`);
+  await page.locator("#btn-toggle-expand").click();
+  await page.waitForTimeout(300);
+  const collapsed = await read();
+  await page.close();
+  assert.match(collapsed.name || "", /^Expand/, "after collapsing, the name must offer Expand again");
+  assert.match(collapsed.title || "", /^Expand/);
+});
+
 await browser.close(); close();
 console.log(fails.length ? `\n${fails.length} FAILED` : "\nall accessibility blockers held");
 process.exit(fails.length ? 1 : 0);

@@ -94,8 +94,45 @@ await check("Stop everything is in the tray menu too, the same command, never gr
   assert.doesNotMatch(html, /Everything here is also in the tray menu/);
   assert.match(html.replace(/\s+/g, " "),
     /The Jarvis bar, the widget, the floating face and Stop everything are also in the tray menu\./);
-  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything", "toggle_floating"]) {
+  for (const id of ["toggle_quickbar", "toggle_widget", "stop_everything", "toggle_floating",
+    // These two shipped unbound, so their rows printed nothing about them at
+    // all; the tray is where most people learn a key exists (click audit,
+    // 2026-10-08).
+    "toggle_live", "toggle_watch"]) {
     assert.match(tray, new RegExp(`accel\\(app, "${id}"\\)`), `${id} has no tray row`);
+  }
+  // And the rows FOLLOW a rebind. The menu is built once, so a key changed in
+  // Settings used to leave the row advertising the one the owner had replaced -
+  // while the hover tooltip, rebuilt live, showed the new one.
+  assert.match(tray, /pub fn hotkeys_changed\(app: &AppHandle\)/,
+    "nothing re-labels the tray rows after a rebind");
+  for (const id of ["stop_everything", "toggle_quickbar", "toggle_widget", "toggle_floating",
+    "toggle_live", "toggle_watch"]) {
+    assert.match(tray.slice(tray.indexOf("pub fn hotkeys_changed")),
+      new RegExp(`\\("${id}", &rows\\.`), `${id} is not re-labelled`);
+  }
+  // A row must not print a key the OS REFUSED, which is the same promise from
+  // the other side ("a tray advertising Alt+Space after PowerToys took it points
+  // the owner at the one key that cannot work"). The re-label reads what was
+  // actually registered.
+  assert.match(tray.slice(tray.indexOf("pub fn hotkeys_changed")), /HotkeyState.*snapshot\(\)/s,
+    "the re-label does not check which keys the OS accepted");
+  const hk = read("src-tauri/src/hotkeys.rs");
+  // The re-label must NOT run from `apply()`. `apply()` also runs during setup,
+  // before the event loop is turning, and touching the native menu from there
+  // HANGS the main thread: the app came up with its windows, registered its
+  // hotkeys, and never reached the line that starts the backend (found
+  // 2026-10-08 by running the built app with its output captured). It is done
+  // from the two commands instead, deferred to the loop.
+  const applyBody = hk.slice(hk.indexOf("pub fn apply("), hk.indexOf("fn relabel_tray("));
+  assert.doesNotMatch(applyBody, /crate::tray::hotkeys_changed/,
+    "apply() touches the tray menu again, which hangs setup before the backend starts");
+  assert.match(hk, /fn relabel_tray\(app: &AppHandle\)[\s\S]{0,400}?run_on_main_thread/,
+    "the tray re-label must be deferred to the event loop");
+  for (const cmd of ["set_hotkeys", "reset_hotkeys"]) {
+    const body = hk.slice(hk.indexOf(`pub fn ${cmd}(`));
+    assert.match(body.slice(0, body.indexOf("\n}")), /relabel_tray\(&app\)/,
+      `${cmd} never re-labels the tray`);
   }
 });
 

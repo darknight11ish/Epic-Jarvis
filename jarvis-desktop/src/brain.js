@@ -2877,7 +2877,7 @@ function renderFacts() {
             );
             if (validTo === undefined) return; // the date prompt was cancelled
             const args = { id: Number(f.id), text };
-            if (validTo !== null) args.valid_to = validTo;
+            if (validTo !== null) args.validTo = validTo;
             await memoryWrite("brain_memory_edit", args,
               "Reworded. The old wording is kept as history.");
           }, { title: "Replace the wording. The old one is retired, not erased." }),
@@ -2896,7 +2896,7 @@ function renderFacts() {
               return;
             }
             const args = { id: Number(f.id) };
-            if (validTo !== null) args.valid_to = validTo;
+            if (validTo !== null) args.validTo = validTo;
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
           }, { danger: true, title: "Stop this being recalled. There is no undo." })
         );
