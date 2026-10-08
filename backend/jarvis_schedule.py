@@ -899,6 +899,52 @@ LAST_WORDS = {
 #   The scheduler
 # --------------------------------------------------------------------------
 
+class _ClosingConnection(sqlite3.Connection):
+    """A connection the `with self._db() as c:` blocks CLOSE, not just commit.
+
+    WHY (2026-10-07, the intermittent backend-windows CI failure; still there
+    on 2026-10-08). sqlite3's own context manager commits on the way out and
+    never closes the connection, so every one of this file's 29
+    `with ... self._db() as c:` blocks left an OPEN HANDLE on schedule.json
+    behind until CPython happened to collect the connection. That collection
+    is immediate on a quiet line of code and NOT immediate when a caught
+    exception's traceback, a generator frame or a temp-folder object still
+    holds a reference - which is why the failure moved from suite to suite and
+    never happened twice in the same one.
+
+    On Windows an open handle makes the file undeletable, and that is exactly
+    what the Windows job log said, twice, inside test_sayable.py's own group
+    (run 2026-10-07, PR #86):
+
+        Exception ignored in: <finalize object at 0x23ea64114e0; dead>
+          File "...\\tempfile.py", line 939, in _cleanup
+            cls._rmtree(name, ignore_errors=ignore_errors)
+          ...
+          File "...\\tempfile.py", line 909, in onexc
+            _os.unlink(path)
+        PermissionError: [WinError 32] The process cannot access the file
+        because it is being used by another process:
+        'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\tmpqw88ug3r\\schedule.json'
+
+    - raised by TemporaryDirectory's own cleanup, and repeated a moment later
+    for a second folder (tmpxh2pi8w1). Measured on this PC in three lines:
+    connect(), then shutil.rmtree(the folder) -> the same WinError 32;
+    close() first -> no error at all. So the handle, not the test, is the bug,
+    and the fix belongs here rather than in each suite's cleanup.
+
+    Nothing else changes: __exit__ still commits (or rolls back) exactly as
+    sqlite3 does, and a caller that keeps the connection outside a `with` - the
+    one call site like that is test_tellme.py's - sees it released when the
+    object is collected, as before.
+    """
+
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+
+
 class Scheduler:
     """One loop, one database. `clock`, `gate`, `tier_of`, `spawn` and
     `publish` are replaceable so the tests run without waiting, without a
@@ -939,7 +985,10 @@ class Scheduler:
 
     def _db(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        c = sqlite3.connect(self.path, timeout=30)
+        # factory: the connection is CLOSED when its `with` block ends, not
+        # left to the collector - a leaked handle is what made schedule.json
+        # undeletable on the Windows runner (2026-10-07). See _ClosingConnection.
+        c = sqlite3.connect(self.path, timeout=30, factory=_ClosingConnection)
         c.row_factory = sqlite3.Row
         return c
 
