@@ -102,7 +102,6 @@ GROUPS: tuple = (
     Group("finance", "Finance", "Spending summaries and the retirement what-if.",
           ("finance", "finances", "money and spending")),
     Group("home", "Home", "Home status and smart-home settings.", ("home", "smart home")),
-    Group("home", "Home", "Home status and smart-home settings.", ("home", "smart home")),
 )
 
 # --------------------------------------------------------------------------
