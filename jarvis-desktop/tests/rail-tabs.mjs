@@ -209,7 +209,11 @@ await check("Tutorials is on the rail, wired like its siblings", async () => {
   assert.ok(VIEWS.includes("tutorials"), "tutorials is not a view in brain.js");
   const item = ITEMS.find((i) => i.id === "tutorials");
   assert.ok(item, "tab-tutorials is missing from the rail");
-  assert.match(item.markup, /<span class="rail-label">Tutorials<\/span>/);
+  // The label is the same words the phone's plate and the generated menu
+  // catalogue carry ("Tutorials and the FAQ", backend/jarvis_menus.py): one
+  // place, one name in both apps (the cohesion audit of 2026-10-08 renamed
+  // this one; the phone already called it that).
+  assert.match(item.markup, /<span class="rail-label">Tutorials and the FAQ<\/span>/);
   assert.match(item.markup, /role="tab"/);
   assert.equal(item.hidden, false,
     "Tutorials is an everyday tab, not one of the four behind Advanced");

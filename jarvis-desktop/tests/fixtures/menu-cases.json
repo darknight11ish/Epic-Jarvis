@@ -990,7 +990,7 @@
     },
     {
       "id": "brain.tab.tutorials",
-      "title": "Tutorials",
+      "title": "Tutorials and the FAQ",
       "about": "How Jarvis works, step by step, and the answers to the usual questions.",
       "apps": [
         "desktop"
@@ -2362,23 +2362,6 @@
         "desktop": true,
         "phone": true
       }
-    },
-    {
-      "id": "group.home",
-      "title": "Home",
-      "about": "Home status and smart-home settings.",
-      "names": [
-        "home",
-        "smart home"
-      ],
-      "members": {
-        "desktop": [],
-        "phone": []
-      },
-      "listed": {
-        "desktop": false,
-        "phone": false
-      }
     }
   ],
   "never_hide": [
@@ -2575,7 +2558,6 @@
     "history entry": "entry.history",
     "history entry in brain": "entry.history",
     "history import": "brain.memory.history-import",
-    "home": "group.home",
     "hotkeys": "settings.shortcuts",
     "how jarvis talks": "settings.manner",
     "hud window": "settings.hud-window",
@@ -2650,7 +2632,6 @@
     "shortcuts": "settings.shortcuts",
     "show or hide": "settings.menu-visibility",
     "skills": "brain.model.skills",
-    "smart home": "group.home",
     "smartwatch notifications": "settings.watch-notify",
     "spending": "settings.spending",
     "spending summaries": "settings.spending",
@@ -2681,7 +2662,7 @@
     "trust": "brain.tab.trust",
     "tutorial": "brain.model.tutorials",
     "tutorials": "brain.tab.tutorials",
-    "tutorials and the faq": "brain.model.tutorials",
+    "tutorials and the faq": "brain.tab.tutorials",
     "undo shelf": "brain.work.undo",
     "updates": "settings.updates",
     "voice": "settings.voice",
@@ -4399,7 +4380,7 @@
       "hidden_count": 0
     },
     {
-      "name": "a group with no member here is refused",
+      "name": "a group id that is gone is refused like any other",
       "app": "desktop",
       "start": {
         "hidden": [],
@@ -6556,7 +6537,7 @@
     {
       "text": "hide the home menu",
       "quick": "menu_visibility",
-      "reply": "There is no Home menu yet.",
+      "reply": "I don't know a menu called that.",
       "route": null
     },
     {

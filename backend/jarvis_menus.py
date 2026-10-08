@@ -87,8 +87,15 @@ def _m(id, title, about, apps=BOTH, **kw) -> Menu:
 
 # --------------------------------------------------------------------------
 #   The groups (design section 4). Members are the menus whose `group` names
-#   it. A group with no member in an app is not listed there; one with no
-#   member anywhere ("home" today) answers "There is no ... menu yet."
+#   it. A group with no member in an app is not listed there.
+#
+#   The "home" group was removed 2026-10-08 (the cohesion audit of that day):
+#   it had the name "Home" and the aliases "home"/"smart home" but NO member in
+#   either app, so "hide the home menu" could only ever answer "There is no
+#   Home menu yet." - a group id and two spoken names for nothing, and the
+#   stored-state machinery (sanitize, hidden_count) carried it too. Every group
+#   below has a member today; a stored "group.home" is now simply a stale id
+#   and is dropped silently, like any other id that is gone.
 # --------------------------------------------------------------------------
 GROUPS: tuple = (
     Group("study", "Study", "Quiz and Review decks.", ("study", "studying")),
@@ -101,7 +108,6 @@ GROUPS: tuple = (
           ("chatbots", "chatbot")),
     Group("finance", "Finance", "Spending summaries and the retirement what-if.",
           ("finance", "finances", "money and spending")),
-    Group("home", "Home", "Home status and smart-home settings.", ("home", "smart home")),
 )
 
 # --------------------------------------------------------------------------
@@ -122,6 +128,13 @@ MENUS: tuple = (
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
+    # "Help and FAQ" STAYS (the cohesion audit of 2026-10-08 asked for the FAQ
+    # to be one place, and this is the second one on the PC). Kept because
+    # folding it would delete, not de-duplicate: this card is the desktop's
+    # only Help destination (the palette's Help row opens it), it holds the
+    # questions only the desktop has answers to, and it is the app's own way in
+    # to "Everything Jarvis can do". What the audit could be done safely is
+    # done: the Brain place both apps share is now named the same words in both.
     _m("settings.faq", "Help and FAQ", "Answers to common questions.", (DESKTOP,),
        names=("faq", "the faq", "frequently asked questions")),
     _m("settings.appearance-card", "Appearance", "Theme, faces and how it all looks.",
@@ -248,7 +261,14 @@ MENUS: tuple = (
        area="brain", view="work", kind="tab", names=("work",)),
     _m("brain.tab.projects", "Projects", "Projects, their notes and benchmarks.",
        area="brain", view="projects", kind="tab", group="goals-projects", names=("projects",)),
-    _m("brain.tab.tutorials", "Tutorials",
+    # Named as the phone's plate is named (the cohesion audit of 2026-10-08:
+    # this one place was "Tutorials" on the PC and "Tutorials and the FAQ" on
+    # the phone). Both draw the same catalogue - tutorials and the questions
+    # and answers - so both say the same words now, and the rail label in
+    # brain.html says them too. Two menus MAY answer to one spoken name when
+    # it is the same words in both apps (test_menu_visibility.py, "no spoken
+    # name means two things"): they are one place in two layouts.
+    _m("brain.tab.tutorials", "Tutorials and the FAQ",
        "How Jarvis works, step by step, and the answers to the usual questions.",
        (DESKTOP,), area="brain", view="tutorials", kind="tab", names=("tutorials",)),
     _m("brain.tab.galaxy", "Galaxy", "The map of what Jarvis knows.", (DESKTOP,),
@@ -321,14 +341,18 @@ MENUS: tuple = (
     # the owner's reading progress, kept on the PC: an intro, a tutorial for
     # each major part, and the questions and answers.
     #
-    # The desktop draws them as its own "Tutorials" rail tab
+    # The desktop draws them as its own "Tutorials and the FAQ" rail tab
     # (`brain.tab.tutorials`); the phone draws the same catalogue as a plate
-    # inside its Model view, and this is that plate. Its title names the FAQ
-    # it also holds, because only one menu may answer to a spoken name and the
-    # rail tab has it: the backend does not know which app asked, so two menus
-    # both called "Tutorials" could not be told apart (test_menu_visibility.py
-    # "no spoken name means two things"). It is the phone's alone now - the
-    # desktop has no Model-view tutorials card, only the tab.
+    # inside its Model view, and this is that plate. The two now say the same
+    # words on purpose (the cohesion audit of 2026-10-08 renamed the rail tab
+    # to match this one): they are one place in two layouts, not two names for
+    # it. The cost, said plainly: the shared long name now resolves to the tab
+    # (first in MENUS), so "hide the tutorials and the faq menu" is applied by
+    # the PC and, on the phone, names an id the phone does not have - the old
+    # arrangement made that trade the other way round. This plate keeps
+    # "tutorial" as its own short spoken name, which still works on the phone.
+    # It is the phone's alone - the desktop has no Model-view tutorials card,
+    # only the tab.
     _m("brain.model.tutorials", "Tutorials and the FAQ",
        "The intro, a tutorial for each part, and the answers to the usual questions.",
        (PHONE,), area="brain", view="tutorials",

@@ -402,10 +402,23 @@ a picture the owner attaches to a chat is cleaned the same way before any model 
 owner's "Yes, clean them too"), and one that cannot be checked is withheld;
 like the others, a pattern list never recognises everything.
 
-### A known limit: a program already on the PC
+### The approval gap: what a program already on the PC can and cannot do
 
-Written down 2026-09-25 (the Muse audit, `docs/COMPETITORS-MUSE-2026-09-25.md`).
-The Windows Hello check before a risky approval ("Windows Hello for
+**State of it, 2026-10-08** (the heading above used to read "A known limit: a
+program already on the PC", which its own lines below contradict - the limit was
+narrowed twice and the risky half was built). The two cheap ways in, described
+in the next paragraph, are **closed for risky approvals**: since 2026-09-25 the
+backend asks Windows Hello itself before it accepts a risky approval from this
+PC, and an "approved" row counts only with the running backend's own stamp
+(step 1 - "Step 1 is built" below); since 2026-09-29 a paired phone must sign a
+risky approval with a key in its own security chip (step 2). What is left is the
+short list under "What is still open": a card that is **not risky**, a stolen
+key used from **another device**, and a program written specifically to attack
+Jarvis - which nothing inside the owner's Windows account can stop.
+
+Written down 2026-09-25 (the Muse audit, `docs/COMPETITORS-MUSE-2026-09-25.md`),
+when this was the whole story. The Windows Hello check before a risky approval
+("Windows Hello for
 approvals", `jarvis-desktop/src-tauri/src/lock.rs`) is made by the desktop
 app. The backend's `POST /api/approve` asks only for the pairing token, and
 any program running as the owner can read that token from Credential
@@ -1944,7 +1957,7 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   desktop adds it before the backend's own sentence, `not_approved_words`) (`lock/rules.rs` `NO_HELLO_NO_RISKY`,
   `SecurityRules.NO_SCREEN_LOCK`) and, on the phone, a button that opens
   Android's screen-lock settings. It used to go through unchecked when no
-  lock was on. On the PC the backend refuses too (§3, "A known limit").
+  lock was on. On the PC the backend refuses too (§3, "The approval gap").
 - **Inbox tidy's Undo strip (2026-09-28, JARVIS-API §95):** the tidy itself
   is an ordinary approval card (a draft's or an email's rules: shown
   verbatim, approved in the Jarvis bar only on the PC, risky on both). The
