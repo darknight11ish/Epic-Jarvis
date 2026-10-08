@@ -637,9 +637,52 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Label of "Everything Jarvis can do".
+pub const FEATURES_LABEL: &str = "features";
+
+/// Opens "Everything Jarvis can do" (`features.html`): the whole feature set,
+/// in plain words, in nine groups, each row extending to what it does, how to
+/// reach it, whether it asks first, and one real limit - the owner's request of
+/// 2026-10-08, designed in docs/FEATURES-LIST-DESIGN.md.
+///
+/// Built on demand, like Faces: most sessions never open it. It reads one
+/// bundled JSON file (`src/features.json`, held byte-identical to the phone's
+/// copy by tools/check_feature_list.py) and draws it. It calls no command of its
+/// own, listens to no event and reaches no network, so
+/// `capabilities/features.json` grants it the core window calls and the theme,
+/// and nothing else. Its size is not remembered: `window_memory.rs` tracks the
+/// four windows that place themselves, and this one centres like the
+/// walkthrough, so a stray entry in that store cannot move a window that has no
+/// business being there.
+pub fn show_features(app: &AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window(FEATURES_LABEL) {
+        window
+            .show()
+            .map_err(|e| format!("unable to show the feature list: {e}"))?;
+        let _ = window.unminimize();
+        return window
+            .set_focus()
+            .map_err(|e| format!("unable to focus the feature list: {e}"));
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        app,
+        FEATURES_LABEL,
+        tauri::WebviewUrl::App("features.html".into()),
+    )
+    .title("Jarvis — Everything Jarvis can do")
+    .inner_size(760.0, 900.0)
+    .min_inner_size(420.0, 480.0)
+    .resizable(true)
+    .center()
+    .theme(Some(tauri::Theme::Dark))
+    .build()
+    .map(|_| ())
+    .map_err(|e| format!("unable to open the feature list: {e}"))
+}
+
 /// Label of the first-run walkthrough.
 pub const ONBOARDING_LABEL: &str = "onboarding";
-
 /// Opens the first-run walkthrough: plain-language screens covering what
 /// Jarvis is and that it runs on this PC, the tray icon, an approval, memory,
 /// how to talk to it and where the settings live - the things DESKTOP-BUILD's

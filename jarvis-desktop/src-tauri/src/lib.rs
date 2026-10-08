@@ -1014,6 +1014,9 @@ pub fn run() {
             commands::get_theme_prefs,
             commands::set_theme_follow_system,
             commands::open_faces,
+            // "Everything Jarvis can do" (2026-10-08): the whole feature set,
+            // read-only, opened from Settings and the tray.
+            commands::open_features,
             commands::mark_answer,
             commands::finish_onboarding,
             commands::get_api_settings,

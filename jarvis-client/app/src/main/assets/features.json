@@ -1,0 +1,1485 @@
+[
+  {
+    "id": "typing",
+    "group": "Talking",
+    "title": "Type a message and read the answer",
+    "what": "You type a question and Jarvis answers in the box.",
+    "where": "Press Alt+Space for the Jarvis bar (or click the tray icon), type in the box, press Enter.",
+    "asks": "No card to just talk.",
+    "limit": "The answer comes from a model running on your own PC, so a long answer can take a while.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "talk-button",
+    "group": "Talking",
+    "title": "The talk button",
+    "what": "You hold a button, speak, and let go.",
+    "where": "On the PC, hold the talk button in the Jarvis bar. On the phone, the talk button on Home - hold it, or tap it to talk and stop at a pause.",
+    "asks": "No card. What you said is checked as your voice on the PC first.",
+    "limit": "The phone needs your voice trained, and the PC able to turn speech into words.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "wake-word",
+    "group": "Talking",
+    "title": "Say \"Hey Jarvis\"",
+    "what": "You start talking without touching anything.",
+    "where": "Turn it on in Settings, Voice, then tap Listen on the phone.",
+    "asks": "Turning it on raises one approval card on the PC. Turning it off is instant.",
+    "limit": "Off until you turn it on. The check cannot tell a recording or a copy of your voice from the real one, and the app says so.",
+    "surface": "both",
+    "covers": [
+      "settings.voice"
+    ]
+  },
+  {
+    "id": "read-aloud",
+    "group": "Talking",
+    "title": "Jarvis reads its answers aloud",
+    "what": "The answer is spoken as well as shown.",
+    "where": "Settings, Voice, \"Read aloud\". Speaking starts at the first comma once the phrase is long enough.",
+    "asks": "No card.",
+    "limit": "An answer that used a sensitive saved fact stays on screen instead, unless you allow it.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "spoken-style",
+    "group": "Talking",
+    "title": "Short answers to spoken questions",
+    "what": "Questions asked by voice get an answer written to be heard - a short first sentence, no lists.",
+    "where": "It happens on its own for anything you ask by voice.",
+    "asks": "No card.",
+    "limit": "Typed questions are unchanged, and a spoken answer can still be long if you ask for more.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "voice-training",
+    "group": "Talking",
+    "title": "Teach Jarvis your voice",
+    "what": "Jarvis learns what you sound like, so it only listens to you.",
+    "where": "Phone: Platform checks, Train my voice. Read the twelve short sentences and send them.",
+    "asks": "One approval card before your voice is learned. The recordings are deleted either way.",
+    "limit": "Nothing is learned until you approve it.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "voice-check",
+    "group": "Talking",
+    "title": "How strict the voice check is",
+    "what": "You choose whether a voice turn is trusted like the talk button or asks more of you.",
+    "where": "Settings, Voice, Voice check.",
+    "asks": "A stricter choice is instant; a looser one raises an approval card.",
+    "limit": "It cannot tell a recording or a copy from your real voice.",
+    "surface": "both",
+    "covers": [
+      "entry.voice-check"
+    ]
+  },
+  {
+    "id": "custom-voices",
+    "group": "Talking",
+    "title": "The voice Jarvis speaks with",
+    "what": "You pick Jarvis's voice, hear a sample of it, and can add voices of your own.",
+    "where": "Settings, Jarvis's voice. On the phone, Voice, then the Jarvis's voice row.",
+    "asks": "Adding a custom voice raises a card; going back to the built-in voice is instant.",
+    "limit": "The voice pack is a 350 MB download on the PC, checksum-pinned.",
+    "surface": "both",
+    "covers": [
+      "settings.voices",
+      "entry.voices"
+    ]
+  },
+  {
+    "id": "manner",
+    "group": "Talking",
+    "title": "How Jarvis talks",
+    "what": "Warm and brief, or plain, and whether Jarvis may use humour.",
+    "where": "Settings, How Jarvis talks.",
+    "asks": "No card either way - it changes wording only.",
+    "limit": "Humour is off to start, and never appears on a card, an error or a serious topic.",
+    "surface": "both",
+    "covers": [
+      "settings.manner"
+    ]
+  },
+  {
+    "id": "interrupt",
+    "group": "Talking",
+    "title": "Interrupt Jarvis while it talks",
+    "what": "You can cut in by talking, instead of waiting for the answer to finish.",
+    "where": "Settings, Voice - the one interrupt setting: by voice, by tap only, or not at all.",
+    "asks": "No card.",
+    "limit": "About two seconds of what you say is checked for your voice only, and is never written down.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "live",
+    "group": "Talking",
+    "title": "Jarvis Live",
+    "what": "A back-and-forth voice conversation you start and stop, with no wake word between turns.",
+    "where": "Press Start Live in the Jarvis bar, or say \"Hey Jarvis, let's talk\". On the phone, Live on Home or the Quick Settings tile. A PC hotkey can start and end it (asked for once, off until you pick one).",
+    "asks": "Cards are still decided by tapping, never by voice. Ending Live never asks.",
+    "limit": "Not full-duplex, so a turn takes a couple of seconds. The voice check still runs on every clip, and side remarks meant for someone else are ignored and not kept.",
+    "surface": "both",
+    "covers": [
+      "safety.live-stop"
+    ]
+  },
+  {
+    "id": "live-extras",
+    "group": "Talking",
+    "title": "The extras around Live",
+    "what": "A phone tile, a headset button, and a \"Live ended - Resume\" note.",
+    "where": "Phone: the Quick Settings tile, or a headset button - press stops Jarvis talking, a long press mutes the microphone.",
+    "asks": "The headset button never approves anything.",
+    "limit": "Live pauses itself during a phone or video call, where the phone can tell one is happening.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "talk-to-type",
+    "group": "Talking",
+    "title": "Talk-to-type",
+    "what": "You hold a key, speak, and Jarvis types what you said into the program in front.",
+    "where": "Hold Alt+Shift+T (changeable in Settings, Shortcuts). A quick tap keeps it listening until you press it again.",
+    "asks": "One approval card to switch it on; after that no card each time. Switching it off is instant.",
+    "limit": "On the PC only - a client must not turn speech into words. It waits while Jarvis Live is on.",
+    "surface": "desktop",
+    "covers": []
+  },
+  {
+    "id": "chat-thread",
+    "group": "Talking",
+    "title": "The whole conversation, and carrying it on",
+    "what": "The current chat is one scrollable thread, and an earlier chat can be picked up again.",
+    "where": "Scroll the Jarvis bar (or Home on the phone). History has \"Continue this chat\" and an \"Earlier chats\" link.",
+    "asks": "No card.",
+    "limit": "The thread hides while \"Hide memory lists and chat history\" is on. A new conversation starts after 30 quiet minutes; the old one stays in History.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "temporary-chat",
+    "group": "Talking",
+    "title": "Temporary chat",
+    "what": "A chat where nothing is kept and nothing you have saved is used.",
+    "where": "Temporary chat in the Jarvis bar. Games and role-play use it automatically.",
+    "asks": "No card.",
+    "limit": "Only on a PC that has it. Answers there do not use your saved facts.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "history-search",
+    "group": "Talking",
+    "title": "Search what was said",
+    "what": "A search box for your own past chats.",
+    "where": "History, the search box.",
+    "asks": "No card - it is shown on screen only, and never handed to the AI.",
+    "limit": "Hidden while the private lists are hidden.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "briefing",
+    "group": "Talking",
+    "title": "The morning briefing",
+    "what": "A short brief with your calendar, your new email and the weather.",
+    "where": "Set it up in Settings, Morning briefing. The latest one is in Brain, Work, Morning briefing.",
+    "asks": "Setting one up repeats, so it raises one card. \"Brief me now\" raises none.",
+    "limit": "Shows the count and the senders of new email unless you choose the count only.",
+    "surface": "both",
+    "covers": [
+      "brain.work.briefing",
+      "settings.briefing-settings"
+    ]
+  },
+  {
+    "id": "coming-up",
+    "group": "Talking",
+    "title": "Timers, alarms, reminders and lists",
+    "what": "Jarvis keeps your timers, alarms, reminders, to-do lists and the standby schedule.",
+    "where": "Just ask (\"remind me at six\"), or see them in Brain, Work, Coming up.",
+    "asks": "A plain timer, a one-time reminder, a repeating reminder, an alarm and the standby schedule need no card. The morning briefing and \"tell me when\" raise one.",
+    "limit": "A late alarm rings only if it is at most 10 minutes late; after that it is a quiet note saying it was missed.",
+    "surface": "both",
+    "covers": [
+      "brain.work.coming-up"
+    ]
+  },
+  {
+    "id": "today",
+    "group": "Talking",
+    "title": "Today",
+    "what": "Your own cards for the day, in one place.",
+    "where": "Brain, Work, Today.",
+    "asks": "No card; adding one is held while the connection is catching up.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.work.today"
+    ]
+  },
+  {
+    "id": "widgets",
+    "group": "Talking",
+    "title": "Widgets you describe",
+    "what": "Small tiles you asked for, drawn on the desktop widget.",
+    "where": "Brain, Work, Widgets. The widget itself shows with Alt+Shift+W.",
+    "asks": "No card.",
+    "limit": "A widget's tile actions are a fixed set, and nothing a widget shows is ever turned into an instruction.",
+    "surface": "both",
+    "covers": [
+      "brain.work.widgets"
+    ]
+  },
+  {
+    "id": "jobs",
+    "group": "Talking",
+    "title": "Background jobs",
+    "what": "The long jobs Jarvis is running, and whether they finished.",
+    "where": "Brain, Work, Background jobs.",
+    "asks": "No card to look; stopping one never asks.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.work.jobs"
+    ]
+  },
+  {
+    "id": "now",
+    "group": "Talking",
+    "title": "What Jarvis is doing right now",
+    "what": "The state Jarvis is in, each step it is taking, and anything it noticed by itself.",
+    "where": "Brain, Now.",
+    "asks": "No card.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.tab.now",
+      "brain.now.right-now",
+      "brain.now.trace",
+      "brain.now.findings"
+    ]
+  },
+  {
+    "id": "attention-budget",
+    "group": "Talking",
+    "title": "How much Jarvis may interrupt you",
+    "what": "The interruption budget, and the day's brief of what needs you.",
+    "where": "Brain, Now, Attention budget. The brief appears in the Jarvis bar.",
+    "asks": "Muting is instant, and approves nothing.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.now.budget"
+    ]
+  },
+  {
+    "id": "focus",
+    "group": "Talking",
+    "title": "Focus session",
+    "what": "A timer plus Quiet, with Jarvis naming a distraction out loud and a report at the end.",
+    "where": "Brain, Work, Focus session. Snooze, \"I'm doing research\", pause and stop by voice.",
+    "asks": "No card - it is off unless you start it.",
+    "limit": "It watches which app is in front on the PC only, and keeps counts, never what it saw. The report has no streak line.",
+    "surface": "both",
+    "covers": [
+      "brain.work.focus"
+    ]
+  },
+  {
+    "id": "memory-tab",
+    "group": "Memory",
+    "title": "The Memory tab",
+    "what": "One place for everything Jarvis knows and how it learns.",
+    "where": "Brain, Memory.",
+    "asks": "No card.",
+    "limit": "The lists hide while \"Hide memory lists and chat history\" is on.",
+    "surface": "desktop",
+    "covers": [
+      "brain.tab.memory"
+    ]
+  },
+  {
+    "id": "memory-saved",
+    "group": "Memory",
+    "title": "Facts Jarvis saved by itself",
+    "what": "Everyday things about you and your projects, saved without asking each time.",
+    "where": "Brain, Memory, Saved automatically.",
+    "asks": "Everyday facts save with no card. Health, money, passwords and account numbers wait for your yes.",
+    "limit": "Only your own words count - never a web page, an email, a document or tool output.",
+    "surface": "both",
+    "covers": [
+      "brain.memory.auto"
+    ]
+  },
+  {
+    "id": "memory-waiting",
+    "group": "Memory",
+    "title": "Facts waiting for your yes",
+    "what": "Facts Jarvis wants to keep, held until you answer.",
+    "where": "Brain, Memory, Waiting for you - or the card that appears.",
+    "asks": "One card per fact, or one card covering several; nothing is saved until you answer.",
+    "limit": "This is the one list that is never hidden.",
+    "surface": "both",
+    "covers": [
+      "brain.memory.waiting"
+    ]
+  },
+  {
+    "id": "memory-known",
+    "group": "Memory",
+    "title": "What Jarvis knows about you",
+    "what": "The facts, by topic, each with Forget and Erase the words.",
+    "where": "Brain, Memory, What Jarvis knows about you.",
+    "asks": "Forget asks \"are you sure?\" first. Erase the words asks too, and cannot be undone - only the dates stay.",
+    "limit": "Erasing a fact's words can also offer to delete the chat it came from.",
+    "surface": "desktop",
+    "covers": [
+      "brain.memory.known"
+    ]
+  },
+  {
+    "id": "memory-people",
+    "group": "Memory",
+    "title": "People and things",
+    "what": "The people and things your facts are linked to.",
+    "where": "Brain, Memory, People and things.",
+    "asks": "No card to look. Forget on a fact asks first, as it does anywhere.",
+    "limit": "The desktop keeps no people-and-things list of its own.",
+    "surface": "phone",
+    "covers": [
+      "brain.memory.people-things"
+    ]
+  },
+  {
+    "id": "pinned-facts",
+    "group": "Memory",
+    "title": "Always keep in mind",
+    "what": "Facts put into every answer.",
+    "where": "Brain, Memory, Always keep in mind.",
+    "asks": "Pinning one fact is one tap, with no question. Unpinning is instant.",
+    "limit": "It holds a fixed number of characters, and the card says how many are used.",
+    "surface": "both",
+    "covers": [
+      "brain.memory.profile"
+    ]
+  },
+  {
+    "id": "between-us",
+    "group": "Memory",
+    "title": "Between us",
+    "what": "Inside jokes and shared references, from your own words only.",
+    "where": "Brain, Memory, Between us.",
+    "asks": "Forget asks first, like any other fact.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.memory.between-us"
+    ]
+  },
+  {
+    "id": "topics",
+    "group": "Memory",
+    "title": "Topics",
+    "what": "A mode for each topic of what Jarvis learns.",
+    "where": "Brain, Memory, Topics.",
+    "asks": "The PC raises the only cards here; every change is held while the connection is catching up.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.memory.topics"
+    ]
+  },
+  {
+    "id": "memory-learning",
+    "group": "Memory",
+    "title": "The learning switches",
+    "what": "Whether Jarvis learns by itself, and how much it remembers.",
+    "where": "Brain, Memory, Learning.",
+    "asks": "Turning automatic learning on raises a card; turning it off is instant. \"Also remember sensitive topics automatically\" is off by default.",
+    "limit": "Everyday facts are learned automatically by default.",
+    "surface": "both",
+    "covers": [
+      "brain.memory.learning"
+    ]
+  },
+  {
+    "id": "wiki",
+    "group": "Memory",
+    "title": "The wiki Jarvis builds",
+    "what": "A wiki made from documents you give Jarvis.",
+    "where": "Brain, Memory, Wiki.",
+    "asks": "Adding a document raises one card.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.memory.wiki"
+    ]
+  },
+  {
+    "id": "deep-questions",
+    "group": "Memory",
+    "title": "Deep questions",
+    "what": "Slow, deeper questions and the answers they produced.",
+    "where": "Brain, Memory, Deep questions.",
+    "asks": "No card per question - the switch was approved once. Asking is held while the connection is catching up.",
+    "limit": "The questions and answers are your own words, so they hide with the memory lists.",
+    "surface": "both",
+    "covers": [
+      "brain.memory.deep"
+    ]
+  },
+  {
+    "id": "memory-as-of",
+    "group": "Memory",
+    "title": "What did I believe on this date?",
+    "what": "Ask what a fact said on a past day.",
+    "where": "Brain, Memory, What did I believe on this date?",
+    "asks": "No card.",
+    "limit": "It needs the connection live.",
+    "surface": "phone",
+    "covers": [
+      "brain.memory.as-of"
+    ]
+  },
+  {
+    "id": "import-chats",
+    "group": "Memory",
+    "title": "Bring in old chats",
+    "what": "Import a chat export from ChatGPT, Claude, Gemini or DeepSeek.",
+    "where": "Brain, Memory, Bring in old chats.",
+    "asks": "It only proposes: every fact it finds waits for its own yes.",
+    "limit": "Imported text is outside text - it is never learned from.",
+    "surface": "desktop",
+    "covers": [
+      "brain.memory.history-import"
+    ]
+  },
+  {
+    "id": "history",
+    "group": "Memory",
+    "title": "Your past chats",
+    "what": "The chats Jarvis kept, with the switches that govern keeping them.",
+    "where": "Brain, History. On the phone, the History row in the Brain.",
+    "asks": "Turning keeping back on raises a card; deleting one chat is instant; forgetting what a chat taught asks first.",
+    "limit": "Kept on the PC, encrypted, by default. This phone keeps none of it.",
+    "surface": "both",
+    "covers": [
+      "brain.tab.history",
+      "brain.history.conversations",
+      "entry.history"
+    ]
+  },
+  {
+    "id": "chat-tags",
+    "group": "Memory",
+    "title": "Chat tags",
+    "what": "Tag your chats yourself, and let Jarvis suggest tags overnight.",
+    "where": "Brain, History, Chat tags.",
+    "asks": "No card. The overnight-suggestion switch is one tap.",
+    "limit": "Tags hide with the private lists.",
+    "surface": "both",
+    "covers": [
+      "brain.history.tags",
+      "brain.history.tag-suggestions"
+    ]
+  },
+  {
+    "id": "forget-range",
+    "group": "Memory",
+    "title": "Forget a time frame",
+    "what": "Forget what Jarvis learned or said over a stretch of days.",
+    "where": "Brain, History, Forget a time frame.",
+    "asks": "One card listing every item, decided by tapping only - never by voice. Then 10 minutes to Undo.",
+    "limit": "After the 10 minutes the chats are gone for good. Erasing a fact's words for good stays the separate per-fact action.",
+    "surface": "both",
+    "covers": [
+      "brain.history.forget-range"
+    ]
+  },
+  {
+    "id": "galaxy",
+    "group": "Memory",
+    "title": "Galaxy",
+    "what": "A map of what Jarvis knows, drawn from your own facts.",
+    "where": "Brain, Galaxy.",
+    "asks": "No card.",
+    "limit": "Drawn from the same memory lists, so it hides with them.",
+    "surface": "desktop",
+    "covers": [
+      "brain.tab.galaxy"
+    ]
+  },
+  {
+    "id": "look-at-this",
+    "group": "Screen and pictures",
+    "title": "Look at this",
+    "what": "Jarvis looks at the window in front of you, once, and answers about it.",
+    "where": "Press Alt+Shift+S on the PC, or say \"look at this\". On the phone, the assistant gesture.",
+    "asks": "No card. Nothing is saved.",
+    "limit": "With one graphics card it reads the screen's words; picture mode can read the picture too, slowly, and is off by default.",
+    "surface": "both",
+    "covers": [
+      "settings.screen-look"
+    ]
+  },
+  {
+    "id": "watch-with-me",
+    "group": "Screen and pictures",
+    "title": "Watch with me",
+    "what": "A live look at your screen that you start and stop.",
+    "where": "Settings, Look at this and Watch with me, or the Watch button in the Jarvis bar. A key can be picked for it (Alt+Shift+V is free).",
+    "asks": "Starting is held while the connection is catching up or App lock would ask; stopping never is.",
+    "limit": "A visible \"Jarvis is watching\" sign shows the whole time. It pauses on password fields and on the apps you exclude (banking), and nothing is saved.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "picture-mode",
+    "group": "Screen and pictures",
+    "title": "Picture mode",
+    "what": "Let the PC read the picture of your screen, not only its words.",
+    "where": "Settings, Look at this and Watch with me, Picture mode.",
+    "asks": "Turning it on raises one card on the PC; turning it off is instant.",
+    "limit": "Off by default, slow, and it runs on the processor rather than the graphics card.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "photo-reminder",
+    "group": "Screen and pictures",
+    "title": "Photo to reminder",
+    "what": "Show Jarvis a photo of a letter or an appointment card and it offers the dates it can read.",
+    "where": "Share the picture into Jarvis from the phone, or paste it in the Jarvis bar.",
+    "asks": "It only proposes. Your tap adds ONE reminder, with no card.",
+    "limit": "The dates are read on the PC, and a scan sets nothing up by itself.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "live-camera",
+    "group": "Screen and pictures",
+    "title": "Show Jarvis the camera in Live",
+    "what": "During a Live session you can show Jarvis what the phone's camera sees.",
+    "where": "Jarvis Live, then the camera button.",
+    "asks": "No extra card - the Live session is already running.",
+    "limit": "Off until the 12 GB card is in and the photo test passes. There is no words-only camera on one card.",
+    "surface": "phone",
+    "covers": []
+  },
+  {
+    "id": "quiz",
+    "group": "Screen and pictures",
+    "title": "Quiz me on a text",
+    "what": "Jarvis writes questions on something you paste, or on a YouTube video.",
+    "where": "Brain, Work, Quiz me on a text.",
+    "asks": "No card, and nothing is saved.",
+    "limit": "A YouTube quiz sends the link once (one card) and keeps it nowhere.",
+    "surface": "both",
+    "covers": [
+      "brain.work.quiz",
+      "brain.work.quiz.youtube"
+    ]
+  },
+  {
+    "id": "decks",
+    "group": "Notes and files",
+    "title": "My study decks",
+    "what": "Questions you kept, asked again on a schedule the PC works out.",
+    "where": "Brain, Work, My study decks.",
+    "asks": "No card.",
+    "limit": "The words hide with the private lists.",
+    "surface": "both",
+    "covers": [
+      "brain.work.decks"
+    ]
+  },
+  {
+    "id": "notes-write",
+    "group": "Notes and files",
+    "title": "Write a note for you",
+    "what": "Jarvis writes a note into Obsidian, Logseq or Joplin.",
+    "where": "Say \"note this\", or use the quick-note key Alt+Shift+N to open the bar ready to file one.",
+    "asks": "No card normally. In a turn where Jarvis has read an email, a page or a file, writing a note raises one.",
+    "limit": "Only the note apps this PC is set up for. With App lock on, adding a note to a running task needs an unlock first.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "folders",
+    "group": "Notes and files",
+    "title": "Folders Jarvis may look in",
+    "what": "The folders Jarvis is allowed to read, and the Notion export.",
+    "where": "Settings, Folders Jarvis may look in.",
+    "asks": "Adding a folder goes through the Windows picker and raises one card; removing one is instant.",
+    "limit": "A Notion export goes into a folder Jarvis searches; imported notes are outside text and are never learned as facts.",
+    "surface": "both",
+    "covers": [
+      "settings.folders"
+    ]
+  },
+  {
+    "id": "documents",
+    "group": "Notes and files",
+    "title": "Ask about a PDF, a Word file or a Notion page",
+    "what": "Jarvis reads a document you point it at and answers questions about it.",
+    "where": "Put the file in a folder Jarvis may look in, then ask about it.",
+    "asks": "Reading needs no card. Writing a note back after reading it raises one, as any note write after outside text does.",
+    "limit": "",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "tutorials",
+    "group": "Notes and files",
+    "title": "Tutorials and the FAQ",
+    "what": "Step-by-step tutorials with your place kept, and the usual questions answered.",
+    "where": "PC: Brain, Tutorials, and Settings, Frequently asked questions. Phone: Brain, Tutorials and the FAQ.",
+    "asks": "No card - reading works even while the connection is catching up.",
+    "limit": "The two apps answer different questions, because they run into different problems.",
+    "surface": "both",
+    "covers": [
+      "brain.tab.tutorials",
+      "brain.model.tutorials",
+      "settings.faq",
+      "entry.help"
+    ]
+  },
+  {
+    "id": "pc-help",
+    "group": "Notes and files",
+    "title": "PC help",
+    "what": "Five plain answers about this PC - what is slow, what is full, what is hot.",
+    "where": "Phone: Brain, PC help. Press Check now.",
+    "asks": "No card - it only reads.",
+    "limit": "Nothing is read until you press the button.",
+    "surface": "phone",
+    "covers": [
+      "brain.model.pc-help"
+    ]
+  },
+  {
+    "id": "web-search",
+    "group": "Notes and files",
+    "title": "Web search",
+    "what": "Jarvis looks something up on the web.",
+    "where": "Just ask. The provider is chosen in Settings, Web search - SearXNG by default, then DuckDuckGo, Exa, Tavily and Brave.",
+    "asks": "A search straight from your own question goes without asking. After outside text, or when the search words would repeat something private, one card shows the exact words. A setting makes it ask every time.",
+    "limit": "If the chosen provider is down, Jarvis says so and offers to switch - it never silently uses another. Brave can cost money past its monthly credit.",
+    "surface": "both",
+    "covers": [
+      "settings.web-search"
+    ]
+  },
+  {
+    "id": "browser-engine",
+    "group": "Notes and files",
+    "title": "A browser without a window",
+    "what": "Jarvis reads a page with a headless browser, so nothing pops up on your screen.",
+    "where": "Settings, Browser without a window.",
+    "asks": "Turning it on raises one card on the PC; turning it off is instant.",
+    "limit": "Only on the PC; the phone can only read what the PC sends back.",
+    "surface": "both",
+    "covers": [
+      "settings.browser-engine"
+    ]
+  },
+  {
+    "id": "github-watchlist",
+    "group": "Notes and files",
+    "title": "What's new on GitHub",
+    "what": "You name a topic and Jarvis searches GitHub for it on a schedule, then tells you what is new and what moved.",
+    "where": "Ask \"what's new on GitHub?\" to read it; the list is on the Brain's Watch tab.",
+    "asks": "Adding a topic raises one card.",
+    "limit": "It never comes to find you - you ask. A repository page is text from a stranger: it is scanned first, and a flagged one is listed with the reason instead of being handed to a model.",
+    "surface": "both",
+    "covers": [
+      "brain.tab.watch",
+      "brain.watch.watchlist"
+    ]
+  },
+  {
+    "id": "chatbot",
+    "group": "Notes and files",
+    "title": "Talk to a chatbot for me",
+    "what": "Jarvis holds a conversation with another AI - Gemini, ChatGPT, Claude, Copilot, Perplexity and others - and brings back what it said.",
+    "where": "Brain, Work, Talk to a chatbot for me. \"Ask several and compare\" puts one question to several at once.",
+    "asks": "One card lists every chatbot it will ask. New limits raise a new card. Stop never asks.",
+    "limit": "Nothing private - email, files, credentials, memory - goes into those chats. Each card names that company's terms risk, and a monthly money limit stops a paid service when it is reached.",
+    "surface": "both",
+    "covers": [
+      "brain.work.chatbot"
+    ]
+  },
+  {
+    "id": "support",
+    "group": "Notes and files",
+    "title": "Deal with customer support for me",
+    "what": "Jarvis runs a customer-support chat on your behalf and brings back what they offered.",
+    "where": "Brain, Work, Chat with customer support for me.",
+    "asks": "One card before the chat lists exactly which personal details Jarvis may give. Every offer (refund, cancellation, change) gets its own card. If the agent asks whether they are talking to a bot, Jarvis never claims to be human - it hands that question to you.",
+    "limit": "Jarvis writes in your name, at human speed. Identity checks - card digits, security questions, codes - are always handed to you. The transcript can be exported as a file that is not encrypted.",
+    "surface": "both",
+    "covers": [
+      "brain.work.support"
+    ]
+  },
+  {
+    "id": "projects",
+    "group": "Notes and files",
+    "title": "Projects",
+    "what": "Projects with their own instructions, files, chats, goals and numbers to track.",
+    "where": "Brain, Projects.",
+    "asks": "One card per change. A \"Shareable\" switch per project is off by default, and a mark Jarvis added to a number by itself is removed with a card first.",
+    "limit": "Never health or money numbers, memory, email or credentials go out of a Shareable project. Jarvis writing code waits for the 12 GB card.",
+    "surface": "both",
+    "covers": [
+      "brain.tab.projects"
+    ]
+  },
+  {
+    "id": "goals",
+    "group": "Notes and files",
+    "title": "Goals",
+    "what": "Plans you edit, with a weekly check-in.",
+    "where": "Brain, Work, Goals.",
+    "asks": "Accepting a drafted goal raises one card. Marking a step done does not.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.work.goals"
+    ]
+  },
+  {
+    "id": "progress",
+    "group": "Notes and files",
+    "title": "Progress",
+    "what": "An activity heatmap and a balance chart of where your time went.",
+    "where": "Brain, Projects, Progress.",
+    "asks": "No card; saving the picked areas is held while the connection is catching up.",
+    "limit": "The picture is taken out while the private lists are hidden or App lock is on.",
+    "surface": "both",
+    "covers": [
+      "brain.projects.progress"
+    ]
+  },
+  {
+    "id": "spending",
+    "group": "Money and health",
+    "title": "Spending summaries",
+    "what": "A bank export dropped into a folder is added up into a small table in the chat.",
+    "where": "Settings, Spending, for the layouts and categories; the table appears when the file is read.",
+    "asks": "No card.",
+    "limit": "Plain code on the PC adds it up - no model sees the numbers, and the phone only shows what the PC sends.",
+    "surface": "both",
+    "covers": [
+      "settings.spending"
+    ]
+  },
+  {
+    "id": "retirement",
+    "group": "Money and health",
+    "title": "Retirement what-if",
+    "what": "A simple what-if from numbers you type in yourself.",
+    "where": "Brain, Work, Retirement what-if.",
+    "asks": "No card, and nothing is saved.",
+    "limit": "Nothing is asked or sent while the private lists are hidden or App lock is on.",
+    "surface": "both",
+    "covers": [
+      "brain.work.retirement"
+    ]
+  },
+  {
+    "id": "chatbot-money",
+    "group": "Money and health",
+    "title": "Chatbot keys and a monthly money limit",
+    "what": "The keys for the paid AI services, and how much each may cost in a month.",
+    "where": "Settings, Chatbot API keys - the keys, the limits and the price list.",
+    "asks": "A key is written straight into Windows Credential Manager. Raising a limit raises one card on the PC plus Windows Hello; lowering or removing one needs no card.",
+    "limit": "The amount is an estimate from a price list you can see and correct, and the card says \"about\". Jarvis also asks each service to cap how long an answer can be.",
+    "surface": "desktop",
+    "covers": [
+      "settings.chatbot-api-keys"
+    ]
+  },
+  {
+    "id": "sensitive-facts",
+    "group": "Money and health",
+    "title": "Health and money facts wait for your yes",
+    "what": "Anything about your health, your money or other sensitive matters is held until you agree.",
+    "where": "The card that appears, or Brain, Memory, Waiting for you.",
+    "asks": "One card, every time - unless you turn on \"Also remember sensitive topics automatically\", which is off by default.",
+    "limit": "Passwords, PINs, account numbers and ID numbers always wait, even with that setting on.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "crisis-help",
+    "group": "Money and health",
+    "title": "Crisis help",
+    "what": "If a message sounds like a crisis, Jarvis answers plainly with the help lines instead of carrying on.",
+    "where": "It happens on its own - there is nothing to press. United States: 988 (Suicide & Crisis Lifeline) and 911.",
+    "asks": "No card.",
+    "limit": "A crisis question and its answer are never learned from and never counted, and do not stay in the thread. The chat is still kept in History, called \"A difficult moment\".",
+    "surface": "both",
+    "covers": [
+      "safety.crisis-help"
+    ]
+  },
+  {
+    "id": "home-status",
+    "group": "Home",
+    "title": "Ask how the house is",
+    "what": "Sensors and devices: whether something is on, open or warm.",
+    "where": "Just ask (\"is the garage door open?\"), once Home Assistant is set up on the PC.",
+    "asks": "No card to read.",
+    "limit": "Plain http is allowed only inside your own networks, and the token is kept as safely as a password.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "lights",
+    "group": "Home",
+    "title": "Lights, plugs and fans",
+    "what": "Jarvis can switch the devices you name, without a card each time.",
+    "where": "A setting in Settings, What asks first, called \"Lights, plugs and fans without a card\".",
+    "asks": "Off by default. Turning it on raises one card; turning it off is instant, and it never applies in a turn that has read outside text.",
+    "limit": "Locks, doors, alarms and covers are never covered by it.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "locks",
+    "group": "Home",
+    "title": "Locks, doors, alarms and covers",
+    "what": "Jarvis can work these, but never quietly.",
+    "where": "Ask, then answer the card.",
+    "asks": "Always one card of its own - never a standing permission.",
+    "limit": "One smart-home card may list several named devices at once; locks, doors, alarms and covers never share theirs.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "calendar",
+    "group": "Home",
+    "title": "Read your own calendar",
+    "what": "Jarvis reads your calendar so it can answer what is coming up.",
+    "where": "Settings, Accounts - the private calendar link (\"Secret address in iCal format\"). Then just ask.",
+    "asks": "Read-only. Loosening it from the settings file is PC-only and raises one card plus Windows Hello.",
+    "limit": "The link is kept as safely as a password: never logged, never shown, and sent nowhere but Google.",
+    "surface": "desktop",
+    "covers": []
+  },
+  {
+    "id": "weather-sky",
+    "group": "Home",
+    "title": "Weather and the sky behind the animals",
+    "what": "The weather in the morning briefing, and the real sun, moon and weather drawn behind a character face.",
+    "where": "Settings, Animal options, for the sky and the weather source.",
+    "asks": "Your own Home Assistant needs no card. Open-Meteo online receives your rough location, so turning it on raises one card; turning it off is instant.",
+    "limit": "Off by default. Rain, snow and wind only appear behind a character face.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "email-read",
+    "group": "Home",
+    "title": "Jarvis reads your email",
+    "what": "It can answer questions about your mail, and tell you when a named sender writes.",
+    "where": "Ask (\"any mail from Sam?\"), once the mail server is filled in at Settings, Accounts.",
+    "asks": "Reading needs no card. \"Tell me when\" for a named sender is set up with one card.",
+    "limit": "Text from an email is outside text: it never makes Jarvis act on its own and is never learned as a fact.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "email-send",
+    "group": "Home",
+    "title": "Send an email for you",
+    "what": "Jarvis writes it and sends it once you say yes.",
+    "where": "Ask it to write and send. Settings, Sending email, says whether it is set up.",
+    "asks": "One card per email, showing the exact recipients, subject and full text, decided by tapping. Never an \"always allow\".",
+    "limit": "The card says plainly when the conversation has read outside text. Sending is a named way out of the PC.",
+    "surface": "both",
+    "covers": [
+      "settings.email-sending"
+    ]
+  },
+  {
+    "id": "email-drafts",
+    "group": "Home",
+    "title": "Save a draft to your Drafts folder",
+    "what": "A written reply can be put in your own Drafts folder for you to finish.",
+    "where": "Ask Jarvis to draft it, then answer the card.",
+    "asks": "One card every time, showing the full draft, before any text goes to the folder.",
+    "limit": "",
+    "surface": "desktop",
+    "covers": []
+  },
+  {
+    "id": "inbox-tidy",
+    "group": "Home",
+    "title": "Tidy the inbox by voice",
+    "what": "Archive, star, mark read, or move mail to Trash by saying so.",
+    "where": "Say what to tidy. The Undo strip sits under the Jarvis bar's input.",
+    "asks": "One card lists every email it will touch, approved on screen and never by voice. Then 10 minutes of Undo. \"Delete\" only ever moves to Trash.",
+    "limit": "The card says when the choice came from reading email. It has been tried against a stand-in mail server, never a real mailbox.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "connection",
+    "group": "Phone",
+    "title": "Pairing and the connection",
+    "what": "The pairing key, the server address, and whether the phone and the PC are reaching each other.",
+    "where": "Settings, Connection. The status line sits on the phone's Home.",
+    "asks": "Pairing by QR code or a short typed code is confirmed by one card on the PC before any key is handed over.",
+    "limit": "Only your own networks are accepted: this PC, the home network, Tailscale and NordVPN Meshnet. A public tunnel is refused, with a plain message saying why.",
+    "surface": "both",
+    "covers": [
+      "settings.connection",
+      "entry.checks"
+    ]
+  },
+  {
+    "id": "devices",
+    "group": "Phone",
+    "title": "Devices",
+    "what": "Every paired device, each with its own key.",
+    "where": "Settings, Devices.",
+    "asks": "Removing a lost phone is instant; retiring the old shared key raises a card.",
+    "limit": "This one can never be hidden, so a lost phone can always be removed.",
+    "surface": "both",
+    "covers": [
+      "settings.devices"
+    ]
+  },
+  {
+    "id": "phone-notifications",
+    "group": "Phone",
+    "title": "Let Jarvis read phone notifications",
+    "what": "Jarvis may read the notifications of the apps you choose, so you can ask what came in.",
+    "where": "Settings, Phone notifications.",
+    "asks": "Off by default. Turning it on raises one card; turning it off is instant.",
+    "limit": "Only the apps you choose, never banking. One-time codes are hidden before anything reaches the model, and it never makes Jarvis act. Never text messages, and Jarvis never replies or sends.",
+    "surface": "phone",
+    "covers": [
+      "settings.phone-notify"
+    ]
+  },
+  {
+    "id": "phone-watch",
+    "group": "Phone",
+    "title": "Smartwatch notifications",
+    "what": "Whether Jarvis's notifications also show on a compatible watch.",
+    "where": "Settings, Smartwatch notifications.",
+    "asks": "Every notification stays on the phone by default. Letting them all show on a watch raises a card; turning it off is instant.",
+    "limit": "",
+    "surface": "phone",
+    "covers": [
+      "settings.watch-notify"
+    ]
+  },
+  {
+    "id": "phone-floating",
+    "group": "Phone",
+    "title": "Floating Jarvis",
+    "what": "A small floating face, or a bubble, over your other apps.",
+    "where": "Settings, Floating Jarvis.",
+    "asks": "No card.",
+    "limit": "Bubble mode may need more than this setting before Android shows it at all - try it on the real phone.",
+    "surface": "phone",
+    "covers": [
+      "settings.floating-avatar"
+    ]
+  },
+  {
+    "id": "phone-tiles",
+    "group": "Phone",
+    "title": "Quick Settings tiles",
+    "what": "A tile in the phone's quick panel starts or ends Jarvis Live.",
+    "where": "Settings, Quick Settings tiles, then add the tile in Android's own editor.",
+    "asks": "No card.",
+    "limit": "The tile never approves anything.",
+    "surface": "phone",
+    "covers": [
+      "settings.quick-tiles"
+    ]
+  },
+  {
+    "id": "also-on-phone",
+    "group": "Phone",
+    "title": "Also on my phone",
+    "what": "An alarm is handed to the phone's own Clock app, or a reminder to its calendar.",
+    "where": "The \"Also on my phone\" button on the alarm or reminder itself.",
+    "asks": "Your tap only - never on its own.",
+    "limit": "The copy in the phone's own apps rings even when the PC is off or out of reach.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "find-phone",
+    "group": "Phone",
+    "title": "Ring my phone",
+    "what": "Jarvis makes your phone ring, to help you find it.",
+    "where": "Say \"ring my phone\" to Jarvis on the PC.",
+    "asks": "No card - your own words only, and it is answered without the AI model.",
+    "limit": "The phone rings on the alarm channel, so it rings even on silent. It stops from the phone or after its time runs out.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "phone-limits",
+    "group": "Phone",
+    "title": "What the phone deliberately does not do",
+    "what": "The honest list of things this phone will not do, so the two apps cannot disagree.",
+    "where": "Nothing to press - this is a limit.",
+    "asks": "Nothing to ask.",
+    "limit": "No deep config editing, no model catalogue to browse, no speech-to-text on the phone, and no approve-all anywhere. Switching or installing a model by typing its name is allowed - it raises a card on the PC like any other change.",
+    "surface": "phone",
+    "covers": []
+  },
+  {
+    "id": "appearance",
+    "group": "The PC itself",
+    "title": "Appearance",
+    "what": "The theme, the face Jarvis wears, and the colour for each state.",
+    "where": "Settings, Appearance. On the phone, Appearance on Home, or from Settings.",
+    "asks": "No card - a look changes at once.",
+    "limit": "Look-and-behaviour options are shared with your phone; sharpness and frame rate stay per device.",
+    "surface": "both",
+    "covers": [
+      "settings.appearance-card",
+      "entry.appearance"
+    ]
+  },
+  {
+    "id": "faces",
+    "group": "The PC itself",
+    "title": "Choose Jarvis's face",
+    "what": "Twenty faces - five of them animals or a robot - drawn live.",
+    "where": "Settings, Appearance, then Open Faces on the PC. On the phone, Appearance.",
+    "asks": "The first time you pick an animal face, one line asks whether to use its own voice. A face never changes the voice by itself, and an approval never gets a wave or anything cute.",
+    "limit": "Animal voices are Jarvis's own voices, blends and pitch - never a real person's.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "animal-options",
+    "group": "The PC itself",
+    "title": "Animal options",
+    "what": "Every animal-face option in one place: Still, the sun and moon, weather and its source, sharpness and frame rate.",
+    "where": "Settings, Animal options. Asking Jarvis to change one works the same as the switch.",
+    "asks": "Cosmetic options change at once. Anything that opens a way out of the PC (online weather) still raises its card.",
+    "limit": "The \"Voice follows the face\" switch starts off.",
+    "surface": "desktop",
+    "covers": [
+      "settings.animal-options"
+    ]
+  },
+  {
+    "id": "menu-visibility",
+    "group": "The PC itself",
+    "title": "Show or hide menus",
+    "what": "Hide any menu you do not use, and bring it back.",
+    "where": "Settings, Show or hide menus. Asking Jarvis to hide or show a menu changes every device that hears it.",
+    "asks": "Hiding is instant and turns nothing off - Jarvis can still do it when asked. A few things always stay visible: approvals, security, What asks first, and the connection status.",
+    "limit": "This hides menus on this device only, and the system-tray menu is not affected.",
+    "surface": "both",
+    "covers": [
+      "settings.menu-visibility"
+    ]
+  },
+  {
+    "id": "shortcuts",
+    "group": "The PC itself",
+    "title": "Keyboard shortcuts",
+    "what": "Every shortcut in one list, and a key of your own for each.",
+    "where": "Settings, Shortcuts.",
+    "asks": "No card.",
+    "limit": "A key another program already owns is refused, with the reason.",
+    "surface": "desktop",
+    "covers": [
+      "settings.shortcuts"
+    ]
+  },
+  {
+    "id": "models",
+    "group": "The PC itself",
+    "title": "Models",
+    "what": "The models Jarvis can use - switch the everyday one, install another by name, roll back.",
+    "where": "Brain, Model, Models. On the phone, Brain, Models. The Model tab also holds Compute and Skills.",
+    "asks": "Switching or installing raises one approval card, and nothing downloads until you approve it.",
+    "limit": "There is no catalogue to scroll or search - you type the model's name by hand, the same as at a terminal.",
+    "surface": "both",
+    "covers": [
+      "models",
+      "brain.model.models",
+      "brain.tab.faculties"
+    ]
+  },
+  {
+    "id": "compute",
+    "group": "The PC itself",
+    "title": "Compute",
+    "what": "The plan for your graphics cards, and which model runs where.",
+    "where": "Brain, Model, Compute.",
+    "asks": "No card.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "brain.model.compute"
+    ]
+  },
+  {
+    "id": "skills",
+    "group": "The PC itself",
+    "title": "Skills",
+    "what": "Extra abilities installed for Jarvis, each with a scan verdict.",
+    "where": "Brain, Model, Skills.",
+    "asks": "Installing or removing one is its own decision.",
+    "limit": "",
+    "surface": "both",
+    "covers": [
+      "skills",
+      "brain.model.skills"
+    ]
+  },
+  {
+    "id": "model-memory",
+    "group": "The PC itself",
+    "title": "Memory on the Model page",
+    "what": "A short summary of what Jarvis remembers, shown beside the models.",
+    "where": "Brain, Model, Memory.",
+    "asks": "No card.",
+    "limit": "Hides with the other memory lists.",
+    "surface": "desktop",
+    "covers": [
+      "brain.model.memory"
+    ]
+  },
+  {
+    "id": "work-tab",
+    "group": "The PC itself",
+    "title": "The Work tab",
+    "what": "The container for focus, chatbots, today, widgets, goals, quiz and the rest.",
+    "where": "Brain, Work.",
+    "asks": "No card.",
+    "limit": "",
+    "surface": "desktop",
+    "covers": [
+      "brain.tab.work"
+    ]
+  },
+  {
+    "id": "hardware",
+    "group": "The PC itself",
+    "title": "Hardware and models",
+    "what": "Your graphics cards and the three setups Jarvis can run in.",
+    "where": "Settings, Hardware and models.",
+    "asks": "Choosing a setup changes nothing by itself; each step it needs is its own card.",
+    "limit": "Second-card features are off until that feature has been measured on your PC.",
+    "surface": "both",
+    "covers": [
+      "settings.hardware"
+    ]
+  },
+  {
+    "id": "second-card",
+    "group": "The PC itself",
+    "title": "The second graphics card",
+    "what": "The switches that put extra work on the second card, and which card everyday chat runs on.",
+    "where": "Settings, Second graphics card.",
+    "asks": "Turning a switch on raises one card; turning it off is instant. Pinning everyday chat raises its own card.",
+    "limit": "The card is installed, but its features are not measured - every switch stays off until you turn it on.",
+    "surface": "both",
+    "covers": [
+      "settings.second-card",
+      "settings.second-card.study-helper",
+      "settings.second-card.referee",
+      "settings.second-card.third-card",
+      "settings.second-card.chat-card"
+    ]
+  },
+  {
+    "id": "big-model",
+    "group": "The PC itself",
+    "title": "The big model (slow)",
+    "what": "One bigger model split across both cards, for the hardest questions.",
+    "where": "Settings, Big model (slow).",
+    "asks": "Turning a switch on raises one card; turning it off is instant.",
+    "limit": "Slow, and only worth it with both cards installed.",
+    "surface": "both",
+    "covers": [
+      "settings.big-model"
+    ]
+  },
+  {
+    "id": "updates",
+    "group": "The PC itself",
+    "title": "Updates",
+    "what": "Whether a newer build of this app exists, and installing it.",
+    "where": "Settings, Updates.",
+    "asks": "Nothing installs by itself - you press to install, then to restart.",
+    "limit": "",
+    "surface": "desktop",
+    "covers": [
+      "settings.updates"
+    ]
+  },
+  {
+    "id": "tool-updates",
+    "group": "The PC itself",
+    "title": "Check for tool updates",
+    "what": "Reports the packages and tools on this PC that are out of date.",
+    "where": "Settings, Check for tool updates.",
+    "asks": "No card - it only reports.",
+    "limit": "Updating a tool is a change, and raises its own card first.",
+    "surface": "desktop",
+    "covers": [
+      "settings.tool-updates"
+    ]
+  },
+  {
+    "id": "settings-file",
+    "group": "The PC itself",
+    "title": "The settings file, the logs and starting with Windows",
+    "what": "The folded card at the end of Settings: start Jarvis with Windows, the log folder, the crash notes.",
+    "where": "Settings, More options.",
+    "asks": "Starting with Windows is one tap; the log folder only opens a folder.",
+    "limit": "",
+    "surface": "desktop",
+    "covers": [
+      "settings.more-options"
+    ]
+  },
+  {
+    "id": "backend-supports",
+    "group": "The PC itself",
+    "title": "What this backend supports",
+    "what": "The list of abilities the app checks before offering a button.",
+    "where": "Settings, What this backend supports.",
+    "asks": "No card - it only reads.",
+    "limit": "It lists the names only, never their values.",
+    "surface": "both",
+    "covers": [
+      "settings.backend-supports"
+    ]
+  },
+  {
+    "id": "about",
+    "group": "The PC itself",
+    "title": "About Jarvis",
+    "what": "The version, the licences and the credits.",
+    "where": "Settings, About Jarvis.",
+    "asks": "No card.",
+    "limit": "",
+    "surface": "desktop",
+    "covers": [
+      "settings.about"
+    ]
+  },
+  {
+    "id": "hud-window",
+    "group": "The PC itself",
+    "title": "The big HUD window",
+    "what": "The larger always-there window, with its own chat box.",
+    "where": "Tray menu, Show the HUD window. Its box opens the Jarvis bar for anything more.",
+    "asks": "No card.",
+    "limit": "The HUD's own chat box has no Temporary chat, no New conversation and no crisis panel.",
+    "surface": "desktop",
+    "covers": [
+      "settings.hud-window"
+    ]
+  },
+  {
+    "id": "backup",
+    "group": "The PC itself",
+    "title": "Backups",
+    "what": "One locked backup file, into a folder you pick.",
+    "where": "Settings, Backups.",
+    "asks": "Setting the folder raises one card. Restoring is one card that always needs Windows Hello.",
+    "limit": "Locked with a recovery code only you have, shown once - lose the code and the backup is useless. Erased facts stay in older backups until they age out. Jarvis keeps only the last few.",
+    "surface": "both",
+    "covers": [
+      "settings.backup"
+    ]
+  },
+  {
+    "id": "accounts",
+    "group": "The PC itself",
+    "title": "Accounts and keys",
+    "what": "The mail password, the private calendar link and the Home Assistant token, kept on this PC.",
+    "where": "Settings, Accounts.",
+    "asks": "Saving a secret writes it straight into Windows Credential Manager - never over HTTP, never shown again.",
+    "limit": "The phone is never asked for an account secret.",
+    "surface": "desktop",
+    "covers": [
+      "settings.account-secrets"
+    ]
+  },
+  {
+    "id": "reach",
+    "group": "The PC itself",
+    "title": "What Jarvis can reach",
+    "what": "Every way Jarvis can reach something outside itself, and whether it is on right now.",
+    "where": "Settings, What Jarvis can reach.",
+    "asks": "Loosening a reading tool from the PC raises one card plus Windows Hello. Nothing outside that short safe list can be loosened from an app.",
+    "limit": "Read-only; the PC writes it from its own settings.",
+    "surface": "both",
+    "covers": [
+      "settings.reach"
+    ]
+  },
+  {
+    "id": "undo",
+    "group": "The PC itself",
+    "title": "Undo",
+    "what": "The changes you can still undo.",
+    "where": "Brain, Work, Undo shelf.",
+    "asks": "Undo itself never asks.",
+    "limit": "Some things offer 10 minutes to undo; after that they are gone.",
+    "surface": "desktop",
+    "covers": [
+      "brain.work.undo"
+    ]
+  },
+  {
+    "id": "past-approvals",
+    "group": "The PC itself",
+    "title": "Activity: cards you already decided",
+    "what": "A read-only list of past approvals.",
+    "where": "Brain, Work, Activity.",
+    "asks": "No card - it only reads.",
+    "limit": "It shows the title, Approved / Denied / Timed out, when, and which device.",
+    "surface": "desktop",
+    "covers": [
+      "brain.work.activity"
+    ]
+  },
+  {
+    "id": "approvals",
+    "group": "Safety",
+    "title": "Approval cards",
+    "what": "One card for each thing Jarvis wants to do that is not completely safe.",
+    "where": "The card appears in the Jarvis bar, the widget, the HUD, or on the phone's Home.",
+    "asks": "Nothing runs until you decide. There is no approve-all anywhere. Approving a risky card asks for Windows Hello on the PC, or your screen lock on the phone.",
+    "limit": "On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
+    "surface": "both",
+    "covers": [
+      "safety.approvals"
+    ]
+  },
+  {
+    "id": "what-asks-first",
+    "group": "Safety",
+    "title": "What asks first",
+    "what": "Every action Jarvis can take and whether it asks you first, in plain words.",
+    "where": "Settings, What asks first - in both apps.",
+    "asks": "A \"make stricter\" switch is instant. Loosening one of a short safe list is PC-only, and costs one card plus Windows Hello.",
+    "limit": "Nothing outside that short list can be loosened from an app.",
+    "surface": "both",
+    "covers": [
+      "settings.asks-first"
+    ]
+  },
+  {
+    "id": "app-lock",
+    "group": "Safety",
+    "title": "Lock Jarvis, and hide what it remembers",
+    "what": "Opening Jarvis needs your fingerprint or PIN, and the memory lists and chat history can be hidden.",
+    "where": "Settings, Security.",
+    "asks": "Turning a lock on is instant; turning it off, or loosening it, asks for Windows Hello or your phone's screen lock first.",
+    "limit": "With App lock on, the phone blocks screenshots, and the PC's approval widget shows only a short title with Approve opening the locked app.",
+    "surface": "both",
+    "covers": [
+      "settings.security"
+    ]
+  },
+  {
+    "id": "stale-link",
+    "group": "Safety",
+    "title": "When the connection is catching up",
+    "what": "Jarvis stops acting, and says so, rather than guessing.",
+    "where": "The banner and the status line say it plainly.",
+    "asks": "Nothing is decided while the stream is stale - refusing is never held, approving can be.",
+    "limit": "This is deliberate: acting on a stale picture of the world is how the wrong thing gets approved.",
+    "surface": "both",
+    "covers": [
+      "safety.stale-link"
+    ]
+  },
+  {
+    "id": "stop-everything",
+    "group": "Safety",
+    "title": "Stop everything",
+    "what": "Halts what Jarvis is doing on the screen or the phone, at once.",
+    "where": "Press Alt+Shift+X on the PC. On the phone, the Stop button in Jarvis Live.",
+    "asks": "It asks nothing first, and approves nothing.",
+    "limit": "There is no control anywhere that clears a rush latch, and no approve-in-bulk.",
+    "surface": "both",
+    "covers": [
+      "safety.stop-everything"
+    ]
+  },
+  {
+    "id": "trust",
+    "group": "Safety",
+    "title": "Trust: content risk and the audit chain",
+    "what": "Outside text that looked risky, and the chain that records what Jarvis decided.",
+    "where": "Brain, Trust.",
+    "asks": "No card - it only reads.",
+    "limit": "It holds what is waiting on you, so it can never be hidden.",
+    "surface": "desktop",
+    "covers": [
+      "brain.tab.trust",
+      "brain.trust.ledger",
+      "brain.trust.content-risk"
+    ]
+  },
+  {
+    "id": "rush-latch",
+    "group": "Safety",
+    "title": "A warning when text tried to rush you",
+    "what": "A banner saying outside text tried to hurry you into approving something.",
+    "where": "The Brain, as the Rush latch banner.",
+    "asks": "Nothing to press - it is a warning.",
+    "limit": "No control clears it, and it is never hidden.",
+    "surface": "phone",
+    "covers": [
+      "brain.trust.rush-latch"
+    ]
+  },
+  {
+    "id": "outside-text",
+    "group": "Safety",
+    "title": "Jarvis marks what it read from outside",
+    "what": "Once Jarvis has read an email, a page, a file or other outside text, it says so, and the turn is treated as tainted.",
+    "where": "A line on the answer, and a line on the card that follows.",
+    "asks": "It is what makes the next risky step ask: note writes, web searches, smart-home switches.",
+    "limit": "Outside text is never learned as a fact, and the tier is raised when it tries to rush you.",
+    "surface": "both",
+    "covers": []
+  },
+  {
+    "id": "settings-entry",
+    "group": "Safety",
+    "title": "Settings itself",
+    "what": "The list of every switch and card, in both apps.",
+    "where": "PC: the tray menu, Settings and help. Phone: Settings.",
+    "asks": "No card.",
+    "limit": "Always reachable - it can never be hidden.",
+    "surface": "both",
+    "covers": [
+      "entry.settings"
+    ]
+  }
+]

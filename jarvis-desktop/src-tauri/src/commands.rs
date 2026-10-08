@@ -596,6 +596,18 @@ pub async fn open_faces(app: AppHandle) -> Result<(), String> {
     crate::windows::show_faces(&app)
 }
 
+/// Opens "Everything Jarvis can do" (`features.html`) from a page. Settings has
+/// a button for it because the owner asked for one place listing the whole
+/// feature set (2026-10-08, docs/FEATURES-LIST-DESIGN.md).
+///
+/// `async` for the same reason [`open_faces`] is: `show_features` builds a
+/// window the first time it runs, and building a window inside a plain command
+/// deadlocks on Windows (bug audit 2026-09-27, desktop-rust finding #3).
+#[tauri::command]
+pub async fn open_features(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_features(&app)
+}
+
 /// Which version of the first-run walkthrough is on screen now.
 ///
 /// Raise this by one whenever `onboarding.html` changes in a way the owner

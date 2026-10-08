@@ -95,6 +95,14 @@ enum class Screen {
      * the others above: a saved back stack from an older build restores by name.
      */
     APPROVALS,
+
+    /**
+     * "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, 2026-10-08; the
+     * owner asked for it the same day). Opened from the row beside Tutorials in
+     * the Brain. Last, for the same reason as the others above: a saved back
+     * stack from an older build restores by name.
+     */
+    FEATURES,
 }
 
 /**

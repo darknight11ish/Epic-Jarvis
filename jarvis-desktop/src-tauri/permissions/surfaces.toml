@@ -1453,6 +1453,16 @@ identifier = "faces-open"
 description = "Open the Faces window."
 permissions = ["allow-open-faces"]
 
+# Settings' "Everything Jarvis can do" button (2026-10-08,
+# docs/FEATURES-LIST-DESIGN.md), and the same row in the tray menu, which calls
+# `windows::show_features` in process and needs no grant for it. Opens a window
+# that reads one bundled list of text and draws it; it changes nothing, on this
+# PC or on the phone, and the page it opens holds no command of its own.
+[[set]]
+identifier = "features-open"
+description = "Open the read-only \"Everything Jarvis can do\" window."
+permissions = ["allow-open-features"]
+
 # ---------------------------------------------------------------------------
 # The first-run walkthrough: closes itself, and nothing else.
 #

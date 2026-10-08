@@ -426,6 +426,28 @@
           the two run into different problems.
         </p>
 
+        <!-- "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the
+             owner's request of 2026-10-08): every feature, in plain words,
+             each one extending to what it does, how to reach it, whether it
+             asks first, and one real limit.
+
+             WHY IT SITS IN THIS CARD. The FAQ and this list are the two halves
+             of one question - "how do I do this" and "what can it do, and does
+             it ask first" - and this card is where "Help" already points in
+             the jump list. A card of its own would also have to be registered
+             in `backend/jarvis_settings_registry.py` before
+             `backend/test_settings_registry.py` would pass, which is a backend
+             decision and not this button's to make. -->
+        <p class="note">
+          For the whole feature set rather than one question: every feature, in
+          plain words, in nine groups, each with what it does, how to reach it,
+          whether it asks first and one real limit. It only reads.
+        </p>
+        <div class="row">
+          <button class="btn" id="open-features" type="button">Everything Jarvis can do</button>
+          <span class="status" id="features-status" role="status"></span>
+        </div>
+
         <div class="faq-list">
           <details class="faq-item">
             <summary class="faq-q">Does anything I say to Jarvis leave this computer?</summary>

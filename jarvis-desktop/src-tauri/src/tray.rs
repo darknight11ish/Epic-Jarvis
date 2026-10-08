@@ -108,6 +108,9 @@ const ID_SHOW_BRAIN: &str = "show-brain";
 /// "Chat history…" (the chat audit, 2026-09-28): the Brain, on History.
 const ID_CHAT_HISTORY: &str = "chat-history";
 const ID_SHOW_FACES: &str = "show-faces";
+/// "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, 2026-10-08): the
+/// whole feature set, in plain words, read-only.
+const ID_SHOW_FEATURES: &str = "show-features";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_TOGGLE_FLOATING: &str = "toggle-floating";
@@ -299,6 +302,16 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let chat_history =
         MenuItem::with_id(app, ID_CHAT_HISTORY, "Chat history…", true, None::<&str>)?;
     let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
+    // The whole feature set in one window (2026-10-08). In the windows group,
+    // beside Faces, and needing no new separator: `ia.mjs` counts five
+    // separators for six groups, and a seventh group is not wanted for this.
+    let show_features = MenuItem::with_id(
+        app,
+        ID_SHOW_FEATURES,
+        "Everything Jarvis can do…",
+        true,
+        None::<&str>,
+    )?;
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
@@ -385,6 +398,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &show_brain,
             &chat_history,
             &show_faces,
+            &show_features,
             &PredefinedMenuItem::separator(app)?,
             // The machinery. `backend` and `reconnect` were three groups apart
             // while being the same subject: is the thing on the other end of
@@ -1456,6 +1470,19 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                     app,
                     "Jarvis",
                     "The faces window could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
+            }
+        }
+
+        ID_SHOW_FEATURES => {
+            if let Err(err) = windows::show_features(app) {
+                eprintln!("[jarvis] feature list unavailable: {err}");
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "The list of what Jarvis can do could not open.",
                     &err.to_string(),
                     commands::Details::Log,
                 );
