@@ -191,19 +191,22 @@ await check("the arrows move the tick, and it wraps at both ends", async () => {
 });
 
 await check("a row the catalogue hides is listed, and says so", async () => {
+  // `settings.backup`, not the removed "Help and FAQ": the card the owner
+  // folded away on 2026-10-08 is not in the catalogue any more, so it cannot be
+  // a row at all - and a test that hid it would be checking a menu that is gone.
   const page = await openBar({
-    storage: { "jarvis.menus.hidden": JSON.stringify(["settings.faq"]) },
+    storage: { "jarvis.menus.hidden": JSON.stringify(["settings.backup"]) },
   });
   await page.locator("#prompt").focus();
   await page.keyboard.press("/");
   await page.waitForTimeout(150);
-  await page.keyboard.type("faq");
+  await page.keyboard.type("backup");
   await page.waitForTimeout(250);
   const state = await paletteState(page);
   const badge = await page.evaluate(() =>
     document.querySelector("#palette-list .palette-row-hidden")?.textContent);
   await page.close();
-  assert.equal(state.firstId, "settings.faq", "a hidden menu cannot be searched for");
+  assert.equal(state.firstId, "settings.backup", "a hidden menu cannot be searched for");
   assert.equal(badge, "hidden", "the row does not say it is hidden on this computer");
 });
 
@@ -253,6 +256,33 @@ await check("Enter on a Brain row writes the place the Brain already reads", asy
   assert.deepEqual(out.calls, ["brain"], `Rust was asked for: ${JSON.stringify(out.calls)}`);
   assert.ok(out.brain && out.brain.place === "brain.work.retirement",
     `the Brain would open at ${JSON.stringify(out.brain)}`);
+});
+
+await check("the Help row opens the Brain's Help tab, not the Settings card that is gone", async () => {
+  // Help is the never-hideable entry (backend/jarvis_menus.py), and it used to
+  // open Settings' "Help and FAQ" card. That card was folded into the Brain's
+  // "Tutorials and the FAQ" on 2026-10-08, so this is the check that the one
+  // entry a person can never tidy away still lands on the one Help place.
+  const page = await openBar();
+  await page.locator("#prompt").focus();
+  await page.keyboard.press("/");
+  await page.waitForTimeout(150);
+  await page.keyboard.type("help");
+  await page.waitForTimeout(250);
+  const state = await paletteState(page);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  const out = await page.evaluate(() => ({
+    calls: window.__calls.filter((c) => c[0] === "open_fix_place").map((c) => c[1] && c[1].place),
+    brain: JSON.parse(localStorage.getItem("jarvis.brain.place") || "null"),
+    settings: localStorage.getItem("jarvis.settings.place"),
+  }));
+  await page.close();
+  assert.equal(state.firstId, "entry.help", `"help" found ${state.firstId}, not the Help row`);
+  assert.deepEqual(out.calls, ["brain"], `Help asked Rust for: ${JSON.stringify(out.calls)}`);
+  assert.ok(out.brain && out.brain.place === "tutorials",
+    `Help would open the Brain at ${JSON.stringify(out.brain)}`);
+  assert.equal(out.settings, null, "Help left a Settings place behind as well");
 });
 
 await check("CONTROL: opening a row runs no command beyond opening a window", async () => {

@@ -42,7 +42,6 @@ object MenuCatalog {
     val MENUS: List<Menu> = listOf(
         Menu("settings.connection", "Connection", "The pairing key, the server address and the link status.", true, true, "settings", "", "card", null, null, false, false, "Acting is blocked when the link is stale (rule 4), so its status is always visible."),
         Menu("settings.devices", "Devices", "Every paired device with its own key.", true, true, "settings", "", "card", null, null, false, true, "Removing a lost phone must stay reachable."),
-        Menu("settings.faq", "Help and FAQ", "Answers to common questions.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.appearance-card", "Appearance", "Theme, faces and how it all looks.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.animal-options", "Animal options", "Every animal-face option in one place.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.voice", "Voice", "Talk, read aloud, hands-free and sounds.", true, true, "settings", "", "card", null, null, true, true, ""),
@@ -141,7 +140,7 @@ object MenuCatalog {
         Menu("entry.voice-check", "Voice check row", "The row that opens the voice check.", false, true, "entry", "", "entry", null, null, true, false, ""),
         Menu("entry.history", "History entry in Brain", "The row that opens your past chats.", false, true, "entry", "", "entry", null, null, true, false, ""),
         Menu("entry.checks", "Connection status line", "The status line that opens Platform checks.", false, true, "safety", "", "entry", null, null, false, false, "It is the connection status (rule 4)."),
-        Menu("entry.help", "Help", "The Help entry.", true, true, "safety", "", "entry", null, null, false, false, "Settings and Help themselves always stay reachable."),
+        Menu("entry.help", "Help", "The Help entry: the Brain's \"Tutorials and the FAQ\".", true, true, "brain", "tutorials", "entry", null, null, false, false, "Settings and Help themselves always stay reachable."),
         Menu("entry.settings", "Settings", "The Settings entry.", true, true, "safety", "", "entry", null, null, false, false, "Settings and Help themselves always stay reachable."),
         Menu("safety.approvals", "Approvals", "Approval cards, the widget, the notification.", true, true, "safety", "", "answer", null, null, false, false, "Approvals must always be reachable."),
         Menu("safety.stale-link", "Stale-link banner", "The warning that the link is old.", true, true, "safety", "", "answer", null, null, false, false, "Rule 4: acting is blocked when the event stream is stale."),

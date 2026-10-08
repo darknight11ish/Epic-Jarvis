@@ -117,7 +117,10 @@ private val FAQS = listOf(
     Faq(
         // Words held to Sayable.kt by SayableContractTest, so this can never
         // drift from what "what can you do?" answers, or from the desktop's
-        // own FAQ entry (settings.html, "What can I say?").
+        // own "What can I say?" entry - which moved on 2026-10-08 out of
+        // settings.html and into the desktop's half of the Brain's "Tutorials
+        // and the FAQ" (jarvis-desktop/src/desktop-help.js, which imports
+        // Sayable.HELP_BODY itself rather than retyping it).
         Sayable.HELP_TITLE,
         Sayable.HELP_BODY,
     ),
@@ -275,7 +278,8 @@ private val FAQS = listOf(
     ),
     Faq(
         // The one answer the "run apply-patches.ps1" messages point to
-        // (ease-of-use audit 2026-09-27, #8e). The desktop's FAQ says the same.
+        // (ease-of-use audit 2026-09-27, #8e). The desktop's own FAQ says the
+        // same - in the Brain's "Tutorials and the FAQ" since 2026-10-08.
         "How do I update Jarvis?",
         "Three parts, in this order. Jarvis on your PC: stop it, then in " +
             "PowerShell, in your copy of the Jarvis files, get the newest files " +

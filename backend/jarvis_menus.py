@@ -128,15 +128,16 @@ MENUS: tuple = (
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
-    # "Help and FAQ" STAYS (the cohesion audit of 2026-10-08 asked for the FAQ
-    # to be one place, and this is the second one on the PC). Kept because
-    # folding it would delete, not de-duplicate: this card is the desktop's
-    # only Help destination (the palette's Help row opens it), it holds the
-    # questions only the desktop has answers to, and it is the app's own way in
-    # to "Everything Jarvis can do". What the audit could be done safely is
-    # done: the Brain place both apps share is now named the same words in both.
-    _m("settings.faq", "Help and FAQ", "Answers to common questions.", (DESKTOP,),
-       names=("faq", "the faq", "frequently asked questions")),
+    # "settings.faq" ("Help and FAQ") lived here until 2026-10-08. It was NOT a
+    # duplicate way in - it held the fifteen questions only the desktop answers
+    # (Quiet against Standby, Alt+Space, "I closed the window but Jarvis is
+    # still running", the pairing token, a lost phone), it was the palette's
+    # only Help destination, and it was the only non-tray way in to "Everything
+    # Jarvis can do". So the owner chose to fold it PROPERLY rather than delete
+    # it: the questions moved, word for word, into the desktop's own half of the
+    # Brain's "Tutorials and the FAQ" (jarvis-desktop/src/desktop-help.js), the
+    # button moved with them, and Help itself now names that place. One Help
+    # place, not two - and nothing was lost.
     _m("settings.appearance-card", "Appearance", "Theme, faces and how it all looks.",
        names=("appearance", "the theme", "themes", "faces")),
     _m("settings.animal-options", "Animal options",
@@ -270,7 +271,13 @@ MENUS: tuple = (
     # name means two things"): they are one place in two layouts.
     _m("brain.tab.tutorials", "Tutorials and the FAQ",
        "How Jarvis works, step by step, and the answers to the usual questions.",
-       (DESKTOP,), area="brain", view="tutorials", kind="tab", names=("tutorials",)),
+       (DESKTOP,), area="brain", view="tutorials", kind="tab",
+       # "faq", "the faq" and "frequently asked questions" moved here from the
+       # Settings card "Help and FAQ" on 2026-10-08: they are the names the
+       # owner already says for Help, and this is the place those names now
+       # answer with. Nothing else in the catalogue claims them.
+       names=("tutorials", "tutorials and the faq", "faq", "the faq",
+              "frequently asked questions")),
     _m("brain.tab.galaxy", "Galaxy", "The map of what Jarvis knows.", (DESKTOP,),
        area="brain", view="galaxy", kind="tab", names=("galaxy",)),
     _m("brain.tab.now", "Now", "What Jarvis is doing right now.", (DESKTOP,),
@@ -435,7 +442,9 @@ MENUS: tuple = (
     _m("entry.checks", "Connection status line", "The status line that opens Platform checks.",
        (PHONE,), area="safety", kind="entry", hide=False, collapse=False,
        why="It is the connection status (rule 4)."),
-    _m("entry.help", "Help", "The Help entry.", area="safety", kind="entry",
+    _m("entry.help", "Help",
+       "The Help entry: the Brain's \"Tutorials and the FAQ\".",
+       area="brain", view="tutorials", kind="entry",
        hide=False, collapse=False, why="Settings and Help themselves always stay reachable.",
        names=("help", "the help button")),
     _m("entry.settings", "Settings", "The Settings entry.", area="safety", kind="entry",

@@ -8,7 +8,8 @@
  * `tools/check_feature_list.py`, run in CI through
  * `backend/run_suites.py test_feature_list.py`. What THIS suite proves is that
  * the page draws what the file says, and that there is a real button to open it
- * with:
+ * with (the Brain's "Tutorials and the FAQ" tab since 2026-10-08, when the
+ * Settings card that held it was folded into that one Help place):
  *
  *   - every group the file names is listed, in the file's own order, with the
  *     right number of features under it;
@@ -20,9 +21,10 @@
  *     all four fields, word for word from the file;
  *   - a feature whose `limit` is empty draws NO limit line, rather than a line
  *     with nothing on it;
- *   - the settings row and the tray row both reach it, the command behind them
- *     is registered and permitted to Settings and nothing else, the page obeys
- *     the packaged CSP's rules, and the copy the page fetches is the source.
+ *   - the Brain's Help tab and the tray row both reach it, the command behind
+ *     them is registered and permitted to the Brain and nothing else, the page
+ *     obeys the packaged CSP's rules, and the copy the page fetches is the
+ *     source.
  *
  * The drawing checks use the shared harness (`tests/uikit.mjs`) and wait on the
  * page's own state with `K.until`, never a fixed sleep; the rest read the real
@@ -218,16 +220,28 @@ await check("a feature with no limit draws no limit line at all", async () => {
 
 /* ── the real button, and what is behind it (no browser) ─────────────────── */
 
-await check("Settings has a real button, in the page's own style", () => {
-  const html = read("src/settings.html");
-  const inFaq = html.slice(html.indexOf('id="faq"'), html.indexOf("faq-list"));
-  assert.match(inFaq, /<button class="btn" id="open-features" type="button">Everything Jarvis can do<\/button>/,
-    "the button is not in the Help card, in the style every other row uses");
-  assert.match(inFaq, /<span class="status" id="features-status" role="status">/,
+await check("the Brain's Help tab has the real button, and the page's own status line", () => {
+  // The button lived in Settings' "Help and FAQ" card until 2026-10-08. The
+  // card was folded into the Brain's one Help place ("Tutorials and the FAQ"),
+  // and the button moved with it rather than being deleted: it is the only way
+  // in that is not the tray row. It is STATIC markup in brain.html, so it is
+  // part of the tab the moment the tab exists, and its click is wired by
+  // tutorials.js (the module that draws that view).
+  const html = read("src/brain.html");
+  const inTutorials = html.slice(html.indexOf('id="view-tutorials"'),
+    html.indexOf("</section>", html.indexOf('id="view-tutorials"')));
+  assert.match(inTutorials, /<button class="btn" id="open-features" type="button">Everything Jarvis can do<\/button>/,
+    "the button is not in the Brain's Help tab, in the style every other row uses");
+  assert.match(inTutorials, /<span class="status" id="features-status" role="status">/,
     "the button has no live status line for a failure");
-  assert.match(read("src/settings.js"),
-    /\$\("open-features"\)\.addEventListener\("click", async \(\) => \{\s*try \{\s*await invoke\("open_features"\);/,
+  assert.match(read("src/tutorials.js"),
+    /getElementById\("open-features"\)[\s\S]{0,600}?await invoke\("open_features"\)/,
     "the button does not call open_features");
+  // ...and it is gone from Settings, whose card no longer exists.
+  assert.ok(!read("src/settings.html").includes('id="open-features"'),
+    "Settings still draws the button the card took with it");
+  assert.ok(!read("src/settings.js").includes('"open-features"'),
+    "settings.js still wires the button that moved");
 });
 
 await check("the tray can open it too, and the command is wired end to end", () => {
@@ -246,14 +260,20 @@ await check("the tray can open it too, and the command is wired end to end", () 
     "show_features does not open features.html");
 });
 
-await check("CONTROL: only Settings may open it, and the window itself holds no command", () => {
+await check("CONTROL: only the button's own window may open it, and the window itself holds no command", () => {
   const surfaces = read("src-tauri/permissions/surfaces.toml");
   assert.equal((surfaces.match(/"allow-open-features"/g) || []).length, 1,
     "allowed on more than one surface");
   assert.match(surfaces, /identifier = "features-open"[\s\S]*?"allow-open-features"/);
+  // The ONE surface that draws the button, since 2026-10-08. It used to be
+  // Settings; it is the Brain now, and the grant moved with the button - the
+  // settings window no longer asks for it at all.
+  const brain = JSON.parse(read("src-tauri/capabilities/brain.json"));
+  assert.ok(brain.permissions.includes("features-open"), "the Brain cannot open it");
   const settings = JSON.parse(read("src-tauri/capabilities/settings.json"));
-  assert.ok(settings.permissions.includes("features-open"), "Settings cannot open it");
-  for (const other of ["brain", "faces", "floating", "hud", "onboarding", "quickbar", "widget"]) {
+  assert.ok(!settings.permissions.includes("features-open"),
+    "the settings window still holds a grant no page of its own calls");
+  for (const other of ["faces", "floating", "hud", "onboarding", "quickbar", "widget"]) {
     assert.ok(!read(`src-tauri/capabilities/${other}.json`).includes("features-open"),
       `${other} can open the feature list`);
   }

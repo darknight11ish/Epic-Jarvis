@@ -173,6 +173,16 @@ check("every row's place exists on the page it opens", () => {
         assert.equal(place.card, "", `${row.id} is a tab and names a card as well`);
       } else if (m.kind === "card") {
         assert.equal(place.card, row.id, `${row.id} is a card and opens something else`);
+      } else if (m.kind === "entry") {
+        // A Brain ENTRY is a way in, not a card (`entry.help` since 2026-10-08:
+        // the Help row opens the Brain's "Tutorials and the FAQ" tab; the
+        // phone's `entry.history` opens its History row). There is no
+        // `data-menu-id` for it to find, so what it must name is the tab - and
+        // it must NOT name a card, which would send the Brain looking for one
+        // that is not on the page.
+        assert.equal(place.card, "", `${row.id} is a way in and names a card as well`);
+        assert.ok(brainTabs.has(m.view),
+          `${row.id} names the view "${m.view}", which the rail does not have`);
       } else {
         // A row of a card (`brain.work.quiz.youtube`, `brain.history.tag-suggestions`)
         // has no element of its own: it opens the nearest card it lives in.
@@ -262,7 +272,10 @@ check("the words Jarvis itself answers to are searchable", () => {
   // "gpu" is an alias of the graphics-cards group as well as of Hardware, so
   // it is deliberately not in this list.)
   for (const [query, id] of [
-    ["faq", "settings.faq"],
+    // "faq" found the Settings card "Help and FAQ" until 2026-10-08. Help is
+    // the Brain's own "Tutorials and the FAQ" now, and it must still be one
+    // search away - that is the whole point of the move, not a side effect.
+    ["faq", "brain.tab.tutorials"],
     ["pairing", "settings.connection"],
     ["themes", "settings.appearance-card"],
     ["quiz", "brain.work.quiz"],
@@ -326,13 +339,19 @@ check("every row can say what it is, in a sentence", () => {
 });
 
 check("a hidden menu is still listed, and says so", () => {
-  const hidden = buildPalette({ hiddenFor: (id) => id === "settings.faq" });
-  const faq = hidden.find((i) => i.id === "settings.faq");
-  assert.ok(faq, "a hidden menu vanished from the palette");
-  assert.equal(faq.hidden, true);
-  assert.match(describe(faq), /hidden/i, "the row does not say it is hidden");
+  // `settings.backup` - one of the many hideable Settings cards, and NOT the
+  // removed "Help and FAQ" (2026-10-08), which is no longer in the catalogue at
+  // all: hiding is only ever about a menu that exists.
+  const hidden = buildPalette({ hiddenFor: (id) => id === "settings.backup" });
+  const card = hidden.find((i) => i.id === "settings.backup");
+  assert.ok(card, "a hidden menu vanished from the palette");
+  assert.equal(card.hidden, true);
+  assert.match(describe(card), /hidden/i, "the row does not say it is hidden");
   const shown = buildPalette();
-  assert.equal(shown.find((i) => i.id === "settings.faq").hidden, false);
+  assert.equal(shown.find((i) => i.id === "settings.backup").hidden, false);
+  // ...and the removed card is in neither list.
+  assert.ok(!ITEMS.some((i) => i.id === "settings.faq"),
+    "the Settings card the owner folded away is still offered by the palette");
 });
 
 /* ── 4. Headings come off the catalogue too ─────────────────────────────── */
@@ -407,6 +426,23 @@ check("the Brain and Settings can be told which place to open", () => {
   // nothing.
   assert.match(page("settings.js"), /SETTINGS_PLACE_KEY/);
   assert.match(page("brain.js"), /takeAnyPlace/);
+});
+
+check("the Help row - the one that can never be hidden - opens the Brain's Help place", () => {
+  // Help/FAQ was in three places until 2026-10-08, and the owner folded it into
+  // one. `entry.help` is the never-hideable entry that must keep working, so it
+  // is checked by the same function the surface calls, against the real
+  // catalogue: the Brain window, on the tutorials view, with no card to look
+  // for inside it (a tab is its own destination).
+  const help = DESKTOP.find((m) => m.id === "entry.help");
+  assert.ok(help, "entry.help is not in the catalogue");
+  const place = placeFor({ kind: help.kind, id: help.id, title: help.title, place: entryPlace(help) });
+  assert.ok(place, "the Help row opens nothing at all");
+  assert.equal(place.window, "brain", `Help opens the ${place.window} window`);
+  assert.equal(place.tab, "tutorials", `Help opens "${place.tab}", not the Help tab`);
+  assert.equal(place.card, "", "a Help row that names a card would look for one that is not there");
+  // The Settings window has no Help card left for a stale row to reach.
+  assert.ok(!settingsIds.has("faq"), "settings.html still has the #faq card");
 });
 
 if (fails.length) {

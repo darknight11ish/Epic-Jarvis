@@ -52,7 +52,7 @@ import { CANNOT_CHAT, canChat } from "./model-chat.js";
 import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 // Brain -> Tutorials and the FAQ: its own module (tutorials.js), its own three
 // commands (brain/tutorials.rs), progress kept on this PC (JARVIS-API 114).
-import { showTutorials } from "./tutorials.js";
+import { showTutorials, TUTORIALS_PLACE } from "./tutorials.js";
 import { tellChatsGone } from "./chat-history.js";
 // Brain -> History -> "Forget a time frame": its own module too.
 import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
@@ -557,8 +557,11 @@ const VIEWS = {
   projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
   // The owner's own request (2026-10-05): a skippable intro and a tutorial for
   // each major part, the same ones the phone shows, with reading progress kept
-  // on this PC and shared by both apps (JARVIS-API section 114).
-  tutorials: { title: "Tutorials", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
+  // on this PC and shared by both apps (JARVIS-API section 114). Named for the
+  // FAQ it also answers since 2026-10-08, when the Settings card "Help and FAQ"
+  // was folded in here - the same words the phone's own menu carries
+  // (`brain.tab.tutorials`, PR #108's retitle).
+  tutorials: { title: "Tutorials and the FAQ", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
   galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
   // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
   // not confused with Jarvis Live (the voice conversation).
@@ -13105,6 +13108,22 @@ onEvent((frame) => {
   const visible = visibleTabOrder();
   const landing = visible.includes("memory") ? "memory" : (visible[0] || "memory");
   const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
+  if (!(await showPlace(place))) await showView(landing);
+})();
+
+/**
+ * Open the place the Jarvis bar or the palette left, if it names one.
+ *
+ * True when it did. Every place is navigation only - nothing here changes a
+ * setting - and the caller falls back to its own landing view when the place
+ * is empty or names nothing (a stale key from an older build).
+ *
+ * A place that is simply one of the rail's own views (`tutorials`, since Help
+ * moved to the Brain on 2026-10-08) opens that view: the view key is the
+ * catalogue's own `view`, which is what the palette writes, so a new Brain
+ * destination needs no new case here.
+ */
+async function showPlace(place) {
   if (place === FORGET_RANGE_PLACE) {
     await showView("history");
     await openForgetRange();
@@ -13115,22 +13134,23 @@ onEvent((frame) => {
     // "Switch off my work topic", said or typed: the picker opens for that
     // topic (topic controls). Nothing changes until Change is tapped.
     await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
+  } else if (place === TUTORIALS_PLACE) {
+    // Help, since 2026-10-08: the palette's own Help row leaves this place,
+    // and it is the view's key as well, so the branch below would catch it -
+    // named here so the one Help destination is greppable and cannot be
+    // renamed out from under the palette by accident.
+    await showView(place);
+  } else if (Object.prototype.hasOwnProperty.call(VIEWS, place)) {
+    await showView(place);
   } else {
-    await showView(landing);
+    return false;
   }
-})();
+  return true;
+}
 
 /** The Brain was already open when the Jarvis bar asked for a place. */
 async function goToPlace(place = takeAnyPlace()) {
-  if (place === FORGET_RANGE_PLACE) {
-    await showView("history");
-    await openForgetRange();
-  } else if (place === HISTORY_PLACE) {
-    await showView("history");
-    await applyHistoryFilePlace(takePlaceExtras());
-  } else if (place === Topics.TOPICS_PLACE) {
-    await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
-  }
+  await showPlace(place);
 }
 window.addEventListener("focus", () => goToPlace());
 window.addEventListener("storage", (e) => {

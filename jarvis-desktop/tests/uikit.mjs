@@ -498,7 +498,8 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails,
+  tutorials, faq }) {
   const listeners = {};
   window.__calls = [];
   // Commands a scenario wants to see FAIL, by name -> the words the bridge
@@ -511,6 +512,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
   // changed), changed by set_animal like the PC would.
   window.__animal = animal ? JSON.parse(JSON.stringify(animal)) : null;
+  // tutorials.rs: the catalogue answer (`get_tutorials`) and the shared
+  // questions (`get_faq`). Unset, both are the SHAPE the Rust returns with
+  // nothing in them - the desktop's own half of the FAQ is local
+  // (src/desktop-help.js) and draws either way.
+  const tutorialsAnswer = tutorials || null;
+  const faqAnswer = faq || null;
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
@@ -676,6 +683,24 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return null;
           }
           case "get_theme": return theme || "deep-space";
+          // Tutorials and the FAQ, the Brain's own tab (tutorials.rs,
+          // backend/jarvis_tutorials.py; JARVIS-API section 114). Both answers
+          // are the SHAPE the Rust command really returns, with no tutorials
+          // and no shared questions in them: what a suite wants from this tab
+          // is the desktop's own half of the FAQ, which is local
+          // (src/desktop-help.js) and must render whether or not the PC has
+          // anything to add. A scenario may pass `tutorials`/`faq` to stand in
+          // for a real backend answer.
+          case "get_tutorials":
+            return tutorialsAnswer || {
+              ok: true, tutorials: [], counts: { done: 0, due: 0, total: 0 },
+              sections: [{ id: "pc", title: "On this computer" },
+                         { id: "phone", title: "On your phone" }],
+              note: "Progress is kept on this PC and shared by both apps.",
+            };
+          case "get_faq":
+            return faqAnswer || { ok: true, questions: [], count: 0,
+                                  note: "Written from how Jarvis behaves today, in plain words." };
           // "Match Windows light or dark mode" (commands.rs ThemePrefs). A
           // scenario sets window.__themePrefs; unset, the shell is treated as
           // not following, on the theme above.

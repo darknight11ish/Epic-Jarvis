@@ -220,27 +220,6 @@ export const MENUS = [
     ]
   },
   {
-    "id": "settings.faq",
-    "title": "Help and FAQ",
-    "about": "Answers to common questions.",
-    "apps": [
-      "desktop"
-    ],
-    "area": "settings",
-    "view": "",
-    "kind": "card",
-    "group": null,
-    "parent": null,
-    "hide": true,
-    "collapse": true,
-    "why": "",
-    "names": [
-      "faq",
-      "the faq",
-      "frequently asked questions"
-    ]
-  },
-  {
     "id": "settings.appearance-card",
     "title": "Appearance",
     "about": "Theme, faces and how it all looks.",
@@ -1134,7 +1113,11 @@ export const MENUS = [
     "collapse": false,
     "why": "",
     "names": [
-      "tutorials"
+      "tutorials",
+      "tutorials and the faq",
+      "faq",
+      "the faq",
+      "frequently asked questions"
     ]
   },
   {
@@ -2222,13 +2205,13 @@ export const MENUS = [
   {
     "id": "entry.help",
     "title": "Help",
-    "about": "The Help entry.",
+    "about": "The Help entry: the Brain's \"Tutorials and the FAQ\".",
     "apps": [
       "desktop",
       "phone"
     ],
-    "area": "safety",
-    "view": "",
+    "area": "brain",
+    "view": "tutorials",
     "kind": "entry",
     "group": null,
     "parent": null,
@@ -2449,7 +2432,7 @@ export const ALIASES = {
   "email sending": "settings.email-sending",
   "everyday chat runs on": "settings.second-card.chat-card",
   "faces": "settings.appearance-card",
-  "faq": "settings.faq",
+  "faq": "brain.tab.tutorials",
   "finance": "group.finance",
   "finances": "group.finance",
   "findings": "brain.now.findings",
@@ -2460,7 +2443,7 @@ export const ALIASES = {
   "folders": "settings.folders",
   "folders jarvis may look in": "settings.folders",
   "forget a time frame": "brain.history.forget-range",
-  "frequently asked questions": "settings.faq",
+  "frequently asked questions": "brain.tab.tutorials",
   "galaxy": "brain.tab.galaxy",
   "github watchlist": "brain.watch.watchlist",
   "goals": "brain.work.goals",
@@ -2475,7 +2458,6 @@ export const ALIASES = {
   "headless browser": "settings.browser-engine",
   "heatmap": "brain.projects.progress",
   "help": "entry.help",
-  "help and faq": "settings.faq",
   "help button": "entry.help",
   "history": "brain.tab.history",
   "history entry": "entry.history",
