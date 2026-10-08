@@ -498,9 +498,16 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube, invokeFails }) {
   const listeners = {};
   window.__calls = [];
+  // Commands a scenario wants to see FAIL, by name -> the words the bridge
+  // gives back. Every command that does not appear here behaves as before.
+  // This is how the "the PC refused, so the switch must SAY so" paths in
+  // Settings are driven (settings-audit, 2026-10-08): a silent spring-back was
+  // exactly the defect, and it cannot be caught by a scenario that only ever
+  // sees successes.
+  window.__invokeFails = invokeFails || {};
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
   // changed), changed by set_animal like the PC would.
   window.__animal = animal ? JSON.parse(JSON.stringify(animal)) : null;
@@ -541,6 +548,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
       Channel: MockChannel,
       invoke: async (cmd, args) => {
         window.__calls.push([cmd, args]);
+        if (window.__invokeFails && window.__invokeFails[cmd]) {
+          throw new Error(window.__invokeFails[cmd]);
+        }
         switch (cmd) {
           case "get_link_state": return state;
           case "get_pending_approvals": {

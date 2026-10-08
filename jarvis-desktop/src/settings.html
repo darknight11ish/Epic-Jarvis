@@ -692,6 +692,12 @@
                wiring. -->
         </fieldset>
 
+        <!-- Where a refused theme change says so. The two toggles above and the
+             theme radios all put themselves back when the PC refuses them, and
+             before this line they did it in silence (settings-audit,
+             2026-10-08). -->
+        <p class="status" id="appearance-status" role="status"></p>
+
         <div class="field">
           <span class="label" id="text-size-label">Text size</span>
           <div class="choices" id="text-size" role="group" aria-labelledby="text-size-label"></div>

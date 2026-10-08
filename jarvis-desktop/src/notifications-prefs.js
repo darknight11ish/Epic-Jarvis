@@ -85,7 +85,7 @@ export function loadNotificationPrefs(storage = globalThis.localStorage) {
   };
 }
 
-export function saveNotificationPrefs(prefs, storage = globalThis.localStorage) {
+export function saveNotificationPrefs(prefs, storage = globalThis.localStorage, { push = true } = {}) {
   if (!prefs) return false;
   let ok = true;
   if (typeof prefs.alarms === "boolean") ok = saveBool(NOTIF_ALARMS_KEY, prefs.alarms, storage) && ok;
@@ -97,9 +97,14 @@ export function saveNotificationPrefs(prefs, storage = globalThis.localStorage) 
   if (typeof prefs.quietEnd === "string") ok = saveString(NOTIF_QUIET_END_KEY, prefs.quietEnd, storage) && ok;
   // The same change goes to Rust, which is what the toasts honour. Every save
   // path goes through this function, so no switch can be drawn as saved and
-  // left un-sent. Fire and forget: the page must not wait on a file write to
-  // redraw, and `pushNotificationPrefs` reports its own failure.
-  void pushNotificationPrefs(prefs);
+  // left un-sent. Fire and forget by default: the page must not wait on a file
+  // write to redraw, and `pushNotificationPrefs` reports its own failure.
+  //
+  // `push: false` is for the one caller that wants to REPORT the answer itself:
+  // Settings has a status line and says so when the PC did not take them
+  // (settings-audit, 2026-10-08 - the switches used to look saved while the
+  // toasts went on, which is the opposite of what this module's header claims).
+  if (push) void pushNotificationPrefs(prefs);
   return ok;
 }
 

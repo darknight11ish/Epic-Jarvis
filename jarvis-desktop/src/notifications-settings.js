@@ -63,10 +63,33 @@ export function initNotificationsSettings() {
   // them - so this is the carry-over: what the owner already turned off stays
   // off instead of coming back on, and a page with nothing stored sends
   // everything on, which is what the app did before the switches existed.
-  void pushNotificationPrefs(prefs);
+  void pushToPc(prefs);
+
+  /**
+   * Sends the switches to the PC and SAYS SO when it did not take them.
+   *
+   * Without this the four switches could be stored as off while the PC kept
+   * notifying: `saveNotificationPrefs` wrote localStorage and fired the push
+   * into the void, and only a console warning marked the refusal - so the
+   * owner saw a switch off and the toasts went on (settings-audit, 2026-10-08).
+   * This module's own header promises the opposite, and the push exists
+   * precisely because that silent failure happened before.
+   */
+  async function pushToPc(next) {
+    const reached = await pushNotificationPrefs(next);
+    if (!dom.status) return;
+    if (reached) {
+      // A later save that works clears the last complaint, like every other
+      // card's status line.
+      say("");
+    } else {
+      say("These switches did not reach the PC, so the notifications still "
+        + "follow what it has. Try again, or restart Jarvis Desktop.", "bad");
+    }
+  }
 
   const saveCurrent = () => {
-    saveNotificationPrefs({
+    const prefs = {
       alarms: dom.alarms ? dom.alarms.checked : true,
       reminders: dom.reminders ? dom.reminders.checked : true,
       briefing: dom.briefing ? dom.briefing.checked : true,
@@ -74,7 +97,10 @@ export function initNotificationsSettings() {
       quietEnabled: dom.quietEnabled ? dom.quietEnabled.checked : false,
       quietStart: dom.quietStart ? dom.quietStart.value : DEFAULT_QUIET_START,
       quietEnd: dom.quietEnd ? dom.quietEnd.value : DEFAULT_QUIET_END,
-    });
+    };
+    // localStorage now; the PC from here, so its answer can be reported.
+    saveNotificationPrefs(prefs, globalThis.localStorage, { push: false });
+    void pushToPc(prefs);
   };
 
   [dom.alarms, dom.reminders, dom.briefing, dom.handoff].forEach((el) => {
