@@ -44,7 +44,9 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
   * The SQLite databases in SOURCE_DBS, snapshotted with the online backup API
     (`sqlite3.Connection.backup`, safe while Jarvis keeps them open):
     memory.db, chat-history.db, schedule.db, feedback.db, projects.db, goals.db,
-    and (2026-09-30) study.db, the review decks.
+    and (2026-09-30) study.db, the review decks; and (2026-10-07) arbiter.db,
+    jobs.db, ledger.db and watch.db, the files of the arbiter, jobs, ledger and
+    watch modules.
   * Every `*.json` file directly in the Jarvis settings folder (folders.
     json, asks_first.json, manner.json, and so on) - never a subfolder, so
     this glob can never reach into "voice" or "notes" by accident.
@@ -258,8 +260,13 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: sealed under a Credential Manager key of their own, so that key travels the
 #: way the chat-history key does (secrets/study-decks-key.b64) - and a study.db
 #: is only written into an archive together with its key, never without.
+#: arbiter.db (jarvis_arbiter.py), jobs.db (jarvis_jobs.py), ledger.db
+#: (jarvis_ledger.py) and watch.db (jarvis_watch.py) joined on 2026-10-07: those
+#: four modules began being shipped that day, each keeps its own SQLite file in
+#: the settings folder, and test_backup.py refuses to let a database a module
+#: names go unbacked. A name whose file is not there is skipped, as for the rest.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
-              "goals.db", "study.db")
+              "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db")
 
 STUDY_DB = "study.db"
 

@@ -456,6 +456,48 @@ SHIPPED = (
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",
+    # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
+    # Found by comparing a working backend against this list: all five were
+    # already IN jarvis-backend/, and a SHIPPED module imports each of them, but
+    # none was in SHIPPED and no patch delivered any of them. So a backend
+    # assembled from the published base imported a shipped module which imported
+    # a file this repository never handed over - an import error for anyone
+    # building from scratch, and their tests could not run in CI either.
+    # `docs/audit-2026-10-07/` and .dsh-scratch/UNSHIPPED-MODULES-REPORT.md carry
+    # the evidence. Listing them changes nothing about what each does; it makes
+    # the delivery match what the code already assumes.
+    #
+    # The one place that decides whether to interrupt the owner: nothing
+    # unsolicited reaches a client directly, it holds an attention budget and
+    # drains the overflow into one daily digest. jarvis_hud.py and jarvis_watch.py
+    # import it.
+    "jarvis_arbiter.py",
+    # A tamper-evident record of what the assistant did, and a "why did you do
+    # that" view over it: append-only, hashing metadata only so the integrity
+    # feature and forgetting do not cancel each other out. jarvis_hud.py imports it.
+    "jarvis_ledger.py",
+    # "Tell me what's new on GitHub for the things I care about": pull, never
+    # push, results handed over when asked, and a repo page treated as text from
+    # a stranger. jarvis_hud.py and jarvis_settings_registry.py import it.
+    "jarvis_watch.py",
+    # A smoke test for a model swap, and deliberately not an eval suite: the
+    # header explains why a judge-scored corpus from real transcripts was
+    # rejected (noise floor, and a second copy of the owner's life that
+    # forgetting cannot reach). jarvis_models.py imports it.
+    "jarvis_tripwire.py",
+    # Makes a malformed tool call structurally impossible: builds the JSON
+    # Schema Ollama's `format` field constrains decoding to, instead of retrying
+    # until bad JSON parses. jarvis_extract.py imports it.
+    "jarvis_structured.py",
+    # These two are pulled in by the five above (jarvis_arbiter and jarvis_watch
+    # import jarvis_jobs; jarvis_watch imports jarvis_content_risk). Adding them
+    # is not optional: test_shipped_modules.py fails a shipped file that imports
+    # an unshipped module, which is what caught the first five in the first place.
+    #
+    # Long Fuse: work that outlives the conversation.
+    "jarvis_jobs.py",
+    # One pipeline for text that arrived from outside.
+    "jarvis_content_risk.py",
 )
 
 

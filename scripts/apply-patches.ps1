@@ -1407,6 +1407,21 @@ $SHIPPED = @(
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
+    # --- The five the base carried but this list did not (2026-10-07) ---
+    # All five were already in jarvis-backend/ and a SHIPPED module imports each,
+    # but none was listed here and no patch delivered any of them - so a backend
+    # built from the published base imported a shipped module that imported a
+    # file the repository never handed over. test_shipped_modules.py keeps this
+    # list and _where.py's SHIPPED in step. See .dsh-scratch/UNSHIPPED-MODULES-REPORT.md.
+    'jarvis_arbiter.py'          # the one place that decides whether to interrupt the owner: an attention budget, overflow drained into one daily digest; jarvis_hud.py and jarvis_watch.py import it - no patch
+    'jarvis_ledger.py'           # a tamper-evident append-only record of what the assistant did, hashing metadata only so integrity and forgetting do not cancel out; jarvis_hud.py imports it - no patch
+    'jarvis_watch.py'            # "tell me what's new on GitHub for the things I care about": pull not push, a repo page treated as text from a stranger; jarvis_hud.py and jarvis_settings_registry.py import it - no patch
+    'jarvis_tripwire.py'         # a smoke test for a model swap, deliberately not an eval suite; jarvis_models.py imports it - no patch
+    'jarvis_structured.py'       # makes a malformed tool call structurally impossible via Ollama's `format` JSON Schema; jarvis_extract.py imports it - no patch
+    # Pulled in by the five above: jarvis_arbiter and jarvis_watch import
+    # jarvis_jobs, and jarvis_watch imports jarvis_content_risk.
+    'jarvis_jobs.py'             # Long Fuse: work that outlives the conversation; imported by jarvis_arbiter.py and jarvis_watch.py - no patch
+    'jarvis_content_risk.py'     # one pipeline for text that arrived from outside; imported by jarvis_watch.py - no patch
 )
 
 # The settings file. Installed only where none exists; never overwritten.
