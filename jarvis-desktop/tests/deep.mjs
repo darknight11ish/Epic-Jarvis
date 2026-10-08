@@ -100,7 +100,17 @@ const SIZE = { width: 1180, height: 1600 };
 /** brain.html on its Memory tab (the one it opens on), deep questions fed. */
 async function brain(deep, extra = {}) {
   const page = await K.open(browser, base, "brain.html", { deep, ...extra }, SIZE);
-  await page.waitForTimeout(400);
+  // "Drawn", not "400ms later". `#deep-state` opens as "Reading…" and the plate
+  // is painted when the first read answers, so that is the real readiness
+  // condition - on a loaded CI runner 400ms was not always enough, which is how
+  // this suite flaked (2026-10-08). See `until` in uikit.mjs for why a fixed
+  // sleep cannot be made safe.
+  await K.until(page, "the Brain's deep plate to be drawn", async () => page.evaluate(() => {
+    const state = document.getElementById("deep-state");
+    if (!state) return false;
+    return state.innerText.trim() !== "Reading…"
+      || document.querySelectorAll("#deep-jobs .row-item").length > 0;
+  }));
   return page;
 }
 
@@ -354,7 +364,15 @@ await check("polls gently only while a question is going", async () => {
   const [going, quiet] = await Promise.all([brain({ status: BM.deep_thinking }),
     brain({ status: BM.deep_done })]);
   const a = await Promise.all([going, quiet].map((p) => p.evaluate(() => window.__deep.reads)));
-  await going.waitForTimeout(POLL_MS + 800);
+  // Wait for the poll to HAPPEN, not for a fixed slice of wall clock. The
+  // page's own 10-second timer is late on a busy machine - and on a
+  // deliberately slowed one (`JARVIS_TEST_SLOW_CPU`, see uikit.mjs) - where a
+  // fixed window reports "read 0 times while one was going": a false red that
+  // named the wrong thing. The two bounds below still prove the cadence is
+  // gentle, which is what this test is actually about.
+  await K.until(going, "the page to poll once while a question is going",
+    async () => (await going.evaluate(() => window.__deep.reads)) > a[0],
+    { ms: POLL_MS + 10000 });
   const b = await Promise.all([going, quiet].map((p) => p.evaluate(() => window.__deep.reads)));
   await going.close();
   await quiet.close();

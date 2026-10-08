@@ -81,19 +81,56 @@ const NOW = Math.floor(Date.now() / 1000);
 async function bar(extra = {}) {
   const page = await K.open(browser, base, "index.html", { chatReplies: [], ...extra },
     { width: 760, height: 900 });
-  await page.waitForTimeout(250);
+  // "Loaded", not "250ms later": the page boots by reading the link state, so
+  // that call is the proof it is up (see `until` in uikit.mjs).
+  await K.until(page, "the bar to finish loading",
+    async () => page.evaluate(
+      () => (window.__calls || []).some((c) => c[0] === "get_link_state")));
   return page;
 }
-async function ask(page, text) {
-  await page.fill("#prompt", text);
-  await page.keyboard.press("Enter");
-  await page.waitForTimeout(350);
+
+/**
+ * Asks a question and waits until THAT turn really happened.
+ *
+ * A question typed into a page that is still finishing the previous answer is
+ * DROPPED: `main.js`'s `send()` refuses while `state.inFlight || state.abort`.
+ * A fixed sleep cannot tell "not sent yet" from "never will be", so the suite
+ * reported the wrong thing entirely - "the crisis pair was re-sent to the
+ * model", when in truth the third question had never been sent at all (CI,
+ * 2026-10-08; it passed locally on a fast machine and failed on a loaded
+ * runner).
+ *
+ * So it waits for what is actually observable: the turn count rising (proof
+ * the question went) and, when the scenario says what the answer should say,
+ * that text on screen (proof the turn finished - which is also what makes the
+ * NEXT question acceptable).
+ *
+ * The retry cannot double-send: once the page has taken a question it is busy,
+ * and a second press is refused by the very latch this guards against.
+ */
+async function ask(page, text, expected) {
+  const before = await K.turnsSent(page);
+  for (let tries = 0; tries < 40; tries++) {
+    await page.fill("#prompt", text);
+    await page.keyboard.press("Enter");
+    if ((await K.turnsSent(page)) > before) break;
+    await page.waitForTimeout(25);
+  }
+  await K.until(page, `"${text}" to reach the model`,
+    async () => (await K.turnsSent(page)) > before);
+  if (expected) {
+    await K.until(page, `the answer to "${text}"`,
+      async () => (await page.locator("#answer").innerText()).includes(expected));
+  } else {
+    await K.until(page, `the answer to "${text}" to appear`,
+      async () => ((await page.locator("#answer").innerText()) || "").trim().length > 0);
+  }
 }
 
 await check("the bar: the question is shown above its answer, and the thread opens on its newest end", async () => {
   const replies = Array.from({ length: 12 }, (_, i) => `Answer ${i + 1}.`);
   const page = await bar({ chatReplies: replies });
-  for (let i = 1; i <= 12; i++) await ask(page, `Question ${i}?`);
+  for (let i = 1; i <= 12; i++) await ask(page, `Question ${i}?`, `Answer ${i}.`);
   const you = await page.locator("#you-line").innerText();
   const summary = await page.locator("#previous-answer-summary").innerText();
   await page.locator("#previous-answer-summary").click();
@@ -122,13 +159,13 @@ await check("the bar: the question is shown above its answer, and the thread ope
 await check("the bar: a crisis question and its answer never join the thread or the model's history", async () => {
   const HELP = "I'm really sorry you're going through this. In the US, call or text **988**.";
   const page = await bar({ chatReplies: ["Tuesday at 3.", [route({ wellbeing: "crisis" }), HELP], "Fine, thanks."] });
-  await ask(page, "when is the dentist?");
-  await ask(page, "I want to hurt myself");
+  await ask(page, "when is the dentist?", "Tuesday at 3.");
+  await ask(page, "I want to hurt myself", "988");
   // The help answer shows once, on screen, as the current answer.
   const shown = await page.locator("#answer").innerText();
   const panel = await page.locator("#answer").evaluate((n) => n.classList.contains("wellbeing-crisis"));
   const foldedNow = await page.locator("#previous-answer-body").textContent();
-  await ask(page, "how are you?");
+  await ask(page, "how are you?", "Fine, thanks.");
   const thread = await page.locator("#previous-answer-body").textContent();
   const summary = await page.locator("#previous-answer-summary").innerText();
   const answerNow = await page.locator("#answer").innerText();
@@ -148,15 +185,15 @@ await check("the bar: a crisis question and its answer never join the thread or 
 
 await check("the bar: no thread under Hide memory lists, until Show; the answer on screen stays", async () => {
   const hidden = await bar({ chatReplies: ["One.", "Two."], security: { hidden: true } });
-  await ask(hidden, "First?");
-  await ask(hidden, "Second?");
+  await ask(hidden, "First?", "One.");
+  await ask(hidden, "Second?", "Two.");
   const folded = await hidden.locator("#previous-answer").isHidden();
   const youHidden = await hidden.locator("#you-line").innerText();
   const answer = await hidden.locator("#answer").innerText();
   await hidden.close();
   const shown = await bar({ chatReplies: ["One.", "Two."], security: { hidden: true, revealed: true } });
-  await ask(shown, "First?");
-  await ask(shown, "Second?");
+  await ask(shown, "First?", "One.");
+  await ask(shown, "Second?", "Two.");
   const visible = await shown.locator("#previous-answer").isVisible();
   await shown.close();
   assert.equal(folded, true, "the thread of earlier answers was drawn while the lists are hidden");
@@ -167,7 +204,7 @@ await check("the bar: no thread under Hide memory lists, until Show; the answer 
 
 await check("the bar: New conversation says where the chat went, and a game says nothing was kept", async () => {
   const page = await bar({ chatReplies: ["Tuesday at 3."] });
-  await ask(page, "when is the dentist?");
+  await ask(page, "when is the dentist?", "Tuesday at 3.");
   await page.locator("#new-conversation").click();
   await page.waitForTimeout(200);
   const note = await page.locator("#chat-ended-note").innerText();
@@ -178,7 +215,7 @@ await check("the bar: New conversation says where the chat went, and a game says
 
   const game = await bar({ chatReplies: [[route({ temporary: true, lane: "qwen3:8b", where: "local" }),
     "The dragon roars."]] });
-  await ask(game, "let's play a text adventure");
+  await ask(game, "let's play a text adventure", "The dragon roars.");
   const strip = await game.locator("#temporary-strip").innerText();
   const state = await game.locator("#temporary-strip").getAttribute("data-state");
   await game.keyboard.press("Escape");
@@ -195,7 +232,7 @@ await check("the bar: New conversation says where the chat went, and a game says
 
 await check("the bar: coming back to it grows it to its content again", async () => {
   const page = await bar({ chatReplies: ["Tuesday at 3."] });
-  await ask(page, "when is the dentist?");
+  await ask(page, "when is the dentist?", "Tuesday at 3.");
   const before = await page.evaluate(() => (window.__calls || [])
     .filter((c) => c[0] === "resize_quickbar").map((c) => c[1].height));
   await page.evaluate(() => window.__emit("focus-input", {}));

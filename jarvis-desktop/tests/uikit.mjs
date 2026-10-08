@@ -3347,6 +3347,38 @@ export async function launch() {
 }
 
 /**
+ * Waits until `ready()` says so, or fails saying WHAT it was waiting for.
+ *
+ * Use this instead of `page.waitForTimeout(...)` whenever the thing being
+ * waited for is observable. A fixed sleep is a guess in both directions: too
+ * short and the test fails on a busy CI runner (that is a false red - two
+ * suites did exactly that on 2026-10-08), too long and the suite crawls. Worse,
+ * it cannot tell "not ready yet" from "will never be ready", so the failure
+ * surfaces later as an unrelated assertion - `chat-thread.mjs` reported "the
+ * crisis pair was re-sent to the model" when the real problem was that the
+ * third question had been DROPPED by a still-busy page and never sent.
+ *
+ * The message names the wait, so a timeout reads as a sentence rather than a
+ * mystery: "timed out after 5000ms waiting for the answer to "how are you?"".
+ */
+export async function until(page, what, ready, { ms = 5000, every = 25 } = {}) {
+  const giveUpAt = Date.now() + ms;
+  for (;;) {
+    if (await ready()) return;
+    if (Date.now() > giveUpAt) {
+      throw new Error(`timed out after ${ms}ms waiting for ${what}`);
+    }
+    await page.waitForTimeout(every);
+  }
+}
+
+/** How many turns this page has sent to the model (the bar's own record). */
+export function turnsSent(page) {
+  return page.evaluate(
+    () => (window.__calls || []).filter((c) => c[0] === "stream_chat").length);
+}
+
+/**
  * A speaker whose every clip lasts `playMs`, for the quickbar's spoken
  * replies (main.js drainSpeechQueue). Each clip `speak_reply` returns is
  * tagged with its sentence (a `#` fragment on the data URI), and "playing"
@@ -3406,6 +3438,22 @@ function silentWav(seconds) {
 /** Opens a page with the bridge installed and the given scenario data. */
 export async function open(browser, base, file, data, viewport) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 2 });
+  // A way to RE-CREATE a loaded machine on purpose, so a timing flake can be
+  // reproduced here instead of only on CI:
+  //
+  //     $env:JARVIS_TEST_SLOW_CPU = "6"   # PowerShell
+  //     JARVIS_TEST_SLOW_CPU=6 node tests/chat-thread.mjs
+  //
+  // Chromium then runs the page's JavaScript six times slower, which is what a
+  // busy CI runner feels like. Every fixed sleep becomes a coin toss at some
+  // rate; a wait on an observable condition does not care. (Added 2026-10-08
+  // with the flaky-test fix: `chat-thread.mjs` failed exactly this way on CI
+  // while passing locally.)
+  const slowCpu = Number(process.env.JARVIS_TEST_SLOW_CPU || 0);
+  if (slowCpu > 1) {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: slowCpu });
+  }
   const errors = [];
   page.on("pageerror", e => errors.push(String(e)));
   page.on("console", m => {
