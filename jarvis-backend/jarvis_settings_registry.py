@@ -223,6 +223,19 @@ SECTIONS: tuple = (
     # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
     Section("quick-tiles", ("quick tiles", "quick settings tiles", "the quick tiles"),
             app="phone"),
+    # "Floating Jarvis" (2026-09-27): the phone's own Settings row
+    # (SettingsScreen.kt's `item(key = "floating-avatar")` - saved on that phone
+    # only, so it needs no `canAct` gate). It had NO section here until
+    # 2026-10-08, although `features/features.json` claims
+    # `settings.floating-avatar`: `jarvis_quick._run_settings_open` reads such an
+    # id through `section_by_id`, and the fallback says the raw id, so "open
+    # Floating Jarvis" answered "Opening floating-avatar in Settings." and named
+    # a place neither app could find. The new check in
+    # test_settings_registry.py keeps the next one from going missing the same
+    # way.
+    Section("floating-avatar", ("floating jarvis", "the floating face",
+                                "the floating avatar", "the bubble"),
+            app="phone"),
     Section("phone-notify", ("phone notifications", "reading phone notifications",
                             "notifications on my phone"), app="phone"),
     # "Look at this and Watch with me" (2026-09-29: its own card on the
