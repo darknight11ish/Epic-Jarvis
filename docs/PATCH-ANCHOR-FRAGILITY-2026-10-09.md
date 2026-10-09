@@ -74,7 +74,29 @@ breaks whichever patch was last there. The `test_screen_attach.py` rule that
 acknowledgement of this — and it is not enough, because "bar the ones written
 after" is a list somebody has to remember to extend.
 
-## The durable fix
+## The proposed fix - NOT VERIFIED, and do not approve it on this document alone
+
+**Read this first.** The sentinel below is a PROPOSAL. Its load-bearing
+claim - that a hunk whose only context is the sentinel applies no matter what
+precedes it - has NOT been demonstrated. An attempt to prove it on a synthetic
+file failed in every case, including a single patch against a clean file with
+nothing else in it:
+
+```
+sentinel-anchored patch, applied in a DIFFERENT ORDER than written:
+  written first                 : FAILED  error: hud.py: patch does not apply
+  reverse of writing            : FAILED  error: hud.py: patch does not apply
+  new one inserted in the middle: FAILED  error: hud.py: patch does not apply
+  new one first                 : FAILED  error: hud.py: patch does not apply
+claim holds: False
+```
+
+A failure in the trivial case points at the test harness rather than at the
+claim, and the harness bug was not isolated. So this is genuinely unknown:
+neither confirmed nor refuted. **Nobody should change 41 patches on the strength
+of the argument below until someone has made that test pass.** What IS
+established is the mechanism and the treadmill, above - those are observed.
+
 
 **Give the anchor a sentinel that no patch competes for, and make every patch
 at that anchor use the sentinel alone as context.**
