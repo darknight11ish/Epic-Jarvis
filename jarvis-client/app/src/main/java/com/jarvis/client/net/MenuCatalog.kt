@@ -72,6 +72,7 @@ object MenuCatalog {
         Menu("settings.more-options", "More options", "Startup, logs and crash notes.", true, false, "settings", "", "card", null, null, false, false, "Already a fold of its own; it stays where it is."),
         Menu("settings.asks-first", "What asks first", "Every action and whether it asks.", true, true, "settings", "", "card", null, null, false, false, "Safety: what asks first must always be reachable."),
         Menu("settings.reach", "What Jarvis can reach", "Which tools Jarvis may use.", true, true, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.limits", "Limits and frequency", "How long an Undo stays possible, how much Jarvis gets on with at once, and the other numbers you can change.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.email-sending", "Sending email", "Sending email, one card per email.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.about", "About Jarvis", "Version, licences and credits.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.backend-supports", "What this backend supports", "The capability list the app branches on.", true, true, "settings", "", "card", null, null, true, true, ""),

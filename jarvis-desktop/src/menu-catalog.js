@@ -856,6 +856,29 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.limits",
+    "title": "Limits and frequency",
+    "about": "How long an Undo stays possible, how much Jarvis gets on with at once, and the other numbers you can change.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "limits",
+      "the limits",
+      "limits and frequencies",
+      "limits and frequency",
+      "how often jarvis does things"
+    ]
+  },
+  {
     "id": "settings.email-sending",
     "title": "Sending email",
     "about": "Sending email, one card per email.",
@@ -2511,6 +2534,7 @@ export const ALIASES = {
   "hotkeys": "settings.shortcuts",
   "how jarvis talks": "settings.manner",
   "how long the hand-off stays on offer": "settings.handoff",
+  "how often jarvis does things": "settings.limits",
   "hud window": "settings.hud-window",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
@@ -2520,6 +2544,9 @@ export const ALIASES = {
   "keyboard shortcuts": "settings.shortcuts",
   "learning": "brain.memory.learning",
   "leave it to ollama": "settings.second-card.chat-card",
+  "limits": "settings.limits",
+  "limits and frequencies": "settings.limits",
+  "limits and frequency": "settings.limits",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
   "manner": "settings.manner",

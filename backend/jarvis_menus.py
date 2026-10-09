@@ -234,6 +234,15 @@ MENUS: tuple = (
        names=("what asks first", "asks first", "what asks first settings")),
     _m("settings.reach", "What Jarvis can reach", "Which tools Jarvis may use.",
        names=("what jarvis can reach", "reach")),
+    # "Limits and frequency" (2026-10-08): the numbers the owner can change,
+    # ONE table on the PC behind one read route and one write route. The
+    # desktop's card is this branch; the phone's own screen for the same table
+    # is a separate piece of work, so this says DESKTOP alone until it lands.
+    _m("settings.limits", "Limits and frequency",
+       "How long an Undo stays possible, how much Jarvis gets on with at once, "
+       "and the other numbers you can change.", (DESKTOP,),
+       names=("limits", "the limits", "limits and frequencies",
+              "limits and frequency", "how often jarvis does things")),
     _m("settings.email-sending", "Sending email", "Sending email, one card per email.",
        names=("sending email", "email sending")),
     _m("settings.about", "About Jarvis", "Version, licences and credits.", (DESKTOP,),
