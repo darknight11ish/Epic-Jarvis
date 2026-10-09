@@ -97,7 +97,18 @@ mod tests {
             body("set", Some("keep_offering")).unwrap(),
             json!({ "mode": "keep_offering" })
         );
-        for bad in ["", "toggle", "on", "stop", "patient", "STOP_EARLY", "stop_early "] {
+        // One entry per line: rustfmt's own layout (2026-10-09). `cargo fmt
+        // --check` is the rust job's first step, so this array being on one
+        // line failed CI before `cargo check` ever ran.
+        for bad in [
+            "",
+            "toggle",
+            "on",
+            "stop",
+            "patient",
+            "STOP_EARLY",
+            "stop_early ",
+        ] {
             assert!(body("set", Some(bad)).is_err(), "{bad:?}");
         }
         for verb in ACTIONS {
