@@ -565,6 +565,17 @@ data class Attention(
     /** The notch count for the reactor's rim ring. */
     val pending: Int = 0,
     val banked: Boolean = false,
+    /**
+     * The hour the morning brief arrives, 0-23 (`GET /api/attention`'s
+     * `digest_hour`; `jarvis_arbiter._digest_hour`). Carried flat with the
+     * budget because both numbers come from the SAME read, so the phone's two
+     * controls ([com.jarvis.client.net.AttentionSettings]) can never be showing a
+     * count and an hour from two different moments.
+     *
+     * 18 is the PC's own fallback, but the default here is only reached when a
+     * response really omits the field - which an older PC's answer does.
+     */
+    val digestHour: Int = 18,
 )
 
 /** The nested wire shape of `GET /api/attention`. */
@@ -593,6 +604,9 @@ data class AttentionResponse(
         muted = budget.muted,
         pending = pending,
         banked = banked,
+        // Not a count of anything waiting: the hour the brief arrives, which
+        // the phone's "Brief at" control reads and writes.
+        digestHour = (digestHour ?: 18).coerceIn(0, 23),
     )
 }
 

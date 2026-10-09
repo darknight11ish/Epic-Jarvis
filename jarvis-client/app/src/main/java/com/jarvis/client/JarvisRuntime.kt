@@ -2471,6 +2471,37 @@ object JarvisRuntime {
         return answer.sentence
     }
 
+    // ---------------------------------------- the interruption budget ----
+
+    /**
+     * ONE change to the interruption budget ([com.jarvis.client.net.AttentionSettings.body]):
+     * how many times a day Jarvis may speak up unasked, or the hour the morning
+     * brief arrives - the two numbers the Attention card used to be able to read
+     * and not change.
+     *
+     * Held on a stale link like every change sent to the PC ([actionBlocker],
+     * rule 4), exactly as [setLimit] and [setMuted] are: raising the count puts
+     * an approval card to the owner on the PC, and a card is a decision, not a
+     * setting. The PC's OWN sentence is what comes back and what the plate
+     * shows, and anything that did not go through ALSO goes into the shared
+     * [notice], so a refusal is never only a line inside one plate.
+     *
+     * `GET /api/attention` is re-read after EVERY attempt, whatever the answer
+     * was - the `LimitsPlate` habit, and for the same reason: a 2xx can mean "a
+     * card is waiting there" and never means "it is on", and an out-of-date
+     * count or hour on this card would be a number the owner reads and trusts.
+     * A read is cheap, never held on a stale link, and this card draws from it.
+     */
+    suspend fun setAttentionSettings(key: String, value: Int): String {
+        actionBlocker()?.let { return it }
+        val answer = com.jarvis.client.net.AttentionSettings.answer(
+            api.setAttentionLimit(com.jarvis.client.net.AttentionSettings.body(key, value)),
+        )
+        if (!answer.changed) _notice.value = answer.sentence
+        refreshAttention()
+        return answer.sentence
+    }
+
     // ------------------------------------------ sun, moon and weather ----
 
     /**

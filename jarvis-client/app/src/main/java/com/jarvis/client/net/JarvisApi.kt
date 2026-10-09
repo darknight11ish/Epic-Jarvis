@@ -2323,6 +2323,46 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    // ---------------------------------------- the interruption budget ----
+
+    /**
+     * `POST /api/attention/settings` with ONE number ([AttentionSettings.body]):
+     * how many times a day Jarvis may speak up unasked, or the hour the morning
+     * brief arrives. The route the PC's own Brain writes through
+     * (`set_attention_limits`), reached here so the phone is not the one surface
+     * that can only read them.
+     *
+     * No direction is sent. The NUMBER decides it on the PC, against the budget
+     * already in force: DOWN and the hour apply at once, UP is a loosening and
+     * the PC puts ONE approval card to the owner first and writes nothing until
+     * it is answered - so a 2xx never means "it is on" and [attention] is read
+     * again afterwards.
+     *
+     * The BODY comes back rather than a bare status, because the PC's own
+     * sentence is the answer: `said` for a change (or for a card now waiting on
+     * the PC), and `error` for a refusal (400 "That has to be a whole number
+     * between 0 and 24.", 409 "You said no, so ...", 503 - all with a 200-shaped
+     * body). [AttentionSettings.answer] reads it; this app never words one of its
+     * own. A 404 means this PC has not run apply-patches.ps1 since the route
+     * arrived.
+     */
+    suspend fun setAttentionLimit(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(AttentionSettings.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    AttentionSettings.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /**
      * `GET /api/sky` - the sun, moon and weather behind the animal faces
      * ([SkySettings.parse]): whether they show, the town as the PC's list
