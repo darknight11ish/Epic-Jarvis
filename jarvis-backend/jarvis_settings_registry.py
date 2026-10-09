@@ -285,7 +285,22 @@ SECTIONS: tuple = (
     # Spending (2026-09-30): a card on the desktop.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
             app="desktop"),
-    # Notifications (2026-10-01): a card on the desktop.
+    # Notifications (2026-10-01): a card on the desktop ONLY, and it said
+    # "both" until 2026-10-09 (settings-coverage audit) - which was untrue.
+    # The PC's card is per kind: alarms, reminders, the briefing and the
+    # captcha hand-off each on or off, plus quiet hours and a Test button
+    # (notifications-settings.js; the toasts themselves are raised in Rust,
+    # src-tauri/src/notifications.rs, which is why the choices are pushed to
+    # it). The phone has no such screen and cannot have this one: its
+    # notification controls are Android's own, per channel (strings.xml
+    # "channel_alarm", "channel_schedule", "channel_approval",
+    # "channel_handoff" - one per kind, which is what the owner asked for on
+    # 2026-09-30: "per kind: on/off, style, Test button, quiet hours"). The
+    # phone already said so in its own words: jarvis-client ui/OpenPlace.kt
+    # lists "notifications" in PC_ONLY, so "open notifications" there answers
+    # "only in Jarvis on your PC" - while this table told the same phone the
+    # section was on both apps. Corrected here rather than left for the next
+    # reader to find; test_settings_registry.py holds the two together now.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="desktop"),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
