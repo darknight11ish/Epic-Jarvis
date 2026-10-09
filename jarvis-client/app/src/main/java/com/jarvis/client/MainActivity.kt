@@ -2350,6 +2350,10 @@ class MainActivity : FragmentActivity() {
                             brain = brain,
                             onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
                             onBack = { nav.back() },
+                            // The Attention card's own re-read, after a mute or
+                            // a change to "Speak up" / "Brief at": one route,
+                            // not the dozen refreshBrain probes.
+                            onRefreshAttention = { scope.launch { JarvisRuntime.refreshAttention() } },
                             memoryDecideBusyId = memoryDecideBusyId,
                             onDecideMemory = { id, accept ->
                                 if (memoryDecideBusyId == null) {

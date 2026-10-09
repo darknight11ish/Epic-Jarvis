@@ -176,11 +176,29 @@ CLASSIFICATION = {
     "/api/attention/mute": ("ported", ""),
     "/api/attention/unmute": ("ported", ""),
     # The interruption budget's two numbers (2026-10-08): the PC's own Brain
-    # card sets them, through set_attention_limits. The phone's control is
-    # still to come, so this is "todo" and not "ported" - and it is a settings
-    # write, not a decision, so it approves nothing on either side.
-    "/api/attention/settings": ("todo", "The phone's own control for the "
-                                        "interruption budget is still to come."),
+    # card sets them through set_attention_limits, and since the same day so
+    # does the phone's Attention card - so this is "ported", not "todo". It is
+    # a settings write, not a decision, so it approves nothing on either side;
+    # what it can do is RAISE the budget, and that asks on the PC.
+    "/api/attention/settings": ("ported", "ONE number for the interruption "
+                                          "budget at a time: how many times a day "
+                                          "Jarvis may speak up unasked, or the "
+                                          "hour the morning brief arrives. The "
+                                          "NUMBER decides the direction on the "
+                                          "PC, never the caller: down, and the "
+                                          "hour, apply at once; UP is a loosening "
+                                          "and the PC puts ONE approval card to "
+                                          "the owner first, so a 2xx can mean "
+                                          "'a card is waiting'. The body comes "
+                                          "back whole so each screen shows the "
+                                          "PC's own sentence (said, or error for "
+                                          "a refusal). Both apps have it: the "
+                                          "PC's Brain card (attention.rs "
+                                          "set_attention_limits, brain.js "
+                                          "setAttentionLimit) and the phone's "
+                                          "Attention card (net/AttentionBudget.kt, "
+                                          "JarvisRuntime.setAttentionBudget, "
+                                          "BrainScreen.kt AttentionPlate)."),
     "/api/chat": ("ported", ""),
     "/api/compute": ("ported", "Brain screen, read-only."),
     # /api/config is NOT here: it is only in the Brain's read allow-list

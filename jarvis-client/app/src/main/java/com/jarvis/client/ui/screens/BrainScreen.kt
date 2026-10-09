@@ -31,15 +31,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
 import com.jarvis.client.BrainSnapshot
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.ModelRequest
 import com.jarvis.client.SectionRead
 import com.jarvis.client.net.Attention
+import com.jarvis.client.net.AttentionSettings
 import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.JobRecord
 import com.jarvis.client.net.MemoryCardKind
@@ -70,6 +73,7 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.ageText
+import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
@@ -112,6 +116,17 @@ fun BrainScreen(
     brain: BrainSnapshot,
     onRefresh: () -> Unit,
     onBack: () -> Unit,
+    /**
+     * Re-reads `GET /api/attention` alone, for the Attention card.
+     *
+     * Its own callback rather than [onRefresh]: `refreshBrain` probes a dozen
+     * other routes, and a mute, a change to "Speak up" or a move of "Brief at"
+     * only ever changes these numbers. The read is cheap and never held on a
+     * stale link, and it is what stops the card showing a count or an hour the
+     * PC did not confirm - a 2xx from the budget's write route can mean "an
+     * approval card is waiting on the PC", never "it is on".
+     */
+    onRefreshAttention: () -> Unit = {},
     /** Which proposal, if any, has a decision in flight - never two at once. */
     memoryDecideBusyId: Long?,
     onDecideMemory: (id: Long, accept: Boolean) -> Unit,
@@ -659,7 +674,13 @@ fun BrainScreen(
             }
 
             item(key = "attention") {
-                Section("Attention budget") { AttentionPlate(attention) }
+                Section("Attention budget") {
+                    AttentionPlate(
+                        attention = attention,
+                        canAct = canAct,
+                        onRefreshAttention = onRefreshAttention,
+                    )
+                }
             }
 
             if (jobs.isNotEmpty()) {
@@ -1549,8 +1570,41 @@ private fun bytes(n: Long): String = when {
 }
 
 @Composable
-private fun AttentionPlate(attention: Attention) {
+private fun AttentionPlate(
+    attention: Attention,
+    canAct: Boolean,
+    onRefreshAttention: () -> Unit,
+) {
     val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
+
+    /**
+     * ONE change to ONE of the two numbers. No direction is chosen here and none
+     * is sent: [JarvisRuntime.setAttentionSettings] posts the number alone, lets
+     * the PC work out which way that is, and hands back the PC's own sentence.
+     * The screen re-reads afterwards, because the PC's answer can mean "an
+     * approval card is waiting on the PC" and never "it is on".
+     */
+    fun change(key: String, value: Int) {
+        if (busy) return
+        busy = true
+        said = null
+        scope.launch {
+            try {
+                said = JarvisRuntime.setAttentionSettings(key, value)
+            } finally {
+                busy = false
+                // A second read, on top of the one `setAttentionSettings` does
+                // itself, so both the answer that went through on the PC and
+                // the one still waiting there as a card leave the count, the
+                // hour and the meter agreeing with the card above.
+                onRefreshAttention()
+            }
+        }
+    }
+
     Plate {
         val limit = attention.limit
         if (limit > 0) {
@@ -1615,6 +1669,122 @@ private fun AttentionPlate(attention: Attention) {
                 color = chrome.textMid,
             )
         }
+
+        // ---- the two numbers the PC's own Brain can change ----
+        //
+        // Until 2026-10-08 this card could only READ them, which left the phone
+        // the one surface where an owner could not change what the PC's "Speak
+        // up" and "Brief at" pickers change. Both numbers arrive in the SAME
+        // read as the budget above, so the count the stepper steps from is the
+        // count the meter is drawing.
+        Gap(12)
+        Rule()
+        Gap(4)
+        Text(
+            AttentionSettings.COUNT_LABEL,
+            style = MaterialTheme.typography.titleSmall,
+            color = chrome.textHi,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(AttentionSettings.LOOSEN_NOTE, style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo)
+        NumberStepper(
+            valueWords = AttentionSettings.countValueWords(limit),
+            downWords = AttentionSettings.countDownWords(limit),
+            upWords = AttentionSettings.countUpWords(limit),
+            downEnabled = canAct && !busy && AttentionSettings.countToSend(limit - 1) != null,
+            upEnabled = canAct && !busy && AttentionSettings.countToSend(limit + 1) != null,
+            // The send itself re-checks the PC's own range, so an out-of-range
+            // number is never posted as-is even if a control offered one.
+            onDown = { AttentionSettings.countToSend(limit - 1)?.let { change(AttentionSettings.KEY_COUNT, it) } },
+            onUp = { AttentionSettings.countToSend(limit + 1)?.let { change(AttentionSettings.KEY_COUNT, it) } },
+        )
+
+        Gap(12)
+        Text(
+            AttentionSettings.HOUR_LABEL,
+            style = MaterialTheme.typography.titleSmall,
+            color = chrome.textHi,
+            modifier = Modifier.semantics { heading() },
+        )
+        Text(AttentionSettings.HOUR_NOTE, style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo)
+        NumberStepper(
+            valueWords = AttentionSettings.hourValueWords(attention.digestHour),
+            downWords = AttentionSettings.hourDownWords(attention.digestHour),
+            upWords = AttentionSettings.hourUpWords(attention.digestHour),
+            downEnabled = canAct && !busy && AttentionSettings.hourToSend(attention.digestHour - 1) != null,
+            upEnabled = canAct && !busy && AttentionSettings.hourToSend(attention.digestHour + 1) != null,
+            onDown = {
+                AttentionSettings.hourToSend(attention.digestHour - 1)
+                    ?.let { change(AttentionSettings.KEY_HOUR, it) }
+            },
+            onUp = {
+                AttentionSettings.hourToSend(attention.digestHour + 1)
+                    ?.let { change(AttentionSettings.KEY_HOUR, it) }
+            },
+        )
+        if (busy) {
+            Gap(6)
+            Text("Asking your PC…", style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                modifier = Modifier.liveStatus())
+        }
+        // The PC's own sentence, word for word - `said` for a change, or for a
+        // card now waiting on the PC, and its own refusal words for a no.
+        said?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                modifier = Modifier.liveStatus())
+        }
+        if (!canAct) {
+            Gap(4)
+            Text(
+                "Not connected to the desktop, so changing these waits until the link is back.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
+        }
+    }
+}
+
+/**
+ * A number with a step down and a step up, the shape the limit rows already use
+ * ([com.jarvis.client.ui.screens.LimitsPlate]'s int rows): [Quiet] carries 48dp
+ * of touch target whatever the glyph looks like, and both buttons carry the
+ * owner's words for TalkBack rather than a bare "-" and "+".
+ */
+@Composable
+private fun NumberStepper(
+    valueWords: String,
+    downWords: String,
+    upWords: String,
+    downEnabled: Boolean,
+    upEnabled: Boolean,
+    onDown: () -> Unit,
+    onUp: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Quiet(
+            "−",
+            modifier = Modifier.semantics { contentDescription = downWords },
+            enabled = downEnabled,
+            onClick = onDown,
+        )
+        Text(
+            valueWords,
+            style = MaterialTheme.typography.titleSmall,
+            color = chrome.textHi,
+            modifier = Modifier
+                .padding(horizontal = 10.dp)
+                .semantics { contentDescription = valueWords },
+        )
+        Quiet(
+            "+",
+            modifier = Modifier.semantics { contentDescription = upWords },
+            enabled = upEnabled,
+            onClick = onUp,
+        )
     }
 }
 
