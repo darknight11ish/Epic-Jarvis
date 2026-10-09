@@ -110,4 +110,26 @@ class WatchReportTest {
             (report as Watch.Report.Read).findings.map { it.title },
         )
     }
+
+    /**
+     * N2 of the same audit, and why it needed no separate fix: with rows already
+     * on screen, a failed refresh used to leave them there indefinitely, under a
+     * heading that says what is new, with no age line and no error. Same root
+     * cause as N1, and the same one-state fix closes it - a failed report is its
+     * own state with no findings, so the rows are gone rather than stale, and
+     * the line that replaces them says the read failed.
+     */
+    @Test
+    fun `rows on screen do not survive a failed refresh`() {
+        val loaded = Watch.reportOf(ApiResult.Ok(obj("""{"findings":[{"full_name":"a/b"}]}""")))
+        assertTrue("a successful read with rows is a Read", loaded is Watch.Report.Read)
+        assertNull("rows are drawn, not a sentence", Watch.reportLine(loaded))
+
+        val failed = Watch.reportOf(ApiResult.Failed(ApiError.Unreachable("Connection refused", "refused")))
+        assertTrue("a failed refresh keeps no rows", failed is Watch.Report.Failed)
+        assertTrue(
+            "the rows' place now holds the failure line",
+            Watch.reportLine(failed)!!.startsWith("Couldn't read what is new: "),
+        )
+    }
 }

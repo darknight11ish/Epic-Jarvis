@@ -208,7 +208,15 @@ def t_every_real_settings_card_is_listed():
     # The phone's "appearance" row is the registry's "appearance-card"; "tail" is
     # a spacer; "floating-avatar" and "voice-switches"/"jump-list" are rows of
     # the same screen reached through Appearance / Voice / the top.
-    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list"}
+    # "jarvis-notify" (2026-10-09) is the same shape for the same reason: it is a
+    # row that opens Android's OWN per-app notification screen and is
+    # deliberately not a Jarvis setting at all (the owner's decision of
+    # 2026-10-09, docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1). The
+    # registry's "notifications" Section stays desktop-only, because the four
+    # per-kind switches and quiet hours really are the PC's, and
+    # _check_phone_declines_the_pc_only_cards below still holds the phone to
+    # that.
+    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",

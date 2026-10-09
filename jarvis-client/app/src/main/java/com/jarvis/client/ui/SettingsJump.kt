@@ -40,6 +40,11 @@ object SettingsJump {
         Entry("Backups", "backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),
+        // "Notifications from Jarvis" (the owner's decision of 2026-10-09): the
+        // phone's own per-kind switches are Android's, so this row points at
+        // Android's screen instead of copying the PC's card. It sits with the
+        // other notification rows on the screen, so it goes here.
+        Entry("Notifications from Jarvis", "jarvis-notify"),
         Entry("Look at this and Watch with me", "screen-look"),
         Entry("Browser without a window", "browser-engine"),
         // "When the phone does not answer" (2026-10-08): the new captcha hand-off
