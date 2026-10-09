@@ -123,9 +123,16 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "devices" to 19,
     "quick-tiles" to 20,
     // "Limits and how often Jarvis does things" (the PC's own
-    // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last:
-    // it is about how much Jarvis does rather than about one feature.
+    // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
+    // but one: it is about how much Jarvis does rather than about one feature.
     "limits" to 21,
+    // "A new conversation starts after" (the audit of 2026-10-08): the one
+    // timing the owner could not change anywhere. It is added BELOW "limits"
+    // rather than beside "How Jarvis talks", on purpose: an insert in the
+    // middle moves every index under it, and the limits work in flight owns
+    // those numbers and their own test (`LimitsTest`'s "the index map has no
+    // limits row" pins 21). A row added at the end moves nothing.
+    "idle-new" to 22,
 )
 
 /**
@@ -175,6 +182,17 @@ fun SettingsScreen(
     /** "Quick Settings tiles" - saved on this phone only, like Floating Jarvis. */
     quickTiles: List<TileAction?> = List(QuickTiles.SLOTS) { null },
     onQuickTileChange: (slot: Int, action: TileAction?) -> Unit = { _, _ -> },
+    /**
+     * "A new conversation starts after ..." (the audit of 2026-10-08): how long
+     * a conversation can sit idle before the next question starts a new one -
+     * one of [com.jarvis.client.net.ChatHistory.IDLE_NEW_CHOICES]'s five ids.
+     * Saved on this phone only, like Floating Jarvis, so it needs no `canAct`
+     * gate and nothing is sent anywhere. The default - and what a missing,
+     * empty, unknown or unreadable stored value reads as - is
+     * `ChatHistory.IDLE_NEW_DEFAULT` (30 minutes), never "never".
+     */
+    idleNewChoice: String = com.jarvis.client.net.ChatHistory.IDLE_NEW_DEFAULT,
+    onIdleNewChoiceChange: (String) -> Unit = {},
     /**
      * "Reading phone notifications" (docs/JARVIS-API.md §61): whether
      * Android's own "Notification access" is currently granted
@@ -486,6 +504,20 @@ fun SettingsScreen(
             // and this check in a real screen.
             if (menus.shows("settings.limits")) item(key = "limits") {
                 MenuFrame(menus, "settings.limits") { LimitsSection(canAct = canAct) }
+            }
+
+            // "A new conversation starts after ..." (the audit of 2026-10-08):
+            // the one timing the owner could not change anywhere. A CLIENT-SIDE
+            // choice, saved on this phone only - the PC serves no route for it
+            // and the desktop keeps its own choice of the same five - so it is
+            // drawn behind menus.shows(...) with a MenuFrame of its own, like
+            // every other row (MenuVisibilityTest), and needs no canAct gate.
+            // Last of the settings rows, so that adding it moves no other row's
+            // position (see SETTINGS_ITEM_INDEX).
+            if (menus.shows("settings.idle-new")) item(key = "idle-new") {
+                MenuFrame(menus, "settings.idle-new") {
+                    IdleNewSection(choice = idleNewChoice, onChange = onIdleNewChoiceChange)
+                }
             }
 
             item(key = "tail") { Gap(24) }

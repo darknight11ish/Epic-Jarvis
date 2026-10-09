@@ -46,6 +46,19 @@ class ChatSession(
      * as temporary to a PC that would ignore the flag.
      */
     private val canTemporary: () -> Boolean = { false },
+    /**
+     * How long this conversation may sit idle before the next question starts a
+     * new one, in milliseconds - the owner's own choice in Settings
+     * ("A new conversation starts after ...", [ChatHistory.IDLE_NEW_CHOICES],
+     * read from [com.jarvis.client.data.ClientSettings] at the moment it is
+     * needed, so a change takes effect on the next question without a restart).
+     *
+     * [ChatHistory.IDLE_NEW_MS] - 30 minutes - when nothing is passed, and the
+     * same when the stored choice is missing, empty, unknown or unreadable
+     * ([ChatHistory.idleNewMsFor] falls back to it, never to "never"). A
+     * "never" choice is [ChatHistory.IDLE_NEW_NEVER_MS], which never expires.
+     */
+    private val idleWaitMs: () -> Long = { ChatHistory.IDLE_NEW_MS },
 ) {
 
     /**
@@ -215,9 +228,12 @@ class ChatSession(
     /** Is there a chat here that was kept on the PC - so a new one can say where it went? */
     fun hasKeptChat(): Boolean = _history.value.isNotEmpty() && !_temporary.value && !_game.value
 
-    /** Has the chat gone quiet for 30 minutes - so the next question starts a new one? */
+    /** Has the chat gone quiet for the owner's own wait - so the next question
+     *  starts a new one? 30 minutes unless Settings says otherwise
+     *  ([ChatHistory.IDLE_NEW_CHOICES]). */
     fun idleNow(): Boolean =
-        ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())
+        ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(),
+            _history.value.isNotEmpty(), idleWaitMs())
 
     private val _chatNote = MutableStateFlow<String?>(null)
 
@@ -514,12 +530,18 @@ class ChatSession(
         live: Boolean = false,
     ): String? {
         cancel()
-        // A new conversation after 30 quiet minutes (the owner's decision,
-        // 2026-09-28) - never in the middle of Jarvis Live, which ends itself
-        // when it goes quiet. The old one stays in History; "Continue this
-        // chat" brings it back. Said once, quietly, above the new question.
+        // A new conversation after the owner's own wait (Settings ->
+        // "A new conversation starts after ..."; 30 quiet minutes by DEFAULT -
+        // the owner's decision, 2026-09-28, and what a missing or unreadable
+        // choice reads as; idleWaitMs() is read here, so a change takes effect
+        // with the next question) - never in the middle of Jarvis Live, which
+        // ends itself when it goes quiet. The old one stays in History;
+        // "Continue this chat" brings it back. Said once, quietly, above the
+        // new question. "Never" is a real choice: then this fires only when the
+        // owner starts a new conversation.
         _chatNote.value = null
-        if (!live && ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())) {
+        if (!live && ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(),
+                _history.value.isNotEmpty(), idleWaitMs())) {
             // A temporary chat or a game was never kept: no "last one in History".
             val kept = hasKeptChat()
             conversation++

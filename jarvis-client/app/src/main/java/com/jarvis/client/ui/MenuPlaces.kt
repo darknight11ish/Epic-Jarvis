@@ -22,6 +22,11 @@ object MenuPlaces {
         "appearance" to "settings.appearance-card",
         "floating-avatar" to "settings.floating-avatar",
         "manner" to "settings.manner",
+        // "A new conversation starts after" (the audit of 2026-10-08): a
+        // CLIENT-SIDE choice, so its row is this phone's own setting and its
+        // menu id still needs a place here - MenuVisibilityTest fails without
+        // this line, and the phone could otherwise not hide the row.
+        "idle-new" to "settings.idle-new",
         "web-search" to "settings.web-search",
         "prompt-coach" to "settings.prompt-coach",
         "asks-first" to "settings.asks-first",

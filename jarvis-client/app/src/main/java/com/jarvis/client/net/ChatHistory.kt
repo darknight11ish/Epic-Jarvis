@@ -333,8 +333,91 @@ object ChatHistory {
     // them to tools/gen_history_cases.py's worked examples
     // (contract/history-cases.json).
 
-    /** A new conversation starts after this long with nothing said. */
+    /** A new conversation starts after this long with nothing said. This is the
+     *  DEFAULT and stays the default: a missing or unreadable stored choice
+     *  reads as this ([idleNewChoice]), never as "never". */
     const val IDLE_NEW_MS = 30L * 60 * 1000
+
+    // ------------------------------------------------------------------
+    //  "A new conversation starts after ..." (the audit of 2026-10-08): the one
+    //  timing the owner could not change anywhere. It is a CLIENT-SIDE choice -
+    //  the PC serves no route for it (`backend/jarvis_limits.py` says so in its
+    //  own words) - so the five choices live in each app's own settings and
+    //  nothing about it is sent anywhere: no request, no approval card.
+    //
+    //  30 quiet minutes stays the DEFAULT, and the owner's decision of
+    //  2026-09-28 is unchanged: the old conversation stays in History, and
+    //  "Continue this chat" brings it back. "never" changes only WHEN a
+    //  conversation ends - it does not stop the owner's own "New conversation"
+    //  from ending one.
+    //
+    //  The desktop offers the same five, with the same ids and the same numbers
+    //  (chat-history.js's IDLE_NEW_CHOICES).
+    // ------------------------------------------------------------------
+
+    /** What a choice of "Never" means, said plainly - it is the Never row's own
+     *  line too, so the sentence has one source. */
+    const val IDLE_NEW_NEVER = "A conversation then only ends when you start a new one."
+
+    /** One choice: [id] is what is stored, [ms] is what [idleExpired] compares
+     *  against. "never" is [IDLE_NEW_NEVER_MS], so no amount of quiet ever
+     *  starts a new conversation. */
+    data class IdleNewChoice(
+        val id: String,
+        val ms: Long,
+        val label: String,
+        val wait: String,
+        val why: String,
+    )
+
+    /** "Never": a conversation then ends only when the owner starts a new one. */
+    const val IDLE_NEW_NEVER_MS = Long.MAX_VALUE
+
+    /** The five choices, in the order the row offers them. */
+    val IDLE_NEW_CHOICES: List<IdleNewChoice> = listOf(
+        IdleNewChoice(
+            "30m", IDLE_NEW_MS, "30 minutes (default)", "30 quiet minutes",
+            "What Jarvis has always done. The same words in both apps.",
+        ),
+        IdleNewChoice(
+            "10m", 10L * 60 * 1000, "10 minutes", "10 quiet minutes",
+            "A fresh conversation sooner, after a short break.",
+        ),
+        IdleNewChoice(
+            "1h", 60L * 60 * 1000, "1 hour", "1 quiet hour",
+            "Carry on through an hour of quiet before a new conversation starts.",
+        ),
+        IdleNewChoice(
+            "4h", 4L * 60 * 60 * 1000, "4 hours", "4 quiet hours",
+            "Most of a working day between messages still counts as one chat.",
+        ),
+        IdleNewChoice("never", IDLE_NEW_NEVER_MS, "Never", "no quiet at all", IDLE_NEW_NEVER),
+    )
+
+    /** The choice a missing or unreadable stored value reads as. */
+    const val IDLE_NEW_DEFAULT = "30m"
+
+    /** Where this phone keeps the choice ([com.jarvis.client.data.ClientSettings]'
+     *  own key). Per device: the PC keeps its own. */
+    const val IDLE_NEW_KEY = "idle_new_choice"
+
+    /** The row's own words, on both apps (the phone's Settings row, the
+     *  desktop's settings.html card): what the choice does. */
+    const val IDLE_NEW_TITLE = "A new conversation starts after"
+    const val IDLE_NEW_DETAIL =
+        "The next message starts a new conversation after this long with nothing said. " +
+            "The old one stays in History, and Continue brings it back."
+    const val IDLE_NEW_TAIL = "Saved on this phone. Your PC keeps its own choice of the same five."
+
+    /** [id] when it really is one of the five, else the default - so a value
+     *  from a newer build, an empty string or `null` can never select "never". */
+    fun idleNewChoice(id: String?): String =
+        if (IDLE_NEW_CHOICES.any { it.id == id }) id!! else IDLE_NEW_DEFAULT
+
+    /** The threshold for a choice: [IDLE_NEW_MS] for anything that is not one of
+     *  the five. Never "never" by accident. */
+    fun idleNewMsFor(id: String?): Long =
+        IDLE_NEW_CHOICES.firstOrNull { it.id == id }?.ms ?: IDLE_NEW_MS
 
     /** Said, quietly, when it happens. */
     const val IDLE_NEW_LINE = "It's been a while, so this is a new conversation. The last one is in History."
@@ -372,9 +455,12 @@ object ChatHistory {
     const val CONTINUE_INVALID = "That is not a conversation this PC keeps."
 
     /** Whether the next question starts a new conversation: there is one going, and nothing
-     *  was said in it for [IDLE_NEW_MS]. */
-    fun idleExpired(lastAtMs: Long, nowMs: Long, hasConversation: Boolean): Boolean =
-        hasConversation && lastAtMs > 0 && nowMs - lastAtMs >= IDLE_NEW_MS
+     *  was said in it for [thresholdMs] - the owner's own choice from Settings
+     *  ([idleNewMsFor]), or [IDLE_NEW_MS] (30 minutes) when nothing is passed. A
+     *  [IDLE_NEW_NEVER_MS] threshold ("never") is a real one and never expires. */
+    fun idleExpired(lastAtMs: Long, nowMs: Long, hasConversation: Boolean,
+                    thresholdMs: Long = IDLE_NEW_MS): Boolean =
+        hasConversation && lastAtMs > 0 && nowMs - lastAtMs >= thresholdMs
 
     /* Home's words for the chat it is in - the desktop's Jarvis bar says the same. */
     const val EARLIER_CHATS = "Earlier chats"

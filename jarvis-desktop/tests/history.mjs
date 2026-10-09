@@ -356,6 +356,89 @@ await check("the bar keeps a new conversation after 30 quiet minutes, and never 
   assert.equal(CH.idleExpired(0, t0, true), false, "no finished answer yet");
 });
 
+await check('the wait the owner chose ("A new conversation starts after") is each choice own threshold', async () => {
+  // The five the row offers, in its own order - the phone's five, the same ids.
+  assert.deepEqual(CH.IDLE_NEW_CHOICES.map((c) => c.id), ["30m", "10m", "1h", "4h", "never"]);
+  assert.equal(CH.IDLE_NEW_DEFAULT, "30m", "the default is still 30 minutes");
+  const want = { "30m": CH.IDLE_NEW_MS, "10m": 600_000, "1h": 3_600_000, "4h": 14_400_000 };
+  assert.equal(want["30m"], 30 * 60 * 1000);
+  for (const c of CH.IDLE_NEW_CHOICES) {
+    // Each of the four TIMED choices really IS its own threshold: the bar starts
+    // afresh at it, and not one millisecond sooner. A suite that skipped this
+    // would still pass if the setting were ignored - this is the half that
+    // would not. ("never" has no length to be early or late by; it is checked
+    // below, where no amount of quiet may ever fire it.)
+    const t0 = 5_000_000;
+    assert.equal(CH.idleNewMsFor(c.id), c.ms, `${c.id}'s own threshold`);
+    if (c.id === "never") continue;
+    assert.equal(CH.idleExpired(t0, t0 + c.ms - 1, true, CH.idleNewMsFor(c.id)), false,
+      `${c.id} started a new conversation early`);
+    assert.equal(CH.idleExpired(t0, t0 + c.ms, true, CH.idleNewMsFor(c.id)), true,
+      `${c.id} did not start a new conversation when it should`);
+  }
+  for (const [id, ms] of Object.entries(want)) assert.equal(CH.idleNewMsFor(id), ms, id);
+  // Four waits, four different lengths - and "never", which is no length at all.
+  assert.equal(new Set(CH.IDLE_NEW_CHOICES.map((c) => c.ms)).size, 5);
+  assert.equal(CH.idleNewMsFor("never"), Infinity);
+  const t0 = 5_000_000;
+  for (const years of [1, 10, 100]) {
+    const later = t0 + years * 365 * 24 * 3_600_000;
+    assert.equal(CH.idleExpired(t0, later, true, CH.idleNewMsFor("never")), false,
+      `"never" started a new conversation after ${years} year(s) of quiet`);
+  }
+  // The tooltip says the wait the owner really chose.
+  assert.equal(CH.carryOnLastTitle(CH.IDLE_NEW_MS), CH.CARRY_ON_LAST_TITLE);
+  assert.match(CH.carryOnLastTitle(10 * 60 * 1000), /10 quiet minutes/);
+  assert.match(CH.carryOnLastTitle(CH.idleNewMsFor("never")), /only when you start a new one/);
+});
+
+await check("an unset, garbled or unreadable stored wait is 30 minutes, never \"never\"", async () => {
+  const store = (value) => ({ getItem: () => value, setItem: () => {} });
+  assert.equal(CH.storedIdleNewChoice(store(null)), "30m", "unset reads as the default");
+  assert.equal(CH.storedIdleNewChoice(store(undefined)), "30m");
+  assert.equal(CH.storedIdleNewMs(store(null)), CH.IDLE_NEW_MS);
+  for (const junk of ["", "   ", "0", "never ", "NEVER", "Never", "45m", "24h", "{}",
+    "[object Object]", "30m,never"]) {
+    assert.equal(CH.idleNewChoice(junk), "30m", `${JSON.stringify(junk)} must not pick a wait`);
+    assert.equal(CH.idleNewMsFor(junk), CH.IDLE_NEW_MS, `${JSON.stringify(junk)} must be 30 minutes`);
+    assert.equal(CH.storedIdleNewMs(store(junk)), CH.IDLE_NEW_MS, `${JSON.stringify(junk)} must be 30 minutes`);
+  }
+  // A storage that cannot be read at all, and a threshold that is not a number:
+  // both are the default - "never" is never reached by accident.
+  const broken = { getItem() { throw new Error("no storage"); }, setItem() {} };
+  assert.equal(CH.storedIdleNewChoice(broken), "30m");
+  assert.equal(CH.storedIdleNewMs(broken), CH.IDLE_NEW_MS);
+  assert.equal(CH.idleExpired(100, 100 + CH.IDLE_NEW_MS, true, NaN), true, "NaN is not 'never'");
+  assert.equal(CH.idleExpired(100, 100 + CH.IDLE_NEW_MS, true, undefined), true);
+  assert.equal(CH.idleExpired(100, 100 + CH.IDLE_NEW_MS - 1, true, -1), false, "-1 falls back to the default");
+  // Saving: a real choice is kept and read back; a garbled one becomes the default.
+  const map = new Map();
+  const real = { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => map.set(k, v) };
+  assert.equal(CH.saveIdleNewChoice("4h", real), "4h");
+  assert.equal(CH.storedIdleNewChoice(real), "4h");
+  assert.equal(CH.storedIdleNewMs(real), 14_400_000);
+  assert.equal(CH.saveIdleNewChoice("banana", real), "30m");
+  assert.equal(CH.storedIdleNewMs(real), CH.IDLE_NEW_MS);
+  assert.equal(map.get(CH.IDLE_NEW_KEY), "30m", "a garbled save stores the default, not the junk");
+  // The words: what the row does, and what "Never" plainly means.
+  assert.match(CH.IDLE_NEW_DETAIL, /starts a new conversation after this long with nothing said/);
+  assert.match(CH.IDLE_NEW_DETAIL, /stays in History/);
+  assert.match(CH.IDLE_NEW_DETAIL, /Continue brings it back/);
+  assert.equal(CH.IDLE_NEW_CHOICES.find((c) => c.id === "never").why, CH.IDLE_NEW_NEVER);
+  assert.match(CH.IDLE_NEW_NEVER, /only ends when you start a new one/);
+  // The card, its jump link and the module that draws it are really on the page
+  // (the page half is the browser half of this suite - see the note at the end).
+  const settings = read("src/settings.html");
+  assert.match(settings, /<section class="card" id="idle-new">/);
+  assert.match(settings, /<a href="#idle-new">/);
+  assert.match(settings, /src="idle-new-settings\.js"/);
+  assert.match(read("src/idle-new-settings.js"), /storedIdleNewChoice/);
+  // The bar itself reads the stored choice, not the bare constant.
+  const main = read("src/main.js");
+  assert.match(main, /idleExpired\(state\.lastTurnAt, Date\.now\(\), state\.conversation\.length > 0, idleWaitMs\)/);
+  assert.match(main, /const idleWaitMs = storedIdleNewMs\(\)/);
+});
+
 await check("a game the PC made temporary is said so, and only then", async () => {
   assert.equal(temporaryOutcome(false, { temporary: true }), "game");
   assert.equal(temporaryOutcome(false, {}), "");
