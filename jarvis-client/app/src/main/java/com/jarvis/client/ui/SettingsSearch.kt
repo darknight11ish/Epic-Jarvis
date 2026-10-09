@@ -6,7 +6,7 @@ package com.jarvis.client.ui
  *
  * The owner's request of 2026-10-09: "a lot more visually simple, with a
  * search bar in settings. I still want everything adjustable, just easier to
- * find and more efficient." Settings had grown to twenty sections with a
+ * find and more efficient." Settings had grown to twenty-one sections with a
  * "Jump to:" list over four lines at the top; the list is the fastest way to
  * a section you already know, and this is the way to one you do not.
  *
@@ -197,6 +197,22 @@ object SettingsSearch {
             label = "Android Quick Settings; tile; pull down the shade",
             quotes = listOf("Quick Settings tiles"),
             source = JUMP + listOf(PLATES + "QuickTilesPlate.kt"),
+        ),
+        Row(
+            // The PC's own limit table, on the phone (LimitsPlate.kt; the
+            // owner's decision of 2026-10-08). It is the last section on the
+            // screen, so it is last here too.
+            key = "limits", title = "Limits and how often Jarvis does things",
+            label = "How much Jarvis does at once; how long you can undo; how long it waits " +
+                "before it reads something of yours; turning something up asks you on the PC",
+            // The heading and both sentences are `net/Limits.kt`'s own
+            // constants - the plate draws them rather than writing its own -
+            // so the quotes are looked for there, like the browser heading.
+            quotes = listOf(
+                "How much Jarvis does at once, how long you can undo, and how long it waits before it ",
+                "Turning something up asks you on the PC first, and nothing changes until you answer ",
+            ),
+            source = JUMP + listOf("net/Limits.kt"),
         ),
     ) + listOf(
         // The search box itself is a `LazyColumn` item, so SettingsJumpTest
