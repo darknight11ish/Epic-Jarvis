@@ -636,7 +636,12 @@ def t_the_patch_and_the_lists():
              # tasks.patch (2026-10-08): two hunks in jarvis_hud.py - one GET
              # route and one POST block - and jarvis_gate.py not at all. It
              # rewrites nothing referee.patch's hunks anchor on.
-             "tasks.patch"}
+             "tasks.patch",
+             # retrieve-count.patch (2026-10-08): two hunks in jarvis_hud.py -
+             # `_retrieve_counts()` beside retrieve() and the handler's own
+             # `count=1` branch - and jarvis_gate.py not at all. It rewrites
+             # nothing referee.patch's hunks anchor on.
+             "retrieve-count.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

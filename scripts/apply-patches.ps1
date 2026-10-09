@@ -1186,9 +1186,12 @@ $PATCHES = @(
     # No gate hunk: this module approves nothing, and the rehearsal in
     # test_tasks.py asserts that no steering route reaches the gate at all.
     'tasks.patch'
-    # This one MUST stay last of all: test_screen_attach.py asserts it
-    # (`_stack.order()[-1]`), because its wrapper reads the request body
-    # once and every later patch would be applied behind its back.
+    # This one MUST stay last but for the patches written after it:
+    # test_screen_attach.py asserts that, because its wrapper reads the request
+    # body once and every later patch would be applied behind its back.
+    # retrieve-count.patch (2026-10-08) is the one written after it, and it is
+    # safe there: it adds `_retrieve_counts()` and the `count=1` branch of the
+    # /api/retrieve handler, and touches the screen route not at all.
     # "Look at this" can hand the owner the CLEANED picture of the look, for the
     # question box (the owner's decision of 2026-10-07;
     # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,
