@@ -85,7 +85,14 @@ def t_the_patch_is_registered_last():
     # own `count=1` branch - and jarvis_gate.py not at all, so it cannot
     # rewrite the stale rows this patch removes either.
     later = {"screen-attach.patch", "prompt-coach.patch",
-             "tasks.patch", "retrieve-count.patch"}
+             "tasks.patch", "retrieve-count.patch",
+             # attention-settings.patch (2026-10-08) comes after it as well: ONE
+             # route in jarvis_hud.py (POST /api/attention/settings), anchored on
+             # the attention routes already there, and jarvis_gate.py not at all -
+             # so it cannot rewrite the stale rows this patch removes. It goes
+             # before screen-attach.patch, the patch every new one is written
+             # before.
+             "attention-settings.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

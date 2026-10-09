@@ -460,6 +460,14 @@ GROUPS = (
         # Hello on the PC; lowering one only ever spends less, so it asks
         # nothing. Their tiers come from the gate, not from here.
         "raise_api_limit", "lower_api_limit",
+        # The interruption budget (attention-settings.patch, 2026-10-08): ONE
+        # action, for the raise only - turning the budget DOWN asks nothing and
+        # needs no card, so it has no action of its own. The raise is a
+        # loosening (Jarvis speaks up more often), so it raises ONE card; the
+        # page must name it because a card can. It sits in this group, not
+        # beside `power_manage`, because what it changes is a Jarvis setting on
+        # a Settings card - and its tier comes from the gate, not from here.
+        "raise_attention_budget",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
         "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),

@@ -646,7 +646,12 @@ def t_the_patch_and_the_lists():
              # `_retrieve_counts()` beside retrieve() and the handler's own
              # `count=1` branch - and jarvis_gate.py not at all. It rewrites
              # nothing referee.patch's hunks anchor on.
-             "retrieve-count.patch"}
+             "retrieve-count.patch",
+             # attention-settings.patch (2026-10-08): ONE route in jarvis_hud.py
+             # (POST /api/attention/settings), anchored on the attention routes
+             # already there, and jarvis_gate.py not at all. It rewrites nothing
+             # referee.patch's hunks anchor on.
+             "attention-settings.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

@@ -1192,6 +1192,15 @@ $PATCHES = @(
     # retrieve-count.patch (2026-10-08) is the one written after it, and it is
     # safe there: it adds `_retrieve_counts()` and the `count=1` branch of the
     # /api/retrieve handler, and touches the screen route not at all.
+    # The interruption budget the Brain shows (2026-10-08): ONE route in
+    # jarvis_hud.py, POST /api/attention/settings, whose context is the
+    # attention routes already there (/api/attention/mute and /unmute), so it
+    # only has to come after attention.patch - and it touches nothing
+    # screen-attach.patch also touches, so it goes just before that one, like
+    # every new patch. It is three lines: the rule that lowering the budget is
+    # immediate and RAISING it needs one approval card lives in
+    # jarvis_arbiter.py (a module this repository ships whole), not here.
+    'attention-settings.patch'
     # "Look at this" can hand the owner the CLEANED picture of the look, for the
     # question box (the owner's decision of 2026-10-07;
     # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,

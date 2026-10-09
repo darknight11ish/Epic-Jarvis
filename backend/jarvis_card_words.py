@@ -83,6 +83,12 @@ TITLES = {
     # the owner-check attaches Windows Hello to the action, not the direction.
     "raise_api_limit": "raise a chatbot's monthly spending limit",
     "lower_api_limit": "lower a chatbot's monthly spending limit",
+    # jarvis_arbiter.py (2026-10-08): the interruption budget. ONE name, for the
+    # raise only - turning the budget DOWN asks nothing and needs no card, so it
+    # has no action for a card to be worded for. The card says how many times a
+    # day Jarvis may speak up, because that is the number the owner is agreeing
+    # to, not "interruptions" in the abstract.
+    "raise_attention_budget": "let Jarvis interrupt you more often",
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",
