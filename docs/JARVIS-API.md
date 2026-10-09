@@ -14402,6 +14402,69 @@ Meshnet, scrambled) and through the PC's memory for that one input; it is
 never logged or kept. Tried against a fake page in a real Chromium
 (`test_handoff.py`); not yet against a real captcha.
 
+### 87.8.1 What that window does while it waits (`jarvis_handoff_front.py`, 2026-10-09)
+
+The owner's own decision of 2026-10-09, his words: **"1 by default with the
+option for 2 in the settings of Jarvis"**. When a captcha or a sign-in page
+blocks the browser window Jarvis is driving, that one window on the PC either
+stays exactly where it is or is brought to the front - and the owner chose
+which. A NEW, WHOLE-SHIPPED module (`jarvis_handoff_front.py`; no patch of its
+own), whose one route is answered by `jarvis_chatbot_routes.py` (shipped
+whole), the same shape as the hand-off's own "when the phone does not answer"
+setting.
+
+| The choice | What happens to the window | Gated? |
+|---|---|---|
+| **"Leave it where it is"** (THE DEFAULT, and the narrower one) | The window is not touched: it keeps its size, its place and whatever is in front of it. The PC goes on saying plainly which window Jarvis is stuck on (`jarvis_handoff.STUCK`), so the owner solves it there when they are ready | **No** - it is the default, it touches nothing, and going back to it is immediate from either app, never held on a stale link |
+| **"Bring it to the front"** | That one window is raised and activated the moment Jarvis is stuck, so it is in front and ready to type into | **ONE approval card** (`handoff_bring_to_front`, tier "ask"), **and on `jarvis_owner_check.PC_ONLY_ACTIONS`**: decided on the PC with Windows Hello, and refused from any other device |
+
+**Why raising it is gated, and leaving it alone is not** (the repo's own rule
+for a setting that takes over something it was not taking before -
+`ARCHITECTURE.md` section 3; the same shape as 87.8's "Keep offering it"):
+raising and ACTIVATING a window takes the owner's screen attention and their
+keyboard focus away from whatever they were doing, whenever it happens -
+possibly in the middle of typing somewhere else, possibly into an account page
+of their own. Going back to "Leave it where it is" does less, so it needs no
+card.
+
+| Route | Body / query | What it does |
+|---|---|---|
+| `GET /api/chatbot/handoff_front` | | The choice, its two names, the default, every word both apps show (`words`), `brings_to_front`, `waiting`, `last`, `pc_only: true`, and `why` when the settings file is damaged. A read: never held on a stale link, no card |
+| `POST /api/chatbot/handoff_front` | `{"mode": "leave_in_place"}` | Applied at once, from either app: **no card**, and it withdraws a card still waiting. `{"mode": "bring_to_front"}` raises ONE card on the PC and changes nothing until a person says yes (`202` with `waiting: true` until then; a card already waiting is answered with its own message). Anything else is `400` with the two names in plain words |
+
+**The route is a SIBLING**, never one of the hand-off's own
+(`/api/chatbot/handoff/...`) and never 87.8's `handoff_mode`: it carries one
+word and fixed sentences, no picture, no page, no window title and no tap. The
+desktop must never name the hand-off's own routes (`tests/handoff.mjs` and
+`tests/handoff-front.mjs` check), because it has the real window.
+
+**What this module never does.** It raises no window itself: it stores one
+word and answers whether that word is the raising choice
+(`brings_to_front()`, and `should_raise_now(stuck, handoff_active)`, which is
+true only when the owner chose it, a page really is waiting, AND no hand-off is
+being solved on the phone). The window belongs to the hand-off, and
+`jarvis_handoff.py` is where a real raise would be asked for, on the PC that
+has the window. Nothing here pictures a page, moves a mouse, types a
+character, reads a title or holds a window handle.
+
+**Fail closed.** No file at all is the owner's default ("Leave it where it
+is"). A file that is unreadable, is not JSON, or holds anything but the two
+names reads as the default too, with a plain `why` - a damaged file must never
+quietly start taking the owner's screen. Nothing is kept but one word and the
+time it changed, in `handoff-front.json` (deliberately not 87.8's
+`handoff-mode.json`: one damaged file must not be able to change the other's
+answer).
+
+**Where both apps show it** (one id, `settings.handoff-front`): desktop
+Settings, "When a captcha stops Jarvis" (`handoff-front.js`,
+`handoff-front-rules.js`, `src-tauri/src/handoff.rs` `handoff_front`, set
+`handoff-front` in `permissions/surfaces.toml`, granted to the Settings window
+in `capabilities/settings.json`); the phone's Settings, the same row
+(`net/HandoffFront.kt`, `ui/screens/HandoffFrontPlate.kt`,
+`JarvisRuntime.setHandoffFront`). Both read the same words from the PC, and
+`tools/gen_handoff_cases.py` carries them into both apps' contract file so
+neither can drift.
+
 ## 88. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §61 on the `claude/jarvis-ai-assistant-research-ff37vy` branch; §61 is already taken on main's side (reading phone notifications). References that came with that branch were renumbered with it.

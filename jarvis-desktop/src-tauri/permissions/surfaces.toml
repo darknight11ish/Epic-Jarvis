@@ -1563,3 +1563,21 @@ permissions = [
 identifier = "handoff-mode"
 description = "How long the captcha hand-off stays on offer: read it, choose \"Stop early\" at once, or ask to keep offering it (one approval card on this PC). Settings only; never a picture of the browser window."
 permissions = ["allow-handoff-mode"]
+
+# What a captcha does about the browser window it is blocking (handoff.rs
+# `handoff_front`; backend/jarvis_handoff_front.py; the owner's decision of
+# 2026-10-09: "1 by default with the option for 2 in the settings of Jarvis").
+# Read the choice, its two names, the PC's own lines and whether a card is
+# waiting; or set it - "Leave it where it is" is applied at once and NEVER held
+# on a stale link (it only makes Jarvis do less - it touches no window at all),
+# "Bring it to the front" is ONE approval card on this PC with Windows Hello and
+# is held on a stale link.
+#
+# Settings only, and deliberately NOT the hand-off's own routes: this carries
+# one word and fixed sentences, and it never raises a window itself. The live
+# picture of the paused browser window goes PC to the owner's own phone, and
+# this PC's windows hold no command that asks for it or passes a tap.
+[[set]]
+identifier = "handoff-front"
+description = "What a captcha does about the browser window it is blocking: read it, choose \"Leave it where it is\" at once, or ask to bring that one window to the front (one approval card on this PC). Settings only; it raises no window itself and never pictures it."
+permissions = ["allow-handoff-front"]

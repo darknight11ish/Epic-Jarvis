@@ -129,6 +129,11 @@ try:
 except Exception:  # pragma: no cover - shipped beside this file on the PC
     HM = None
 
+try:
+    import jarvis_handoff_front as HF
+except Exception:  # pragma: no cover - shipped beside this file on the PC
+    HF = None
+
 STATUS_ROUTE = "/api/chatbot/status"
 START_ROUTE = "/api/chatbot/start"
 STOP_ROUTE = "/api/chatbot/stop"
@@ -150,11 +155,20 @@ HANDOFF_END_ROUTE = "/api/chatbot/handoff/end"
 #: own picture or input routes, and tests/handoff.mjs checks that it never
 #: does, because it has the real window and pictures nothing.
 HANDOFF_MODE_ROUTE = "/api/chatbot/handoff_mode"
+#: What a captcha does about its browser window (backend/jarvis_handoff_front.py;
+#: the owner's decision of 2026-10-09): the setting BOTH apps show. A sibling of
+#: HANDOFF_MODE_ROUTE above, and deliberately NOT under "/api/chatbot/handoff/"
+#: for the same reason - the desktop names none of the hand-off's own picture or
+#: input routes (tests/handoff.mjs checks), because it has the real window and
+#: pictures nothing.
+HANDOFF_FRONT_ROUTE = "/api/chatbot/handoff_front"
 HANDOFF_POST_ROUTES = (HANDOFF_START_ROUTE, HANDOFF_INPUT_ROUTE, HANDOFF_END_ROUTE)
 POST_ROUTES = (START_ROUTE, STOP_ROUTE, LIMITS_ROUTE, COMPARE_START_ROUTE, COMPARE_STOP_ROUTE,
                SUPPORT_START_ROUTE, SUPPORT_STOP_ROUTE, SUPPORT_TAKEOVER_ROUTE,
-               SUPPORT_ANSWER_ROUTE, HANDOFF_MODE_ROUTE) + HANDOFF_POST_ROUTES
-GET_ROUTES = (STATUS_ROUTE, SUPPORT_EXPORT_ROUTE, HANDOFF_FRAME_ROUTE, HANDOFF_MODE_ROUTE)
+               SUPPORT_ANSWER_ROUTE, HANDOFF_MODE_ROUTE,
+               HANDOFF_FRONT_ROUTE) + HANDOFF_POST_ROUTES
+GET_ROUTES = (STATUS_ROUTE, SUPPORT_EXPORT_ROUTE, HANDOFF_FRAME_ROUTE, HANDOFF_MODE_ROUTE,
+              HANDOFF_FRONT_ROUTE)
 SUPPORT_BUSY = "A customer-support chat is still going - stop it or let it finish first."
 
 #: What a conversation id looks like (jarvis_chatbot._new_id).
@@ -621,6 +635,33 @@ def handle_handoff_mode_get() -> tuple:
     return 200, HM.view()
 
 
+def handle_handoff_front(body, *, spawn: Optional[Callable] = None) -> tuple:
+    """POST /api/chatbot/handoff_front {"mode"} - what a captcha does about its
+    browser window (jarvis_handoff_front.py). "Leave it where it is" is at
+    once; "Bring it to the front" raises ONE approval card and changes nothing
+    until a person says yes."""
+    if HF is None:
+        return 503, {"ok": False,
+                     "error": ("Your PC's Jarvis does not have the captcha window setting yet - "
+                               "run apply-patches.ps1 on the PC.")}
+    try:
+        return HF.request(body.get("mode"), spawn=spawn)
+    except KeyError:
+        return 503, {"ok": False,
+                     "error": ("This PC's captcha window setting is older than this app - run "
+                               "apply-patches.ps1 on the PC.")}
+
+
+def handle_handoff_front_get() -> tuple:
+    """GET /api/chatbot/handoff_front - the choice, its two names and every word
+    both apps show. A read: never held on a stale link, no card."""
+    if HF is None:
+        return 503, {"ok": False,
+                     "error": ("Your PC's Jarvis does not have the captcha window setting yet - "
+                               "run apply-patches.ps1 on the PC.")}
+    return 200, HF.view()
+
+
 def _handoff(route: str, body: dict) -> tuple:
     if route == HANDOFF_START_ROUTE:
         return HO.start(body.get("kind"), body.get("id"))
@@ -658,6 +699,8 @@ def handle_post(route: str, body, *, deps=None, spawn: Optional[Callable] = None
         return _handoff(route, body)
     if route == HANDOFF_MODE_ROUTE:
         return handle_handoff_mode(body, spawn=spawn or _thread)
+    if route == HANDOFF_FRONT_ROUTE:
+        return handle_handoff_front(body, spawn=spawn or _thread)
     return 404, {"ok": False, "error": "no such route"}
 
 
@@ -700,6 +743,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 code, out = handle_frame(parsed.query)
             elif route == HANDOFF_MODE_ROUTE:
                 code, out = handle_handoff_mode_get()
+            elif route == HANDOFF_FRONT_ROUTE:
+                code, out = handle_handoff_front_get()
             else:
                 code, out = handle_get(parsed.query)
         except Exception as exc:

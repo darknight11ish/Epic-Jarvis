@@ -72,6 +72,14 @@ object OpenPlace {
         // "open the captcha hand-off" land on it instead of the top of Settings
         // - OpenPlaceTest's new-section check is what caught it missing.
         "handoff" to Where.Go(Screen.SETTINGS, "handoff"),
+        // "When a captcha stops Jarvis" (2026-10-09): the registry's own Section
+        // for what a captcha does about the browser window it is blocking. An
+        // ordinary Settings row on the phone (SettingsScreen.kt, item
+        // "handoff-front"), which is what makes "open the captcha window
+        // setting" land on it instead of the top of Settings -
+        // OpenPlaceTest's new-section check is what caught it missing for the
+        // row above.
+        "handoff-front" to Where.Go(Screen.SETTINGS, "handoff-front"),
         // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").

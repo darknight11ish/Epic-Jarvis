@@ -1201,6 +1201,13 @@ pub fn run() {
             // (with Windows Hello, on this PC) that choosing "Keep offering it"
             // raises. Settings only.
             handoff::handoff_mode,
+            // What a captcha does about the browser window it is blocking
+            // (handoff.rs `handoff_front`; the owner's decision of 2026-10-09:
+            // "1 by default with the option for 2 in the settings of Jarvis"):
+            // leave that one window exactly where it is (the default), or ask
+            // to bring it to the front - ONE approval card on this PC with
+            // Windows Hello. Settings only; it raises no window itself.
+            handoff::handoff_front,
             browser_engine::browser_engine,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,

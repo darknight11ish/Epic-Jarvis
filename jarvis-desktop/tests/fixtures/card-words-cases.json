@@ -155,6 +155,10 @@
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
     },
     {
+      "action": "handoff_bring_to_front",
+      "title": "Jarvis wants to bring the stuck browser window to the front"
+    },
+    {
       "action": "handoff_keep_offering",
       "title": "Jarvis wants to keep the phone's live view on offer for 15 minutes"
     },

@@ -120,19 +120,23 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day.
     "handoff" to 18,
-    "devices" to 19,
-    "quick-tiles" to 20,
+    // What a captcha does about the browser window it is blocking (the owner's
+    // decision of 2026-10-09). Sits with the hand-off row above, so the two
+    // captcha rows are together; every index below it moved down by one.
+    "handoff-front" to 19,
+    "devices" to 20,
+    "quick-tiles" to 21,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 21,
+    "limits" to 22,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
-    // limits row" pins 21). A row added at the end moves nothing.
-    "idle-new" to 22,
+    // limits row" pins 22). A row added at the end moves nothing.
+    "idle-new" to 23,
 )
 
 /**
@@ -464,6 +468,15 @@ fun SettingsScreen(
             // is one approval card on the PC with Windows Hello.
             if (menus.shows("settings.handoff")) item(key = "handoff") {
                 MenuFrame(menus, "settings.handoff") { HandoffModeSection(canAct = canAct) }
+            }
+
+            // What a captcha does about the browser window it is blocking (the
+            // owner's own decision of 2026-10-09: "1 by default with the option
+            // for 2 in the settings of Jarvis"). "Leave it where it is" is the
+            // default and touches no window; "Bring it to the front" is one
+            // approval card on the PC with Windows Hello.
+            if (menus.shows("settings.handoff-front")) item(key = "handoff-front") {
+                MenuFrame(menus, "settings.handoff-front") { HandoffFrontSection(canAct = canAct) }
             }
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),

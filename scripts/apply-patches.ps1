@@ -1264,6 +1264,19 @@ $PATCHES = @(
     # hand-off's own picture and input routes are untouched, and the desktop
     # still names none of them (tests/handoff.mjs).
     'handoff-mode.patch'
+    # What a captcha does about the browser window it is blocking (the owner's
+    # OWN decision of 2026-10-09, his words: "1 by default with the option for 2
+    # in the settings of Jarvis"; backend/jarvis_handoff_front.py). TWO hunks in
+    # jarvis_gate.py ONLY - the new action joins the "acts only on tier ask" list
+    # and gets its _RISK line, both right after the last patch that wrote those
+    # two tables, so it goes last, like every new patch - and NO jarvis_hud.py
+    # hunk at all: the route is answered by jarvis_chatbot_routes.py, which
+    # chatbot-routes.patch already installs. Needs jarvis_handoff_front.py copied
+    # in; without it, or on any error, the route answers 503 in plain words and
+    # the window is left exactly where it is - the safe direction. The hand-off's
+    # own picture and input routes are untouched, and the desktop still names
+    # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
+    'handoff-front.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1490,6 +1503,7 @@ $SHIPPED = @(
     # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
     'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
     'jarvis_handoff_mode.py'     # how long that hand-off stays on offer (the owner's OWN setting of 2026-10-08): "Stop early" by default, or keep offering it for the full 15 minutes - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
+    'jarvis_handoff_front.py'    # what a captcha does about its browser window (the owner's OWN setting of 2026-10-09): leave it exactly where it is by default, or bring it to the front - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
