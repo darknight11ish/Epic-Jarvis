@@ -197,7 +197,16 @@ async function openHud(browser, status, pageOptions = {}) {
     if (url.origin === BACKEND) {
       if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
       if ((await req.allHeaders())["x-jarvis-token"] !== "test-token") direct.push(`${req.method()} ${url.pathname}`);
-      if (url.pathname === "/api/status") return route.fulfill({ status: 200, headers: cors, json: status });
+      // `statusFails` is read at request time, not captured, so a check can
+      // start the window with Jarvis unreachable and then bring it up (the
+      // demo-mode check below). `abort` is what makes the page's read THROW,
+      // which is the only way it reaches its own "demo · not connected"
+      // fallback: a 503 with a body is taken as a status object instead.
+      if (url.pathname === "/api/status") {
+        return status.statusFails
+          ? route.abort("failed")
+          : route.fulfill({ status: 200, headers: cors, json: status });
+      }
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
         // A case from chat-stream-cases.json: the body AND Content-Type the
@@ -715,6 +724,72 @@ await check("the HUD says what the link is doing, live, under the brand", async 
   assert.ok((await page.locator("#brand-sub").textContent()).length > 0);
   await page.close();
   assert.deepEqual(problems, []);
+});
+
+/** #brand-sub as text, read without throwing while the window reloads itself. */
+function brandOf(page) {
+  return page
+    .evaluate(() => (document.getElementById("brand-sub") || {}).textContent || "")
+    .catch(() => "");
+}
+
+await check("a window that booted while Jarvis was unreachable stops claiming it is not connected", async () => {
+  // Reported from the owner's running app on 2026-10-09: the main window read
+  // "DEMO · NOT CONNECTED" while the shell held a live, established stream to
+  // the backend. boot() reads /api/status ONCE and never again, so one failed
+  // read at load is that window's verdict for the rest of the session -
+  // however healthy the link becomes. The same read is what S.online is left
+  // at, and S.online is the page's whole idea of "am I talking to Jarvis": it
+  // answers Send with sampleReply() and shows the face asleep.
+  const backend = { jarvis: false, ollama: true, proxy: false, statusFails: true };
+  const { page, problems, chats } = await openHud(browser, backend);
+  // Forced by route.abort: hud_get rejects, so boot()'s catch leaves
+  // status = null and the page writes its own fallback, once.
+  assert.equal((await brandOf(page)).trim(), "demo · not connected",
+    "the window never reached its no-server state, so this check proves nothing");
+  const sent = chats.length;
+
+  // Jarvis comes up. The stream's hello is the live, checked signal - Rust
+  // sets `connected` from that frame and pushes the link to this window on
+  // every change - and /api/status answers again. Both, as the real shell
+  // reports them.
+  backend.statusFails = false;
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+
+  await K.until(page, "the window to stop saying it is not connected", async () =>
+    (await brandOf(page)).trim() === "online · local first", { ms: 8000 });
+
+  // And not only the words: the window is really out of its sample mode, so
+  // what the owner types from here reaches Jarvis.
+  await send(page, "are you there?");
+  assert.equal(chats.length, sent + 1, "the window still answered with its own sample reply");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("a window in its no-server state waits for the owner's words, then puts itself right", async () => {
+  const backend = { jarvis: false, ollama: true, proxy: false, statusFails: true };
+  const { page } = await openHud(browser, backend);
+  assert.equal((await brandOf(page)).trim(), "demo · not connected");
+
+  // The owner is typing a question into that window. Putting itself right
+  // must not cost them the words - a reload here would empty the box.
+  await page.locator("#input").fill("what time is it");
+  backend.statusFails = false;
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  await page.waitForTimeout(1500);
+  assert.match(await brandOf(page), /demo · not connected/,
+    "the window reloaded over words the owner was still typing");
+  assert.equal(await page.locator("#input").inputValue(), "what time is it");
+
+  // The box is empty again (they sent it or cleared it). The page's own 30 s
+  // beat is where a verdict left standing is found again when the link never
+  // changes - this drives the very call its `setInterval` makes.
+  await page.locator("#input").fill("");
+  await page.evaluate(() => window.apprPoll());
+  await K.until(page, "the window to put itself right once the box was empty", async () =>
+    (await brandOf(page)).trim() === "online · local first", { ms: 8000 });
+  await page.close();
 });
 
 await check("a HUD approval card is shown but never answered in the HUD, stale or not (audit M2)", async () => {

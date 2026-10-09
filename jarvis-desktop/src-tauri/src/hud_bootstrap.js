@@ -300,6 +300,11 @@
     // Every call, not only when `connected` flips: stale comes and goes
     // while connected stays true.
     paintLink();
+    // The page's own verdict on /api/status (see the block just below).
+    // Every call, for the same reason: the push that arrives right after a
+    // reload lands before the page's own read has finished, so it is a later
+    // one that finds a fallback left standing by a read that failed.
+    recheckBrand(link);
     var up = !!(link && link.connected);
     if (up === linkUp) return;
     linkUp = up;
@@ -307,6 +312,105 @@
       if (up) es._open();
       else es._fail();
     });
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The page's own "not connected" verdict, re-checked
+   *
+   * 2026-10-09, from the owner's running app: the main window read
+   * "DEMO · NOT CONNECTED" while the shell held a live, established stream
+   * to its own backend. boot() reads /api/status ONCE, through this shell,
+   * and writes #brand-sub from that one answer - "demo · not connected"
+   * when the read threw, which is what an unreachable backend does
+   * (hud_proxy.rs returns Err, so the page's fetch rejects). Nothing in the
+   * page reads it again: not its 30 s safety net (apprPoll/initPoll), not
+   * the stream's hello. So one failed read at load was that window's verdict
+   * for the rest of the session, however healthy the link became. And
+   * S.online is left at false by the same read, which is the page's whole
+   * idea of "am I talking to Jarvis": Send answers with sampleReply() -
+   * "Jarvis is not connected" - and the face is shown asleep.
+   *
+   * The link is live and checked: Rust sets `connected` from the stream's
+   * hello frame alone, and pushes it here on every change. So it, not a
+   * boot-time default, is what decides whether that verdict still stands.
+   * When it says the backend is answering, the page's own read is made
+   * again; if that succeeds, the page was wrong, and it is put back through
+   * its own boot path by reloading - the page's own words for this state are
+   * "reload this window and your messages will get real answers". Nothing
+   * smaller would do: the line, the banner, the face, the lane list and Send
+   * all come from that one read, and the page's `S` is a top-level `const`,
+   * so no other script can correct it - only the page can re-derive it.
+   *
+   * Three guards, and no way through them: only while #brand-sub still holds
+   * the page's own fallback; never while the owner has unsent words in the
+   * box; and at most once per window (`window.name` outlives a reload of the
+   * same window), so a backend that answers the stream and not /api/status
+   * cannot put this window in a reload loop.
+   * ---------------------------------------------------------------- */
+  var DEMO_BRAND = /^\s*demo\b/i; // the page's own "demo · not connected"
+  var BRAND_RELOADED = "jarvis-hud-demo-reload";
+  var brandReading = false;
+
+  function brandIsFallback() {
+    var sub = document.getElementById("brand-sub");
+    return !!sub && DEMO_BRAND.test(sub.textContent || "");
+  }
+
+  function recheckBrand(link) {
+    if (brandReading || !link || !link.connected || !brandIsFallback()) return;
+    if (window.name === BRAND_RELOADED) return;
+    var box = document.getElementById("input");
+    if (box && String(box.value || "").trim()) return;
+    brandReading = true;
+    // Through the same shim, the same proxy and the same route the page's own
+    // read took - this is that read, made again, not a second opinion.
+    window
+      .fetch("/api/status", { cache: "no-store", headers: { "X-Jarvis-Client": "hud" } })
+      .then(function (res) {
+        return res && res.ok ? res.json() : null;
+      })
+      .then(function (status) {
+        brandReading = false;
+        // Only a read that actually landed proves the fallback wrong. Still
+        // no answer means the page's verdict is not disproved, so it stands
+        // and the live link line under it says what is really happening.
+        if (!status || !brandIsFallback()) return;
+        try {
+          window.name = BRAND_RELOADED;
+        } catch (err) {
+          /* a window that will not take a name: the landed read above is
+             still what stops a second reload, since the page it reloads
+             into will read the same answer and never show the fallback */
+        }
+        window.location.reload();
+      })
+      .catch(function () {
+        brandReading = false;
+      });
+  }
+
+  /* The page's own beat, so a fallback left standing is still found when the
+   * link never changes again - a quiet Jarvis pushes no events at all, and
+   * the owner would be left reading the wrong word on an idle desktop.
+   * `apprPoll` is a top-level function declaration, so the page's
+   * `setInterval` resolves it on the global object and sees this wrapper -
+   * the same reason section 4 can wrap `setView`. Installed once the page's
+   * own script has run, which is where the function exists at all. */
+  function watchPageBeat() {
+    if (typeof window.apprPoll !== "function" || window.apprPoll.__jarvisBrandBeat) return;
+    var pagePoll = window.apprPoll;
+    var beat = function () {
+      var result = pagePoll.apply(this, arguments);
+      recheckBrand(lastLink);
+      return result;
+    };
+    beat.__jarvisBrandBeat = true;
+    window.apprPoll = beat;
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", watchPageBeat, { once: true });
+  } else {
+    watchPageBeat();
   }
 
   /* The feed.
