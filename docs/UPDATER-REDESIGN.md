@@ -1,0 +1,606 @@
+# The updater: why it cannot finish, and what to do about the owner's own edits
+
+Written 2026-10-08 on `design/updater-redesign`, from `origin/main` at
+`165e8f2d`. **No algorithm code in this pass** — this is a design note, a
+reproduction, and the questions that belong to the owner.
+
+Everything below was measured. The folding line where a command was run is
+named beside the number, and nothing here was changed on the owner's machine:
+his backend folder was **read only**, and every run happened against a copy in
+`%TEMP%`.
+
+---
+
+## 1. What the tool does today, in plain words
+
+`scripts/apply-patches.ps1` brings the owner's backend folder up to date. The
+owner's folder is not in this repository (`docs/ARCHITECTURE.md` §9); this
+repository holds **patches** — small text files describing edits — and the
+script applies them in a fixed order.
+
+The problem the script has to solve is that the owner's folder is often
+**partly** patched: an earlier run applied the list as it was then, and since
+then patches have been added and edited here. A patch cannot simply be applied
+again if it is already on — the lines it looks for are no longer where it
+expects.
+
+So the script answers "which patches are on?" by **taking them off**. Its
+rehearsal, on a throwaway copy, is:
+
+1. **Strip.** Walk the 126-patch list backwards (newest first) and reverse
+   each patch off the copy, one at a time.
+2. **Re-apply.** Put the whole list back on, in order.
+3. **Check the result.** Take the whole list off the copy again. The gate.
+
+If step 3 cannot finish, the script refuses **everything** and changes
+nothing. That refusal is correct — a backend missing half a feature is worse
+than one waiting to be updated — but it is where the owner is stuck.
+
+### Why it deadlocks
+
+The strategy assumes that *what can be taken off* is *what is on*. On the
+owner's backend that is false in both directions at once:
+
+- `screen-attach.patch` is **on** his files and **can be taken off** there.
+  But it was written to sit on the block `tutorials.patch` installs. Once the
+  strip has removed both and the re-apply puts the list back on, `tutorials`
+  lands exactly where `screen-attach`'s own context expects to find itself.
+  Measured: in the re-apply, **both** fail (`git-ok=False`) and are recorded
+  "already on … left as it is". The two are nested, so neither can be put back
+  on in that rehearsal — and step 3 then cannot take `screen-attach` off the
+  state the run would leave.
+- Four further patches (`tasks`, `accounts`, `chatbot-limits`,
+  `chatbot-limits-hud`) are on his files, and the strip **fails** to take them
+  off — a later patch has rewritten the context they were written against. So
+  they are left in the tree and then re-applied on top of themselves.
+
+The strategy is therefore **circular**: what gets removed is decided by what
+can be removed, and then the result is judged against a fixed list. On a stack
+where any patch fails either half, there is no answer it can accept. That is
+the deadlock, and it is in the strategy — not in any one patch, and not in the
+patches being wrong.
+
+---
+
+## 2. The reproduction, and its real output
+
+The script's own rehearsal copies `*.py` out of the backend folder
+(`Reset-Rehearsal`, `apply-patches.ps1:2388`), so a copy is exactly what it
+does. I made the same copy myself and pointed the script at it.
+
+```powershell
+# the owner's folder was only READ. This copy is what every run used.
+$src = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+$dst = "$env:TEMP\jarvis-deadlock-repro"
+Copy-Item "$src\*" $dst -Recurse -Force
+
+pwsh -File scripts\apply-patches.ps1 -BackendPath $dst -SkipTests -SkipPackages
+```
+
+`-SkipTests -SkipPackages` is what keeps it fast; it changes nothing about the
+patch decision, which is over before either step runs. The run ended
+`exit=1`. Its own words:
+
+```
+Endings : LF, which is what the patches expect
+
+Rehearsing all 126 on a copy first.
+  9 ok, 117 "not onto the files as they are"        <- expected: most are already on
+
+122 of these are already on your backend from an earlier run.
+
+Rehearsing again: take those off, newest first, then put all
+126 back on in order. Still on the copy.
+  124 ok
+  already on   tutorials.patch  (left as it is)
+  already on   screen-attach.patch  (left as it is)
+
+  FAIL  1 patch(es) will not apply. NOTHING HAS BEEN CHANGED.
+
+--- the state this run would leave ---
+screen-attach.patch cannot be taken off the state this run would leave
+
+This is not a patch that has drifted. Taking the applied ones off and
+putting the whole list back on would leave a backend that does not carry
+every patch in this list - and a backend missing part of a feature is
+worse than one waiting to be updated. So nothing was changed, on
+purpose. The patch named above is the one already on your files that
+cannot survive that.
+```
+
+**This is the #107 deadlock, reproduced exactly, and it names the same two
+patches.** The check stops at the first failure, so it names `screen-attach`;
+`tutorials.patch` fails the same gate for the same reason. Every `.py` file in
+the copy was byte-identical afterwards.
+
+**And the two faults are visible in the run's own numbers**, without needing to
+trust a hand-built replica of step 2:
+
+- the strip prints `122 of these are already on your backend from an earlier
+  run`, and instrumenting that exact loop shows it as
+  `INSTR_FOUND_COUNT=122 INSTR_ALREADYON_COUNT=0`. So **122 came off and 4 did
+  not** (`tasks`, `accounts`, `chatbot-limits`, `chatbot-limits-hud`).
+- pass 2 prints `ok` for four patches that the strip had already confirmed were
+  in the tree and taken off — and instrumenting the re-apply shows
+  `chatbot-limits-hud.patch git-ok=True`, likewise `chatbot-limits`, `accounts`
+  and `tasks`. Those four are exactly the four the strip could not take off, so
+  they go on a second time.
+- `tutorials.patch` and `screen-attach.patch` are reported `already on … left as
+  it is`, and instrumenting confirms `git-ok=False` for both: neither is put
+  back on, which is precisely the half-applied state step 3 exists to catch.
+
+I could not make the headline counts add up to the last line, and I am not
+going to dress that up. Pass 2 prints **124 `ok`** and 2 "already on", while
+the patch list has 126 entries; the split-patch handling
+(`$UsingRebuilt`, `apply-patches.ps1:1818`) and the two dropped superseded
+patches mean the line the loop counts and the line I count are not obviously
+the same, and I did not resolve it. **What is measured, and all this note
+relies on, is the per-patch evidence above, read out of the script's own
+branches.**
+
+### Two things the #107 notes say that are no longer true, and one that is
+
+- **Line endings are no longer the blocker.** The notes describe `-FixLineEndings`
+  and a CRLF `jarvis_hud.py`. Today that file is **plain LF**, as are
+  `jarvis_gate.py` and `jarvis_extract.py` (measured byte by byte). The script's
+  own line says `Endings : LF, which is what the patches expect`. The
+  `-FixLineEndings` deadlock is gone; the nest (`tutorials` / `screen-attach`)
+  is what remains.
+- **The 28 "rewritten" patches are no longer refused.** The notes say 28
+  patches whose added lines a later patch rewrote "still answer not on and stay
+  refused", with `token-file.patch`'s `TOKEN_FILE` line as the example. That
+  line is still rewritten — the patch adds
+  `TOKEN_FILE = CONFIG_DIR / "token"` and the owner's file carries
+  `TOKEN_FILE = CONFIG_DIR / "token"      # the OLD plain-text place; only read, to move it`
+  — but the script now recognises it. On today's state, of the 126 entries the
+  strip is given, **122 come off (120 by their current text, 2 by an older text
+  from `backend/patch-history/`) and 4 do not.** The `#107` work recognising
+  122 where it used to recognise 9 still holds.
+- **The `Test-PatchOnBackend` rescue does not fire at all on today's state.**
+  Instrumenting the script's own strip loop (a copy of the script, on a copy of
+  the backend; nothing of the owner's touched) prints
+  `INSTR_FOUND_COUNT=122 INSTR_ALREADYON_COUNT=0`. The rescue added by `#107`
+  — "already on, leave it alone" — is not what is refusing. The refusal is
+  purely step 3.
+
+### What the four un-strippable patches actually do
+
+They are left in the tree, and the re-apply then puts them **on a second
+time** — instrumenting the re-apply branch shows
+`chatbot-limits-hud.patch git-ok=True`, and the same for `chatbot-limits`,
+`accounts` and `tasks`. Nothing skipped them, because the "already on … left as
+it is" verdict is only reached *after* a patch has failed to apply
+(`apply-patches.ps1:2801`).
+
+So the rehearsal's own result state contains a second copy of those four
+patches' work. The gate then refuses — and here it happens to refuse over
+`screen-attach` first, so this second problem is masked. That is worth saying
+plainly: **on a backend where the nest is not present, the same code path would
+reach the gate with a doubled result state, and the gate would be the only
+thing standing between the owner and a file carrying the same edit twice.** The
+gate is doing real work, not merely being stubborn.
+
+I could not measure the doubled state directly: step 3 has no exit that keeps
+its scratch folder, and a hand-built replica of step 2 did not reproduce the
+script's exact split-patch handling (`$UsingRebuilt`, `apply-patches.ps1:1818`).
+What is measured is the re-application itself.
+
+### The set the tool is asked to work on is smaller than the folder
+
+`backend/` holds **128** `.patch` files. The script's list holds **128** names,
+but before the rehearsal it **drops two** — `embedding-guard.patch` and
+`event-allowlist.patch`, whose only fix is already inside the rebuilt
+`backend/rebuilt/jarvis_memory.py` and `jarvis_events.py` (`$REBUILT_SUPERSEDES`,
+`apply-patches.ps1:1487`) — and swaps four others for the split halves in
+`backend/rebuilt-patches/`. That is why the run says **126**.
+
+---
+
+## 3. The question that actually matters
+
+Everything above is about `.patch` files. But the reason the owner is stuck is
+narrower and more personal than that:
+
+> **His backend is a live, hand-modified program.** It carries edits the patch
+> stack cannot reproduce.
+
+Measured: his `jarvis_hud.py` differs from this repository's published base by
+exactly two hunks (a 21-line difference at a whole-file level). One of them is
+`screen-attach.patch`, which simply has not been in a base snapshot yet. The
+other is **not in any patch at all**:
+
+```diff
+-            # each with its reason. Never the reason a pass fails.
++            # each with its reason.
++            _auto, _why = {}, ""
+             try:
+@@
+-            except Exception:
+-                _auto = {}
++                _why = str((_auto or {}).get("error") or "")
++            except Exception as _exc:
++                _auto, _why = {}, type(_exc).__name__
+             _saved = len((_auto or {}).get("saved") or [])
+@@
+-            if len(out) > _saved:
++            if _why:
++                # Honest errors: a pass that raised did NOT leave its
++                # proposals waiting for review (2026-10-06).
++                print(f"  memory     the learning pass failed ({_why}) - nothing was "
++                      f"saved or carded for it")
++            elif len(out) > _saved:
+```
+
+A learning pass that raised now says so instead of reporting proposals waiting
+for review. **No patch in `backend/` adds that.** It is hand work, or work that
+was never written back into a patch. It is in the live file; it is not in the
+published base; and no run of this tool will ever reproduce it.
+
+That is the whole question. **A file on his machine that the patches cannot
+reproduce has to be either:** left alone and the patch skipped with a plain
+report; backed up and overwritten with the patched version; or shown to him as
+a difference and chosen per file.
+
+| | what it costs him |
+|---|---|
+| **(a) Left alone, patch skipped, plain report** | His hand-edit survives, always. The cost is that the update is **incomplete**: a feature in that patch is not on his machine until he merges it by hand, and he has to read a report to find out. Nothing is lost; something is not gained. |
+| **(b) Backed up and overwritten** | The update is **complete and simple** — one command, no reading. The cost is that his hand-edit is **gone from the live file**. It survives only in a `_jarvis-backup-<date>` folder, and he has to notice and re-apply it. If he does not notice, behaviour he added silently stops working. |
+| **(c) Shown as a difference, chosen per file** | Nothing is lost and nothing is silent, and he decides with the text in front of him. The cost is **work at every update**: he reads a diff and answers per file, and a long-running update path that asks him questions is one he may stop running. |
+
+**This is the owner's decision, not mine.** It is question 1 in §6.
+
+One thing can be said about the choice without deciding it: **(c) is the only
+one of the three that cannot lose his edit and cannot silently omit a feature**,
+and it is the only one whose cost falls on us rather than on him. That is a
+reason to recommend it, not a reason to take it for him.
+
+---
+
+## 4. The approaches, compared honestly
+
+Each answer below is from reading the code and from the measurements above.
+
+### 4.1 A state manifest — a written record of what is on
+
+**What it is.** After a run, write down which patches are on, with a hash of
+each patch and of each file it produced. Then "what is on?" is a **read**, not
+a rehearsal: no strip, no re-apply, no result gate, and the deadlock of §1
+cannot happen because the circular question is never asked.
+
+**What it needs.** A file the owner's folder carries (e.g.
+`_jarvis-state.json`), written only after a run that succeeded, listing each
+patch's identity and the hash of each resulting file.
+
+**The hard part — bootstrapping, and it is genuinely hard.** A backend that
+predates the manifest has no record, and his folder is exactly that case. The
+first run still has to answer "what is on?" by guessing, which is the code in
+§1 — so **the manifest does not remove the deadlock on the first run; it only
+stops it recurring.** For the bootstrap, either:
+
+- the first run must be allowed to be *honest and partial*: write a manifest
+  recording only what it can **prove** (by the `#107` proof, patch by patch)
+  and mark the rest "unknown", then let him decide about the unknowns; or
+- the bootstrap is resolved by taking a fresh snapshot of his folder as the new
+  baseline (§4.3), and the manifest starts from there — which is *correct* but
+  requires him to accept a snapshot.
+
+Neither is free, and picking one is an owner question (question 2 in §6).
+
+**What it cannot do.** It cannot tell you what a patch *did* if the file has
+since changed by hand: a manifest records the hash the patch produced, and a
+hand-edit changes that hash. So the manifest answers "has this file changed
+since we wrote it?" — which is exactly the signal needed for §3's choice — but
+it does not by itself say whether the change was a hand-edit or a later patch
+unless the later patch is also in the manifest. A file whose hash matches no
+recorded patch output is **drift**, and that is the flag §3 needs.
+
+**Verdict: the right long-term spine**, and the only approach that makes "what
+is on?" cheap and truthful — but it does not by itself solve first boot on his
+machine, and it should not be sold as if it does.
+
+### 4.2 Three-way apply (`git apply --3way`)
+
+**What it is.** Git's own merge: given the pre-image, the post-image and the
+current file, try to merge. It is the standard answer to "the context moved".
+
+**Can it be used here? No, and the reason is measured, not assumed.**
+`git apply --3way` requires a **git repository**: it reads the pre-image blobs
+out of the object database. Measured:
+
+```
+$ git -C "<owner's backend>" rev-parse --show-toplevel
+fatal: not a git repository (or any of the parent directories): .git
+
+$ git apply --3way --check backend\tutorials.patch       # in a copy of his folder
+error: '--3way' outside a repository
+
+$ git apply --3way --check backend\screen-attach.patch
+error: '--3way' outside a repository
+
+$ git apply --3way --check backend\token-file.patch
+error: '--3way' outside a repository
+```
+
+And the blobs would not be there even inside a repository: of the 128 patches,
+**exactly one** (`thinking.patch`) carries the `index <a>..<b>` line that names
+pre-image and post-image objects. The other 127 carry no object names at all,
+so there is nothing for `--3way` to look up.
+
+**What it would need.** Making his backend a git repository, *and* having the
+pre-image of every patch committed as a blob. The pre-images are reconstructible
+in principle (a patch's `-` lines plus its context describe them), but building
+that object database is a new piece of machinery, not a flag.
+
+**What it cannot do.** Even with the machinery, `--3way` can leave **conflict
+markers in a live Python file**. The script deliberately refuses this today —
+`apply-patches.ps1:2195`, `--3way is deliberately absent. It can leave conflict
+markers in a working Python file, which turns "the patch did not apply" into
+"the backend will not start and the error is a syntax error on line 900".` That
+judgement is right and should survive any redesign: `--3way` is a tool for a
+tree you can afford to break, and this is the program the owner runs.
+
+**Verdict: not available as written, and not desirable on a live tree even if
+it were.** Worth revisiting only as an *inner* step that produces a candidate
+merged file **off to the side** — never in place.
+
+### 4.3 Staging from the shipped base (`jarvis-backend/`)
+
+**What it is.** Instead of stripping the live copy, build the target state
+from `jarvis-backend/` — the snapshot published 2026-10-06 — and copy the
+result over.
+
+**What it needs — and the catch is decisive.** `jarvis-backend/` is the only
+complete copy of this program that exists anywhere public. Measured: the
+patches name **7 distinct target files** —
+`jarvis_events.py`, `jarvis_extract.py`, `jarvis_gate.py`, `jarvis_hud.py`,
+`jarvis_memory.py`, `jarvis_models.py`, `jarvis_skills.py` — and under
+`backend/` only **two** of them exist. The other five exist **only** in
+`jarvis-backend/`. So `backend/` alone cannot even describe a backend, and
+`jarvis-backend/` is what a stranger runs.
+
+**But the base is a snapshot, not a source of truth, and it is already stale.**
+Measured against the owner's live folder, LF-normalised:
+
+| file | live lines | base lines | same? |
+|---|---|---|---|
+| `jarvis_hud.py` | 6544 | 6523 | **no** (−21) |
+| `jarvis_gate.py` | 1973 | 1964 | **no** (−9) |
+| `jarvis_extract.py` | 840 | 840 | yes |
+| `jarvis_models.py` | 1319 | 1319 | yes |
+| `jarvis_skills.py` | 896 | 896 | yes |
+| `jarvis_memory.py` | 5245 | 5245 | yes |
+| `jarvis_events.py` | 981 | 981 | yes |
+
+The gap is not drift in the bad sense — it is the base being a **2026-10-06
+photograph** and `screen-attach.patch` being decided on 2026-10-07, plus the
+hand-edit in §3. Which means:
+
+- **Staging from the base would silently drop `screen-attach.patch`**, and it
+  is the newest feature in the list.
+- **`jarvis-backend/README.md` is now wrong about the patcher.** It says
+  "`apply-patches.ps1` changes nothing here, and that is the correct result …
+  exit 0". Measured today, against a copy of that folder:
+
+```
+Rehearsing all 126 on a copy first.
+  ...
+error: patch failed: jarvis_hud.py:6506
+error: jarvis_hud.py: patch does not apply
+...
+  1. 1 patch(es) will not apply to your files as they are: screen-attach.patch.
+```
+
+  `exit=1`, and `jarvis_hud.py`'s SHA-256 unchanged. The script is right and
+  the README is out of date; the base is one patch behind.
+
+**What it cannot do.** It cannot be the source of truth without becoming a
+regenerated artefact — and **nothing regenerates it**. Its own README lists
+this as known follow-up 8: "The base is not regenerated by a script. The rule
+is in 'The exact rule, so it can be re-taken' above and was followed by hand."
+A hand-taken snapshot that is already one patch stale, with five files that
+exist nowhere else, is a copy of the truth, not the truth.
+
+**Verdict: real, and it is the right thing to build *on* — not to trust
+blindly.** Using it as the staging tree is a genuinely good idea (§5). Treating
+it as the *definition* of the owner's install is not: it is a snapshot from
+2026-10-06 that is already one patch behind, and it differs from his file in two
+places by design (§3's hand-edit and README's four removed dead lines), and the
+only thing that would fix that is regenerating it — which is the same "keep two
+copies in step" problem that `test_base_matches_repo.py` already exists to
+police.
+
+### 4.4 Retiring the patch stack entirely
+
+**What it is.** Stop shipping patches. Ship the base. The owner's update
+becomes "copy this folder over mine".
+
+**Is it a real option or a trap? On the evidence: a trap, for now — but the
+evidence is closer than the phrasing suggests, and it points at a real path.**
+
+*The trap, measured:*
+
+1. **The base is not the stack's output, and the repository says so.**
+   `test_base_matches_repo.py`'s own docstring: "It cannot prove the base is
+   the state the patch stack describes. Reversing the stack off the base stops
+   at `approval-notice.patch`… So the base is checked against THIS
+   REPOSITORY's copies, never against the patch stack." And running the patcher
+   against a copy of the base refuses at `screen-attach.patch`, as above.
+2. **The base is deliberately not the owner's file.** `jarvis-backend/README.md`
+   records one deliberate difference — four dead duplicate dict entries removed
+   from `jarvis_gate.py`, which the owner's live file still carries. A
+   retirement plan has to decide which of the two is canonical for those four
+   lines, and today they disagree **by design**.
+3. **The base is one patch behind the list.** `screen-attach.patch` (2026-10-07)
+   is not in a 2026-10-06 snapshot.
+4. **Five of the seven target files are in the base and nowhere else.** So the
+   patch stack can never be validated against anything but his disk. That is an
+   argument *for* retirement, but it is also why retiring is not a mechanical
+   change: after retirement, `backend/` becomes a set of documents about the
+   past, and `test_base_matches_repo.py`'s job (keep the two copies in step)
+   shrinks to keeping the base in step with itself — which is no job at all.
+
+*Where it stops being a trap, honestly:*
+
+The measured fact that **94 of the 128 patches already have every added line
+present somewhere in `jarvis-backend/`** shows the base is not a pristine
+pre-patch tree that the stack builds from — it is the *result*. The patches
+overlap the base heavily; the base is what the stack produces, refreshed by
+hand. If the base were regenerated by a script from the owner's folder on every
+release, "retire the patches" would become a real and much simpler design.
+
+**Verdict: not a trap in principle — a trap as the repository stands today,
+because the base is hand-taken, one patch stale, and deliberately differs from
+his file.** The honest version of this option is not "delete the patches"; it
+is **"make the base regenerable, then reconsider"**, which is build step 3 in
+§5.
+
+---
+
+## 5. Recommendation and build order
+
+**Recommendation (marked as mine, not the owner's): keep the patch stack for
+now, add a state manifest, and make the base regenerable — but decide §3 first,
+because every one of those steps is shaped by the answer.**
+
+The reasoning: the deadlock is a **strategy** bug, and a manifest removes the
+strategy. The base cannot replace the stack until it is regenerable, and
+regenerating it is exactly what produces trustworthy manifests. So the two work
+together, and neither requires the owner to accept losing a hand-edit before
+he has said what should happen to one.
+
+Each step below is small enough to verify on its own, and **none of them
+touches the owner's live files until the step that is specifically about doing
+so.**
+
+1. **Write down the classification a run reaches, in a machine-readable form.**
+   Extend the rehearsal's report to emit, per patch, one of: *taken off*,
+   *taken off (older text)*, *on but unstrippable*, *not recognised*. Today
+   that information is only in prose. **Verify:** run against a copy and diff
+   the classification against the JSON emitted here; they must agree patch for
+   patch. No behaviour change, no file touched.
+
+2. **Write the manifest.** After a run that finishes, write
+   `_jarvis-state.json` beside the backend: each patch's file hash, and the
+   hash of each `.py` it produced. **Verify:** run twice on a copy — the second
+   run must read the manifest and need no rehearsal at all; and hand-edit one
+   `.py` in the copy and confirm the next run reports that file as drift, by
+   name. Still nothing of the owner's.
+
+3. **Make the base regenerable, and make its staleness a failure.** One script
+   that re-takes `jarvis-backend/` from a given backend folder, and a check
+   that fails when it differs. `jarvis-backend/README.md`'s follow-up 8 asks
+   for exactly this. **Verify:** regenerate from a copy of the owner's folder
+   and confirm `test_base_matches_repo.py` still passes; then confirm the
+   patcher runs against that regenerated base and reaches the same place as
+   against his folder. *This is the step that tests §4.4 properly, and it may
+   well be the step that makes retirement right.*
+
+4. **Then, and only then, act on §3.** Whatever the owner chooses, it is now a
+   small change in one place: when the manifest says a file is drift, either
+   skip and report (a), back up and overwrite (b), or stop and show the
+   difference (c). **Verify:** a copy of his folder, with the hand-edit of §3
+   deliberately present, must produce the chosen behaviour — and for (a) and
+   (c), the hand-edit must still be in the file afterwards.
+
+5. **Fix the one real defect found on the way.** Where the script decides a
+   patch is "already on" it reaches that verdict by *failing to put it on*
+   (`apply-patches.ps1:2801`), which is not proof that the work is there — §2
+   measured four patches re-applied on top of themselves after exactly this
+   path. The result gate catches it today. Before the gate is relaxed or the
+   strategy is replaced, this verdict must be obtained **before** anything is
+   applied, not after. **Verify:** a test whose expected answer is "left alone"
+   must answer the same way whether the patch would have applied or not.
+
+---
+
+## 6. The owner's questions
+
+1. **When a file on your PC has been edited by hand and the patches cannot
+   reproduce it, what should happen to it?**
+   - **Show it to me and let me choose per file** (my recommendation — nothing
+     is lost, nothing is silent, but you read a diff at each update)
+   - **Back it up and overwrite it** (simplest, and the update is complete — but
+     your edit is gone from the live file and you must notice the backup)
+   - **Leave it alone and skip that patch, with a plain report** (your edit
+     always survives — but the feature in that patch is not installed until you
+     merge it yourself)
+
+2. **For the first run, which has no record of what is on your PC yet, may the
+   tool take a fresh snapshot of your current files as the new starting point?**
+   - **Yes, snapshot first, then tell me what it could not match**
+     (recommended — it is the only way to stop guessing)
+   - **No — work it out from the files as they are** (slower, and some patches
+     will end up marked "unknown" until you decide about them)
+
+3. **`jarvis-backend/` is the only complete copy of your program in the
+   repository, and it is one patch behind your PC (it is missing
+   `screen-attach.patch`) and deliberately differs from your `jarvis_gate.py`
+   in four dead lines. Should it be regenerated from your folder?**
+   - **Yes, and make it a check that fails when it drifts** (recommended — it is
+     the step that would let the patches be retired later)
+   - **No — leave it as a snapshot for strangers, and keep the patches as the
+     description of my install**
+
+4. **Held over, because it needs question 1's answer first:** should a run that
+   had to skip patches still report success, or must it always end as "not
+   finished" until you have looked at the skipped list?
+
+---
+
+## 7. What this note could not determine
+
+- **Why pass 2's headline count does not match the patch list.** Pass 2 prints
+  124 `ok` and 2 "already on" against a 126-entry list. The per-patch evidence
+  in §2 is solid and is what this note rests on, but I did not reconcile the
+  totals, and I am not claiming the extra two are anything in particular.
+- **The doubled result state, directly.** §2 measures the four patches being
+  re-applied `git-ok=True` on a tree that already carries their work, and reads
+  the code path that would drop them from the real run. It does not produce the
+  exact pre-gate tree byte for byte: step 3 has no exit that keeps its scratch
+  folder, and a hand-built replica of step 2 diverged from the script's own
+  split-patch handling (`$UsingRebuilt`, `apply-patches.ps1:1818`). What is
+  asserted is the measured re-application, not a diff of the result.
+- **Whether the four patches, applied twice, produce duplicated code** rather
+  than a harmless second application. They applied cleanly; what the file looks
+  like afterwards was not captured, because the only run that gets there
+  continues into step 3 and refuses.
+- **How many patches the `Test-PatchOnBackend` rescue would catch on a
+  different backend.** On today's state it catches none
+  (`INSTR_ALREADYON_COUNT=0`); the 80 "left exactly as they are" that `#107`
+  reports are not reproducible from the current files.
+- **Whether `jarvis_gate.py`'s 9-line gap is the same story. It is, and it was
+  diffed:** the base has **2 fewer** lines (the dead `append_logseq_journal` and
+  `send_email` duplicate dict entries `jarvis-backend/README.md` says were
+  deliberately removed) and **7 more** that only live has — `read_web_page` in
+  `_TOOL_ACTIONS`, which is `readpage.patch` and has not been in a snapshot
+  yet. So both files' gaps are the same two causes: one patch newer than the
+  snapshot, plus one deliberate difference.
+- **Anything about a Windows PowerShell 5.1 run.** Every measurement here used
+  PowerShell 7 (`pwsh`), which is what the script's own tests use.
+- **A test pinning these numbers, and why one was not written.** The brief
+  asked for one "only if it is honest". The two deadlocking patches and the
+  four doubled ones are facts about **this PC's folder**, which CI does not
+  have; a test that skips without it proves nothing, and one that hard-codes
+  `122`/`126`/`4` would fail on the next patch added — a test that breaks for
+  the wrong reason is worse than none. Pinning the *gate's* behaviour is
+  genuinely valuable and is what build step 5 asks for, but writing it well
+  means first getting the re-apply to expose a "left alone" verdict **before**
+  it applies — which is a code change, and this pass is deliberately not one.
+
+## 8. Risk
+
+- **Nothing of the owner's was changed.** His backend folder was read; every
+  script run used a copy in `%TEMP%`; `-FixLineEndings` was never passed
+  against his folder; his running Jarvis was not stopped. The one run that hit
+  the "Jarvis is still running" guard was `-Revert`, and it correctly refused
+  and changed nothing.
+- **The real risk is in acting on this note too early.** The temptation is to
+  "just relax the result gate" — it is the line that refuses, and removing it
+  makes the run finish. That would be wrong: §2 shows the gate is currently the
+  only thing standing between the owner and a backend carrying a doubly-applied
+  patch. **Do not relax the gate before step 5.**
+- **The second risk is silence.** Whichever of §3's three choices is taken, the
+  failure mode that hurts most is an update that reports success while a
+  hand-edit or a feature is quietly missing. Any of the three is better than
+  that, which is why the choice is worth making explicitly rather than
+  defaulting.
