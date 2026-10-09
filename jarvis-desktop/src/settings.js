@@ -700,6 +700,21 @@ function paintFaceTuning() {
       ? "Auto adjust is choosing. Picking one turns Auto adjust off."
       : "High matches the reactor kit. Lower is easiest on the graphics chip.";
   }
+  // The closed fold reads its own value (2026-10-08): the summary line above
+  // the controls, so sharpness and frame rate can be read without opening it.
+  // Auto adjust is written as itself: while it is on, these two are what it
+  // starts from, not what is being drawn.
+  const now = $("face-tuning-now");
+  if (now) {
+    const rate = FRAME_RATES.find((f) => f.id === faceTuning.frameRate) || FRAME_RATES[0];
+    const quality = QUALITIES.find((q) => q.id === faceTuning.quality) || QUALITIES[0];
+    const fps = rate.id === "auto" || rate.id === "max"
+      ? `frame rate ${rate.label}`
+      : `${rate.label} fps`;
+    now.textContent = faceTuning.autoAdjust
+      ? "Now: Auto adjust is choosing."
+      : `Now: ${quality.label}, ${fps}.`;
+  }
 }
 
 // The level notes and the frame-rate note, written once: they never change.

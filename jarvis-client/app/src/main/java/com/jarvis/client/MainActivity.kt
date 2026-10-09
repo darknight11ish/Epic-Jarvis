@@ -3125,6 +3125,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenInbox = { nav.go(Screen.INBOX) },
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                // Settings from Home's own row (2026-10-08).
+                                onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
