@@ -422,6 +422,156 @@ def set_digest_hour(hour, *, path: Optional[Path] = None) -> dict:
     return out
 
 
+# --------------------------------------------------------------------------
+#   The route: POST /api/attention/settings
+# --------------------------------------------------------------------------
+# The shape is jarvis_chatbot_limits.py's, deliberately: a numeric setting with
+# a direction that matters. Turning the budget DOWN (or moving the digest) is
+# applied at once, with no card - it only ever makes Jarvis quieter. Turning it
+# UP is a loosening: the owner is interrupted more often, so it goes through
+# ONE approval card first, and nothing is written until that card is approved.
+#
+# WHICH WAY IT IS comes from the NUMBER against the budget already in force,
+# never from anything the caller sends. A page (or anything else that can reach
+# the route) does not get to call a raise a lowering and skip the card; that
+# exact hole was found and fixed in the money limits on 2026-10-07 (bug audit
+# finding E2), so this module is written without it rather than after it.
+#
+# The gate action's name carries the meaning: `raise_attention_budget`. It is
+# deliberately NOT in an owner's tier table, so it resolves to the file's
+# unknown-action tier - "ask" in the shipped config - and a PC whose Jarvis
+# cannot ask refuses the raise (503) instead of applying it.
+RAISE_ACTION = "raise_attention_budget"
+
+_STATE: dict = {"gate": None, "tier_of": None}
+
+
+def configure(*, gate=None, tier_of=None) -> None:
+    """Tests only: stand in for the approval gate and the tier table."""
+    _STATE.update(gate=gate, tier_of=tier_of)
+
+
+def _dep(name: str, default):
+    return _STATE.get(name) or default
+
+
+def _person_said_yes(v) -> bool:
+    """The same reading jarvis_chatbot_limits.py uses: the tier must really be
+    "ask" and the outcome must really be an approval on this PC."""
+    if getattr(v, "allowed", False) is not True:
+        return False
+    outcome = getattr(v, "outcome", None)
+    if outcome is not None:
+        return outcome == "approved" and getattr(v, "tier", "ask") == "ask"
+    return getattr(v, "tier", None) == "ask"
+
+
+def _gate(action: str, detail: dict, prompt: str):
+    import jarvis_gate
+    return jarvis_gate.check(action, detail, prompt=prompt)
+
+
+def _tier(action: str) -> str:
+    import jarvis_gate
+    try:
+        return str(jarvis_gate.tier_of(action))
+    except Exception:
+        try:
+            return str(jarvis_gate._tiers().get(action, "ask"))
+        except Exception:
+            return "ask"
+
+
+def _raise_budget_card(old: int, new: int) -> tuple:
+    """The card for raising the budget, and the yes. (None, said) when it went
+    through; ((status, body), "") when it did not."""
+    prompt = (f"Let Jarvis speak up to {new} times a day, instead of {old}? "
+              f"That is more interruptions, not fewer.")
+    detail = {"text": prompt,
+              "what": "let Jarvis interrupt you more often",
+              "was": old, "now": new,
+              "leaves_this_pc": False}
+    gate = _dep("gate", _gate)
+    tier_of = _dep("tier_of", _tier)
+    try:
+        if tier_of(RAISE_ACTION) != "ask":
+            return (503, {"ok": False, "error": "Your PC's Jarvis cannot ask you about "
+                                                "that yet, so nothing was changed."}), ""
+        v = gate(RAISE_ACTION, detail, prompt)
+    except Exception:
+        return (503, {"ok": False, "error": "Jarvis could not put that to you just now, "
+                                            "so nothing was changed."}), ""
+    if not _person_said_yes(v):
+        outcome = getattr(v, "outcome", None)
+        words = {"denied": "You said no, so Jarvis still speaks up to "
+                           f"{old} times a day.",
+                 "timed_out": "The card was not answered in time, so Jarvis still "
+                              f"speaks up to {old} times a day."}
+        return (409, {"ok": False, "error": words.get(
+            outcome, "That was not approved, so Jarvis still speaks up to "
+                     f"{old} times a day.")}), ""
+    return None, f"Jarvis may now speak up to {new} times a day."
+
+
+def change(body, *, peer=None, local=None) -> tuple:
+    """POST /api/attention/settings - the two numbers the Brain shows.
+
+    {"spoken_per_day": 6} or {"digest_hour": 9}. One number at a time: the two
+    are different kinds of thing, and a card that asked about both at once
+    would be a card nobody could answer well."""
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "Send the number you want to change."}
+    keys = [k for k in ("spoken_per_day", "digest_hour") if k in body]
+    if len(keys) != 1:
+        return 400, {"ok": False,
+                     "error": "Send one of these: spoken_per_day, digest_hour."}
+    key = keys[0]
+    if key == "digest_hour":
+        try:
+            out = set_digest_hour(body[key])
+        except SettingsFileError as exc:
+            return 400, {"ok": False, "error": str(exc)}
+        return 200, {"ok": True, "changed": out.get("changed", True),
+                     "loosening": False, "from": out.get("from"),
+                     "to": out.get("to"),
+                     "said": f"The morning brief arrives at {int(out['to']):02d}:00 now."}
+
+    # spoken_per_day. The NUMBER decides the direction, not the caller.
+    raw = _as_int(body[key])
+    if raw is None:
+        return 400, {"ok": False, "error": f"\"{body[key]}\" is not a whole number."}
+    if not SPOKEN_PER_DAY_MIN <= raw <= SPOKEN_PER_DAY_MAX:
+        return 400, {"ok": False, "error": "That has to be a whole number between "
+                                           f"{SPOKEN_PER_DAY_MIN} and "
+                                           f"{SPOKEN_PER_DAY_MAX}."}
+    old = _limit()
+    raised = raw > old
+    said = ""
+    if raised:
+        refused, said = _raise_budget_card(old, raw)
+        if refused is not None:
+            _audit("arbiter.budget_card", {"from": old, "to": raw, "outcome": "not_approved"})
+            return refused
+    try:
+        out = set_spoken_per_day(raw)
+    except SettingsFileError as exc:
+        return 400, {"ok": False, "error": str(exc)}
+    if not said:
+        said = ("Jarvis will not speak up on its own today."
+                if int(out["to"]) == 0 else
+                f"Jarvis may speak up to {int(out['to'])} times a day.")
+    return 200, {"ok": True, "changed": out.get("changed", True),
+                 "loosening": raised, "approved": raised,
+                 "from": out.get("from"), "to": out.get("to"), "said": said}
+
+
+def handle_post(route: str, body, *, peer=None, local=None) -> tuple:
+    """POST /api/attention/settings (the HUD's own route calls this)."""
+    if route != "/api/attention/settings":
+        return 404, {"error": "no such route"}
+    return change(body, peer=peer, local=local)
+
+
 def _spend(now: Optional[float] = None) -> bool:
     """Take one token. Returns False if there was none, without spending.
 
