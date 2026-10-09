@@ -36,6 +36,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,6 +61,7 @@ import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PromptCoach
 import com.jarvis.client.net.Provenance
@@ -127,6 +129,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The one activity.
@@ -942,13 +945,28 @@ class MainActivity : FragmentActivity() {
         // rollback: the setting was never written and the card was gone until
         // tomorrow. The suppressing flag and the work it belongs to now share
         // a lifetime, so a rotation re-offers the card instead of eating it.
-        // `cachedSleepOffer` stays plain `remember`: a raw
-        // JsonObject isn't Bundle-saveable, and it doesn't need to be - the
-        // LaunchedEffect(brain.memory) block below re-populates it from the
-        // still-cached server data on the next recomposition, and the
-        // survived `dismissed` flag is what stops that from re-adopting the
-        // offer just turned down.
-        var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
+        // `cachedSleepOffer` used to be plain `remember`, on the grounds that a
+        // raw JsonObject isn't Bundle-saveable. That was the whole of finding 5
+        // in the first Android audit: the suppression flag is saveable and the
+        // payload was not, so after a process death the payload was gone, the
+        // restart's read returned no offer (the PC marks the day as made when it
+        // SERVES one), and the card could not appear again that day. A Saver
+        // carries the offer's own JSON text across that boundary and gives it
+        // back as the same object, so the payload now has the lifetime its
+        // suppression flag already had.
+        val sleepOfferSaver = remember {
+            Saver<JsonObject?, String>(
+                save = { it?.toString().orEmpty() },
+                restore = { text ->
+                    text.takeIf { it.isNotBlank() }?.let {
+                        runCatching { JarvisJson.parseToJsonElement(it).jsonObject }.getOrNull()
+                    }
+                },
+            )
+        }
+        var cachedSleepOffer by rememberSaveable(stateSaver = sleepOfferSaver) {
+            mutableStateOf<JsonObject?>(null)
+        }
         // A date string, not a bare Boolean - "not now" means not now, not
         // forever. See [todayLocal]'s own doc comment for the bug a plain
         // Boolean had: rememberSaveable outlives the exact process death
