@@ -211,14 +211,17 @@ SECTIONS: tuple = (
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
     # "Limits and frequency" (2026-10-08): the numbers the owner can change,
-    # ONE table on the PC behind one read route and one write route
-    # (backend/jarvis_limits.py; limits-read.patch + limits-settings.patch;
-    # src-tauri/src/limits.rs). The PHONE's own screen for the same table is a
-    # separate piece of work, so this says app="desktop" today; when that lands
-    # these become ONE entry, app="both", carrying both sets of words.
+    # ONE table on the PC (backend/jarvis_limits.py) behind one read route and
+    # one write route (limits-read.patch + limits-settings.patch). BOTH apps
+    # have a screen for it - the PC's Settings card (src-tauri/src/limits.rs,
+    # src/limits-settings.js) and the phone's Settings row
+    # (ui/screens/LimitsPlate.kt, item "limits") - so this is ONE entry,
+    # app="both", carrying both sets of words.
     Section("limits", ("limits", "the limits", "limits and frequencies",
-                       "limits and frequency", "how often jarvis does things"),
-            app="desktop"),
+                       "limits and frequency",
+                       "limits and how often jarvis does things",
+                       "how often jarvis does things"),
+            app="both"),
     Section("email-sending", ("sending email", "email sending settings")),
     Section("about", ("about jarvis", "about")),
     # "Hang and crash notes": inside "More options" on the desktop (its own
@@ -285,6 +288,7 @@ SECTIONS: tuple = (
     # Notifications (2026-10-01): a card on the desktop.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="desktop"),
+    # "Limits and how often Jarvis does things" (2026-10-08): the limits and
 )
 
 #: id -> Section, for a direct lookup once a name has matched.

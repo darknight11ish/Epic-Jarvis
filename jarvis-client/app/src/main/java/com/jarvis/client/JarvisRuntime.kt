@@ -68,6 +68,7 @@ import com.jarvis.client.voice.VoiceTraining
 import com.jarvis.client.voice.liveIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -2428,6 +2429,38 @@ object JarvisRuntime {
         actionBlocker()?.let { return it }
         val body = com.jarvis.client.net.Thinking.bodyString(role, level)
         return com.jarvis.client.net.Thinking.replyLine(api.thinkingPost(body), level)
+    }
+
+    // ------------------------------------------ limits and frequencies ----
+
+    /**
+     * `GET /api/limits` - "Limits and how often Jarvis does things" on the
+     * phone's Settings (the PC's own `jarvis_limits.py` table). The PC answers
+     * with this phone's own view, and [com.jarvis.client.net.Limits.offered]
+     * filters `pc_only` again. A read: never held on a stale link.
+     */
+    suspend fun limits(): ApiResult<JsonObject> = api.limits()
+
+    /**
+     * ONE change to ONE limit - the row's key and its new value
+     * ([com.jarvis.client.net.Limits.body]).
+     *
+     * Held on a stale link like every change sent to the PC ([actionBlocker],
+     * rule 4): turning a number UP raises an approval card on the PC, and a
+     * card is a decision, not a setting. The PC's OWN sentence is what comes
+     * back and is what the plate shows; a change that did not go through ALSO
+     * goes into the shared [notice], the way [setMuted]'s failure does, so a
+     * refusal is never only a line inside one plate. The screen re-reads the
+     * row afterwards, because a 2xx can mean "a card is waiting there" and
+     * never means "it is on".
+     */
+    suspend fun setLimit(key: String, value: JsonElement): String {
+        actionBlocker()?.let { return it }
+        val answer = com.jarvis.client.net.Limits.answer(
+            api.setLimit(com.jarvis.client.net.Limits.body(key, value)),
+        )
+        if (!answer.changed) _notice.value = answer.sentence
+        return answer.sentence
     }
 
     // ------------------------------------------ sun, moon and weather ----

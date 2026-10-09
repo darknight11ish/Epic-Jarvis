@@ -49,5 +49,10 @@ object SettingsJump {
         Entry("When the phone does not answer", "handoff"),
         Entry("Devices", "devices"),
         Entry("Quick Settings tiles", "quick-tiles"),
+        // "Limits and how often Jarvis does things" (the PC's own
+        // backend/jarvis_limits.py table, 2026-10-08): the last row on the
+        // screen, so it is the last entry here too. The desktop has no jump
+        // entry for these yet, so the words are this section's own title.
+        Entry("Limits and how often Jarvis does things", "limits"),
     )
 }

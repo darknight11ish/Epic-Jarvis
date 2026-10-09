@@ -122,6 +122,10 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "handoff" to 18,
     "devices" to 19,
     "quick-tiles" to 20,
+    // "Limits and how often Jarvis does things" (the PC's own
+    // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last:
+    // it is about how much Jarvis does rather than about one feature.
+    "limits" to 21,
 )
 
 /**
@@ -469,6 +473,19 @@ fun SettingsScreen(
                 MenuFrame(menus, "settings.quick-tiles") {
                     QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
                 }
+            }
+
+            // "Limits and how often Jarvis does things" (the PC's own
+            // backend/jarvis_limits.py table, 2026-10-08): the limits and
+            // frequencies the owner can change, in the PC's own words. It reads
+            // and writes through JarvisRuntime directly (LimitsPlate.kt), so
+            // this is its only line. Behind `menus.shows("settings.limits")`
+            // like every other hideable row: the menu is declared once in
+            // backend/jarvis_menus.py and generated into MenuCatalog.kt, and
+            // MenuVisibilityTest checks both halves - the place in MenuPlaces
+            // and this check in a real screen.
+            if (menus.shows("settings.limits")) item(key = "limits") {
+                MenuFrame(menus, "settings.limits") { LimitsSection(canAct = canAct) }
             }
 
             item(key = "tail") { Gap(24) }

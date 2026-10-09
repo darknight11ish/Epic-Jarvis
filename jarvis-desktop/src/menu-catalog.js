@@ -860,7 +860,8 @@ export const MENUS = [
     "title": "Limits and frequency",
     "about": "How long an Undo stays possible, how much Jarvis gets on with at once, and the other numbers you can change.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
