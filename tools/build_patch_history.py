@@ -123,6 +123,33 @@ def well_formed(text: bytes) -> bool:
     targets = sorted(set(_TARGET_RE.findall(decoded)))
     if not targets:
         return True  # no "+++ b/..." line at all - not a file patch this script reads
+
+    # ASK GIT TO READ THE WHOLE TEXT FIRST (2026-10-09). The per-hunk loop
+    # below rebuilds each hunk from its OWN body and applies that, so it never
+    # compares an "@@" header's declared line counts to the lines that actually
+    # follow - which is the one thing git refuses a patch over. handoff-mode.patch
+    # shipped to main with a first header claiming six original lines and a body
+    # of seven; every hunk still applied on its own, so this said "well formed",
+    # the malformed text was archived as an earlier version, and then
+    # `git apply --reverse` failed on it for good - on a text that could never
+    # have gone onto anyone's backend, which is exactly what this function
+    # exists to keep out. Found by test_patch_history.py going red on the commit
+    # that fixed the header.
+    #
+    # `--numstat` reads the headers and nothing else, needs no repository and no
+    # target file, and catches both directions: a header claiming too many lines
+    # ("corrupt patch") and one claiming too few ("patch fragment without
+    # header"). It costs one git start per candidate version.
+    probe = Path(tempfile.mkdtemp(prefix="jarvis-patch-parse-")) / "probe.patch"
+    try:
+        probe.write_bytes(text)
+        parsed = subprocess.run([git_bin, "apply", "--numstat", str(probe)],
+                                capture_output=True)
+        if parsed.returncode != 0:
+            return False
+    finally:
+        shutil.rmtree(probe.parent, ignore_errors=True)
+
     d = Path(tempfile.mkdtemp(prefix="jarvis-patch-check-"))
     try:
         for target in targets:
