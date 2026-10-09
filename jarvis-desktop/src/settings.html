@@ -1008,6 +1008,21 @@
           Choose what Jarvis notifies you about on this PC. Decisions waiting for your yes
           always notify you and cannot be turned off.
         </p>
+        <!-- The owner's decision of 2026-10-08: these seven values now live in
+             the owner's own settings file ([notifications] in
+             jarvis-framework.toml, backend/jarvis_notify_prefs.py) and BOTH apps
+             change them through the one limits route - because a phone can never
+             read this window's localStorage, and the phone must be able to change
+             them. This card READS them from the PC when it opens and WRITES every
+             change through it (notifications-prefs.js readFromBackend /
+             writeToBackend); localStorage is only this page's cache of what it
+             last read. The line below says the same thing, plainly, and the
+             matching rows in Limits and frequency say "(on your PC)". -->
+        <p class="sub">
+          These are this PC's notifications. Your phone can change them too, in its own
+          Settings, and it is told there that they are the PC's. Decisions waiting for your
+          yes never go quiet.
+        </p>
 
         <h3 class="subhead">What notifies you</h3>
         <label class="toggle" id="notif-alarms-row">

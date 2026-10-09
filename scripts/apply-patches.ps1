@@ -1551,6 +1551,7 @@ $SHIPPED = @(
     # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 118) ---
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
     'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
+    'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -63,6 +63,39 @@ class LimitsTest {
     private fun row(key: String): Limits.Row =
         requireNotNull(Limits.offered(body).firstOrNull { it.key == key }) { "$key is not offered" }
 
+    /**
+     * The seven rows the owner's decision of 2026-10-08 added to the PC's table:
+     * THIS PC's own notification choices, which the phone may change too. Two of
+     * them are the third kind, `time` - the quiet hours' two ends, carried as the
+     * clock STRING the owner reads ("22:00"), never a number of minutes - and
+     * every row carries the PC's additive `quiet_on`.
+     */
+    private val notifyBody: JsonObject = JarvisJson.parseToJsonElement(
+        """
+        {"ok":true,"available":true,"limits":[
+          {"key":"notif_alarms","title":"Speak up when an alarm rings (on your PC)","kind":"bool",
+           "value":true,"words":"Speak up when an alarm rings (on your PC)","choices":[],"low":0,
+           "high":0,"unit":"","note":"An alarm rings until you dismiss it.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_quiet_enabled","title":"Be quiet during quiet hours (on your PC)","kind":"bool",
+           "value":true,"words":"Be quiet during quiet hours (on your PC)","choices":[],"low":0,
+           "high":0,"unit":"","note":"Silences the PC's non-urgent notifications.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_quiet_start","title":"Quiet hours start (on your PC)","kind":"time",
+           "value":"22:00","words":"22:00","choices":[],"low":0,"high":0,"unit":"",
+           "note":"The hour the PC's quiet window begins, on the PC's own clock.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_quiet_end","title":"Quiet hours end (on your PC)","kind":"time",
+           "value":"07:00","words":"07:00","choices":[],"low":0,"high":0,"unit":"",
+           "note":"The hour the PC's quiet window ends, on the PC's own clock.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true}
+        ]}
+        """.trimIndent(),
+    ) as JsonObject
+
+    private fun notifyRow(key: String): Limits.Row =
+        requireNotNull(Limits.offered(notifyBody).firstOrNull { it.key == key }) { "$key is not offered" }
+
     // ------------------------------------------------------ what is offered --
 
     @Test
@@ -250,6 +283,122 @@ class LimitsTest {
         val map = screen.substringAfter("SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(")
             .substringBefore("\n)")
         assertTrue("the index map has no limits row", map.contains("\"limits\" to 21"))
+    }
+
+    // ------------------------------------------- a time of day, and the PC's
+    //                                              own notifications (2026-10-08)
+
+    @Test
+    fun `this PC's own notification rows reach the phone, and say whose they are`() {
+        // Every one of them is offered here, and every title says the setting is
+        // the PC's - the phone's OWN notification settings are a different screen.
+        assertEquals(listOf("notif_alarms", "notif_quiet_enabled", "notif_quiet_start",
+            "notif_quiet_end"), Limits.offered(notifyBody).map { it.key })
+        for (r in Limits.offered(notifyBody)) {
+            assertTrue("${r.key} must say the setting is the PC's own", r.title.contains("(on your PC)"))
+            assertFalse("${r.key} is not a loosening either way", r.loosenUp)
+            assertEquals("both", r.app)
+        }
+    }
+
+    @Test
+    fun `a clock time is a clock string, never a number of minutes`() {
+        val start = notifyRow("notif_quiet_start")
+        assertEquals("time", start.kind)
+        assertTrue(start.isTime)
+        assertEquals("the string the PC sent, unchanged", "22:00", start.clock)
+        assertEquals("the PC's own words for the row", "22:00", start.words)
+        // No step and no shape a number could take.
+        assertNull("a clock has no step up", start.up)
+        assertNull("and none down", start.down)
+        assertEquals("and no range line either", "", Limits.rangeLine(start))
+
+        // What ONE change posts: the clock STRING, quoted on the wire. This is
+        // the assertion that fails if a time is ever sent as 1320 minutes.
+        assertEquals("""{"key":"notif_quiet_start","value":"22:00"}""",
+            Limits.body("notif_quiet_start", Limits.timeJson("22:00")))
+        assertTrue("never a bare number",
+            !Limits.body("notif_quiet_start", Limits.timeJson("22:00")).contains("1320"))
+    }
+
+    @Test
+    fun `the phone checks the clock's shape before anything is sent`() {
+        assertEquals("the PC's own shape, normalised", "07:05", Limits.validTime("7:05"))
+        assertEquals("already normal", "22:00", Limits.validTime(" 22:00 "))
+        for (junk in listOf("1320", "25:00", "22:60", "7:5", "", "half past ten")) {
+            assertNull("$junk is not a time of day", Limits.validTime(junk))
+        }
+        // The picker starts where the value in force is - and a value it cannot
+        // read starts at the PC's own default rather than at midnight.
+        assertEquals(Pair(22, 0), Limits.hourMinute("22:00"))
+        assertEquals(Pair(7, 5), Limits.hourMinute("7:05"))
+        assertEquals(Pair(22, 0), Limits.hourMinute("nonsense"))
+    }
+
+    @Test
+    fun `quiet_on says whether the two hours decide anything`() {
+        assertTrue("quiet hours are on, so the times matter", notifyRow("notif_quiet_start").quietOn)
+        // The PC sends the SAME answer on every row; with quiet hours off the two
+        // clock rows say so and the plate offers no clock.
+        val off = notifyRow("notif_quiet_end").copy(quietOn = false)
+        assertFalse("the PC says quiet hours are off", off.quietOn)
+        assertTrue("the off row's words say the hour decides nothing",
+            Limits.timeWords(off).contains(Limits.TIME_QUIET_OFF))
+        // A PC that does not send the field at all is read as "they do", so an
+        // unknown field never hides a control from the owner.
+        val silent = JarvisJson.parseToJsonElement(
+            """{"limits":[{"key":"t","title":"Quiet hours start (on your PC)","kind":"time",
+                "value":"22:00","words":"22:00","choices":[],"low":0,"high":0,"unit":"","note":""}]}""",
+        ) as JsonObject
+        assertTrue("a row that does not say is drawn", Limits.offered(silent).single().quietOn)
+    }
+
+    @Test
+    fun `a row whose value is not a clock string is not offered at all`() {
+        // A PC sending a number of minutes (the exact mistake this kind exists to
+        // prevent) leaves the row out rather than drawing "1320" as if it were a
+        // time - and a kind this app has no control for is left out as before.
+        val bad = JarvisJson.parseToJsonElement(
+            """{"limits":[
+              {"key":"t1","title":"Quiet hours start (on your PC)","kind":"time","value":1320,
+               "words":"1320","choices":[],"low":0,"high":0,"unit":"","note":""},
+              {"key":"t2","title":"Quiet hours end (on your PC)","kind":"time","value":"07:00",
+               "words":"07:00","choices":[],"low":0,"high":0,"unit":"","note":""}
+            ]}""",
+        ) as JsonObject
+        assertEquals("only the real clock string is drawn", listOf("t2"), Limits.read(bad).map { it.key })
+    }
+
+    @Test
+    fun `the clock row's control carries the owner's words for TalkBack`() {
+        val words = Limits.timeWords(notifyRow("notif_quiet_start"))
+        assertTrue("the button names the row:\n$words", words.contains("Quiet hours start (on your PC)"))
+        assertTrue("and the value in force:\n$words", words.contains("22:00"))
+        assertEquals("Change", Limits.CHANGE_TIME)
+        // With quiet hours off the row says the hour decides nothing instead.
+        val off = Limits.timeWords(notifyRow("notif_quiet_end").copy(quietOn = false))
+        assertTrue("the off row says so:\n$off", off.contains(Limits.TIME_QUIET_OFF))
+    }
+
+    @Test
+    fun `the plate draws the app's own clock, and sends only what it shows`() {
+        val plate = source(PLATE)
+        assertTrue("the plate must draw the app's own time picker",
+            plate.contains("TimePicker(state = state)"))
+        assertTrue("started where the value in force is",
+            plate.contains("Limits.hourMinute(row.clock.orEmpty())"))
+        assertTrue("24-hour, like the value the PC holds",
+            plate.contains("is24Hour = true"))
+        assertTrue("the shape is checked before anything is sent",
+            plate.contains("Limits.validTime(\"%02d:%02d\".format(state.hour, state.minute))"))
+        assertTrue("the picked time is sent as the clock string",
+            plate.contains("change(open.key, Limits.timeJson(text))"))
+        assertTrue("the clock row's own branch exists", plate.contains("row.isTime ->"))
+        assertTrue("and the off row is told apart",
+            plate.contains("if (!row.quietOn)"))
+        assertTrue("TalkBack words on the clock's control",
+            plate.contains("Limits.timeWords(row)"))
+        assertTrue("the plate never posts to a route itself", !plate.contains("/api/"))
     }
 
     // ------------------------------------------------------------- helpers --

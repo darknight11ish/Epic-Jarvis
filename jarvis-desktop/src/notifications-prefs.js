@@ -1,19 +1,25 @@
 /**
- * Desktop notification preferences (the owner's decisions of 2026-09-30).
+ * Desktop notification preferences (the owner's decisions of 2026-09-30, and of
+ * 2026-10-08).
  *
- * This module is the ONE place the notification choices are read, written and
- * sent on. `localStorage` on this PC keeps the page's own copy, so the
- * switches paint correctly and survive an app restart with no roundtrip; and
- * every change is PUSHED to Rust through `set_notification_prefs` as well,
- * because the toasts themselves are raised in Rust (brain/schedule.rs,
- * brain/briefing.rs, stream.rs) and Rust cannot read another window's
- * `localStorage`.
+ * THE BACKEND IS THE ONE SOURCE OF TRUTH. Since 2026-10-08 the seven values
+ * live in the owner's `[notifications]` table in `jarvis-framework.toml`, owned
+ * by `backend/jarvis_notify_prefs.py`, and both apps reach them through the one
+ * limits route (`GET /api/limits`, `POST /api/limits/settings`) - because a
+ * phone can never read another app's `localStorage`, and the phone must be able
+ * to change these. So `localStorage` here is a CACHE and never an authority:
+ * `readFromBackend` is what fills it, and a value this page is holding is never
+ * written back over a value the backend already has unless the owner changed it
+ * here.
  *
- * That push is what makes the switches real. Until it existed, a kind
- * switched off here still notified: the page wrote a key nothing that posts a
- * toast ever read. Two copies are kept and always written together - the
- * page's, for what it draws, and Rust's, for what it does - and a save that
- * cannot reach Rust says so rather than pretending.
+ * TWO COPIES, WRITTEN TOGETHER, AND ONLY ONE OF THEM IS AUTHORITY. The toasts
+ * themselves are raised in Rust (brain/schedule.rs, brain/briefing.rs,
+ * stream.rs) and Rust cannot read another window's `localStorage`, so every
+ * change is still PUSHED to Rust through `set_notification_prefs`. The page's
+ * copy exists so the switches paint at once and survive a restart without a
+ * round trip; it is refreshed FROM the backend on open, and while this window is
+ * open it is refreshed again every `REFRESH_MS`, which is how a change made on
+ * the phone reaches this page.
  *
  * @module notifications-prefs
  */
@@ -32,6 +38,41 @@ export const DEFAULT_QUIET_END = "07:00";
 /** The Rust command that carries these choices to the toasts. */
 export const SET_NOTIFICATION_PREFS_COMMAND = "set_notification_prefs";
 
+/** The Rust command that reads the limits table - the authority for these seven. */
+export const GET_LIMITS_COMMAND = "get_limits";
+
+/** The Rust command that changes ONE limit; the PC decides whether it asks first. */
+export const SET_LIMIT_COMMAND = "set_limit";
+
+/**
+ * The seven limits rows, in the order the card draws them: the four toggles,
+ * the quiet-hours switch, then the window's two ends.
+ *
+ * `key` is the limits-table row (`backend/jarvis_limits.py`), `pref` is the name
+ * this module and Rust use, and `mode` says where a change goes: `"limit"` means
+ * the backend owns it and this page only asks (see `saveNotificationPrefs`).
+ */
+export const NOTIF_ROWS = [
+  { key: "notif_alarms", pref: "alarms", kind: "bool" },
+  { key: "notif_reminders", pref: "reminders", kind: "bool" },
+  { key: "notif_briefing", pref: "briefing", kind: "bool" },
+  { key: "notif_handoff", pref: "handoff", kind: "bool" },
+  { key: "notif_quiet_enabled", pref: "quietEnabled", kind: "bool" },
+  { key: "notif_quiet_start", pref: "quietStart", kind: "time" },
+  { key: "notif_quiet_end", pref: "quietEnd", kind: "time" },
+];
+
+/**
+ * How often the open Settings window asks the backend what is really in force.
+ *
+ * A phone change has to reach this page somehow, and this is that. The window is
+ * built on demand and destroyed when it is closed (windows.rs
+ * `show_settings_unlocked`), so this runs only while it is open; a change made
+ * while it is closed arrives the next time it is opened, and is pushed to Rust
+ * then. See this repository's report for the exact window and its limits.
+ */
+export const REFRESH_MS = 30000;
+
 function loadBool(key, defaultValue, storage = globalThis.localStorage) {
   try {
     if (!storage) return defaultValue;
@@ -42,6 +83,7 @@ function loadBool(key, defaultValue, storage = globalThis.localStorage) {
     return defaultValue;
   }
 }
+
 
 function saveBool(key, value, storage = globalThis.localStorage) {
   try {
@@ -163,3 +205,89 @@ export async function pushNotificationPrefs(prefs, invoke = tauriInvoke()) {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+//   The backend, which owns the values (2026-10-08)
+// ---------------------------------------------------------------------------
+
+/** A time of day as the backend stores and checks it, "HH:MM", or null. Pure. */
+export function validTime(text) {
+  const t = String(text == null ? "" : text).trim();
+  if (!/^\d{2}:\d{2}$/.test(t)) return null;
+  const h = Number(t.slice(0, 2));
+  const m = Number(t.slice(3, 5));
+  if (!(h >= 0 && h <= 23) || !(m >= 0 && m <= 59)) return null;
+  return t;
+}
+
+/**
+ * The seven values out of a `GET /api/limits` answer, or null when the answer
+ * is not the shape this card can read.
+ *
+ * A row whose kind is not `bool` or `time` is ignored - the table carries other
+ * kinds for other screens, and this card draws only these seven. A row that is
+ * absent leaves its value alone rather than inventing one: an older PC without
+ * these rows must not have its switches silently changed by a page that guessed.
+ */
+export function notificationPrefsFromLimits(body) {
+  const rows = body && Array.isArray(body.limits) ? body.limits : null;
+  if (!rows) return null;
+  const byKey = new Map(rows.filter((r) => r && typeof r === "object").map((r) => [r.key, r]));
+  const prefs = {};
+  let found = 0;
+  for (const row of NOTIF_ROWS) {
+    const got = byKey.get(row.key);
+    if (!got) continue;
+    found += 1;
+    if (row.kind === "bool") prefs[row.pref] = got.value === true;
+    else {
+      const t = validTime(got.value);
+      if (t !== null) prefs[row.pref] = t;
+    }
+  }
+  return found ? prefs : null;
+}
+
+/**
+ * What is really in force on this PC: the owner's own settings file, through
+ * the limits route. Null when the PC cannot be asked, or has no such route.
+ *
+ * Never throws: an unreachable PC is a fact the caller reports, not a crash.
+ */
+export async function readFromBackend(invoke = tauriInvoke()) {
+  if (!invoke) return null;
+  try {
+    return notificationPrefsFromLimits(await invoke(GET_LIMITS_COMMAND));
+  } catch (err) {
+    console.warn("[jarvis] the PC's notification settings could not be read:", err);
+    return null;
+  }
+}
+
+/**
+ * Writes ONE value to the PC, through the one limits route.
+ *
+ * The BACKEND decides whether a change asks first: these seven rows carry no
+ * loosening in either direction (`loosening="none"`), so a change is applied at
+ * once and there is no card - which is the point, because a card over "show me
+ * the briefing" could otherwise leave an alarm waiting on an answer.
+ *
+ * @returns the PC's own sentence, or a refusal in the PC's own words.
+ */
+export async function writeToBackend(rowKey, valueJson, invoke = tauriInvoke()) {
+  if (!invoke) return { ok: false, why: "Open this in Jarvis Desktop to change these." };
+  try {
+    const out = await invoke(SET_LIMIT_COMMAND, { key: rowKey, value: valueJson });
+    return { ok: true, said: String((out && out.said) || "Changed.") };
+  } catch (error) {
+    const raw = error && error.message !== undefined ? error.message : error;
+    const said = String(raw == null ? "" : raw).trim();
+    return {
+      ok: false,
+      why: said && !/[{}<>]|::/.test(said) && said.length <= 400
+        ? said
+        : "Could not change that on the PC. Try again in a moment, or restart Jarvis Desktop.",
+    };
+  }
+}
+

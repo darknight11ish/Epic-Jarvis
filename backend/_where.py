@@ -551,6 +551,13 @@ SHIPPED = (
     # address it sends to is checked with jarvis_auto_learn.check_local_model
     # before the request is built. Off until the owner turns it on.
     "jarvis_prompt_coach.py",
+    # This PC's own notification choices - which of its toasts fire and the
+    # quiet hours around them - in the OWNER'S SETTINGS FILE instead of one
+    # webview's localStorage, so the phone can change them too (the owner's
+    # decision of 2026-10-08). jarvis_limits.py rides the same seven values as
+    # rows and calls this module's check_time for the two clock times, which is
+    # why it is shipped whole. No patch, no route of its own.
+    "jarvis_notify_prefs.py",
 )
 
 
