@@ -1,0 +1,57 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2030,9 +2030,36 @@
+             })
+         return out
+ 
+     return {"hits": pack(hits), "near": pack(near), "available": True}
+ 
+ 
++def _retrieve_counts(query: str) -> dict:
++    """The same search as retrieve(), answered as COUNTS ONLY.
++
++    retrieve-count.patch, the owner's decision of 2026-10-08 (the brief is
++    docs/RETRIEVE-PORT-BRIEF.md, option B). The desktop's own trace prints up
++    to 150 characters of the real matched words - a saved fact, a document,
++    every Logseq page read off disk - which is exactly why the desktop blanks
++    it while the memory lists are hidden. The phone must never be sent a word
++    of that, so it has no path to it: this reply carries no `hits`, no `near`,
++    no id, no kind and no text. The one step in this module that puts matched
++    text into a reply is never reached from here at all.
++
++    The numbers still agree with the desktop's trace exactly, because the
++    scoring is the same call - the words are built on the PC and dropped on
++    the PC, and only these four keys leave."""
++    if not query.strip():
++        return {"available": bool(ROUTING), "count_only": True,
++                "recalled": 0, "near": 0}
++    full = retrieve(query)
++    return {
++        "available": full.get("available") is True,
++        "count_only": True,
++        "recalled": len(full.get("hits") or ()),
++        "near": len(full.get("near") or ()),
++    }
++
++
+ # --------------------------------------------------------------------------
+ # HTTP
+ # --------------------------------------------------------------------------
+@@ -3171,8 +3171,16 @@
+             except Exception as exc:
+                 return self._send(500, {"error": f"approval queue: {exc}"})
+ 
+         if path == "/api/retrieve":
+             from urllib.parse import parse_qs, urlparse
+-            q = (parse_qs(urlparse(self.path).query).get("q") or [""])[0]
++            params = parse_qs(urlparse(self.path).query)
++            q = (params.get("q") or [""])[0]
++            # retrieve-count.patch: `count=1` is the phone's read. The owner's
++            # decision of 2026-10-08 was "just the number": the phone shows how
++            # many were recalled and how many were near misses, and never a word
++            # of any of them. Answered by _retrieve_counts above, which has no
++            # way to put text in a reply at all.
++            if (params.get("count") or [""])[0].strip().lower() in ("1", "true", "yes", "on"):
++                return self._send(200, _retrieve_counts(q))
+             if not q.strip():
+                 return self._send(200, {"hits": [], "near": [], "available": ROUTING})

@@ -1200,6 +1200,16 @@ $PATCHES = @(
     # in; without it, or on any error, the banner says so and a look is exactly
     # what it was before (the words only, no picture).
     'screen-attach.patch'
+    # The count-only retrieval trace (the owner's decision of 2026-10-08,
+    # "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B; JARVIS-API
+    # section 119): `count=1` on GET /api/retrieve answers with four keys and
+    # no words at all - how many were recalled, how many were near misses -
+    # so the phone can show "3 recalled - 2 near" without ever being sent a
+    # saved fact, a document or a Logseq page. Two hunks in jarvis_hud.py:
+    # `_retrieve_counts()` beside retrieve(), and the handler's own
+    # `count=1` branch. Nothing else in the file changes, and the desktop's
+    # trace is untouched (no `count` on its own request). No new module.
+    'retrieve-count.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
