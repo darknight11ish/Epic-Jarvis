@@ -26,6 +26,12 @@ object MenuPlaces {
         "prompt-coach" to "settings.prompt-coach",
         "asks-first" to "settings.asks-first",
         "reach" to "settings.reach",
+        // "Limits and frequency" (2026-10-08): the numbers the owner can change,
+        // read and written through ONE table on the PC. SettingsScreen.kt draws
+        // it behind `menus.shows("settings.limits")`; without this line the row
+        // would have no PLACE and MenuVisibilityTest would say so, which is how
+        // the pair is kept in step on both sides.
+        "limits" to "settings.limits",
         "email-sending" to "settings.email-sending",
         "folders" to "settings.folders",
         "backup" to "settings.backup",
