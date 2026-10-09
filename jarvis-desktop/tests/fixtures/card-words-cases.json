@@ -247,6 +247,10 @@
       "title": "Jarvis wants to raise a chatbot's monthly spending limit"
     },
     {
+      "action": "raise_attention_budget",
+      "title": "Jarvis wants to let Jarvis interrupt you more often"
+    },
+    {
       "action": "read_calendar",
       "title": "Jarvis wants to read your calendar"
     },
