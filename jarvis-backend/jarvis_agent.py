@@ -2462,7 +2462,18 @@ def _tidy_inbox_refusal(watch: "_TurnWatch") -> str:
 #: the config sets to "never" stays "never"; one already at "ask" keeps its
 #: own action. The same gate, the same card - no second approval path.
 NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
-                         "create_joplin_note"})
+                         "create_joplin_note",
+                         # Making a NEW Logseq page is a note write like the
+                         # other three, and it was missed here until
+                         # 2026-10-08: the shipped config gives it "auto"
+                         # (jarvis-framework.toml's [autonomy.tiers]), so in a
+                         # turn shaped by outside text it wrote a page with no
+                         # card at all - the exact case this rule was written
+                         # for (the owner's decision of 2026-09-24). A feature
+                         # review found it while giving the row a "make it
+                         # stricter" switch, which is what makes the omission
+                         # matter more, not less.
+                         "create_logseq_page"})
 
 #: The gate action a note write is asked under after outside text. Read out
 #: by the approval notice as "Jarvis wants to write notes after outside text".
