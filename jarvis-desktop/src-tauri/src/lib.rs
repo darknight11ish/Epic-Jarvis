@@ -1005,6 +1005,7 @@ pub fn run() {
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
+            attention::set_attention_limits,
             sidecar::supervisor_status,
             sidecar::set_supervision,
             sidecar::start_backend,
