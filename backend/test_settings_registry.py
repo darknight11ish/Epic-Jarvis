@@ -335,10 +335,33 @@ def t_jump_list_matches_the_page():
               re.findall(r'<div class="settings-jump-place">(.*?)</div>', nav, re.S)))
 
 
+#: A row's `item(key = ...)`: either a quoted string or a `SettingsJump`
+#: constant. The search box (2026-10-09) names `SettingsJump.SEARCH_KEY`, and
+#: the jump list's own row names `SettingsJump.LIST_KEY`, so the screen and
+#: the tests that read it cannot disagree about those two keys by spelling
+#: them twice. `SettingsJumpTest` reads the same two shapes
+#: (jarvis-client/app/src/test/java/com/jarvis/client/SettingsJumpTest.kt,
+#: its own ROW_KEY) - this reader mirrors it, because a reader that only
+#: understood quoted keys silently SKIPPED both rows and then reported the
+#: whole map as shifted by two.
+_ROW_KEY = re.compile(r'item\(key\s*=\s*(?:"([\w.-]+)"|SettingsJump\.(\w+))')
+
+#: A declared position is a plain number OR a `SettingsJump` constant
+#: (`"search" to SettingsJump.SEARCH_KEY_INDEX`), so `SEARCH_KEY_INDEX` is
+#: held to the row it names rather than trusted.
+_JUMP_CONST = re.compile(r'const val (\w+) = "([\w.-]+)"')
+_JUMP_INT = re.compile(r'const val (\w+) = (\d+)')
+
+
+def _settings_jump_source() -> str:
+    return (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+            / "client" / "ui" / "SettingsJump.kt").read_text(encoding="utf-8")
+
+
 def _check_settings_item_index(kt: str):
     """`SettingsScreen.kt`'s own `SETTINGS_ITEM_INDEX` claims a `LazyColumn`
     position for each key it lists - checked here against the REAL, current
-    order of `item(key = "...")` calls in the same file, never trusted as
+    order of `item(key = ...)` calls in the same file, never trusted as
     still accurate.
 
     Bug audit 2026-09-27: this map went stale the moment a concurrent piece
@@ -346,12 +369,43 @@ def _check_settings_item_index(kt: str):
     was one item too early, and nothing caught it because the map was never
     checked against the file's real order, only checked (by the test above)
     for which keys it lists at all. A silent, plausible-looking wrong
-    number is exactly what a presence-only check misses."""
-    real_order = re.findall(r'item\(key\s*=\s*"([^"]+)"', kt)
+    number is exactly what a presence-only check misses.
+
+    Settings search, 2026-10-09: the search box became the FIRST row and the
+    jump list's own row started naming `SettingsJump.LIST_KEY`. Both are real
+    `item(key = ...)` rows, but neither spells its key as a quoted string, so
+    the old quoted-only reader counted NEITHER: every declared position then
+    looked two too high. The map itself was right (search 0, jump-list 1,
+    voice 2, ... limits 22) - the reader was the stale half. A row key and a
+    declared position may now both be a `SettingsJump` constant, resolved
+    from `SettingsJump.kt` itself, so the map is still held to every row it
+    names - the two rows the old reader skipped are now counted rather than
+    ignored. This is what SettingsJumpTest's own ROW_KEY already does."""
+    jump_src = _settings_jump_source()
+    keys = dict(_JUMP_CONST.findall(jump_src))
+    numbers = dict(_JUMP_INT.findall(jump_src))
+    real_order = [quoted or keys.get(const) for quoted, const in _ROW_KEY.findall(kt)]
+    unresolved = sorted({c for q, c in _ROW_KEY.findall(kt) if not q and c not in keys})
+    check("every SettingsJump constant a row key names is a real const val",
+          not unresolved, f"{unresolved} - SettingsJump.kt has no such constant")
     real_index = {key: i for i, key in enumerate(real_order)}
     map_block = re.search(r"SETTINGS_ITEM_INDEX[^{(]*\(\s*(.*?)\n\)", kt, re.S)
-    declared = dict(re.findall(r'"([\w-]+)"\s+to\s+(\d+)', map_block.group(1))) if map_block else {}
+    declared, unresolved_numbers = {}, []
+    if map_block:
+        for key, value in re.findall(r'"([\w-]+)"\s+to\s+([\w.]+)', map_block.group(1)):
+            if value.isdigit():
+                declared[key] = value
+            else:
+                name = value.split(".")[-1]
+                if name in numbers:
+                    declared[key] = numbers[name]
+                else:
+                    unresolved_numbers.append(key)
     check("SETTINGS_ITEM_INDEX's own map block was found and parsed", bool(declared))
+    check("every declared position is a number or a real SettingsJump constant",
+          not unresolved_numbers,
+          f"{unresolved_numbers} - SettingsJump.kt has no such const val, so that "
+            "row's position would go unchecked")
     # "appearance-card" is the desktop's own id, deliberately aliased to the
     # phone's own item key "appearance" (docs/JARVIS-API.md section 58.1's
     # own note on this one intentional name mismatch) - checked against
