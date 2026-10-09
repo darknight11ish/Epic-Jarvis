@@ -80,6 +80,7 @@ object MenuCatalog {
         Menu("settings.phone-notify", "Phone notifications", "Reading phone notifications, and the apps allowed.", false, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.floating-avatar", "Floating Jarvis", "The floating face or bubble.", false, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.quick-tiles", "Quick Settings tiles", "The tiles in the phone's quick panel.", false, true, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.screen-rate", "Screen refresh rate", "The rate the screen is asked to run at while Jarvis is on screen.", false, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.menu-visibility", "Show or hide menus", "The list you are looking at.", true, true, "settings", "", "card", null, null, false, false, "Otherwise nothing hidden could be shown again."),
         Menu("settings.hud-window", "The big HUD window", "Its own chat box, and the button that opens the Jarvis bar.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("brain.tab.memory", "Memory", "What Jarvis knows and how it learns.", true, false, "brain", "memory", "tab", null, null, true, false, ""),

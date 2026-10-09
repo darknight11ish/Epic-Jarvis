@@ -259,6 +259,18 @@ MENUS: tuple = (
        names=("floating jarvis", "floating face", "the bubble")),
     _m("settings.quick-tiles", "Quick Settings tiles", "The tiles in the phone's quick panel.",
        (PHONE,), names=("quick settings tiles", "quick tiles")),
+    # "Screen refresh rate" (2026-10-09): what the PANEL is asked to run at
+    # while Jarvis is on screen (jarvis-client's data/ScreenRate.kt and
+    # ui/screens/ScreenRatePlate.kt). Phone only, and deliberately so: it is
+    # about a phone's own display modes, read from that phone's
+    # Display.getSupportedModes(), and the desktop draws on a monitor the
+    # Windows app already owns - so there is no desktop row to generate and
+    # none is invented. It is NOT the animal's frame rate (the face editor
+    # under settings.appearance-card), which is how often the animal is DRAWN;
+    # ScreenRate.kt's own doc says why the two must never be merged.
+    _m("settings.screen-rate", "Screen refresh rate",
+       "The rate the screen is asked to run at while Jarvis is on screen.",
+       (PHONE,), names=("screen refresh rate", "refresh rate", "the refresh rate")),
     _m("settings.menu-visibility", "Show or hide menus",
        "The list you are looking at.", kind="card",
        hide=False, collapse=False,

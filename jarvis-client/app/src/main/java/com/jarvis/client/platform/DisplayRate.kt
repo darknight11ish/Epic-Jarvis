@@ -9,6 +9,7 @@ import android.view.Display
 import android.view.View
 import androidx.core.content.ContextCompat
 import com.jarvis.client.FaceState
+import com.jarvis.client.data.ScreenRate
 import com.jarvis.client.face.Spec
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,11 +55,71 @@ object DisplayRate {
 
     private val _modes = MutableStateFlow<List<Float>>(emptyList())
 
-    /** Every rate the panel offers at the current resolution. */
+    /** Every rate the panel offers at the current resolution, in Hz, ascending. */
     val modes: StateFlow<List<Float>> = _modes.asStateFlow()
+
+    /**
+     * The owner's own screen-refresh-rate pick, or null for "follow the phone"
+     * ([ScreenRate.FOLLOW_PHONE]) - the way back to whatever the phone was
+     * using. Set by the Settings plate and re-applied on resume.
+     *
+     * **This is the PANEL's rate, not the face's frame rate** - see
+     * [com.jarvis.client.data.ScreenRate]'s own doc for why the two settings
+     * must never be merged. It is deliberately a field of its own rather than
+     * part of the face machinery below, and it outranks it: [setHigh] does
+     * nothing at all while this is set, because otherwise the face's resting
+     * states would quietly drop the rate the owner picked and the plate would
+     * then report a rate that was never asked for.
+     */
+    private val _chosenHz = MutableStateFlow<Float?>(null)
+    val chosenHz: StateFlow<Float?> = _chosenHz.asStateFlow()
+
+    /**
+     * The plain sentence about what the panel did with the owner's pick - the
+     * readback, so a refused request is never left looking like it worked (see
+     * [ScreenRate.tookNote]). Empty until the plate has asked once.
+     */
+    private val _pickNote = MutableStateFlow("")
+    val pickNote: StateFlow<String> = _pickNote.asStateFlow()
+
+    /** True once the panel was re-read after an ask, however it went. */
+    private val _pickChecked = MutableStateFlow(false)
+    val pickChecked: StateFlow<Boolean> = _pickChecked.asStateFlow()
+
+    /** What was last asked for, in Hz; 0 while following the phone. */
+    private val _askedHz = MutableStateFlow(0f)
 
     /** The fastest same-resolution mode, found by [request]. 0 until then. */
     @Volatile private var bestHz = 0f
+
+    /**
+     * The rates the panel offers at the current resolution, deduplicated and
+     * ascending, read fresh.
+     *
+     * Same resolution only: a mode with a different size would resize the
+     * window to get a different clock, which is never the trade being made.
+     * Empty when the display cannot be read at all.
+     */
+    private fun modesOf(display: Display): List<Float> {
+        val current = display.mode
+        val sameSize = display.supportedModes.orEmpty().filter {
+            current == null ||
+                (it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight)
+        }
+        return ScreenRate.rates(sameSize.map { it.refreshRate })
+    }
+
+    /**
+     * The owner picked a rate, or null to hand the choice back to the phone.
+     * Only records it; [applyChosen] does the asking, so this is safe to call
+     * from a settings row that has no Activity to hand.
+     */
+    fun setChosenHz(hz: Float?) {
+        _chosenHz.value = if (hz != null && hz.isFinite() && hz > 0f) hz else null
+    }
+
+    /** [setChosenHz]'s current value. */
+    fun chosen(): Float? = _chosenHz.value
 
     /**
      * Asks for the highest rate the panel offers **at the current resolution**.
@@ -75,14 +136,8 @@ object DisplayRate {
      */
     fun request(activity: Activity, view: View?) {
         val display = runCatching { activity.display }.getOrNull() ?: return
-        val current = display.mode ?: return
 
-        // Same resolution only. A mode with a different size would resize the
-        // window to get a faster clock, which is not the trade being made.
-        val sameSize = display.supportedModes.orEmpty().filter {
-            it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight
-        }
-        val rates = sameSize.map { it.refreshRate }.distinct().sorted()
+        val rates = modesOf(display)
         _modes.value = rates
         _panelHz.value = display.refreshRate
         bestHz = rates.maxOrNull() ?: 0f
@@ -94,14 +149,90 @@ object DisplayRate {
     }
 
     /**
+     * Asks the display for a specific rate **for this app's own window**, then
+     * reads back what the panel actually settled on.
+     *
+     * What this can and cannot do is [ScreenRate]'s whole doc; in one line: an
+     * ordinary sideloaded app cannot change the phone's system-wide refresh
+     * rate, so this asks and then reports, and the report is the honest half.
+     *
+     * `preferredRefreshRate` (API 23+) is the field for "this window, at this
+     * rate"; 0 means "no preference", which is how the choice goes back to the
+     * phone. `preferredDisplayModeId` is deliberately not used - it can also
+     * change the resolution, a far bigger hammer than "run the screen at this
+     * rate". On API 35+ the same number also goes through
+     * `View.requestedFrameRate`, the cooperative API the platform now prefers,
+     * so whichever route this OEM reads, it reads the owner's intent instead
+     * of finding it unset.
+     *
+     * Nothing can say whether the request was accepted - there is no such API -
+     * so [readBack] is what decides and [pickNote] carries its answer.
+     */
+    fun applyChosen(activity: Activity, view: View?) {
+        val display = runCatching { activity.display }.getOrNull() ?: return
+        val rates = modesOf(display)
+        if (rates.isNotEmpty()) _modes.value = rates
+
+        val ask = ScreenRate.choose(_chosenHz.value, rates)
+        val want = ask.hz ?: 0f
+        _askedHz.value = want
+        _pickChecked.value = false
+        // Following the phone, or a panel that reported no rates at all: both
+        // hand the choice back rather than guessing at a number.
+        _pickNote.value = if (ask.hz == null) ScreenRate.choose(null, rates).note else ask.note
+
+        runCatching {
+            val attrs = activity.window.attributes
+            attrs.preferredRefreshRate = want
+            activity.window.attributes = attrs
+        }.onFailure { Log.w(TAG, "preferredRefreshRate refused", it) }
+
+        if (Build.VERSION.SDK_INT >= 35 && view != null) {
+            runCatching {
+                view.requestedFrameRate =
+                    if (want > 0f) want else View.REQUESTED_FRAME_RATE_CATEGORY_DEFAULT.toFloat()
+            }.onFailure { Log.w(TAG, "setRequestedFrameRate refused", it) }
+        }
+        readBack(activity)
+    }
+
+    /**
+     * Reads what the panel is really running at and turns it into the sentence
+     * the plate shows - including, when the request was refused, that it did
+     * **not** take effect.
+     *
+     * Called right after [applyChosen] and again on resume, because a panel can
+     * settle a moment after being asked, and can also drop back later (battery
+     * saver, heat, or the owner's own display settings). No API reports why.
+     */
+    fun readBack(activity: Activity) {
+        val want = _askedHz.value
+        val actual = runCatching { activity.display?.refreshRate }.getOrNull() ?: return
+        _panelHz.value = actual
+        _pickNote.value = if (want <= 0f) {
+            ScreenRate.choose(null, _modes.value).note
+        } else {
+            ScreenRate.tookNote(want, actual)
+        }
+        _pickChecked.value = true
+    }
+
+    /**
      * Asks for the panel's fastest rate while [high] and lets go of it
      * otherwise.
      *
      * Whether to ask is [wantsHigh]'s decision, not this function's: this one
      * only carries the answer to the platform. Repeated calls with the same
      * answer are free; the request is only re-sent when it changes.
+     *
+     * **A rate the owner picked by hand wins.** While [chosenHz] is set this
+     * does nothing: otherwise the face going idle would drop the owner's rate
+     * moments after they chose it, and the plate would then report a rate that
+     * was never in force. Handing the choice back to the phone (null) restores
+     * this behaviour exactly as it was.
      */
     fun setHigh(activity: Activity, view: View?, high: Boolean) {
+        if (_chosenHz.value != null) return
         val best = bestHz
         if (best <= 0f) return
         val want = if (high) best else 0f

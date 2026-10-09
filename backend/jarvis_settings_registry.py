@@ -236,6 +236,17 @@ SECTIONS: tuple = (
     # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
     Section("quick-tiles", ("quick tiles", "quick settings tiles", "the quick tiles"),
             app="phone"),
+    # "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to run at
+    # while Jarvis is on screen (jarvis-client's SettingsScreen.kt item
+    # "screen-rate"; data/ScreenRate.kt, ui/screens/ScreenRatePlate.kt).
+    # Phone-only: the rates come from that phone's own
+    # Display.getSupportedModes(), which a desktop does not have, so there is no
+    # desktop row and none is invented. Not the animal's frame rate - that lives
+    # in the face editor under "appearance-card" and is how often the animal is
+    # DRAWN; ScreenRate.kt's own doc says why the two must never be merged.
+    Section("screen-rate", ("screen refresh rate", "refresh rate", "the refresh rate",
+                            "screen rate", "the screen refresh rate"),
+            app="phone"),
     # "Floating Jarvis" (2026-09-27): the phone's own Settings row
     # (SettingsScreen.kt's `item(key = "floating-avatar")` - saved on that phone
     # only, so it needs no `canAct` gate). It had NO section here until

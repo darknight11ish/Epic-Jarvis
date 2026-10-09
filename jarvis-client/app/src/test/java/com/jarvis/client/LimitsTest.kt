@@ -249,7 +249,11 @@ class LimitsTest {
         assertTrue("the jump list has no limits entry", jump.contains("Entry(\"Limits and how often Jarvis does things\", \"limits\")"))
         val map = screen.substringAfter("SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(")
             .substringBefore("\n)")
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 21"))
+        // 22, not 21: "Screen refresh rate" (2026-10-09) was inserted directly
+        // above this row, so every row below it moved down by one. The number
+        // is the screen's real position, which SettingsJumpTest recomputes from
+        // the screen itself - this line pins the same number a second time.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 22"))
     }
 
     // ------------------------------------------------------------- helpers --

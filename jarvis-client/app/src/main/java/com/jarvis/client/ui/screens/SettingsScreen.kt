@@ -122,10 +122,17 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "handoff" to 18,
     "devices" to 19,
     "quick-tiles" to 20,
+    // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
+    // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
+    // and it sits immediately above "Limits" on the screen - so Limits' own
+    // number moved down by one that day, and both halves of that pair are kept
+    // true by SettingsJumpTest's `the index map matches the screen, item by
+    // item`, which reads this map against the screen's real row order.
+    "screen-rate" to 21,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last:
     // it is about how much Jarvis does rather than about one feature.
-    "limits" to 21,
+    "limits" to 22,
 )
 
 /**
@@ -175,6 +182,32 @@ fun SettingsScreen(
     /** "Quick Settings tiles" - saved on this phone only, like Floating Jarvis. */
     quickTiles: List<TileAction?> = List(QuickTiles.SLOTS) { null },
     onQuickTileChange: (slot: Int, action: TileAction?) -> Unit = { _, _ -> },
+    /**
+     * "Screen refresh rate" (2026-10-09) - saved on this phone only, like the
+     * two above, so it needs no `canAct` gate either.
+     *
+     * [screenRate] is the owner's pick or null for "follow the phone";
+     * [screenRates] are the distinct rates this phone's own panel reports,
+     * ascending ([com.jarvis.client.data.ScreenRate.rates]); [screenPanelHz] is
+     * what the panel is running at right now; [screenRateNote] is the readback
+     * sentence, including - when the system refused the rate - that it did not
+     * take effect; [screenRateChecked] is true once that sentence is a real
+     * observation rather than a promise.
+     *
+     * **Not the same as the face editor's Frame rate** (which is [faceTuning]'s
+     * `frameRate`, on the Appearance screen): that one is how often the animal
+     * is drawn, this one is what the panel runs at.
+     * [com.jarvis.client.data.ScreenRate]'s doc says why the two must never be
+     * merged.
+     */
+    screenRate: Float? = null,
+    screenRates: List<Float> = emptyList(),
+    screenPanelHz: Float = 0f,
+    screenRateNote: String = "",
+    screenRateChecked: Boolean = false,
+    onScreenRateChange: (Float?) -> Unit = {},
+    /** Re-reads what the panel settled on - nothing tells the app when the phone's own settings change it. */
+    onScreenRateRecheck: () -> Unit = {},
     /**
      * "Reading phone notifications" (docs/JARVIS-API.md §61): whether
      * Android's own "Notification access" is currently granted
@@ -472,6 +505,27 @@ fun SettingsScreen(
             if (menus.shows("settings.quick-tiles")) item(key = "quick-tiles") {
                 MenuFrame(menus, "settings.quick-tiles") {
                     QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
+                }
+            }
+
+            // "Screen refresh rate" (2026-10-09): what the PANEL is asked to run
+            // at while Jarvis is on screen (ScreenRatePlate.kt,
+            // data/ScreenRate.kt). Phone-only and saved on this phone only, like
+            // Floating Jarvis and Quick Settings tiles above it, so it needs no
+            // `canAct` gate - nothing here reaches the PC. It is NOT the animal's
+            // frame rate, which lives in Appearance; ScreenRate.kt's own doc says
+            // why the two must never be merged.
+            if (menus.shows("settings.screen-rate")) item(key = "screen-rate") {
+                MenuFrame(menus, "settings.screen-rate") {
+                    ScreenRateSection(
+                        chosen = screenRate,
+                        rates = screenRates,
+                        panelHz = screenPanelHz,
+                        note = screenRateNote,
+                        checked = screenRateChecked,
+                        onPick = onScreenRateChange,
+                        onRecheck = onScreenRateRecheck,
+                    )
                 }
             }
 

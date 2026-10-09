@@ -49,6 +49,12 @@ object SettingsJump {
         Entry("When the phone does not answer", "handoff"),
         Entry("Devices", "devices"),
         Entry("Quick Settings tiles", "quick-tiles"),
+        // "Screen refresh rate" (2026-10-09): its own Settings row, right after
+        // Quick Settings tiles on the screen (SettingsScreen.kt), so it is next
+        // to it here too. Phone-only: the desktop draws on a monitor, so no
+        // desktop jump entry exists to copy words from, and the label is this
+        // section's own title.
+        Entry("Screen refresh rate", "screen-rate"),
         // "Limits and how often Jarvis does things" (the PC's own
         // backend/jarvis_limits.py table, 2026-10-08): the last row on the
         // screen, so it is the last entry here too. The desktop has no jump
