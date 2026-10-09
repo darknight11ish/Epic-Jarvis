@@ -6,7 +6,7 @@ package com.jarvis.client.ui
  *
  * The owner's request of 2026-10-09: "a lot more visually simple, with a
  * search bar in settings. I still want everything adjustable, just easier to
- * find and more efficient." Settings had grown to twenty sections with a
+ * find and more efficient." Settings had grown to twenty-one sections with a
  * "Jump to:" list over four lines at the top; the list is the fastest way to
  * a section you already know, and this is the way to one you do not.
  *
@@ -167,6 +167,18 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "PhoneNotificationsPlate.kt"),
         ),
         Row(
+            // "Notifications from Jarvis" (the owner's decision of 2026-10-09):
+            // one line and one button into Android's own per-app notification
+            // screen, which is where this phone's per-kind switches really are.
+            key = "jarvis-notify", title = "Notifications from Jarvis",
+            label = "Android's own notification switches; alarms; reminders; approvals; " +
+                "which kinds this phone shows",
+            quotes = listOf(
+                "Android decides whether this phone shows what Jarvis sends from your ",
+            ),
+            source = JUMP + listOf(PLATES + "JarvisNotifyPlate.kt"),
+        ),
+        Row(
             key = "screen-look", title = "Look at this and Watch with me",
             label = "Screen; camera; picture mode; look at my screen",
             quotes = listOf("Look at this and Watch with me"),
@@ -187,6 +199,17 @@ object SettingsSearch {
             source = JUMP + listOf("net/HandoffMode.kt"),
         ),
         Row(
+            // What a captcha does about the browser window it is blocking (the
+            // owner's decision of 2026-10-09). Its heading and both choice lines
+            // are net/HandoffFront.kt's own constants, so the quote is looked
+            // for there, like the browser heading.
+            key = "handoff-front", title = "When a captcha stops Jarvis",
+            label = "A captcha or a sign-in page blocking a window; leave the window " +
+                "where it is; bring it to the front",
+            quotes = listOf("When a captcha stops Jarvis"),
+            source = JUMP + listOf("net/HandoffFront.kt"),
+        ),
+        Row(
             key = "devices", title = "Devices",
             label = "Paired devices; each device's own key; pair a phone; remove a device",
             quotes = listOf("Devices"),
@@ -198,10 +221,36 @@ object SettingsSearch {
             quotes = listOf("Quick Settings tiles"),
             source = JUMP + listOf(PLATES + "QuickTilesPlate.kt"),
         ),
+        Row(
+            // The PC's own limit table, on the phone (LimitsPlate.kt; the
+            // owner's decision of 2026-10-08). It is the last section on the
+            // screen, so it is last here too.
+            key = "limits", title = "Limits and how often Jarvis does things",
+            label = "How much Jarvis does at once; how long you can undo; how long it waits " +
+                "before it reads something of yours; turning something up asks you on the PC",
+            // The heading and both sentences are `net/Limits.kt`'s own
+            // constants - the plate draws them rather than writing its own -
+            // so the quotes are looked for there, like the browser heading.
+            quotes = listOf(
+                "How much Jarvis does at once, how long you can undo, and how long it waits before it ",
+                "Turning something up asks you on the PC first, and nothing changes until you answer ",
+            ),
+            source = JUMP + listOf("net/Limits.kt"),
+        ),
     ) + listOf(
         // The search box itself is a `LazyColumn` item, so SettingsJumpTest
         // sees it as a row; it is a control, not a section, and it is never
         // filtered out (there would be no way back to the box).
+        Row(
+            // "A new conversation starts after ..." (the audit of 2026-10-08): a
+            // CLIENT-SIDE choice saved on this phone only, so its heading is
+            // ChatHistory's own constant. It is the last section the screen
+            // draws, so it is last here too - under "limits", as on the screen.
+            key = "idle-new", title = "A new conversation starts after",
+            label = "How long a chat can sit idle before the next message starts a new one",
+            quotes = listOf("A new conversation starts after"),
+            source = JUMP + listOf("net/ChatHistory.kt"),
+        ),
         Row(
             key = SettingsJump.SEARCH_KEY, title = SettingsSearchWords.LABEL,
             label = SettingsSearchWords.PLACEHOLDER, quotes = emptyList(),
