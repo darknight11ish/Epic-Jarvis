@@ -191,6 +191,10 @@
       "title": "Jarvis wants to lower a chatbot's monthly spending limit"
     },
     {
+      "action": "lower_the_voice_check_bar",
+      "title": "Jarvis wants to lower the bar for your voice check"
+    },
+    {
       "action": "memory_forget_range",
       "title": "Jarvis wants to forget what it learned and delete chats from the days you chose"
     },

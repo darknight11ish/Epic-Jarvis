@@ -95,6 +95,15 @@ TITLES = {
     # asks nothing and needs no card; the card itself says the limit and both
     # numbers ("How long you can undo: change it from 24 to 168...").
     "raise_a_limit": "let Jarvis do more, for longer, or more often",
+    # The ONE limit whose loosening goes the OTHER way (jarvis_limits.py, the
+    # owner's decision of 2026-10-08): LOWERING the voice check's bar means more
+    # clips count as the owner's voice, so a lowering is the change that asks.
+    # `raise_a_limit` would be a lie over that card, and this row needs its own
+    # name for the same reason the chatbot limits have two ("raise_api_limit" /
+    # "lower_api_limit"): the owner-check attaches Windows Hello to the action
+    # NAME, not to a direction. Making the bar stricter asks nothing at all, so
+    # there is no action for that direction to be worded for.
+    "lower_the_voice_check_bar": "lower the bar for your voice check",
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",
