@@ -558,6 +558,19 @@ data class HomeState(
      * [com.jarvis.client.JarvisRuntime.lockdown].
      */
     val lockdown: Boolean = false,
+    /**
+     * The prompt coach's switch as the PC last had it
+     * ([com.jarvis.client.net.PromptCoach], ui/screens/PromptCoachBar.kt): the
+     * words of the "Coach this" button and of its two send buttons, so the
+     * chat bar and the PC can never disagree about them.
+     *
+     * Null is "not read yet", which draws nothing at all - the same as off.
+     * The only reading that draws a line without a button is a PC whose answer
+     * says it has no prompt coach ([com.jarvis.client.net.PromptCoach.missing]),
+     * which is carried as a [com.jarvis.client.net.PromptCoach.View] with
+     * `routeKnown` false.
+     */
+    val promptCoach: com.jarvis.client.net.PromptCoach.View? = null,
 )
 
 /**
@@ -3225,6 +3238,29 @@ private fun Composer(
     // A `#log` / `#obs` / `#joplin` line is filed, not asked - said while it
     // is typed, as the desktop's chip beside its prompt does.
     NoteCapture.chip(text, state.noteTargets)?.let { VoiceStrip(it, tone = chrome.textMid) }
+    // "Coach this" (docs/PROMPT-COACH-DESIGN.md, docs/JARVIS-API.md section
+    // 119): above the box it coaches, so the advice panel opens between the
+    // button and the words it is about. Off - the default - it draws nothing
+    // at all, and a PC with no coach route says so instead of offering a
+    // button that would 404.
+    PromptCoachBar(
+        draft = draft,
+        view = state.promptCoach,
+        thread = state.thread,
+        link = state.link,
+        shared = state.sharedLine != null,
+        streaming = state.streaming,
+        // "Send mine": exactly the words in the box, down the chat's own path.
+        // Nothing is sent unless one of these two is pressed.
+        sendMine = { actions.onSend() },
+        // "Send the suggestion": into the box first, then sent - so the owner
+        // sees the words that went, and the box is empty afterwards exactly as
+        // after an ordinary Send.
+        sendSuggestion = { suggestion ->
+            actions.onDraftChange(suggestion)
+            actions.onSend()
+        },
+    )
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
