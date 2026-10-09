@@ -713,6 +713,35 @@ def t_the_shipped_config_asks_for_note_writes_after_outside_text():
           [tier(a) for a in NOTE_TOOLS])
 
 
+def t_every_note_write_an_app_may_loosen_still_waits_after_outside_text():
+    """A row the owner may loosen must not slip out of the 2026-09-24 rule.
+
+    Two lists have to agree, and nothing said so until 2026-10-08:
+
+      * `jarvis_asks_first.SWITCHABLE` is the short safe list an app may loosen
+        - its line goes back to the tier this repository ships, so a row here
+        can end up at "auto";
+      * `jarvis_agent.NOTE_WRITES` is what still asks after outside text
+        whatever that line says.
+
+    `create_logseq_page` was on neither: the shipped config gives it "auto"
+    (jarvis-framework.toml's [autonomy.tiers]), so in a turn shaped by outside
+    text a new Logseq page was written with NO card - the exact case the rule
+    was written for - and a feature review then gave the row a "make it
+    stricter" switch, which makes the omission matter more, not less.
+
+    Derived from the two lists rather than typed out, so the next note row to
+    join the short safe list is covered by this check on the day it does."""
+    import jarvis_asks_first as AF
+    loosenable_note_writes = {a for a in AF.SWITCHABLE
+                              if re.match(r"^(append|create|edit)_(obsidian|logseq|joplin)", a)}
+    missing = sorted(loosenable_note_writes - set(AG.NOTE_WRITES))
+    check("every note write an app may loosen still waits after outside text",
+          not missing,
+          f"{missing} - add them to jarvis_agent.NOTE_WRITES, or take them off the "
+          "short safe list in jarvis_asks_first.SWITCHABLE")
+
+
 # --------------------------------------------------------------------------
 #   B1: broken tool calls
 # --------------------------------------------------------------------------
@@ -874,6 +903,7 @@ if __name__ == "__main__":
                t_taint_and_pasted_words_are_named_on_cards,
                t_note_writes_after_outside_text_wait_for_a_yes,
                t_the_shipped_config_asks_for_note_writes_after_outside_text,
+               t_every_note_write_an_app_may_loosen_still_waits_after_outside_text,
                t_the_gate_is_handed_the_resolved_action_name,
                t_broken_arguments_raise_no_card_and_get_one_retry,
                t_a_second_broken_call_ends_it_with_a_plain_line,
