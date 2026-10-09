@@ -10262,18 +10262,20 @@ the model; and the patch applied to what the earlier patches wrote.
 - **Brave: nothing in Jarvis stops it charging your card.** Past the free
   credit Brave bills and answers normally; Jarvis cannot tell. Only a limit
   you set in Brave's dashboard can.
-- **Nothing has reached a real SearXNG, DuckDuckGo, Exa, Tavily or Brave.** The
+- **Nothing has reached a real DuckDuckGo, Exa, Tavily or Brave.** The
   answers were written from their documentation and read in the dev
-  container; the Docker and settings lines above have not been run on your
-  PC (the PowerShell here could not be run by this session either - its
-  checks blocked it - so read them once before pasting). **The compose file and
-  its settings (added 2026-10-09) are in the same position:** they parse
-  (`docker compose config` needs no Docker engine) and `jarvis_search.py` was
-  driven against a stand-in SearXNG on 127.0.0.1:8888, but no container was
-  started - Docker cannot run on this PC until CPU virtualisation is switched on
-  in the firmware - so nothing has yet proved that the image pulls, that
-  SearXNG answers, or that the settings file is written. The first check in 3a
-  is the one that answers all three.
+  container; their setup lines above have not been run on your PC (the
+  PowerShell here could not be run by this session either - its checks blocked
+  it - so read them once before pasting). **SearXNG is no longer in that list,
+  as of 2026-10-09:** the compose file and its settings added that day were run
+  on your PC - on Docker engine 29.7.2, `docker compose up -d` brought
+  `searxng` up (`Up`, `127.0.0.1:8888->8080/tcp`), and
+  `http://127.0.0.1:8888/search?q=wikipedia&format=json` answered **200** with
+  20 results. That is the three things the first check in 3a asks at once: the
+  image pulls, SearXNG answers, and the settings file it writes on its first
+  start already has JSON switched on. Nothing here has yet been seen across a
+  reboot, where the container is meant to come back by itself
+  (`restart: unless-stopped`).
 - How Tavily, Exa and Brave say "your monthly credit is used up" (Tavily
   432/433 and Brave 402/429 from their documentation; Exa 402 or 429,
   assumed) has not been seen. Brave's "roughly 1,000 searches" for $5 is not
