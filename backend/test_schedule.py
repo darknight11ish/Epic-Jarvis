@@ -1143,6 +1143,89 @@ def t_a_new_kind_plugs_in():
         S.KINDS.pop("briefing", None)
 
 
+def t_a_scheduler_call_does_not_leave_its_database_file_open():
+    """Every connection the scheduler opens is CLOSED when its block ends.
+
+    WHY (2026-10-07, the intermittent backend-windows CI failure; still failing
+    a different suite on 2026-10-08). sqlite3's context manager commits on the
+    way out and never closes the connection, so a bare
+    `with self._db() as c:` left an OPEN HANDLE on schedule.json behind until
+    CPython happened to collect it - immediate on a quiet line, and NOT
+    immediate when a caught exception's traceback, a generator frame or a
+    temp-folder object still held a reference. On Windows an open handle makes
+    the file undeletable, which is what the runner's own log said, twice,
+    inside test_sayable.py's group (run 2026-10-07, PR #86):
+
+        Exception ignored in: <finalize object at ...; dead>
+          File "...\\tempfile.py", line 939, in _cleanup
+            cls._rmtree(name, ignore_errors=ignore_errors)
+          ...
+          File "...\\tempfile.py", line 909, in onexc
+            _os.unlink(path)
+        PermissionError: [WinError 32] The process cannot access the file
+        because it is being used by another process:
+        'C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\tmpqw88ug3r\\schedule.json'
+
+    - TemporaryDirectory's own cleanup, and the same again for a second folder
+    (tmpxh2pi8w1) a moment later. Which suite it lands on depends on when the
+    handle is released, which is why the failing suite's name kept changing.
+
+    This is the deterministic half of that, and it holds on every platform:
+    every connection is KEPT (so no refcount can be what closes it) and then
+    asked to do something. On the old code each one answers and the check is
+    red; with _ClosingConnection they are all closed and it is green. Linux
+    cannot show the deletion failure at all, so without this the fix would be
+    unmeasurable here."""
+    import sqlite3
+    made = []
+    real = S.sqlite3.connect
+
+    def spy(*a, **kw):
+        c = real(*a, **kw)
+        made.append(c)          # held on purpose: the collector must not close it
+        return c
+
+    S.sqlite3.connect = spy
+    try:
+        w = World(local(2026, 9, 25, 12, 0), name="closed")
+        jid = w.s.add_timer(600, "tea")["id"]
+        w.s.act(jid, "pause")
+        w.s.job(jid)
+        w.s.listed()
+        w.s.status()
+        w.s.mark_command("set a timer for ten minutes")
+        w.s.was_command("set a timer for ten minutes")
+    finally:
+        S.sqlite3.connect = real
+
+    def still_readable(c):
+        try:
+            c.execute("SELECT 1")
+            return True
+        except sqlite3.ProgrammingError:
+            return False
+
+    open_ones = [c for c in made if still_readable(c)]
+    check("every connection the scheduler opens is closed when its `with` block "
+          "ends (a leaked handle is what made schedule.json undeletable on the "
+          "Windows runner, 2026-10-07)",
+          bool(made) and not open_ones, f"{len(open_ones)} of {len(made)} still open")
+    # And the thing the runner actually saw: a folder holding the scheduler's
+    # own file, removed the way a suite's temporary folder is.
+    d = Path(tempfile.mkdtemp(prefix="jarvis-schedule-del-"))
+    s2 = S.Scheduler(d / "schedule.json", clock=Clock(local(2026, 9, 25, 12, 0)),
+                     spawn=lambda fn: fn(), publish=lambda k, x: None)
+    s2.add_timer(60, "think")
+    try:
+        shutil.rmtree(str(d))
+        removed, why = True, ""
+    except OSError as exc:
+        removed, why = False, f"{type(exc).__name__}: {exc}"
+    check("... so the folder holding it can be removed at once, the way a suite's "
+          "temporary folder is removed (on Windows an open handle refuses this)",
+          removed, why)
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:
