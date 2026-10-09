@@ -17,10 +17,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -1792,7 +1794,44 @@ class MainActivity : FragmentActivity() {
                 // jumps there at once, so the page behind every screen would
                 // cut while everything drawn on it faded.
                 .background(LocalChrome.current.surface0)
-                .windowInsetsPadding(WindowInsets.systemBars)
+                // The system bars UNION the display cutout (2026-10-09,
+                // Android 15 / targetSdk 35+).
+                //
+                // `WindowInsets.systemBars` is statusBars + navigationBars +
+                // captionBar and has never included `displayCutout`. That was
+                // survivable while the cutout was on the top edge and the
+                // status bar (which IS in systemBars) happened to be at least
+                // as deep. Android 15 changed the default: for an app
+                // targeting 35+, `layoutInDisplayCutoutMode` is
+                // LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS for a non-floating
+                // window, so the platform lays this window under the cutout and
+                // leaves the inset to the app - the same hand-over
+                // `enableEdgeToEdge` already made for the bars and the keyboard.
+                //
+                // Checked on the real phone (f0a5b32b, Android 15, API 35):
+                // `dumpsys window` reports
+                // `layoutInDisplayCutoutMode=always` and
+                // `EDGE_TO_EDGE_ENFORCED` for
+                // com.jarvis.client/.MainActivity, and its frame is the whole
+                // display. That phone's notch is 107px / 35.7dp deep. In
+                // portrait the status bar is also 107px, so systemBars alone
+                // covered it and nothing looked wrong - which is exactly why
+                // this went unnoticed. Rotated to landscape the notch becomes a
+                // 35.7dp strip down one SIDE edge and the status bar is a strip
+                // along the top: nothing in systemBars covers it, so the first
+                // ~36dp of every full-width row (the Brain plates, Settings,
+                // History) sat under the camera.
+                //
+                // `union`, not two `windowInsetsPadding` calls in a row: each
+                // one consumes the insets it applies, and the cutout is a
+                // different type from the bars, so a second call would ADD the
+                // full cutout depth under a status bar that already covers it -
+                // 71dp of dead space at the top in portrait. `union` takes the
+                // larger of the two per side, so portrait is byte-for-byte
+                // unchanged and landscape gains the strip it was missing.
+                .windowInsetsPadding(
+                    WindowInsets.systemBars.union(WindowInsets.displayCutout),
+                )
                 // The keyboard inset, on the root so every screen gets it
                 // (UI audit 2026-10-05, finding A2). `enableEdgeToEdge` means
                 // this app owns the IME inset, and the root only asked for the

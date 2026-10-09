@@ -20,6 +20,13 @@ import java.io.File
  *   call sites were too small, two of them about 19dp of text. The minimum
  *   lives inside the shared helper now, and the one call site that cannot fit
  *   it says so in words next to the opt-out.
+ * - **A5, the display cutout** (Android 15, 2026-10-09): the root asked for
+ *   `WindowInsets.systemBars`, which is the bars only and has never included
+ *   `displayCutout` - while Android 15 lays a targetSdk-35+ window under the
+ *   cutout by default. Invisible in portrait on the owner's phone, because
+ *   its status bar is exactly as deep as its notch; in landscape the notch is
+ *   a strip down one side and nothing covered it. The root now takes
+ *   `systemBars.union(displayCutout)`, and this fails if that is dropped.
  */
 class TouchTargetAndInsetsTest {
 
@@ -79,7 +86,22 @@ class TouchTargetAndInsetsTest {
         // theme block, and the only marker around it that is not a comment.
         val chain = src.substring(at, src.indexOf("if (locked)", at))
         assertTrue("the root modifier was not found:\n$chain", chain.contains(".fillMaxSize()"))
-        assertTrue("the root still asks for the system bars:\n$chain", chain.contains("windowInsetsPadding(WindowInsets.systemBars)"))
+        assertTrue("the root still asks for the system bars:\n$chain", chain.contains("WindowInsets.systemBars"))
+        // A5, the display cutout (Android 15, 2026-10-09). `enableEdgeToEdge`
+        // plus targetSdk 35+ means the platform lays the window under the
+        // cutout (`layoutInDisplayCutoutMode=always` on the real phone, read
+        // from `dumpsys window`), and `WindowInsets.systemBars` does not
+        // include it. Only `displayCutout` is asserted here, not the exact
+        // expression, because the two are read as separate facts: which bars
+        // are asked for, and that the cutout is asked for with them. `union`
+        // rather than a second `windowInsetsPadding`, because that would add
+        // the cutout's depth UNDER a status bar that already covers it in
+        // portrait - see the comment on the root itself.
+        assertTrue(
+            "the root has to take the display cutout too, or a landscape " +
+                "notch covers the first ~36dp of every row:\n$chain",
+            chain.contains(".union(WindowInsets.displayCutout)"),
+        )
         assertTrue(
             "the keyboard inset has to be on the ROOT or the 11 screens that " +
                 "never added one are covered again:\n$chain",
