@@ -1100,8 +1100,15 @@ $PATCHES = @(
     'gate-action-name.patch'
     # "Tutorials and the FAQ" (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md,
     # JARVIS-API section 114): GET /api/tutorials, POST /api/tutorials/progress and GET
-    # /api/faq. ONE hunk in jarvis_hud.py, an install block right after retirement.patch's
-    # own, so it goes after it. One catalogue and the owner's reading progress, kept on the
+    # /api/faq. ONE hunk in jarvis_hud.py, an install block at the END of the
+    # chain before `_loopback_companion` - right after chatbot-limits-hud.patch's
+    # own block, which is what its context names. (It said "right after
+    # retirement.patch's own" until 2026-10-09 and that had been wrong since
+    # 2026-10-04, when the patch was rebuilt onto quiz-cloud; the note was left
+    # behind and the anchor drifted again with it. The anchor it names now is
+    # the one it is written against, and that is worth keeping true: it is how
+    # the next person sees which earlier patch this one's context belongs to.)
+    # One catalogue and the owner's reading progress, kept on the
     # PC and shared by both apps: it writes its own one JSON file in the config folder,
     # raises no card and calls nothing out. Needs jarvis_tutorials.py copied in (it is in
     # SHIPPED below); without it, or on any error, the banner says so and the routes are
