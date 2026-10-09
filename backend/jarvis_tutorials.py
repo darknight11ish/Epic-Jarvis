@@ -137,7 +137,7 @@ CATALOGUE = (
              "body": "Every clip is checked against your voice print before it "
                      "is used. It is honest about its limit: it cannot tell a "
                      "recording or a copy from the real you, and it says so.",
-             "where": "Brain → Voice → Your voice print"},
+             "where": "Settings → Voice → Your voice"},
             {"title": "Jarvis Live",
              "body": "A back-and-forth conversation with no wake word between "
                      "turns, which you can interrupt. It pauses during a phone "
@@ -206,7 +206,7 @@ CATALOGUE = (
                      "details about other people, are only saved when you say so. "
                      "A setting can save health and money automatically; "
                      "passwords, PINs and ID numbers always ask.",
-             "where": "Brain → Memory → Sensitive topics"},
+             "where": "Brain → Memory → Learning"},
             {"title": "Forget, and Erase the words",
              "body": "Forget hides a fact and keeps its history. Erase the words "
                      "wipes the fact's text and its search entry for good - only "
@@ -238,7 +238,7 @@ CATALOGUE = (
                      "a switch turns that off. Temporary chats are not kept at "
                      "all. Crisis chats are kept but titled \"A difficult "
                      "moment\", never with your words.",
-             "where": "History, and Brain → Privacy"},
+             "where": "Brain → History"},
             {"title": "The approval list is read-only",
              "body": "Every card you decided - approved, denied or timed out - is "
                      "listed with when it happened and which device asked.",
@@ -924,17 +924,17 @@ CATALOGUE = (
              "body": "The phone reaches this PC over Tailscale or NordVPN Meshnet "
                      "only. A home Wi-Fi address is refused on purpose: the "
                      "pairing key would travel unscrambled over it.",
-             "where": "The phone's setup screen, and Brain → Phone on the PC"},
+             "where": "The phone's setup screen, and Settings → Connection"},
             {"title": "Scan the code, or type the short one",
              "body": "The PC shows a QR code and a short typed code as the backup. "
                      "Either way the PC raises one card, and no key is handed over "
                      "until you approve it there.",
-             "where": "Brain → Phone → Pair a device"},
+             "where": "Settings → Devices"},
             {"title": "One key per device",
              "body": "Each device gets its own key, so you can see which device "
                      "did what - in the approval list, and in the log - and you "
                      "can revoke one device without touching the others.",
-             "where": "Brain → Phone → Devices"},
+             "where": "Settings → Devices"},
             {"title": "What the phone does not do",
              "body": "It never does speech-to-text itself, and it never keeps the "
                      "model or your memory. It sends your voice to the PC, where "
@@ -959,11 +959,11 @@ FAQ = (
           "device-to-device. A public address is refused with a message saying "
           "why, and while one is saved the desktop does nothing over the "
           "network.",
-     "where": "Brain → Phone"},
+     "where": "Settings → Connection"},
     {"q": "Where do my API keys go?",
      "a": "Only to the one service each key belongs to. They are never logged "
           "and never written to disk in plain text.",
-     "where": "Brain → API keys and services"},
+     "where": "Settings → Accounts"},
     {"q": "Can it act without asking me?",
      "a": "Only where you have said so. Risky approvals need Windows Hello on "
           "the PC or your screen lock on the phone, and it stops acting when the "
@@ -1028,7 +1028,7 @@ FAQ = (
      "a": "No. Picture understanding and the long-context lane wait for it; "
           "everything else runs on the card you have. Nothing switches to it "
           "until it is installed and measured.",
-     "where": "Brain → Your second graphics card"},
+     "where": "Settings → Second graphics card"},
     {"q": "How do I see what it has been doing?",
      "a": "History (with continued chats marked), the read-only approval list, "
           "and the audit log on the PC.",
