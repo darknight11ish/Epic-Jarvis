@@ -638,11 +638,18 @@ def t_the_voice_bar_loosening_is_wired_like_the_other_ones():
           OC.is_risky({"action": L.LOWER_ACTION,
                        "risk": {"classified": False}}) is True)
     tiers = tomllib.loads(SHIPPED.read_text(encoding="utf-8"))["autonomy"]["tiers"]
-    check("neither loosening action carries a tier line of its own, so the gate "
-          "reads both as 'ask' - the card is live and the loosening cannot "
-          "silently go through",
-          L.RAISE_ACTION not in tiers and L.LOWER_ACTION not in tiers,
-          [L.RAISE_ACTION in tiers, L.LOWER_ACTION in tiers])
+    # The gate reads an action with no tier line of its own as "ask", which is
+    # what keeps the card live - and an explicit "ask" is the same promise. What
+    # must never happen is a LOOSER line ("auto", "local"), because then the
+    # loosening could go through with no card at all. This checks the promise
+    # rather than the absence of a line: the other session's
+    # fix/two-raises-get-their-tier-lines (2026-10-09, merged) added explicit
+    # `raise_a_limit` and `raise_attention_budget` lines, both "ask", and CI runs
+    # this suite on the MERGE of this branch with main - so "no line" is no
+    # longer the shape the truth takes.
+    for action in (L.RAISE_ACTION, L.LOWER_ACTION):
+        check(f"{action} is never looser than 'ask', so its card cannot be skipped",
+              str(tiers.get(action, "ask")).strip().lower() == "ask", tiers.get(action))
     check("the row names its own gate action, not the raise's name",
           L.find("voice_bar").action == L.LOWER_ACTION
           and L.find("undo_window").action == "", L.find("voice_bar").action)
