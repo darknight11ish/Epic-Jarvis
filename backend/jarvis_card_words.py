@@ -174,6 +174,10 @@ TITLES = {
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
     "phone_notifications_read": "start reading notifications from apps you choose on your phone",
+    # --- the captcha hand-off (jarvis_handoff_mode.py, the owner's decision of
+    # 2026-10-08): keeping the live picture of one of the owner's own browser
+    # windows on offer for the full 15 minutes instead of about a minute.
+    "handoff_keep_offering": "keep the phone's live view on offer for 15 minutes",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
     # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)

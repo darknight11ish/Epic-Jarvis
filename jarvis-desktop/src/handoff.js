@@ -52,6 +52,28 @@ export const WORDS = {
 const REASONS = new Set(["captcha", "login", "unusual"]);
 const KINDS = new Set(["chatbot", "support"]);
 
+/**
+ * The PC's own line for a window Jarvis is stuck on (jarvis_handoff.STUCK,
+ * added 2026-10-08 with the "Stop early" setting): shown when the hand-off
+ * ended the "Stop early" way, naming the site and the reason, so the owner
+ * knows exactly which browser window on the PC to solve it in. Both apps show
+ * it word for word (tools/gen_handoff_cases.py carries it).
+ */
+export const STUCK = {
+  title: "{site} is waiting on this PC",
+  text: "Jarvis is stuck on {reason} in that window, so the hand-off to your phone has ended. "
+    + "Solve it in the browser window on this PC, then press Resume. Your phone can start it "
+    + "again (Solve it here) if you need it.",
+};
+
+/** That line for one site and reason, exactly as the PC writes it. */
+export function stuckLine(site, reason) {
+  return {
+    title: STUCK.title.replace("{site}", site),
+    text: STUCK.text.replace("{reason}", reasonWords(reason)),
+  };
+}
+
 const text = (v) => (typeof v === "string" ? v : "");
 
 /**
@@ -64,7 +86,14 @@ export function readHandoff(o) {
   const reason = text(o.reason);
   const id = text(o.id);
   if (!KINDS.has(kind) || !REASONS.has(reason) || !id) return null;
-  return { kind, id, reason, site: text(o.site) || "The website", active: text(o.active) };
+  // `stuck` (the owner's setting of 2026-10-08): the PC's own two fixed
+  // sentences for the window it is stuck on, or null. Two strings only -
+  // never a page title, never a word the site said.
+  const s = o.stuck && typeof o.stuck === "object" ? o.stuck : null;
+  const stuck = s && text(s.title) && text(s.text)
+    ? { title: text(s.title), text: text(s.text) }
+    : null;
+  return { kind, id, reason, site: text(o.site) || "The website", active: text(o.active), stuck };
 }
 
 /** What the reason is called ("a captcha (...)"). */
@@ -83,4 +112,16 @@ export function pcLine(h, kind, id) {
     title: WORDS.pc_title.replace("{site}", h.site),
     text: WORDS.pc_text.replace("{reason}", reasonWords(h.reason)),
   };
+}
+
+/**
+ * The PC's own line for a window Jarvis is stuck on, for the session with
+ * [kind] and [id] - or null. Set on `handoff.stuck` (the PC's `_stuck_now`)
+ * only when the hand-off ended the "Stop early" way while that page is still
+ * paused: the offer is gone and the owner is told exactly which window to
+ * solve the puzzle in, on this PC. Same fixed words as the phone's screen.
+ */
+export function stuckPcLine(h, kind, id) {
+  if (!h || h.kind !== kind || h.id !== id || !h.stuck) return null;
+  return { title: text(h.stuck.title), text: text(h.stuck.text) };
 }

@@ -21,6 +21,7 @@
     "faces-open",
     "screen-never-look",
     "screen-picture",
+    "handoff-mode",
     "browser-engine",
     "spending-settings",
     "core:webview:allow-set-webview-zoom"

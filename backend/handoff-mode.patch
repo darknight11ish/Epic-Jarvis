@@ -1,0 +1,27 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -190,6 +190,7 @@
+     "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
+     "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
+     "raise_api_limit",  # jarvis_chatbot_limits.py acts only on tier "ask": ONE card per raise of a chatbot service's monthly money limit, plus Windows Hello, because raising it lets Jarvis spend more of the owner's money (chatbot-limits.patch)
+     "lower_api_limit",  # jarvis_chatbot_limits.py: LOWERING a limit only ever spends less, so it asks nothing - this name exists so the owner-check's Windows Hello, which is attached to the action and not to the direction, lands on the raise alone (chatbot-limits.patch)
++    "handoff_keep_offering",  # jarvis_handoff_mode.py acts only on tier "ask": ONE card to keep the captcha hand-off on offer for the full 15 minutes instead of stopping early (handoff-mode.patch)
+ })
+ 
+ 
+@@ -840,4 +841,14 @@
+     "raise_api_limit": ("no", "local", "lets Jarvis spend more of your money a month on the chatbot service named on the card; the limit is what stops that service being used once it is reached, so raising it spends more, and the change cannot be taken back"),
+     "lower_api_limit": ("yes", "local", "lowers or removes a chatbot service's monthly money limit, so Jarvis can spend LESS of your money than before; nothing is sent anywhere and it can be raised again with a card"),
++    # handoff-mode.patch (jarvis_handoff_mode.py; the owner's OWN decision of
++    # 2026-10-08, his words: "make this a setting for both options with 1 as
++    # the default"). It changes ONE thing: how long the captcha hand-off - a
++    # live picture of ONE of the owner's own browser windows, offered to their
++    # own phone over their private mesh - stays on offer when nobody answers.
++    # "Stop early" is the default; this card keeps it on offer for the full 15
++    # minutes instead, which is fifteen times longer for a window that may hold
++    # their own account details. Nothing leaves the owner's own devices either
++    # way, and going back to stopping early is instant.
++    "handoff_keep_offering": ("yes", "local", "keeps the captcha hand-off - a live picture of ONE of your browser windows, shown only to your own phone over your private network - on offer for the full 15 minutes instead of ending it after about a minute with nobody looking, so a window that may show your own account details stays available fifteen times longer; the picture is still never saved, your taps and typing still go to that one window only, and going back to stopping early is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

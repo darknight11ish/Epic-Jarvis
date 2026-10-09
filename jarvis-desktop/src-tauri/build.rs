@@ -799,6 +799,13 @@ fn main() {
             // Before a screen capture is sent: can the local model see it?
             // Asks the Jarvis server and loopback Ollama; quickbar only.
             "local_model_vision",
+            // How long "Solve it here" stays on offer (handoff.rs; the owner's
+            // decision of 2026-10-08). One command for the setting alone: read
+            // it, put it back to "Stop early" at once, or ask to keep offering
+            // it (ONE card on this PC). Settings only, and it carries one word
+            // and fixed sentences - never a picture of the paused browser
+            // window, which this PC's windows have no route to.
+            "handoff_mode",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

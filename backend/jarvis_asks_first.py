@@ -431,6 +431,11 @@ GROUPS = (
                       "open_public_tunnel",
                       "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+                      # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
+                      # decision of 2026-10-08): keeping the live picture of one of the
+                      # owner's own browser windows on offer for 15 minutes instead of
+                      # about a minute is a loosening, so a card can name it on this page.
+                      "handoff_keep_offering",
                       "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",

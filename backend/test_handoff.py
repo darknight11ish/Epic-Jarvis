@@ -312,6 +312,25 @@ def t_code():
     check("shipped", "jarvis_handoff.py" in SHIPPED)
     ps1 = (HERE.parent / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("apply-patches.ps1 ships it", "'jarvis_handoff.py'" in ps1)
+    # The owner's setting of 2026-10-08 ("make this a setting for both options
+    # with 1 as the default") is its own module, shipped the same way, and IT
+    # is where the two numbers now come from - so the no-file promise above
+    # still holds for the picture path, and this is the one file that may read
+    # and write a file (ONE word, never a picture - its own suite checks that).
+    check("the setting module is shipped", "jarvis_handoff_mode.py" in SHIPPED)
+    check("apply-patches.ps1 ships the setting module", "'jarvis_handoff_mode.py'" in ps1)
+    # THE OWNER'S DECISION OF 2026-10-08 is the source of both numbers now, so
+    # this module must READ it and must not carry a timeout constant of its own
+    # ("make this a setting for both options with 1 as the default").
+    code = _code_only(SRC)
+    check("the idle time and the ceiling are read from the setting, not constants here",
+          "idle_seconds" in code and "ceiling_seconds" in code
+          and "jarvis_handoff_mode" in code
+          and "= IDLE_S" not in SRC and "= MOST_S" not in SRC)
+    check("START_AFTER/CEILING FALLBACKS exist for an older PC without the setting",
+          "STOP_AFTER_FALLBACK_S" in code and "CEILING_FALLBACK_S" in code)
+    check("the PC's own 'stuck' line is the module's, not an app's",
+          "STUCK" in SRC and "def stuck_line(" in SRC)
 
 
 # ==========================================================================
@@ -442,19 +461,20 @@ def t_ends():
     s = session(code="unusual")
     hid = HO.start("chatbot", s.id)[1]["handoff"]
     HO.frame(hid)
-    CLOCK.t += HO.IDLE_S + 1
+    CLOCK.t += HO.idle_seconds() + 1
     code, out = HO.send_input(hid, {"type": "key", "key": "Enter"})
-    check("nobody looking for IDLE_S: it ends ('idle')", code == 410 and out["ended"] == "idle")
+    check("nobody looking for the owner's idle time: it ends ('idle')",
+          code == 410 and out["ended"] == "idle")
 
     fresh()
     s = session(code="captcha")
     hid = HO.start("chatbot", s.id)[1]["handoff"]
-    for _ in range(int(HO.MOST_S // 30) + 2):
+    for _ in range(int(HO.ceiling_seconds() // 30) + 2):
         CLOCK.t += 30
         code, out = HO.frame(hid)
         if code != 200:
             break
-    check("however it goes, it ends after MOST_S ('time')", code == 410
+    check("however it goes, it ends after the 15-minute ceiling ('time')", code == 410
           and out["ended"] == "time", (code, out))
 
     fresh()
@@ -554,8 +574,34 @@ def _trap_writes():
     # it.) Trapped on the module object AND in builtins, so the check holds
     # whichever way the code says it.
     import builtins
-    trap(builtins, "open", "open()")
-    trap(io, "open", "io.open()")
+    # READ-ONLY opens are allowed through, said plainly: the promise is that no
+    # PICTURE is ever written to disk, and the hand-off now reads ONE setting
+    # file (handoff-mode.json, jarvis_handoff_mode.py: how long the offer
+    # stays open - the owner's decision of 2026-10-08) on the path. `open(p)`
+    # with the default mode is a read; only a write/append/exclusive/create
+    # mode counts, and `Path.write_text`/`write_bytes`, `os.replace`, `shutil`
+    # and `tempfile` below are all still trapped outright, so a save written
+    # any other way is still caught. The probe that proved the trap works (a
+    # save added to frame()) uses a write mode, so it still fails this check.
+    _WRITEY = ("w", "a", "x", "+")
+
+    def trap_open(owner, name, label):
+        real = getattr(owner, name, None)
+        if real is None:
+            return
+
+        def catch(file, mode="r", *a, **k):
+            if any(c in str(mode) for c in _WRITEY):
+                recorded.append(label)
+            return real(file, mode, *a, **k)
+        try:
+            setattr(owner, name, catch)
+        except (TypeError, AttributeError):
+            return
+        saved.append((owner, name, real))
+
+    trap_open(builtins, "open", "open()")
+    trap_open(io, "open", "io.open()")
     for cls in (io.TextIOWrapper, io.BufferedWriter, io.FileIO):
         try:
             trap(cls, "write", "a file was written")

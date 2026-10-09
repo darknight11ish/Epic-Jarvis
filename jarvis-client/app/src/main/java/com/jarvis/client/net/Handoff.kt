@@ -3,6 +3,7 @@ package com.jarvis.client.net
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 
 /**
@@ -37,8 +38,25 @@ object Handoff {
     const val INPUT_PATH = "/api/chatbot/handoff/input"
     const val END_PATH = "/api/chatbot/handoff/end"
 
-    /** The only POST routes the phone sends here. */
+    /**
+     * How long the hand-off stays on offer (the owner's decision of
+     * 2026-10-08: "make this a setting for both options with 1 as the
+     * default"; backend/jarvis_handoff_mode.py). Deliberately NOT one of the
+     * hand-off's own picture or input routes: it carries one word - which of
+     * the two choices - and no picture, no page and no tap.
+     */
+    const val MODE_PATH = "/api/chatbot/handoff_mode"
+
+    /** The only POST routes the phone sends for the hand-off itself. */
     val WRITE_PATHS: Set<String> = setOf(START_PATH, INPUT_PATH, END_PATH)
+
+    /**
+     * The setting's own POST route. Apart from [WRITE_PATHS] on purpose: those
+     * three move a picture or the owner's own typing to the PC's browser
+     * window, and this one only chooses how long the offer lasts, so a reader
+     * (and this app's own rules) can never confuse the two.
+     */
+    val MODE_PATHS: Set<String> = setOf(MODE_PATH)
 
     // ---- the words, the PC's own (jarvis_handoff.WORDS) -------------------
 
@@ -95,6 +113,31 @@ object Handoff {
         "new_window" to NEW_WINDOW,
     )
 
+    // ---- how long it stays on offer (the owner's setting, 2026-10-08) -------
+    // The setting itself lives in its own file, [HandoffMode]: its one route,
+    // its two values, its default and every sentence it shows. This object keeps
+    // only the one thing the hand-off's own screen needs from it: the `stuck`
+    // line that rides on the status (below), plus the `patient` flag.
+
+    /**
+     * The PC's own line for the window it is stuck on, from `handoff.stuck` in
+     * `GET /api/chatbot/status` - or null when the hand-off ended some other way
+     * (or is still on offer). "Stop early" (the default) is the moment this
+     * appears. Anything not in the PC's exact shape is null.
+     */
+    fun stuck(status: JsonObject?): Pair<String, String>? {
+        val o = (status?.get("handoff") as? JsonObject)
+            ?: status?.takeIf { it.containsKey("stuck") } ?: return null
+        val s = o["stuck"] as? JsonObject ?: return null
+        val title = s.text("title")?.takeIf { it.isNotBlank() } ?: return null
+        val text = s.text("text")?.takeIf { it.isNotBlank() } ?: return null
+        return title to text
+    }
+
+    /** Is the PC keeping the offer for the full ceiling? (an older PC: no) */
+    fun patient(o: JsonObject?): Boolean =
+        (o?.get("patient") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
+
     /** Why a hand-off ended, the PC's own sentences (jarvis_handoff.ENDED). */
     val ENDED: Map<String, String> = linkedMapOf(
         "owner" to "You ended it.",
@@ -108,6 +151,24 @@ object Handoff {
         "stop_all" to "Stop everything ended it.",
         "replaced" to "A new hand-off started.",
     )
+
+    /**
+     * The PC's own line for a window Jarvis is stuck on, word for word
+     * (jarvis_handoff.STUCK): shown when the hand-off ended the "Stop early"
+     * way, naming the site and the reason, so the owner knows exactly which
+     * browser window on the PC to solve it in.
+     */
+    val STUCK: Map<String, String> = linkedMapOf(
+        "title" to "{site} is waiting on this PC",
+        "text" to "Jarvis is stuck on {reason} in that window, so the hand-off to your phone has " +
+            "ended. Solve it in the browser window on this PC, then press Resume. Your phone " +
+            "can start it again (Solve it here) if you need it.",
+    )
+
+    /** That line for one site and reason, exactly as the PC writes it. */
+    fun stuckLine(site: String, reason: String): Pair<String, String> =
+        (STUCK.getValue("title").replace("{site}", site)) to
+            STUCK.getValue("text").replace("{reason}", reasonWords(reason))
 
     /** The keys the phone may send by name (jarvis_handoff.KEYS). */
     val KEYS: List<String> = listOf(
