@@ -150,7 +150,16 @@ RATCHET = {
     # with it, and `by_patch` names `retrieve-count.patch: 2` and
     # `attention-settings.patch: 1`, with `prompt-coach.patch` absent. A
     # ratchet: it may still only go down.
-    "jarvis_hud.py": 49,
+    # 50, raised from 49 on 2026-10-09: screen-attach.patch was re-anchored.
+# It used to name tutorials.patch's two print lines, which is what the real
+# backend stopped leaving there once chatbot-limits-hud.patch inserted its own
+# block before the same "# Before the main socket" comment - so the patch did
+# not apply to the owner's files at all. It now names what really is there,
+# and the stand-in walk does not assemble that same neighbourhood, so this
+# one hunk needs its pre-image pasted in. A patch that was broken on the real
+# backend was free here; the patch that fixes it costs one. Measured, not
+# inferred: test_retrieve_count.py asserts the pin EQUALS the measurement.
+"jarvis_hud.py": 50,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

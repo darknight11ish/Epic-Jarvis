@@ -94,6 +94,7 @@ referee.patch	referee/05d8c1d.patch	05d8c1dcfdaeaed82f9dff682dda8bb8e1bff921	202
 schedule.patch	schedule/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58Z	Open or adjust any setting by voice or chat
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33Z	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12Z	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+screen-attach.patch	screen-attach/c05f3a6.patch	c05f3a63ea87e0a1d64c68e6c325cf981fc66d11	2026-10-08T03:41:53-07:00	"look at this" can hand the owner the cleaned picture, so a chart or an error message can be asked about
 screen-picture.patch	screen-picture/fafaa82.patch	fafaa82c1d3443723ef0710e27d5b40e6217d8f3	2026-09-29T10:34:17Z	Picture mode: a slow, optional picture reader on the processor for "Look at this" and "Watch with me"
 screen.patch	screen/9c1e58e.patch	9c1e58ed6ce0cab77eb806fa8a4c31c8fed034fc	2026-09-29T22:13:56Z	screen.patch: anchor the look-mark hunk without the _chat_client_fields_off line (rules-first-relay's invariant)
 screen.patch	screen/33624ed.patch	33624ed1e8d93ca6d8c6d86f2d4a3cd2f72dd515	2026-09-29T21:37:50Z	A screen look mark counts only from this PC
