@@ -766,11 +766,14 @@
               dismissed rather than surviving into the next time it opens.
             -->
             <!-- The one quiet line about the chat itself: a new conversation
-                 after 30 quiet minutes, a chat carried on from History, a
+                 after the owner's own quiet wait (30 minutes by default, set
+                 in Settings), a chat carried on from History, a
                  chat deleted elsewhere (main.js showChatNote). -->
             <p class="chat-note" id="chat-note" hidden></p>
-            <!-- After 30 quiet minutes: the chat that just ended, back
-                 (main.js showCarryOn). Only for a chat that was kept. -->
+            <!-- After that wait: the chat that just ended, back
+                 (main.js showCarryOn). Only for a chat that was kept. Never
+                 under a "Never" wait, which ends a chat only when the owner
+                 starts a new one. -->
             <button class="text-button carry-on-last" type="button" id="carry-on-last" hidden>Carry on the last chat</button>
             <!-- Since the chat audit (2026-09-28): the whole conversation so
                  far, not only the last answer - "Earlier in this chat · 3

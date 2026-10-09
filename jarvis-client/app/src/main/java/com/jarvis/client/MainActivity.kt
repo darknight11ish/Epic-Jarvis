@@ -1041,6 +1041,10 @@ class MainActivity : FragmentActivity() {
         val floatingAvatar by JarvisRuntime.settings.floatingAvatar.collectAsState()
         // Settings -> Quick Settings tiles (data/QuickTiles.kt): this phone only.
         val quickTiles by JarvisRuntime.settings.quickTiles.collectAsState()
+        // "A new conversation starts after ..." (the audit of 2026-10-08):
+        // Settings, this phone only - one of ChatHistory.IDLE_NEW_CHOICES' five
+        // ids, 30 minutes (the default) unless the owner chose another.
+        val idleNewChoice by JarvisRuntime.settings.idleNewChoice.collectAsState()
         LaunchedEffect(floatingAvatar, tick) {
             if (floatingAvatar == FloatingAvatarMode.OVERLAY &&
                 Settings.canDrawOverlays(this@MainActivity)
@@ -2752,6 +2756,11 @@ class MainActivity : FragmentActivity() {
                         onQuickTileChange = { slot, action ->
                             JarvisRuntime.settings.setQuickTile(slot, action)
                         },
+                        // "A new conversation starts after ..." (Settings, this
+                        // phone only; data/ClientSettings.kt): one tap sets it,
+                        // no card and no request - the PC serves no route for it.
+                        idleNewChoice = idleNewChoice,
+                        onIdleNewChoiceChange = { JarvisRuntime.settings.setIdleNewChoice(it) },
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(

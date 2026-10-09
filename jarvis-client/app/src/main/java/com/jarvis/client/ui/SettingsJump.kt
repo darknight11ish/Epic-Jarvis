@@ -54,5 +54,11 @@ object SettingsJump {
         // screen, so it is the last entry here too. The desktop has no jump
         // entry for these yet, so the words are this section's own title.
         Entry("Limits and how often Jarvis does things", "limits"),
+        // "A new conversation starts after" (the audit of 2026-10-08): the one
+        // timing the owner could not change anywhere. It is the LAST row on the
+        // screen, so it is the last entry here too - the label is the desktop
+        // jump list's own words for the same section (settings.html,
+        // `#idle-new`).
+        Entry("A new conversation starts after", "idle-new"),
     )
 }

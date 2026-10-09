@@ -171,11 +171,13 @@
     "group": "Talking",
     "title": "The whole conversation, and carrying it on",
     "what": "The current chat is one scrollable thread, and an earlier chat can be picked up again.",
-    "where": "Scroll the Jarvis bar (or Home on the phone). History has \"Continue this chat\" and an \"Earlier chats\" link.",
+    "where": "Scroll the Jarvis bar (or Home on the phone). History has \"Continue this chat\" and an \"Earlier chats\" link. How long a chat can sit before the next message starts a new one is in Settings, A new conversation starts after.",
     "asks": "No card.",
-    "limit": "The thread hides while \"Hide memory lists and chat history\" is on. A new conversation starts after 30 quiet minutes; the old one stays in History.",
+    "limit": "The thread hides while \"Hide memory lists and chat history\" is on. A new conversation starts after 30 quiet minutes by default - 10 minutes, 1 hour, 4 hours or never can be chosen in Settings - and the old one stays in History, where Continue brings it back.",
     "surface": "both",
-    "covers": []
+    "covers": [
+      "settings.idle-new"
+    ]
   },
   {
     "id": "temporary-chat",

@@ -89,6 +89,13 @@ object OpenPlace {
         // phone (SettingsScreen.kt, item "limits"; LimitsPlate.kt). So "open
         // limits" lands on it instead of the top of Settings.
         "limits" to Where.Go(Screen.SETTINGS, "limits"),
+        // "A new conversation starts after" (the audit of 2026-10-08): a
+        // CLIENT-SIDE choice with its own Settings row on the phone
+        // (SettingsScreen.kt, item "idle-new"; IdleNewPlate.kt), so "open a new
+        // conversation starts after" lands on it rather than the top of
+        // Settings. OpenPlaceTest's own new-section check is what requires a
+        // decision here for every registry Section.
+        "idle-new" to Where.Go(Screen.SETTINGS, "idle-new"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).

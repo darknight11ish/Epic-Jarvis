@@ -682,7 +682,15 @@ object JarvisRuntime {
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
         // section 18.1): read from the last handshake, when it is asked.
-        val chatSession = ChatSession(jarvisApi, canTemporary = { can(com.jarvis.client.net.TemporaryChat.CAPABILITY) })
+        val chatSession = ChatSession(
+            jarvisApi,
+            canTemporary = { can(com.jarvis.client.net.TemporaryChat.CAPABILITY) },
+            // "A new conversation starts after ..." (Settings, this phone only):
+            // read at the moment the decision is made, so a change takes effect
+            // with the next question - and a missing or unreadable choice reads
+            // as 30 minutes, never as "never" (ChatHistory.idleNewMsFor).
+            idleWaitMs = { com.jarvis.client.net.ChatHistory.idleNewMsFor(clientSettings.idleNewChoice.value) },
+        )
         // The link check is a lambda, not a value: it is read at the moment
         // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
         val voiceSession = VoiceSession(

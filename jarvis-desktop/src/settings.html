@@ -98,6 +98,7 @@
             <span class="settings-jump-place-label">Talk and voice</span>
             <a href="#voice">Voice</a>
             <a href="#manner">How Jarvis talks</a>
+            <a href="#idle-new">A new conversation starts after</a>
             <a href="#prompt-coach">Prompt coach</a>
           </div>
           <div class="settings-jump-place">
@@ -880,6 +881,36 @@
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- ── A new conversation starts after ────────────────────────────────
+           The audit of 2026-10-08 found this was the one timing the owner
+           could not change anywhere: it was `IDLE_NEW_MS` in chat-history.js
+           and a constant in ChatSession.kt, and nothing else. It is a
+           CLIENT-SIDE choice - the PC serves no route for it (backend/
+           jarvis_limits.py says so in its own words) - so this card reads and
+           writes localStorage through idle-new-settings.js and nothing is
+           sent anywhere: no route, no approval card, no stale-link hold.
+           The five choices and the words under them are chat-history.js's own
+           (IDLE_NEW_CHOICES, IDLE_NEW_DETAIL, IDLE_NEW_TAIL).
+
+           30 minutes is the DEFAULT and stays the default: a missing, empty
+           or unknown stored value reads as 30 minutes, never as "Never"
+           (idle-new-settings.js's `storedIdleNewChoice`). The owner's
+           decision of 2026-09-28 is unchanged - the old conversation stays in
+           History, and "Continue this chat" brings it back. The phone's
+           Settings has the same five, in the same words. -->
+      <section class="card" id="idle-new">
+        <h2 id="in-heading">A new conversation starts after</h2>
+        <p class="note" id="in-detail">The next message starts a new conversation after this long with nothing said. The old one stays in History, and Continue brings it back.</p>
+        <fieldset class="theme-list" id="in-list">
+          <legend class="label">Wait</legend>
+          <div id="in-choices"></div>
+        </fieldset>
+        <p class="note" id="in-tail">Saved on this app. Your phone keeps its own choice of the same five.</p>
+        <div class="row">
+          <span class="status" id="in-status" role="status"></span>
         </div>
       </section>
 
@@ -2561,6 +2592,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="idle-new-settings.js"></script>
     <script type="module" src="prompt-coach-settings.js"></script>
     <script type="module" src="thinking-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
