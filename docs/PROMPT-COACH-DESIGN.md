@@ -127,11 +127,15 @@ rewrite that answers the question instead of asking it better.
 - **The four libraries were rejected on the evidence above**, which is their
   own READMEs and `requirements.txt`, not a benchmark of them.
 
-## The two questions that are the owner's
+## The two questions that are the owner's - answered 2026-10-08
 
-1. **Just the button, or also a setting that checks every message?** Proposed:
-   button only, to start.
-2. **May the coach also read the last few turns of the conversation?** It makes
-   the advice much better ("it" has an antecedent) and it means the coach reads
-   more than the one line being sent. Proposed: yes, the same turns the chat
-   already holds, and no further.
+1. **Just the button, or also a setting that checks every message?** The owner
+   answered: **the button, with a setting to turn the feature off.** So the
+   `prompt_coach` switch is the master switch and it is the only switch: off,
+   there is no button and nothing is read; on, the "Coach this" button appears
+   beside Send. There is no per-message mode, and nothing runs unless the
+   button is pressed.
+2. **May the coach also read the last few turns of the conversation?** **Yes** -
+   the same turns the chat already holds, so "it" and "that" have an
+   antecedent, and no further.
+
