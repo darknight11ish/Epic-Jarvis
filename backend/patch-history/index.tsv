@@ -86,6 +86,8 @@ ollama-direct.patch	ollama-direct/b2c3a98.patch	b2c3a989bd85f94967c053e5140e94b3
 ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340d566ef05	2026-10-06T20:32:34-07:00	The cloud lane gets a real transport, and DeepSeek is behind it
 ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
+prompt-coach.patch	prompt-coach/f56e6ab.patch	f56e6abc597daa98e826022584f6fe9b2c3fcba9	2026-10-08T20:47:48-07:00	the two things CI caught that this machine could not
+prompt-coach.patch	prompt-coach/54ed3dc.patch	54ed3dc1566ccb824ad38921a110c83503db3e54	2026-10-08T18:39:20-07:00	prompt coach: the patch, generated from the real jarvis_hud.py
 quiz.patch	quiz/663f61e.patch	663f61e22e0f4ce76ab4c24d278b1d07bd2c293f	2026-09-30T05:12:04Z	WIP: Quiz me on a text (Slice A), builders still working
 readpage.patch	readpage/f84ce5d.patch	f84ce5d435e0e326e1a9b84d19b697bc063e487b	2026-10-05T20:54:36-07:00	He could not hand Jarvis a web page and hear it read out, so build exactly that one thing
 referee.patch	referee/05d8c1d.patch	05d8c1dcfdaeaed82f9dff682dda8bb8e1bff921	2026-09-30T08:13:18Z	Topic controls: phone side (Topics.kt compiled and 27 tests run locally; Compose unverified)
