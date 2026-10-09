@@ -24,17 +24,44 @@ import java.io.File
  */
 class SettingsSearchTest {
 
+    /**
+     * The screen's `item(key = ...)` rows, in order: a quoted string, or a
+     * `SettingsJump` constant (the search box names `SettingsJump.SEARCH_KEY`,
+     * so the screen and these tests cannot disagree about it). Same reader as
+     * `SettingsJumpTest`'s, kept here so this file depends on nothing else.
+     */
+    private fun rows(): List<String> {
+        val src = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt"
+        ).readText()
+        val jump = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt"
+        ).readText()
+        val constant = { name: String ->
+            Regex("const val $name = \"([\\w.-]+)\"").find(jump)?.groupValues?.get(1)
+                ?: error("SettingsJump has no const val $name")
+        }
+        return Regex("item\\(key\\s*=\\s*(?:\"([\\w.-]+)\"|SettingsJump\\.(\\w+))").findAll(src)
+            .map { it.groupValues[1].ifEmpty { constant(it.groupValues[2]) } }
+            .toList()
+    }
+
     @Test
     fun `every Settings section can be searched, in screen order`() {
         val screen = repoFile(
             "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt"
         ).readText()
-        val rows = Regex("item\\(key\\s*=\\s*\"([\\w.-]+)\"").findAll(screen)
-            .map { it.groupValues[1] }.toList()
-        val sections = rows.filter { it != SettingsJump.LIST_KEY && it != SettingsJump.TAIL_KEY }
+        val rows = rows()
+        // The search box is a ROW of the screen but not a SECTION: it is the
+        // control that does the filtering, so it is never one of the things
+        // filtered. It is still in `ROWS`, so that the screen's searchable
+        // rows and the index are one list.
+        val sections = rows.filter {
+            it != SettingsJump.LIST_KEY && it != SettingsJump.TAIL_KEY && it != SettingsJump.SEARCH_KEY
+        }
         assertEquals(
-            "SettingsSearch.ROWS must be the screen's own rows, in order",
-            sections,
+            "SettingsSearch.ROWS must be every searchable row of the screen, in order",
+            sections + SettingsJump.SEARCH_KEY,
             SettingsSearch.ROWS.map { it.key },
         )
         assertEquals("no key is listed twice", sections.size, sections.toSet().size)
@@ -45,8 +72,7 @@ class SettingsSearchTest {
         val screen = repoFile(
             "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt"
         ).readText()
-        val rows = Regex("item\\(key\\s*=\\s*\"([\\w.-]+)\"").findAll(screen)
-            .map { it.groupValues[1] }.toList()
+        val rows = rows()
         assertEquals("the box comes first", SettingsJump.SEARCH_KEY, rows.first())
         assertEquals(SettingsJump.LIST_KEY, rows[1])
         // ...and it is a control, never a section a search can hide.
