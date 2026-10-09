@@ -14,6 +14,19 @@ Found by a read-only audit of the update path (2026-09-30):
      for a running Jarvis, and a backend folder inside another git repository
      behaving differently from its rehearsal.
 
+  5. "Jarvis is still running" named the wrong process (2026-10-08). The check
+     was "a Python program whose command line contains the backend folder, OR
+     contains jarvis_hud.py". The second half had no folder in it, so the
+     owner's own app - running from ITS folder, while this suite patched copies
+     - stopped every run: 37 checks red, with the owner's live backend (pid
+     34612) named as the culprit and never touched. The first half matched any
+     file inside the folder, so `python.exe <backend folder>\test_x.py` - how
+     run_suites.py starts every suite - counted too. The rule is now the
+     folder's own jarvis_hud.py and nothing else; the checks below are the two
+     halves of that (a Python program that is not it is not named; the real one
+     still is) plus the rule itself, on command lines, with no processes
+     involved.
+
 Each check here FAILS on the script as it was before that fix (the fixes are
 in the same change; the checks were written against the old script first).
 
@@ -353,6 +366,10 @@ def t_mini_midway_failure_restore():
 
 
 def t_mini_running_jarvis():
+    """A genuine Jarvis of the folder being patched counts - the FAITHFUL
+    STAND-IN: a real python.exe whose command line names that folder's
+    jarvis_hud.py, the shape the desktop app starts it with (measured: the
+    owner's own app is `python.exe "...\\Desktop program\\jarvis_hud.py"`)."""
     tmp = tmpdir()
     root = mini_repo(tmp / "r")
     be = tmp / "be"
@@ -364,6 +381,8 @@ def t_mini_running_jarvis():
         time.sleep(0.5)
         code, out = run(script, be, "-SkipTests", "-SkipPackages")
         check("running Jarvis: the run refuses (exit 1)", code == 1, out[-600:])
+        check("running Jarvis: it names THAT process, not just 'something'",
+              str(p.pid) in out, out[-600:])
         check("running Jarvis: says close Jarvis first and that nothing changed",
               "Close Jarvis first" in out and "NOTHING HAS BEEN CHANGED" in out)
         check("running Jarvis: nothing was touched", {n: md5(be / n) for n in MINI_TARGETS} == before)
@@ -372,6 +391,181 @@ def t_mini_running_jarvis():
     finally:
         p.kill()
         p.wait()
+
+
+def t_an_unrelated_python_is_not_jarvis():
+    """The false positive of 2026-10-08, in both its shapes.
+
+    Python programs that are NOT the Jarvis of the folder being patched must not
+    stop a run. The old rule named two of them:
+
+      * `python.exe <backend folder>\\test_x.py` - exactly how run_suites.py
+        starts every suite, and how a person runs one by hand. The rule's first
+        half matched any file inside the folder.
+      * a python.exe whose command line names ANOTHER folder's jarvis_hud.py -
+        the owner's own app, while this script rehearses on a copy. The rule's
+        second half had no folder in it at all.
+
+    Measured on the owner's PC: 37 checks in this file went red, and the process
+    the refusal named (pid 34612) was the owner's live backend, which the run
+    never touched. Both were survived by the run's own output, and the check
+    below is what would have said so at the time.
+    """
+    tmp = tmpdir()
+    mine = tmp / "be"           # the folder this run patches
+    theirs = tmp / "theirs"     # "the owner's" - a different folder
+    build_backend(mine)
+    build_backend(theirs)
+    sleepers = []
+    try:
+        # (a) the harness's own interpreter, started the way run_suites.py
+        #     starts every suite: its own python.exe, an absolute path to a
+        #     script inside the folder being patched.
+        sleepers.append(subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(300)",
+             str(mine / "test_something.py")]))
+        # (b) a python.exe whose command line names another folder's
+        #     jarvis_hud.py - the owner's app on its own backend.
+        sleepers.append(subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(300)",
+             str(theirs / "jarvis_hud.py")]))
+        time.sleep(1.5)
+        said = running_backend_verdict(mine)
+        check("a Python program that is not this folder's Jarvis is NOT named: "
+              "neither the harness's own interpreter (a script inside the "
+              "folder), nor another folder's jarvis_hud.py",
+              named_pids(said) == [], f"the check said: {said!r}")
+        # The harness's own interpreter, on the folder THIS suite lives in - how
+        # run_suites.py starts every suite (`python.exe <backend folder>\
+        # test_apply_outcomes.py`, an absolute path). The old rule's first half
+        # named it; run_suites.py is the documented way to run this file.
+        ours = named_pids(running_backend_verdict(HERE))
+        check("... and this suite's own interpreter is not named for the folder "
+              "it lives in, when run the way run_suites.py runs it",
+              str(os.getpid()) not in ours, f"the check said: {ours!r}")
+        # CONTROL - the same process IS this backend's Jarvis for the folder its
+        # command line names. Without this, "not named" could be satisfied by
+        # ignoring Python altogether, which is the one thing the fix must not do.
+        for_theirs = running_backend_verdict(theirs)
+        check("CONTROL: the same process IS this backend's Jarvis for the folder "
+              "its command line names (so this is not 'ignore python')",
+              str(sleepers[1].pid) in named_pids(for_theirs), for_theirs)
+        # ... and a whole run against `mine` goes ahead with both of them alive.
+        root = mini_repo(tmp / "r")
+        code, out = run(root / "scripts" / "apply-patches.ps1", mine,
+                        "-SkipTests", "-SkipPackages")
+        check("... so a whole run against that folder goes ahead (exit 0)",
+              code == 0, out[-900:])
+        check("... and it never says Jarvis is still running",
+              "still running" not in out, out[-700:])
+    finally:
+        for p in sleepers:
+            p.kill()
+            p.wait()
+
+
+def t_the_live_jarvis_is_named_and_a_copy_is_not():
+    """The positive case, against the REAL live backend where there is one.
+
+    The stand-in above covers the rule; this covers the thing itself. The
+    owner's app was running when this was written (python.exe pid 34612,
+    `...\\Desktop program\\jarvis_hud.py`), and it asks the two questions the
+    incident turned on: the live app must be named for ITS OWN folder, and must
+    NOT be named for another folder - the copy this script rehearses on. Skips
+    quietly (no "skip" line, which the script's own suite runner would count)
+    where there is no live backend, as on CI.
+    """
+    default = default_backend_path()
+    if not (default / "jarvis_hud.py").is_file():
+        print(f"      (not measured here: no backend folder at {default})")
+        return
+    live = live_jarvis_pids(default)
+    if not live:
+        print(f"      (not measured here: nothing is running {default} - close "
+              f"Jarvis and this check cannot say anything about the real one)")
+        return
+    said = running_backend_verdict(default)
+    named = named_pids(said)
+    check("the real live Jarvis IS named for its own folder",
+          all(pid in named for pid in live), f"live pids {live}; the check said: {said!r}")
+    copy = tmpdir() / "rehearsal-copy"
+    build_backend(copy)
+    elsewhere = named_pids(running_backend_verdict(copy))
+    check("... and the same live Jarvis is NOT named for a copy - which is what "
+          "the 37 failures were about",
+          all(pid not in elsewhere for pid in live),
+          f"live pids {live}; the check said: {elsewhere!r}")
+
+
+#: The shapes a command line takes, and what the rule must answer for each.
+#: Straight from the machines this runs on: the desktop app's own launch (the
+#: owner's live pid 34612, quoted path with spaces), setup-jarvis.ps1's line to
+#: the owner (`cd "$BackendPath"; py -3 jarvis_hud.py` - no folder in it at
+#: all), and the two false positives above.
+RULE_CASES = [
+    ("the desktop app's own launch, quoted, with spaces in the path",
+     r'python.exe "C:\jarvis-backend\jarvis_hud.py"', True),
+    ("a forward-slashed spelling", r'python3 /srv/jarvis-backend/jarvis_hud.py', False),
+    ("the line setup-jarvis.ps1 gives the owner: no folder at all",
+     'py -3 jarvis_hud.py', True),
+    ("python -m jarvis_hud", 'python.exe -m jarvis_hud', True),
+    ("a test suite's own script inside the folder (run_suites.py's shape)",
+     r'python.exe C:\jarvis-backend\test_apply_outcomes.py', False),
+    ("another backend folder's app",
+     r'python.exe "C:\somewhere else\jarvis_hud.py"', False),
+    ("the folder named only inside a -c string",
+     r'python.exe -c print("C:\jarvis-backend")', False),
+    ("a python that has nothing to do with any of it",
+     r'python.exe C:\tools\thing.py --out C:\tmp', False),
+]
+
+
+def t_the_running_rule_itself():
+    """The matcher, on those command lines, with no processes involved.
+
+    This is the rule the whole incident was about, so it is measured directly
+    and cheaply: a Windows machine cannot be relied on for any particular
+    process to exist, and a stray one elsewhere on the machine must not decide
+    whether these checks pass.
+    """
+    if not has_running_rule(REAL_PS1):
+        check("apply-patches.ps1 has a rule for THIS backend's Jarvis at all",
+              False, "there is no Test-NamesThisBackendsHud: the rule is the old, "
+                     "folder-blind one, which names any python that mentions the "
+                     "folder or jarvis_hud.py anywhere")
+        return
+    backend = r"C:\jarvis-backend"
+    lines = [ps_function(REAL_PS1, "function Test-NamesThisBackendsHud {"), ""]
+    for i, (_name, cmd, _want) in enumerate(RULE_CASES):
+        assert "'" not in cmd, cmd
+        lines.append(f'"{{{i}}}=" + (Test-NamesThisBackendsHud -Cmd \'{cmd}\' -Backend \'{backend}\')')
+    tmp = tmpdir()
+    harness = tmp / "rule.ps1"
+    harness.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    r = subprocess.run([PWSH, "-NoProfile", "-File", str(harness)],
+                       capture_output=True, text=True, timeout=120)
+    got = dict(re.findall(r"^\{(\d+)\}=(\w+)$", r.stdout, re.M))
+    for i, (name, cmd, want) in enumerate(RULE_CASES):
+        check(f"the rule, on a command line: {name} -> {'counts' if want else 'does not count'}",
+              got.get(str(i)) == ("True" if want else "False"),
+              f"answered {got.get(str(i))!r} for {cmd!r}; {r.stdout}{r.stderr}")
+
+
+def t_both_scripts_share_one_running_rule():
+    """The rule lives in two files, because update-jarvis.ps1 CLOSES what it
+    finds and its own note says the two must agree about what "Jarvis is
+    running" means. Nothing else keeps them agreeing - so this does."""
+    other = REAL_PS1.parent / "update-jarvis.ps1"
+    if not (has_running_rule(REAL_PS1) and has_running_rule(other)):
+        check("both scripts have the rule to compare", False,
+              f"apply-patches.ps1: {has_running_rule(REAL_PS1)}, "
+              f"update-jarvis.ps1: {has_running_rule(other)}")
+        return
+    a = ps_function(REAL_PS1, "function Test-NamesThisBackendsHud {")
+    b = ps_function(other, "function Test-NamesThisBackendsHud {")
+    check("apply-patches.ps1 and update-jarvis.ps1 carry the same running-Jarvis "
+          "rule, character for character", a == b and len(a) > 500,
+          f"{len(a)} characters in apply-patches.ps1, {len(b)} in update-jarvis.ps1")
 
 
 def t_mini_inside_outer_repo():
@@ -587,9 +781,14 @@ TUTORIALS_HUNK = [
 def function_text(marker: str) -> str:
     """One function out of the real script, braces balanced - so the rule below
     is the script's own and cannot drift away from a copy of it."""
-    text = REAL_PS1.read_text(encoding="utf-8")
+    return ps_function(REAL_PS1, marker)
+
+
+def ps_function(path: Path, marker: str) -> str:
+    """One function out of a PowerShell file, braces balanced, LF only."""
+    text = path.read_text(encoding="utf-8")
     i = text.find(marker)
-    assert i >= 0, f"{marker} is not in apply-patches.ps1"
+    assert i >= 0, f"{marker} is not in {path}"
     depth = 0
     for k in range(i, len(text)):
         if text[k] == "{":
@@ -597,8 +796,73 @@ def function_text(marker: str) -> str:
         elif text[k] == "}":
             depth -= 1
             if depth == 0:
-                return text[i:k + 1]
+                return text[i:k + 1].replace("\r\n", "\n")
     raise AssertionError(marker)
+
+
+# ------------------------------------------------- what "Jarvis is running" means
+
+def has_running_rule(path: Path) -> bool:
+    """Whether a script carries the folder-anchored rule at all. False on the
+    script as it was before the fix, where the rule was the old, folder-blind
+    one inside Get-RunningBackend itself."""
+    return "function Test-NamesThisBackendsHud {" in path.read_text(encoding="utf-8")
+
+
+def running_backend_verdict(backend: Path) -> str:
+    """What the script's own running-Jarvis check answers for `backend`.
+
+    The functions are lifted out of the real script (as function_text does for
+    the patch rule above) and called on their own, so nothing is patched and the
+    owner's real backend is never at risk. The answer is the script's own words,
+    e.g. "process 1234: python.exe", or "" for nothing found.
+
+    On the script BEFORE the fix there is no separate rule function to lift, and
+    Get-RunningBackend carries the old rule itself - so this still answers, with
+    the old rule's answer, and the checks below fail on the behaviour rather
+    than on a missing name.
+    """
+    tmp = tmpdir()
+    harness = tmp / "running.ps1"
+    text = ["$ErrorActionPreference = 'Continue'", f"$BackendPath = '{backend}'"]
+    if has_running_rule(REAL_PS1):
+        text.append(ps_function(REAL_PS1, "function Test-NamesThisBackendsHud {"))
+    text.append(ps_function(REAL_PS1, "function Get-RunningBackend {"))
+    text.append("@(Get-RunningBackend) -join '; '")
+    harness.write_text("\n".join(text) + "\n", encoding="utf-8", newline="\n")
+    r = subprocess.run([PWSH, "-NoProfile", "-File", str(harness)],
+                       capture_output=True, text=True, timeout=300)
+    return (r.stdout + r.stderr).strip()
+
+
+def named_pids(said: str) -> list:
+    """The pids in a verdict, however it is worded."""
+    return re.findall(r"process (\d+):", said)
+
+
+def default_backend_path() -> Path:
+    """The folder apply-patches.ps1 patches when nothing is passed - read out of
+    the script, not written down here, so the two cannot drift apart."""
+    m = re.search(r'\[string\]\s*\$BackendPath\s*=\s*"([^"]+)"',
+                  REAL_PS1.read_text(encoding="utf-8"))
+    return Path(m.group(1)) if m else Path("")
+
+
+def live_jarvis_pids(backend: Path) -> list:
+    """PIDs of live Python processes whose command line names `backend`'s own
+    jarvis_hud.py, read straight from the OS here - NOT through the function
+    under test, so the two cannot agree by construction."""
+    r = subprocess.run([PWSH, "-NoProfile", "-Command",
+                        "Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^python' } | "
+                        "ForEach-Object { \"$($_.ProcessId)`t$($_.CommandLine)\" }"],
+                       capture_output=True, text=True, timeout=120)
+    want = (str(backend).rstrip("\\/") + os.sep + "jarvis_hud.py").lower()
+    found = []
+    for line in (r.stdout + r.stderr).splitlines():
+        pid, _, cmd = line.partition("\t")
+        if want in cmd.lower():
+            found.append(pid.strip())
+    return found
 
 
 def on_backend_verdict(lines: list, shift: int = 0, drift: bool = False) -> dict:
@@ -741,6 +1005,8 @@ def main():
     for fn in (t_real_script_crlf_missing_files, t_real_script_rehearsal_fails,
                t_mini_success_and_endings, t_mini_fixendings_success, t_mini_locked_file,
                t_mini_midway_failure_restore, t_mini_running_jarvis, t_mini_inside_outer_repo,
+               t_an_unrelated_python_is_not_jarvis, t_the_live_jarvis_is_named_and_a_copy_is_not,
+               t_the_running_rule_itself, t_both_scripts_share_one_running_rule,
                t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
