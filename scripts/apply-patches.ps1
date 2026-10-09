@@ -61,10 +61,13 @@
   are affected and the command to run.
 
 .PARAMETER Force
-  By default the script refuses to change anything while a Python program that
-  looks like Jarvis (its command line names the backend folder or jarvis_hud.py)
-  is running, because a running Jarvis has the files open and would go on
-  running the old code. Close Jarvis and run again; -Force skips that check.
+  By default the script refuses to change anything while the Jarvis that runs
+  THIS backend folder is still running - a Python program whose command line
+  names this folder's own jarvis_hud.py (see Test-NamesThisBackendsHud for the
+  exact rule, and for what it cannot see). It has to: a running Jarvis has the
+  files open and would go on running the old code. A Python program that is
+  not this folder's Jarvis - another backend folder's, or a test suite - is not
+  a reason to refuse. Close Jarvis and run again; -Force skips that check.
 
 .PARAMETER SkipPackages
   Do not run pip. The packages in backend/requirements.txt are then yours to
@@ -2095,12 +2098,85 @@ if ($crlfFiles.Count -gt 0) {
 }
 Say ""
 
+# Is this Python process the Jarvis that runs THIS backend folder?
+#
+# WHAT THIS REPLACED, AND WHY (2026-10-08). The rule used to be: a Python
+# process whose command line contains the backend folder, OR contains
+# "jarvis_hud.py". Neither half was anchored to the folder being patched:
+#
+#   * the second half matched the owner's own app in ITS folder while this
+#     script was rehearsing on a copy, so a run refused over a folder nothing
+#     was using. On the owner's PC that was 37 checks red in
+#     backend/test_apply_outcomes.py, and the process the refusal named
+#     (pid 34612) was the owner's live backend, which that run never touched.
+#     It had been read twice before as something else: once as "the owner's app
+#     is up" (true - but not the folder being patched) and once as a race.
+#   * the first half matched ANY file inside the folder, so
+#     `python.exe <backend folder>\test_x.py` - how run_suites.py starts every
+#     suite, and how a person runs one by hand - counted as Jarvis running too.
+#
+# A PORT PROBE WAS CONSIDERED AND REJECTED. jarvis_hud.py's port is a
+# machine-wide fact and the owner's app holds it while this script rehearses on
+# a copy, so probing it would refuse exactly the rehearsals the incident was
+# about - and it still could not say WHICH folder the answering program runs
+# from. The question here is per-folder, and only the command line carries the
+# folder. So: no port probe.
+#
+# WHAT THIS STILL CANNOT DO, PLAINLY. Windows will not let one process read
+# another's working directory, so a command line that names jarvis_hud.py with
+# no folder at all - `py -3 jarvis_hud.py`, the line setup-jarvis.ps1 gives the
+# owner - cannot be tied to a folder; it is read as a hit, the refusing side.
+# A process whose command line cannot be read at all (an elevated one) is
+# invisible to any of this, and Get-RunningBackend says how many of those there
+# were rather than pretending there were none.
+#
+# update-jarvis.ps1 carries the same rule, verbatim, and the two are checked
+# against each other - see backend/test_apply_outcomes.py.
+function Test-NamesThisBackendsHud {
+    param([string] $Cmd, [string] $Backend)
+
+    if (-not $Cmd) { return $false }
+    $bp = ([string]$Backend).TrimEnd('\', '/')
+    if (-not $bp) { return $false }
+
+    # 1. The shape the desktop app starts it with - the whole path:
+    #    python.exe "C:\...\Desktop program\jarvis_hud.py"
+    if ($Cmd.IndexOf($bp + '\jarvis_hud.py', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    if ($Cmd.IndexOf($bp + '/jarvis_hud.py', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+
+    # 2. A launch that names no folder: `py -3 jarvis_hud.py` from inside the
+    #    backend folder, or `python -m jarvis_hud`. See "cannot do" above.
+    if ($Cmd -match '(^|[\s"''=])jarvis_hud\.py([\s"'']|$)') { return $true }
+    if ($Cmd -match '-m\s+jarvis_hud([\s"''=]|$)') { return $true }
+
+    # 3. The same file spelled another way: an 8.3 short name, ./.., a forward
+    #    slash. Resolve each candidate's folder and compare it with the folder
+    #    being patched. Reached only when the command line already names
+    #    jarvis_hud.py somewhere, so the common path above stays cheap.
+    foreach ($m in [regex]::Matches($Cmd, '(?i)[^\s"'']*jarvis_hud\.py')) {
+        $t = $m.Value.Trim('"', "'")
+        $dir = Split-Path -Path $t -Parent
+        if (-not $dir) { continue }
+        $cand = $dir
+        # A relative one is read against the folder being patched, the only
+        # folder whose Jarvis this check is about.
+        if (-not [System.IO.Path]::IsPathRooted($dir)) { $cand = Join-Path $bp $dir }
+        try {
+            $full = (Get-Item -LiteralPath $cand -ErrorAction Stop).FullName.TrimEnd('\', '/')
+            if ($full -eq $bp) { return $true }
+        } catch { }
+    }
+    return $false
+}
+
 # A running Jarvis has its files open (Windows will not let a locked file be
 # replaced) and keeps running the OLD code from memory after they change. Best
-# effort: a Python program whose command line names the backend folder or
-# jarvis_hud.py. -Force skips it. Returns a list of short descriptions.
+# effort: a Python program whose command line names THIS backend's own
+# jarvis_hud.py - see Test-NamesThisBackendsHud above for what that means and
+# what it cannot see. -Force skips it. Returns a list of short descriptions.
 function Get-RunningBackend {
     $found = @()
+    $script:UnreadablePython = @()
     try {
         $bp = (Resolve-Path -LiteralPath $BackendPath).Path
         $rows = @()
@@ -2118,8 +2194,14 @@ function Get-RunningBackend {
         foreach ($r in $rows) {
             if ($r.Id -eq $PID) { continue }
             if ($r.Name -notmatch '^(py|pyw|python[0-9.]*|pythonw[0-9.]*)(\.exe)?$') { continue }
-            if (-not $r.Cmd) { continue }
-            if ($r.Cmd.IndexOf($bp, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or $r.Cmd -match 'jarvis_hud\.py') {
+            if (-not $r.Cmd) {
+                # A Python program that will not say what it is running (an
+                # elevated one). Named below, never silently counted as "not
+                # Jarvis".
+                $script:UnreadablePython += "$($r.Id)"
+                continue
+            }
+            if (Test-NamesThisBackendsHud -Cmd $r.Cmd -Backend $bp) {
                 $found += "process $($r.Id): $($r.Name)"
             }
         }
@@ -2130,6 +2212,9 @@ function Get-RunningBackend {
 function Assert-JarvisClosed {
     if ($Force) { return }
     $running = @(Get-RunningBackend)
+    if ($script:UnreadablePython.Count -gt 0) {
+        Warn "$($script:UnreadablePython.Count) Python program(s) would not say what they are running (pid $($script:UnreadablePython -join ', ')). If one of them is Jarvis, this check cannot see it - close Jarvis by hand first."
+    }
     if ($running.Count -eq 0) { return }
     Say ""
     Bad "Jarvis (or something else using this backend folder) looks like it is still running:"
