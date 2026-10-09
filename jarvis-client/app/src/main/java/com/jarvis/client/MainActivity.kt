@@ -115,6 +115,7 @@ import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.PlateEdges
 import com.jarvis.client.ui.theme.Themes
 import com.jarvis.client.ui.theme.systemPrefersDark
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -3077,37 +3078,42 @@ class MainActivity : FragmentActivity() {
                                     scope.launch { approveItem(item) }
                                 },
                                 onDeny = { item -> JarvisRuntime.decideDetached(item, approve = false) },
+                                // Approve and Deny hand in the card's own
+                                // `onReset` so a decision that never left the
+                                // phone un-sticks it (Android audit
+                                // 2026-10-08: Deny took the callback and never
+                                // called it, and the approve path's plain
+                                // branch answered `true` the moment the POST
+                                // was dispatched - so a refused approve froze
+                                // Approve, Deny and the swipe just as a
+                                // refused deny did). Both go through the one
+                                // shared function below, and for the same
+                                // reason: [ApprovalCard] greys both buttons
+                                // and the swipe out the instant a decision is
+                                // sent, and only this closure clears that
+                                // again.
+                                //
+                                // The wait for the answer runs on the
+                                // runtime's own scope - a screen going away
+                                // mid-decision must not cancel a POST already
+                                // on its way, which is exactly why
+                                // decideDetached exists, and it is also what
+                                // keeps a half-sent approval from being
+                                // dropped by a rotation - and the card's
+                                // reset comes back to this screen's scope,
+                                // because that closure writes Compose state.
+                                //
+                                // The `onApprove`/`onDeny` fallbacks above are
+                                // the cards that hand in no onReset at all;
+                                // Home always hands one in, so both of its
+                                // paths come through here. They are left as
+                                // they were: there is no flag for them to
+                                // un-stick.
                                 onApproveWithReset = { item, onReset ->
-                                    scope.launch {
-                                        val sent = approveItem(item)
-                                        if (!sent) onReset()
-                                    }
+                                    decideAndReset(item, approve = true, onReset = onReset, scope = scope)
                                 },
                                 onDenyWithReset = { item, onReset ->
-                                    // Same shape as the approve path above,
-                                    // and for the same reason: the card hands
-                                    // in `onReset` so a decision that never
-                                    // left the phone un-sticks it. This one
-                                    // took the callback and never called it
-                                    // (Android audit 2026-10-08), so a deny
-                                    // refused for a stale link, an expired
-                                    // card or one already on its way left the
-                                    // card's own `decided` flag set: Approve,
-                                    // Deny and the swipe stayed dead until the
-                                    // owner left Home and came back.
-                                    //
-                                    // The wait for the answer runs on the
-                                    // runtime's own scope - a screen going
-                                    // away mid-deny must not cancel a POST
-                                    // already on its way, which is exactly why
-                                    // decideDetached exists - and the card's
-                                    // reset comes back to this screen's scope,
-                                    // because that closure writes Compose
-                                    // state.
-                                    JarvisRuntime.launchDetached {
-                                        val sent = denyItem(item)
-                                        if (!sent) scope.launch { onReset() }
-                                    }
+                                    decideAndReset(item, approve = false, onReset = onReset, scope = scope)
                                 },
                                 onReconnect = {
                                     // `force = true`, and only because a person
@@ -3336,13 +3342,23 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Approve [item]. Which way it goes is [SignedApproval.pathFor]: a risky
+     * Approve [item], answering whether the decision actually went out - see
+     * [decideAndReset], which is what reads this.
+     *
+     * Which way it goes is [SignedApproval.pathFor]: a risky
      * card on a paired phone with signed approvals on is signed with the
      * fingerprint or PIN (docs/PAIRING-DESIGN.md §11); a paired phone
      * without them is offered the one button that turns them on; everything
      * else - a card that is not risky, the old shared key, a PC that does
      * not know signed approvals, or a PC that could not be read - takes
      * today's way, and the PC says `no_approval_key` if it needed one.
+     *
+     * The PLAIN branch's POST is awaited, because its answer is what the
+     * card needs; the SIGNED branch dispatches its POST on the runtime's own
+     * scope (a signature is made once and is already sent by the time it
+     * returns) and answers "sent" there. Nothing here approves anything by
+     * itself: the gates in [confirmed] and [signedApprove] come first, and a
+     * decision is only ever sent after the owner's own answer.
      */
     private suspend fun approveItem(item: PendingItem): Boolean {
         val risky = SecurityRules.riskyByToday(item)
@@ -3351,8 +3367,11 @@ class MainActivity : FragmentActivity() {
         return when (val path = SignedApproval.pathFor(risky, read?.state)) {
             SignedApproval.Path.PLAIN -> {
                 if (confirmed(item)) {
-                    JarvisRuntime.decideDetached(item, approve = true)
-                    true
+                    // Awaited, not dispatched and answered `true`: a POST the
+                    // PC did not take has to come back as "not sent" or the
+                    // card keeps the `decided` flag the tap set - the same
+                    // freeze the Deny path had (Android audit 2026-10-08).
+                    JarvisRuntime.decide(item, approve = true) is ApiResult.Ok
                 } else {
                     false
                 }
@@ -3430,17 +3449,83 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Both card decisions, the one shape (Android audit 2026-10-08).
+     *
+     * [ApprovalCard] sets its own `decided` flag the instant either button or
+     * the swipe is used, greys both buttons out, and only the `onReset` it
+     * hands in clears that again. So the answer to "did this decision actually
+     * leave the phone?" is the whole point of this function, and a branch that
+     * cannot answer it leaves the card undecidable for the rest of its life -
+     * until the owner leaves Home and comes back.
+     *
+     * [approveItem] and [denyItem] are awaited, never dispatched and forgotten:
+     * their answers are the real outcome. Where a POST is sent, `decideDetached`
+     * is not the right tool here for the same reason it was introduced - a
+     * screen going away while the answer is outstanding. Launching the whole
+     * decision on the runtime's scope means a rotation during the round trip
+     * cannot cancel a POST already on its way, and the answer is always
+     * collected; only the card's reset comes back to this screen's scope,
+     * because that closure writes Compose state.
+     *
+     * Reset means "not sent", never "sent and refused" - rule 4. A [false]
+     * answer here is a stale link, an expired card, one already on its way, a
+     * cancelled fingerprint, a PC still waiting for a signature, or a POST the
+     * PC refused. None of those was a decision, so the card comes back and the
+     * owner may answer again; nothing is approved, retried or reported as
+     * approved by clearing that flag. The refusal's own sentence is shown by
+     * the call that refused ([JarvisRuntime.decide] and the security gates in
+     * [confirmed]).
+     *
+     * A throw from either helper is "not sent" too. Nothing was approved on
+     * that path and the card's own flag is the only thing left set, so
+     * unlocking it is the safe direction - a decision that failed must never
+     * look like one that was taken, and it must not leave the card dead
+     * either.
+     *
+     * [scope] - the screen's own scope, the one `App()` makes with
+     * `rememberCoroutineScope()` - has to be handed in (2026-10-08). Deny's
+     * original body sat inside that composable, where `scope` was simply a
+     * local; moving both bodies here into a plain member function left the
+     * reset's `scope.launch` with nothing named `scope` to resolve to, and
+     * that - not the fix's shape - is what CI refused to compile. It is a
+     * parameter rather than a second scope of this function's own because the
+     * reset writes Compose state that belongs to that screen: a fresh scope
+     * would outlive the composition it is resetting. Deliberately the last
+     * parameter, so both call sites still read
+     * `decideAndReset(item, approve = ..., onReset = onReset, scope = scope)`.
+     */
+    private fun decideAndReset(
+        item: PendingItem,
+        approve: Boolean,
+        onReset: () -> Unit,
+        scope: CoroutineScope,
+    ) {
+        JarvisRuntime.launchDetached {
+            val sent = try {
+                if (approve) approveItem(item) else denyItem(item)
+            } catch (e: Exception) {
+                // Covers the runtime's scope being cancelled (the process
+                // itself) as well as a bug: either way, say "not sent" and let
+                // the card unlock instead of leaving the flag latched.
+                false
+            }
+            if (!sent) scope.launch { onReset() }
+        }
+    }
+
+    /**
      * Deny [item], answering whether the decision actually went out.
      *
      * [JarvisRuntime.decide] is awaited rather than [JarvisRuntime.decideDetached]
      * handed the job, because its answer is the whole point: [ApprovalCard]
      * greys both buttons and the swipe out the moment a decision is sent, and
-     * only the `onReset` it passes in clears that again. [approveItem]'s own
-     * refusals (a cancelled fingerprint, a signed approval the PC is still
-     * waiting for) return false for the same reason; a deny had no equivalent,
-     * so anything `decide` refused before sending - a stale link, an expired
-     * card, one already on its way, the PC unreachable - left the card
-     * undecidable for the rest of its life (Android audit 2026-10-08).
+     * only the `onReset` it passes in clears that again - see [decideAndReset],
+     * which both decisions now go through. [approveItem]'s own refusals (a
+     * cancelled fingerprint, a signed approval the PC is still waiting for)
+     * return false for the same reason; a deny had no equivalent, so anything
+     * `decide` refused before sending - a stale link, an expired card, one
+     * already on its way, the PC unreachable - left the card undecidable for
+     * the rest of its life (Android audit 2026-10-08).
      *
      * A deny carries no signature and no option to choose, so nothing is
      * prepared first here, unlike [approveItem].
