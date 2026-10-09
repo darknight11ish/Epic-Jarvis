@@ -162,6 +162,21 @@ raise_api_limit           = "ask"
 # Hello, which the owner-check attaches to the ACTION and not to the
 # direction, lands on the raise alone.
 lower_api_limit           = "auto"
+# RAISING a spending limit (jarvis_limits.py's own RAISE_ACTION). The name says
+# only "this is a raise" - the card's own words carry which limit and how far.
+# It shipped with no line here, so it took unknown_action_tier ("ask") by
+# accident: the right tier, for a reason nobody chose, and one edit to
+# unknown_action_tier would have moved it with nothing recording that it did.
+# The same accident was fixed for four other names on 2026-10-06, and the
+# sibling raise_api_limit above has always had its own line.
+raise_a_limit             = "ask"
+# RAISING the interruption budget (jarvis_arbiter.py's own RAISE_ACTION). This
+# name reached "ask" only by falling through, because jarvis_arbiter.py's
+# comment said it was deliberately absent from the tier table. The tier was
+# right and the reason was not: a raise that LOOSENS had its tier decided by a
+# shared fallback rather than by a line the owner can read and change. The tier
+# is unchanged - it is now written down.
+raise_attention_budget    = "ask"
 # GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
 # owner's choice of 2026-09-28): one read-only GET to api.github.com per look
 # - a workflow run list or one pull request - for a watch the owner already
