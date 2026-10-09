@@ -23,10 +23,9 @@
          if path == "/api/task":
              # task-control.patch - what is running and what is paused: ids,
              # tool names and step counts, never the text of a note.
-@@ -3478,7 +3478,32 @@
-                 except Exception:
-                     pass
-             return self._send(code, out)
+@@ -3544,6 +3544,31 @@ class Handler(BaseHTTPRequestHandler):
+                                         "error": f"{type(exc).__name__}: {exc}"})
+             return self._send(200, {"id": got.id, "state": got.status})
  
 +        if route in ("/api/prompt/coach", "/api/prompt/coach/setting"):
 +            # prompt-coach.patch - "Coach this", and the switch that turns it
