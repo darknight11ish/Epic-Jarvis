@@ -247,12 +247,15 @@ a difference and chosen per file.
 | **(b) Backed up and overwritten** | The update is **complete and simple** — one command, no reading. The cost is that his hand-edit is **gone from the live file**. It survives only in a `_jarvis-backup-<date>` folder, and he has to notice and re-apply it. If he does not notice, behaviour he added silently stops working. |
 | **(c) Shown as a difference, chosen per file** | Nothing is lost and nothing is silent, and he decides with the text in front of him. The cost is **work at every update**: he reads a diff and answers per file, and a long-running update path that asks him questions is one he may stop running. |
 
-**This is the owner's decision, not mine.** It is question 1 in §6.
+**This is the owner's decision, not mine.** It is question 1 in §6, and **he
+answered it on 2026-10-08: (b), back it up and overwrite.**
 
-One thing can be said about the choice without deciding it: **(c) is the only
-one of the three that cannot lose his edit and cannot silently omit a feature**,
-and it is the only one whose cost falls on us rather than on him. That is a
-reason to recommend it, not a reason to take it for him.
+One thing can be said about the choice: **(c) is the only one of the three that
+cannot lose his edit and cannot silently omit a feature**, and it is the only
+one whose cost falls on us rather than on him. That was a reason to recommend
+it, not a reason to take it for him - and he chose (b) with the cost above in
+front of him. The recommendation below stands as written; §5's build order is
+unchanged by his answer, because the answer is what step 4 acts on.
 
 ---
 
@@ -495,12 +498,15 @@ so.**
    against his folder. *This is the step that tests §4.4 properly, and it may
    well be the step that makes retirement right.*
 
-4. **Then, and only then, act on §3.** Whatever the owner chooses, it is now a
-   small change in one place: when the manifest says a file is drift, either
-   skip and report (a), back up and overwrite (b), or stop and show the
-   difference (c). **Verify:** a copy of his folder, with the hand-edit of §3
-   deliberately present, must produce the chosen behaviour — and for (a) and
-   (c), the hand-edit must still be in the file afterwards.
+4. **Then, and only then, act on §3.** **The owner answered §3 on 2026-10-08:
+(b), back up and overwrite** (§6, question 1, for the backup's name and place
+and what he is told). So this step is now a fixed behaviour rather than a
+choice: when the manifest says a file is drift, copy his version into
+`_jarvis-backup-<date>`, put the patched version in its place, and say so by
+name. **Verify:** a copy of his folder, with the hand-edit of §3 deliberately
+present, must produce that behaviour - the backup byte-identical to the file as
+it was, the patched version in place afterwards, and the file he was told about
+named in the run's own output.
 
 5. **Fix the one real defect found on the way.** Where the script decides a
    patch is "already on" it reaches that verdict by *failing to put it on*
@@ -515,15 +521,38 @@ so.**
 
 ## 6. The owner's questions
 
-1. **When a file on your PC has been edited by hand and the patches cannot
-   reproduce it, what should happen to it?**
-   - **Show it to me and let me choose per file** (my recommendation — nothing
-     is lost, nothing is silent, but you read a diff at each update)
-   - **Back it up and overwrite it** (simplest, and the update is complete — but
-     your edit is gone from the live file and you must notice the backup)
-   - **Leave it alone and skip that patch, with a plain report** (your edit
-     always survives — but the feature in that patch is not installed until you
-     merge it yourself)
+### Answered
+
+**1. When a file on your PC has been edited by hand and the patches cannot
+reproduce it, what should happen to it? — ANSWERED 2026-10-08: back it up and
+overwrite.** The owner's own words: **"Back it up and overwrite"**. He did not
+choose "show me the difference per file" and did not choose "leave it and
+report the skip", so the updater does not do either of those for this case.
+
+What that commits the updater to, concretely:
+
+- **The backup.** Before a file that the patches cannot reproduce is replaced,
+  the owner's own copy is **copied**, byte for byte, into a folder named
+  `_jarvis-backup-<date>` inside the backend folder - the same name and the
+  same place the script already uses for the files it is about to touch
+  (`apply-patches.ps1`, step 2), so there is one kind of backup on his machine,
+  not two. Nothing is deleted from it and old backup folders are not cleaned up
+  by the tool.
+- **The overwrite.** The patched version then replaces the file, so the run's
+  result carries every patch in the list. The update is **complete and
+  simple** - one command, no diff to read.
+- **How he is told.** He must not have to notice a folder. So the update
+  **says so in its own output, by name**: which file was hand-edited, that its
+  copy is in `_jarvis-backup-<date>`, and that the behaviour his edit added is
+  **no longer in the live file until he puts it back**. A run that overwrote
+  something of his does not end as a plain success and does not stay silent
+  about it. (The exact wording and where it is printed belong to build step 4,
+  with the manifest that detects the drift.)
+- **What it costs him, written down here because it is real:** his hand-edit is
+  gone from the live file, and if he does not put it back, behaviour he added
+  silently stops working. That is the cost he accepted on 2026-10-08.
+
+### Still open
 
 2. **For the first run, which has no record of what is on your PC yet, may the
    tool take a fresh snapshot of your current files as the new starting point?**
@@ -604,3 +633,82 @@ so.**
   hand-edit or a feature is quietly missing. Any of the three is better than
   that, which is why the choice is worth making explicitly rather than
   defaulting.
+
+---
+
+## 9. Build step 1, built (2026-10-08)
+
+**Step 1 of §5 is done: the classification a run reaches is now emitted in a
+machine-readable form.** The switch is `-StateJson <path>`; with it, a run
+writes a JSON file with one entry per patch in the list:
+
+| verdict | what it means |
+|---|---|
+| `taken-off` | the run found this patch's work on the files and took it off, to put the current text back on |
+| `taken-off-older-text` | the same, but the text that came off was an **older committed version** of the patch (`backend/patch-history`), named in the entry |
+| `on-but-unstrippable` | the work is measured as present, and no text of the patch can take it off the files this run found |
+| `not-recognised` | neither: no text of it came off, and the content check did not find its work |
+
+The file also carries a **totals** object, so a count can be checked without
+recounting the list. Without `-StateJson` nothing is written and nothing about
+the run changes - the switch is opt-in, and the default path is byte-identical
+to before. The JSON is written **even when the result gate refuses**, which is
+the case on the owner's machine: a refusal is exactly when a record of the
+classification is worth most.
+
+Measured on a copy of the owner's folder with this switch on, the counts are
+**taken-off 122, taken-off-older-text 2, on-but-unstrippable 2,
+not-recognised 0** - 126 in total, and they agree patch for patch with the
+script's own prose (`122 of these are already on your backend` / `2 of those are
+an OLDER version` / the two `already on … left as it is` lines). Without
+`-StateJson` nothing is written and nothing about the run changes - the switch is
+opt-in, and the default path is byte-identical to before. The JSON is written
+**even when the result gate refuses**, which is the case on the owner's machine:
+a refusal is exactly when a record of the classification is worth most.
+
+Two things this step measured, on copies, that change what step 5 is:
+
+- **The four doubled patches are worse than §2 describes, and the strip does not
+  name them.** `Test-PatchOnBackend` is what §2 says decides "already on, leave
+  it alone"; instrumenting its calls on today's state (a throwaway copy of the
+  script, on a copy of the backend) gives **`False` for all four** - `tasks`,
+  `accounts`, `chatbot-limits`, `chatbot-limits-hud` - and `True` only for
+  `screen-attach`. So `$alreadyOn` does not hold those four, and the re-apply
+  loop **does** apply them: instrumenting the loop prints `apply … True` for
+  `tasks`, `accounts` and `chatbot-limits`, i.e. the work goes on a second time.
+  They are recorded here as `not-recognised` **only when the re-apply fails**;
+  measured, all four re-apply `ok`, so on today's state they are counted
+  `taken-off` and the doubling is invisible in this file. **The classification
+  alone does not fix them, and the skip in the re-apply loop is not what would**;
+  step 5 must obtain a "left alone" verdict *before* anything is applied, exactly
+  as it says.
+- **`tutorials.patch` and `screen-attach.patch` are the pair the gate refuses
+  over, and they come off the strip but will not go back on.** Measured: both
+  are taken off the copy by the strip (they are inside the `122`), and in the
+  re-apply both fail forward and reach "already on … left as it is" - the
+  patches applied before them have rewritten the context they land in. The
+  strip therefore says "taken off" while the state the run would leave does not
+  carry them, which is exactly the half-applied backend the gate refuses. They
+  are recorded `on-but-unstrippable`, and the result gate still refuses
+  (`exit=1`, `screen-attach.patch cannot be taken off the state this run would
+  leave`) - **the gate's behaviour is unchanged.**
+
+One rule the recording had to settle, because a patch can reach both sources:
+the strip and the re-apply disagree, and "last one wins" is wrong in both
+directions. `taken-off-older-text` is never replaced by a plain `taken-off`
+(cloud-one-turn and ollama-direct were, in the first version of this, which
+threw away the only record that what was on the files was an older text), and
+`on-but-unstrippable` beats `taken-off` (tutorials and screen-attach came off
+cleanly and then would not go back on). Both are in `Set-PatchClass`'s comment,
+with the measurements.
+
+What step 1 does **not** do, plainly: it does not back anything up, it does not
+overwrite anything, and it does not detect a hand-edit. §3's test - the backup
+byte-identical to the file as it was, the patched version in place afterwards,
+the owner told by name - needs step 2's manifest (a hand-edit is *drift*: a hash
+that matches no patch's output) and is built in step 4. Nothing about the result
+gate changed, which is deliberate: §8 says do not relax it before step 5, and it
+is still the only thing standing between the owner and a backend carrying a
+doubly-applied patch.
+
+

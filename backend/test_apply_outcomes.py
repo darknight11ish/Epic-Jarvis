@@ -13,6 +13,11 @@ Found by a read-only audit of the update path (2026-09-30):
   4. A half-patched backend after a mid-way failure with no way back, no check
      for a running Jarvis, and a backend folder inside another git repository
      behaving differently from its rehearsal.
+  5. (-StateJson, 2026-10-08) the rehearsal's per-patch verdict was prose only,
+     so nothing could check it and nothing could build on it. It is now written
+     as JSON on request - including on a refusal, which is the run that needs it
+     most. docs/UPDATER-REDESIGN.md section 5, build step 1; the checks for it
+     are t_mini_state_json_classifies_every_patch's.
 
 Each check here FAILS on the script as it was before that fix (the fixes are
 in the same change; the checks were written against the old script first).
@@ -33,6 +38,7 @@ Skipped where there is no PowerShell 7 (pwsh). Standard library + git + pwsh.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -559,6 +565,115 @@ def t_mini_revert_ends_plainly():
     check("-Revert: the files are what they were before", {n: md5(be / n) for n in MINI_TARGETS} == pre)
 
 
+# ---------------------------------- what the run decided about each patch
+
+#: A patch whose one added line cannot be on the backend: `jarvis_hud.py` has no
+#: such import (and nothing like it), so the forward check fails, the content
+#: check finds none of its added lines, and the strip has nothing to take off.
+#: That is the "not recognised" verdict below, which must stay on the other side
+#: of the line from "on but unstrippable".
+BLOCKED_PATCH = """--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2,3 +2,4 @@
+ two
+ three
++from nowhere import nothing_at_all
+ four
+"""
+
+
+def t_mini_state_json_classifies_every_patch():
+    """docs/UPDATER-REDESIGN.md section 5, build step 1: -StateJson.
+
+    The rehearsal's verdict per patch was prose only. This proves the switch
+    writes it as JSON, that every patch in the list gets exactly one entry, that
+    the totals add up to the list, that the two verdicts which must not be
+    confused are not, that 'not-recognised' is what an impossible patch gets,
+    and - the point of the whole step - that the file is written even when the
+    result gate REFUSES, without the refusal changing by one byte.
+
+    FAILS WITHOUT THE CHANGE: the switch does not exist, so PowerShell refuses
+    the argument and the file is never written (first check fails).
+
+    The backend here is two real one-hunk patches (approval-expiry on
+    jarvis_gate.py, brain-reads on jarvis_hud.py) built from their own
+    pre-images, so both really go on; plus that impossible third patch, so the
+    run refuses and the refusal path is what is measured.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a",
+                     patches=["approval-expiry.patch", "brain-reads.patch", "blocked.patch"],
+                     patch_files={"blocked.patch": BLOCKED_PATCH})
+    be = tmp / "a-be"
+    build_backend(be)
+    before = {n: md5(be / n) for n in MINI_TARGETS}
+
+    state = tmp / "state-one.json"
+    code, out = run(root / "scripts" / "apply-patches.ps1", be,
+                    "-SkipTests", "-SkipPackages", "-StateJson", str(state))
+
+    check("no -StateJson: the switch is accepted and the file is written",
+          state.exists(), out[-700:])
+    if not state.exists():
+        return
+    doc = json.loads(state.read_text(encoding="utf-8"))
+    entries = doc.get("patches") or []
+    names = [e.get("Patch") for e in entries]
+    verdicts = {e["Patch"]: e["Verdict"] for e in entries}
+    totals = doc.get("totals") or {}
+
+    check("every patch in the list has exactly one entry, in list order",
+          names == ["approval-expiry.patch", "brain-reads.patch", "blocked.patch"],
+          names)
+    check("the verdicts are the four the design note names",
+          set(verdicts.values()) <= {"taken-off", "taken-off-older-text",
+                                     "on-but-unstrippable", "not-recognised"},
+          verdicts)
+    check("a patch this run took off is 'taken-off'",
+          verdicts.get("approval-expiry.patch") == "taken-off", verdicts)
+    check("a patch this run cannot find on the backend is 'not-recognised'",
+          verdicts.get("blocked.patch") == "not-recognised", verdicts)
+    check("nothing is claimed 'on but unstrippable' that is not there",
+          verdicts.get("brain-reads.patch") in ("taken-off", "on-but-unstrippable"), verdicts)
+    check("the totals are the entries, counted",
+          sum(totals.get(v, 0) for v in ("taken-off", "taken-off-older-text",
+                                         "on-but-unstrippable", "not-recognised")) == len(entries)
+          and totals.get(verdicts["blocked.patch"], 0) >= 1, totals)
+    check("the file says which backend it is about",
+          str(be) in str(doc.get("backend", "")), doc.get("backend"))
+
+    check("the run that refuses still refuses (exit 1, NOTHING HAS BEEN CHANGED)",
+          code == 1 and "NOTHING HAS BEEN CHANGED" in out and "blocked.patch" in out
+          and "will not apply" in out, out[-500:])
+    check("... and the classification file is there anyway, which is the point",
+          "State   : wrote what this run decided" in out, out[-1500:])
+    check("... and not one file of the backend was touched",
+          {n: md5(be / n) for n in MINI_TARGETS} == before)
+
+    # A second run must not quietly change the record, or say something
+    # different about the same backend: same state in, same JSON out.
+    state2 = tmp / "state-two.json"
+    code2, out2 = run(root / "scripts" / "apply-patches.ps1", be,
+                      "-SkipTests", "-SkipPackages", "-StateJson", str(state2))
+    check("a second run makes no new decision: the same state writes the same JSON",
+          state2.exists() and state2.read_bytes() == state.read_bytes(),
+          state2.read_text(encoding="utf-8") if state2.exists() else "(no file)")
+    check("a second run refuses in the same words and touches nothing either",
+          code2 == 1 and "NOTHING HAS BEEN CHANGED" in out2
+          and {n: md5(be / n) for n in MINI_TARGETS} == before, out2[-400:])
+
+    # Off is off: without the switch, nothing of this step happens at all. (What
+    # the run does then is every OTHER check in this file's business; the run may
+    # legitimately stop at the "Jarvis is still running" guard when a live
+    # backend is up, and that is not this step's answer either way.)
+    root3 = mini_repo(tmp / "b", patches=["approval-expiry.patch", "brain-reads.patch"])
+    be3 = tmp / "b-be"
+    build_backend(be3)
+    code3, out3 = run(root3 / "scripts" / "apply-patches.ps1", be3, "-SkipTests", "-SkipPackages")
+    check("WITHOUT -StateJson: no state file is written, and nothing new is printed",
+          not (be3 / "_jarvis-state.json").exists() and "State   :" not in out3, out3[-500:])
+
+
 # ------------------------------------- a patch that is already on the backend
 
 #: tutorials.patch's own block, and the two context lines right above it. The
@@ -744,7 +859,8 @@ def main():
                t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
-               t_mini_revert_ends_plainly, t_already_on_is_proved_by_the_patchs_own_bytes,
+               t_mini_revert_ends_plainly, t_mini_state_json_classifies_every_patch,
+               t_already_on_is_proved_by_the_patchs_own_bytes,
                t_a_shifted_stack_is_still_recognised_as_on):
         try:
             fn()
