@@ -159,7 +159,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,
@@ -1291,7 +1291,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,
@@ -2420,7 +2420,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,
@@ -3542,7 +3542,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,
@@ -4664,7 +4664,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,
@@ -5798,7 +5798,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,
@@ -6927,7 +6927,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
+       "note": "It only adds a page, and deleting it undoes it. It is a note write like the Obsidian daily note, the Logseq journal and a new Joplin note, so a chat that has read outside text waits for a card before it writes. Turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
        "switch": {
         "asks": false,

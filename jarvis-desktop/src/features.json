@@ -484,7 +484,7 @@
     "title": "Chat tags",
     "what": "Tag your chats yourself, and let Jarvis suggest tags overnight.",
     "where": "Brain, History, Chat tags.",
-    "asks": "No card. The overnight-suggestion switch is one tap.",
+    "asks": "Tagging a chat yourself needs no card. Turning the overnight suggestions on raises one card, and every tag it suggests is one more - a suggestion is filed only if you tap it.",
     "limit": "Tags hide with the private lists.",
     "surface": "both",
     "covers": [
@@ -569,7 +569,7 @@
     "group": "Screen and pictures",
     "title": "Show Jarvis the camera in Live",
     "what": "During a Live session you can show Jarvis what the phone's camera sees.",
-    "where": "Jarvis Live, then the camera button.",
+    "where": "Nothing to press yet - inside Jarvis Live the phone says showing it from the phone comes in a later update.",
     "asks": "No extra card - the Live session is already running.",
     "limit": "Off until the 12 GB card is in and the photo test passes. There is no words-only camera on one card.",
     "surface": "phone",
@@ -730,6 +730,17 @@
     "covers": [
       "brain.work.support"
     ]
+  },
+  {
+    "id": "captcha-handoff",
+    "group": "Notes and files",
+    "title": "Solve it here: a captcha on your phone",
+    "what": "When a chatbot or support chat stops at a captcha or a sign-in, your phone can show you that one browser window so you solve it yourself.",
+    "where": "The phone gets an alert that the site needs you; tap \"Solve it here\" to see the page and tap or type on it. The PC shows the same alert and points at the window, and you can solve it there instead.",
+    "asks": "No card to look or to end it. Jarvis never solves it for you, and when you are done, Resume still asks with its card, as always.",
+    "limit": "It is a picture of that one window only, so a site that opens a new window for its sign-in has to be finished on the PC. Some captchas refuse taps passed on this way, and then the PC is the way. It ends by itself after 15 minutes, or after 45 seconds with nobody looking. A password you type is sent to the PC and never written down.",
+    "surface": "phone",
+    "covers": []
   },
   {
     "id": "projects",
@@ -935,6 +946,20 @@
     "covers": []
   },
   {
+    "id": "news-and-page-watches",
+    "group": "Home",
+    "title": "News headlines, and pages that change",
+    "what": "Headlines from news feeds you name, and a note when a web page you are watching changes its text.",
+    "where": "Say \"add this feed:\" and the address, or \"tell me when this page changes\" and the address. The news shows in your morning briefing; a watched page shows in Brain, Work, Coming up, and tells you on the PC and the phone.",
+    "asks": "One card when you add a feed, and one when you set up a watch, each showing the whole address and saying what will be read. Removing a feed, or ending a watch, is instant with no card.",
+    "limit": "Up to ten feeds, and up to five headlines from each. A watch keeps only a short fingerprint, so it knows that something changed but never keeps or shows you the page's words, and it runs for up to 90 days. Neither can reach this PC or your own network addresses, both are outside text and are never saved as facts about you, and neither ever follows a link or acts on what it reads.",
+    "surface": "both",
+    "covers": [
+      "brain.work.briefing",
+      "brain.work.coming-up"
+    ]
+  },
+  {
     "id": "connection",
     "group": "Phone",
     "title": "Pairing and the connection",
@@ -954,7 +979,7 @@
     "title": "Devices",
     "what": "Every paired device, each with its own key.",
     "where": "Settings, Devices.",
-    "asks": "Removing a lost phone is instant; retiring the old shared key raises a card.",
+    "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card.",
     "limit": "This one can never be hidden, so a lost phone can always be removed.",
     "surface": "both",
     "covers": [
@@ -1253,7 +1278,7 @@
     "title": "Check for tool updates",
     "what": "Reports the packages and tools on this PC that are out of date.",
     "where": "Settings, Check for tool updates.",
-    "asks": "No card - it only reports.",
+    "asks": "Asks the first time only, then never again. Turning it off is instant.",
     "limit": "Updating a tool is a change, and raises its own card first.",
     "surface": "desktop",
     "covers": [
