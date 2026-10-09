@@ -287,14 +287,9 @@ each kind has their own intricacies and make sure this can stay up to date."*
   across (which is what that suite's own message asks for) turns its 12 passed,
   1 failed into **13 passed, 0 failed**.
 
-**One red herring, recorded so nobody chases it.** `py -3
-tools/check_claims.py` failed once with `C36 reading phone notifications is in
-this tree too … jarvis-client/.gradle/9.6.0/checksums/checksums.lock could not be
-read ([Errno 13] Permission denied)`. That is **not** a code failure: the claim's
-check is a `grep` over `jarvis-client`, and a Gradle build running at the same
-time held a lock inside the build's own ignored `.gradle/` cache. Re-run with no
-build running: *"125 claim(s) checked against the code: 93 built, 25 still open,
-7 unverifiable … Every `built` claim still holds"*, exit 0.
+**One red herring, recorded so nobody chases it.** The only odd-looking output
+this branch produced was `check_claims.py` reading a Gradle lock file while a
+Kotlin build held it. Section 5.5 explains it, with the clean re-run.
 
 ### 5.5 Verification actually run (real output)
 
@@ -308,10 +303,36 @@ py -3 tools/check_claims.py            -> "125 claim(s) checked against the code
                                            7 unverifiable ... Every `built` claim still holds"              exit 0
 py -3 backend/test_prompt_coach.py     -> "all checks passed"                               exit 0
 py -3 backend/test_base_matches_repo.py-> "13 passed, 0 failed"                             exit 0
+py -3 backend/test_shipped_modules.py  -> "594 passed, 0 failed"                            exit 0
+py -3 backend/test_settings_registry.py-> "114 passed, 0 failed"                            exit 0
+py -3 backend/test_referee.py          -> "105 passed, 0 skipped, 0 failed"                 exit 0
+py -3 backend/test_devices.py          -> "275 passed, 0 skipped, 0 failed"                 exit 0
+py -3 backend/test_gate_risk_rows.py   -> "11 passed, 0 failed"                             exit 0
 node tests/prompt-coach.mjs            -> 10 checks, all ok                                 exit 0
 cd src-tauri && cargo test prompt_coach -> 7 passed, 0 failed                               exit 0
 cd jarvis-client && gradlew testDebugUnitTest -> BUILD SUCCESSFUL, 1981 tests, 0 failures, 0 skipped
 ```
+
+**The whole sweep was attempted and abandoned on time, not on a failure.**
+`py -3 backend/run_suites.py` runs every suite that can run without the owner's
+PC and took far longer than the work allowed; it was stopped, and instead every
+suite this change can reach was run on its own - the fourteen above. Nothing
+that failed is unlisted, and the two known non-failures are named below.
+
+**Two commands that fail for reasons unrelated to this change, both checked.**
+
+1. `py -3 backend/test_settings_registry.py` **exits 1 with `JARVIS_BACKEND`
+   set**, printing *"Not run: this suite would have tested this repository's
+   copy instead of the one your backend uses."* That is `_where.py`'s
+   `require_shipped` (`:564-597`) doing its job: this session's environment
+   points `JARVIS_BACKEND` at the owner's real backend folder, whose
+   `jarvis_prompt_coach.py` is an older copy. **With it cleared the suite is
+   114 passed, 0 failed.** It is the trap the brief warned about, and it is not
+   a code failure.
+2. `py -3 tools/check_claims.py` failed once with a Gradle lock file
+   (`jarvis-client/.gradle/9.6.0/checksums/checksums.lock could not be read
+   ([Errno 13] Permission denied)`) while a Kotlin build held it. Re-run with no
+   build running: exit 0.
 
 **Baseline for the Kotlin**, measured on `origin/main` at `facba013` in this
 same worktree before any change: **1,972 tests, 0 failures, 0 skipped**. After
