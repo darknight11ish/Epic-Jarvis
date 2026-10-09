@@ -218,6 +218,35 @@ def t_every_real_settings_card_is_listed():
               R.find_section(sid.replace("-", " ")) is not None)
     check("'devices' is on both apps, 'crash-notes' is desktop only",
           R.section_by_id("devices").app == "both" and R.section_by_id("crash-notes").app == "desktop")
+    _check_phone_declines_the_pc_only_cards()
+
+
+def _check_phone_declines_the_pc_only_cards():
+    """A section this file says the phone has must really be on the phone.
+
+    Settings-coverage audit, 2026-10-09: `notifications` was declared
+    `app="both"` for months while the phone has no notifications screen at
+    all - its controls are Android's own, per channel. Nothing failed,
+    because the phone half of the two checks above is satisfied by an id
+    that is a desktop card (`s.id not in phone_keys and s.id not in
+    desktop_ids`), so one id could be "both" for a reason that only ever
+    held on the PC. `jarvis-client`'s own `ui/OpenPlace.kt` had the right
+    answer all along ("notifications" is in its PC_ONLY set, so the phone
+    answers "only in Jarvis on your PC"); this reads that same file as text
+    and holds the registry to it, the way OpenPlaceTest reads this file."""
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client"
+          / "ui" / "OpenPlace.kt").read_text(encoding="utf-8")
+    block = re.search(r"val PC_ONLY: Set<String> = setOf\((.*?)\n    \)", kt, re.S)
+    pc_only = set(re.findall(r'"([\w-]+)"', block.group(1))) if block else set()
+    check("OpenPlace.kt's own PC_ONLY set was found and parsed", bool(pc_only), sorted(pc_only))
+    lying = sorted(s.id for s in R.SECTIONS
+                   if s.app in ("both", "phone") and s.id in pc_only)
+    check("no section claims the phone has it while the phone says 'only on your PC'",
+          not lying, f"{lying} - set app=\"desktop\" on each, or take it out of OpenPlace.PC_ONLY")
+    check("'notifications' is desktop only, as the phone's own OpenPlace says",
+          R.section_by_id("notifications").app == "desktop"
+          and "notifications" in pc_only
+          and all(s.id != "notifications" for s in R.sections_for("phone")))
 
 
 def t_jump_list_matches_the_page():
