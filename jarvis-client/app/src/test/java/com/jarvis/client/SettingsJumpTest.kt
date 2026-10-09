@@ -26,11 +26,27 @@ class SettingsJumpTest {
 
     private val dir = "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/"
 
-    /** The screen's `item(key = "...")` rows, in the order they are drawn. */
+    /**
+     * A row's `item(key = ...)`: either a quoted string or a `SettingsJump`
+     * constant (the search box, 2026-10-09, names `SettingsJump.SEARCH_KEY`
+     * so the screen and this test cannot disagree about it). The constant's
+     * value is looked up rather than repeated here.
+     */
+    private val ROW_KEY = Regex("item\\(key\\s*=\\s*(?:\"([\\w.-]+)\"|SettingsJump\\.(\\w+))")
+
+    /** The constant's own value, read from `SettingsJump` itself. */
+    private fun constant(name: String): String {
+        val src = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt").readText()
+        return Regex("const val $name = \"([\\w.-]+)\"").find(src)?.groupValues?.get(1)
+            ?: error("SettingsJump has no const val $name")
+    }
+
+    /** The screen's `item(key = ...)` rows, in the order they are drawn. */
     private fun rows(file: String): List<String> =
-        // Quoted keys only: a comment that says `item(key = ...)` is not a row.
-        Regex("item\\(key\\s*=\\s*\"([\\w.-]+)\"").findAll(repoFile(dir + file).readText())
-            .map { it.groupValues[1] }.toList()
+        // Quoted keys and SettingsJump constants only: a comment that says
+        // `item(key = ...)` is not a row.
+        ROW_KEY.findAll(repoFile(dir + file).readText())
+            .map { it.groupValues[1].ifEmpty { constant(it.groupValues[2]) } }.toList()
 
     /**
      * The rows the screen really draws when [hidden] menus are hidden, in
@@ -40,7 +56,8 @@ class SettingsJumpTest {
      */
     private fun drawnRows(hidden: Set<String>): List<String> {
         val src = repoFile(dir + "SettingsScreen.kt").readText()
-        val at = Regex("item\\(key\\s*=\\s*\"([\\w.-]+)\"").findAll(src).map { it.range.first to it.groupValues[1] }
+        val at = ROW_KEY.findAll(src)
+            .map { it.range.first to it.groupValues[1].ifEmpty { constant(it.groupValues[2]) } }
         return at.map { (start, key) ->
             // The guard sits just before the row; the `if` nearest to it is the one that decides.
             val before = src.substring(maxOf(0, start - 90), start)
