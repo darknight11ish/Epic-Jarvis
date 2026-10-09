@@ -139,7 +139,21 @@ async function settings(data = {}) {
   const page = await K.open(browser, base, "settings.html", {}, { width: 900, height: 2000 });
   await page.addInitScript(limitsBridge, data);
   await page.reload();
-  await page.waitForTimeout(700);
+  // Wait for the card to have ANSWERED rather than for a fixed time: it paints
+  // from an invoke, and on a loaded machine 700 ms was occasionally not enough,
+  // which made this suite flaky (seen once, 2026-10-08). Either the rows are
+  // drawn or the state line says why there are none - and "old" is the latter.
+  await page
+    .waitForFunction(
+      () => {
+        const rows = document.querySelectorAll("#limits-rows li").length;
+        const state = (document.getElementById("limits-state") || {}).textContent || "";
+        return rows > 0 || state.trim().length > 0;
+      },
+      null,
+      { timeout: 15000 },
+    )
+    .catch(() => {});
   return page;
 }
 
@@ -156,10 +170,15 @@ await check("Settings: one row per limit, in the PC's words", async () => {
   assert.deepEqual(errors, []);
 });
 
+/** Waits until `fn` is true in the page. If it never is, the assertion below says why. */
+async function settled(page, fn, timeout = 10000) {
+  await page.waitForFunction(fn, null, { timeout }).catch(() => {});
+}
+
 await check("Settings: a choice sends that choice, and a bool sends the other way", async () => {
   const page = await settings({ view: VIEW });
   await page.locator('#limits-rows li[data-limit="undo_window"] button', { hasText: "168" }).click();
-  await page.waitForTimeout(300);
+  await settled(page, () => (window.__limitCalls || []).length > 0);
   const calls = await page.evaluate(() => window.__limitCalls);
   assert.deepEqual(calls, [{ cmd: "set_limit", args: { key: "undo_window", value: 168 } }]);
   await page.close();
@@ -168,7 +187,7 @@ await check("Settings: a choice sends that choice, and a bool sends the other wa
     kind: "bool", value: false, words: "off", choices: [], low: 0, high: 0, unit: "", note: "",
     loosen_up: true, pc_only: false, app: "both" }] } });
   await on.locator('#limits-rows li[data-limit="memory_people"] button').click();
-  await on.waitForTimeout(300);
+  await settled(on, () => (window.__limitCalls || []).length > 0);
   const boolCalls = await on.evaluate(() => window.__limitCalls);
   await on.close();
   assert.deepEqual(boolCalls, [{ cmd: "set_limit", args: { key: "memory_people", value: true } }]);
@@ -177,7 +196,13 @@ await check("Settings: a choice sends that choice, and a bool sends the other wa
 await check("Settings: the PC's refusal is shown in its own words", async () => {
   const page = await settings({ view: VIEW, refuse: true });
   await page.locator('#limits-rows li[data-limit="undo_window"] button', { hasText: "168" }).click();
-  await page.waitForTimeout(300);
+  // The note says "Saving…" first and the PC's sentence last, and the re-read
+  // after an answer must not wipe it - so wait for a note that is neither empty
+  // nor still saving.
+  await settled(page, () => {
+    const said = ((document.getElementById("limits-note") || {}).textContent || "").trim();
+    return said.length > 0 && said !== "Saving…";
+  });
   const note = await page.locator("#limits-note").innerText();
   await page.close();
   assert.equal(note, "Turning this up needs your approval on the PC.");

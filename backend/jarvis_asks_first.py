@@ -481,6 +481,14 @@ GROUPS = (
         # new-conversation window and whether a model looks for people and
         # things in what the owner saves. Its tier comes from the gate.
         "raise_a_limit",
+        # The voice check's bar (jarvis_limits.py, the owner's decision of
+        # 2026-10-08): the ONE limit whose loosening goes DOWN, because a lower
+        # bar means more clips count as the owner's voice. So it is the one limit
+        # whose card needs a name of its own - `raise_a_limit` says the opposite
+        # of what the owner is agreeing to - and the page must name it because a
+        # card can. Making the bar stricter asks nothing and has no action of its
+        # own, exactly as raising any other row's number does not.
+        "lower_the_voice_check_bar",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
         "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),

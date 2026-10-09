@@ -21,13 +21,25 @@ key itself (`jarvis_jobs.py`, `jarvis_watch.py`, `jarvis_undo.py`,
 
 THE RULE, the same one every setting follows:
 
-  * TURNING SOMETHING DOWN is applied at once, with no card - it can only make
-    Jarvis do less;
-  * TURNING IT UP is a loosening ONLY where the entry says so (`loosen_up=True`:
-    keeping undo history longer, or letting a model read the owner's saved
-    facts). Those go through ONE approval card first, and nothing is written
-    until a person approves. Which way a request is comes from the value
-    against the number in force - never from anything the caller sends.
+  * THE SAFE DIRECTION is applied at once, with no card;
+  * THE DIRECTION THAT LOOSENS SOMETHING goes through ONE approval card first,
+    and nothing is written until a person approves. WHICH direction that is is
+    the entry's own `loosening`: "up" means a bigger number (or a bool turned
+    ON) lets Jarvis do more or keep more - keeping undo history longer, letting
+    a model read the owner's saved facts; "down" means a SMALLER number lets
+    MORE through, and the voice check's bar is the one entry of that shape (the
+    owner's decision of 2026-10-08: a lower bar means more clips count as the
+    owner's voice); "none" means neither direction loosens anything. Which way a
+    request goes comes from the value against the number in force - never from
+    anything the caller sends.
+
+WHERE A ROW'S NUMBER LIVES. Most entries name a `[table].key` in the owner's
+`jarvis-framework.toml` and this module moves that one line. ONE entry does not:
+the voice check's bar lives in the owner's ENROLLED VOICE PRINT, which is
+encrypted and which `jarvis_voice.py` alone reads and writes. That entry names a
+`source` instead (`SOURCES`, below) and keeps no second copy of the number -
+see `_VoiceBar`. This module never writes a print file itself, and it logs
+nothing about a print; the one thing it takes from one is the bar.
 """
 from __future__ import annotations
 
@@ -45,12 +57,25 @@ try:
 except Exception:                                    # pragma: no cover
     fw = None
 
-#: The gate action a raise is asked under. ONE name for every limit: the card's
-#: own words (below) carry which limit and how far, and a name per limit would
-#: mean a name per limit in the card-words table, on the "What asks first" page
-#: and in the tier file - three places to keep in step for no gain the owner can
-#: see. The value decides the direction, this name only says "this is a raise".
+#: The gate action a loosening going UP is asked under. ONE name for every such
+#: limit: the card's own words (below) carry which limit and how far, and a name
+#: per limit would mean a name per limit in the card-words table, on the "What
+#: asks first" page and in the tier file - three places to keep in step for no
+#: gain the owner can see. The value decides whether this loosening is going
+#: that way, this name only says "this one is a raise".
 RAISE_ACTION = "raise_a_limit"
+
+#: The gate action the ONE loosening that goes DOWN is asked under. Its own name,
+#: not `raise_a_limit`: a card that says "Jarvis wants to let Jarvis do more, for
+#: longer, or more often" over a LOWER voice-check bar would describe the
+#: opposite of what the owner is agreeing to. (The other direction on this entry
+#: - making the bar stricter - asks nothing and has no action, exactly as
+#: turning any other number down does.)
+LOWER_ACTION = "lower_the_voice_check_bar"
+
+#: What a loosening card says it lets through, when the entry names no line of
+#: its own.
+RAISE_MORE = "That lets Jarvis do more."
 
 ROUTE = "/api/limits/settings"
 
@@ -69,26 +94,160 @@ def _words(n) -> str:
 
 
 # ---------------------------------------------------------------------------
+#   The one value that lives outside the settings file
+# ---------------------------------------------------------------------------
+#: The voice check passes a clip when its similarity to the owner's enrolled
+#: print is at least a bar, and that bar lives IN THE PRINT (`threshold`). The
+#: print is encrypted and `jarvis_voice.py` is the only module that reads or
+#: writes it, so this table keeps no second copy of the number in
+#: jarvis-framework.toml: the row names this source instead of a `[table].key`.
+VOICE_BAR_SOURCE = "voice"
+
+#: What the row reads when no voice has been trained yet: the bar enrolment
+#: would give one (jarvis_voice's own `threshold` default, 0.35), as a whole
+#: percentage.
+VOICE_BAR_DEFAULT = 35
+
+
+def _percent_to_cosine(percent) -> float:
+    """The whole percentage the owner reads, as the print's own bar.
+
+    The stored number is a cosine similarity (0.35 by default) and is not a
+    number the owner should have to read; the row is a whole percentage and
+    these two functions are the only place the two meet."""
+    return float(percent) / 100.0
+
+
+def _cosine_to_percent(cosine) -> int:
+    """The print's own bar as the whole percentage the owner reads."""
+    return int(round(float(cosine) * 100))
+
+
+class _VoiceBar:
+    """The owner's voice-check bar, read and written through `jarvis_voice`.
+
+    THE ONE HOME OF THE NUMBER. `read` asks `jarvis_voice.find_profile("")`,
+    whose own first step is `load_profile` (the general print) - the same lookup
+    `write` uses - so read and write can never disagree about which print holds
+    the bar. `write` goes through `jarvis_voice.set_threshold`, the function the
+    "someone else" check's own card already uses. Nothing here writes a print
+    file, nothing here reads anything from a print but the bar, and nothing here
+    logs anything about one.
+
+    `read` returns jarvis_voice's own clamped value: `load_profile` holds every
+    bar inside `MIN_THRESHOLD` (5%) .. 1.0 (100%), so a hand-edited print cannot
+    show the owner a number the check itself would never use.
+    """
+
+    #: The name a `Limit.source` uses, the module the value belongs to, and the
+    #: name that module carries in `_where.SHIPPED`. test_limits.py checks all
+    #: three agree, so a source cannot point at a module this repository does
+    #: not ship whole.
+    name = VOICE_BAR_SOURCE
+    module = "jarvis_voice"
+    owner = "jarvis_voice.py"
+
+    def _voice(self):
+        try:
+            import jarvis_voice
+        except Exception:                    # pragma: no cover - no print, no bar
+            return None
+        return jarvis_voice
+
+    def read(self):
+        """The bar in the print, as a whole percentage."""
+        v = self._voice()
+        if v is None:
+            return VOICE_BAR_DEFAULT
+        try:
+            prof, _label = v.find_profile("")
+        except Exception:                    # pragma: no cover - unreadable print
+            return VOICE_BAR_DEFAULT
+        if prof is None:
+            return VOICE_BAR_DEFAULT
+        return _cosine_to_percent(prof.threshold)
+
+    def check(self, percent) -> None:
+        """Refuse, in plain words and BEFORE any card is raised, a number the
+        print itself would refuse.
+
+        `set_threshold` enforces the model's own floor - "no bar below the
+        model's own floor, not by enrolment and not by a card either" - so the
+        floor is READ FROM jarvis_voice rather than restated here. Without this,
+        the owner would answer a card for a change that then could not happen.
+        """
+        v = self._voice()
+        if v is None:
+            raise SettingsFileError("The voice check is not installed on this PC, "
+                                    "so nothing was changed")
+        prof, _label = v.find_profile("")
+        if prof is None:
+            raise SettingsFileError("No voice has been trained yet, so there is "
+                                    "no bar to change")
+        lowest = _cosine_to_percent(v.floor_for(prof.embedder, v.BALANCED))
+        if float(percent) < lowest:
+            raise SettingsFileError(f"The lowest this voice check allows is "
+                                    f"{lowest}%, so nothing was changed")
+
+    def write(self, percent) -> None:
+        """Write the bar into the print, through `jarvis_voice.set_threshold`.
+
+        jarvis_voice checks its own floor again here, so this is a second gate
+        that fails closed rather than the only one."""
+        v = self._voice()
+        if v is None:
+            raise SettingsFileError("The voice check is not installed on this PC, "
+                                    "so nothing was changed")
+        try:
+            v.set_threshold(_percent_to_cosine(percent))
+        except ValueError as exc:
+            raise SettingsFileError(f"Your voice check would not take that "
+                                    f"({exc}), so nothing was changed")
+
+
+#: The non-toml homes a row may name, by the name the row uses. A source is the
+#: ONLY thing that reads or writes that row's value, and a row naming one
+#: carries no `[table].key` at all.
+SOURCES: dict = {VOICE_BAR_SOURCE: _VoiceBar()}
+
+
+# ---------------------------------------------------------------------------
 #   The table
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class Limit:
     key: str                     # the name the route, the screens and a voice
                                  # sentence use
-    section: str                 # the table in jarvis-framework.toml
-    name: str                    # the key inside it
+    section: str                 # the table in jarvis-framework.toml - "" when
+                                 # the value lives in a `source` instead
+    name: str                    # the key inside it - "" for a source row
     title: str                   # the row's words, in the owner's language
     kind: str                    # "int" | "float" | "bool"
     default: object
     low: float = 0
     high: float = 0
     choices: tuple = ()          # when set, the value must be one of these
-    loosen_up: bool = False      # is a BIGGER value (or bool ON) a loosening?
+    loosening: str = "none"      # which direction asks: "up" | "down" | "none"
     pc_only: bool = False        # may only be changed from this PC
     app: str = "both"            # "both" | "desktop" | "phone"
     unit: str = ""               # what one step of the number means
     note: str = ""               # the row's second line, plain words
+    source: str = ""             # a non-toml home for the value (SOURCES), or ""
+    action: str = ""             # the gate action a loosening is asked under
+                                 # (RAISE_ACTION when empty)
+    card_more: str = ""          # the card's last line: what the loosening lets
+                                 # through (RAISE_MORE when empty)
     says: Optional[Callable[[object], str]] = None
+
+    @property
+    def loosen_up(self) -> bool:
+        """Kept for the wire: the view's own `loosen_up` says "a BIGGER value is
+        the loosening", which is true of every row but the voice bar."""
+        return self.loosening == "up"
+
+    @property
+    def asked_action(self) -> str:
+        return self.action or RAISE_ACTION
 
     def words(self, value) -> str:
         if self.says is not None:
@@ -110,10 +269,10 @@ def _ttl_says(v) -> str:
 
 LIMITS: tuple = (
     # `[undo].ttl_hours` - how long an Undo stays possible. LONGER keeps more
-    # of the owner's own files recoverable on disk, so it is the one direction
+    # of the owner's own files recoverable on disk, so UP is the direction
     # that asks (jarvis_undo.py reads this key already).
     Limit("undo_window", "undo", "ttl_hours", "How long you can undo",
-          "int", 24, low=1, high=720, choices=(1, 24, 168), loosen_up=True,
+          "int", 24, low=1, high=720, choices=(1, 24, 168), loosening="up",
           app="both", unit="hours",
           note="A longer window keeps older copies of your files on this PC.",
           says=_ttl_says),
@@ -159,9 +318,34 @@ LIMITS: tuple = (
     # reading of memory a card). OFF is instant.
     Limit("memory_people", "memory.entities", "model_pass",
           "Look for people and things in what you save",
-          "bool", False, loosen_up=True, app="phone",
+          "bool", False, loosening="up", app="phone",
           note="A model reads what you save to find the people and things in "
                "it. Off, only the plain words you used are kept."),
+    # THE VOICE CHECK'S BAR - the owner's decision of 2026-10-08, and the one
+    # row here whose loosening goes the OTHER way. It lives in the ENROLLED
+    # VOICE PRINT, not in jarvis-framework.toml (the print is encrypted and
+    # `jarvis_voice.py` is the only module that reads or writes it), so the row
+    # names that `source` instead of a `[table].key`, and the number is
+    # `jarvis_voice`'s own `threshold` - never a second copy of it.
+    #
+    # The owner reads a WHOLE PERCENTAGE: the stored cosine (0.35) is not a
+    # number they should have to read, and the conversion happens at the voice
+    # boundary (`_percent_to_cosine`). LOWERING it is the loosening - a lower
+    # bar means MORE clips count as the owner's voice - so `loosening="down"`
+    # and `LOWER_ACTION` is the name its card is asked under. Raising it is the
+    # safe direction and applies at once, like every other tightening.
+    #
+    # 25% is offered though a print whose model floor is 35% (the small model's
+    # own balanced bar) refuses it: the floor is jarvis_voice's rule, read from
+    # jarvis_voice and never overridden here, and the refusal is in its words.
+    Limit("voice_bar", "", "", "How sure Jarvis must be that it is your voice",
+          "int", VOICE_BAR_DEFAULT, low=5, high=100,
+          choices=(25, 35, 50, 65), loosening="down",
+          app="both", pc_only=False, unit="%",
+          note="Lower means more clips count as your voice. Going lower asks "
+               "you on the PC first.",
+          source=VOICE_BAR_SOURCE, action=LOWER_ACTION,
+          card_more="That lets more clips count as your voice."),
 )
 
 
@@ -194,7 +378,12 @@ def _table(cfg: dict, section: str) -> dict:
 
 
 def value_of(limit: Limit):
-    """What the owner's file says now, or the default the owning module uses."""
+    """What the owner's file says now, or the default the owning module uses.
+
+    A source-backed row has no key in the settings file at all: its value comes
+    from the module that owns it (`_VoiceBar.read` asks `jarvis_voice`)."""
+    if limit.source:
+        return SOURCES[limit.source].read()
     raw = _table(_config(), limit.section).get(limit.name, limit.default)
     try:
         if limit.kind == "bool":
@@ -207,7 +396,12 @@ def value_of(limit: Limit):
 
 
 def _coerced(limit: Limit, value):
-    """The value as the file would hold it, or a SettingsFileError to show."""
+    """The value as the file would hold it, or a SettingsFileError to show.
+
+    For a source-backed row this also asks the owning module whether it would
+    take the number at all (for the voice bar: the model's own floor), and it
+    asks BEFORE any card is raised - so the owner is never asked to approve a
+    change that could not happen."""
     if limit.kind == "bool":
         if isinstance(value, bool):
             return value
@@ -227,7 +421,26 @@ def _coerced(limit: Limit, value):
     elif not (limit.low <= number <= limit.high):
         raise SettingsFileError("That has to be between "
                                 f"{_words(limit.low)} and {_words(limit.high)}.")
-    return int(number) if limit.kind == "int" else number
+    typed = int(number) if limit.kind == "int" else number
+    if limit.source:
+        SOURCES[limit.source].check(typed)
+    return typed
+
+
+def _is_loosening(limit: Limit, now, want) -> bool:
+    """Is this change the one that must be put to the owner on a card?
+
+    `limit.loosening` says which WAY the loosening goes - "up" (a bigger number,
+    or a bool turned ON), "down" (a smaller number lets more through), or
+    "none". The direction of THIS request is read from the value against the
+    number IN FORCE, never from anything the caller sends."""
+    if limit.loosening == "none":
+        return False
+    if limit.kind == "bool":
+        up, down = bool(want) and not bool(now), bool(now) and not bool(want)
+    else:
+        up, down = want > now, want < now
+    return up if limit.loosening == "up" else down
 
 
 def _literal(limit: Limit, value) -> str:
@@ -288,18 +501,30 @@ _LOCK = threading.RLock()
 
 
 def set_limit(key: str, value, *, path: Optional[Path] = None) -> dict:
-    """Change ONE limit in the owner's settings file, atomically.
+    """Change ONE limit, atomically.
 
     {"ok", "key", "from", "to", "changed", "loosening"} - and `loosening` says
-    whether this direction is the one that needs a card, so the caller (the
-    route, and the two apps' own screens) can put it to the owner. Nothing here
-    raises a card or pretends to."""
+    whether THIS direction is the one that needs a card (the entry's own
+    `loosening`, against the value in force), so the caller (the route, and the
+    two apps' own screens) can put it to the owner. Nothing here raises a card
+    or pretends to.
+
+    A source-backed row is written by its OWNING module (`_VoiceBar.write` calls
+    `jarvis_voice.set_threshold`), and no settings file is touched at all - the
+    `path` argument is the settings file's and is not this row's business."""
     limit = find(key)
     if limit is None:
         raise SettingsFileError("That is not a limit Jarvis knows.")
     want = _coerced(limit, value)
     now = value_of(limit)
-    raised = (want > now) if limit.kind != "bool" else (want and not now)
+    asks = _is_loosening(limit, now, want)
+    if limit.source:
+        if want == now:
+            return {"ok": True, "key": key, "from": now, "to": want,
+                    "changed": False, "loosening": False}
+        SOURCES[limit.source].write(want)
+        return {"ok": True, "key": key, "from": now, "to": want, "changed": True,
+                "loosening": bool(asks)}
     p = path or _toml_path()
     if p is None or not Path(p).is_file():
         raise SettingsFileError("Jarvis could not find your settings file "
@@ -343,7 +568,7 @@ def set_limit(key: str, value, *, path: Optional[Path] = None) -> dict:
                                     f"({type(exc).__name__}), so nothing was changed")
     _reload()
     return {"ok": True, "key": key, "from": now, "to": want, "changed": True,
-            "loosening": bool(raised)}
+            "loosening": bool(asks)}
 
 
 # ---------------------------------------------------------------------------
@@ -386,21 +611,27 @@ def _tier(action: str) -> str:
             return "ask"
 
 
-def _raise_card(limit: Limit, old, new) -> tuple:
-    """The card for a raise, and the yes. (None, said) when it went through;
-    ((status, body), "") when it did not."""
+def _loosening_card(limit: Limit, old, new) -> tuple:
+    """The card for the direction that loosens, and the yes. (None, said) when
+    it went through; ((status, body), "") when it did not.
+
+    The action is the entry's own when it names one, so a loosening that goes
+    DOWN is never asked under a name that says "raise"; and the last line is the
+    entry's own when it names one, so the card cannot promise "Jarvis does more"
+    about a lower bar, which lets more CLIPS through instead."""
+    action = limit.asked_action
     prompt = (f"{limit.title}: change it from {_words(old)} to {_words(new)} "
-              f"({limit.words(new)})? That lets Jarvis do more.")
+              f"({limit.words(new)})? {limit.card_more or RAISE_MORE}")
     detail = {"text": prompt, "what": limit.title.lower(),
               "was": old, "now": new, "limit": limit.key,
               "leaves_this_pc": False}
     gate = _dep("gate", _gate)
     tier_of = _dep("tier_of", _tier)
     try:
-        if tier_of(RAISE_ACTION) != "ask":
+        if tier_of(action) != "ask":
             return (503, {"ok": False, "error": "Your PC's Jarvis cannot ask you about "
                                                 "that yet, so nothing was changed."}), ""
-        v = gate(RAISE_ACTION, detail, prompt)
+        v = gate(action, detail, prompt)
     except Exception:
         return (503, {"ok": False, "error": "Jarvis could not put that to you just now, "
                                             "so nothing was changed."}), ""
@@ -422,7 +653,13 @@ def view(*, app: Optional[str] = None) -> dict:
     filter guessed here. (Both call the same route: the PC's card must see the
     PC-only limits and the phone must not, and neither can be told apart at the
     route without the caller saying so.) `app="desktop"` / `"phone"` narrows it
-    here, which is what the tests and the voice lane ask for."""
+    here, which is what the tests and the voice lane ask for.
+
+    THE ROW'S SHAPE DOES NOT CHANGE. `loosen_up` keeps exactly the meaning it has
+    always had for both apps - "a BIGGER value is this row's loosening" - so the
+    voice bar's row, whose loosening goes the other way, says `false` and carries
+    its direction in its own `note` instead. Nothing new is sent, so neither
+    screen needs a change to draw the new row."""
     rows = []
     for limit in (LIMITS if app is None else limits_for(app)):
         now = value_of(limit)
@@ -461,10 +698,10 @@ def change(body, *, peer=None, local=None) -> tuple:
     except SettingsFileError as exc:
         return 400, {"ok": False, "error": str(exc)}
     now = value_of(limit)
-    raised = (want > now) if limit.kind != "bool" else (want and not now)
+    asks = _is_loosening(limit, now, want)
     said = ""
-    if raised and limit.loosen_up:
-        refused, said = _raise_card(limit, now, want)
+    if asks:
+        refused, said = _loosening_card(limit, now, want)
         if refused is not None:
             return refused
     try:
@@ -474,8 +711,7 @@ def change(body, *, peer=None, local=None) -> tuple:
     if not said:
         said = f"{limit.title} is now {limit.words(out['to'])}."
     return 200, {"ok": True, "key": key, "changed": out.get("changed", True),
-                 "loosening": bool(raised and limit.loosen_up),
-                 "approved": bool(raised and limit.loosen_up),
+                 "loosening": bool(asks), "approved": bool(asks),
                  "from": out.get("from"), "to": out.get("to"), "said": said}
 
 
