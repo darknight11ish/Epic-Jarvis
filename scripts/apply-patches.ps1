@@ -1168,6 +1168,12 @@ $PATCHES = @(
     # screen.patch, whose route it wraps. Needs jarvis_screen_attach.py copied
     # in; without it, or on any error, the banner says so and a look is exactly
     # what it was before (the words only, no picture).
+    # prompt-coach.patch (2026-10-08, JARVIS-API section 119): "Coach this" and
+    # the switch that turns it on. Two hunks in jarvis_hud.py - one GET route
+    # and one POST block - anchored on routes that predate it. It goes BEFORE
+    # screen-attach.patch, which must stay last (test_screen_attach.py asserts
+    # it), and it touches jarvis_gate.py not at all: it approves nothing.
+    'prompt-coach.patch'
     'screen-attach.patch'
 )
 

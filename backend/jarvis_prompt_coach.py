@@ -452,6 +452,23 @@ def handle_post(body: object) -> tuple:
     return 200, {"ok": True, "coach": out}
 
 
+def handle_setting(body: object) -> tuple:
+    """(status, dict) for POST /api/prompt/coach/setting - the switch.
+
+    Enabled must be a real true or false. Anything else is refused rather than
+    guessed at, because guessing here would mean "your switch moved" when it
+    did not.
+    """
+    if not isinstance(body, dict) or not isinstance(body.get("enabled"), bool):
+        return 400, {"ok": False,
+                     "error": "The request needs an enabled true or false."}
+    try:
+        set_enabled(body["enabled"])
+    except Refused as exc:
+        return 409, {"ok": False, "error": str(exc)}
+    return 200, status()
+
+
 def status() -> dict:
     """The switch's own state, for the settings screens and for
     "is the prompt coach on?" - the same shape as jarvis_search.settings()."""

@@ -575,7 +575,14 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # entry, no risk row, no _TOOL_ACTIONS line - so
                                 # it cannot rewrite a line devices.patch wrote.
                                 # The later_rewriting() half below proves it.
-                                "screen-attach.patch"}
+                                "screen-attach.patch",
+                                # prompt-coach.patch (2026-10-08) is the prompt coach's
+                                # own wiring: one GET route and one POST block in
+                                # jarvis_hud.py. It touches jarvis_gate.py not at all -
+                                # no gate list entry, no risk row, no _TOOL_ACTIONS line -
+                                # so it cannot rewrite a line devices.patch wrote. The
+                                # later_rewriting() half below proves it.
+                                "prompt-coach.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
