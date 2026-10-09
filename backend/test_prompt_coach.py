@@ -29,6 +29,13 @@ _CFG = tempfile.mkdtemp(prefix="coach-test-")
 os.environ["JARVIS_CONFIG_DIR"] = _CFG
 
 import jarvis_prompt_coach as PC  # noqa: E402
+# Point the module at THIS test's folder, not at whatever the machine's
+# settings folder is. jarvis_prompt_coach._config_dir() asks
+# jarvis_framework.CONFIG_DIR first and only then the environment, so on a PC
+# (or on CI) the env var above is ignored and the module would read and write
+# the real settings folder. This machine has no jarvis_framework, which is why
+# the env var alone looked like enough here and was not.
+PC._config_dir = lambda: Path(_CFG)
 
 FAILURES = []
 

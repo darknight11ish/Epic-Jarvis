@@ -114,7 +114,12 @@ RATCHET = {
     #: two no longer drift. 3 + 1 + 1 became 4 + 0 + 0, which is one hunk less
     #: and, more to the point, two patches that now anchor on real text. A
     #: ratchet: it may still only go down.
-    "jarvis_hud.py": 46,
+    # 47, raised from 46 on 2026-10-08 for prompt-coach.patch: its POST hunk is
+# anchored on task-control.patch's own `if route in ("/api/task/pause"` block,
+# but the four lines of leading context above that line are the tail of a route
+# which predates every patch - text only the owner's real file holds. The other
+# hunk was re-anchored onto patch-written lines and no longer needs one.
+"jarvis_hud.py": 47,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
