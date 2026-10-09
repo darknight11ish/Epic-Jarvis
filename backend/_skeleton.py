@@ -22,8 +22,12 @@ test_documents_owned.py use it.
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _gitapply  # noqa: E402  (beside this file; see its docstring)
 
 HERE = Path(__file__).resolve().parent
 
@@ -71,6 +75,10 @@ def rehearse(new_patch: str, *earlier: str, target: str = "jarvis_hud.py",
     if not git:
         return None, "git is not installed, so the rehearsal could not run"
     d = Path(tempfile.mkdtemp(prefix="jarvis-skel-"))
+    # Inside a git work tree, `git apply` resolves the patch's paths against the
+    # repository root rather than `d`, so the file it is meant to patch is not
+    # there and a good patch reads as broken. See _gitapply.py.
+    env = _gitapply.env_for(git, d)
     try:
         # LF on both sides, byte for byte, whatever this checkout did to the
         # patch files - apply-patches.ps1 does the same before applying.
@@ -80,7 +88,7 @@ def rehearse(new_patch: str, *earlier: str, target: str = "jarvis_hud.py",
             below = d / f"below{i}.patch"
             below.write_bytes((HERE / name).read_bytes().replace(b"\r\n", b"\n"))
             r = subprocess.run([git, "apply", "--include", target, str(below)], cwd=d,
-                               capture_output=True, text=True)
+                               capture_output=True, text=True, env=env)
             if r.returncode != 0:
                 return False, f"{name} (applied first): {r.stderr.strip() or r.stdout.strip()}"
         lf = d / "new.patch"
@@ -89,7 +97,7 @@ def rehearse(new_patch: str, *earlier: str, target: str = "jarvis_hud.py",
                  ["apply", str(lf)],
                  ["apply", "--check", "--reverse", str(lf)]]
         for args in steps:
-            r = subprocess.run([git] + args, cwd=d, capture_output=True, text=True)
+            r = subprocess.run([git] + args, cwd=d, capture_output=True, text=True, env=env)
             if r.returncode != 0:
                 return False, f"git {' '.join(args[:-1])}: {r.stderr.strip() or r.stdout.strip()}"
         return True, (d / target).read_text(encoding="utf-8")

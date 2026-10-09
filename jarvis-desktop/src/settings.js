@@ -163,8 +163,6 @@ const dom = {
   updateProgressFill: $("update-progress-fill"),
   updateIntroOff: $("update-intro-off"),
   updateIntroOn: $("update-intro-on"),
-  faqUpdateOff: $("faq-update-off"),
-  faqUpdateOn: $("faq-update-on"),
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
 
@@ -826,17 +824,11 @@ $("open-faces").addEventListener("click", async () => {
 });
 
 // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the owner's request
-// of 2026-10-08). The window it opens reads one bundled list of text and draws
-// it; there is no return value to render and nothing to wait for but the window
-// itself, so this is the same three lines as the Faces button above.
-$("open-features").addEventListener("click", async () => {
-  try {
-    await invoke("open_features");
-    report($("features-status"), "Opened.", "ok");
-  } catch (error) {
-    report($("features-status"), String((error && error.message) || error), "bad");
-  }
-});
+// of 2026-10-08) used to be opened from a button in this window, in the "Help
+// and FAQ" card. Both moved to the Brain's "Tutorials and the FAQ" on
+// 2026-10-08: the card was the second way in to help, and the owner chose to
+// fold it. `open_features` is now called by tutorials.js - the same three
+// lines, in the window that draws the button.
 
 /**
  * "Show me where" (plain-errors.js), and, since 2026-09-27, "open <a
@@ -1459,8 +1451,6 @@ function paintUpdate(status) {
   const setUp = Boolean(status.supported);
   if (dom.updateIntroOff) dom.updateIntroOff.hidden = setUp;
   if (dom.updateIntroOn) dom.updateIntroOn.hidden = !setUp;
-  if (dom.faqUpdateOff) dom.faqUpdateOff.hidden = setUp;
-  if (dom.faqUpdateOn) dom.faqUpdateOn.hidden = !setUp;
 
   const notes = String(status.notes || "").trim();
   dom.updateNotes.hidden = !notes;

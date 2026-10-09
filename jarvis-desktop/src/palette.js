@@ -154,10 +154,13 @@ export function headingOf(item) {
  */
 export function entryPlace(m) {
   if (!m) return null;
-  // The catalogue's `area` names the window a menu lives in - except for the
-  // two "entry" rows (Help, Settings), which are the tray and Brain rows that
-  // open the Settings window rather than anything inside the Brain.
-  const settings = m.area === "settings" || m.id === "entry.settings" || m.id === "entry.help";
+  // The catalogue's `area` names the window a menu lives in - except for
+  // `entry.settings`, the tray and Brain row that opens the Settings window
+  // rather than anything inside the Brain. `entry.help` is NOT in this list any
+  // more (2026-10-08): Help moved to the Brain's own "Tutorials and the FAQ"
+  // place, which is where its catalogue entry now points, so it opens the Brain
+  // like every other Brain row.
+  const settings = m.area === "settings" || m.id === "entry.settings";
   return {
     id: m.id,
     title: m.title,
@@ -338,12 +341,13 @@ export function placeFor(item) {
   if (place.window === "settings") {
     // `settings.hardware` is Settings -> #hardware. A row that is itself a
     // row of a card (`settings.second-card.referee`) opens its parent card,
-    // which is where it lives on the page. The two "entry" rows name their
-    // own target instead (Help opens the FAQ card, Settings the window).
+    // which is where it lives on the page. `entry.settings` names its own
+    // target (the Connection card); `entry.help` used to be here too and is
+    // not any more - Help is the Brain's "Tutorials and the FAQ" since
+    // 2026-10-08, so it never reaches this branch.
     const m = menu(item.id);
     const parent = m && m.parent && m.parent.startsWith("settings.") ? m.parent : null;
-    const own = item.id === "entry.help" ? "faq"
-      : item.id === "entry.settings" ? "connection" : null;
+    const own = item.id === "entry.settings" ? "connection" : null;
     const card = parent || own || item.id;
     const elementId = card.startsWith("settings.") ? card.slice("settings.".length) : card;
     return { window: "settings", place: elementId, card };
@@ -352,10 +356,13 @@ export function placeFor(item) {
   // Which element to show once the window is open. A card is itself; a ROW
   // (kind "row", e.g. `brain.work.quiz.youtube`, `brain.history.tag-suggestions`)
   // has no element of its own, so it opens the nearest card it lives inside -
-  // which is where the rail would take the owner by hand. A tab needs no
-  // card: the tab is the destination.
+  // which is where the rail would take the owner by hand. A tab needs no card:
+  // the tab is the destination. Neither does an ENTRY (kind "entry") - it is a
+  // way in rather than a card, and `entry.help` is one since 2026-10-08 (the
+  // Help row opens the Brain's "Tutorials and the FAQ" tab, where the card it
+  // used to point at no longer exists).
   let card = "";
-  if (item.kind !== "tab") {
+  if (item.kind !== "tab" && item.kind !== "entry") {
     if (item.kind === "card") {
       card = item.id;
     } else {

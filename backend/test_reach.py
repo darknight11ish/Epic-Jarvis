@@ -119,7 +119,7 @@ class Env:
 
 def ctx(enabled=(), tiers=None, **kw):
     tiers = tiers or {}
-    base = dict(enabled=set(enabled), tier=lambda a: tiers.get(a, "auto"),
+    base = dict(tier=lambda a: tiers.get(a, "auto"),
                 env=lambda n: str(os.environ.get(n, "") or "").strip(),
                 lanes=[], providers=[],
                 search={"provider": "searxng", "searxng_url": "http://127.0.0.1:8888",
@@ -127,6 +127,11 @@ def ctx(enabled=(), tiers=None, **kw):
                 key_saved=lambda p: None, second_card={"master": False, "features": {}},
                 big_model={"master": False}, gate_action=lambda lookup: None,
                 youtube={"ready": None})
+    # `ctx(None)`: leave `enabled` to Ctx's own default - the real
+    # `jarvis_reach._tools_enabled()`, reading the two settings files. Every
+    # other call passes a set, which is what the row checks want.
+    if enabled is not None:
+        base["enabled"] = set(enabled)
     base.update(kw)
     return R.Ctx(**base)
 
@@ -406,6 +411,88 @@ def t_tools_are_the_tool_loops_own_list():
     check("... and is, when it is on", got == ["browser_control"])
     check("every tool has a plain name", all(n in R.TOOL_NAMES for n in AG.TOOLS),
           [n for n in AG.TOOLS if n not in R.TOOL_NAMES])
+
+
+def t_the_tool_list_reads_the_same_fallback_the_turn_does():
+    """A settings file with no `[tools]` section must not read as "no tools".
+
+    `jarvis_agent.enabled_tools_for_turn()` falls back to the inherited
+    `config.toml` list when `jarvis-framework.toml` names nothing, and the turn
+    is offered those tools. This page read only the settings file until
+    2026-10-08, so on a PC in exactly that state - the owner's PC - it said
+    "None: the AI model is offered no tools, so it can only write answers"
+    while a turn really offered web search, the calculator and memory search.
+    The preflight read the same list and skipped its web-search check with
+    "web search is not switched on" for the same wrong reason. This is the
+    check that keeps the two readings equal."""
+    cfg_dir = Path(os.environ["OPENJARVIS_CONFIG_DIR"])
+    toml = cfg_dir / "config.toml"
+    # The settings file the framework will really read: jarvis_framework prefers
+    # JARVIS_FRAMEWORK_TOML when it is set - and run_suites.py sets it - so a
+    # test that wrote only the config folder's copy would measure the runner's
+    # template instead of its own.
+    fw_toml = Path(os.environ.get("JARVIS_FRAMEWORK_TOML") or (cfg_dir / "jarvis-framework.toml"))
+    had = toml.read_text(encoding="utf-8") if toml.exists() else None
+    had_fw = fw_toml.read_text(encoding="utf-8") if fw_toml.exists() else None
+    saved_fw = R._fw
+    import jarvis_framework as FW
+
+    class NoToolsSection:
+        """`jarvis-framework.toml` with no `[tools]` section - what the owner's
+        PC had, because the switch that writes it had never been used."""
+
+        def load_framework(self):
+            return {}
+
+    try:
+        # A settings file with no `[tools]` section, found where the modules
+        # would find the owner's: in the config folder. Without this the suite's
+        # own environment would answer from the repository's shipped template.
+        fw_toml.write_text('[meta]\nversion = "1.0"\n', encoding="utf-8")
+        FW.reload_framework()
+        R._fw = lambda: NoToolsSection()
+
+        # (a) Neither file names a tool. Nothing offered, and the page says so:
+        # this empty answer is correct, and it is not the bug.
+        if toml.exists():
+            toml.unlink()
+        got = [t["id"] for t in R.view(ctx(None))["tools"]]
+        check("neither file names a tool: the page lists none", got == [], got)
+
+        # (b) The settings file still names nothing, and the inherited
+        # config.toml does - the state the owner's PC was in.
+        names = ["web_search", "calculator", "not_a_tool"]
+        toml.write_text('[tools]\nenabled = ["web_search", "calculator", "not_a_tool"]\n',
+                        encoding="utf-8")
+        want = AG.offered_tools(AG.enabled_tools_for_turn({"tools": {"enabled": names}}))
+        got = [t["id"] for t in R.view(ctx(None))["tools"]]
+        check("the settings file names nothing: the inherited list is read, as the turn reads it",
+              got == want, (got, want))
+        check("...and the answer is not empty, which is what the page used to say",
+              got == ["calculator", "web_search"], got)
+
+        # (c) A settings file that names tools still wins, and names nothing
+        # else: the fallback is a fallback.
+        class Names:
+            def load_framework(self):
+                return {"tools": {"enabled": ["email_check"]}}
+
+        R._fw = lambda: Names()
+        got = [t["id"] for t in R.view(ctx(None))["tools"]]
+        check("the settings file's own list wins when it names one", got == ["email_check"], got)
+    finally:
+        R._fw = saved_fw
+        if had is None:
+            if toml.exists():
+                toml.unlink()
+        else:
+            toml.write_text(had, encoding="utf-8")
+        if had_fw is None:
+            if fw_toml.exists():
+                fw_toml.unlink()
+        else:
+            fw_toml.write_text(had_fw, encoding="utf-8")
+        FW.reload_framework()
 
 
 class NoSockets:
@@ -810,7 +897,9 @@ if __name__ == "__main__":
                t_chatbot_api_row, t_no_secret_anywhere,
                t_phone_push_needs_an_owner_chosen_destination,
                t_asks_follows_the_rules,
-               t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
+               t_tools_are_the_tool_loops_own_list,
+               t_the_tool_list_reads_the_same_fallback_the_turn_does,
+               t_it_only_reads, t_sending_email_is_one_entry,
                t_never_raises, t_cloud_lanes_are_the_modules_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,
                t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract):

@@ -642,14 +642,13 @@
     "group": "Notes and files",
     "title": "Tutorials and the FAQ",
     "what": "Step-by-step tutorials with your place kept, and the usual questions answered.",
-    "where": "PC: Brain, Tutorials and the FAQ, and Settings, Frequently asked questions. Phone: Brain, Tutorials and the FAQ.",
+    "where": "PC: Brain, Tutorials and the FAQ. Phone: Brain, Tutorials and the FAQ. On the PC that one place also holds the \"Everything Jarvis can do\" button.",
     "asks": "No card - reading works even while the connection is catching up.",
-    "limit": "The two apps answer different questions, because they run into different problems.",
+    "limit": "The two apps answer different questions, because they run into different problems. On the PC the two halves are drawn on one page: the questions both apps answer, then the ones only this computer's program has.",
     "surface": "both",
     "covers": [
       "brain.tab.tutorials",
       "brain.model.tutorials",
-      "settings.faq",
       "entry.help"
     ]
   },

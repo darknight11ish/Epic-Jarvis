@@ -166,7 +166,14 @@ SECTIONS: tuple = (
     # Paired devices (docs/PAIRING-DESIGN.md section 7.2): a card on both apps
     # (settings.html id="devices"; the phone's item(key = "devices")).
     Section("devices", ("devices", "paired devices", "my devices", "my paired devices")),
-    Section("faq", ("the faq", "frequently asked questions", "help")),
+    # "the faq" / "frequently asked questions" / "help" were here until
+    # 2026-10-08, naming the Settings card "Help and FAQ" (settings.html
+    # id="faq"). That card was a SECOND way in to the same help the Brain
+    # answers, and the owner folded it into one place: the desktop questions
+    # moved to the Brain's "Tutorials and the FAQ" (jarvis-desktop/src/
+    # desktop-help.js) and the card is gone, so there is no `faq` section left
+    # for "open the faq" to name. The questions BOTH apps answer were never
+    # this card - the backend serves those at GET /api/faq, exactly as before.
     Section("appearance-card", ("appearance", "the theme", "how jarvis looks", "the face")),
     # "Animal options" (2026-09-28): every animal-face option in one place.
     # Desktop: its own card in settings.html. Phone: inside Appearance, so

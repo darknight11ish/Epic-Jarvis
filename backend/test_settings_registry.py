@@ -57,6 +57,7 @@ require_shipped("jarvis_quick.py", "jarvis_settings_registry.py", "jarvis_asks_f
 sys.path.append(str(HERE / "rebuilt"))
 import jarvis_quick as Q  # noqa: E402
 import jarvis_settings_registry as R  # noqa: E402
+import jarvis_menus as M  # noqa: E402
 import jarvis_asks_first as AF  # noqa: E402
 import jarvis_auto_learn as AL  # noqa: E402
 import jarvis_watch_notify as WN  # noqa: E402
@@ -328,11 +329,25 @@ def t_open_is_pure_navigation():
                         ("show me the security settings", "security"),
                         ("go to accounts", "account-secrets"),
                         ("take me to what asks first", "asks-first"),
-                        ("open the faq", "faq"),
                         ("show me how jarvis talks", "manner")):
         i = Q.match(phrase)
         check(f"{phrase!r} opens {want!r}", i is not None and i.name == "settings_open"
               and i.f.get("id") == want, i)
+    # "open the faq" opened the Settings card "Help and FAQ" until 2026-10-08.
+    # The card is gone (its questions moved to the Brain's "Tutorials and the
+    # FAQ"), so the phrase must no longer name a settings section - there is no
+    # #faq element left for the window to scroll to, and a section that names a
+    # card that no longer exists is the drift this test is for. What DID stay is
+    # the help itself: the Brain's own menu answers to "faq", "the faq" and
+    # "frequently asked questions" (backend/jarvis_menus.py), which is where the
+    # owner is sent instead - checked right here rather than left implied.
+    i = Q.match("open the faq")
+    check("'open the faq' no longer names a Settings section (the card is gone)",
+          i is None or i.f.get("id") != "faq", i)
+    check("the Brain's Help place still answers to the names 'open the faq' used",
+          {"faq", "the faq", "frequently asked questions"}
+          <= set(M.menu("brain.tab.tutorials").names),
+          M.menu("brain.tab.tutorials").names)
     for phrase in ("open the door", "open the pod bay doors", "show me the money",
                   "go to sleep"):
         i = Q.match(phrase)

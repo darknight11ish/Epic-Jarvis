@@ -168,7 +168,48 @@ def _fw():
         return None
 
 
+def _inherited_config() -> dict:
+    """`config.toml` from the config folder, as the turn's own fallback reads it.
+
+    A copy of `jarvis_hud.py`'s reader, deliberately: the folder is the HUD's
+    (`OPENJARVIS_CONFIG_DIR`, else `~/.openjarvis`), the file is `config.toml`,
+    and only `[tools].enabled` is needed. The HUD is the program rather than a
+    library, so it cannot be imported here - but the FILE must be the same one,
+    or this page answers a question about a different settings file."""
+    folder = Path(os.environ.get("OPENJARVIS_CONFIG_DIR") or (Path.home() / ".openjarvis"))
+    path = folder / "config.toml"
+    if not path.exists():
+        return {}
+    try:
+        import tomllib
+        with open(path, "rb") as fh:
+            return tomllib.load(fh)
+    except ImportError:
+        pass
+    except Exception:
+        return {}
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    block = re.search(r"^\[tools\]\s*$(.*?)(?=^\[)", raw, re.M | re.S)
+    names = re.findall(r'"([a-z0-9_]+)"', block.group(1)) if block else []
+    return {"tools": {"enabled": names}}
+
+
 def _tools_enabled() -> set:
+    """The tools the model may be offered, from the place the turn reads.
+
+    `jarvis-framework.toml`'s `[tools] enabled` wins as soon as it names
+    anything. When it names nothing - which is what an owner who has never
+    touched the switch has, and what the owner's PC had on 2026-10-08 - the
+    turn falls back to the inherited `config.toml` list, and so must this page.
+    It read only the settings file until then, so on that PC it said "None: the
+    AI model is offered no tools, so it can only write answers" while a turn
+    really offered web search, the calculator and memory search; the preflight
+    read the same list and skipped its web-search check for the same wrong
+    reason. The fallback is asked of `jarvis_agent` rather than copied, so the
+    page and the turn cannot drift apart again."""
     fw = _fw()
     try:
         cfg = fw.load_framework() if fw is not None else {}
@@ -177,7 +218,13 @@ def _tools_enabled() -> set:
         # the tool "email_check": read it as the tool (jarvis_asks_first).
         if "email_read" in names:
             names.add("email_check")
-        return names
+        if names:
+            return names
+    except Exception:
+        return set()
+    try:
+        import jarvis_agent as ag
+        return set(ag.enabled_tools_for_turn(_inherited_config()))
     except Exception:
         return set()
 
