@@ -55,9 +55,25 @@ class FeaturesListTest {
     fun `the asset parses, and it is the whole list`() {
         assertTrue("the asset is missing: $asset", asset.isFile)
         assertTrue("no entries were read", entries.isNotEmpty())
-        // A readable length, not one row per route (the design note's own rule).
+        // NO CEILING, AND IT SHOULD NOT COME BACK (2026-10-09). This read
+        // `entries.size <= 120`, and the note above it claimed that was "the
+        // design note's own rule". It was not: docs/FEATURES-LIST-DESIGN.md
+        // says the list is "curated for reading" and names no size limit
+        // anywhere, and the owner's own words when asked were "get rid of that
+        // cap. i didn't specifically make a cap like that".
+        //
+        // It did real damage. The list reached exactly 120 on 2026-10-09 with
+        // news feeds and "tell me when this page changes" still missing from it
+        // entirely, and this line - with its twin in backend/test_feature_list.py
+        // - was what blocked the row that lists them.
+        //
+        // THE FLOOR IS NOT A SIZE LIMIT and stays: it catches an asset that has
+        // been emptied, truncated or replaced wholesale, which nothing else on
+        // this screen would notice, because a short list passes every other
+        // check here. It is deliberately the same floor the Python suite uses -
+        // two guards on one list have to agree, and for a while they were the
+        // same wrong number written in two languages.
         assertTrue("only ${entries.size} entries", entries.size >= 60)
-        assertTrue("${entries.size} entries", entries.size <= 120)
         assertEquals("an entry id is used twice",
             entries.size, entries.map { it.id }.toSet().size)
     }
