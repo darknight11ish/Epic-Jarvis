@@ -226,6 +226,9 @@ import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 // "Inbox tidy by voice" (2026-09-28): the Undo strip under the input.
 import { mountInboxTidy } from "./inbox-tidy.js";
+// "Coach this" - the prompt coach's button above the box and the panel its
+// critique opens (prompt-coach-panel.js; the owner's request of 2026-10-08).
+import { historyFor, mountPromptCoach } from "./prompt-coach-panel.js";
 // "Spending summaries" (2026-09-30): the table a spending answer announced.
 import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending.js";
 import { mountFormReview } from "./form-review.js";
@@ -426,6 +429,10 @@ const dom = {
   captureFindDate: $("capture-find-date"),
   photoProposal: $("photo-proposal"),
   inboxTidy: $("inbox-tidy"),
+  // The prompt coach: the `.field` the "Coach this" button is put into, above
+  // the box, and the panel the critique is drawn in (prompt-coach-panel.js).
+  promptField: $("prompt-field"),
+  coachPanel: $("coach-panel"),
   spendingTable: $("spending-table"),
   approvalPicture: $("approval-picture"),
   clipboardChip: $("attachment-clipboard"),
@@ -787,6 +794,52 @@ const formReview = dom.approvalPicture
     invoke: (command, args) => invokeStrict(command, args),
     onChange: () => syncWindowHeight(),
     announce,
+  })
+  : null;
+
+/**
+ * "Coach this" (prompt-coach-panel.js; docs/PROMPT-COACH-DESIGN.md, the
+ * owner's request of 2026-10-08): the button above the box, and the panel that
+ * shows ONE critique of the words in it - a score out of 10, what is missing
+ * and why it matters and the smallest fix for each, the questions it would
+ * have to ask, and the rewritten prompt in full.
+ *
+ * The button is drawn only while the PC says the coach is on (off by default);
+ * with it off there is no button at all, which is the owner's own rule.
+ *
+ * NOTHING HERE SENDS A TURN BY ITSELF. The critique is advice: the score is
+ * never a gate, and the panel's own two buttons are the only things that send
+ * anything -
+ *
+ *  - "Send mine" hands back exactly what is in the box, unchanged, through the
+ *    same `send()` the Enter key uses;
+ *  - "Send the suggestion" puts the rewritten prompt in the box and sends
+ *    that. Writing it marks the box "typed" - the words are a question for
+ *    Jarvis written for the owner to read and send, not something pasted in
+ *    from elsewhere (chat-history.js `boxTagAfter`, which holds that rule).
+ *
+ * The history handed over is the bar's own thread - the last few turns it was
+ * going to re-send to the same local model anyway, and never anything the PC
+ * does not already have.
+ */
+const promptCoach = dom.coachPanel
+  ? mountPromptCoach(dom.promptField, dom.coachPanel, {
+    invoke: (command, args) => invokeStrict(command, args),
+    boxText: () => dom.prompt.value,
+    history: () => historyFor(state.thread),
+    sendMine: (text) => send(text, state.boxTag),
+    sendSuggestion: async (text) => {
+      dom.prompt.value = text;
+      // A rewritten question is the owner's own typing, not a paste: it was
+      // written for them to read and send, and every rule about pasted words
+      // stays with words that really were pasted (chat-history.js).
+      state.boxTag = boxTagAfter("typed", "edit", text);
+      state.historyIndex = null;
+      autoGrowPrompt();
+      await send(text, state.boxTag);
+    },
+    announce,
+    onChange: () => syncWindowHeight(),
   })
   : null;
 

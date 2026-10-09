@@ -329,6 +329,13 @@ fn main() {
             // only.
             "get_prompt_coach",
             "set_prompt_coach",
+            // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
+            // critique of the words in the box plus the last few turns, from
+            // the same local model, through the same route. It sends nothing
+            // and decides nothing (the owner's own two buttons do the
+            // sending), raises no card and is never held on a stale link.
+            // Jarvis bar only - "quickbar-surface".
+            "coach_prompt",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings

@@ -1076,10 +1076,17 @@ pub fn run() {
             // PC's own words (a read), and the switch - at once in BOTH
             // directions, no approval card either way and NEVER held on a
             // stale link: it opens no way out of the PC, takes no action and
-            // loosens no rule. Settings window only; the "Coach this" button
-            // in the Jarvis bar is a later piece with its own commands.
+            // loosens no rule. Settings window only.
             prompt_coach::get_prompt_coach,
             prompt_coach::set_prompt_coach,
+            // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
+            // critique of the words in the box plus the last few turns, asked
+            // of the same local model the chat would use. It SENDS NOTHING and
+            // decides nothing - the owner's own press of "Send mine" or "Send
+            // the suggestion" is what sends a turn - and it raises no card and
+            // is never held on a stale link either, for the same reasons as
+            // the switch above. Jarvis bar only.
+            prompt_coach::coach_prompt,
             email_sending::get_email_sending,
             folders::get_folders,
             folders::add_folder,
