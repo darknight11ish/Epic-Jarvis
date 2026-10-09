@@ -140,6 +140,19 @@ RATCHET = {
 # with both features in it, not a sum worked out by hand: test_retrieve_count.py
 # asserts the pin equals what it measures, so it must be the measured value.
     "jarvis_hud.py": 48,
+    #:
+    #: Raised once more to 49 on 2026-10-08, when this branch and `retrieve-count.patch`'s two hunks met: `attention-settings.patch` is the one new
+    #: patch this walk adds for this file, and its single hunk - the interruption
+    #: budget's route, POST /api/attention/settings - anchors on the blank line
+    #: and the `if route == "/api/digest/seen":` that follow the
+    #: `/api/attention/unmute` block. That context is text only the owner's PC
+    #: holds: the walk's stand-in has a gap there, so the hunk materialises its
+    #: pre-image honestly rather than drifting, the same reason
+    #: `gate-risk-rows.patch`'s `_RISK` hunk does. Measured, not argued:
+    #: `_stack.materialised("jarvis_hud.py")` reads 48 without this patch and 49
+    #: with it, and `by_patch` names `attention-settings.patch: 1` and nothing
+    #: else new. A ratchet: it may still only go down.
+    "jarvis_hud.py": 49,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
