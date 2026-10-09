@@ -455,11 +455,26 @@ def t_the_error_message_names_the_right_service():
           "unreachable_msg = (" in direct
           and 'f"Ollama is not answering on {OLLAMA_URL}. "' in direct,
           "expected the 503 lifted with its own words")
+    # WHAT THE SECOND HALF MUST ASK FOR (corrected 2026-10-09). It used to
+    # require the literal absence of "answers at {JARVIS_URL}" - but the NEW,
+    # correct cloud sentence contains that phrase: "The cloud model is not set
+    # up on this PC - nothing answers at {JARVIS_URL}. Pick the local model and
+    # ask again." So the check demanded the absence of a phrase that is inside
+    # the very wording it was asking for, and could never pass on a machine with
+    # a patched jarvis_hud.py. It passed in CI only because `src` is empty
+    # there - green everywhere except the owner's PC, the one place this suite
+    # exists to check.
+    #
+    # The sentence that really did tell the owner to act on JARVIS_URL alone is
+    # the OLD one, and that is what is gone: "Jarvis is not answering on
+    # {JARVIS_URL}. Start it with `uv run jarvis serve`." - a program this setup
+    # never installs (chat-stream.patch's own comment says so).
     check("... so the cloud 503's wording is chat-stream's, and nothing in the HUD "
           "still tells the owner to act on JARVIS_URL alone",
           "The cloud model is not set up on this PC" in stream
-          and (not src or "answers at {JARVIS_URL}" not in src),
-          "expected chat-stream.patch to carry the cloud half")
+          and (not src or "Jarvis is not answering on" not in src),
+          "expected chat-stream.patch to carry the cloud half, and the old "
+          "`Jarvis is not answering on {JARVIS_URL}` sentence to be gone")
 
 
 if __name__ == "__main__":

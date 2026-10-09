@@ -552,6 +552,51 @@ What that commits the updater to, concretely:
   gone from the live file, and if he does not put it back, behaviour he added
   silently stops working. That is the cost he accepted on 2026-10-08.
 
+**4. Should a run that had to skip patches still report success? — ANSWERED
+2026-10-09: no, it always ends as "not finished" until the skipped list has
+been read.** The owner's own words: **"always end as 'not finished' until I
+have seen the skipped list"**. He did not choose "report success and list the
+skips underneath", so the updater does not do that.
+
+What that commits the updater to, concretely:
+
+- **A run that skipped anything does not end as a plain success.** Not a
+  success with a note under it, and not a success whose detail is left in a
+  file: the run's own result must say plainly that it is **not finished**.
+- **It names the patches it skipped**, one by one, in its own output - the
+  owner should not have to open a JSON file to find out what is missing.
+- **It leaves the decision to him.** Having read the list, he decides whether
+  to run it again (or deal with a patch by hand). The tool does not retry by
+  itself and does not treat the skip as settled.
+- **The rule this makes: "finished" means "everything went on".** No patch is
+  ever silently counted as on when it is not - which is the failure mode §8
+  calls the one that hurts most.
+- **Where the skipped list comes from: build step 1, already built.** A run
+  with `-StateJson <path>` writes one entry per patch (§9). The two verdicts
+  that mean "skipped" are **`not-recognised`** (no text of the patch came off
+  and the content check did not find its work either) and
+  **`on-but-unstrippable`** (its work is measured as present, and no text of
+  the patch can take it off the files this run found). That record is what the
+  run's own words must be built from, and it exists even when the result gate
+  refuses - which is exactly when the list is worth most.
+- **What it costs him, written down here because it is real:** a run that got
+  most of the way now still reports itself as **not finished**, so an update is
+  never declared done by the tool alone. He reads the skipped list and decides
+  before running it again. That is the cost he accepted on 2026-10-09, and it
+  is the trade he asked for: less silence, a little more reading.
+
+**One thing to fix on the way, so the rule means what it says.** The two
+verdicts above are not yet the whole story of a skip on today's files. §9
+measured `tutorials.patch` and `screen-attach.patch` failing the **re-apply**
+and being reported in the script's prose as `already on … left as it is`, while
+the run's own record calls them `on-but-unstrippable` - and §9's own note says
+the skip in the re-apply loop is not what would fix the four doubled patches.
+So "skipped" cannot be read off today's prose line; it has to be read off the
+`-StateJson` classification, and step 5's honest "left alone" verdict (obtained
+**before** anything is applied, §5 step 5) is what makes that list complete.
+**This decision does not relax the result gate**, and it does not change step
+5's order: relaxing the gate before step 5 is still forbidden (§8).
+
 ### Still open
 
 2. **For the first run, which has no record of what is on your PC yet, may the
@@ -569,10 +614,6 @@ What that commits the updater to, concretely:
      the step that would let the patches be retired later)
    - **No — leave it as a snapshot for strangers, and keep the patches as the
      description of my install**
-
-4. **Held over, because it needs question 1's answer first:** should a run that
-   had to skip patches still report success, or must it always end as "not
-   finished" until you have looked at the skipped list?
 
 ---
 

@@ -437,10 +437,20 @@ def set_digest_hour(hour, *, path: Optional[Path] = None) -> dict:
 # exact hole was found and fixed in the money limits on 2026-10-07 (bug audit
 # finding E2), so this module is written without it rather than after it.
 #
-# The gate action's name carries the meaning: `raise_attention_budget`. It is
-# deliberately NOT in an owner's tier table, so it resolves to the file's
-# unknown-action tier - "ask" in the shipped config - and a PC whose Jarvis
-# cannot ask refuses the raise (503) instead of applying it.
+# The gate action's name carries the meaning: `raise_attention_budget`. It
+# resolves to "ask" through its own [autonomy.tiers] line, and a PC whose
+# Jarvis cannot ask refuses the raise (503) instead of applying it.
+#
+# CORRECTED 2026-10-09. This comment used to say the name was "deliberately NOT
+# in an owner's tier table", so that it took the file's unknown-action tier.
+# That gave the right tier for the wrong reason: one edit to
+# `unknown_action_tier` would have moved a raise that LOOSENS, silently, with
+# nothing in this file saying so. The project ruled on that pattern on
+# 2026-10-06, giving `control_browser`, `control_phone`,
+# `research_authenticated` and `run_plan` explicit lines for exactly this
+# reason ("One edit to unknown_action_tier would have moved all four
+# silently"). This name now follows that rule too. Nothing about the tier or
+# the card changed - only where the tier is written down.
 RAISE_ACTION = "raise_attention_budget"
 
 _STATE: dict = {"gate": None, "tier_of": None}
