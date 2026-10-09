@@ -576,9 +576,9 @@ pub(crate) fn label_ok(label: &str) -> bool {
     if label.chars().count() > 40 {
         return false;
     }
-    label.chars().all(|c| {
-        c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '\'' | '(' | ')')
-    })
+    label
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '\'' | '(' | ')'))
 }
 
 /// A change's answer (remove, retire, bring back, cancel).
@@ -835,8 +835,12 @@ pub async fn devices_label(
         // not make a round trip first.
         return Err(LABEL_BAD.to_string());
     }
-    let (status, text) =
-        post_raw(&app, LABEL_PATH, serde_json::json!({ "id": id, "label": label })).await?;
+    let (status, text) = post_raw(
+        &app,
+        LABEL_PATH,
+        serde_json::json!({ "id": id, "label": label }),
+    )
+    .await?;
     change_answer(status, &text)
 }
 
