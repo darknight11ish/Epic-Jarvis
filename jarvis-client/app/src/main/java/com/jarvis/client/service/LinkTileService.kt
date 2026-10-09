@@ -15,6 +15,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -37,11 +38,31 @@ import kotlinx.coroutines.launch
  * `/api/status`'s `held` - its producer is the owner's jarvis_hud.py - and
  * the Mind screen reads it as something held back from sending, so the two
  * disagreed; this tile does not read `held` at all.
+ *
+ * THE ONE THING HELD LOCALLY is a mute the owner has just asked for and the
+ * PC has not confirmed yet ([asked]): the tile says "Muting..." and drops a
+ * second tap for that round trip only (Android audit 2026-10-08). It never
+ * claims the mute happened - "Muted" still comes from the PC's own re-read,
+ * exactly as the paragraph above requires.
  */
 class LinkTileService : TileService() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var watcher: Job? = null
+
+    /**
+     * The mute state the owner has asked for and the runtime's own re-read has
+     * not shown yet: null when nothing is in flight.
+     *
+     * `attention.muted` only moves when the PC answers `GET /api/attention`,
+     * which `setMuted` runs after its POST - so without this the tile kept
+     * drawing the OLD value for the whole round trip, a second tap read that
+     * same value and sent "mute" again, and the tap meant to unmute muted
+     * instead (Android audit 2026-10-08). [render] uses it to answer the tap
+     * at once ("Muting..."), and [onClick] to drop a second tap aimed at the
+     * state it is already going to be in ([QuickTiles.muteCommand]).
+     */
+    private val asked = MutableStateFlow<Boolean?>(null)
 
     override fun onStartListening() {
         super.onStartListening()
@@ -55,10 +76,10 @@ class LinkTileService : TileService() {
                 JarvisRuntime.link,
                 JarvisRuntime.activity,
                 JarvisRuntime.attention,
-            ) { link, activity, attention -> Triple(link, activity, attention) }
-                .collect { (link, activity, attention) ->
-                    render(link, activity, attention.muted, attention.pending)
-                }
+                asked,
+            ) { link, activity, attention, ask ->
+                render(link, activity, attention.muted, attention.pending, ask)
+            }.collect { }
         }
     }
 
@@ -96,13 +117,40 @@ class LinkTileService : TileService() {
         // most of the time, so reading it here meant the tile believed it was
         // never muted: every tap sent mute, and it could never unmute.
         val muted = JarvisRuntime.attention.value.muted
+        // What this tap should send, or nothing: a tap while the previous
+        // mute is still unconfirmed would otherwise read this same `muted`
+        // and send the same command again, so the second tap never unmuted
+        // (Android audit 2026-10-08). Never queued - the tile turns dark the
+        // moment the first tap is sent, so that second tap was aimed at the
+        // state it is already going to be in.
+        val command = QuickTiles.muteCommand(shown = muted, asked = asked.value) ?: return
         // App lock on and the phone locked: Android's own unlock first, like
         // every other tile (QuickTileService). Dismissed, nothing is done.
         if (QuickTiles.muteNeedsUnlock(JarvisRuntime.settings.security.value.appLock, isLocked)) {
-            unlockAndRun { scope.launch { JarvisRuntime.setMuted(!JarvisRuntime.attention.value.muted) } }
+            unlockAndRun { scope.launch { sendMute(command) } }
             return
         }
-        scope.launch { JarvisRuntime.setMuted(!muted) }
+        scope.launch { sendMute(command) }
+    }
+
+    /**
+     * One Mute or Unmute, holding the state it asked for until the round trip
+     * is over: [render] draws "Muting..." and [onClick] ignores a second tap
+     * while `asked` disagrees with what the tile shows.
+     *
+     * Cleared whatever the answer, and that is deliberate - held after a
+     * failure it would ignore every later tap, the same frozen-control shape
+     * this replaced. On a failure the re-read never happened, so the old value
+     * is still the true one and the next tap sends the same command again,
+     * which is right: nothing had changed on the PC.
+     */
+    private suspend fun sendMute(muted: Boolean) {
+        asked.value = muted
+        try {
+            JarvisRuntime.setMuted(muted)
+        } finally {
+            asked.value = null
+        }
     }
 
     private fun render(
@@ -110,6 +158,7 @@ class LinkTileService : TileService() {
         activity: Activity,
         muted: Boolean,
         pending: Int,
+        askedFor: Boolean?,
     ) {
         val tile = qsTile ?: return
         // INACTIVE, not UNAVAILABLE, when the link is down. SystemUI does not
@@ -120,13 +169,17 @@ class LinkTileService : TileService() {
         // "Offline", so the tile still reads as off rather than as ready.
         tile.state = when {
             link != LinkState.CONNECTED -> Tile.STATE_INACTIVE
-            muted -> Tile.STATE_INACTIVE
+            // Sent but not yet confirmed counts as dimmed too: the tile's only
+            // feedback is what it draws, and it draws the new state at once
+            // rather than staying lit for the round trip.
+            muted || askedFor == true -> Tile.STATE_INACTIVE
             else -> Tile.STATE_ACTIVE
         }
         tile.label = "Jarvis"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = when {
                 link != LinkState.CONNECTED -> "Offline"
+                askedFor != null -> if (askedFor) "Muting..." else "Unmuting..."
                 muted -> if (pending > 0) "Muted · $pending waiting" else "Muted"
                 pending > 0 -> "$pending waiting"
                 activity == Activity.THINKING -> "Thinking"

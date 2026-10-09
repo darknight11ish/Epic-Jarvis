@@ -119,6 +119,23 @@ class QuickTilesTest {
     }
 
     @Test
+    fun aSecondMuteTapInsideTheRoundTripIsDroppedInsteadOfSentAgain() {
+        // Android audit 2026-10-08. `shown` only moves when the PC's re-read
+        // lands, so the tap is the opposite of what the tile draws.
+        assertEquals(true, QuickTiles.muteCommand(shown = false, asked = null))
+        assertEquals(false, QuickTiles.muteCommand(shown = true, asked = null))
+        // A mute is in flight and the tile still shows the old state: the
+        // second tap is dropped, never sent as a second "mute" (the bug -
+        // tap to mute, tap again, still muted).
+        assertNull(QuickTiles.muteCommand(shown = false, asked = true))
+        assertNull(QuickTiles.muteCommand(shown = true, asked = false))
+        // The re-read has agreed (the tile now draws what was asked for):
+        // the next tap is a real toggle again, so unmuting still works.
+        assertEquals(false, QuickTiles.muteCommand(shown = true, asked = true))
+        assertEquals(true, QuickTiles.muteCommand(shown = false, asked = false))
+    }
+
+    @Test
     fun playPauseFollowsThePcsOwnSentence() {
         assertEquals("pause", QuickTiles.playPauseAction("Playing: “Song” by Band."))
         assertEquals("play", QuickTiles.playPauseAction("Paused: “Song” by Band."))
@@ -134,6 +151,23 @@ class QuickTilesTest {
         assertFalse(QuickTiles.shown(TileAction.FOCUS, ok = true, said = "Focus on taxes.", private = true).contains("taxes"))
         assertEquals(staleWords, QuickTiles.shown(TileAction.FOCUS, ok = false, said = staleWords, private = true))
         assertEquals("Paused.", QuickTiles.shown(TileAction.PC_PLAY_PAUSE, ok = true, said = "Paused.", private = true))
+    }
+
+    @Test
+    fun theLinkTileSendsWhatMuteCommandSaysAndHoldsItUntilTheReRead() {
+        // The pure decision above is only worth anything if the tile uses it.
+        // Source, not behaviour: the tap needs a bound TileService on a phone
+        // (CI's Gradle build is the first compile). Before the fix this read
+        // `setMuted(!muted)` in place and never held anything.
+        val src = listOf(
+            File("src/main/java/com/jarvis/client/service/LinkTileService.kt"),
+            File("app/src/main/java/com/jarvis/client/service/LinkTileService.kt"),
+        ).first { it.isFile }.readText()
+        assertTrue("the tap must ask the pure rule", src.contains("QuickTiles.muteCommand("))
+        assertFalse("never negate the shown value in place again", src.contains("setMuted(!muted)"))
+        assertTrue("and send that answer", src.contains("setMuted(muted)"))
+        assertTrue("holding what it asked for", src.contains("asked.value = muted"))
+        assertTrue("answering the tap before the round trip", src.contains("\"Muting...\""))
     }
 
     @Test
