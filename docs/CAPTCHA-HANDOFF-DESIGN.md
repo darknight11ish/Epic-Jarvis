@@ -38,7 +38,7 @@ Hello**; choice 1 is immediate from either app. Section 5 has the whole shape;
 both apps show it in the same words. This answers **Q1**; section 8 takes it out
 of its open list below (Q5 and Q10 follow on 2026-10-09).
 
-**THE OWNER'S DECISIONS OF 2026-10-09.** Three more questions were answered, and
+**THE OWNER'S DECISIONS OF 2026-10-09.** Four more questions were answered, and
 section 8 records each one as answered rather than deleting it, so the list of
 what is still open stays checkable against the list of what was asked:
 
@@ -59,6 +59,13 @@ what is still open stays checkable against the list of what was asked:
    any other window. He did **not** choose "never send a support page", and did
    **not** choose "ask me on the PC first, each session". §3 carries the cost in
    its own "what is *not* protected" list; section 8 has the full statement.
+4. **Q4 - whether the window Jarvis is stuck on is brought to the front.
+   ANSWERED: no by default; a setting may turn it on.** The owner's own words:
+   *"1 by default with the option for 2 in the settings of Jarvis"* - leave the
+   window where it is and **name it** as the default, with a **setting** that
+   switches to bringing it to the front. The default is **built and merged** and
+   is what the code does today; the setting is **owed work, not built yet**.
+   Section 8.1 has the full statement.
 
 **In one paragraph:** when the visible browser window Jarvis is driving stops
 on a captcha, a sign-in page or an "unusual activity" page, Jarvis stops

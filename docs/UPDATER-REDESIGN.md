@@ -552,7 +552,7 @@ What that commits the updater to, concretely:
   gone from the live file, and if he does not put it back, behaviour he added
   silently stops working. That is the cost he accepted on 2026-10-08.
 
-**2. Should a run that had to skip patches still report success? — ANSWERED
+**4. Should a run that had to skip patches still report success? — ANSWERED
 2026-10-09: no, it always ends as "not finished" until the skipped list has
 been read.** The owner's own words: **"always end as 'not finished' until I
 have seen the skipped list"**. He did not choose "report success and list the
