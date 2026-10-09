@@ -186,20 +186,40 @@ export function renderMenuList() {
   }
 }
 
+/**
+ * A card that is not hidden is marked `false` rather than left unmarked, so
+ * "this card is not hidden by a menu" is a fact the search can read - see the
+ * note in `applyVisibility` below and `settings-search.js`.
+ */
+export function markMenuHidden(card, hidden) {
+  card.dataset.menuHidden = hidden ? "true" : "false";
+  if (hidden) card.hidden = true;
+  else if (!document.body.classList.contains("searching")) card.hidden = false;
+}
+
 export function applyVisibility() {
   const cards = document.querySelectorAll("section.card");
   for (const card of cards) {
     const mid = card.dataset.menuId || (card.id ? `settings.${card.id}` : null);
     if (!mid || !known(mid, "desktop")) continue;
 
-    const hidden = menuManager.isHidden(mid);
-    card.hidden = hidden;
+    // THE MENU'S DECISION IS RECORDED, NOT ONLY APPLIED (settings search,
+    // 2026-10-09). `settings-search.js` filters by setting `hidden` too, and
+    // these are two different reasons for the same attribute: a card the
+    // owner hid must not come back because it happens to match a search, and
+    // must still be hidden after the search is cleared. So the menu writes
+    // its answer to `data-menu-hidden` and touches `hidden` only while no
+    // search is on - the search's own pass reads the attribute and leaves it
+    // alone. `markMenuHidden` is that one place.
+    markMenuHidden(card, menuManager.isHidden(mid));
 
     const m = menu(mid);
     if (m && m.collapse) {
       if (menuManager.isCollapsed(mid)) {
         card.classList.add("card-collapsed");
-      } else {
+      } else if (!card.dataset.searchWasCollapsed) {
+        // ...and a card the SEARCH opened stays open until the box is empty,
+        // or folding it here would hide the row that just matched.
         card.classList.remove("card-collapsed");
       }
       updateCollapseButton(card, mid);
