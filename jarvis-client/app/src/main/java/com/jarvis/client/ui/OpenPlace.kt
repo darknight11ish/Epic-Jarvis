@@ -94,6 +94,12 @@ object OpenPlace {
         "second-card" to Where.Go(Screen.BRAIN, "second-card"),
         "big-model" to Where.Go(Screen.BRAIN, "big-model"),
         "backend-supports" to Where.Go(Screen.BRAIN, "capabilities"),
+        // Spending summaries (2026-10-08): the phone draws this plate itself
+        // (BrainScreen.kt `item(key = "spending")`, menu "settings.spending",
+        // which `contract/menu-cases.json` marks available on the phone). It
+        // sat in [PC_ONLY] instead, so "open spending" answered "only in
+        // Jarvis on your PC" with the plate one tap away.
+        "spending" to Where.Go(Screen.BRAIN, "spending"),
         // "Forget a time frame" (2026-09-28): not a settings section - the
         // place "forget what you learned last week" opens, named by the
         // answer's `open_brain` (net/ForgetRange.kt, ChatSession).
@@ -124,7 +130,6 @@ object OpenPlace {
         "more-options",
         "crash-notes",
         "start-jarvis",
-        "spending",
         "notifications",
         "first-run",
         "hud-window",
