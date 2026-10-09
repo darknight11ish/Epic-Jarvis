@@ -142,18 +142,38 @@ anchor, the chain and the ordering rule together. It is a bigger change and
 would want its own design note; the sentinel is the small version that can be
 done now.
 
-## One more blocker, unrelated
+## The second blocker I reported, and the correction
 
-On the same day, `handoff-mode.patch` on `main` was **malformed**:
+While rehearsing, this appeared alongside the anchor failure:
 
 ```
+FAIL  handoff-mode.patch - will not apply
 error: patch fragment without header at handoff-mode.patch:12: @@ -840,4 +841,14 @@
 ```
 
-A hunk with no `@@` header cannot apply to anything, so this blocks every
-install on its own, whatever happens to `screen-attach.patch`. It is a
-one-line-class repair by whoever owns that patch, and it should be fixed before
-anyone spends more time on the anchor.
+I called it a live blocker in the first version of this document. **That was
+true when the rehearsal observed it and is not true now.** It was fixed in
+`cb294e04` ("one wrong integer in a hunk header blocked every install",
+2026-10-09, merged as PR #142), which landed *after* the `main` that rehearsal
+ran against. Any checkout of current `main` carries the fixed text.
+
+Two details from the diagnosis worth keeping, because the error misleads:
+
+- **The line number in the message is not the defect.** Git blamed line 12; the
+  real fault was one integer on **line 3**, where `@@ -190,6 +190,7 @@`
+  under-claimed by one line (the body supplies 7 old and 8 new). Fixing line 12
+  instead still failed identically. Editing the header on line 3 to
+  `@@ -190,7 +190,8 @@` was the whole repair, and the merged diff is exactly that
+  one character per side.
+- **A test now catches this class of defect.** `backend/test_patch_wellformed.py`
+  runs `git apply --numstat` over every name in `$PATCHES` and every rebuilt
+  half, and was added by the same fix. Before it, nothing did:
+  `test_apply_outcomes.py` drives the installer with two fake one-hunk patches,
+  and the feature's own suite asserted only that the patch text *contains*
+  certain strings - which a malformed patch contains just as well.
+
+That second point strengthens the case for the proposal above: a convention
+without a test is exactly how a one-character defect blocked every install.
 
 ## What is proven, and what is not
 
