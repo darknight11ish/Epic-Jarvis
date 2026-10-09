@@ -63,6 +63,12 @@ object OpenPlace {
         "screen-look" to Where.Go(Screen.SETTINGS, "screen-look"),
         // The headless browser (Obscura): its switch, default and install line (2026-09-29).
         "browser-engine" to Where.Go(Screen.SETTINGS, "browser-engine"),
+        // "When the phone does not answer" (2026-10-08): the registry's own
+        // Section for the captcha hand-off. It is an ordinary Settings row on
+        // the phone (SettingsScreen.kt, item "handoff"), which is what makes
+        // "open the captcha hand-off" land on it instead of the top of Settings
+        // - OpenPlaceTest's new-section check is what caught it missing.
+        "handoff" to Where.Go(Screen.SETTINGS, "handoff"),
         // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").

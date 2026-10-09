@@ -32,6 +32,12 @@ object MenuPlaces {
         "phone-notify" to "settings.phone-notify",
         "screen-look" to "settings.screen-look",
         "browser-engine" to "settings.browser-engine",
+        // "When the phone does not answer" (2026-10-08): SettingsScreen.kt draws
+        // it behind `menus.shows("settings.handoff")` with a MenuFrame of its
+        // own, but without this line the new section had no PLACE here, so the
+        // phone could not hide it and its row was an undecided item key -
+        // MenuVisibilityTest caught both halves in CI.
+        "handoff" to "settings.handoff",
         "devices" to "settings.devices",
         "quick-tiles" to "settings.quick-tiles",
     )

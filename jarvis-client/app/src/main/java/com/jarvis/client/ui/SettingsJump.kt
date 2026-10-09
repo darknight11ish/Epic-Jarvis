@@ -41,6 +41,11 @@ object SettingsJump {
         Entry("Phone notifications", "phone-notify"),
         Entry("Look at this and Watch with me", "screen-look"),
         Entry("Browser without a window", "browser-engine"),
+        // "When the phone does not answer" (2026-10-08): the new captcha hand-off
+        // row sits between these two on the screen (SettingsScreen.kt), so it
+        // goes between them here too - the label is the desktop jump list's own
+        // words for the same section (settings.html, `#handoff`).
+        Entry("When the phone does not answer", "handoff"),
         Entry("Devices", "devices"),
         Entry("Quick Settings tiles", "quick-tiles"),
     )
