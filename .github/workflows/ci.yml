@@ -282,6 +282,17 @@ jobs:
         run: |
           python tools/gen_season.py --check
           node jarvis-desktop/tests/season.mjs
+      # The job list (2026-10-08, JARVIS-API section 118): work that outlives one
+      # chat turn. tasks-cases.json is what jarvis_tasks.JobList().status() really
+      # answers, with jobs in real states, for BOTH apps - the phone's TasksTest
+      # reads it and the desktop's job-list.mjs checks its own fields against the
+      # same file, so the two clients cannot drift apart and the payload cannot
+      # change shape without it being a decision.
+      - name: Job list - both apps' contract matches jarvis_tasks.py
+        run: |
+          python tools/gen_tasks_cases.py --check
+          python tools/gen_tasks_patch.py --check
+          node jarvis-desktop/tests/job-list.mjs
       # A command registered in lib.rs but missing from build.rs's own ACL
       # export list has no permission at all, and every window's call to it
       # is refused at runtime - a compile-time-invisible break that bit two

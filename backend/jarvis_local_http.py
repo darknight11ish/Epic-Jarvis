@@ -260,10 +260,54 @@ def plain_http_problem(url: str, env_name: str, secret: str) -> str:
 #: refused, plus link-local and "any address" ranges that _OWN_NETS leaves
 #: out (on purpose, for the opposite reason: a home router never hands out
 #: 169.254.x.x, so `plain_http_problem` need not treat it as "safely home").
+#
+# The last two groups were added 2026-10-08, reading OpenMuse's
+# `apps/worker/src/network.ts` (docs/COMPETITORS-OPENMUSE-2026-10-08.md) and
+# then checking this file: its own allowlist taught the check about the
+# ranges the internet has set aside for things that are NOT a destination.
+# None of these is "somewhere on the open internet" either, so a fetch to
+# one is refused for exactly the reason 127.0.0.1 is - and two of them are
+# reachable on purpose by ordinary software (198.18.0.0/15 is claimed by
+# some VPN and proxy tools; 192.0.0.1/192.0.0.9 are DNS64 and PCP anycast),
+# which is the reason to name them rather than assume nobody would try.
 _PRIVATE_NETS = _OWN_NETS + (
     ipaddress.ip_network("169.254.0.0/16"), ipaddress.ip_network("fe80::/10"),
     ipaddress.ip_network("0.0.0.0/8"), ipaddress.ip_network("::/128"),
+    # RFC 5735/6890 "never a destination": protocol assignments, the three
+    # TEST-NET blocks a documentation example uses, the benchmarking block.
+    ipaddress.ip_network("192.0.0.0/24"), ipaddress.ip_network("192.0.2.0/24"),
+    ipaddress.ip_network("198.18.0.0/15"),
+    ipaddress.ip_network("198.51.100.0/24"), ipaddress.ip_network("203.0.113.0/24"),
+    # Multicast and the reserved top of the space (255.255.255.255 in it),
+    # and the IPv6 equivalents.
+    ipaddress.ip_network("224.0.0.0/4"), ipaddress.ip_network("240.0.0.0/4"),
+    ipaddress.ip_network("ff00::/8"), ipaddress.ip_network("2001:db8::/32"),
 )
+
+#: NAT64 (RFC 6052): what a DNS64 network answers for a name that only has
+#: an IPv4 address. `127.0.0.1` inside it is spelled `64:ff9b::7f00:1`, and
+#: `ipaddress` does NOT report that as `.ipv4_mapped`, so without the
+#: unwrapping in `_address_carries` the private address behind it would be
+#: invisible to the check. The range itself is deliberately NOT in
+#: `_PRIVATE_NETS`: a NAT64 address carrying a genuinely public IPv4 is a
+#: legitimate way for an IPv6-only machine to reach the open internet, and
+#: refusing the whole range would break that for no security gain.
+_NAT64 = ipaddress.ip_network("64:ff9b::/96")
+
+
+def _address_carries(ip):
+    """The IPv4 address an IPv6 address CARRIES, or None.
+
+    Two real forms, both of which the operating system will dial as the
+    address they embed: IPv4-mapped (`::ffff:0:0/96`, which `ipaddress`
+    reports as `.ipv4_mapped`) and NAT64 (`64:ff9b::/96`)."""
+    if ip.version == 4:
+        return None
+    if ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    if ip in _NAT64:
+        return ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
+    return None
 
 
 def _resolved_addresses(host: str) -> list:
@@ -299,6 +343,16 @@ def _resolved_addresses(host: str) -> list:
 
 
 def _is_private(ip) -> bool:
+    """Is this an address Jarvis must not reach for a fetch meant to be on
+    the open internet?
+
+    Unwraps a carried IPv4 FIRST (see `_address_carries`): an IPv6 address
+    that is a wrapped 127.0.0.1 or 10.0.0.5 is judged as the address it
+    really is, never as a harmless-looking IPv6 one. Recursion ends at the
+    IPv4 hop, and IPv4 addresses never carry anything."""
+    inner = _address_carries(ip)
+    if inner is not None:
+        return _is_private(inner)
     return any(ip in net for net in _PRIVATE_NETS if net.version == ip.version)
 
 

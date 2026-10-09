@@ -674,6 +674,16 @@ fun BrainScreen(
                 }
             }
 
+            // The job list (2026-10-08, JARVIS-API section 118): work that
+            // outlives one chat turn, beside "Background jobs" and hidden with
+            // it - one menu entry covers what the PC is working on - but in an
+            // item of its own, because this list has to be visible when there
+            // are no Long Fuse jobs. It reads and steers through JarvisRuntime
+            // directly (TasksPlate.kt), so this is its only line.
+            if (menus.shows("brain.work.jobs")) item(key = "tasks") {
+                TasksSection(canAct = canAct)
+            }
+
             // The GitHub watch list (WatchPlate.kt) - it reads and acts
             // through JarvisRuntime directly, so this is its only line.
             item(key = "watch") { WatchSection(canAct = canAct) }
