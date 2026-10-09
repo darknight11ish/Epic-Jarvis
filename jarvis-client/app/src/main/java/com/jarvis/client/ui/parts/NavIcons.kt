@@ -17,7 +17,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.unit.dp
 
 /**
- * Four drawn glyphs. `docs/UI-AUDIT-2026-09-18.md` choice A1 - "no icon
+ * Six drawn glyphs (Mind, Inbox, Appearance, Live, Help, Settings - Settings
+ * joined the row on 2026-10-08, and the count here moved with it).
+ * `docs/UI-AUDIT-2026-09-18.md` choice A1 - "no icon
  * font... drawn in-app like the microphone glyph is." - still holds: no icon
  * font, no vector asset.
  *
@@ -152,5 +154,27 @@ fun HelpIcon(tint: Color, modifier: Modifier = Modifier) {
             strokeWidth = stroke.width,
             cap = StrokeCap.Round,
         )
+    }
+}
+
+/** Settings: a cog - the plain, universal mark for "the switches for
+ *  everything else", an outline like the other five. Its eight teeth are one
+ *  line each, drawn round the ring, so it never looks busier than they do. */
+@Composable
+fun SettingsIcon(tint: Color, modifier: Modifier = Modifier) {
+    Glyph(modifier) { stroke, u ->
+        val c = Offset(12f * u, 12f * u)
+        drawCircle(tint, radius = 6.5f * u, center = c, style = stroke)
+        for (i in 0 until 8) {
+            rotate(degrees = i * 45f, pivot = c) {
+                drawLine(
+                    color = tint,
+                    start = Offset(12f * u, 3f * u),
+                    end = Offset(12f * u, 5.5f * u),
+                    strokeWidth = stroke.width,
+                    cap = StrokeCap.Round,
+                )
+            }
+        }
     }
 }

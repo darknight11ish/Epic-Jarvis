@@ -208,9 +208,27 @@ def t_the_tool_updates_row_tells_the_truth():
 
 def t_the_safe_list_never_meets_the_hard_limits():
     s = set(AF.SWITCHABLE)
-    check("the short safe list is the owner's: reads and note writes",
+    # Grew on 2026-10-08: the audit found seven rows running without asking and
+    # switchable nowhere; these five are on the list now. The expectation is
+    # still an exact set, deliberately - a row joining the list is a decision,
+    # not a detail, so it has to be written here on purpose.
+    check("the short safe list is the owner's: reads, note writes and the power mode",
           s == {"calendar_read", "email_read", "notes_search", "home_read",
-                "append_obsidian_daily", "append_logseq_journal", "create_joplin_note"}, s)
+                "append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
+                "read_files_readonly", "read_joplin_note", "read_logseq_page",
+                "create_logseq_page", "power_manage"}, s)
+    # The two of the seven left OFF the list, and why - so a later change has
+    # to argue with the reason, not just add a name.
+    # browse_model_catalog: a way out of this PC (LOCKDOWN_ACTIONS,
+    # docs/ARCHITECTURE.md section 4). test_lockdown.py pins the only ways out
+    # that may be switched at all.
+    check("... and not the catalogue browse: it leaves this PC",
+          "browse_model_catalog" not in s and "browse_model_catalog" in AF.LOCKDOWN_ACTIONS)
+    # rollback_model: the undo for a model switch, which must never wait -
+    # jarvis_tripwire.py's "keep the previous model" rolls back with no
+    # approval at all ("rollback needs no approval").
+    check("... and not the model rollback: the undo must never wait",
+          "rollback_model" not in s and "rollback_model" not in AF.MUST_ASK)
     check("... never a hard limit", not s & AF.HARD_LIMITS)
     check("... never an action whose module accepts only 'ask'", not s & AF.MUST_ASK)
     person = set()
