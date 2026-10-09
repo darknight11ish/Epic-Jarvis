@@ -46,6 +46,7 @@ pub mod look;
 pub mod notifications;
 pub mod plain_errors;
 pub mod proctree;
+pub mod prompt_coach;
 pub mod pyfind;
 pub mod reach;
 pub mod screen_work;
@@ -1070,6 +1071,15 @@ pub fn run() {
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
             asks_first::set_tool_enabled,
+            // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
+            // owner's request of 2026-10-08): whether the coach is on, in the
+            // PC's own words (a read), and the switch - at once in BOTH
+            // directions, no approval card either way and NEVER held on a
+            // stale link: it opens no way out of the PC, takes no action and
+            // loosens no rule. Settings window only; the "Coach this" button
+            // in the Jarvis bar is a later piece with its own commands.
+            prompt_coach::get_prompt_coach,
+            prompt_coach::set_prompt_coach,
             email_sending::get_email_sending,
             folders::get_folders,
             folders::add_folder,

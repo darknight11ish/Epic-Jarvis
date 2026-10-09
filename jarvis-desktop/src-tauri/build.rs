@@ -320,6 +320,15 @@ fn main() {
             "set_asks_first",
             "set_lights_without_card",
             "set_tool_enabled",
+            // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
+            // owner's request of 2026-10-08; backend/prompt-coach.patch):
+            // whether the coach is on, in the PC's own words (a read), and
+            // the switch - at once in BOTH directions, no approval card
+            // either way and never held on a stale link: it opens no way out
+            // of the PC, takes no action and loosens no rule. Settings window
+            // only.
+            "get_prompt_coach",
+            "set_prompt_coach",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings

@@ -98,6 +98,7 @@
             <span class="settings-jump-place-label">Talk and voice</span>
             <a href="#voice">Voice</a>
             <a href="#manner">How Jarvis talks</a>
+            <a href="#prompt-coach">Prompt coach</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Schedules</span>
@@ -870,6 +871,45 @@
                 <span class="status" id="th-status" role="status"></span>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Prompt coach ──────────────────────────────────────────────────
+           The owner's request of 2026-10-08 and their answers the same day
+           (docs/PROMPT-COACH-DESIGN.md; prompt-coach-settings.js;
+           src-tauri/src/prompt_coach.rs get_prompt_coach, set_prompt_coach;
+           backend jarvis_prompt_coach.py). OFF by default. ON, a "Coach this"
+           button sits beside the box where you type and asks the model on this
+           PC what is missing from the question - advice only, never a send,
+           never a change to the owner's own words. That button and the panel
+           it opens are a later piece of work (they belong to the Jarvis bar);
+           this card is its switch.
+
+           NEITHER DIRECTION IS A LOOSENING: nothing here opens a way out of
+           the PC, takes an action or loosens a rule, so no approval card is
+           raised either way and neither direction is held on a stale link -
+           the one setting in this window that is not (see the module's own
+           note, and prompt_coach.rs's). The label and the paragraph under the
+           switch are the PC's own words, with a byte-identical copy in the
+           module (LABEL, DETAIL) if the read fails. -->
+      <section class="card" id="prompt-coach">
+        <h2>Prompt coach</h2>
+        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one.</p>
+
+        <p class="state" id="coach-state" role="status">Asking Jarvis…</p>
+
+        <div id="coach-body" hidden>
+          <label class="toggle">
+            <input id="coach-enabled" type="checkbox" />
+            <span>
+              <span id="coach-enabled-label">Prompt coach</span>
+              <span class="toggle-detail" id="coach-enabled-detail"></span>
+            </span>
+          </label>
+          <p class="sc-line" id="coach-enabled-status" role="status"></p>
+          <div class="row">
+            <span class="status" id="coach-status" role="status"></span>
           </div>
         </div>
       </section>
@@ -2459,6 +2499,7 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="prompt-coach-settings.js"></script>
     <script type="module" src="thinking-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
     <script type="module" src="hud-window-settings.js"></script>

@@ -52,6 +52,9 @@ object OpenPlace {
         "animal-options" to Where.Go(Screen.SETTINGS, "appearance-card"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
+        // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,
+        // docs/JARVIS-API.md section 119): its own row on Settings.
+        "prompt-coach" to Where.Go(Screen.SETTINGS, "prompt-coach"),
         "asks-first" to Where.Go(Screen.SETTINGS, "asks-first"),
         "reach" to Where.Go(Screen.SETTINGS, "reach"),
         "email-sending" to Where.Go(Screen.SETTINGS, "email-sending"),

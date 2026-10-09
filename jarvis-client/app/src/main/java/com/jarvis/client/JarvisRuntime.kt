@@ -2084,6 +2084,39 @@ object JarvisRuntime {
     /** `GET /api/search`. A read: never held. */
     suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
 
+    // ------------------------------------------------------- prompt coach ----
+    // docs/PROMPT-COACH-DESIGN.md; docs/JARVIS-API.md section 119; see
+    // [com.jarvis.client.net.PromptCoach] and ui/screens/PromptCoachPlate.kt.
+    // ONE change, off by default: the master switch for the "Coach this"
+    // button. Neither direction raises an approval card - the coach reads only
+    // words the chat is about to send to the same local model, takes no action
+    // and opens no way out of the PC. The button itself is later work; this
+    // phone only turns the feature on or off.
+
+    /** `GET /api/prompt/coach`. A read: never held. */
+    suspend fun promptCoach(): ApiResult<JsonObject> = api.promptCoach()
+
+    /**
+     * The prompt coach switch. Held on a stale link like every change sent to
+     * the PC ([actionBlocker], rule 4): "at once" means no approval card, not
+     * "works while the link is down". Neither direction asks, so nothing here
+     * waits for a card - [writeNoticingCards] is still used, so this screen can
+     * never say "done" over a card that did turn up while the request was out.
+     * @return the sentence to show under the switch.
+     */
+    suspend fun setPromptCoach(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPromptCoach(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.said(on, r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                    com.jarvis.client.net.PromptCoach.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
     // ------------------------------------------------ what Jarvis can reach ----
     // The Muse audit, 2026-09-25 - see [com.jarvis.client.net.Reach] and
     // ui/screens/ReachPlate.kt. Every way Jarvis can reach something outside

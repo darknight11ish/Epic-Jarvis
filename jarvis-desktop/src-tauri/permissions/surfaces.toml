@@ -550,6 +550,17 @@ permissions = [
   # Rust; OFF is at once. Rust refuses any tool off the short list before
   # sending; so does the PC. Desktop only.
   "allow-set-tool-enabled",
+  # "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the owner's request of
+  # 2026-10-08; backend jarvis_prompt_coach.py): whether the coach is on, in
+  # the PC's own words (a read), and the switch - OFF by default. NEITHER
+  # DIRECTION raises a card and NEITHER is held on a stale link, the one
+  # setting in this window of that shape: it opens no way out of the PC, takes
+  # no action and loosens no rule (the design's choice B, written down so "no
+  # card" stays a decision and never an oversight). The "Coach this" button
+  # beside the box in the Jarvis bar is a later piece of work, with its own
+  # commands.
+  "allow-get-prompt-coach",
+  "allow-set-prompt-coach",
   # "Sending email": whether it is set up, from which address and through
   # which server (GET /api/email/sending). A read: it sends nothing and
   # never carries the password. Each email is its own approval card.

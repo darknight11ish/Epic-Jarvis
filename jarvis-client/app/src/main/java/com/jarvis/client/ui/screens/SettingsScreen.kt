@@ -105,17 +105,19 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "floating-avatar" to 5,
     "manner" to 6,
     "web-search" to 7,
-    "asks-first" to 8,
-    "reach" to 9,
-    "email-sending" to 10,
-    "folders" to 11,
-    "backup" to 12,
-    "watch-notify" to 13,
-    "phone-notify" to 14,
-    "screen-look" to 15,
-    "browser-engine" to 16,
-    "devices" to 17,
-    "quick-tiles" to 18,
+    // "Prompt coach" (docs/JARVIS-API.md section 119) sits right after Web search.
+    "prompt-coach" to 8,
+    "asks-first" to 9,
+    "reach" to 10,
+    "email-sending" to 11,
+    "folders" to 12,
+    "backup" to 13,
+    "watch-notify" to 14,
+    "phone-notify" to 15,
+    "screen-look" to 16,
+    "browser-engine" to 17,
+    "devices" to 18,
+    "quick-tiles" to 19,
 )
 
 /**
@@ -398,6 +400,10 @@ fun SettingsScreen(
                 }
             }
             if (menus.shows("settings.web-search")) item(key = "web-search") { MenuFrame(menus, "settings.web-search") { WebSearchSection(canAct = canAct) } }
+            // "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, docs/JARVIS-API.md section 119):
+            // the master switch for the "Coach this" button, off by default,
+            // decided on the PC and shown in the PC's own words here.
+            if (menus.shows("settings.prompt-coach")) item(key = "prompt-coach") { MenuFrame(menus, "settings.prompt-coach") { PromptCoachSection(canAct = canAct) } }
             item(key = "asks-first") { AsksFirstSection(canAct = canAct) }
             if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
             if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }

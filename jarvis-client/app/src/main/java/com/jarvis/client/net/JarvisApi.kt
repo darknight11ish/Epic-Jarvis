@@ -1767,6 +1767,25 @@ class JarvisApi(
     suspend fun webSearch(): ApiResult<JsonObject> = probe(WebSearch.PATH)
 
     /**
+     * `GET /api/prompt/coach` - the prompt coach's switch, in the PC's own
+     * words ([PromptCoach.parse]): whether it is on, its label and its detail
+     * paragraph, and the two sentences the "Coach this" bar will use ("Send
+     * mine", "Send the suggestion"), which this screen does not show yet. A
+     * read. A 404 is an older backend ([PromptCoach.missing]).
+     */
+    suspend fun promptCoach(): ApiResult<JsonObject> = probe(PromptCoach.PATH)
+
+    /**
+     * `POST /api/prompt/coach/setting {"enabled": bool}` - the prompt coach
+     * switch ([PromptCoach.enabledBody]). Either direction is at once and
+     * raises no card on the PC: this reads only words the chat is about to
+     * send to the same local model, acts on nothing and opens no way out of
+     * the PC. Held on a stale link by the runtime.
+     */
+    suspend fun setPromptCoach(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PromptCoach.SETTING_PATH, PromptCoach.enabledBody(on))
+
+    /**
      * `GET /api/reach` - "What Jarvis can reach": every way Jarvis can reach
      * something outside itself, written by the PC from its settings
      * ([Reach.parse]). A read. A 404 is an older backend ([Reach.missing]).
