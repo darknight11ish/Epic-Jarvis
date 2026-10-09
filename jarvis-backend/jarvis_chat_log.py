@@ -306,6 +306,33 @@ def _config_dir() -> Path:
                 or (Path.home() / ".openjarvis"))
 
 
+def _cfg(key: str, default):
+    """One number from jarvis-framework.toml's [chat] table, or `default`.
+
+    The same shape jarvis_jobs._cfg uses: no framework module - the test
+    suites run this file without one - or a settings file that will not read,
+    gives the default rather than an exception. Every number read this way is
+    a window the module has always had; the key only lets a settings writer
+    change it later."""
+    try:
+        return fw.load_framework().get("chat", {}).get(key, default)
+    except Exception:
+        return default
+
+
+def _int_cfg(key: str, default: int, lo: int, hi: int) -> int:
+    """One whole number from the settings file, inside lo..hi, else `default`.
+
+    The shape jarvis_big_model._int_cfg uses: a typo, a value of the wrong
+    kind or one outside the range is the default, never a crash and never a
+    window of the wrong length."""
+    try:
+        v = int(_cfg(key, default))
+    except (TypeError, ValueError):
+        return default
+    return v if lo <= v <= hi else default
+
+
 # ----------------------------------------------------------- reading a turn
 
 def _text_of(content):
@@ -2088,9 +2115,24 @@ class ChatLog:
                     "tag_suggest_paused", "tag_suggest_declined", "tag_suggest_offered",
                     "tag_suggest_looked")
     SUGGEST_MIN_TURNS = 2
+    #: How long a kept chat must have been quiet before the overnight tag
+    #: suggester may read it. This is the DEFAULT, not the only number:
+    #: _min_age() reads jarvis-framework.toml's [chat]
+    #: tag_suggest_quiet_minutes (whole minutes) and falls back to this one
+    #: when the key is absent, unreadable or nonsense. 0 there means no
+    #: waiting at all - a chat is old enough as soon as it exists; the other
+    #: rules in suggest_candidates still apply to it.
     SUGGEST_MIN_AGE = 30 * 60
     SUGGEST_USER_MSGS = 6
     SUGGEST_SCAN = 500
+
+    def _min_age(self) -> float:
+        """How long a kept chat must have been quiet, in seconds: this class's
+        own SUGGEST_MIN_AGE (30 minutes), or the owner's own number of minutes
+        from the settings file. Nothing over a day is a window worth reading;
+        a negative value is the default."""
+        return _int_cfg("tag_suggest_quiet_minutes",
+                        int(self.SUGGEST_MIN_AGE // 60), 0, 24 * 60) * 60.0
 
     def meta_get(self, key: str) -> str:
         """One of SUGGEST_META, as text ("" when unset). Opaque values only:
@@ -2146,8 +2188,10 @@ class ChatLog:
         crisis check (the same _crisis_turn that titles a chat that way); no
         turn read outside text (read_outside) and every message of the owner's
         was typed or spoken (never shared, pasted, clipboard or a picture
-        caption); it has at least 2 turns and was last updated over 30 minutes
-        ago; it is not under a Forget/Erase hush and is not marked as having
+        caption); it has at least 2 turns and has been quiet for longer than the
+        quiet window (30 minutes by default; the settings file's [chat]
+        tag_suggest_quiet_minutes decides it); it is not under a Forget/Erase
+        hush and is not marked as having
         added up bank spending; and its id is not in `exclude`. Needs history
         to be ON and the key (this READS chat words): otherwise ok is False and
         nothing is opened."""
@@ -2167,7 +2211,7 @@ class ChatLog:
                 "SELECT id, title, updated FROM conversations WHERE tag_id IS NULL"
                 " AND COALESCE(kind, 'chat') = 'chat' AND updated < ?"
                 " ORDER BY updated DESC, id DESC LIMIT ?",
-                (now - self.SUGGEST_MIN_AGE, self.SUGGEST_SCAN)).fetchall()
+                (now - self._min_age(), self.SUGGEST_SCAN)).fetchall()
             for cid, title_blob, updated in rows:
                 if len(out["chats"]) >= max(0, int(limit)):
                     break

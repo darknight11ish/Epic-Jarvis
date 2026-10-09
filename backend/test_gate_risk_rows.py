@@ -97,7 +97,12 @@ def t_the_patch_is_registered_last():
              # join the "acts only on tier ask" list and the _RISK table at the
              # END of each, so it cannot rewrite the two rows this patch removes
              # either.
-             "handoff-mode.patch"}
+             "handoff-mode.patch",
+             # limits-settings.patch (2026-10-08) comes after it too: ONE route in
+             # jarvis_hud.py (POST /api/limits/settings) right after the budget's
+             # own, and jarvis_gate.py not at all - so it cannot rewrite the stale
+             # rows either.
+             "limits-settings.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

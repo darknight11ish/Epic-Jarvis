@@ -1201,9 +1201,14 @@ $PATCHES = @(
     # immediate and RAISING it needs one approval card lives in
     # jarvis_arbiter.py (a module this repository ships whole), not here.
     'attention-settings.patch'
-    # handoff-mode.patch (2026-10-08) is the last patch here: it touches only
-    # jarvis_gate.py (the "acts only on tier ask" list and the _RISK table), so
-    # it too leaves the screen route alone.
+    # The limits and frequencies the owner can change (2026-10-08): ONE route in
+    # jarvis_hud.py, POST /api/limits/settings, right after the interruption
+    # budget's own route, so it only has to come after attention-settings.patch -
+    # and it touches nothing screen-attach.patch touches, so it goes just before
+    # that one too. The whole table and the card a loosening needs live in
+    # jarvis_limits.py (a module this repository ships whole), so every limit
+    # after this one is a line in that table and no patch at all.
+    'limits-settings.patch'
     # "Look at this" can hand the owner the CLEANED picture of the look, for the
     # question box (the owner's decision of 2026-10-07;
     # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,
@@ -1527,6 +1532,7 @@ $SHIPPED = @(
     # Pulled in by the five above: jarvis_arbiter and jarvis_watch import
     # jarvis_jobs, and jarvis_watch imports jarvis_content_risk.
     'jarvis_jobs.py'             # Long Fuse: work that outlives the conversation; imported by jarvis_arbiter.py and jarvis_watch.py - no patch
+    'jarvis_limits.py'           # The limits and frequencies the owner can change: ONE table and ONE route (limits-settings.patch) for the numbers that were readable and unchangeable - the undo window, jobs at once, what counts as news from a watched project, study questions a day, the new-conversation window, and whether a model looks for people and things in what the owner saves. Writes ONE line of jarvis-framework.toml, atomically, keeping its comments; raising a number that lets Jarvis do more raises ONE approval card first, and turning one down is instant - no patch
     'jarvis_content_risk.py'     # one pipeline for text that arrived from outside; imported by jarvis_watch.py - no patch
     # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 118) ---
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing

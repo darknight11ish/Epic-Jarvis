@@ -434,6 +434,57 @@ def RUN_IDLE_PLUS():
     return D.RUN_IDLE + 60.0
 
 
+def t_the_run_limit_is_the_settings_files_number():
+    """How many cards one run shows is [decks] run_limit in
+    jarvis-framework.toml - 20 is the default, not the only number - and a
+    value that is missing, unreadable or nonsense falls back to 20 rather than
+    crashing or asking for no cards at all."""
+    real = D.fw
+
+    class Settings:
+        """A stand-in jarvis_framework holding just the [decks] table."""
+
+        CONFIG_DIR = _TMP
+
+        def __init__(self, decks):
+            self.decks = decks
+
+        def load_framework(self):
+            return {"decks": self.decks}
+
+    def run_with(decks, cards=25):
+        D.fw = Settings(decks)
+        w = World()
+        v = w.d.create_deck("Run")["id"]
+        w.d.set_new_per_day(20)
+        w.d.keep({"deck": v}, mkcards(cards))
+        return w
+
+    try:
+        w = run_with({})
+        check("no [decks] run_limit at all: a run shows the default 20",
+              w.d.review_state()["run"] == {"done": 0, "limit": 20},
+              json.dumps(w.d.review_state()))
+        w2 = run_with({"run_limit": 7}, cards=10)
+        got = w2.d.review_state()
+        check("[decks] run_limit = 7 is what the run shows", got["run"] == {"done": 0, "limit": 7}
+              and got["ready"] == 10, json.dumps(got))
+        for _ in range(7):
+            study(w2.d, w2.d.review_state()["card"]["id"])
+        got = w2.d.review_state()
+        check("... seven rated: enough for now, the rest still ready, and 'Do 10 more' adds 10",
+              got["state"] == "enough" and got["card"] is None and got["ready"] == 3
+              and got["run"] == {"done": 7, "limit": 7} and w2.d.more()["run"]["limit"] == 17,
+              json.dumps(got))
+        for bad in ("lots", "", None, 0, -1, 10 ** 6):
+            w3 = run_with({"run_limit": bad}, cards=1)
+            check(f"[decks] run_limit = {bad!r} -> the default 20, never no cards at all",
+                  w3.d.review_state()["run"] == {"done": 0, "limit": 20},
+                  json.dumps(w3.d.review_state()))
+    finally:
+        D.fw = real
+
+
 def t_ratings_and_rules():
     w = World()
     v = w.d.create_deck("Rules")

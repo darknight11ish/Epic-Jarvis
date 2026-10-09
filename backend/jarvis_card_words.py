@@ -89,6 +89,12 @@ TITLES = {
     # day Jarvis may speak up, because that is the number the owner is agreeing
     # to, not "interruptions" in the abstract.
     "raise_attention_budget": "let Jarvis interrupt you more often",
+    # jarvis_limits.py (2026-10-08): the limits and frequencies the owner can
+    # change, ONE name for every one of them - the card's own words carry which
+    # limit and how far. Only the RAISE is named, because turning a number DOWN
+    # asks nothing and needs no card; the card itself says the limit and both
+    # numbers ("How long you can undo: change it from 24 to 168...").
+    "raise_a_limit": "let Jarvis do more, for longer, or more often",
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",

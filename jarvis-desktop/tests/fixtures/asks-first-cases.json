@@ -989,6 +989,15 @@
        "title": "Let Jarvis interrupt you more often"
       },
       {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2139,6 +2148,15 @@
        "title": "Let Jarvis interrupt you more often"
       },
       {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -3284,6 +3302,15 @@
        "title": "Let Jarvis interrupt you more often"
       },
       {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -4424,6 +4451,15 @@
        "title": "Let Jarvis interrupt you more often"
       },
       {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -5562,6 +5598,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
+      },
+      {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
       },
       {
        "action": "modify_own_code",
@@ -6718,6 +6763,15 @@
        "title": "Let Jarvis interrupt you more often"
       },
       {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -7861,6 +7915,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
+      },
+      {
+       "action": "raise_a_limit",
+       "fixed": false,
+       "id": "raise_a_limit",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let Jarvis do more, for longer, or more often"
       },
       {
        "action": "modify_own_code",
