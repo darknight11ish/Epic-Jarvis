@@ -488,6 +488,20 @@ better_voice_enable       = "ask"
 # rather than let this line become your yes.
 watch_notifications_enable = "ask"
 
+# --- The captcha hand-off's own setting (jarvis_handoff_mode.py, 2026-10-08) --
+# How long "Solve it here" - the live picture of ONE of the owner's browser
+# windows, offered to their own phone - stays on offer when nobody answers.
+# "Stop early" is the default: about a minute with nobody looking, then the
+# hand-off ends and the PC says which window Jarvis is stuck on, so the owner
+# solves it there. "Keep offering it" leaves it on offer for the full 15-minute
+# ceiling, so the owner can pick their phone up late - MORE exposure for a
+# window that may hold their own account details, so choosing it is ONE card
+# and (jarvis_owner_check.PC_ONLY_ACTIONS) approved on this PC with Windows
+# Hello. Going back to "Stop early" is immediate and never asks. Must stay
+# "ask": jarvis_handoff_mode.py refuses any other tier rather than let this
+# line become your yes.
+handoff_keep_offering = "ask"
+
 # --- Backups (jarvis_backup.py, the owner's decision of 2026-09-27) ------
 # Restoring from a locked backup file replaces memory, chat history,
 # settings and notes with what was saved then, so it is ONE card, always

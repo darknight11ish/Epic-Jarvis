@@ -21,6 +21,23 @@ For the owner's decision of 2026-09-28 (`CLAUDE.md`, "A captcha can be handed
 to the owner's phone"). Anything marked **unverified** has not been tried on a
 real machine.
 
+**THE OWNER'S DECISION OF 2026-10-08** (his own words: *"make this a setting for
+both options with 1 as the default"*; `CLAUDE.md`, added the same day): how long
+the hand-off stays on offer is no longer two constants chosen by hand. It is a
+setting with **two choices, defaulting to the quick cut-off**:
+
+1. **"Stop early" - THE DEFAULT.** About a minute (60 s) of no interaction, then
+   the hand-off ends **and the PC says plainly that Jarvis is stuck on a puzzle
+   in that window, naming it**, leaving the window for the owner to solve there.
+2. **"Keep offering it".** The live picture stays on offer for the full
+   15-minute ceiling, so the owner can pick their phone up late.
+
+Keeping a window of the owner's on offer fifteen times longer is *more*
+exposure, so choice 2 is **one approval card, decided on the PC with Windows
+Hello**; choice 1 is immediate from either app. Section 5 has the whole shape;
+both apps show it in the same words. This answers **Q1**, so section 8 now lists
+nine open questions, not ten.
+
 **In one paragraph:** when the visible browser window Jarvis is driving stops
 on a captcha, a sign-in page or an "unusual activity" page, Jarvis stops
 there and tells the phone. The owner taps "Solve it here" and sees a live
@@ -203,18 +220,57 @@ show; the routes answer **410** with `ended` and that sentence afterwards.
 | **Stop** on the conversation | `stopped` | "The conversation stopped." |
 | The window **going to another site** | `left` | "...Nothing more is passed on - look at the window on the PC." |
 | The window **closing** | `closed` | "The browser window closed." |
-| **Nobody looking**: no picture asked for 45 s | `idle` | "Nobody was looking at the picture for a while..." |
+| **Nobody looking**: no picture asked for the owner's idle time | `idle` | "Nobody was looking at the picture for a while..." |
 | **However it went**: 15 minutes | `time` | "The hand-off ended after 15 minutes." |
 | **Stop everything** (the global hotkey) | `stop_all` | "Stop everything ended it." |
 | A **new hand-off** starting | `replaced` | "A new hand-off started." |
 
-Timeout is therefore two clocks, both fail-closed: **45 seconds of no picture**
-(the phone left the screen, or the link died) and **15 minutes absolute**. The
-45-second clock is refreshed by pictures *and* by inputs, so an owner typing
-slowly on a sign-in form is not cut off mid-way. Nothing about ending a
-hand-off asks for approval: it only makes Jarvis do less, so it is never held
-on a stale link (rule 4 holds it the other way - input *is* held when the link
-is stale, ending never is).
+Timeout is therefore two clocks, both fail-closed: **nobody looking** and the
+**15-minute ceiling**. Both are refreshed by pictures *and* by inputs, so an
+owner typing slowly on a sign-in form is not cut off mid-way. Nothing about
+ending a hand-off asks for approval: it only makes Jarvis do less, so it is
+never held on a stale link (rule 4 holds it the other way - input *is* held when
+the link is stale, ending never is).
+
+**How long "nobody looking" is, is now the OWNER'S SETTING** (his decision of
+2026-10-08, in his own words: *"make this a setting for both options with 1 as
+the default"*; `backend/jarvis_handoff_mode.py`). This answers Q1 below. The
+ceiling is **15 minutes for both choices**: the setting moves the idle clock,
+not the ceiling, which is exactly what the owner was promised.
+
+| The choice | Idle clock | What happens | Gated? |
+|---|---|---|---|
+| **"Stop early"** (THE DEFAULT, and the stricter one) | **60 s** | The hand-off ends (`idle`) **and the PC says plainly which window Jarvis is stuck on** (`STUCK`: "{site} is waiting on this PC"), naming it, leaving the window for the owner to solve there. The window on the PC is the fallback this feature already promises, so the owner is never left without a way through | **No** - it is the default, it is the narrower choice, and going back to it is immediate from either app, never held on a stale link |
+| **"Keep offering it"** | the full **900 s** | The live picture stays on offer for the whole ceiling, so the owner can pick their phone up late | **ONE approval card** (`handoff_keep_offering`, tier "ask"), **and on `jarvis_owner_check.PC_ONLY_ACTIONS`**: decided on the PC, with Windows Hello, and refused from any other device |
+
+**Why the longer offer is gated, and the shorter one is not** (the repo's own
+rule for a setting that increases exposure - `ARCHITECTURE.md` section 3, one
+permission model, one place approval cards come from; the same shape as
+`jarvis_voice`'s `live_end` and `jarvis_watch_notify.py`): a live picture of one
+of the owner's own browser windows - which may show their own account details,
+or a support chat's order page - staying on offer for fifteen minutes instead of
+one is *more* exposure, never less. Going back to "Stop early" narrows what may
+be seen, so it needs no card.
+
+**Fail closed.** No settings file at all is the owner's default ("Stop early").
+A file that is unreadable, is not JSON, or holds anything but the two names
+reads as "Stop early" too, with a plain `why` - a damaged file must never quietly
+leave a window on offer for fifteen minutes. Nothing about it is stored except
+one word and the time it changed.
+
+**Where both apps show it** (`docs/JARVIS-API.md` section 87.8; one id,
+`settings.handoff`): desktop Settings, "When the phone does not answer"
+(`handoff-mode.js`, `handoff-mode-rules.js`, `src-tauri/src/handoff.rs`
+`handoff_mode`); the phone's Settings, the same row (`net/HandoffMode.kt`,
+`ui/screens/HandoffModePlate.kt`, `JarvisRuntime.setHandoffMode`). Both read the
+same words from the PC, and `tools/gen_handoff_cases.py` carries them into both
+apps' contract file so neither can drift.
+
+**The route is a sibling, never one of the hand-off's own.**
+`GET`/`POST /api/chatbot/handoff_mode` carries one word and no picture, no page
+and no tap. It is deliberately **not** under `/api/chatbot/handoff/`: the
+desktop must never name one of those routes (`jarvis-desktop/tests/handoff.mjs`
+checks it), because it has the real window and pictures nothing.
 
 ## 6. The tests, and what each one proves
 
@@ -259,6 +315,40 @@ the real-browser half is skipped without Playwright):
 Run it with `python backend\test_handoff.py`, or through
 `python backend\run_suites.py` with everything else.
 
+**The setting's own suite** (`backend/test_handoff_mode.py`, added 2026-10-08
+with the owner's decision). Each check fails without its fix:
+
+- **The default is the quick cut-off, and the two values are what the owner was
+  promised**: no settings file reads as "Stop early"; the two names are exactly
+  `stop_early` and `keep_offering`; the default's idle clock is 60 s; both
+  choices share the 900 s ceiling; "Keep offering it" makes the idle clock the
+  ceiling itself; a file that is unreadable, is not JSON, or holds anything but
+  the two names reads as "Stop early" with a plain `why`.
+- **Under the default, an idle hand-off ends at about a minute AND the PC
+  message names the stuck window**: a real pause, a real start, 59 s of nobody
+  looking - still on offer; a minute - it ends `idle`, and `offer()` carries
+  `STUCK`'s own two sentences with the site's name in them ("Gemini is waiting
+  on this PC"), while a hand-off that ended another way carries none.
+- **Under the patient value, it stays on offer past a minute and up to the
+  ceiling**: 61 s - still offering; six minutes - still offering, and a picture
+  still comes back; then every 30 s until the 900 s ceiling ends it `time`.
+- **The gates and the words**: "Keep offering it" waits for one card under
+  `handoff_keep_offering`, applies only on a person's `approved` at tier "ask",
+  and is refused outright at any other tier; "Stop early" is immediate, never a
+  card, and withdraws a waiting card; a bad value is refused; the idempotent
+  cases and the OFF-during-an-approved-card race (the one
+  `jarvis_learning_switch.py` was fixed for) are covered; the action is on
+  `jarvis_owner_check.PC_ONLY_ACTIONS`, has a plain card title, and the shipped
+  tier table says "ask"; the route rides the chatbot routes' own `install()` and
+  is never one of the hand-off's picture or input routes; and this module's own
+  audit lines carry an outcome word - no picture, no page, no token.
+
+Also checked, in both apps' own suites (`jarvis-desktop/tests/handoff.mjs`,
+`jarvis-desktop/tests/handoff-mode.mjs`, the phone's `HandoffTest.kt`): the two
+values, the default and **every sentence** are the PC's own, held to the
+generated contract file word for word; and the desktop still names none of the
+hand-off's own routes.
+
 ## 7. What the phone will need (the next step - not built in this pass)
 
 The phone calls these routes and nothing else; it never runs a browser, never
@@ -302,11 +392,20 @@ real captcha (§9). This pass changed nothing about them.
 Listed, not answered. Each is a decision, and the design deliberately does not
 guess. (Q2 and Q5 are the ones most likely to change what is already built.)
 
-- **Q1 - How long before it gives up?** Today: **45 s** with no picture asked
-  for, and **15 minutes** absolute. Is 15 minutes too long to leave a browser
-  window sitting on a captcha? Is 45 seconds too short if the owner is
-  fetching their phone or reading a 2-factor code? (The 45 s refreshes on
-  input, so slow typing is fine; walking away from the screen is not.)
+**Q1 was answered on 2026-10-08** - see section 5: *"make this a setting for
+both options with 1 as the default"*. The idle clock is now the owner's own
+setting, "Stop early" (about a minute, the default) or "Keep offering it" (the
+full 15-minute ceiling, one approval card on the PC with Windows Hello), and the
+ceiling is 15 minutes for both. Nine questions remain open:
+
+- **Q1 - How long before it gives up?** **Answered by the owner on
+  2026-10-08** (see section 5): it is now a setting with two choices - "Stop
+  early" (about a minute, THE DEFAULT, which ends the hand-off and makes the PC
+  name the stuck window) and "Keep offering it" (the full 15-minute ceiling,
+  one approval card on the PC with Windows Hello). The ceiling is 15 minutes
+  for both. What is left of this question is a *measurement*, not a decision:
+  nobody has watched a real captcha hand-off run, so the two numbers are still
+  chosen rather than measured (section 9).
 - **Q2 - A stream, or a still refreshed?** Today: a still, asked for about
   once a second, because it is simple, cheap, and nothing is sent when nobody
   is looking. A captcha whose picture itself rotates or animates (an audio
@@ -365,15 +464,27 @@ guess. (Q2 and Q5 are the ones most likely to change what is already built.)
   app's own words. It may simply refuse.
 - **No phone, no Android SDK, no emulator here.** The phone half is on `main`
   but has never been built or run against this backend from this checkout. Its
-  behaviour - notification, App lock, the picture loop, masked typing - is
-  unverified **in this pass and, as far as this note can tell, in general**.
+  behaviour - notification, App lock, the picture loop, masked typing, and the
+  new Settings row for how long the offer lasts - is unverified **in this pass
+  and, as far as this note can tell, in general**. The 2026-10-08 change is the
+  first time this feature's phone half has been edited since it was built, so
+  **CI's Gradle build is its first compile.**
 - **No end-to-end run.** PC -> mesh -> phone -> tap -> PC has never been
   exercised here, and cannot be: there is no second device, no mesh link and
   no captcha in this environment.
 - **The picture quality is unmeasured.** JPEG quality 60 at a page's own size
   may be too blurry to read a captcha's grid on a phone, or larger than the
-  link wants. `FRAMES_PER_S = 2`, `JPEG_QUALITY = 60` and `IDLE_S = 45` are
-  chosen numbers, not measured ones.
+  link wants. `FRAMES_PER_S = 2`, `JPEG_QUALITY = 60` and **both of the
+  setting's numbers** (`STOP_AFTER_S = 60`, `CEILING_S = 900`) are chosen
+  numbers, not measured ones: nobody has watched a real hand-off run, so the
+  owner's setting chooses between two guesses rather than between two measured
+  values (the rest of Q1 in section 8).
+- **The setting's own new surface is unverified in the same way as the rest of
+  the phone half.** The phone's Settings row, its read of
+  `GET /api/chatbot/handoff_mode` and its "Use this" have never been built or
+  run: there is no Android SDK here (below). The desktop's card has been checked
+  by its own offline suites (`tests/handoff-mode.mjs`), not by opening the page
+  in a browser.
 - **The risk, plainly.** (a) A captcha may reject passed-on input, which is
   why the PC window is kept as the fallback and the app says so. (b) The
   picture shows a real page that may contain the owner's own account details

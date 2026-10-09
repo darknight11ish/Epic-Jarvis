@@ -112,7 +112,7 @@ import {
   whoOf as supportWhoOf,
   WORDS as SUPPORT,
 } from "./support.js";
-import { pcLine as handoffPcLine } from "./handoff.js";
+import { pcLine as handoffPcLine, stuckPcLine } from "./handoff.js";
 import {
   actionsOf,
   addPlaceholder,
@@ -7602,6 +7602,11 @@ function paintChatbot() {
     // an "unusual activity" page - the window is right here on the PC.
     const waitsForYou = s.state === "paused" ? handoffPcLine(v.handoff, "chatbot", s.id) : null;
     if (waitsForYou) now.append(handoffAlert(waitsForYou));
+    // "Stop early" (the owner's setting of 2026-10-08, handoff.js
+    // stuckLine): the hand-off ended because nobody was looking, so the PC
+    // says plainly which window Jarvis is stuck on - the owner solves it here.
+    const stuckHere = s.state === "paused" ? stuckPcLine(v.handoff, "chatbot", s.id) : null;
+    if (stuckHere) now.append(handoffAlert(stuckHere, "stuck"));
     if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
     if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
     if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
@@ -8113,11 +8118,14 @@ function supportOfferBox(c) {
 /**
  * "Solve it here" on the PC: the same alert the phone gets, pointing at the
  * browser window on this PC (handoff.js). Only a site and a reason - never
- * a picture or a word from the page.
+ * a picture or a word from the page. `tone` "stuck" marks the PC's line for a
+ * hand-off that already ended the "Stop early" way (the owner's setting of
+ * 2026-10-08): same box, same fixed words, a different colour.
  */
-function handoffAlert(line) {
+function handoffAlert(line, tone) {
   const box = el("div", "chatbot-handoff");
   box.setAttribute("role", "status");
+  if (tone) box.dataset.tone = tone;
   box.append(el("p", "subhead", line.title), el("p", "note", line.text));
   return box;
 }
@@ -8156,6 +8164,10 @@ function paintSupport() {
     if (c.live) now.append(el("p", "chatbot-line", supportStatusLine(c)));
     const waitsForYou = c.state === "paused" ? handoffPcLine(v.handoff, "support", c.id) : null;
     if (waitsForYou) now.append(handoffAlert(waitsForYou));
+    // "Stop early": the hand-off ended because nobody was looking, so the PC
+    // names the window Jarvis is stuck on (handoff.js stuckPcLine).
+    const stuckHere = c.state === "paused" ? stuckPcLine(v.handoff, "support", c.id) : null;
+    if (stuckHere) now.append(handoffAlert(stuckHere, "stuck"));
     if (c.state !== "refused") now.append(el("p", "note", supportProgress(c)));
     if (c.tierName) now.append(el("p", "note", `${SUPPORT.version}: ${c.tierName}`));
     if (c.hidden) {

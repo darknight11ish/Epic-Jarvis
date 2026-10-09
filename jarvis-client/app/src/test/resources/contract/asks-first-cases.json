@@ -541,6 +541,15 @@
        "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -1673,6 +1682,15 @@
        "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -2801,6 +2819,15 @@
        "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -3923,6 +3950,15 @@
        "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -5043,6 +5079,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
        "fixed": true,
@@ -6180,6 +6225,15 @@
        "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -7306,6 +7360,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
+       "action": "handoff_keep_offering",
+       "fixed": false,
+       "id": "handoff_keep_offering",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
        "fixed": true,

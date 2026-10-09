@@ -36,6 +36,7 @@ pub mod crash_notes;
 pub mod devices;
 pub mod email_sending;
 pub mod folders;
+pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
@@ -1192,6 +1193,11 @@ pub fn run() {
             // Picture mode's switch (look.rs): read it, turn it on (ONE
             // approval card) or off (at once). Settings only.
             look::screen_picture,
+            // How long "Solve it here" stays on offer (handoff.rs; the owner's
+            // own decision of 2026-10-08): the choice, and the ONE approval card
+            // (with Windows Hello, on this PC) that choosing "Keep offering it"
+            // raises. Settings only.
+            handoff::handoff_mode,
             browser_engine::browser_engine,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,

@@ -34,7 +34,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -186,7 +188,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -279,7 +283,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -505,7 +511,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -891,7 +899,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -969,7 +979,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -1056,7 +1068,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -1252,7 +1266,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -1528,7 +1544,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -1780,7 +1798,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -2162,7 +2182,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -2293,7 +2315,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -2455,7 +2479,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "The new limits apply from the next message.",
@@ -2639,7 +2665,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -2708,7 +2736,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -2855,7 +2885,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -2950,7 +2982,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -3019,7 +3053,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -3088,7 +3124,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -3214,7 +3252,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -3404,7 +3444,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",
@@ -3607,7 +3649,9 @@
     "handoff": {
       "active": "",
       "available": false,
-      "ended": {}
+      "ended": {},
+      "patient": false,
+      "stuck": null
     },
     "limits": {
       "said": "",

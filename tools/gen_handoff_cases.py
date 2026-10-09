@@ -40,6 +40,7 @@ sys.modules["jarvis_framework"] = _fw
 import jarvis_chatbot as CB  # noqa: E402
 import jarvis_chatbot_routes as R  # noqa: E402
 import jarvis_handoff as HO  # noqa: E402
+import jarvis_handoff_mode as HM  # noqa: E402
 import jarvis_support as SUP  # noqa: E402
 
 COPIES = (ROOT / "jarvis-desktop" / "tests" / "fixtures" / "handoff-cases.json",
@@ -137,12 +138,21 @@ def offer():
 
 def cases() -> dict:
     out = {"words": dict(HO.WORDS), "ended_words": dict(HO.ENDED),
-           "keys": list(HO.KEYS), "owner_codes": list(HO.OWNER_CODES),
-           "limits": {"frames_per_s": HO.FRAMES_PER_S, "idle_s": HO.IDLE_S,
-                      "most_s": HO.MOST_S, "text_most": HO.TEXT_MOST,
-                      "scroll_most": HO.SCROLL_MOST},
+           "stuck_words": dict(HO.STUCK), "keys": list(HO.KEYS),
+           "owner_codes": list(HO.OWNER_CODES),
+           # The owner's setting of 2026-10-08 ("make this a setting for both
+           # options with 1 as the default"): the two values, the default, and
+           # every word both apps show for it. Read from the real module, so
+           # neither app can carry a different pair of names or a different
+           # default.
+           "mode_words": dict(HM.WORDS), "modes": list(HM.MODES),
+           "mode_default": HM.DEFAULT, "mode_patient": HM.KEEP_OFFERING,
+           "limits": {"frames_per_s": HO.FRAMES_PER_S,
+                      "idle_s": HO.idle_seconds(), "ceiling_s": HO.ceiling_seconds(),
+                      "text_most": HO.TEXT_MOST, "scroll_most": HO.SCROLL_MOST},
            "routes": {"start": R.HANDOFF_START_ROUTE, "frame": R.HANDOFF_FRAME_ROUTE,
-                      "input": R.HANDOFF_INPUT_ROUTE, "end": R.HANDOFF_END_ROUTE}}
+                      "input": R.HANDOFF_INPUT_ROUTE, "end": R.HANDOFF_END_ROUTE,
+                      "mode": R.HANDOFF_MODE_ROUTE}}
     fresh()
     out["offer_none"] = offer()
     out["start_nothing"] = answer(R.handle_post(R.HANDOFF_START_ROUTE,
@@ -181,6 +191,22 @@ def cases() -> dict:
     fresh()
     support("login")
     out["offer_support"] = offer()
+    # ---- the owner's setting (2026-10-08) --------------------------------
+    # "Stop early" is the default: nobody looking for about a minute ends the
+    # hand-off AND the status carries the PC's own line naming the window
+    # Jarvis is stuck on. Both apps show that line word for word, so it is
+    # worked out here from the real code, not typed twice.
+    fresh()
+    s = chatbot("captcha")
+    started = R.handle_post(R.HANDOFF_START_ROUTE, {"kind": "chatbot", "id": s.id})
+    hid = started[1]["handoff"]
+    out["mode_default_offer"] = offer()
+    out["mode_default_start"] = answer(started)
+    CLOCK.t += HM.idle_seconds() + 1
+    out["mode_idle_frame"] = answer(R.handle_frame("h=" + hid))
+    out["mode_idle_offer"] = offer()
+    # The setting's own route, as both apps read it (GET /api/chatbot/handoff_mode).
+    out["mode_route_get"] = {"route": R.HANDOFF_MODE_ROUTE, "body": HM.view()}
     fresh()
     return out
 
