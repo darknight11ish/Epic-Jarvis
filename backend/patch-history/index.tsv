@@ -123,6 +123,7 @@ tool-calling-wiring.patch	tool-calling-wiring/477b7b4.patch	477b7b4383c9d192725f
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27Z	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47Z	backend: jarvis_agent.py - the model can finally use a tool, local lane only
 topics.patch	topics/bb25795.patch	bb2579561ee03d659482a2462a3fa56cba841a46	2026-09-30T06:53:12Z	Heatmap and balance chart: phone side (Progress.kt compiled and 16 tests run locally; Compose unverified)
+tutorials.patch	tutorials/d4163ee.patch	d4163eeb59f6b82cc9e43b91f0e41f73f3060f43	2026-10-04T22:28:08-07:00	﻿tutorials.patch anchored on the wrong install block - rebuilt
 tutorials.patch	tutorials/35aad3c.patch	35aad3c61f58f1cf94f4f21cede54cf24489f4e8	2026-10-04T21:12:12-07:00	﻿Two regressions my patch caused, both caught by the full local sweep
 tutorials.patch	tutorials/41ec99f.patch	41ec99f371a6790f12971f3378d293e4e87bfd1e	2026-10-04T20:26:38-07:00	﻿Tutorials: the routes, the patch, the patcher entries and the API page
 voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41Z	The voice routes were telling four different stories, and one was a leak
