@@ -74,6 +74,9 @@ def t_the_patch_is_registered_last():
     # screen-attach.patch (2026-10-07) comes after it: one hunk in jarvis_hud.py's
     # tutorials install block, touching jarvis_gate.py not at all, so it cannot
     # rewrite the rows this patch fixes.
+    # prompt-coach.patch (2026-10-08) also comes after it: two hunks in
+    # jarvis_hud.py and jarvis_gate.py not at all, so it cannot rewrite the
+    # stale rows this patch removes.
     # tasks.patch (2026-10-08) comes after it too: two hunks in jarvis_hud.py -
     # one GET route, one POST block - and jarvis_gate.py not at all, so it
     # cannot rewrite the stale rows this patch removes either.
@@ -81,7 +84,8 @@ def t_the_patch_is_registered_last():
     # jarvis_hud.py - `_retrieve_counts()` beside retrieve() and the handler's
     # own `count=1` branch - and jarvis_gate.py not at all, so it cannot
     # rewrite the stale rows this patch removes either.
-    later = {"screen-attach.patch", "tasks.patch", "retrieve-count.patch"}
+    later = {"screen-attach.patch", "prompt-coach.patch",
+             "tasks.patch", "retrieve-count.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

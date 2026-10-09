@@ -23,6 +23,7 @@ object MenuPlaces {
         "floating-avatar" to "settings.floating-avatar",
         "manner" to "settings.manner",
         "web-search" to "settings.web-search",
+        "prompt-coach" to "settings.prompt-coach",
         "asks-first" to "settings.asks-first",
         "reach" to "settings.reach",
         "email-sending" to "settings.email-sending",

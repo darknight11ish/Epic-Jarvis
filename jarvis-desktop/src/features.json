@@ -11,6 +11,19 @@
     "covers": []
   },
   {
+    "id": "prompt-coach",
+    "group": "Talking",
+    "title": "Check a prompt before you send it",
+    "what": "Press Coach this beside the box you type in and Jarvis reads what you wrote - not to answer it, but to say what is missing: a score, up to four gaps with the smallest fix for each, questions it would have to ask, and one rewritten version of your request.",
+    "where": "Settings, Prompt coach, to turn it on. Then the Coach this button appears in the Jarvis bar on the PC and on the phone. Read the advice, then press Send mine or Send the suggestion.",
+    "asks": "No card, either way. Turning it on and turning it off both happen at once, because it reads words the chat is about to send to the same model on your own PC anyway, takes no action, and opens no way out of the PC.",
+    "limit": "It never sends anything by itself and never changes your words unless you pick the rewritten one - a low score does not stop you sending what you wrote. It runs on the small model on this PC, so its advice is sometimes wrong and it misses things a bigger model would catch.",
+    "surface": "both",
+    "covers": [
+      "settings.prompt-coach"
+    ]
+  },
+  {
     "id": "talk-button",
     "group": "Talking",
     "title": "The talk button",

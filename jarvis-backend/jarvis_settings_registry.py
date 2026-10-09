@@ -208,6 +208,7 @@ SECTIONS: tuple = (
     Section("start-jarvis", ("starting jarvis for you", "start jarvis automatically"),
             app="desktop"),
     Section("asks-first", ("what asks first", "asks first settings")),
+    Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
     Section("email-sending", ("sending email", "email sending settings")),
     Section("about", ("about jarvis", "about")),
@@ -334,6 +335,27 @@ def _say(code: int, out: dict, *, on_ok: Optional[str] = None) -> Outcome:
 def _missing(name: str) -> Outcome:
     return Outcome(False, f"Your PC's Jarvis does not have {name} yet - run "
                           "apply-patches.ps1 on the PC.")
+
+
+
+# --- the prompt coach (jarvis_prompt_coach.py) ----------------------------
+
+def set_prompt_coach(on: bool, *, peer=None, local=None) -> Outcome:
+    """Off at once, on at once. Neither direction asks: this reads words the
+    chat is about to send to the same local model anyway, takes no action, and
+    opens no way out of the PC."""
+    try:
+        import jarvis_prompt_coach as PC
+    except Exception:
+        return _missing("the prompt coach")
+    try:
+        out = PC.set_enabled(bool(on))
+    except PC.Refused as exc:
+        return Outcome(False, str(exc))
+    except Exception as exc:
+        return Outcome(False, "The prompt coach's setting could not be saved "
+                              f"({type(exc).__name__}).")
+    return _say(200, out or {})
 
 
 # --- background learning (jarvis_auto_learn.py) ---------------------------
@@ -625,6 +647,10 @@ BOOL_SETTINGS: tuple = (
                ("lights without asking", "lights, plugs and fans without a card",
                 "lights without a card", "switching lights without asking"),
                "asks-first", set_lights_without_card),
+    BoolSetting("prompt_coach",
+               ("prompt coach", "the prompt coach", "prompt coaching",
+                "coaching my prompts"),
+               "prompt-coach", set_prompt_coach),
     BoolSetting("ask_before_every_search",
                ("asking before every web search", "ask before every search",
                 "asking before every search"),

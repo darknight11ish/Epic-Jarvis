@@ -2116,6 +2116,75 @@ object JarvisRuntime {
     /** `GET /api/search`. A read: never held. */
     suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
 
+    // ------------------------------------------------------- prompt coach ----
+    // docs/PROMPT-COACH-DESIGN.md; docs/JARVIS-API.md section 119; see
+    // [com.jarvis.client.net.PromptCoach], ui/screens/PromptCoachPlate.kt (the
+    // switch) and ui/screens/PromptCoachBar.kt (the chat bar's button and the
+    // advice panel it opens).
+    //
+    // ONE change, off by default: the master switch for the "Coach this"
+    // button. Neither direction raises an approval card - the coach reads only
+    // words the chat is about to send to the same local model, takes no action
+    // and opens no way out of the PC.
+    //
+    // [coach] is the READ half: it reads the words in the box and returns
+    // advice, sends nothing, and keeps nothing. It is deliberately NOT held on
+    // a stale link the way the switch is ([actionBlocker], rule 4). Rule 4 is
+    // about ACTING - "blocks acting when the event stream is stale" - and a
+    // critique acts on nothing: it raises no card, touches no file, runs no
+    // tool, and the owner cannot mistake it for something done, because the
+    // only two things that can follow it are the two buttons that send, and
+    // those go down the chat's own path. Held there, a stale stream would take
+    // the button away for no reason the owner could see.
+
+    /** `GET /api/prompt/coach`. A read: never held. */
+    suspend fun promptCoach(): ApiResult<JsonObject> = api.promptCoach()
+
+    /**
+     * The prompt coach switch. Held on a stale link like every change sent to
+     * the PC ([actionBlocker], rule 4): "at once" means no approval card, not
+     * "works while the link is down". Neither direction asks, so nothing here
+     * waits for a card - [writeNoticingCards] is still used, so this screen can
+     * never say "done" over a card that did turn up while the request was out.
+     * @return the sentence to show under the switch.
+     */
+    suspend fun setPromptCoach(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPromptCoach(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.said(on, r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                    com.jarvis.client.net.PromptCoach.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * "Coach this": the words in the box, with the last few turns, read for
+     * advice. A read - never held on a stale link (see the block above).
+     *
+     * The PC's own refusal is the PC's own sentence ([PromptCoach.Read.Refused]):
+     * "That is too short to coach - write a little more and try again.", "The
+     * prompt coach is switched off." (the PC's `OFF_LINE`), "Jarvis could not
+     * find the model on this PC, so there is nothing to coach with.", or the
+     * sentence that says the model stayed silent. None of them is re-worded
+     * here, and none of them is a generic failure.
+     */
+    suspend fun coach(
+        text: String,
+        history: List<com.jarvis.client.net.PromptCoach.Turn>,
+    ): com.jarvis.client.net.PromptCoach.Read =
+        when (val r = api.coach(text, history)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.classify(r.value.code, r.value.body)
+            is ApiResult.Failed -> if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                com.jarvis.client.net.PromptCoach.Read.Missing
+            } else {
+                com.jarvis.client.net.PromptCoach.Read.Failed(describe(r.error))
+            }
+        }
+
     // ------------------------------------------------ what Jarvis can reach ----
     // The Muse audit, 2026-09-25 - see [com.jarvis.client.net.Reach] and
     // ui/screens/ReachPlate.kt. Every way Jarvis can reach something outside

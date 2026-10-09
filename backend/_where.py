@@ -537,6 +537,13 @@ SHIPPED = (
     # must carry the hash of the words that were shown. Local SQLite only,
     # standard library only, no network, no child process, approves nothing.
     "jarvis_tasks.py",
+    # The prompt coach (2026-10-08, prompt-coach.patch, JARVIS-API section
+    # 119): checks ONE prompt the owner is about to send and returns what is
+    # missing - a score, up to four gaps and a rewritten version. Advice only:
+    # it sends nothing, runs no tool, raises no card, keeps nothing, and the
+    # address it sends to is checked with jarvis_auto_learn.check_local_model
+    # before the request is built. Off until the owner turns it on.
+    "jarvis_prompt_coach.py",
 )
 
 

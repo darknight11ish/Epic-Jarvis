@@ -50,6 +50,7 @@ object MenuCatalog {
         Menu("settings.shortcuts", "Shortcuts", "Keyboard shortcuts.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.security", "Security", "App lock and Windows Hello or the screen lock.", true, true, "settings", "", "card", null, null, false, false, "Safety: the lock and fingerprint settings must always be reachable."),
         Menu("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.", true, false, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.prompt-coach", "Prompt coach", "Checks a prompt before you send it.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.web-search", "Web search", "Which search provider Jarvis uses.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.account-secrets", "Accounts", "Keys and account details kept on this PC.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.chatbot-api-keys", "Chatbot API keys", "The six chatbot services' API keys, kept on this PC.", true, false, "settings", "", "card", null, null, true, true, ""),

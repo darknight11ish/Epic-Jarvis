@@ -798,6 +798,13 @@ _TOOL_ACTIONS: dict[str, str] = {
     # inbox-tidy.patch: jarvis_agent.py's tidy_inbox tool, under the action
     # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
     "tidy_inbox": "tidy_inbox",
+    # readpage.patch: jarvis_agent.py's read_web_page tool, under the action
+    # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
+    # The tool's own name IS the action name - jarvis_agent.Tool's own
+    # default when gate_lookup_name is omitted - so without this line
+    # action_for_tool() fell through to "unclassified_tool" and the card the
+    # owner was shown was never the one this tool raises.
+    "read_web_page": "read_web_page",
     # plan.patch (jarvis_plan.py): propose_plan builds and describes a Plan
     # only - it reads nothing, sends nothing, and is auto for the same
     # reason browser_axtree and jarvis_ui_control_plan are: nothing has

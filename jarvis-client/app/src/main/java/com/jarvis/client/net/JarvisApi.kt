@@ -1783,6 +1783,62 @@ class JarvisApi(
     suspend fun webSearch(): ApiResult<JsonObject> = probe(WebSearch.PATH)
 
     /**
+     * `GET /api/prompt/coach` - the prompt coach's switch, in the PC's own
+     * words ([PromptCoach.parse]): whether it is on, its label and its detail
+     * paragraph, and the two sentences the "Coach this" bar will use ("Send
+     * mine", "Send the suggestion"), which this screen does not show yet. A
+     * read. A 404 is an older backend ([PromptCoach.missing]).
+     */
+    suspend fun promptCoach(): ApiResult<JsonObject> = probe(PromptCoach.PATH)
+
+    /**
+     * `POST /api/prompt/coach/setting {"enabled": bool}` - the prompt coach
+     * switch ([PromptCoach.enabledBody]). Either direction is at once and
+     * raises no card on the PC: this reads only words the chat is about to
+     * send to the same local model, acts on nothing and opens no way out of
+     * the PC. Held on a stale link by the runtime.
+     */
+    suspend fun setPromptCoach(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PromptCoach.SETTING_PATH, PromptCoach.enabledBody(on))
+
+    /**
+     * `POST /api/prompt/coach {"text", "history"}` - "Coach this"
+     * ([PromptCoach.coachBody]): the words in the box and the last few turns,
+     * answered with a critique. This SENDs nothing; the owner still presses
+     * "Send mine" or "Send the suggestion" ([PromptCoach.SEND_MINE], [Read]).
+     *
+     * A read in the only sense that matters here - it acts on nothing and
+     * raises no card - but its refusals are ANSWERS, not transport failures:
+     * `jarvis_prompt_coach.handle_post` answers 409 with its own sentence
+     * ("That is too short to coach...", "The prompt coach is switched off.")
+     * and 503 for a PC without the module. So the status and body come back
+     * whole ([PromptCoach.Reply]) for [PromptCoach.classify] to word, exactly
+     * as [focusWrite] hands [Focus.said] its 409. 401/403 is the one case that
+     * is not an answer: that is [ApiError.BadToken], and the runtime words it.
+     */
+    suspend fun coach(text: String, history: List<PromptCoach.Turn>): ApiResult<PromptCoach.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(PromptCoach.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = PromptCoach.coachBody(text, history)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(PromptCoach.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/reach` - "What Jarvis can reach": every way Jarvis can reach
      * something outside itself, written by the PC from its settings
      * ([Reach.parse]). A read. A 404 is an older backend ([Reach.missing]).

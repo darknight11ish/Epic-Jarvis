@@ -390,6 +390,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.prompt-coach",
+    "title": "Prompt coach",
+    "about": "Checks a prompt before you send it.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "prompt coach menu",
+      "show the prompt coach"
+    ]
+  },
+  {
     "id": "settings.web-search",
     "title": "Web search",
     "about": "Which search provider Jarvis uses.",
@@ -2504,6 +2525,7 @@ export const ALIASES = {
   "progress": "brain.projects.progress",
   "projects": "brain.tab.projects",
   "projects and goals": "group.goals-projects",
+  "prompt coach": "settings.prompt-coach",
   "quick settings tiles": "settings.quick-tiles",
   "quick tiles": "settings.quick-tiles",
   "quiz": "brain.work.quiz",
@@ -2536,6 +2558,7 @@ export const ALIASES = {
   "settings button": "entry.settings",
   "shortcuts": "settings.shortcuts",
   "show or hide": "settings.menu-visibility",
+  "show the prompt coach": "settings.prompt-coach",
   "skills": "brain.model.skills",
   "smartwatch notifications": "settings.watch-notify",
   "spending": "settings.spending",

@@ -1202,10 +1202,16 @@ $PATCHES = @(
     # screen.patch, whose route it wraps. Needs jarvis_screen_attach.py copied
     # in; without it, or on any error, the banner says so and a look is exactly
     # what it was before (the words only, no picture).
+    # prompt-coach.patch (2026-10-08, JARVIS-API section 120): "Coach this" and
+    # the switch that turns it on. Two hunks in jarvis_hud.py - one GET route
+    # and one POST block - anchored on routes that predate it. It goes BEFORE
+    # screen-attach.patch, which must stay last (test_screen_attach.py asserts
+    # it), and it touches jarvis_gate.py not at all: it approves nothing.
+    'prompt-coach.patch'
     'screen-attach.patch'
     # The count-only retrieval trace (the owner's decision of 2026-10-08,
     # "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B; JARVIS-API
-    # section 119): `count=1` on GET /api/retrieve answers with four keys and
+    # section 120): `count=1` on GET /api/retrieve answers with four keys and
     # no words at all - how many were recalled, how many were near misses -
     # so the phone can show "3 recalled - 2 near" without ever being sent a
     # saved fact, a document or a Logseq page. Two hunks in jarvis_hud.py:
@@ -1497,6 +1503,7 @@ $SHIPPED = @(
     'jarvis_content_risk.py'     # one pipeline for text that arrived from outside; imported by jarvis_watch.py - no patch
     # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 118) ---
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
+    'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -3104,6 +3111,20 @@ try {
                             foreach ($nm in $bw2) {
                                 $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
                                 if (-not (Test-Path -LiteralPath $fp)) { continue }
+                                # A patch in $alreadyOn is ON the real files and is left
+                                # exactly as it is: the re-apply step below skips it for the
+                                # same reason (see the $todo filter further down). Asking this
+                                # loop to take it off the rehearsal copy asks for the one thing
+                                # it cannot do - screen-attach.patch is nested on
+                                # tutorials.patch's own block, so one of the two can never come
+                                # off that state however the taking-off went. Refusing the whole
+                                # run over it is what left the owner with no way to update at
+                                # all (2026-10-09: four runs, every one of them
+                                # "NOTHING HAS BEEN CHANGED", the owner still on the build from
+                                # the morning of 2026-10-08). It is not the half-applied backend
+                                # this check exists to prevent: those patches are not being
+                                # re-applied, they are staying on the owner's files untouched.
+                                if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $nm) { continue }
                                 $r2 = Invoke-Patch -File $fp -Reverse
                                 if (-not $r2.Ok) {
                                     $intact = $false

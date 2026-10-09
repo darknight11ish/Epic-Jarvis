@@ -59,6 +59,7 @@ import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
+import com.jarvis.client.net.PromptCoach
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
@@ -1197,6 +1198,11 @@ class MainActivity : FragmentActivity() {
         // audit 2026-09-28), and its one quiet line. Memory only.
         val thread by chat.thread.collectAsState()
         val chatNote by chat.chatNote.collectAsState()
+        // The prompt coach's switch, as the PC last had it - the words of the
+        // chat bar's "Coach this" button and of its two send buttons
+        // ([com.jarvis.client.net.PromptCoach]). Null is "not read yet", which
+        // draws nothing, the same as off. Read by the LaunchedEffect below.
+        var promptCoach by remember { mutableStateOf<PromptCoach.View?>(null) }
         // Whether this conversation read outside text, and whether the chat is a
         // game (the PC made it temporary) - both from the chat, memory only.
         val readOutsideChat by chat.readOutside.collectAsState()
@@ -1529,6 +1535,27 @@ class MainActivity : FragmentActivity() {
             // request-that-404s that rule exists to prevent.
             if (paired && link == LinkState.CONNECTED && JarvisRuntime.can("voice")) {
                 voice.refreshStatus()
+            }
+        }
+
+        // The prompt coach's switch, read for the chat bar's "Coach this"
+        // button (docs/PROMPT-COACH-DESIGN.md, docs/JARVIS-API.md section 119).
+        // Off - the default - it draws nothing at all, so this read is what
+        // decides whether the button exists; a PC with no coach route is
+        // remembered as `routeKnown = false` so the bar can say so in the
+        // desktop's own words instead of offering a button that would 404.
+        //
+        // Re-read when `version` moves as well as when the link comes back: a
+        // PC that has just had apply-patches.ps1 run on it still reports the
+        // same link, and the route appears with the new version.
+        LaunchedEffect(link, paired, version) {
+            if (!paired || link != LinkState.CONNECTED) return@LaunchedEffect
+            when (val r = JarvisRuntime.promptCoach()) {
+                is ApiResult.Ok -> PromptCoach.parse(r.value)?.let { promptCoach = it }
+                is ApiResult.Failed ->
+                    if (PromptCoach.missing(r.error)) promptCoach = PromptCoach.absentView()
+                // Any other failure leaves whatever was last read alone: a
+                // blip must not take a working button away.
             }
         }
 
@@ -2946,6 +2973,7 @@ class MainActivity : FragmentActivity() {
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
                             lockdown = lockdown,
+                            promptCoach = promptCoach,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on

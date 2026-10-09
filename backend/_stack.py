@@ -131,6 +131,14 @@ RATCHET = {
     #:     the whole stack leaves) with `git apply`, which is the check this
     #:     walk cannot make; `backend/test_retrieve_count.py` re-runs it. A
     #:     ratchet: it may still only go down.
+    # prompt-coach.patch (2026-10-08) also contributed one, when it was raised to
+# 47 on this branch alone: its POST hunk is anchored on task-control.patch's own
+# `if route in ("/api/task/pause"` block, and the four lines of leading context
+# above that line are the tail of a route which predates every patch - text only
+# the owner's real file holds. The other hunk was re-anchored onto patch-written
+# lines and no longer needs one. The number above is the walk's own MEASUREMENT
+# with both features in it, not a sum worked out by hand: test_retrieve_count.py
+# asserts the pin equals what it measures, so it must be the measured value.
     "jarvis_hud.py": 48,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context

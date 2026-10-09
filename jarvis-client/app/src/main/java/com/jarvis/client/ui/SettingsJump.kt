@@ -32,6 +32,7 @@ object SettingsJump {
         Entry("Floating Jarvis", "floating-avatar"),
         Entry("How Jarvis talks", "manner"),
         Entry("Web search", "web-search"),
+        Entry("Prompt coach", "prompt-coach"),
         Entry("What asks first", "asks-first"),
         Entry("What Jarvis can reach", "reach"),
         Entry("Sending email", "email-sending"),

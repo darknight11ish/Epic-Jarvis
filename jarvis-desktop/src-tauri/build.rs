@@ -326,6 +326,22 @@ fn main() {
             "set_asks_first",
             "set_lights_without_card",
             "set_tool_enabled",
+            // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
+            // owner's request of 2026-10-08; backend/prompt-coach.patch):
+            // whether the coach is on, in the PC's own words (a read), and
+            // the switch - at once in BOTH directions, no approval card
+            // either way and never held on a stale link: it opens no way out
+            // of the PC, takes no action and loosens no rule. Settings window
+            // only.
+            "get_prompt_coach",
+            "set_prompt_coach",
+            // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
+            // critique of the words in the box plus the last few turns, from
+            // the same local model, through the same route. It sends nothing
+            // and decides nothing (the owner's own two buttons do the
+            // sending), raises no card and is never held on a stale link.
+            // Jarvis bar only - "quickbar-surface".
+            "coach_prompt",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings

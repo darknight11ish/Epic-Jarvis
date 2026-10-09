@@ -213,8 +213,14 @@ html[data-state="streaming"] .shell::before {
   /* Never squeezed to nothing: at 200% text the buttons beside it used to
      leave the typing box 7 px wide (the Live review, 2026-09-28). */
   min-width: min(9rem, 45%);
+  /* A column, so the prompt coach's "Coach this" can sit as its own row ABOVE
+     the typing box (the owner's request of 2026-10-08; prompt-coach-panel.js).
+     With the coach off, the button is `hidden` and takes no space, so the box
+     is the single centred row it has always been. */
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
 }
 
 .prompt {
@@ -3089,6 +3095,122 @@ thead .st-cell {
   color: var(--text-faint);
 }
 
+/* The prompt coach (prompt-coach-panel.js; docs/PROMPT-COACH-DESIGN.md, the
+   owner's request of 2026-10-08; backend jarvis_prompt_coach.py, JARVIS-API.md
+   section 119).
+
+   The button is a full-width row of its own at the TOP of `.field`, which puts
+   it directly above the box the owner types in. `.field` is a column so the
+   button and the textarea stack rather than sit side by side; the box keeps its
+   own full width and its two-line growth (main.js autoGrowPrompt). Hidden, the
+   button takes no space at all (`[hidden]` below wins over `display: flex`),
+   so a bar with the coach off is pixel-for-pixel the bar that shipped. */
+
+.coach-this {
+  align-self: flex-start;
+  margin-bottom: 2px;
+  font-size: var(--text-xs);
+}
+
+.coach-this[hidden] {
+  display: none;
+}
+
+/* The critique, under the bar. Scrolls with the rest of the stack, and its
+   own parts are bounded so a long rewrite cannot push the card past the
+   window's clamp. The rewritten prompt itself is shown in FULL - the box
+   scrolls rather than the words being trimmed. */
+.coach {
+  margin: 0 16px 12px 18px;
+  padding: 10px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.coach[hidden] {
+  display: none;
+}
+
+.coach p {
+  margin: 0;
+}
+
+.coach-score {
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.coach-score[hidden],
+.coach-issues[hidden],
+.coach-missing[hidden],
+.coach-suggestion[hidden] {
+  display: none;
+}
+
+.coach-issues,
+.coach-missing,
+.coach-suggestion {
+  margin-top: 8px;
+}
+
+.coach-heading {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-faint);
+}
+
+.coach-issue + .coach-issue {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--hairline);
+}
+
+.coach-what {
+  font-weight: 550;
+}
+
+.coach-why,
+.coach-fix,
+.coach-question {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.coach-fix {
+  color: var(--text);
+}
+
+/* The rewritten prompt, in full: a scroll box rather than a truncation. */
+.coach-suggestion-text {
+  margin-top: 2px;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.coach-note {
+  margin-top: 8px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.coach-note[data-tone="bad"] {
+  color: var(--bad-text);
+}
+
+.coach-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* Windows high-contrast (forced-colors): the system palette replaces ours, so
    box-shadows and tinted fills vanish. Keep every control's edge and its focus
    outline visible, in the system's own colours. */
@@ -3098,6 +3220,13 @@ thead .st-cell {
   .text-button,
   .icon-button {
     border: 1px solid ButtonText;
+  }
+
+  /* The prompt coach's panel: its own edge, which the tinted fill above would
+     otherwise carry. Its three buttons are `.text-button`s and so are already
+     covered. */
+  .coach {
+    border: 1px solid CanvasText;
   }
 
   .approval-button:focus-visible,

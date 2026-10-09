@@ -78,7 +78,7 @@
           <span id="note-chip-label">Logseq Journal</span>
         </span>
 
-        <div class="field">
+        <div class="field" id="prompt-field">
           <label class="sr-only" for="prompt">Ask Jarvis</label>
           <textarea
             id="prompt"
@@ -278,6 +278,22 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- The prompt coach's panel (prompt-coach-panel.js;
+             docs/PROMPT-COACH-DESIGN.md, the owner's request of 2026-10-08;
+             backend jarvis_prompt_coach.py, JARVIS-API.md section 119). It
+             hangs directly under the bar, where the eye already is, and shows
+             ONE critique of the words in the box: the score out of 10, what is
+             missing and why it matters and the smallest fix for each, the
+             questions it would have to ask, and the rewritten prompt in full.
+             Nothing in it sends anything by itself - only "Send mine" and
+             "Send the suggestion" do, and they are the panel's own two
+             buttons. Its contents are built in JS with textContent, never
+             innerHTML: the words are a model's. Empty and hidden until the
+             owner presses "Coach this" (which is itself drawn only while the
+             coach is on). -->
+        <!-- ...and its name is set from the PC's own answer when the panel is
+             mounted (prompt-coach-panel.js), not written here. -->
+        <section class="coach" id="coach-panel" hidden></section>
         <!-- Jarvis Live's sign in the bar: fixed words and minutes (the PC's
              jarvis_live.py), its buttons, and the tap buttons after a spoken
              question. The always-on-top badge (live-badge.html) shows the
