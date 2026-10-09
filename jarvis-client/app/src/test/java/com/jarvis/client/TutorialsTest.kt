@@ -192,4 +192,73 @@ class TutorialsTest {
         assertEquals(listOf("pc", "phone"), Tutorials.SECTIONS.map { it.first })
         assertEquals(listOf("in_progress", "done", "skipped", "not_started"), Tutorials.STATES)
     }
+
+    @Test
+    fun `a step points at a real phone control, and only at the phone's own`() {
+        val shared = json(
+            """
+            {"ok": true, "sections": [],
+             "tutorials": [
+               {"id": "talking", "section": "both", "title": "Talking to it", "why": "why",
+                "minutes": 2,
+                "steps": [{"title": "The talk button", "body": "b", "where": "Home",
+                           "point": {"desktop": "prompt-field", "phone": "talk-button"}},
+                          {"title": "PC only", "body": "b", "where": "Settings",
+                           "point": {"desktop": "hotkeys", "phone": null}},
+                          {"title": "No point at all", "body": "b", "where": "Brain"}],
+                "state": "not_started", "step": 0, "steps_total": 3, "done": false,
+                "resume_at": null, "due": true}
+             ]}
+            """.trimIndent()
+        )
+        val steps = Tutorials.parse(shared)!!.tutorials.single().steps
+
+        // A step meant for the phone carries the PHONE's name, and this app
+        // resolves it - which is the only thing "interactive on the phone" can
+        // honestly mean before the highlight is drawn.
+        assertEquals("talk-button", steps[0].point)
+        assertTrue(steps[0].pointsHere)
+        assertEquals("The talk button at the bottom of Home", steps[0].target)
+
+        // The step that names a PC control is not a phone step at all: the
+        // catalogue sends `null`, so the phone is never told to press a hotkey.
+        // That is the failure this whole field exists to prevent.
+        assertEquals("", steps[1].point)
+        assertFalse(steps[1].pointsHere)
+        assertNull(steps[1].target)
+
+        // A step with no point is prose, and says so rather than guessing.
+        assertEquals("", steps[2].point)
+        assertFalse(steps[2].pointsHere)
+    }
+
+    @Test
+    fun `no PC-only control is declared on the phone`() {
+        // The two registries are allowed to agree where the two apps genuinely
+        // mean the same thing - both have an approval card, both have a talk
+        // button, and a name is how a shared step points at each app's own.
+        //
+        // What must never happen is a control only the PC HAS turning up here.
+        // That is the failure the owner is asking to avoid: a phone tutorial
+        // sending him to a hotkey, a window or the HUD. The desktop's own
+        // registry is checked the other way round in
+        // jarvis-desktop/tests/tutorials.mjs.
+        val pcOnly = listOf(
+            "prompt-field",   // the PC's input, and the palette behind it
+            "hotkeys",        // a keyboard
+            "hud-talk",       // the HUD window
+            "faces",          // the Faces window
+            "brain-memory",   // Brain's own pages, drawn on the PC
+            "brain-tutorials",
+            "brain-about",
+            "stop-everything", // the PC's stop hotkey
+        )
+        for (name in pcOnly) {
+            assertFalse(
+                "the phone must not declare the PC-only control `$name`",
+                Tutorials.CONTROL_POINTS.containsKey(name),
+            )
+        }
+        assertTrue(Tutorials.CONTROL_POINTS.isNotEmpty())
+    }
 }

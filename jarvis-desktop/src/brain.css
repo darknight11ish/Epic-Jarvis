@@ -3064,3 +3064,38 @@ mark.find-current {
   display: none !important;
 }
 
+
+/* ── Tutorials and the FAQ (tutorials.js, JARVIS-API section 114) ──────────
+   The panel itself has always gone without styling here; the one rule that
+   matters is the last one. "Show me" marks the REAL control a step names
+   (tutorials.js's CONTROL_POINTS), so the owner is sent to the thing rather
+   than to a picture of it - and an unmarked highlight would be a button that
+   silently does nothing. */
+
+.tutorial-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.tutorial-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tutorial-show-said {
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.tutorial-pointed {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 6px var(--accent-faint);
+  transition: outline-color 120ms ease-out, box-shadow 120ms ease-out;
+}
