@@ -172,6 +172,12 @@ CLASSIFICATION = {
     "/api/attention": ("ported", ""),
     "/api/attention/mute": ("ported", ""),
     "/api/attention/unmute": ("ported", ""),
+    # The interruption budget's two numbers (2026-10-08): the PC's own Brain
+    # card sets them, through set_attention_limits. The phone's control is
+    # still to come, so this is "todo" and not "ported" - and it is a settings
+    # write, not a decision, so it approves nothing on either side.
+    "/api/attention/settings": ("todo", "The phone's own control for the "
+                                        "interruption budget is still to come."),
     "/api/chat": ("ported", ""),
     "/api/compute": ("ported", "Brain screen, read-only."),
     # /api/config is NOT here: it is only in the Brain's read allow-list
