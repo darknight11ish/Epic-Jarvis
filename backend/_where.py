@@ -418,6 +418,14 @@ SHIPPED = (
     # 15 minutes). No patch: jarvis_chatbot_routes.py answers its one route,
     # and jarvis_handoff.py reads it.
     "jarvis_handoff_mode.py",
+    # The first Docker integration (the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list
+    # (today SearXNG, the default search provider) and start/stop for one. It
+    # deliberately cannot create or pull - a start is refused unless the pinned
+    # image is already on this PC - and it never touches a container that is
+    # not ours (wrong image, a port beyond loopback, or privileged). Start is
+    # one card, stop is instant; docker.patch installs its routes.
+    "jarvis_docker.py",
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
