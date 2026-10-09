@@ -925,6 +925,49 @@ def t_keep_days_sweep():
         w.done()
 
 
+def t_the_tag_suggesters_quiet_window_is_the_settings_files_number():
+    """How long a kept chat must have been quiet before the overnight tag
+    suggester may read it is [chat] tag_suggest_quiet_minutes in
+    jarvis-framework.toml - 30 minutes is the default, not the only number -
+    and a value that is missing, unreadable or nonsense falls back to 30."""
+    real = H.fw
+
+    class Settings:
+        """A stand-in jarvis_framework holding just the [chat] table."""
+
+        def __init__(self, cfg):
+            self.cfg = cfg
+
+        def load_framework(self):
+            return self.cfg
+
+    w = World()
+    try:
+        w.log.record_turn(req(SENTENCE), lane="qwen3:8b", turn=local("Noted."))
+        at = w.clock.t
+        H.fw = Settings({})
+        check("no [chat] key at all: a chat quiet for 29 minutes is not read yet",
+              w.log.suggest_candidates(now=at + 29 * 60)["chats"] == [])
+        check("... and 30 minutes (the default window) is quiet enough",
+              [c["id"] for c in w.log.suggest_candidates(now=at + 30 * 60 + 1)["chats"]]
+              == ["conv-000001"])
+        H.fw = Settings({"chat": {"tag_suggest_quiet_minutes": 5}})
+        check("[chat] tag_suggest_quiet_minutes = 5 is used: 6 quiet minutes is enough",
+              len(w.log.suggest_candidates(now=at + 6 * 60)["chats"]) == 1
+              and w.log.suggest_candidates(now=at + 4 * 60)["chats"] == [])
+        H.fw = Settings({"chat": {"tag_suggest_quiet_minutes": 0}})
+        check("0 means no waiting at all: the chat is old enough at once",
+              len(w.log.suggest_candidates(now=at + 1)["chats"]) == 1)
+        for bad in ("lots", "", None, -5):
+            H.fw = Settings({"chat": {"tag_suggest_quiet_minutes": bad}})
+            check(f"[chat] tag_suggest_quiet_minutes = {bad!r} -> the default 30 minutes",
+                  w.log.suggest_candidates(now=at + 5 * 60)["chats"] == []
+                  and len(w.log.suggest_candidates(now=at + 31 * 60)["chats"]) == 1)
+    finally:
+        H.fw = real
+        w.done()
+
+
 # ------------------------------------------------------ the switch and card
 
 class V:

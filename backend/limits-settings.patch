@@ -1,0 +1,22 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index 340f7f8..8c56c3b 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -866,6 +866,17 @@ def _desktop_action(route: str, body: dict):
+         import jarvis_arbiter
+         return jarvis_arbiter.handle_post(route, body)
+ 
++    if route == "/api/limits/settings":
++        # The limits and frequencies the owner can change (2026-10-08):
++        # POST {"key": "jobs_per_tick", "value": 8}. Lowering a number, and
++        # anything that is not a loosening, applies at once; RAISING one that
++        # lets Jarvis do more is a loosening, so jarvis_limits puts one
++        # approval card to the owner first and writes nothing until it is
++        # approved. ONE route for every limit, because a new patch costs this
++        # repository real work and the next limit is a line in that table.
++        import jarvis_limits
++        return jarvis_limits.handle_post(route, body)
++
+     if route == "/api/digest/seen":
+         # Marking the digest read is not approving anything in it. There is
+         # deliberately no route that decides an approval in bulk; each one

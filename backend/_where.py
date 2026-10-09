@@ -528,6 +528,8 @@ SHIPPED = (
     #
     # Long Fuse: work that outlives the conversation.
     "jarvis_jobs.py",
+    # The limits and frequencies the owner can change: one table, one route.
+    "jarvis_limits.py",
     # One pipeline for text that arrived from outside.
     "jarvis_content_risk.py",
     # The job list (2026-10-08, tasks.patch, JARVIS-API section 118): work that

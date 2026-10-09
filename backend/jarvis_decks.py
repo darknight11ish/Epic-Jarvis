@@ -37,8 +37,9 @@ THE RULES IT KEEPS
     an app's tap does (the routes below).
   * No streaks, no guilt words, no points. A day with nothing ready is neutral.
   * Numbers come from code: counts, days, intervals.
-  * New cards a day: 5 by default (0-20). A run shows at most 20 cards, then
-    the app says it is enough for now; "more" adds 10.
+  * New cards a day: 5 by default (0-20), set in the app. A run shows at most
+    20 cards, then the app says it is enough for now; "more" adds 10. That 20
+    is a default the settings file can change ([decks] run_limit, below).
   * A card can be rated only after its back was shown in this run.
 
 THE ONE SCHEDULER KIND
@@ -91,7 +92,14 @@ MAX_CARDS = 1000                  # in all, across every deck
 NAME_MAX = 60
 FRONT_MAX, BACK_MAX, PASSAGE_MAX = 500, 2000, 800
 NEW_PER_DAY_DEFAULT, NEW_PER_DAY_MAX = 5, 20
+#: How many cards one run shows before the app says it is enough for now
+#: (RUN_MORE is what "Do 10 more" adds on top). The number is a DEFAULT, not
+#: the only number: _run_limit() reads jarvis-framework.toml's [decks]
+#: run_limit and falls back to this one when the key is absent, unreadable or
+#: outside RUN_LIMIT_MIN..RUN_LIMIT_MAX - so a settings writer can change it
+#: without an edit here, and a nonsense value can never mean "ask no cards".
 RUN_LIMIT, RUN_MORE, RUN_IDLE = 20, 10, 30 * 60.0
+RUN_LIMIT_MIN, RUN_LIMIT_MAX = 1, MAX_CARDS
 REVEAL_KEEP = 6 * 3600.0
 DESIRED_RETENTION = 0.90
 RATINGS = ("again", "hard", "good", "easy")
@@ -213,6 +221,38 @@ def _config_dir() -> Path:
     return Path(os.environ.get("OPENJARVIS_CONFIG_DIR")
                 or os.environ.get("JARVIS_CONFIG_DIR")
                 or (Path.home() / ".openjarvis"))
+
+
+def _cfg(key: str, default):
+    """One number from jarvis-framework.toml's [decks] table, or `default`.
+
+    The same shape jarvis_jobs._cfg uses: no framework module - this file also
+    runs beside a test harness that has none - or a settings file that will
+    not read, gives the default rather than an exception. Nothing here is
+    required for a deck to work: every number it reads has one already."""
+    try:
+        return fw.load_framework().get("decks", {}).get(key, default)
+    except Exception:
+        return default
+
+
+def _int_cfg(key: str, default: int, lo: int, hi: int) -> int:
+    """One whole number from the settings file, inside lo..hi, else `default`.
+
+    The shape jarvis_big_model._int_cfg uses. A value that is not a number, or
+    that is outside the range - 0 would ask for no cards at all - is the
+    default, so a typo in the settings file can never silently stop a review
+    or ask for a thousand cards in one sitting."""
+    try:
+        v = int(_cfg(key, default))
+    except (TypeError, ValueError):
+        return default
+    return v if lo <= v <= hi else default
+
+
+def _run_limit() -> int:
+    """How many cards this run shows: RUN_LIMIT, or the owner's own number."""
+    return _int_cfg("run_limit", RUN_LIMIT, RUN_LIMIT_MIN, RUN_LIMIT_MAX)
 
 
 def db_path() -> Path:
@@ -743,7 +783,7 @@ class Decks:
                       if v["day"] == today and now - v["at"] <= RUN_IDLE}
         r = self._runs.get(scope)
         if r is None or fresh:
-            r = self._runs[scope] = {"scope": scope, "done": 0, "cap": RUN_LIMIT, "day": today,
+            r = self._runs[scope] = {"scope": scope, "done": 0, "cap": _run_limit(), "day": today,
                                      "at": now}
         r["at"] = now
         return r
@@ -786,7 +826,7 @@ class Decks:
         with self._lock:
             if not self._exists():
                 return {"ok": True, "ready": 0, "new_left": NEW_PER_DAY_DEFAULT, "state": "no_decks",
-                        "card": None, "line": "", "run": {"done": 0, "limit": RUN_LIMIT}}
+                        "card": None, "line": "", "run": {"done": 0, "limit": _run_limit()}}
             with closing(self._connect()) as c:
                 out = self._review_view(c, deck)
             out["ok"] = True

@@ -473,6 +473,14 @@ GROUPS = (
         # beside `power_manage`, because what it changes is a Jarvis setting on
         # a Settings card - and its tier comes from the gate, not from here.
         "raise_attention_budget",
+        # The limits and frequencies (limits-settings.patch, 2026-10-08): ONE
+        # action for every one of them, again for the RAISE only - turning a
+        # number down asks nothing. The card names the limit and both numbers,
+        # so one page row covers the undo window, jobs at once, what counts as
+        # news from a watched project, study questions a day, the
+        # new-conversation window and whether a model looks for people and
+        # things in what the owner saves. Its tier comes from the gate.
+        "raise_a_limit",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
         "check_tool_updates"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),

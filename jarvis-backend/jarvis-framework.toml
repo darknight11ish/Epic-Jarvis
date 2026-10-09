@@ -1700,3 +1700,26 @@ enabled = ["web_search"]
 # way and `jarvis_energy.status()["why"]` says so in one sentence.
 [energy]
 enabled = false
+
+# ------------------------------------------------------------------------
+# DECKS - the cards you kept from a quiz (jarvis_decks.py)
+# ------------------------------------------------------------------------
+# One review run shows at most this many cards, then the app says it is
+# enough for now ("Do 10 more" adds 10). 20 is the default the module has
+# always used, and what a missing, unreadable or out-of-range (1-1000) value
+# falls back to: a run that asks for no cards at all is not expressible. The
+# new-cards-a-day number is separate and is set in the app, not here.
+[decks]
+run_limit = 20
+
+# ------------------------------------------------------------------------
+# CHAT - what chat history keeps, and how long a chat waits
+# ------------------------------------------------------------------------
+# How long a kept chat must have been quiet before the overnight tag
+# suggester may read it (jarvis_tag_suggest.py; it only ever suggests, and
+# every suggestion is a card). 30 minutes is the default the module has
+# always used; 0 means no waiting at all, so a chat is old enough as soon as
+# it exists. A missing, unreadable or out-of-range (0-1440) value falls back
+# to 30.
+[chat]
+tag_suggest_quiet_minutes = 30

@@ -247,6 +247,10 @@
       "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better"
     },
     {
+      "action": "raise_a_limit",
+      "title": "Jarvis wants to let Jarvis do more, for longer, or more often"
+    },
+    {
       "action": "raise_api_limit",
       "title": "Jarvis wants to raise a chatbot's monthly spending limit"
     },
