@@ -870,13 +870,21 @@ def t_mini_state_json_classifies_every_patch():
 
 # ------------------------------------- a patch that is already on the backend
 
-#: tutorials.patch's own block, and the two context lines right above it. The
+#: tutorials.patch's own block, and the three context lines right above it. The
 #: real patch's text, put into a made-up file at about the line it names, so the
 #: verdicts below are measured with the REAL patch and the REAL rule.
+#:
+#: Those context lines are chatbot-limits-hud.patch's own `chatbot money NOT ON`
+#: block, and they were quiz-cloud.patch's until 2026-10-09: chatbot-limits-hud
+#: runs earlier in the list and writes its block between quiz-cloud's print lines
+#: and the banner comment, so the anchor tutorials.patch had named no longer
+#: existed on the owner's backend. Re-anchored, and this fixture re-anchored with
+#: it - the two have to move together, or the file below stops being the patch's
+#: own text and every verdict measured against it stops meaning what it says.
 TUTORIALS_HUNK = [
     "    except Exception as exc:",
-    '        print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")',
-    '        print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")',
+    '        print(f"  chatbot money NOT ON ({type(exc).__name__}) - chatbot money limits are off")',
+    '        print("             until jarvis_chatbot_limits.py is back: run apply-patches.ps1 again")',
     "    # tutorials.patch (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md):",
     "    # GET /api/tutorials, POST /api/tutorials/progress and GET /api/faq - one catalogue",
     "    # for both apps, and the owner's reading progress kept on the PC. It writes its own",
@@ -982,7 +990,7 @@ def live_jarvis_pids(backend: Path) -> list:
 
 def on_backend_verdict(lines: list, shift: int = 0, drift: bool = False) -> dict:
     """What Test-PatchOnBackend answers for tutorials.patch against a made-up
-    file of about 6,500 lines holding `lines` where the patch's own block goes,
+    file of about 6,750 lines holding `lines` where the patch's own block goes,
     so its added lines land at about the line the hunk header names.
 
     `shift` puts that many extra lines in ABOVE the block - a backend with
@@ -999,7 +1007,7 @@ def on_backend_verdict(lines: list, shift: int = 0, drift: bool = False) -> dict
     if drift:
         block[0] = block[0] + "  # hand-edited since: the context has moved on"
     tmp = tmpdir()
-    (tmp / "jarvis_hud.py").write_text("".join(f"line {i}\n" for i in range(1, 6490 + shift))
+    (tmp / "jarvis_hud.py").write_text("".join(f"line {i}\n" for i in range(1, 6751 + shift))
                                        + "\n".join(block) + "\n",
                                        encoding="utf-8", newline="\n")
     harness = tmp / "verdict.ps1"

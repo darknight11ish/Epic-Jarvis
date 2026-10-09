@@ -158,7 +158,21 @@ RATCHET = {
     # `_stack.materialised("jarvis_hud.py")` reads 49 without this patch and 51
     # with it, and `by_patch` names `limits-read.patch: 2`. A ratchet: it may
     # still only go down.
-    "jarvis_hud.py": 51,
+    # LOWERED 2026-10-09, 51 -> 50, and this one IS a drift fixed rather than a
+    # patch that stopped needing an honest pre-image. `tutorials.patch` was
+    # anchored on quiz-cloud.patch's two print lines, with the banner comment
+    # below them; `chatbot-limits-hud.patch` runs first and writes its own
+    # `chatbot money NOT ON` block between those lines and that comment, so on
+    # the owner's backend the hunk could not match and the walk invented a
+    # pre-image for it - 51, with `by_patch` naming `tutorials.patch: 1`. The
+    # patch now anchors on `chatbot-limits-hud.patch`'s own block instead: the
+    # hunk applies to lines an earlier patch really writes, `tutorials.patch`
+    # is out of `by_patch`, and the walk reads 50. Measured, not argued:
+    # `_stack.materialised("jarvis_hud.py")` reads 51 with the old anchor and
+    # 50 with this one. A ratchet: it may still only go down, and the pin has
+    # to move with a LOWERING too - test_retrieve_count.py asserts this number
+    # EQUALS what the walk measures.
+    "jarvis_hud.py": 50,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

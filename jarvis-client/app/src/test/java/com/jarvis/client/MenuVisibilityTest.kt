@@ -332,7 +332,14 @@ class MenuVisibilityTest {
         val undecided = brainKeys - MenuPlaces.BRAIN.keys - fixed
         assertTrue("Brain items with no decision in MenuPlaces: $undecided", undecided.isEmpty())
         val settingsKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(settings).map { it.groupValues[1] }.toSet()
-        val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys - setOf("menus-hidden", "tail", "jump-list")
+        // Every Settings row is a menu with a place, or one of these: the rows
+        // that are deliberately NOT menus. "limits" joined them on 2026-10-08
+        // (LimitsPlate.kt): a menu id is generated into the desktop's own
+        // catalogue by tools/gen_menu_cases.py, and that row is visible always -
+        // like Security and What asks first, which are never hideable either.
+        // The assertion is unchanged: any OTHER undecided key still fails it.
+        val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
+            setOf("menus-hidden", "tail", "jump-list", "limits")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 
