@@ -180,7 +180,8 @@ import {
   CONTINUED_TAINTED,
   CONTINUED_TEMPORARY_OFF,
   CARRY_ON_LAST,
-  CARRY_ON_LAST_TITLE,
+  carryOnLastTitle,
+  storedIdleNewMs,
   continuedLine,
   continuedSkipped,
   continuedTrimmed,
@@ -465,7 +466,8 @@ const dom = {
   earlierChatsPrimer: $("earlier-chats-primer"),
   chatNote: $("chat-note"),
   // "Carry on the last chat": beside the note that a new conversation began
-  // after 30 quiet minutes (the second chat audit, 2026-09-28).
+  // after the owner's own quiet wait - 30 minutes by default (the second chat
+  // audit, 2026-09-28; the wait is set in Settings, chat-history.js).
   carryOnLast: $("carry-on-last"),
   // "You: ..." above the answer - the question this answer is for.
   youLine: $("you-line"),
@@ -544,8 +546,9 @@ const state = {
    */
   conversationId: newConversationId(),
   /** When the last answer of this conversation finished (ms) - a new
-   *  conversation starts after 30 quiet minutes (chat-history.js
-   *  IDLE_NEW_MS; the owner's decision, 2026-09-28). 0: none yet. */
+   *  conversation starts after the owner's own wait (chat-history.js
+   *  `storedIdleNewMs()`, 30 quiet minutes by default; the owner's decision,
+   *  2026-09-28). 0: none yet. */
   lastTurnAt: 0,
   /**
    * Where the words now in the box came from: "typed", "clipboard" (the
@@ -1244,8 +1247,9 @@ function paintYouLine(question) {
   dom.youLine.append(who, document.createTextNode(` ${q.length > 240 ? `${q.slice(0, 239)}…` : q}`));
 }
 
-/** "Carry on the last chat": shown with the note that 30 quiet minutes
- *  began a new conversation, for a chat that was kept. */
+/** "Carry on the last chat": shown with the note that the owner's own quiet
+ *  wait began a new conversation (30 minutes by default), for a chat that was
+ *  kept. Its tooltip says the wait the owner really chose ([carryOnLastTitle]). */
 function showCarryOn(id) {
   if (!dom.carryOnLast) return;
   state.lastChatId = id;
@@ -3470,10 +3474,14 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   state.inFlight = message;
   hideChatNote();
   if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
-  // A new conversation after 30 quiet minutes (the owner's decision,
-  // 2026-09-28) - never in the middle of Jarvis Live, which has its own
-  // quiet rule. The old one stays in History; Continue brings it back.
-  if (!liveOnHere() && idleExpired(state.lastTurnAt, Date.now(), state.conversation.length > 0)) {
+  // A new conversation after the owner's own wait (Settings -> "A new
+  // conversation starts after"; 30 quiet minutes by DEFAULT - the owner's
+  // decision, 2026-09-28, and what a missing or unreadable choice reads as).
+  // "Never" is a real choice: then this only fires when the owner starts a new
+  // conversation. Never in the middle of Jarvis Live, which has its own quiet
+  // rule. The old one stays in History; Continue brings it back.
+  const idleWaitMs = storedIdleNewMs();
+  if (!liveOnHere() && idleExpired(state.lastTurnAt, Date.now(), state.conversation.length > 0, idleWaitMs)) {
     // A temporary chat or a game was never kept, so there is no "last one in
     // History" to point to or carry on (the second chat audit, desktop C2).
     const kept = !(temporaryChat.on || state.gameChat);
@@ -5117,7 +5125,7 @@ dom.stop.addEventListener("click", abortStream);
 if (dom.newConversation) dom.newConversation.addEventListener("click", newConversation);
 if (dom.carryOnLast) {
   dom.carryOnLast.textContent = CARRY_ON_LAST;
-  dom.carryOnLast.title = CARRY_ON_LAST_TITLE;
+  dom.carryOnLast.title = carryOnLastTitle(storedIdleNewMs());
   dom.carryOnLast.addEventListener("click", () => {
     const id = state.lastChatId;
     hideCarryOn();

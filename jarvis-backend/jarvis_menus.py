@@ -147,6 +147,15 @@ MENUS: tuple = (
        names=("voice", "voice settings")),
     _m("settings.manner", "How Jarvis talks", "Warm and brief, or plain.",
        names=("how jarvis talks", "manner")),
+    # "A new conversation starts after" (the audit of 2026-10-08): the one
+    # timing the owner could not change anywhere. A CLIENT-SIDE choice, the
+    # same five on both apps - 30 minutes (the default), 10 minutes, 1 hour,
+    # 4 hours, or never (a conversation then ends only when the owner starts a
+    # new one). Each app keeps its own; nothing about it is sent anywhere.
+    _m("settings.idle-new", "A new conversation starts after",
+       "How long a chat can sit idle before the next message starts a new one.",
+       names=("a new conversation starts after", "new conversation timing",
+              "the idle timeout")),
     _m("settings.briefing-settings", "Morning briefing settings",
        "What the morning briefing includes.", (DESKTOP,),
        names=("briefing settings", "morning briefing settings")),

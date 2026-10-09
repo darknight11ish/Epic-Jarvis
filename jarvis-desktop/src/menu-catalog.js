@@ -305,6 +305,28 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.idle-new",
+    "title": "A new conversation starts after",
+    "about": "How long a chat can sit idle before the next message starts a new one.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "a new conversation starts after",
+      "new conversation timing",
+      "the idle timeout"
+    ]
+  },
+  {
     "id": "settings.briefing-settings",
     "title": "Morning briefing settings",
     "about": "What the morning briefing includes.",
@@ -2437,6 +2459,7 @@ export const NEVER_HIDE = [
   "safety.live-stop"
 ];
 export const ALIASES = {
+  "a new conversation starts after": "settings.idle-new",
   "about": "settings.about",
   "about jarvis": "settings.about",
   "account secrets": "settings.account-secrets",
@@ -2537,6 +2560,7 @@ export const ALIASES = {
   "how long the hand-off stays on offer": "settings.handoff",
   "how often jarvis does things": "settings.limits",
   "hud window": "settings.hud-window",
+  "idle timeout": "settings.idle-new",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
   "jarvis's voice": "settings.voices",
@@ -2565,6 +2589,7 @@ export const ALIASES = {
   "more options": "settings.more-options",
   "morning briefing": "brain.work.briefing",
   "morning briefing settings": "settings.briefing-settings",
+  "new conversation timing": "settings.idle-new",
   "now": "brain.tab.now",
   "paired devices": "settings.devices",
   "pairing": "settings.connection",

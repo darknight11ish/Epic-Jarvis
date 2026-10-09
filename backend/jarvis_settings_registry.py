@@ -183,6 +183,18 @@ SECTIONS: tuple = (
                                "the animal's settings", "the animal settings")),
     Section("voice", ("voice", "voice settings", "my voice", "how jarvis listens")),
     Section("manner", ("how jarvis talks", "manner", "warm and brief", "plain mode")),
+    # "A new conversation starts after" (the audit of 2026-10-08): how long a
+    # conversation can sit idle before the next message starts a new one - the
+    # one timing the owner could not change anywhere. It is a CLIENT-SIDE
+    # choice: the PC serves no route for it (`jarvis_limits.py` says so in its
+    # own words), so this is "open"-only. Opening it jumps the app to its own
+    # Settings row, where the five choices are made by hand; there is no spoken
+    # "adjust", on purpose - there is no existing function to call, and a
+    # spoken change would have to be a new, parallel mutation path.
+    Section("idle-new", ("a new conversation starts after", "when a new conversation starts",
+                         "new conversation timing", "how long a chat stays open",
+                         "how long before a new chat", "the quiet minutes",
+                         "the idle timeout")),
     Section("briefing-settings", ("the morning briefing", "briefing settings")),
     Section("shortcuts", ("shortcuts", "keyboard shortcuts", "hotkeys"), app="desktop"),
     Section("security", ("security", "app lock", "windows hello")),

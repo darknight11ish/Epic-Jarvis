@@ -46,6 +46,7 @@ object MenuCatalog {
         Menu("settings.animal-options", "Animal options", "Every animal-face option in one place.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.voice", "Voice", "Talk, read aloud, hands-free and sounds.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.manner", "How Jarvis talks", "Warm and brief, or plain.", true, true, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.idle-new", "A new conversation starts after", "How long a chat can sit idle before the next message starts a new one.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.briefing-settings", "Morning briefing settings", "What the morning briefing includes.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.shortcuts", "Shortcuts", "Keyboard shortcuts.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.security", "Security", "App lock and Windows Hello or the screen lock.", true, true, "settings", "", "card", null, null, false, false, "Safety: the lock and fingerprint settings must always be reachable."),
