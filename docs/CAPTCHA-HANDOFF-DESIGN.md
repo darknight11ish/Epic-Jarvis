@@ -38,7 +38,7 @@ Hello**; choice 1 is immediate from either app. Section 5 has the whole shape;
 both apps show it in the same words. This answers **Q1**; section 8 takes it out
 of its open list below (Q5 and Q10 follow on 2026-10-09).
 
-**THE OWNER'S DECISIONS OF 2026-10-09.** Three more questions were answered, and
+**THE OWNER'S DECISIONS OF 2026-10-09.** Four more questions were answered, and
 section 8 records each one as answered rather than deleting it, so the list of
 what is still open stays checkable against the list of what was asked:
 
@@ -59,6 +59,13 @@ what is still open stays checkable against the list of what was asked:
    any other window. He did **not** choose "never send a support page", and did
    **not** choose "ask me on the PC first, each session". §3 carries the cost in
    its own "what is *not* protected" list; section 8 has the full statement.
+4. **Q4 - whether the window Jarvis is stuck on is brought to the front.
+   ANSWERED: no by default; a setting may turn it on.** The owner's own words:
+   *"1 by default with the option for 2 in the settings of Jarvis"* - leave the
+   window where it is and **name it** as the default, with a **setting** that
+   switches to bringing it to the front. The default is **built and merged** and
+   is what the code does today; the setting is **owed work, not built yet**.
+   Section 8.1 has the full statement.
 
 **In one paragraph:** when the visible browser window Jarvis is driving stops
 on a captcha, a sign-in page or an "unusual activity" page, Jarvis stops
@@ -421,21 +428,22 @@ real captcha (§9). This pass changed nothing about them.
 
 ## 8. Questions only the owner can answer
 
-This section used to say "listed, not answered". Three of the ten have since
+This section used to say "listed, not answered". Four of the ten have since
 been answered by the owner and are kept below in §8.1, each **in the words it
 was asked in**, so a narrower or easier question was never quietly put in its
 place. The rest, in §8.2, are still **listed, not answered**: each is a
 decision, and the design deliberately does not guess.
 
-**Q1 was answered on 2026-10-08, and Q5 and Q10 on 2026-10-09** - see the
-block at the top of this note, and section 5: *"make this a setting for both
-options with 1 as the default"*, *"your tap is the yes"*, and *"Send it - it's
-my phone, my mesh"*.
+**Q1 was answered on 2026-10-08, and Q5, Q10 and Q4 on 2026-10-09** - Q1, Q5
+and Q10 in the block at the top of this note and in section 5 (*"make this a
+setting for both options with 1 as the default"*, *"your tap is the yes"*,
+*"Send it - it's my phone, my mesh"*); Q4 in §8.1 below (*"1 by default with
+the option for 2 in the settings of Jarvis"*).
 
 ### 8.1 Answered, kept here so the asking stays checkable
 
-**Q1 was answered on 2026-10-08, Q5 and Q10 on 2026-10-09** (the block at the
-top of this note, and section 5):
+**Q1 was answered on 2026-10-08, and Q5, Q10 and Q4 on 2026-10-09** (the block
+at the top of this note and section 5 for the first three; Q4 below):
 
 - **Q1 - How long before it gives up?** **Answered by the owner on
   2026-10-08, and confirmed 2026-10-09** (see section 5): it is now a setting
@@ -447,6 +455,39 @@ top of this note, and section 5):
   `stop_early`, `keep_offering`). What is left of this question is a
   *measurement*, not a decision: nobody has watched a real captcha hand-off
   run, so the two numbers are still chosen rather than measured (section 9).
+- **Q4 - Is the window brought to the front? — ANSWERED 2026-10-09: no by
+  default; a setting may turn it on.** The owner's own words: **"1 by default
+  with the option for 2 in the settings of Jarvis"** - leave the window where
+  it is and say which window is stuck (**1**) as the default, with a **setting**
+  that switches to bringing it to the front (**2**). He did not choose "bring
+  it to the front" as the default. It is recorded in two parts, because they are
+  two different kinds of fact:
+  - **The default behaviour - built and merged, and it is what the code does
+    today.** The hand-off calls no focus, raise or activate: the window **stays
+    wherever the owner left it**, and Jarvis **names the window it is stuck on**
+    instead (`STUCK`: "{site} is waiting on this PC", section 5; the Brain shows
+    the same line and the PC never calls the picture or input routes, section
+    7). **No focus stealing** - fronting a browser window takes focus away from
+    whatever the owner is doing, and this project has been bitten by that
+    before. This part commits to nothing new; it is the behaviour the owner
+    chose to keep as the default.
+  - **The setting he asked for - OWED WORK, NOT BUILT YET. Do not read this as
+    a description of anything that exists.** A Jarvis setting, in the same place
+    the other captcha settings live, that switches to **bringing the window to
+    the front** instead of leaving it where it is. It is the **same shape as the
+    hand-off's own "when the phone does not answer" setting** (Q1, section 5),
+    which **is built and merged** (`jarvis_handoff_mode.py`,
+    `GET`/`POST /api/chatbot/handoff_mode`, `docs/JARVIS-API.md` section 87.8):
+    **a two-choice setting, declared once, shown in both apps' settings** -
+    the desktop's Settings row and the phone's Settings row reading the same
+    words from the PC, with `tools/gen_handoff_cases.py` carrying them into both
+    apps' contract file so neither can drift. What is **not** built: the second
+    choice itself (front the window), its own setting id and the apps' rows for
+    it. Nothing in the current code fronts the window, and this does not claim
+    otherwise. **Whether turning it on should raise an approval card is not
+    decided here** - it is not obviously more exposure of the owner's own
+    screen, so section 5's reasoning ("the longer offer is gated because it is
+    *more* exposure") does not settle it, and it belongs to whoever builds it.
 - **Q5 - Does "Solve it here" need a card?** Today: **no card**, on the
   grounds that nothing leaves the owner's own devices and nothing is done but
   what the owner does by hand (this matches `ARCHITECTURE.md` section 4's "Not
@@ -497,7 +538,7 @@ top of this note, and section 5):
 
 Each is a decision, and the design deliberately does not guess. (Q2 and Q5 were
 the ones most likely to change what is already built; Q5 is answered above, and
-Q2 is still open.) **Seven questions remain open**, each left in the words it
+Q2 is still open.) **Six questions remain open**, each left in the words it
 was asked in:
 
 - **Q2 - A stream, or a still refreshed?** Today: a still, asked for about
@@ -513,12 +554,6 @@ was asked in:
   give up after N minutes and stop the conversation, or stay paused
   indefinitely until the owner acts? (Stopping on a timer risks losing a
   half-typed sign-in; staying forever holds a browser window open.)
-- **Q4 - Is the window brought to the front?** Today: **no**. The hand-off
-  never calls focus, raise or activate; the window stays wherever the owner
-  left it, which is why the PC alert says "on this PC" and points at it. Bring
-  it to the front when the phone taps "Solve it here", or when the hand-off
-  starts? (Fronting a browser window takes focus away from whatever the owner
-  is doing, and this project has been bitten by focus-stealing before.)
 - **Q6 - How much of the picture may the phone keep while the screen is
   open?** Today: the latest frame only, in memory, dropped with the screen -
   so a brief network stall shows `WORDS["waiting"]` rather than a stale
