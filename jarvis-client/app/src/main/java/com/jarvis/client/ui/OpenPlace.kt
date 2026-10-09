@@ -142,6 +142,14 @@ object OpenPlace {
         "notifications",
         "first-run",
         "hud-window",
+        // "Limits and frequency" (2026-10-08): the PC's own card for the limits
+        // table (backend/jarvis_limits.py). The phone's screen for the same
+        // table is a separate piece of work, so on THIS branch "open limits"
+        // answers "only in Jarvis on your PC" rather than landing at the top of
+        // Settings - and OpenPlaceTest, which refuses a registry Section with no
+        // decision at all, is what made this line necessary. The phone's own
+        // place replaces it when that screen lands.
+        "limits",
     )
 
     /** Every id this file has made a decision about - for the test. */
