@@ -64,6 +64,11 @@ fn main() {
             "get_digest",
             "mark_digest_seen",
             "set_attention_muted",
+            // How many times a day Jarvis may speak up unasked, and the hour
+            // the brief arrives (2026-10-08). The Brain's budget card sets
+            // them; the write is the backend's to decide - raising a number is
+            // a loosening and the backend puts one card to the owner first.
+            "set_attention_limits",
             // The Brain. One fan-out read over a fixed allowlist, then one
             // command per power it can exercise.
             "brain_read",
