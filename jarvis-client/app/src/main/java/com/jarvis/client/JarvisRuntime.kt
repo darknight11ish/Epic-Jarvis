@@ -4498,6 +4498,33 @@ object JarvisRuntime {
         }
 
     /**
+     * `GET /api/retrieve?q=...&count=1` - "3 recalled · 2 near" under an
+     * answer, and never a word of what was recalled (the owner's decision of
+     * 2026-10-08, "Just the number"; [com.jarvis.client.net.RetrieveCount]).
+     *
+     * A read: never held on a stale link, and **nothing is sent at all**
+     * unless the PC's handshake says it has the count-only read - on an
+     * older PC the same question would come back with the matched facts,
+     * documents and Logseq pages themselves, and the phone must never be
+     * sent those. The reply is read as two numbers or dropped entirely.
+     */
+    suspend fun retrieveCount(question: String?): com.jarvis.client.net.RetrieveCount.Read {
+        if (!can(com.jarvis.client.net.RetrieveCount.CAPABILITY)) {
+            return com.jarvis.client.net.RetrieveCount.Read.Missing
+        }
+        return when (val r = api.retrieveCount(question)) {
+            is ApiResult.Ok -> com.jarvis.client.net.RetrieveCount.parse(r.value)
+                ?.let { com.jarvis.client.net.RetrieveCount.Read.Shown(it) }
+                ?: com.jarvis.client.net.RetrieveCount.Read.Missing
+            is ApiResult.Failed -> if (com.jarvis.client.net.RetrieveCount.missing(r.error)) {
+                com.jarvis.client.net.RetrieveCount.Read.Missing
+            } else {
+                com.jarvis.client.net.RetrieveCount.Read.Failed(describe(r.error))
+            }
+        }
+    }
+
+    /**
      * `GET /api/chat/table?id=` - the spending table under an answer
      * ([com.jarvis.client.net.Spending]). A read: never held. The result is
      * handed to the screen that draws it and kept nowhere else.

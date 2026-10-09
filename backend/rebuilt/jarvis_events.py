@@ -812,6 +812,15 @@ def _capability_probe() -> dict:
         # appearance: both apps refuse to offer it - rather than send the
         # flag to a PC that would ignore it - unless this is true.
         "temporary_chat": _hud_has("_temporary_chat"),
+        # The count-only retrieval trace (retrieve-count.patch; the owner's
+        # decision of 2026-10-08, "Just the number"). True once the running
+        # server answers `count=1` on GET /api/retrieve with counts and no
+        # words. Asked of the running server, like temporary_chat, and for a
+        # sharper reason: an older PC would ignore `count` and answer with
+        # the matched words themselves, which the phone must never be sent -
+        # so the phone sends NOTHING, not even the question, unless this is
+        # true. It then shows "3 recalled · 2 near", or nothing at all.
+        "retrieve_count": _hud_has("_retrieve_counts"),
         # "backend" when POST /api/approve on this PC asks Windows Hello
         # itself for a risky approval from this PC (owner-check.patch,
         # jarvis_owner_check.py; docs/APPROVAL-GAP-DESIGN.md step 1). The

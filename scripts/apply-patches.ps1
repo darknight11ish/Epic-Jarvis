@@ -1186,9 +1186,12 @@ $PATCHES = @(
     # No gate hunk: this module approves nothing, and the rehearsal in
     # test_tasks.py asserts that no steering route reaches the gate at all.
     'tasks.patch'
-    # This one MUST stay last of all: test_screen_attach.py asserts it
-    # (`_stack.order()[-1]`), because its wrapper reads the request body
-    # once and every later patch would be applied behind its back.
+    # This one MUST stay last but for the patches written after it:
+    # test_screen_attach.py asserts that, because its wrapper reads the request
+    # body once and every later patch would be applied behind its back.
+    # retrieve-count.patch (2026-10-08) is the one written after it, and it is
+    # safe there: it adds `_retrieve_counts()` and the `count=1` branch of the
+    # /api/retrieve handler, and touches the screen route not at all.
     # "Look at this" can hand the owner the CLEANED picture of the look, for the
     # question box (the owner's decision of 2026-10-07;
     # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,
@@ -1200,6 +1203,16 @@ $PATCHES = @(
     # in; without it, or on any error, the banner says so and a look is exactly
     # what it was before (the words only, no picture).
     'screen-attach.patch'
+    # The count-only retrieval trace (the owner's decision of 2026-10-08,
+    # "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B; JARVIS-API
+    # section 119): `count=1` on GET /api/retrieve answers with four keys and
+    # no words at all - how many were recalled, how many were near misses -
+    # so the phone can show "3 recalled - 2 near" without ever being sent a
+    # saved fact, a document or a Logseq page. Two hunks in jarvis_hud.py:
+    # `_retrieve_counts()` beside retrieve(), and the handler's own
+    # `count=1` branch. Nothing else in the file changes, and the desktop's
+    # trace is untouched (no `count` on its own request). No new module.
+    'retrieve-count.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
