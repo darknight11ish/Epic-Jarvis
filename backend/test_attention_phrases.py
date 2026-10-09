@@ -110,8 +110,19 @@ def t_a_raise_cannot_slip_through_without_the_gate():
     AR.configure(gate=None, tier_of=None)
     r = ask("speak up 6 times a day")
     check("with no gate reachable, the raise is refused", AR._limit() == 3, AR._limit())
+    # BOTH WORDINGS COUNT (corrected 2026-10-09). Which one the owner sees
+    # depends on the machine, not on the feature:
+    #   * with no settings file to write, the module refuses with
+    #     "...so nothing was changed";
+    #   * on the owner's PC a real `jarvis_gate` is importable, so the raise
+    #     becomes a card, and an unanswered card answers "The card was not
+    #     answered in time, so Jarvis still speaks up to 3 times a day."
+    # Both report the same thing - the budget did not move - and the check above
+    # already proves it did not. Requiring only the first made this suite pass in
+    # CI and fail on the one PC it exists to check.
     check("and refused in plain words that say nothing was changed",
-          "nothing was changed" in says(r), says(r))
+          "nothing was changed" in says(r) or "still speaks up to" in says(r),
+          says(r))
 
     fresh()
     AR.configure(gate=lambda action, detail, prompt: Verdict(True, "approved"),
