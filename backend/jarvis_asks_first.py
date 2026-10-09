@@ -247,10 +247,11 @@ NOTE_ROW = {
     "read_logseq_page": ("Reading happens on this PC and changes nothing in the graph. A chat "
                          "that read a page counts as having read outside text, so a later web "
                          "search or note in it still asks."),
-    "create_logseq_page": ("It only adds a page, and deleting it undoes it. The "
-                           "after-outside-text rule names the Obsidian daily note, the Logseq "
-                           "journal and a new Joplin note - not this one, so turning \"Ask me "
-                           "first\" on is what makes it ask every time."),
+    "create_logseq_page": ("It only adds a page, and deleting it undoes it. It is a note "
+                           "write like the Obsidian daily note, the Logseq journal and a "
+                           "new Joplin note, so a chat that has read outside text waits for "
+                           "a card before it writes. Turning \"Ask me first\" on is what "
+                           "makes it ask every time."),
     "power_manage": ("Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. "
                      "With \"Ask me first\" on, every change - the standby schedule's at its "
                      "start, and waking - waits for a card."),
