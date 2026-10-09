@@ -1417,6 +1417,19 @@
     ]
   },
   {
+    "id": "captcha-handoff",
+    "group": "Safety",
+    "title": "Hand a captcha to your phone (\"Solve it here\")",
+    "what": "When Jarvis is driving a browser and hits a captcha or a sign-in page, it stops there and your phone can show a live picture of that one window so you can solve it. Jarvis never solves a captcha.",
+    "where": "The phone's alert, then \"Solve it here\". The setting is in Settings, When the phone does not answer - in both apps.",
+    "asks": "Opening the hand-off asks nothing: your own taps and typing, on your own devices. \"Keep offering it\" for the full 15 minutes is one card on the PC with Windows Hello; \"Stop early\", the default, is instant.",
+    "limit": "The picture is never saved and goes only to your own phone over Tailscale or NordVPN Meshnet. Some captchas refuse taps passed on this way, so the window on the PC stays the fallback. With \"Stop early\" (about a minute) the PC says which window Jarvis is stuck on.",
+    "surface": "both",
+    "covers": [
+      "settings.handoff"
+    ]
+  },
+  {
     "id": "stale-link",
     "group": "Safety",
     "title": "When the connection is catching up",

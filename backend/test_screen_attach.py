@@ -474,16 +474,21 @@ def t_hygiene():
           (REPO / "jarvis-backend" / "jarvis_screen_attach.py").is_file())
     # "Last" means last but for the patches written after it - the same rule
     # test_devices.py, test_gate_risk_rows.py and test_referee.py use, and the
-    # same allow-list they declare. retrieve-count.patch (2026-10-08) is
-    # written after it: two hunks in jarvis_hud.py - `_retrieve_counts()`
-    # beside retrieve() and the /api/retrieve handler's own `count=1` branch -
-    # nowhere near the POST /api/screen route this patch's wrapper takes over,
-    # so the request body is still read once, and still by this wrapper.
+    # same allow-list they declare. Every new patch is appended, so the next one
+    # pushes this one up the list, and that is not a defect in either of them.
+    # retrieve-count.patch (2026-10-08) is written after it: two hunks in
+    # jarvis_hud.py - `_retrieve_counts()` beside retrieve() and the
+    # /api/retrieve handler's own `count=1` branch - nowhere near the
+    # POST /api/screen route this patch's wrapper takes over, so the request
+    # body is still read once, and still by this wrapper. handoff-mode.patch
+    # (2026-10-08) is written after it too, and has no jarvis_hud.py hunk at
+    # all (its two hunks are in jarvis_gate.py), so it cannot rewrite the
+    # block this patch installs either.
     stack_order = __import__("_stack").order()
+    later = {"retrieve-count.patch", "handoff-mode.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
-          and [n for n in stack_order
-               if n not in {"retrieve-count.patch"}][-1] == "screen-attach.patch")
+          and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")
     patch = (HERE / "screen-attach.patch").read_text(encoding="utf-8")
     check("the patch wires it into jarvis_hud.py and edits no shipped file",
           "jarvis_screen_attach.install(Handler" in patch and "+++ b/jarvis_hud.py" in patch

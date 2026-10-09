@@ -35,8 +35,25 @@ IN PLAIN WORDS, WHAT HAPPENS
     window still shows one of the fixed hosts. When any of that stops being
     true the hand-off ends at once and says why: the owner pressed Resume or
     Stop, the window went to another site ("left"), the window closed, Stop
-    everything, nobody asked for a picture for IDLE_S (the phone left the
-    screen), or MOST_S passed.
+    everything, nobody asked for a picture for the idle time (the phone left the
+    screen), or the ceiling passed.
+
+HOW LONG "NOBODY LOOKING" IS, AND THE CEILING, ARE THE OWNER'S SETTING
+  `jarvis_handoff_mode.py` (his decision of 2026-10-08: "make this a setting
+  for both options with 1 as the default"). Until then both numbers were
+  constants chosen by hand - 45 s and 15 minutes - and neither was measured.
+    * "Stop early" (the DEFAULT, and the stricter one): about a minute of no
+      interaction ends the hand-off AND the PC says plainly that Jarvis is
+      stuck on a puzzle in that window, naming it, leaving the window for the
+      owner to solve there. The window on the PC is the fallback this feature
+      already promises, so the owner is never left without a way through.
+    * "Keep offering it": the live picture stays on offer for the full
+      15-minute ceiling, so the owner can pick their phone up late. Choosing
+      THAT is one approval card on the PC (handoff_keep_offering, with
+      Windows Hello), because a window of theirs - which may hold their own
+      account details - stays on offer fifteen times longer. Going back to
+      "Stop early" is immediate, from either app.
+  A damaged or missing settings file reads as "Stop early": fail closed.
 
 WHAT IT NEVER DOES
   * Solve, skip, click or type anything by itself. There is no code here that
@@ -84,10 +101,18 @@ FRAMES_PER_S = 2.0
 #: JPEG quality: small enough for a phone link, clear enough to read a
 #: captcha's picture grid.
 JPEG_QUALITY = 60
-#: No picture asked for this long: the phone left the screen - it ends.
-IDLE_S = 45.0
-#: However it goes, a hand-off ends after this long.
-MOST_S = 15 * 60.0
+#: HOW LONG A HAND-OFF STAYS ON OFFER IS THE OWNER'S SETTING, not a constant
+#: here (jarvis_handoff_mode.py; his decision of 2026-10-08). Both numbers are
+#: read from it at every check, so changing the setting takes effect on the
+#: next hand-off - and on one already running - with no restart:
+#:   * "Stop early" (the DEFAULT): about a minute of no interaction, then it
+#:     ends and the PC says which window Jarvis is stuck on (`STUCK`).
+#:   * "Keep offering it": the full 15-minute ceiling, so the owner can pick
+#:     their phone up late (one approval card plus Windows Hello to choose).
+#: These two are the fallbacks for a PC whose backend is older than this
+#: setting: the safe direction, "Stop early", and the ceiling both share.
+STOP_AFTER_FALLBACK_S = 60.0
+CEILING_FALLBACK_S = 15 * 60.0
 #: Typed characters in one input.
 TEXT_MOST = 200
 #: One scroll, in page pixels, either way.
@@ -119,6 +144,18 @@ ENDED = {
     "time": "The hand-off ended after 15 minutes.",
     "stop_all": "Stop everything ended it.",
     "replaced": "A new hand-off started.",
+}
+
+#: The PC's own line once the hand-off has ended the "Stop early" way: Jarvis
+#: is stuck on a puzzle in THAT window, named, and the owner solves it there.
+#: Shown by both apps in place of the offer - this is what keeps "Stop early"
+#: safe rather than merely shorter: the owner is told exactly where to go.
+#: `{site}` is the site's name and `{reason}` one of the reason phrases.
+STUCK = {
+    "title": "{site} is waiting on this PC",
+    "text": ("Jarvis is stuck on {reason} in that window, so the hand-off to your phone has "
+             "ended. Solve it in the browser window on this PC, then press Resume. Your phone "
+             "can start it again (Solve it here) if you need it."),
 }
 
 #: The sentences both apps show for this feature, word for word
@@ -185,6 +222,10 @@ _LOCK = threading.RLock()
 _CURRENT: Optional[Handoff] = None
 #: The last hand-off that ended, for the apps to say why (id -> why). Small.
 _ENDED: dict = {}
+#: The site and reason that hand-off was about (id -> (site, reason)), kept so
+#: the "Stop early" line can name the window after the offer is gone. Two
+#: fixed words - never a page title, never a word the site said.
+_ENDED_AT: dict = {}
 _clock: Callable[[], float] = time.monotonic
 
 
@@ -256,10 +297,67 @@ def _publish(kind: str, data: dict) -> None:
         pass
 
 
+def _mode():
+    """The owner's setting module, or None on a PC whose backend is older than
+    it (the two fallbacks above then apply - never a crash, never a guess)."""
+    try:
+        import jarvis_handoff_mode as HM
+        return HM
+    except Exception:
+        return None
+
+
+def idle_seconds() -> float:
+    """How long with nobody looking before the hand-off ends: the owner's
+    choice (jarvis_handoff_mode.idle_seconds), or the safe "Stop early"
+    fallback when that module is not on this PC."""
+    hm = _mode()
+    if hm is None:
+        return STOP_AFTER_FALLBACK_S
+    try:
+        return float(hm.idle_seconds())
+    except Exception:
+        return STOP_AFTER_FALLBACK_S
+
+
+def ceiling_seconds() -> float:
+    """The 15-minute ceiling, the same for both of the owner's choices."""
+    hm = _mode()
+    if hm is None:
+        return CEILING_FALLBACK_S
+    try:
+        return float(hm.ceiling_seconds())
+    except Exception:
+        return CEILING_FALLBACK_S
+
+
+def patient() -> bool:
+    """Is the owner's choice "Keep offering it"?"""
+    hm = _mode()
+    if hm is None:
+        return False
+    try:
+        return bool(hm.is_patient())
+    except Exception:
+        return False
+
+
+def stuck_line(site: str, reason: str) -> dict:
+    """The PC's own line for an offer that ended the "Stop early" way: Jarvis
+    is stuck on a puzzle in THAT window, named, and the owner solves it there.
+    Both apps show it word for word (tools/gen_handoff_cases.py carries it)."""
+    return {"title": STUCK["title"].format(site=site),
+            "text": STUCK["text"].format(site=site, reason=reason_words(reason))}
+
+
 def offer() -> dict:
     """What both apps read (GET /api/chatbot/status, `handoff`): is a page
     waiting for the owner, which site and why - never a picture, never a
-    word from the page. `active` is the hand-off going on now, if any."""
+    word from the page. `active` is the hand-off going on now, if any.
+
+    `ended` also carries the PC's own line (`stuck`) when the last hand-off
+    ended because nobody was looking under "Stop early": that is the moment
+    the owner is told plainly which window to solve the puzzle in."""
     _sweep()
     rows = _targets()
     with _LOCK:
@@ -269,14 +367,16 @@ def offer() -> dict:
     if not rows:
         with _LOCK:
             _NOTIFIED_TARGETS.clear()
-        return {"available": False, "active": "", "ended": last_end}
+        return {"available": False, "active": "", "ended": last_end,
+                "patient": patient(), "stuck": _stuck_now(None)}
     kind, tid, site, reason, _a = rows[-1]
     res = {"available": True, "kind": kind, "id": tid, "site": site, "reason": reason,
            "reason_words": reason_words(reason),
            "title": WORDS["alert_title"].format(site=site),
            "text": WORDS["alert_text"].format(reason=reason_words(reason)),
            "active": active if cur is not None and cur.target == tid else "",
-           "ended": last_end}
+           "ended": last_end, "patient": patient(),
+           "stuck": _stuck_now(row=(kind, tid, site, reason))}
     target_key = f"{kind}:{tid}:{reason}"
     with _LOCK:
         should_publish = target_key not in _NOTIFIED_TARGETS
@@ -285,6 +385,30 @@ def offer() -> dict:
     if should_publish:
         _publish("handoff", res)
     return res
+
+
+def _last_id() -> str:
+    """The one hand-off id _ENDED holds (it keeps at most one), or ""."""
+    with _LOCK:
+        return next(iter(_ENDED), "")
+
+
+def _stuck_now(row=None) -> Optional[dict]:
+    """The PC's own line for the window Jarvis is stuck on, or None.
+
+    Shown only when the last hand-off ended because nobody was looking
+    (`idle`) - that is the "Stop early" moment the design promises: the offer
+    is gone AND the PC says plainly which window to solve the puzzle in, named.
+    Both apps show it word for word. The site and the reason are the two fixed
+    words that hand-off was about, kept when it ended (never a word from the
+    page). `row` is accepted so a caller that already read the waiting page
+    needs no second read; the line is always about the hand-off that ENDED."""
+    with _LOCK:
+        why = _ENDED.get(_last_id(), "")
+        site, reason = _ENDED_AT.get(_last_id(), ("", ""))
+    if why != "idle" or not site:
+        return None
+    return stuck_line(site, reason)
 
 
 # ============================================================================
@@ -300,6 +424,8 @@ def _end(h: Handoff, why: str) -> None:
     h.adapter = None
     _ENDED.clear()
     _ENDED[h.id] = h.ended
+    _ENDED_AT.clear()
+    _ENDED_AT[h.id] = (h.site, h.reason)
     if _CURRENT is h:
         _CURRENT = None
     _audit("end", {"why": h.ended, "frames": h.frames, "inputs": h.inputs,
@@ -308,7 +434,8 @@ def _end(h: Handoff, why: str) -> None:
 
 def _sweep() -> None:
     """Ends a hand-off whose session is no longer paused at that page, or
-    that nobody has looked at for IDLE_S, or that passed MOST_S."""
+    that nobody has looked at for the owner's idle time, or that passed the
+    15-minute ceiling (`jarvis_handoff_mode.py`)."""
     with _LOCK:
         h = _CURRENT
     if h is None:
@@ -320,13 +447,18 @@ def _sweep() -> None:
 
 
 def _why_not(h: Handoff) -> str:
-    """"" while the hand-off may go on; else why it ends."""
+    """"" while the hand-off may go on; else why it ends.
+
+    Both clocks come from the owner's setting, read HERE on every check, so a
+    change takes effect on a hand-off already running: "Stop early" (the
+    default) ends it after about a minute with nobody looking, and "Keep
+    offering it" leaves it on offer until the 15-minute ceiling."""
     now = _clock()
     if h.ended:
         return h.ended
-    if now - h.started >= MOST_S:
+    if now - h.started >= ceiling_seconds():
         return "time"
-    if now - h.last_ask >= IDLE_S:
+    if now - h.last_ask >= idle_seconds():
         return "idle"
     row = _target(h.kind, h.target)
     if row is None:
@@ -398,10 +530,12 @@ def start(kind, target) -> tuple:
             _end(_CURRENT, "replaced")
         _CURRENT = h
         _ENDED.clear()
+        _ENDED_AT.clear()
     _audit("start", {"kind": kind, "reason": reason, "hosts": len(hosts)})
     return 200, {"ok": True, "handoff": h.id, "site": site, "reason": reason,
                  "reason_words": reason_words(reason), "frames_per_s": FRAMES_PER_S,
-                 "idle_s": IDLE_S}
+                 "idle_s": idle_seconds(), "ceiling_s": ceiling_seconds(),
+                 "patient": patient()}
 
 
 def _mine(hid) -> tuple:
@@ -615,6 +749,7 @@ def _reset_for_tests(clock: Optional[Callable[[], float]] = None) -> None:
     with _LOCK:
         _CURRENT = None
         _ENDED.clear()
+        _ENDED_AT.clear()
         _NOTIFIED_TARGETS.clear()
     _clock = clock or time.monotonic
 

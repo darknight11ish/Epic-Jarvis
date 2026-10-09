@@ -206,6 +206,16 @@ MENUS: tuple = (
     _m("settings.browser-engine", "Browser without a window",
        "Which browser Jarvis uses for plain reading.",
        names=("browser without a window", "headless browser", "browser settings")),
+    # "When the phone does not answer" (the owner's decision of 2026-10-08:
+    # "make this a setting for both options with 1 as the default"): how long
+    # the captcha hand-off - a live picture of one of the owner's browser
+    # windows, shown only to their own phone - stays on offer. "Stop early" is
+    # the default; "Keep offering it" is one approval card on the PC with
+    # Windows Hello. Same id in both apps, like every other settings row.
+    _m("settings.handoff", "When the phone does not answer",
+       "How long the captcha hand-off stays on offer.",
+       names=("when the phone does not answer", "the captcha hand-off",
+              "how long the hand-off stays on offer", "solve it here settings")),
     _m("settings.backup", "Backups", "One locked backup file into a folder you pick.",
        names=("backups", "backup settings")),
     _m("settings.updates", "Updates", "New versions of this app.", (DESKTOP,),

@@ -2068,6 +2068,27 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    // ------------------------------ the hand-off's own setting --------------
+    // How long "Solve it here" stays on offer (the owner's decision of
+    // 2026-10-08; docs/JARVIS-API.md section 87.8; backend/jarvis_handoff_mode.py;
+    // see [Handoff]). Decided on the PC like every other approval-card switch
+    // here: "Stop early" is the default, "Keep offering it" is ONE card on the
+    // PC with Windows Hello.
+
+    /**
+     * `GET /api/chatbot/handoff_mode`: `{"mode", "modes", "default", "words",
+     * "patient", "waiting", "last", "idle_s", "ceiling_s", ...}`. A read.
+     */
+    suspend fun handoffModeSettings(): ApiResult<JsonObject> = probe(HandoffMode.PATH)
+
+    /**
+     * The choice. "Keep offering it" answers 202 waiting while its approval
+     * card is up; "Stop early" is immediate, and withdraws a card still
+     * waiting. Nothing but a body [HandoffMode.body] made is sent.
+     */
+    suspend fun setHandoffMode(body: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(HandoffMode.PATH, body)
+
     /**
      * `GET /api/form-review/picture?id=` - the screenshot of a web form Jarvis
      * filled in, for the card that asks to submit it (FormReview). A read: not

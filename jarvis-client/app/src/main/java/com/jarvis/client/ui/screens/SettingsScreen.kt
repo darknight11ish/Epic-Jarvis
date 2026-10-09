@@ -114,8 +114,12 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "phone-notify" to 14,
     "screen-look" to 15,
     "browser-engine" to 16,
-    "devices" to 17,
-    "quick-tiles" to 18,
+    // How long the captcha hand-off stays on offer (the owner's decision of
+    // 2026-10-08). Sits with the browser it belongs to, so the two exposure
+    // rows are together; every index below it moved down by one on that day.
+    "handoff" to 17,
+    "devices" to 18,
+    "quick-tiles" to 19,
 )
 
 /**
@@ -425,6 +429,14 @@ fun SettingsScreen(
             // The headless browser, Obscura (the owner's decision of 2026-09-29):
             // Jarvis may choose a browser with no window for plain reading.
             if (menus.shows("settings.browser-engine")) item(key = "browser-engine") { MenuFrame(menus, "settings.browser-engine") { BrowserEngineSection(canAct = canAct) } }
+
+            // How long the captcha hand-off stays on offer (the owner's own
+            // decision of 2026-10-08: "make this a setting for both options with
+            // 1 as the default"). "Stop early" is the default; "Keep offering it"
+            // is one approval card on the PC with Windows Hello.
+            if (menus.shows("settings.handoff")) item(key = "handoff") {
+                MenuFrame(menus, "settings.handoff") { HandoffModeSection(canAct = canAct) }
+            }
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
             // shown only when the PC reports pairing (section 5.5).

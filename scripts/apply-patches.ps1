@@ -1192,6 +1192,9 @@ $PATCHES = @(
     # retrieve-count.patch (2026-10-08) is the one written after it, and it is
     # safe there: it adds `_retrieve_counts()` and the `count=1` branch of the
     # /api/retrieve handler, and touches the screen route not at all.
+    # handoff-mode.patch (2026-10-08) went on after that one, and is the last
+    # patch here: it touches only jarvis_gate.py (the "acts only on tier ask"
+    # list and the _RISK table), so it too leaves the screen route alone.
     # "Look at this" can hand the owner the CLEANED picture of the look, for the
     # question box (the owner's decision of 2026-10-07;
     # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,
@@ -1213,6 +1216,20 @@ $PATCHES = @(
     # `count=1` branch. Nothing else in the file changes, and the desktop's
     # trace is untouched (no `count` on its own request). No new module.
     'retrieve-count.patch'
+    # How long "Solve it here" stays on offer (the owner's OWN decision of
+    # 2026-10-08, his words: "make this a setting for both options with 1 as
+    # the default"; backend/jarvis_handoff_mode.py; docs/CAPTCHA-HANDOFF-DESIGN.md
+    # section 5; JARVIS-API section 87.8). TWO hunks in jarvis_gate.py ONLY -
+    # the new action joins the "acts only on tier ask" list and gets its _RISK
+    # line, both right after the last patch that wrote those two tables, so it
+    # goes last, like every new patch - and NO jarvis_hud.py hunk at all: the
+    # route is answered by jarvis_chatbot_routes.py, which
+    # chatbot-routes.patch already installs. Needs jarvis_handoff_mode.py
+    # copied in; without it, or on any error, the route answers 503 in plain
+    # words and the hand-off keeps stopping early - the safe direction. The
+    # hand-off's own picture and input routes are untouched, and the desktop
+    # still names none of them (tests/handoff.mjs).
+    'handoff-mode.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1435,6 +1452,7 @@ $SHIPPED = @(
     'jarvis_support_widget.py'   # the support window on the chatbot websites' shared base: the company's help page, its chat widget (Zendesk, Intercom, LivePerson, Gorgias, Freshchat, Salesforce, unbranded); needs Playwright (not installed by this script)
     # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
     'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
+    'jarvis_handoff_mode.py'     # how long that hand-off stays on offer (the owner's OWN setting of 2026-10-08): "Stop early" by default, or keep offering it for the full 15 minutes - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online

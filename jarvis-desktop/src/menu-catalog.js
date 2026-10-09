@@ -692,6 +692,29 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.handoff",
+    "title": "When the phone does not answer",
+    "about": "How long the captcha hand-off stays on offer.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "when the phone does not answer",
+      "the captcha hand-off",
+      "how long the hand-off stays on offer",
+      "solve it here settings"
+    ]
+  },
+  {
     "id": "settings.backup",
     "title": "Backups",
     "about": "One locked backup file into a folder you pick.",
@@ -2404,6 +2427,7 @@ export const ALIASES = {
   "browser settings": "settings.browser-engine",
   "browser without a window": "settings.browser-engine",
   "bubble": "settings.floating-avatar",
+  "captcha hand-off": "settings.handoff",
   "chat card": "settings.second-card.chat-card",
   "chat history": "brain.tab.history",
   "chat history and conversations": "brain.history.conversations",
@@ -2465,6 +2489,7 @@ export const ALIASES = {
   "history import": "brain.memory.history-import",
   "hotkeys": "settings.shortcuts",
   "how jarvis talks": "settings.manner",
+  "how long the hand-off stays on offer": "settings.handoff",
   "hud window": "settings.hud-window",
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
@@ -2538,6 +2563,7 @@ export const ALIASES = {
   "show or hide": "settings.menu-visibility",
   "skills": "brain.model.skills",
   "smartwatch notifications": "settings.watch-notify",
+  "solve it here settings": "settings.handoff",
   "spending": "settings.spending",
   "spending summaries": "settings.spending",
   "stale-link banner": "safety.stale-link",
@@ -2588,6 +2614,7 @@ export const ALIASES = {
   "what jarvis is doing": "brain.now.trace",
   "what jarvis knows about you": "brain.memory.known",
   "what this backend supports": "settings.backend-supports",
+  "when the phone does not answer": "settings.handoff",
   "which card runs chat": "settings.second-card.chat-card",
   "widgets": "brain.work.widgets",
   "wiki": "brain.memory.wiki",
