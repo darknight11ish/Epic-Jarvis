@@ -41,7 +41,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
+import stat
+import tempfile
 import threading
 import time
 import uuid
@@ -246,6 +249,177 @@ def unmute(now: Optional[float] = None) -> dict:
     with closing(_connect()) as c:
         c.execute("UPDATE spend SET muted=0 WHERE day=?", (_today(now),))
     return budget(now)
+
+
+# --------------------------------------------------------------------------
+#   The two numbers the Brain shows - changeable since 2026-10-08
+# --------------------------------------------------------------------------
+# "How much Jarvis may interrupt you" is a card in the Brain on the PC. Until
+# 2026-10-08 it was readable and nothing else: an audit of every feature
+# against the real settings surface found the owner could see the budget and
+# change it nowhere - the worst gap it found. The numbers live in
+# jarvis-framework.toml's [arbiter] table, so changing one is a one-line edit
+# of the owner's own settings file, with every other byte of it left alone:
+# comments, spacing, CRLF endings and a byte-order mark included, the same
+# promise jarvis_asks_first.set_tier makes for the tier lines.
+#
+# The range each number may take is the one the file's own comment already
+# gives it. Nothing here is invented.
+SPOKEN_PER_DAY_MIN, SPOKEN_PER_DAY_MAX = 0, 24
+DIGEST_HOUR_MIN, DIGEST_HOUR_MAX = 0, 23
+
+_SECTION_LINE = re.compile(r"^\s*\[(?P<name>[^\]]+)\]\s*$")
+_NUMBER_LINE = re.compile(r"^(?P<indent>\s*)(?P<key>[A-Za-z_][A-Za-z0-9_]*)"
+                          r"(?P<eq>\s*=\s*)(?P<value>[^#\r\n]*?)(?P<rest>\s*(?:#.*)?)$")
+
+
+class SettingsFileError(Exception):
+    """The owner's settings file could not be read or written, so nothing was
+    changed. The message is shown to the owner as it is, in plain words."""
+
+
+def _as_int(raw: str) -> Optional[int]:
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _toml_path() -> Optional[Path]:
+    try:
+        p = fw.config_path() if fw is not None else None
+    except Exception:
+        p = None
+    return Path(p) if p else None
+
+
+def _reload() -> None:
+    try:
+        if fw is not None:
+            fw.reload_framework()
+    except Exception:
+        pass
+
+
+def _rewrite_number(text: str, key: str, value: int,
+                    *, section: str = "arbiter") -> tuple:
+    """(new text, the old value or None). Only that one line moves.
+
+    The line keeps its own indentation and its own trailing comment; when the
+    owner has deleted the line, it is added back at the end of the table (or,
+    with no table at all, under a new one)."""
+    lines = text.splitlines(keepends=True)
+    ending = "\r\n" if "\r\n" in text else "\n"
+    start = None
+    for i, line in enumerate(lines):
+        m = _SECTION_LINE.match(line.rstrip("\r\n"))
+        if m and m.group("name").strip() == section:
+            start = i
+            break
+    if start is None:
+        tail = "" if (not lines or lines[-1].endswith(("\n", "\r"))) else ending
+        lines.append(f"{tail}[{section}]{ending}{key} = {value}{ending}")
+        return "".join(lines), None
+    last = start
+    for i in range(start + 1, len(lines)):
+        bare = lines[i].rstrip("\r\n")
+        if _SECTION_LINE.match(bare):
+            break                       # the next table starts here
+        if not bare.strip():
+            continue
+        m = _NUMBER_LINE.match(bare)
+        if m and m.group("key") == key:
+            old = _as_int(m.group("value"))
+            lines[i] = (f"{m.group('indent')}{key} = {value}"
+                        f"{m.group('rest')}{ending}")
+            return "".join(lines), old
+        last = i
+    lines.insert(last + 1, f"{key} = {value}{ending}")
+    return "".join(lines), None
+
+
+def _set_number(key: str, value, *, low: int, high: int,
+                path: Optional[Path] = None) -> dict:
+    """Change ONE number under [arbiter], atomically. Raises SettingsFileError."""
+    n = _as_int(value)
+    if n is None:
+        raise SettingsFileError(f"\"{value}\" is not a whole number")
+    if not low <= n <= high:
+        raise SettingsFileError(f"That has to be a whole number between "
+                                f"{low} and {high}")
+    p = path or _toml_path()
+    if p is None or not Path(p).is_file():
+        raise SettingsFileError("Jarvis could not find your settings file "
+                                "(jarvis-framework.toml), so nothing was changed")
+    p = Path(p)
+    with _LOCK:
+        try:
+            raw = p.read_bytes()
+        except OSError as exc:
+            raise SettingsFileError(f"Your settings file could not be read "
+                                    f"({type(exc).__name__}), so nothing was changed")
+        bom = raw.startswith(b"\xef\xbb\xbf")
+        try:
+            text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+        except UnicodeDecodeError:
+            raise SettingsFileError("Your settings file is not plain text, so "
+                                    "nothing was changed")
+        new, old = _rewrite_number(text, key, n)
+        if new == text:
+            return {"ok": True, "from": old, "to": n, "changed": False}
+        data = (b"\xef\xbb\xbf" if bom else b"") + new.encode("utf-8")
+        fd, tmp = tempfile.mkstemp(prefix=p.name + ".", suffix=".tmp",
+                                   dir=str(p.parent))
+        try:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+            try:
+                # The file's own permissions, not the temporary file's.
+                os.chmod(tmp, stat.S_IMODE(os.stat(p).st_mode))
+            except OSError:
+                pass
+            os.replace(tmp, p)
+        except OSError as exc:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise SettingsFileError(f"Your settings file could not be written "
+                                    f"({type(exc).__name__}), so nothing was changed")
+    _reload()
+    return {"ok": True, "from": old, "to": n, "changed": True}
+
+
+def set_spoken_per_day(count, *, path: Optional[Path] = None) -> dict:
+    """How many times a day Jarvis may speak up unasked. 0 leaves the digest.
+
+    {"ok", "from", "to", "changed", "loosening"} - and RAISING this is a
+    loosening: the owner is interrupted more often. The answer says so rather
+    than deciding: the route, and the two apps' own screens, are where a card
+    is raised (an approval card for a loosening, nothing at all for a
+    tightening - the same rule every other setting follows)."""
+    before = _limit()
+    out = _set_number("spoken_per_day", count,
+                      low=SPOKEN_PER_DAY_MIN, high=SPOKEN_PER_DAY_MAX, path=path)
+    out["loosening"] = int(out["to"]) > int(before)
+    if out.get("changed"):
+        _audit("arbiter.budget_changed", {"from": before, "to": out["to"]})
+    return out
+
+
+def set_digest_hour(hour, *, path: Optional[Path] = None) -> dict:
+    """When the once-a-day brief arrives, as an hour 0-23.
+
+    Never a loosening: it changes when the owner reads the overflow, not how
+    much noise Jarvis makes in the room."""
+    out = _set_number("digest_hour", hour,
+                      low=DIGEST_HOUR_MIN, high=DIGEST_HOUR_MAX, path=path)
+    out["loosening"] = False
+    if out.get("changed"):
+        _audit("arbiter.digest_hour_changed", {"to": out["to"]})
+    return out
 
 
 def _spend(now: Optional[float] = None) -> bool:
