@@ -262,6 +262,19 @@ jobs:
         run: |
           python tools/gen_animal_cases.py --check
           node jarvis-desktop/tests/animal-settings.mjs
+      # "One source for the settings screens" (2026-10-09): the desktop page's
+      # 26 switch rows, the contract fixture both apps read, the phone's
+      # SettingsCatalog.kt and the desktop's settings-catalog.js all come from
+      # backend/jarvis_settings_registry.py's SETTINGS_ROWS. --check proves the
+      # four generated files are what that table says; test_settings_rows.py
+      # asks the other direction (a toggle added by hand to settings.html has
+      # no row); settings-catalogue.mjs holds the page, the fixture and the
+      # catalogue together, ROW ORDER included - which nothing checked before.
+      - name: Settings switches - the one table, the page and both apps agree
+        run: |
+          python tools/gen_settings_cases.py --check
+          python backend/test_settings_rows.py
+          node jarvis-desktop/tests/settings-catalogue.mjs
       # The animals' new behaviours as the desktop feeds them (the moments'
       # relay, the lock rules) and the faces at every speed of Jarvis's
       # voice (the phrase-end finder, the robot's eye pulse). Both also run,

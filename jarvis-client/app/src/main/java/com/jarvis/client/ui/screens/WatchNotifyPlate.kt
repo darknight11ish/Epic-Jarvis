@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.SettingsCatalog
 import com.jarvis.client.net.WatchNotify
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
@@ -84,9 +85,16 @@ internal fun WatchNotifySwitch(canAct: Boolean, refresh: Int) {
         return
     }
     Gap(8)
+    // The words come from the generated catalogue (net/SettingsCatalog.kt,
+    // tools/gen_settings_cases.py) because this row's words are the PHONE's
+    // own - there is no desktop toggle for it and nothing on the PC sends
+    // them. The literals below are the fallback: the catalogue is generated,
+    // so if it were ever missing the switch must still read properly rather
+    // than show an empty row. SettingsCatalogTest holds the two together.
+    val row = SettingsCatalog.row("watch-notify")
     SwitchRow(
-        title = "Show notifications on a compatible watch",
-        detail = "Off by default: every notification (approval cards, timers, reminders, " +
+        title = row?.label ?: "Show notifications on a compatible watch",
+        detail = row?.detail ?: "Off by default: every notification (approval cards, timers, reminders, " +
             "\"tell me when\") stays on this phone only.",
         // Waiting shows the switch ON, so it can be turned back off (which
         // takes the request back). The line under it says it is only

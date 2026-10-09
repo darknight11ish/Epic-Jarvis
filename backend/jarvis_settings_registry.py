@@ -624,6 +624,578 @@ def set_manner(manner: str, *, peer=None, local=None) -> Outcome:
 
 
 # --------------------------------------------------------------------------
+#   The desktop Settings page's own switch rows (2026-10-09): every
+#   `<label class="toggle">` in jarvis-desktop/src/settings.html, in the
+#   order the page has them, with the words the page shows.
+#
+#   WHY THIS IS NOT `BOOL_SETTINGS` ABOVE. `BOOL_SETTINGS` is the SPOKEN
+#   table: jarvis_quick.py's grammar reads its `names` (jarvis_quick.py:2788)
+#   and dispatches on its `set` (:3703-3709). A row here is a thing on a
+#   SCREEN. They overlap on ten rows, and the overlap is 2-way on purpose:
+#
+#     * a row with no `setting` - 15 of the 26 - has NO spoken "adjust" and
+#       no setter in this file at all (the switch is acted on by its own
+#       desktop module, or by a Tauri command). Adding it to BOOL_SETTINGS
+#       would make "turn on autostart" MATCH the grammar and then fail at
+#       dispatch; nothing checks that today (backend/test_settings_registry.py
+#       only round-trips two keys), so it would be a silent lie.
+#     * a `BoolSetting` with no desktop row is the phone's own
+#       ("phone_notifications") or lives on the Brain's Memory tab
+#       ("background_learning", "learn_sensitive_topics").
+#
+#   Nothing in this table is ever spoken: `names` and `set` stay exactly
+#   where they were. tools/gen_settings_cases.py turns this table into the
+#   two byte-identical contract fixtures, the phone's SettingsCatalog.kt and
+#   the desktop's settings-catalog.js, and splices the rows back into
+#   settings.html between two markers - so the page, the fixtures and both
+#   apps cannot drift apart. backend/test_settings_rows.py fails when a
+#   hand-added toggle has no row here.
+#
+#   WORDS ARE A FALLBACK, NOT A SECOND OWNER - see `fallback` below. ELEVEN
+#   rows have their visible words sent by the PC at read time
+#   (`fallback=True`); for those, the text carried here is the sentence the
+#   page shows before the read answers, exactly as the markup has it today.
+#   Nothing may be changed HERE to change what the owner reads on those
+#   rows: that is the PC's to say. (An earlier count of "12" in the handoff
+#   added `spd-accept`; it does NOT belong - its span starts EMPTY and is
+#   filled by a local constant, spending.js's BOX.acceptTick, so the PC
+#   never sends it and the markup was never a fallback for it.)
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SettingRow:
+    """One `<label class="toggle">` row on the desktop's Settings page."""
+
+    #: This row's identity: the `<input>`'s own id in settings.html, which
+    #: is also what the desktop JavaScript looks the switch up by. Stable -
+    #: never renamed.
+    dom_id: str
+    #: The BoolSetting this row is (side of) the same switch as, or None.
+    #: None means no spoken "adjust" exists for it - see the note above.
+    setting: Optional[str]
+    #: The `<label>`'s own id, when the page puts one there so a module can
+    #: hide or relabel the whole row. "" when the label carries no id.
+    row_id: str
+    #: The id of the `<span>` the label's words sit in, when it is NOT the
+    #: `<input>`'s own id. "" when the span has no id (its parent `<label>`
+    #: is then the only handle).
+    label_span_id: str
+    #: The id of the `class="toggle-detail"` span, or "" when that span
+    #: carries no id of its own (two rows - `face-auto` and
+    #: `cv-better-switch` - never got one). Separate from `has_detail`: a span
+    #: without an id still exists and still has to be written back.
+    detail_span_id: str
+    #: What the page shows as the row's title, and its one-line detail, in
+    #: PLAIN TEXT (the fixture is JSON, not markup - a detail containing
+    #: `<code>` appears here as the words between the tags).
+    label: str
+    detail: str
+    #: Position on the page, 1-based, top to bottom. Checked against the
+    #: page's real order by the generator, the --check mode, the Python test
+    #: and the desktop Node test - row order was unprotected before this.
+    order: int
+    #: The `<section class="card" id="...">` (or `<details id="more-options">`)
+    #: this row sits inside. Checked to be a real card AND a SECTIONS id.
+    section: str
+    #: "desktop" (this row is the desktop's) or "phone" (the words belong to
+    #: the phone; the desktop has no such row).
+    owner: str
+    #: How far the row's own `<label>` is indented in settings.html, in
+    #: spaces. The rows do NOT all sit at one depth - `supervise` is three
+    #: levels inside "More options", `face-auto` two - and the generated page
+    #: has to put each one back exactly where it was, so the depth is
+    #: recorded here rather than assumed. Checked against the page on every
+    #: run of the generator, which fails loudly if it drifts.
+    indent: int = 8
+    #: True when the row has a `class="toggle-detail"` span at all. Five rows
+    #: have none (`notif-quiet-enabled`, `sp-switch`, `be-switch`, `supervise`,
+    #: `autostart`) - the page keeps those to a single line - and a span can
+    #: exist without an id of its own (`face-auto`, `cv-better-switch`), which
+    #: is why this is a flag rather than "detail_span_id is not empty".
+    has_detail: bool = False
+    #: The `<input ... />` tag VERBATIM, whitespace collapsed.
+    #:
+    #: This is the one place the table does not describe a row field by field.
+    #: Twenty-five rows spell the tag the same way - `type="checkbox"`, the id,
+    #: then any of `checked`/`data-live` - and could be built from flags. The
+    #: twenty-second (`spd-accept`) cannot: the page writes
+    #: `<input type="checkbox" id="spd-accept" />`, with the type first and the
+    #: id second, and every other row the other way round. Rather than invent a
+    #: flag meaning "the other word order", the tag itself is recorded, so the
+    #: page cannot drift from it and no reader has to work out which flag
+    #: produced which ordering.
+    input_open: str = ""
+    #: True when the label's `<span id="...">` shares its line with the words
+    #: instead of opening a line above them. One row does this - `spd-accept`,
+    #: whose span starts empty and is filled later by spending-settings.js.
+    label_span_inline: bool = False
+    #: True when `label_span_id` is the id of the WRAPPER span itself rather
+    #: than of a child span inside it. One row does this - `spd-accept`, whose
+    #: `<span id="spd-accept-text"></span>` IS the row's only span - and the
+    #: renderer must then put the id on the line it already writes instead of
+    #: wrapping it in a second span.
+    label_span_is_wrapper: bool = False
+    #: True when a row with no child span and no detail span still opens the
+    #: wrapping `<span>` on a line of its own instead of sharing that line
+    #: with the words. One row does this - `notif-quiet-enabled` - and the
+    #: difference is whitespace INSIDE the span, so it cannot be worked out
+    #: from the words; the page is the only thing that knows.
+    span_on_own_line: bool = False
+    #: For a phone-owned row: SettingsScreen.kt's `item(key = "...")`.
+    phone_key: str = ""
+    #: True when the PC sends this row's visible words at read time, so the
+    #: text above is the FALLBACK the page starts with, never the words the
+    #: owner ends up reading.
+    fallback: bool = False
+    #: Extra attributes on the `<input>`, reproduced verbatim in settings.html.
+    checked: bool = False
+    hidden: bool = False
+    data_live: bool = False
+    #: False for the ONE `<label class="toggle">` that is not a settings
+    #: switch at all: `spd-accept` is the spending screen's "accept every
+    #: column" control, and its label carries `hidden`. It is described here
+    #: (so the page and this table still agree, and the count stays honest)
+    #: and flagged `setting_row=False` so nothing treats it as a preference.
+    setting_row: bool = True
+    #: For a phone-owned row: the Kotlin the words above are copied FROM, so
+    #: the two can be compared by eye (there is no build step that reads the
+    #: Kotlin, and the phone may one day read the catalogue for it instead).
+    source: str = ""
+
+
+#: The desktop page's 26 toggle rows, in page order. The PAGE-OWNED rows
+#: (owner="desktop") are generated into settings.html between its
+#: "settings-toggles:begin/end" markers; the two phone rows are carried for
+#: the phone's SettingsCatalog.kt only.
+SETTINGS_ROWS: tuple = (
+    # ------------------------------------------------------------------
+    #   The desktop page's own 26 rows, in page order. Every field that
+    #   the page can answer for itself (the ids, and the label and detail
+    #   words, line breaks included) was read FROM settings.html; the
+    #   rest - which BoolSetting a row is the same switch as, which card
+    #   it sits in - was written by hand and is checked, not guessed, by
+    #   tools/gen_settings_cases.py.
+    # ------------------------------------------------------------------
+    SettingRow(
+        "follow-system",
+        None,
+        "",
+        "",
+        "follow-system-detail",
+        'Match Windows light or dark mode',
+        (
+        'Daylight when Windows is light, your dark theme when it is dark.\n'
+        'A switch waits until Jarvis is idle, never mid-approval.\n'),
+        1,
+        "appearance-card",
+        "desktop",
+        indent=8,
+        has_detail=True),
+    SettingRow(
+        "floating-enabled",
+        None,
+        "",
+        "",
+        "floating-detail",
+        'Floating face',
+        (
+        "A small window, always on top, that shows only Jarvis's face -\n"
+        'no text box. Drag it anywhere. Say "open a chat", or press\n'
+        'Alt+Space, to bring up the real Jarvis bar. Alt+Shift+F shows\n'
+        'or hides this face (see Shortcuts below to change either key).\n'),
+        2,
+        "appearance-card",
+        "desktop",
+        indent=8,
+        has_detail=True),
+    SettingRow(
+        "sky-show",
+        None,
+        "",
+        "sky-show-label",
+        "sky-show-detail",
+        'Show the sun and moon behind the face',
+        '',
+        3,
+        "animal-options",
+        "desktop",
+        indent=12,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "face-auto",
+        None,
+        "",
+        "",
+        "",
+        'Auto adjust',
+        (
+        'Picks quality and frame rate for this computer, and steps down\n'
+        'if the face runs slow. On a capable graphics chip an animal can\n'
+        'go up to Maximum.\n'),
+        4,
+        "animal-options",
+        "desktop",
+        indent=10,
+        has_detail=True),
+    SettingRow(
+        "voice-one-moment",
+        None,
+        "",
+        "",
+        "voice-one-moment-detail",
+        'Say "One moment" if I\'m kept waiting',
+        '',
+        5,
+        "voice",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "voice-heard-sound",
+        None,
+        "",
+        "",
+        "voice-heard-sound-detail",
+        'Play a short sound when I finish speaking',
+        '',
+        6,
+        "voice",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "mn-humor",
+        None,
+        "",
+        "",
+        "mn-humor-detail",
+        'Occasional light humour in answers',
+        '',
+        7,
+        "manner",
+        "desktop",
+        indent=10,
+        has_detail=True,
+        fallback=True,
+        data_live=True),
+    SettingRow(
+        "coach-enabled",
+        "prompt_coach",
+        "",
+        "coach-enabled-label",
+        "coach-enabled-detail",
+        'Prompt coach',
+        '',
+        8,
+        "prompt-coach",
+        "desktop",
+        indent=10,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "br-senders",
+        "briefing_senders",
+        "br-senders-row",
+        "",
+        "",
+        'Show who new emails are from',
+        'The briefing lists who your newest unread emails are from (up to 5), next to how many there are. Off: the number only. Turning it on shows you an approval card first; turning it off happens at once.',
+        9,
+        "briefing-settings",
+        "desktop",
+        indent=10,
+        has_detail=True),
+    SettingRow(
+        "notif-alarms",
+        None,
+        "notif-alarms-row",
+        "",
+        "",
+        'Alarms and urgent alerts',
+        'Alarms and urgent "tell me when" alerts ring until dismissed. They break through Windows Focus Assist so you do not miss them.',
+        10,
+        "notifications",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        checked=True),
+    SettingRow(
+        "notif-reminders",
+        None,
+        "notif-reminders-row",
+        "",
+        "",
+        'Reminders, timers and to-dos',
+        'Timers, reminders and to-do items chime once when they are due and offer Snooze.',
+        11,
+        "notifications",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        checked=True),
+    SettingRow(
+        "notif-briefing",
+        None,
+        "notif-briefing-row",
+        "",
+        "",
+        'Morning briefing',
+        'Tells you when your morning briefing is ready to read in the Brain.',
+        12,
+        "notifications",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        checked=True),
+    SettingRow(
+        "notif-handoff",
+        None,
+        "notif-handoff-row",
+        "",
+        "",
+        'Website needs you (Solve it here)',
+        'Tells you when a website or support chat pauses at a captcha or sign-in page.',
+        13,
+        "notifications",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        checked=True),
+    SettingRow(
+        "notif-quiet-enabled",
+        None,
+        "notif-quiet-row",
+        "",
+        "",
+        'Turn on quiet hours',
+        "",
+        14,
+        "notifications",
+        "desktop",
+        indent=8,
+        span_on_own_line=True),
+    SettingRow(
+        "hud-open-bar-show",
+        None,
+        "",
+        "",
+        "hud-open-bar-detail",
+        'Show the "Open the Jarvis bar" button',
+        (
+        "On: the button sits beside the big window's own chat box, and\n"
+        'opens the Jarvis bar ready to type. Off: the button is not drawn\n'
+        'there. The chat box, its Send and the microphone button are\n'
+        'unchanged, and Alt+Space still opens the Jarvis bar.\n'),
+        15,
+        "hud-window",
+        "desktop",
+        indent=8,
+        has_detail=True),
+    SettingRow(
+        "sec-app-lock",
+        None,
+        "",
+        "",
+        "sec-app-lock-detail",
+        'App lock',
+        '',
+        16,
+        "security",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "sec-private",
+        None,
+        "",
+        "",
+        "sec-private-detail",
+        'Windows Hello for memory lists and chat history',
+        '',
+        17,
+        "security",
+        "desktop",
+        indent=8,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "cv-face-switch",
+        None,
+        "",
+        "cv-face-title",
+        "cv-face-detail",
+        'Voice follows the face',
+        '',
+        18,
+        "voices",
+        "desktop",
+        indent=12,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "cv-better-switch",
+        None,
+        "",
+        "",
+        "",
+        'Make custom voices on the second graphics card',
+        'A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.',
+        19,
+        "voices",
+        "desktop",
+        indent=12,
+        has_detail=True),
+    SettingRow(
+        "ws-enabled",
+        "web_search",
+        "",
+        "ws-enabled-label",
+        "ws-enabled-detail",
+        'Web search',
+        '',
+        20,
+        "web-search",
+        "desktop",
+        indent=10,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "ws-ask",
+        "ask_before_every_search",
+        "",
+        "ws-ask-label",
+        "ws-ask-detail",
+        'Ask before every web search',
+        '',
+        21,
+        "web-search",
+        "desktop",
+        indent=10,
+        has_detail=True,
+        fallback=True),
+    SettingRow(
+        "spd-accept",
+        None,
+        "spd-accept-wrap",
+        "spd-accept-text",
+        "",
+        '',
+        "",
+        22,
+        "spending",
+        "desktop",
+        indent=12,
+        input_open='<input type="checkbox" id="spd-accept" />',
+        label_span_inline=True,
+        label_span_is_wrapper=True,
+        setting_row=False,
+        hidden=True),
+    SettingRow(
+        "sp-switch",
+        "screen_picture",
+        "",
+        "sp-switch-label",
+        "",
+        'Turn on Picture mode (slow)',
+        "",
+        23,
+        "screen-look",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
+    SettingRow(
+        "be-switch",
+        "headless_browser",
+        "",
+        "be-switch-label",
+        "",
+        'Let Jarvis use the windowless browser (Obscura)',
+        "",
+        24,
+        "browser-engine",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
+    SettingRow(
+        "supervise",
+        None,
+        "",
+        "",
+        "",
+        'Let Jarvis Desktop start and stop Jarvis',
+        "",
+        25,
+        "start-jarvis",
+        "desktop",
+        indent=10),
+    SettingRow(
+        "autostart",
+        None,
+        "",
+        "",
+        "",
+        'Start Jarvis Desktop when Windows starts',
+        "",
+        26,
+        "more-options",
+        "desktop",
+        indent=10),
+    # ------------------------------------------------------------------
+    #   The phone's own two rows. There is no desktop toggle for
+    #   either, so they are never spliced into settings.html; the
+    #   phone reads their words from SettingsCatalog.kt. `source`
+    #   records the Kotlin the words were copied from, so the two can
+    #   be compared by eye - nothing checks it automatically.
+    # ------------------------------------------------------------------
+    SettingRow(
+        dom_id="watch-notify",
+        setting="smartwatch_notifications",
+        row_id="",
+        label_span_id="",
+        detail_span_id="",
+        label='Show notifications on a compatible watch',
+        detail='Off by default: every notification (approval cards, timers, reminders, "tell me when") stays on this phone only.',
+        order=1,
+        indent=8,
+        section="watch-notify",
+        owner="phone",
+        phone_key="watch-notify",
+        source="WatchNotifyPlate.kt:87-90",
+    ),
+    SettingRow(
+        dom_id="phone-notify",
+        setting="phone_notifications",
+        row_id="",
+        label_span_id="",
+        detail_span_id="",
+        label='Let your phone read notifications',
+        detail='Off by default. Jarvis never sees a phone notification unless you turn this on AND add at least one app below.',
+        order=2,
+        indent=8,
+        section="phone-notify",
+        owner="phone",
+        phone_key="phone-notify",
+        source="PhoneNotificationsPlate.kt:107-110",
+    ),
+)
+
+#: The rows that belong on the desktop page, in page order.
+DESKTOP_ROWS: tuple = tuple(r for r in SETTINGS_ROWS if r.owner == "desktop")
+
+#: dom id -> row, for a direct lookup.
+_ROWS_BY_ID = {r.dom_id: r for r in SETTINGS_ROWS}
+
+
+def setting_row(dom_id: str) -> Optional[SettingRow]:
+    return _ROWS_BY_ID.get(dom_id)
+
+
+# --------------------------------------------------------------------------
 #   The plain, simple on/off settings: one alias table, one setter each.
 #   jarvis_quick.py's grammar looks a name up here, then calls `set`.
 # --------------------------------------------------------------------------
