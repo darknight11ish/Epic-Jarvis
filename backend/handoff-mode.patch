@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -190,6 +190,7 @@
+@@ -190,7 +190,8 @@
      "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
      "read_web_page",  # jarvis_readpage.py acts only on tier "ask": ONE card per address the owner hands over; one GET of that one page, its words read out as outside text (readpage.patch)
      "raise_api_limit",  # jarvis_chatbot_limits.py acts only on tier "ask": ONE card per raise of a chatbot service's monthly money limit, plus Windows Hello, because raising it lets Jarvis spend more of the owner's money (chatbot-limits.patch)
