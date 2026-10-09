@@ -474,6 +474,36 @@ def _leave_balance_chart(goal_id: str) -> None:
         pass
 
 
+class _ClosingConnection(sqlite3.Connection):
+    """A connection the `with self._db() as c:` blocks CLOSE, not just commit.
+
+    THE SAME BUG jarvis_schedule.py fixed on 2026-10-08 (its own
+    _ClosingConnection carries the full story): sqlite3's context manager
+    commits on the way out and never closes the connection, so every one of
+    this file's 9 `with ... _db() as c:` blocks left an OPEN HANDLE on
+    goals.db behind until CPython happened to collect it. That collection is
+    immediate on a quiet line and NOT immediate when a caught exception's
+    traceback, a generator frame or a temp-folder object still holds a
+    reference - which is why the Windows runner's failure moved from suite to
+    suite. On Windows an open handle makes the file undeletable, which is what
+    produced:
+
+        PermissionError: [WinError 32] The process cannot access the file
+        because it is being used by another process: '...\\goals.json'
+
+    Nothing else changes: __exit__ still commits (or rolls back) exactly as
+    sqlite3 does, and a caller that keeps the connection outside a `with` -
+    test_progress.py does, and this file's own older-file checks do - sees it
+    released when the object is collected, as before.
+    """
+
+    def __exit__(self, *exc):
+        try:
+            return super().__exit__(*exc)
+        finally:
+            self.close()
+
+
 class Goals:
     """CRUD for goals, plus the weekly check-in's on_fire. `path`, `clock`
     and `scheduler` are replaceable for the tests - no test needs a real
@@ -493,7 +523,10 @@ class Goals:
 
     def _db(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        c = sqlite3.connect(self.path, timeout=30)
+        # factory: the connection is CLOSED when its `with` block ends, not
+        # left to the collector - a leaked handle is what made goals.db
+        # undeletable on the Windows runner. See _ClosingConnection.
+        c = sqlite3.connect(self.path, timeout=30, factory=_ClosingConnection)
         c.row_factory = sqlite3.Row
         return c
 
