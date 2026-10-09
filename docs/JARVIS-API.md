@@ -6955,7 +6955,7 @@ from the real `view()`. `tools/check_parity.py` records all three routes as
 ```
 {"available": true, "title": "What asks first", "detail": <the sentence under it>,
  "switch_label": "Ask me first", "can_loosen": bool,
- "switchable": [the seven actions of 32.4],
+ "switchable": [the twelve actions of 32.4],
  "groups": [{"title": "Reading your own things",
              "rows": [{"id": "calendar_read", "action": "calendar_read",
                        "title": "Read your calendar",          the card's own words (jarvis_card_words)
@@ -7035,12 +7035,24 @@ rule (`_NO_RULE_FROM_DENIAL`).
 ### 32.4 The short safe list, and the settings file
 
 `calendar_read`, `email_read`, `notes_search`, `home_read` (loosened back to
-`auto`), `append_obsidian_daily`, `append_logseq_journal` (`auto`) and
-`create_joplin_note` (`notify`). The backend refuses every other action,
+`auto`), `append_obsidian_daily`, `append_logseq_journal` (`auto`),
+`create_joplin_note` (`notify`), and five rows a feature review added on
+2026-10-08 so that they can be made stricter like the rest:
+`read_files_readonly`, `read_joplin_note`, `read_logseq_page` and
+`create_logseq_page` (all `auto`), and `power_manage` (`auto` - Quiet,
+standby and a wake-up get a card). Every one of the five acts on the owner's
+own things on this PC, or on Jarvis's own power state, and none of them
+leaves the PC. The backend refuses every other action,
 and never anything in NEEDS_A_PERSON or its hard-limit list (anything that
 leaves the PC, deletes, sends, spends, moves a lock or door, touches secrets
 or loosens a security or privacy setting); `backend/test_asks_first.py`
 checks the two lists never meet.
+
+**Two rows of the same shape are deliberately not on it**, and the page says
+so rather than offering a switch that would not exist: `browse_model_catalog`
+is a way out of this PC (section 4's own list), and `rollback_model` is the
+automatic undo of a bad model swap - the one thing that must never wait for a
+card (`jarvis_tripwire.py`: "rolls back; rollback needs no approval").
 
 **The wiki is not on it, said plainly.** The owner's list named it, but
 since the security audit (L1) `jarvis_wiki.py` writes the wiki only on a
@@ -10026,9 +10038,10 @@ second version of any of it.
   voice, hardware/second-card/big-model's own multi-field controls,
   backups, Accounts).
 - **A device named in words for "loosen"/"enable a tool"** is limited to
-  the seven names `jarvis_asks_first.LOOSE`/`TOOLS_SWITCHABLE` already use
-  (calendar, email, notes, home status, and the three note-writes for
-  loosening only - the reading tools list is four, not seven). A phrase
+  the twelve names `jarvis_asks_first.LOOSE`/`TOOLS_SWITCHABLE` already use
+  (calendar, email, notes, home status, the three note-writes for loosening
+  only, and the five the 2026-10-08 feature review added: reading files and
+  notes, a new Logseq page, and Jarvis's own power state). A phrase
   naming anything else falls through to the model, same as an unknown
   section or setting.
 - **Ambiguity is never guessed at.** A sentence that fits the shape of
@@ -17675,3 +17688,307 @@ module opens no file, prints nothing and uses the one cleaner, once.
 * **The phone gets no picture.** This is the PC's own screen; the phone's
   camera is a separate, already-designed thing, and the route refuses a request
   from anything but this PC.
+
+---
+
+## 118. The job list: work that outlives one chat turn (added 2026-10-08; **backend module and its route built, both apps not yet**)
+
+`backend/jarvis_tasks.py`, `backend/tasks.patch`, `backend/test_tasks.py`.
+Copied in shape from OpenMuse's durable task worker, read on 2026-10-08 and
+written up in `docs/COMPETITORS-OPENMUSE-2026-10-08.md`. Local SQLite,
+standard library only, no network, no child process, and it approves nothing.
+
+**Why.** Until now every turn Jarvis takes is a single-turn, tool-using chat
+turn with a hard 7-request ceiling, and nothing about it survives the turn
+ending. The project's own capability audit of 2026-10-06 says the cost
+plainly: *"No persistent queue, no retries, no self-verification, no
+self-critique, no multi-agent work."* The plan card (`jarvis_plan.py`) is
+built and switched off because it has no durable place to sit, Projects
+cannot run a test suite, and the overnight tidy runs nothing.
+
+### 118.1 What a job is
+
+A job is a name, a goal and **at most 8 steps** - the same ceiling
+`jarvis_plan.MAX_STEPS` uses, so a plan that was allowed on its own card
+cannot become a longer job by being enqueued. Each step is
+`{tool, args, why, risky, from_step, acts, retry_safe}`:
+
+- **`risky`**, or **`from_step`** set, means the step is asked about on its
+  own card when its turn comes - approving the job never approves it
+  (`jarvis_plan.py`'s conditions 1-4, unchanged).
+- **`acts` defaults to True.** Assume a step changes something until the
+  caller says otherwise, so an interrupted step blocks and asks rather than
+  being retried behind the owner's back.
+- **`retry_safe`** says a step may be served from the memo and re-run after
+  an interruption. A step that leaves the machine must never set it.
+- **`from_step`** and `{{step N}}` work exactly as in `jarvis_plan.py`; a
+  placeholder with no `from_step` is refused rather than run literally.
+
+### 118.2 The five protections, and where each came from
+
+1. **A lease.** A claim writes a `lease_id` and a `lease_until` through a
+   compare-and-set on the row's own version, so two claimers cannot both
+   win. A `running` job whose lease has run out is a backend that died
+   mid-step: a step that **acts** puts the job in `blocked` with a question
+   ("check, then choose Retry or Cancel"), and a step that only **reads** is
+   simply done again.
+2. **A checkpoint after every step**, and **one step per tick**. The backend
+   is one process that is also answering the apps and listening for "Hey
+   Jarvis", so a job must never hold the turn that started it. The lease is
+   given back at each checkpoint - holding it would turn a three-step job
+   into a three-minute one on a 60-second lease.
+3. **`outcome_unknown`.** An action that might have reached the other side -
+   a timeout, a reset, a restart mid-send - is neither `failed` (which
+   invites a retry) nor `succeeded` (which would be a guess). `startup()`
+   turns every action left `executing` by a restart into one, in the words
+   *"The PC restarted while this was going out. Check the other side before
+   doing it again - Jarvis will not repeat it."*
+4. **An idempotency key.** The action's id is `sha256(key)` and the insert
+   is `ON CONFLICT DO NOTHING`, so the same request twice returns the first
+   action instead of making a second. This is the half Jarvis was missing:
+   `decide-once.patch` stops a double DECISION, this stops a double REQUEST.
+5. **A decision bound to the words that were shown.** An action carries
+   `hash = sha256({kind, payload, shown})`. `decide_action()` refuses unless
+   the caller sends that hash back - *"This changed since it was shown to
+   you"* - and also refuses an unauthorized decision (`authorized=False` by
+   default: no Windows Hello, nothing decided), an expired card (30 minutes,
+   moved to `expired` by a compare-and-set), and a second decide gives back
+   the same answer instead of doing it twice. `owner-check.patch` proves WHO
+   approved; this proves WHAT.
+
+A timeout is deliberately not a denial: a card nobody answered leaves the
+job `queued` and it asks again, where a real "no" stops the job at that step
+with the steps before it kept (`backend/gate-outcome.patch`'s own
+distinction). `Pause`, `Resume`, `Cancel`, `Retry` and answering a question
+are the owner's acts; **Retry is never something a tick does by itself**.
+
+**Stopping is never gated.** `request_stop()` sets a flag in the store and
+the next `guard()` raises: immediate, ungated, the same as the existing
+Stop-everything hotkey. A stop that had to be approved would not be a stop.
+
+### 118.3 The routes
+
+`GET /api/tasks` (`tasks.patch`), origin- and token-checked like every other
+read. It returns **counts and names only** - ids, states, kinds, step counts,
+tool names - never the text of a note or a task title, the same rule
+`jarvis_task_control.status()` already follows in §45, so the job list cannot
+become a new way for private words to reach a lock screen. The readable feed
+(`JobList().feed()`) is for the PC's own window.
+
+The first call also runs `boot_once()`: startup recovery and the
+interrupted-run reconciliation happen there, so they do not depend on finding
+a startup hook in a file this repository does not hold.
+
+`POST /api/tasks/act` with `{"id": ..., "act": "pause" | "resume" | "cancel" |
+"retry"}` and `POST /api/tasks/input` with `{"id": ..., "answer": ...}` steer
+one job. Both check the origin and the token, and **neither approves
+anything**: Resume puts a job back in the queue and every step of it still
+raises its own card when its turn comes; Pause and Cancel are immediate,
+because stopping is never gated. An act that is not one of the four is a
+`400`; a refusal from the job list (an unknown id, a job that is not paused, a
+job that is not waiting on a question) comes back as a plain `409` carrying
+the module's own sentence. The input route is the only one whose body holds
+the owner's words, and it carries them into the job list, never out of the PC.
+
+**Not built yet:** no screen in either app draws any of this, and the one-line
+call that makes the split real belongs with the plan card's switch-on (§60),
+because that card is the approval a job is born from. The plan card's own
+switch is untouched: this module is where a plan will sit, not a way to turn it
+on.
+
+### 118.4 The split: a turn hands the work to a job
+
+This is the point of the module, and it is two functions.
+
+`jarvis_tasks.from_plan(job_list, plan, approved=False, plan_key=None)` takes a
+plan shaped exactly like `jarvis_plan.propose()`'s output and enqueues it as
+one job. **`approved=False` is the default and an unapproved plan adds
+nothing** - the same shape as `jarvis_plan.run(approved=False)` and
+`run_action(approved=False)`. `plan_key` makes it idempotent, so the same plan
+approved twice makes one job rather than two (the same idea as an action's
+idempotency key, one layer up). Nothing is softened on the way in:
+`plan_steps()` carries each step's `risky` and `from_step` over exactly, so a
+risky step is asked about on its own card when its turn comes and a
+result-filled step is asked again with the value it will really use -
+`jarvis_plan.py`'s conditions 1 and 2, preserved rather than re-implemented.
+Two things a `PlanStep` does not say are filled in the safe way: **`acts` is
+True** for every plan step (assume it changes something until a caller says
+otherwise, so an interruption blocks rather than retries) and **`retry_safe`
+is False** (never stand in a recorded result for actually running it).
+
+`jarvis_tasks.gate_ask(gate_check)` is the only place the job list and the
+approval gate meet, and everything in it goes one way - it hands the step to
+the gate that already exists and reports what came back. `allowed is True`
+means the step may run, and only then; anything else means it does not, with a
+`timed_out` still waiting rather than killing the job; `None` means **not
+decided yet**, so the job waits and a later tick asks again and a card is never
+waited on inside a tick; and a gate that **raises** is also "not decided",
+because a gate that cannot answer has not answered and the one wrong reading
+here would be to treat silence as permission. `allowed` also outranks the
+outcome word: a verdict that is not allowed can never be reported with an
+outcome that reads as an approval.
+
+**The call the backend makes**, in full - this is the whole split:
+
+```python
+plan = jarvis_plan.propose(goal, steps, tainted=tainted)   # refuses on outside text
+card = jarvis_plan.describe(plan)                          # every step, in full
+if approved_on_that_card:
+    jarvis_tasks.from_plan(jarvis_tasks.JobList(), plan, approved=True,
+                           plan_key=card_id)
+```
+
+From there the job runs one step per tick, each through `jarvis_tasks.gate_ask`
+around the caller's own `jarvis_gate.check`, so **every step of every job goes
+through the same gate as any ordinary tool call**. The module still imports
+nothing of the gate; `backend/test_tasks.py` asserts that.
+
+### 118.5 The desktop surface
+
+The Brain's **Work** tab. No new card and no new menu entry: the job list is
+drawn **under the Long Fuse jobs** in the card that already exists, because
+both answer the same question - what is the PC working on - and a second card
+saying the same thing would be one more thing to hide and fold.
+
+- **The read.** `("tasks", "/api/tasks")` on the Brain's read allowlist
+  (`jarvis-desktop/src-tauri/src/brain/routes.rs`). That table is the security
+  boundary between "this window may read" and "this window may act", so the
+  same commit puts `/api/tasks/act` and `/api/tasks/input` in the read
+  allowlist test's `WRITES` list - and that test asserts, on every run, that no
+  read route is a write. The reply is **counted only**, which is why the pane
+  cannot show what a job is about: there is no title and no step text in it to
+  show.
+- **The write.** `brain_task_act(app, id, act, value)` in
+  `jarvis-desktop/src-tauri/src/brain.rs`, the only steering command. It
+  accepts `pause`, `resume`, `cancel`, `retry` and `input` (the owner's answer
+  to a question a job stopped on) and refuses anything else **in words**. It is
+  gated on a live link (`require_link_live`), the same gate `brain_cancel_job`
+  has and for the same reason: steering a job list that could not be confirmed
+  live risks cancelling or resuming work that has already finished on its own.
+  **It cannot approve anything** - it has no branch that reaches
+  `/api/approve` or `/api/deny`, and the only two paths it may post to are the
+  two job-list routes.
+- **The grant.** `allow-brain-task-act`, in the `brain-act` permission set in
+  `src-tauri/permissions/surfaces.toml` and in the generated
+  `permissions/autogenerated/brain_task_act.toml`. It sits in that set rather
+  than one of its own because it is the same shape as the two beside it: Pause
+  and Cancel stop something unfinished, Retry moves back toward a state the
+  owner already had, and Resume re-queues work whose steps still ask one at a
+  time. Tauri's own ACL resolver is what makes this unavoidable - without the
+  generated file the build fails with `SetPermissionNotFound`, which is the
+  right failure for a command that was wired but not granted.
+- **The pane.** `renderTaskList()` in `jarvis-desktop/src/brain.js`, appended
+  to the jobs card after its own rows are painted (`rows()` clears the
+  container, so the block is rebuilt on every render - and it is appended on
+  **both** ways out of `renderJobs`, or a backend without `/api/jobs` would
+  hide the job list it does have). The heading counts: *"Job list: N waiting ·
+  N running"*, plus *"N needs you"* when a job is blocked. Each row shows the
+  state, which step of how many, and the tool names; a blocked job also shows
+  the module's own question. The buttons are Pause, Cancel, Resume and Retry,
+  greyed on a stale link like every other acting button, and a job that has
+  stopped on a question gets a box to answer it in.
+
+`status()` flags a job as needing the owner in **two** cases - `blocked` by an
+interrupted step, and `waiting_input` because it stopped to ask something - and
+carries the question in both. That second case was missing until 2026-10-08: a
+job that stopped to ask arrived as "needs an answer" with **nothing to
+answer**, which is the kind of dead end that only shows up on a screen. The
+question must be the **caller's own words** about what is missing, never the
+text of a note, an email or a message - the same rule
+`jarvis_task_control.status()` follows, for the same reason: a phone reads this
+payload.
+
+The phone's own half is §118.6.
+
+### 118.6 The phone surface
+
+Brain -> **Work** -> jobs. Like the desktop, no new menu entry: the plate is
+guarded by the **same `brain.work.jobs`** menu id as the Long Fuse jobs
+(`MenusState.shows`), so hiding "Background jobs" hides both halves of *what
+the PC is working on*. It is in an `item` of its own rather than inside the
+`if (jobs.isNotEmpty())` block, so the job list is visible when there are no
+Long Fuse jobs at all - which is the normal case.
+
+- **`net/Tasks.kt`** - the payload parser, the ten states in words, the steers
+  each state offers, the two request bodies (`actBody`, and `inputBody` which
+  refuses a blank answer rather than sending one), and the sentences for an
+  older backend and a `409`. It has no field for a task title, because the PC
+  does not send one.
+- **`JarvisRuntime.tasks()`**, **`taskAct(id, act)`** and
+  **`taskAnswer(id, answer)`** - three thin calls through `net/JarvisApi.kt`
+  (`probe(Tasks.PATH)`, `postForJob(Tasks.ACT_PATH, …)`,
+  `postForJob(Tasks.INPUT_PATH, …)`). The list is held by the screen that
+  asked, like PC help: it is small and nothing in it is worth keeping in
+  memory.
+- **`ui/screens/TasksPlate.kt`** - `TasksSection(canAct)` reads once when the
+  screen opens and again after every steer or answer. Each row shows the state
+  in words, `step N of M` and the tool names, the try count when it is more
+  than one, and the PC's own sentence for a job that needs the owner. The
+  steers offered are `Tasks.actsFor(state)` and are held back while the link
+  cannot be confirmed live (rule 4). **A job that stopped to ask gets a
+  `TextInput` and a "Send answer", and only that job** - the answer is the one
+  thing on this screen that carries the owner's own words. **It never reports
+  a job as paused or resumed on a click** - it re-reads and says only what the
+  PC then says, the same rule `TaskControl` was written for.
+
+**Tests, and what is not verified here.** `jarvis-client/app/src/test/java/com/
+jarvis/client/TasksTest.kt` reads `contract/tasks-cases.json`, which
+`tools/gen_tasks_cases.py` writes by building a **real** `JobList`, putting jobs
+into real states through the module's own calls and writing down exactly what
+`status()` returned - so nothing in the fixture is hand-made, and a change to
+the payload has to be a decision. The desktop reads the same generated file in
+`jarvis-desktop/tests/job-list.mjs`, which is what stops it becoming one of
+those fixture pairs no test ever checks still agree. CI runs
+`tools/gen_tasks_cases.py --check` and the desktop suite together. **Kotlin is
+not compiled in this checkout** - there is no Gradle or Android SDK here - so
+the phone's half is verified by CI, not by the session that wrote it.
+
+### 118.7 Tests
+
+`backend/test_tasks.py` - 139 checks, no pytest, no network, real SQLite in a
+temp file. An interrupted acting step blocks and is never retried; an
+interrupted read-only step is done again; a restart turns a mid-flight action
+into `outcome_unknown` and never `failed`; two claimers cannot both win; one
+tick is one step and the checkpoint is on disk before the next; an earlier
+step's real result is filled into a later one and a stray placeholder is
+refused; one key makes one action; a wrong hash, an unauthorized decision and
+an expired card are all refused and nothing is approved by the refused
+attempt; a double tap decides once; a timed-out card waits where a denial
+stops; the memo serves a `retry_safe` step and never one that acts; Stop is
+immediate; a full queue refuses rather than dropping; the counted summary
+carries no title and no argument. **For the split:** an unapproved plan adds
+nothing and the same plan key makes one job; a plan becomes a job with its
+`risky` and `from_step` flags intact and its steps defaulting to acting; and
+the whole path runs end to end with the gate injected exactly as the real one
+is - a safe step runs, then the risky step is asked about on its own card
+inside the job, and a real "no" stops the job at that step with the step before
+it kept. The gate adapter is proved not to turn silence into permission (a
+gate that raises, and a gate that answers `None`, both leave the job waiting
+with nothing run), and to carry the gate's own outcome, reason and request id
+through untouched.
+
+The last two groups **read the module's own source** for the claims that must
+not rot (no network import, no `eval`, the two fail-closed defaults, and that
+it never imports the gate), the way `test_gate_outcome.py` reads the gate for
+the no-approve-all claim. `tasks.patch` is rehearsed with `git apply` on the
+text `task-control.patch` wrote, forwards and backwards; the rehearsal also
+asserts that both routes are reached, that each checks the origin and the
+token, that Pause/Resume/Cancel/Retry are the only acts offered, that an
+unknown act is a `400` rather than a guess, and that no steering route reaches
+the gate at all.
+
+**The two clients' half.** `jarvis-desktop/tests/job-list.mjs` (15 checks that
+need no browser, plus DOM checks for CI) holds the four desktop files to each
+other: the read allowlist, `brain_task_act`, the permission set and
+`renderTaskList`, including that the payload `status()` sends is exactly what
+the page reads, that neither a task title nor step text is in it, and that the
+answer box is added to the row that asked rather than to every row. It also
+reads `tests/fixtures/tasks-cases.json` - the same generated file the phone's
+`TasksTest.kt` reads - so the pair cannot drift apart. `TasksTest.kt` reads
+`contract/tasks-cases.json` and checks the parsing, the ten states in words,
+the steers per state, both request bodies (including that a blank answer is
+never sent), the conflict wording, and that a row carrying a `title` the client
+was never sent renders nothing from it. `cargo test --lib` runs 689 tests;
+`brain::routes`' own four are the ones that guard the read boundary. CI runs
+`tools/gen_tasks_cases.py --check` and the desktop suite in one step, and
+compiles the Kotlin.

@@ -1900,6 +1900,29 @@ deliberate rather than an oversight:
   listening instead of spawning a second one, and keep it a setting, default
   off.
 
+Decided 2026-10-08, after the comparison against CopilotKit's OpenMuse
+(`docs/COMPETITORS-OPENMUSE-2026-10-08.md`): **the job list comes first, and a
+turn hands work to it.** Work that outlives one chat turn is built
+(`backend/jarvis_tasks.py`, `tasks.patch`, JARVIS-API section 118): a job is a
+named list of steps, one step runs per tick, each step still raises its own
+approval card, and the list remembers where it got to through a restart. A
+chat turn delegates to a job with `jarvis_tasks.from_plan` after the plan card
+is approved, and the gate is reached only through `gate_ask`, so nothing
+bypasses it. Five protections came with it: a lease so a crashed job is picked
+up again and never run twice at once, a checkpoint after every step,
+`outcome_unknown` for a send interrupted by a restart (never `failed`, which
+invites a retry), an idempotency key so the same request makes one action, and
+a card whose decision must carry the hash of the words that were shown. Both
+apps show the list on Brain -> Work. Nothing new leaves the PC.
+- **The comparison also produced a correction, and the correction is the point.**
+  The report first listed OpenMuse's IP-pinned egress check as a gap to copy;
+  `backend/jarvis_local_http.py` had already done it since the 2026-09-27
+  security audit, and checks every resolved answer rather than the first. That
+  was the third time this project has "gone looking for" something it already
+  had (`docs/PEERS.md` recorded the first two). The two real things it did
+  earn were closed the same day: the ranges that are never a destination, and
+  NAT64, where `127.0.0.1` is spelled `64:ff9b::7f00:1`.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

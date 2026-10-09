@@ -56,6 +56,11 @@ object MenuPlaces {
         "projects" to "brain.tab.projects",
         "attention" to "brain.now.budget",
         "jobs" to "brain.work.jobs",
+        // The job list (2026-10-08, JARVIS-API section 118). Its own item key,
+        // because it has to be drawn when there are no Long Fuse jobs at all,
+        // but the same one menu decides both - they are two panes of the same
+        // "what is the PC working on" answer, and hiding that hides both.
+        "tasks" to "brain.work.jobs",
         "watch" to "brain.watch.watchlist",
         "initiative" to "brain.now.findings",
         "memory-counts" to "brain.memory.learning",
@@ -88,7 +93,7 @@ object MenuPlaces {
      * id -> where (a sentence; the test only needs the id to be listed).
      */
     val INSIDE: Map<String, String> = mapOf(
-        "entry.appearance" to "HomeScreen: the Appearance button in the row of five",
+        "entry.appearance" to "HomeScreen: the Appearance button in the home row (six buttons since Settings joined it, 2026-10-08)",
         "entry.voices" to "SettingsScreen: the Jarvis's voice button in the Voice item",
         "entry.voice-check" to "SettingsScreen: the Voice check button in the Voice item",
         "brain.history.tag-suggestions" to "HistoryTags: the last row, Suggest tags overnight",

@@ -520,6 +520,18 @@ SHIPPED = (
     "jarvis_jobs.py",
     # One pipeline for text that arrived from outside.
     "jarvis_content_risk.py",
+    # The job list (2026-10-08, tasks.patch, JARVIS-API section 118): work that
+    # outlives one chat turn - a task is a named job with steps, each step still
+    # goes through the one gate, and the list remembers where it got to through a
+    # restart. Copied in shape from OpenMuse's task worker
+    # (docs/COMPETITORS-OPENMUSE-2026-10-08.md, including a correction: the report
+    # first called the address check a gap, and Jarvis already had it).
+    # A lease so a crashed job is picked up again and never run twice at once, a
+    # checkpoint after every step, `outcome_unknown` for an interrupted send, an
+    # idempotency key so one request makes one action, and a card whose decision
+    # must carry the hash of the words that were shown. Local SQLite only,
+    # standard library only, no network, no child process, approves nothing.
+    "jarvis_tasks.py",
 )
 
 

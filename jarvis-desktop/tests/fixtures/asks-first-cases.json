@@ -70,8 +70,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -79,8 +84,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -88,8 +98,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -144,8 +159,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -604,8 +624,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -1062,7 +1087,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -1172,8 +1202,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -1181,8 +1216,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -1190,8 +1230,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -1246,8 +1291,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -1706,8 +1756,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -2164,7 +2219,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -2271,8 +2331,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -2280,8 +2345,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -2289,8 +2359,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -2345,8 +2420,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -2804,8 +2884,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -3261,7 +3346,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -3363,8 +3453,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -3372,8 +3467,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -3381,8 +3481,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -3437,8 +3542,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -3896,8 +4006,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": true,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -4353,7 +4468,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -4455,8 +4575,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -4464,8 +4589,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -4473,8 +4603,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -4529,8 +4664,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -4988,8 +5128,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -5445,7 +5590,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -5559,8 +5709,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -5568,8 +5723,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -5577,8 +5737,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -5633,8 +5798,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -6093,8 +6263,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -6551,7 +6726,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -6658,8 +6838,13 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and writes nothing back. A chat that read a file counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read files on this PC"
       },
@@ -6667,8 +6852,13 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the vault. A chat that read a note counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a note in Joplin"
       },
@@ -6676,8 +6866,13 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Reading happens on this PC and changes nothing in the graph. A chat that read a page counts as having read outside text, so a later web search or note in it still asks.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Read a page in Logseq"
       }
@@ -6732,8 +6927,13 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "It only adds a page, and deleting it undoes it. The after-outside-text rule names the Obsidian daily note, the Logseq journal and a new Joplin note - not this one, so turning \"Ask me first\" on is what makes it ask every time.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Make a new page in Logseq"
       },
@@ -7191,8 +7391,13 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. With \"Ask me first\" on, every change - the standby schedule's at its start, and waking - waits for a card.",
        "says": "Does it without asking",
+       "switch": {
+        "asks": false,
+        "can_loosen": false,
+        "loose": "auto"
+       },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
@@ -7648,7 +7853,12 @@
     "home_read",
     "append_obsidian_daily",
     "append_logseq_journal",
-    "create_joplin_note"
+    "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage"
    ],
    "title": "What asks first",
    "tools": {
@@ -7694,9 +7904,14 @@
   "append_obsidian_daily": "auto",
   "calendar_read": "auto",
   "create_joplin_note": "notify",
+  "create_logseq_page": "auto",
   "email_read": "auto",
   "home_read": "auto",
-  "notes_search": "auto"
+  "notes_search": "auto",
+  "power_manage": "auto",
+  "read_files_readonly": "auto",
+  "read_joplin_note": "auto",
+  "read_logseq_page": "auto"
  },
  "switchable": [
   "calendar_read",
@@ -7705,7 +7920,12 @@
   "home_read",
   "append_obsidian_daily",
   "append_logseq_journal",
-  "create_joplin_note"
+  "create_joplin_note",
+  "read_files_readonly",
+  "read_joplin_note",
+  "read_logseq_page",
+  "create_logseq_page",
+  "power_manage"
  ],
  "tools_switchable": [
   "calendar_read",
@@ -7729,7 +7949,7 @@
   "lockdown_row_note": "Lockdown is on, so this asks you first - or stops, if it runs by itself.",
   "lockdown_waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",
   "missing": "Your PC's Jarvis cannot show what asks first yet - run apply-patches.ps1 on the PC.",
-  "not_on_list": "Only reading your calendar, email, notes and home status, and adding to your notes, can be changed from an app. Everything else changes only in your settings file (jarvis-framework.toml), and some things always ask.",
+  "not_on_list": "Only reading your calendar, email, notes, home status and files, adding to your notes, and the power mode, can be changed from an app. Everything else changes only in your settings file (jarvis-framework.toml), and some things always ask.",
   "pc_only": "Letting Jarvis do this without asking can only be done on the PC (Settings, What asks first), with an approval card and Windows Hello.",
   "phone_loosen": "To let this go ahead without asking, use the PC: Settings, What asks first. It takes an approval card and Windows Hello.",
   "says": {

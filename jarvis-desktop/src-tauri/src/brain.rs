@@ -213,6 +213,48 @@ pub async fn brain_cancel_job(app: AppHandle, id: String) -> Result<serde_json::
     post(&app, "/api/jobs/cancel", serde_json::json!({ "id": id })).await
 }
 
+/// Steers one job in the job list (2026-10-08, JARVIS-API section 118):
+/// `pause`, `resume`, `cancel`, `retry`, or answers a question a job stopped
+/// on (`input`, where `value` is the owner's answer).
+///
+/// **This command approves nothing, and cannot.** Resume puts a job back in
+/// the queue and Retry tries an interrupted step again; either way every
+/// step of that job still raises its own approval card when its turn comes,
+/// through the same gate as any ordinary tool call. The one thing the gate
+/// would never allow — "approve this and everything after it" — has no route
+/// here to call.
+///
+/// Gated on a live link for the same reason `brain_cancel_job` is: steering a
+/// job list that could not be confirmed live risks cancelling or resuming
+/// work that has already finished or already failed on its own.
+#[tauri::command]
+pub async fn brain_task_act(
+    app: AppHandle,
+    id: String,
+    act: String,
+    value: Option<String>,
+) -> Result<serde_json::Value, String> {
+    require_link_live(&app)?;
+    let body = match act.as_str() {
+        "pause" | "resume" | "cancel" | "retry" => serde_json::json!({ "id": id, "act": act }),
+        // Answering a question the job stopped on. The words go into the job
+        // list and never leave the PC.
+        "input" => serde_json::json!({ "id": id, "answer": value.unwrap_or_default() }),
+        other => {
+            return Err(format!(
+                "\"{other}\" is not something that can be done to a job; \
+                 pause, resume, cancel, retry or answer it"
+            ))
+        }
+    };
+    let path = if act == "input" {
+        "/api/tasks/input"
+    } else {
+        "/api/tasks/act"
+    };
+    post(&app, path, body).await
+}
+
 /// Stops a message inside its send window.
 ///
 /// A 409 means it has already gone. That is not an error to retry or a spinner

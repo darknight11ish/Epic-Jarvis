@@ -46,7 +46,7 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     memory.db, chat-history.db, schedule.db, feedback.db, projects.db, goals.db,
     and (2026-09-30) study.db, the review decks; and (2026-10-07) arbiter.db,
     jobs.db, ledger.db and watch.db, the files of the arbiter, jobs, ledger and
-    watch modules.
+    watch modules; and (2026-10-08) tasks.db, the job list.
   * Every `*.json` file directly in the Jarvis settings folder (folders.
     json, asks_first.json, manner.json, and so on) - never a subfolder, so
     this glob can never reach into "voice" or "notes" by accident.
@@ -265,8 +265,15 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: four modules began being shipped that day, each keeps its own SQLite file in
 #: the settings folder, and test_backup.py refuses to let a database a module
 #: names go unbacked. A name whose file is not there is skipped, as for the rest.
+#: tasks.db (jarvis_tasks.py, the job list) joined on 2026-10-08: it is where a
+#: job remembers which step it got to, so a restore without it would leave the
+#: owner's unfinished work as a row nothing can pick up again. It holds ids,
+#: states, tool names, step counts and the same words a step was approved with -
+#: no more than the other working databases here - and it travels only inside
+#: this one locked file, like every name below.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
-              "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db")
+              "goals.db", "study.db", "arbiter.db", "jobs.db", "ledger.db", "watch.db",
+              "tasks.db")
 
 STUDY_DB = "study.db"
 

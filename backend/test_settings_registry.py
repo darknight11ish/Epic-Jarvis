@@ -103,6 +103,51 @@ def go(text, *, peer=None, local="127.0.0.1", now=None):
     return Q.answer_turn(body, now=now or time.time(), peer=peer, local=local)
 
 
+#: `settings.` ids `features/features.json` claims that are ROWS INSIDE a
+#: section rather than sections of their own, with the reason. Everything else
+#: it claims must name a real Section.
+SUB_ROWS = {
+    "second-card.chat-card": "a row inside the second-card card",
+    "second-card.referee": "a row inside the second-card card",
+    "second-card.study-helper": "a row inside the second-card card",
+    "second-card.third-card": "a row inside the second-card card",
+}
+
+
+def t_every_feature_settings_claim_names_a_section():
+    """"Open <a feature's setting>" must be able to name the place.
+
+    `features/features.json` says where each feature can be changed (`covers`),
+    and `jarvis_quick._run_settings_open` turns such an id into the words it
+    says and the place it opens through `section_by_id` - falling back to the
+    raw id when the section is missing. That fallback hid a real gap for
+    months: `settings.floating-avatar` was claimed with no Section, so "open
+    Floating Jarvis" answered "Opening floating-avatar in Settings." and named
+    nothing either app could find (measured 2026-10-08: five claimed ids had no
+    section - four are rows inside the second-card card, listed above with the
+    reason, and the fifth was this one)."""
+    import json
+    try:
+        rows = json.loads((REPO / "features" / "features.json").read_text(encoding="utf-8"))
+    except Exception as exc:
+        return check("features/features.json is readable", False,
+                     f"{type(exc).__name__}: {exc}")
+    claims: dict = {}
+    for row in rows:
+        for cover in (row.get("covers") or []):
+            if isinstance(cover, str) and cover.startswith("settings."):
+                claims.setdefault(cover.split(".", 1)[1], row.get("id"))
+    missing = sorted(i for i in claims if R.section_by_id(i) is None and i not in SUB_ROWS)
+    check("every settings.* id a feature claims names a Section (or a listed sub-row)",
+          not missing,
+          "; ".join(f"{i} (claimed by {claims[i]})" for i in missing)
+          + " - add it to jarvis_settings_registry.SECTIONS, or to SUB_ROWS above "
+            "with the section it sits in")
+    stale = sorted(i for i in SUB_ROWS if R.section_by_id(i) is not None)
+    check("...and no SUB_ROWS entry has quietly become a section of its own", not stale,
+          f"{stale} - drop it from SUB_ROWS")
+
+
 PC, PHONE = "127.0.0.1", "100.100.5.9"
 
 # ======================================================== 1. SECTIONS matches the real UI
