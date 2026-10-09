@@ -115,6 +115,7 @@ import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.PlateEdges
 import com.jarvis.client.ui.theme.Themes
 import com.jarvis.client.ui.theme.systemPrefersDark
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -3104,10 +3105,10 @@ class MainActivity : FragmentActivity() {
                                 // they were: there is no flag for them to
                                 // un-stick.
                                 onApproveWithReset = { item, onReset ->
-                                    decideAndReset(item, approve = true, onReset = onReset)
+                                    decideAndReset(item, approve = true, onReset = onReset, scope = scope)
                                 },
                                 onDenyWithReset = { item, onReset ->
-                                    decideAndReset(item, approve = false, onReset = onReset)
+                                    decideAndReset(item, approve = false, onReset = onReset, scope = scope)
                                 },
                                 onReconnect = {
                                     // `force = true`, and only because a person
@@ -3475,8 +3476,25 @@ class MainActivity : FragmentActivity() {
      * unlocking it is the safe direction - a decision that failed must never
      * look like one that was taken, and it must not leave the card dead
      * either.
+     *
+     * [scope] - the screen's own scope, the one `App()` makes with
+     * `rememberCoroutineScope()` - has to be handed in (2026-10-08). Deny's
+     * original body sat inside that composable, where `scope` was simply a
+     * local; moving both bodies here into a plain member function left the
+     * reset's `scope.launch` with nothing named `scope` to resolve to, and
+     * that - not the fix's shape - is what CI refused to compile. It is a
+     * parameter rather than a second scope of this function's own because the
+     * reset writes Compose state that belongs to that screen: a fresh scope
+     * would outlive the composition it is resetting. Deliberately the last
+     * parameter, so both call sites still read
+     * `decideAndReset(item, approve = ..., onReset = onReset, scope = scope)`.
      */
-    private fun decideAndReset(item: PendingItem, approve: Boolean, onReset: () -> Unit) {
+    private fun decideAndReset(
+        item: PendingItem,
+        approve: Boolean,
+        onReset: () -> Unit,
+        scope: CoroutineScope,
+    ) {
         JarvisRuntime.launchDetached {
             val sent = try {
                 if (approve) approveItem(item) else denyItem(item)

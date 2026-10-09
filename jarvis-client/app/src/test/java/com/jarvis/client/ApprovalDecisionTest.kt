@@ -211,4 +211,42 @@ class ApprovalDecisionTest {
             helper.contains("return true"),
         )
     }
+
+    /**
+     * CI's own first compile of this file (2026-10-08) failed with
+     * `MainActivity.kt:3489:24 Unresolved reference 'scope'`, and the three
+     * tests above all passed on that same source - they read text, so none of
+     * them can compile Kotlin. This one closes the part of that hole this
+     * change is about: the reset runs on `scope`, `scope` is a local inside
+     * `App()`, and `decideAndReset` is a plain member function, so the scope
+     * has to arrive as a parameter or `scope.launch` resolves to nothing.
+     *
+     * No JVM test can compile MainActivity.kt (no Android SDK here, and CI's
+     * Gradle build is the first real compile), so this still holds a shape
+     * rather than a compile: the declaration names the parameter, and both
+     * call sites hand it in - the two things whose absence CI refused. For the
+     * version that does compile, `decideAndReset`'s own text was lifted out of
+     * MainActivity.kt and compiled off-device against coroutine stubs: the
+     * fixed text compiles, and the pre-fix text fails with
+     * `unresolved reference 'scope'` at column 24, CI's own column.
+     */
+    @Test
+    fun `the shared helper is handed the screen's scope, so its reset can resolve`() {
+        val text = mainActivity()
+        val helper = body(text, "private fun decideAndReset(")
+        val declaration = helper.substringAfter("private fun decideAndReset(").substringBefore(") {")
+        assertTrue(
+            "the helper launches the reset on `scope` without declaring it - exactly CI's Unresolved reference 'scope':\n$declaration",
+            declaration.contains("scope: CoroutineScope"),
+        )
+        val src = code(text)
+        assertTrue(
+            "the approve call site must hand the helper the screen's scope:\n$src",
+            src.contains("decideAndReset(item, approve = true, onReset = onReset, scope = scope)"),
+        )
+        assertTrue(
+            "the deny call site must hand the helper the screen's scope:\n$src",
+            src.contains("decideAndReset(item, approve = false, onReset = onReset, scope = scope)"),
+        )
+    }
 }
