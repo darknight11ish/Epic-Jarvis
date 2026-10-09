@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.RetrieveCount
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -41,21 +42,69 @@ class RetrieveCountTest {
 
     @Test
     fun aCountIsTwoWholeNumbersAndHasNowhereToPutAWord() {
-        // By construction, not by care: the fields are the whole object.
-        // Adding `val text: String`, or any other field, fails right here.
-        val fields = RetrieveCount.Count::class.java.declaredFields
-            .filterNot { it.isSynthetic }
-            .associate { it.name to it.type }
+        // By construction, not by care - but stated as the property that
+        // matters rather than as a field count: the two whole numbers are
+        // there, and **no field of this type has anywhere to put a word** -
+        // not a `String`, not a `CharSequence`, not a collection, array or
+        // JSON element that could hold one, not an `Any`. Adding
+        // `val text: String`, `val words: List<String>` or
+        // `val raw: JsonObject` fails right here.
+        //
+        // Deliberately NOT `declaredFields.size == 2`: the Compose compiler
+        // adds a static `$stable` field of its own to a class in this module
+        // (NotificationIdsTest names the same field on its object), so a
+        // class with exactly two properties legitimately has three declared
+        // fields and a count fails for a reason that has nothing to do with
+        // the promise.
+        val byName = RetrieveCount.Count::class.java.declaredFields.associateBy { it.name }
         assertEquals(
-            "a Count holds two whole numbers and no text field",
-            mapOf(
-                "recalled" to Int::class.javaPrimitiveType,
-                "near" to Int::class.javaPrimitiveType,
-            ),
-            fields,
+            "recalled is a whole number",
+            Int::class.javaPrimitiveType,
+            byName["recalled"]?.type,
         )
+        assertEquals(
+            "near is a whole number",
+            Int::class.javaPrimitiveType,
+            byName["near"]?.type,
+        )
+        for (field in RetrieveCount.Count::class.java.declaredFields) {
+            assertTrue(
+                "a Count field can hold text: ${field.name}: ${field.type.name}",
+                !canHoldWords(field.type),
+            )
+        }
+        // Exactly two pieces of state, whatever their type: a third one - a
+        // word, an id, a kind - fails here too.
+        val parts = RetrieveCount.Count::class.java.declaredMethods
+            .map { it.name }
+            .filter { it.matches(Regex("component\\d+")) }
+        assertEquals("a Count has two pieces of state", 2, parts.size)
+        // And the check above is only worth having if it would really catch
+        // the field this test exists for - a guard against the promise
+        // quietly going vacuous, which is checked rather than assumed.
+        assertTrue("a String field must be seen as text", canHoldWords(String::class.java))
+        assertTrue("a list of Strings must be too", canHoldWords(List::class.java))
+        assertTrue("so must a raw JSON reply", canHoldWords(JsonObject::class.java))
+        assertTrue("a whole number must not", !canHoldWords(Int::class.javaPrimitiveType!!))
         assertEquals(3, RetrieveCount.Count(3, 1).recalled)
         assertEquals(1, RetrieveCount.Count(3, 1).near)
+    }
+
+    /** True for any type a word could live in: text itself, anything a word
+     *  can be put inside, or a bag (`Any`) that could be one of those. A
+     *  compiler-generated member (`$stable`, a `Companion`) is none of them,
+     *  so this cannot fail for a reason that is not the promise. */
+    private fun canHoldWords(type: Class<*>): Boolean = when {
+        type.isPrimitive -> type == Char::class.javaPrimitiveType
+        type.isArray -> true
+        type == Any::class.java -> true
+        type == Char::class.javaObjectType -> true
+        CharSequence::class.java.isAssignableFrom(type) -> true
+        Iterable::class.java.isAssignableFrom(type) -> true
+        Map::class.java.isAssignableFrom(type) -> true
+        Sequence::class.java.isAssignableFrom(type) -> true
+        JsonElement::class.java.isAssignableFrom(type) -> true
+        else -> false
     }
 
     @Test
@@ -189,8 +238,19 @@ class RetrieveCountTest {
         val api = repoFile("$main/net/JarvisApi.kt").readText()
         assertTrue("the request goes out with count=1 only",
             api.contains("val path = RetrieveCount.path(question)"))
-        assertTrue("the reply is read as counts or dropped",
-            api.contains("RetrieveCount.parse(r.value)"))
+        // The API layer only *asks*: it hands back the reply's own JSON,
+        // still unread, and names none of the keys a word would ride in on.
+        // Reading it happens one layer up, in JarvisRuntime - the same
+        // function the gate above is in, the same place every other route
+        // parses its own reply - and it is `RetrieveCount.parse`, which
+        // yields two numbers or nothing at all.
+        val apiFn = api.substring(api.indexOf("suspend fun retrieveCount("))
+        val apiBody = apiFn.substring(0, apiFn.indexOf("\n    }"))
+        assertTrue("the api layer asks and never reads a word",
+            apiBody.contains("probe(path)") && !apiBody.contains("\"text\"") &&
+                !apiBody.contains("\"hits\""))
+        assertTrue("the gated call reads the reply as counts or drops it",
+            body.contains("com.jarvis.client.net.RetrieveCount.parse(r.value)"))
     }
 
     @Test
