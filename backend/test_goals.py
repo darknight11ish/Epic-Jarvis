@@ -776,6 +776,88 @@ def t_no_sql_is_stored_and_the_goal_module_calls_no_model():
           not re.search(r"^\s*(import|from)\s+(socket|urllib\.request|http\.client|requests|subprocess)\b", src, re.M))
 
 
+def t_a_goal_call_does_not_leave_its_database_file_open():
+    """Every connection the Goals store opens is CLOSED when its block ends.
+
+    WHY (2026-10-07, the intermittent backend-windows CI failure; still failing
+    a different suite on 2026-10-08). sqlite3's context manager commits on the
+    way out and never closes the connection, so a bare
+    `with self._db() as c:` left an OPEN HANDLE on goals.db behind until
+    CPython happened to collect it - immediate on a quiet line, and NOT
+    immediate when a caught exception's traceback, a generator frame or a
+    temp-folder object still held a reference. On Windows an open handle makes
+    the file undeletable, which is what the runner's log said for
+    schedule.json, twice, and goals.db is opened by the same shape
+    (jarvis_schedule.py's own _ClosingConnection, and this file's).
+
+    This is the deterministic half of that, and it holds on every platform:
+    every connection is KEPT (so no refcount can be what closes it) and then
+    asked to do something. On the old code each one answers and the check is
+    red; with _ClosingConnection they are all closed and it is green."""
+    import sqlite3
+    made = []
+    real = G.sqlite3.connect
+
+    def spy(*a, **kw):
+        c = real(*a, **kw)
+        made.append(c)          # held on purpose: the collector must not close it
+        return c
+
+    G.sqlite3.connect = spy
+    try:
+        w = World()
+        goal = w.g.create("insulate the garage before winter",
+                          plan=[{"step": "contact 3 installers", "by": "this week"}])
+        w.g.accept(goal["id"])
+        w.g.get(goal["id"])
+        w.g.list()
+        w.g.mark_step(goal["id"], 0, True)
+        w.g.checkin_note(goal["id"])
+        w.g.stop(goal["id"])
+    finally:
+        G.sqlite3.connect = real
+
+    def still_readable(c):
+        try:
+            c.execute("SELECT 1")
+            return True
+        except sqlite3.ProgrammingError:
+            return False
+
+    open_ones = [c for c in made if still_readable(c)]
+    check("every connection the Goals store opens is closed when its `with` block "
+          "ends (a leaked handle is what made goals.db undeletable on the "
+          "Windows runner, 2026-10-07)",
+          bool(made) and not open_ones, f"{len(open_ones)} of {len(made)} still open")
+    # The factory must not change what a caller does with the connection:
+    # test_progress.py reads one OUTSIDE a `with`, and that must still answer.
+    # Checked on its own live store, before the folder below is removed.
+    g3 = G.Goals(_TMP / "goals-outside-with.db", clock=Clock(1_000_000.0))
+    g3.create("a goal", plan=[{"step": "one"}])
+    held = g3._db()
+    try:
+        check("a connection read outside a `with` block still answers (the shape "
+              "test_progress.py and test_tellme.py use, kept working)",
+              held.execute("SELECT COUNT(*) FROM goals").fetchone()[0] == 1)
+    finally:
+        held.close()
+    # And the thing the runner actually saw: a folder holding the store's own
+    # file, removed the way a suite's temporary folder is. On POSIX an open
+    # handle does not refuse the unlink, so this half is Windows-only
+    # evidence - the check above is the half that holds everywhere.
+    d = Path(tempfile.mkdtemp(prefix="jarvis-goals-del-"))
+    g2 = G.Goals(d / "goals.db", clock=Clock(1_000_000.0))
+    g2.create("a goal", plan=[{"step": "one"}])
+    try:
+        shutil.rmtree(str(d))
+        removed, why = True, ""
+    except OSError as exc:
+        removed, why = False, f"{type(exc).__name__}: {exc}"
+    check("... so the folder holding it can be removed at once, the way a suite's "
+          "temporary folder is removed (on Windows an open handle refuses this)",
+          removed, why)
+
+
 def main() -> int:
     try:
         for name, fn in list(globals().items()):
