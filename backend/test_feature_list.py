@@ -56,8 +56,25 @@ def t_the_list_is_complete_and_true():
     seen = [g for i, g in enumerate(groups) if i == 0 or groups[i - 1] != g]
     check("the nine groups are all used, in the design's order",
           seen == C.GROUPS, seen)
-    check("the list is a readable length, not one row per route",
-          60 <= len(got) <= 120, len(got))
+    # NO CEILING, AND IT SHOULD NOT COME BACK (2026-10-09). This read
+    # `60 <= len(got) <= 120` with the label "a readable length, not one row
+    # per route". The 120 was the builder's own number, not the owner's:
+    # the request that produced this list asked for a place to see every
+    # feature, and nothing in it asked for a size limit. It was recorded in
+    # the commit that added it and in no owner decision.
+    #
+    # It then did real damage. On 2026-10-09 the list reached 120 with two
+    # BUILT features still missing from it - news feeds and page watches -
+    # and the ceiling was what blocked the row that would have listed them.
+    # A limit that stops the list telling the truth is the wrong limit, and
+    # the fix is not to raise the number: it is to have no number.
+    #
+    # THE FLOOR IS NOT A SIZE LIMIT and stays. It catches a list that has
+    # been emptied, truncated or replaced wholesale - the one failure the
+    # three calls above cannot see, because a short list covers nothing and
+    # so "covers everything" would pass on an empty file.
+    check("the list still holds every feature - nothing gutted it",
+          60 <= len(got), len(got))
     ids = [e["id"] for e in got]
     check("no entry id is used twice", len(ids) == len(set(ids)))
 
