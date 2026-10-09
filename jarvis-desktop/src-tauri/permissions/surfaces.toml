@@ -182,13 +182,21 @@ permissions = [
 # approve anything: marking read stamps a delivery time, and muting has a fixed
 # end at midnight. There is deliberately no bulk-decide route in the API to
 # grant even if a window asked for one.
+#
+# `set_attention_limits` (2026-10-08) writes the two numbers the budget card
+# shows: how many times a day Jarvis may speak up unasked, and the hour the
+# brief arrives. It can still approve nothing - turning the budget DOWN, and
+# moving the hour, apply at once, and turning it UP is a loosening that the
+# BACKEND puts to the owner on its own approval card before writing anything.
+# The window grants the ask, never the yes.
 [[set]]
 identifier = "attention-surface"
-description = "Read the daily brief, mark it read, and mute spoken interruptions until tomorrow. Approves nothing."
+description = "Read the daily brief, mark it read, mute spoken interruptions until tomorrow, and set how often Jarvis may speak up or when the brief arrives. Approves nothing."
 permissions = [
   "allow-get-digest",
   "allow-mark-digest-seen",
   "allow-set-attention-muted",
+  "allow-set-attention-limits",
 ]
 
 # ---------------------------------------------------------------------------

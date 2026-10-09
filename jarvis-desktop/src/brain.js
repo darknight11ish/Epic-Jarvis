@@ -648,6 +648,9 @@ const dom = {
   nowKv: $("now-kv"),
   budget: $("budget"),
   budgetNote: $("budget-note"),
+  budgetPerDay: $("budget-per-day"),
+  budgetHour: $("budget-hour"),
+  budgetSetNote: $("budget-set-note"),
   trace: $("trace"),
   traceClear: $("trace-clear"),
 
@@ -11824,6 +11827,85 @@ function renderWatchReport() {
    Live
    ========================================================================== */
 
+// ---------------------------------------------------------------------------
+// The two numbers behind the budget (2026-10-08)
+// ---------------------------------------------------------------------------
+// How many times a day Jarvis may speak up unasked, and when the brief
+// arrives. DOWN is instant; UP is a loosening, so the backend puts one
+// approval card to the owner before it writes anything. That is why the
+// sentence under the two pickers is the backend's own (`said`, or its refusal
+// in the owner's words) rather than a guess made here, and why nothing is
+// written locally: the answer comes back from the PC that holds the file.
+const BUDGET_CHOICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24];
+
+/** An hour as the owner reads a clock: "8 pm (20:00)", "midnight (00:00)". */
+function budgetHourWords(h) {
+  const clock = String(h).padStart(2, "0") + ":00";
+  if (h === 0) return `midnight (${clock})`;
+  if (h === 12) return `noon (${clock})`;
+  return `${h % 12} ${h < 12 ? "am" : "pm"} (${clock})`;
+}
+
+function fillBudgetPickers() {
+  if (!dom.budgetPerDay || dom.budgetPerDay.options.length) return;
+  for (const n of BUDGET_CHOICES) {
+    const option = el("option", "", n === 0 ? "not at all" : `${n} times a day`);
+    option.value = String(n);
+    dom.budgetPerDay.append(option);
+  }
+  for (let h = 0; h < 24; h++) {
+    const option = el("option", "", budgetHourWords(h));
+    option.value = String(h);
+    dom.budgetHour.append(option);
+  }
+}
+
+/** Asks the PC to change one of the two numbers, and says what it answered. */
+async function setAttentionLimit(body) {
+  if (!dom.budgetSetNote) return;
+  dom.budgetSetNote.textContent = "Saving…";
+  try {
+    const out = await TAURI.core.invoke("set_attention_limits", body);
+    dom.budgetSetNote.textContent = (out && out.said) || "Done.";
+  } catch (err) {
+    dom.budgetSetNote.textContent = String((err && err.message) || err);
+  }
+}
+
+function wireBudgetPickers() {
+  fillBudgetPickers();
+  if (dom.budgetPerDay) {
+    dom.budgetPerDay.addEventListener("change", () =>
+      setAttentionLimit({ spoken_per_day: Number(dom.budgetPerDay.value) })
+    );
+  }
+  if (dom.budgetHour) {
+    dom.budgetHour.addEventListener("change", () =>
+      setAttentionLimit({ digest_hour: Number(dom.budgetHour.value) })
+    );
+  }
+}
+
+/** Puts the numbers the PC holds into the pickers, without fighting a click. */
+function syncBudgetPickers(attention) {
+  if (!attention || !attention.known) return;
+  if (dom.budgetPerDay && document.activeElement !== dom.budgetPerDay) {
+    const want = String(attention.limit);
+    // A budget the settings file holds that is not one of the picks - a
+    // hand-typed 9, say - still has to be selectable, so it is added rather
+    // than silently showing a different number.
+    if (![...dom.budgetPerDay.options].some((o) => o.value === want)) {
+      const option = el("option", "", `${attention.limit} times a day`);
+      option.value = want;
+      dom.budgetPerDay.append(option);
+    }
+    dom.budgetPerDay.value = want;
+  }
+  if (dom.budgetHour && document.activeElement !== dom.budgetHour) {
+    dom.budgetHour.value = String(attention.digestHour);
+  }
+}
+
 function renderLive() {
   const link = currentLink();
   const attention = link.attention;
@@ -11869,6 +11951,7 @@ function renderLive() {
   } else {
     dom.budgetNote.textContent = "The interruption budget has not been read yet.";
   }
+  syncBudgetPickers(attention);
 }
 
 function pushTrace(frame) {
@@ -13344,6 +13427,10 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
     if (event && event.payload === HISTORY_PLACE) goToPlace(HISTORY_PLACE);
   });
 }
+
+// The interruption budget's two pickers: filled once here, and kept in step
+// with what the PC holds by renderLive().
+wireBudgetPickers();
 
 console.info(
   `[brain] ready — backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

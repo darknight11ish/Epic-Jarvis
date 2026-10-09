@@ -2100,6 +2100,26 @@ html[data-state="approval"] .pulse {
   letter-spacing: 0.02em;
 }
 
+/* The interruption budget's two numbers (2026-10-08): "Speak up 3 times a
+   day", "Brief at 6 pm". Plain selects, because they are a settings pair on a
+   card rather than a dial, and they sit under the pips they describe. */
+.budget-set {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  margin-top: 10px;
+}
+
+.budget-label {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.budget-input {
+  max-width: 13rem;
+}
+
 .attention-actions {
   display: flex;
   align-items: center;

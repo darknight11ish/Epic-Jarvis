@@ -294,6 +294,22 @@
               <h2>Interruption budget</h2>
               <div class="budget" id="budget"></div>
               <p class="note" id="budget-note"></p>
+              <!--
+                The two numbers behind the pips (2026-10-08): how many times a
+                day Jarvis may speak up unasked, and when the brief arrives.
+                Turning the budget DOWN, and moving the hour, change at once.
+                Turning it UP is a loosening, so the BACKEND puts one approval
+                card to the owner first and writes nothing until it is
+                approved — the line under these two pickers is the backend's
+                own sentence, never a guess made on this page.
+              -->
+              <div class="budget-set">
+                <label class="budget-label" for="budget-per-day">Speak up</label>
+                <select id="budget-per-day" class="budget-input"></select>
+                <label class="budget-label" for="budget-hour">Brief at</label>
+                <select id="budget-hour" class="budget-input"></select>
+              </div>
+              <p class="note" id="budget-set-note"></p>
             </div>
 
             <div class="card card-trace" id="trace-card" data-menu-id="brain.now.trace">
