@@ -67,6 +67,12 @@ object OpenPlace {
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").
         "quick-tiles" to Where.Go(Screen.SETTINGS, "quick-tiles"),
+        // Floating Jarvis (SettingsScreen.kt, item "floating-avatar", saved on
+        // this phone only). It is a registry Section since 2026-10-08 - before
+        // that "open Floating Jarvis" answered with the raw id - and
+        // OpenPlaceTest requires every phone-relevant Section to have a place
+        // here, which is what caught this missing line in CI.
+        "floating-avatar" to Where.Go(Screen.SETTINGS, "floating-avatar"),
         // Hidden navigation menus section (SettingsScreen.kt, item "menu-visibility").
         "menu-visibility" to Where.Go(Screen.SETTINGS, "menu-visibility"),
         // "Platform checks": its Connection card, and "This app" with the
