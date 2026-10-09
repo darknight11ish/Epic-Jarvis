@@ -484,7 +484,7 @@
     "title": "Chat tags",
     "what": "Tag your chats yourself, and let Jarvis suggest tags overnight.",
     "where": "Brain, History, Chat tags.",
-    "asks": "No card. The overnight-suggestion switch is one tap.",
+    "asks": "Tagging a chat yourself needs no card. Turning the overnight suggestions on raises one card, and every tag it suggests is one more - a suggestion is filed only if you tap it.",
     "limit": "Tags hide with the private lists.",
     "surface": "both",
     "covers": [
@@ -569,7 +569,7 @@
     "group": "Screen and pictures",
     "title": "Show Jarvis the camera in Live",
     "what": "During a Live session you can show Jarvis what the phone's camera sees.",
-    "where": "Jarvis Live, then the camera button.",
+    "where": "Nothing to press yet - inside Jarvis Live the phone says showing it from the phone comes in a later update.",
     "asks": "No extra card - the Live session is already running.",
     "limit": "Off until the 12 GB card is in and the photo test passes. There is no words-only camera on one card.",
     "surface": "phone",
@@ -954,7 +954,7 @@
     "title": "Devices",
     "what": "Every paired device, each with its own key.",
     "where": "Settings, Devices.",
-    "asks": "Removing a lost phone is instant; retiring the old shared key raises a card.",
+    "asks": "Removing a lost phone is instant, and so is retiring the old shared key. Bringing a retired key back raises one card.",
     "limit": "This one can never be hidden, so a lost phone can always be removed.",
     "surface": "both",
     "covers": [
@@ -1253,7 +1253,7 @@
     "title": "Check for tool updates",
     "what": "Reports the packages and tools on this PC that are out of date.",
     "where": "Settings, Check for tool updates.",
-    "asks": "No card - it only reports.",
+    "asks": "Asks the first time only, then never again. Turning it off is instant.",
     "limit": "Updating a tool is a change, and raises its own card first.",
     "surface": "desktop",
     "covers": [
