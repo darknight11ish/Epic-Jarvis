@@ -54,16 +54,22 @@ class SettingsJumpTest {
         val real = rows("SettingsScreen.kt")
         assertEquals("jump-list", SettingsJump.LIST_KEY)
         assertTrue("SettingsScreen.kt's rows were not found", real.size > 10)
-        val sections = real.filter { it != SettingsJump.LIST_KEY && it != SettingsJump.TAIL_KEY }
+        // The search box (2026-10-09) is a row of the screen but not a
+        // SECTION: it is a control, and it is never hidden by its own search
+        // or listed as somewhere to jump to (SettingsSearchTest holds that).
+        assertEquals("the search box is the first row", SettingsJump.SEARCH_KEY, real.first())
+        val sections = real.filter {
+            it != SettingsJump.LIST_KEY && it != SettingsJump.TAIL_KEY && it != SettingsJump.SEARCH_KEY
+        }
         assertEquals(sections, SettingsJump.ENTRIES.map { it.key })
         assertEquals("no label is listed twice", SettingsJump.ENTRIES.size, SettingsJump.ENTRIES.map { it.label }.toSet().size)
     }
 
     @Test
-    fun `the jump list is the first row, and Voice holds the hey Jarvis switches`() {
+    fun `the jump list is right below the search box, and Voice holds the hey Jarvis switches`() {
         val src = repoFile(dir + "SettingsScreen.kt").readText()
         val real = rows("SettingsScreen.kt")
-        assertEquals("the jump list comes first", SettingsJump.LIST_KEY, real.first())
+        assertEquals("the jump list comes second, under the search box", SettingsJump.LIST_KEY, real[1])
         assertTrue("Voice draws the switches slot", src.contains("voiceSwitches?.let"))
         assertTrue("Picture mode gets the Look-switch button", src.contains("onOpenLookSwitch = onOpenLookSwitch"))
     }

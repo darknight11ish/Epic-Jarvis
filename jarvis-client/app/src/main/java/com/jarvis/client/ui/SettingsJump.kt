@@ -21,6 +21,22 @@ object SettingsJump {
     const val LIST_KEY = "jump-list"
     const val TAIL_KEY = "tail"
 
+    /**
+     * The search box's own row (2026-10-09). It is the FIRST `item(key = ...)`
+     * on the screen, so it is a row like any other - but it is a control, not
+     * a section, so it is never in [ENTRIES] and never filtered out by the
+     * search itself. Same shape as [LIST_KEY] and [TAIL_KEY], and
+     * `SettingsSearch` carries its words.
+     */
+    const val SEARCH_KEY = "search"
+
+    /**
+     * Where [SEARCH_KEY] sits in `SettingsScreen.kt`'s `SETTINGS_ITEM_INDEX`:
+     * the first row, above [LIST_KEY]. Named here so the screen and the test
+     * that reads that map cannot disagree about it.
+     */
+    const val SEARCH_KEY_INDEX = 0
+
     data class Entry(val label: String, val key: String)
 
     /** In the order the sections appear on the screen. */
