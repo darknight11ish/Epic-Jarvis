@@ -1,9 +1,9 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -6751,4 +6751,16 @@
+@@ -6493,4 +6493,16 @@
      except Exception as exc:
-         print(f"  chatbot money NOT ON ({type(exc).__name__}) - chatbot money limits are off")
-         print("             until jarvis_chatbot_limits.py is back: run apply-patches.ps1 again")
+         print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")
+         print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")
 +    # tutorials.patch (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md):
 +    # GET /api/tutorials, POST /api/tutorials/progress and GET /api/faq - one catalogue
 +    # for both apps, and the owner's reading progress kept on the PC. It writes its own
