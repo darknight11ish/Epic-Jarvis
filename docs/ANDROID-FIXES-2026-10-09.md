@@ -160,10 +160,10 @@ warning is in the build output.
 ## 4. Tests and what ran where
 
 - `.\gradlew.bat testDebugUnitTest` from `jarvis-client`, with `ANDROID_HOME`
-  set: **BUILD SUCCESSFUL, 1,992 tests, 0 failures, 0 errors, 0 skipped**
-  across 183 JUnit XML files, read from the XML rather than the exit code.
-  **11 of those are new** (4 for the three dead ends, 3 for the notification
-  row, 3 for N3/N4, 1 for N2).
+  set: **BUILD SUCCESSFUL, 2,000 tests, 0 failures, 0 errors, 0 skipped**
+  across 184 JUnit XML files, read from the XML rather than the exit code.
+  **19 of those are new** (4 for the three dead ends, 3 for the notification
+  row, 3 for N3/N4, 1 for N2, 8 for the first audit's leftovers below).
 - `.\gradlew.bat assembleDebug`: BUILD SUCCESSFUL, and that APK was installed
   on the phone with `adb install -r` (in place — the app is debuggable, and no
   app data was cleared, nothing uninstalled, nothing paired, no credential
@@ -191,17 +191,45 @@ warning is in the build output.
 - `TouchTargetAndInsetsTest` window starts for FaqScreen's two ~19dp targets
   moved 444/473 → 454/483, because the FAQ answer above them grew.
 
-## 5. Still open, honestly
+## 5. The first audit's eight remaining findings, now closed
+
+None of these was in the 2026-10-09 handoff's queue, and the second audit's
+Part 1 recorded all eight as still standing. One line each:
+
+- **4** — Security's footer promised that "turning something on is instant"
+  while two switches on that screen are loosenings that ask for the fingerprint
+  or PIN on the way ON. The sentence is gone; the loosening rule stays.
+- **5** — the daily standby card's payload was plain `remember` while its
+  suppression flag was saveable, so a process death lost the offer for the day
+  (the PC marks the day as made when it *serves* one). The payload now crosses
+  that boundary through its own `Saver`, as its own JSON text.
+- **7** — the "Never look at" picker walked every installed app **during
+  composition**. It loads off the main thread with a "Looking for apps…" line
+  now, exactly as `PhoneNotificationsPlate`'s identical walk does.
+- **8** — "Show everything saved automatically" scrolled to "one item after
+  `memory-counts`", which with that menu hidden landed on "Always keep in mind".
+  It scrolls to the row's own key now, and shows the row for the visit when the
+  owner has hidden it.
+- **9** — "Clear the numbers" put the PC's assumed figures straight back. It is
+  "Start over" now, which is what it does.
+- **10** — Tasks' "Reading…" state existed and nothing constructed it, so the
+  line and its colour were dead. The plate sets it before the first read.
+- **11** — Voices drew the same "Hear it" result line twice, only one with
+  `liveStatus()`. The duplicate is gone.
+- **12** — one setting, two names on one screen: "Quality" and "Sharpness" are
+  the same stored field and the same control. Sharpness is what the rest of the
+  app calls it, so the per-face editor says that too.
+
+Each is held by one assertion in `FirstAuditLeftoversTest`.
+
+## 6. Still open, honestly
 
 - **The 12 of 16 screens behind pairing** (handoff item 3): they need the
-  owner's Windows Hello tap on the PC. Unchanged by this pass.
-- **The first audit's eight findings that still stand** (4, 5, 7, 8, 9, 10, 11,
-  12 in `docs/ANDROID-AUDIT-2026-10-08.md`): all real, all small, none in this
-  handoff's queue. They are the next pass.
+  owner's Windows Hello tap on the PC. Unchanged by either pass.
 - **`docs/ANDROID-TOUR-2026-10-09.md` is not on `main`.** The handoff cites it
   as if it were; it exists only on the `audit/android-tour` branch
-  (`3370ca32`). Its evidence directory is there too. Nothing in this pass
-  depends on it being merged, but the citation should not stay dangling.
+  (`3370ca32`). Its evidence directory is there too. Nothing here depends on it
+  being merged, but the citation should not stay dangling.
 - **App lock and the black frame** are still unmeasured, for the reason the tour
   gave: turning either switch on is instant, turning it off asks for the owner's
   fingerprint. The two-tap procedure for the owner is in the tour's Q2.

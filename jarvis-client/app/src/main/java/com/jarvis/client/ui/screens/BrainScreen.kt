@@ -75,6 +75,7 @@ import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.parts.rememberTickingNow
+import com.jarvis.client.ui.parts.scrollToKey
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -731,9 +732,17 @@ fun BrainScreen(
                     MemoryCountsSection(
                         canAct = canAct,
                         onOpenAutoList = {
-                            val here = listState.layoutInfo.visibleItemsInfo
-                                .firstOrNull { it.key == "memory-counts" }?.index
-                            if (here != null) listScope.launch { listState.animateScrollToItem(here + 1) }
+                            // By key, and by showing the row if the owner has
+                            // hidden it (first Android audit, finding 8). The old
+                            // code scrolled to "the item after memory-counts",
+                            // and `brain.memory.auto` is hideable
+                            // (net/MenuCatalog.kt) - with it hidden, the button
+                            // labelled "Show everything saved automatically"
+                            // landed on "Always keep in mind" and said nothing.
+                            // Showing it for this visit is the app's own
+                            // mechanism for exactly this (MenuPrefs.showForVisit).
+                            com.jarvis.client.JarvisRuntime.menus.showForVisit("brain.memory.auto")
+                            listScope.launch { scrollToKey(listState, "memory-auto") }
                         },
                         // "Jarvis remembered N things" opens those facts: a memory
                         // list, hidden like the others.
