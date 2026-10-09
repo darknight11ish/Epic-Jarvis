@@ -32,12 +32,16 @@ import kotlinx.serialization.json.contentOrNull
  * offered either: a number with no step and no chip would be a control that
  * cannot be worked. Only "int" and "bool" reach the screen.
  *
- * ONE TAP IS ONE CHANGE, and the PC decides what it means. Turning a number
- * DOWN applies at once. Turning one UP is a loosening only where the row says
- * `loosen_up`, and then the PC puts ONE approval card to the owner and writes
- * nothing until it is answered there - so a 200 can mean "a card is waiting",
- * never "it is done". This app shows the PC's own sentence ([Answer]) and
- * invents none of its own; it re-reads the row afterwards, whatever the answer.
+ * ONE TAP IS ONE CHANGE, and the PC decides what it means. Some changes take
+ * effect at once; others are a loosening, and the PC then puts ONE approval card
+ * to the owner and writes nothing until it is answered there - so a 200 can mean
+ * "a card is waiting", never "it is done". WHICH DIRECTION ASKS IS THE ROW'S OWN:
+ * on most rows turning a number up is the loosening, and on the voice check's
+ * bar turning it DOWN is (a lower bar means more clips count as the owner's
+ * voice). No line here may claim one direction always applies at once; the row's
+ * own `note`, written by the PC, says which way that row goes. This app shows
+ * the PC's own sentence ([Answer]) and invents none of its own; it re-reads the
+ * row afterwards, whatever the answer.
  *
  * Pure Kotlin, no Android types, so it runs on a plain JVM.
  */
@@ -55,12 +59,22 @@ object Limits {
             "reads something of yours. These are the PC's own settings, in the PC's own words."
     /**
      * Said ONCE, above the rows: the screen must not look as if every tap went
-     * straight through. A number turned DOWN applies at once; a number turned UP
-     * - on a row that says so - is a loosening, and the PC asks first.
+     * straight through.
+     *
+     * IT MAY NOT SAY WHICH DIRECTION ASKS (corrected 2026-10-09). This used to
+     * end "Turning something down applies at once", as a blanket line about
+     * every row under it - and that is not true of every row. On the voice
+     * check's bar, LOWERING it is the loosening (a lower bar means more clips
+     * count as the owner's voice), so going down is the direction that raises
+     * ONE card on the PC, and the row's own note says exactly that. A general
+     * sentence ending that way therefore contradicted the row immediately below
+     * it. Which direction asks is the row's own business - the PC decides it
+     * per row, and sends it in the row's `note` - so the line above the rows
+     * says only what is true of all of them.
      */
     const val LOOSEN_NOTE =
-        "Turning something up asks you on the PC first, and nothing changes until you answer " +
-            "there. Turning something down applies at once."
+        "Changing something here may take effect at once or ask you on the PC first, and " +
+            "nothing changes until you answer there. The line under each one says which."
     /** The row's own mark, when turning this one up is what asks. */
     const val ASKS_ON_PC = "Turning this up asks you on the PC."
 

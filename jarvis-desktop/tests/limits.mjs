@@ -166,8 +166,65 @@ await check("Settings: one row per limit, in the PC's words", async () => {
   assert.deepEqual(keys, ["undo_window", "jobs_per_tick"]);
   assert.ok(text.includes("How long you can undo - keep undo for a day"));
   assert.ok(text.includes("A longer window keeps older copies of your files on this PC."));
-  assert.ok(text.includes("Turning a number down changes at once"), "the one plain line about asks");
+  assert.ok(text.includes("Some of these take effect at once"), "the one plain line about asks");
   assert.deepEqual(errors, []);
+});
+
+await check("Settings: the line above the rows promises no direction", async () => {
+  // THE BUG THIS EXISTS FOR (found 2026-10-09). This card used to say, once,
+  // above every row: "Turning a number down changes at once. Turning one up
+  // asks you first, on this PC." That is FALSE for the one row whose loosening
+  // goes the other way - the voice check's bar, where LOWERING it is what lets
+  // more clips count as the owner's voice, so going down is the direction that
+  // raises an approval card. The card therefore told the owner the opposite of
+  // what the row under it does.
+  //
+  // Which direction asks is the ROW's business (`loosen_up` can only describe an
+  // UP loosening, and such a row says so in its own `note`), so the general line
+  // may not claim one. This walks the real voice-bar row through the card and
+  // checks both halves: the row keeps its own sentence, and nothing on the card
+  // says a smaller number always applies at once.
+  const voiceBar = {
+    key: "voice_bar", title: "How sure Jarvis must be that it is your voice",
+    kind: "int", value: 35, words: "35 %", choices: [25, 35, 50, 65], low: 5, high: 100,
+    unit: "%",
+    note: "Lower means more clips count as your voice. Going lower asks you on the PC first.",
+    // The PC marks this row `false`: its loosening is DOWN, and it says so in
+    // its own note instead.
+    loosen_up: false, pc_only: false, app: "both",
+  };
+  const page = await settings({ view: { ok: true, available: true, limits: [voiceBar] } });
+  const body = await page.locator("#limits-body").innerText();
+  await page.close();
+  assert.ok(
+    body.includes("Going lower asks you on the PC first."),
+    "the row's own sentence - the one that names the direction - was not drawn",
+  );
+  // The pattern is narrow on purpose: "down" immediately governing one of these
+  // verbs, or a short "down ... at once". It catches both sentences this test
+  // exists to keep out - "Turning a number down changes at once" (this file's
+  // old line) and "Turning something down applies at once" (the phone's, which
+  // was corrected in the same pass).
+  const claimsDownIsInstant = (text) =>
+    /\bdown\s+(?:changes|applies|takes effect|is applied|goes through)\b/i.test(text) ||
+    /\bdown\s+(?:\w+\s+){0,3}at once\b/i.test(text);
+  assert.ok(
+    !claimsDownIsInstant(body),
+    `the card claims a direction again:\n${body}`,
+  );
+  // ...and the same promise in the page's own source, in case a later edit
+  // writes it back where the rendered text would still pass. Comment lines are
+  // dropped first: this fix's own note QUOTES the sentence it removed, and a
+  // check that cannot tell a quotation from a promise would have to be deleted
+  // the next time somebody explains the bug.
+  const pageSource = read("src/limits-settings.js")
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+    .join("\n");
+  assert.ok(
+    !claimsDownIsInstant(pageSource),
+    "src/limits-settings.js tells the owner that a smaller number always applies at once",
+  );
 });
 
 /** Waits until `fn` is true in the page. If it never is, the assertion below says why. */

@@ -222,6 +222,43 @@ class LimitsTest {
     }
 
     @Test
+    fun `the line above the rows promises no direction`() {
+        // THE BUG THIS EXISTS FOR (found 2026-10-09). `Limits.LOOSEN_NOTE` is
+        // drawn ONCE, above every row, and it used to end "Turning something
+        // down applies at once." That is FALSE for a row whose loosening goes
+        // DOWN - the voice check's bar, where a lower bar means more clips
+        // count as the owner's voice, so going lower is the direction that
+        // raises ONE card on the PC. The plate therefore told the owner the
+        // opposite of what the row immediately under that line does, and the
+        // row's own note said so in the very next line.
+        //
+        // Which direction asks is the ROW's business (the PC sends it in the
+        // row's own `note`), so the general line may not name one. This checks
+        // the constant AND the plate's own doc comment, because the comment is
+        // what a later editor reads before changing the sentence.
+        val claimsDownIsInstant = Regex(
+            """\bdown\s+(?:changes|applies|takes effect|is applied|goes through)\b""" +
+                """|\bdown\s+(?:\w+\s+){0,3}at once\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        assertTrue(
+            "Limits.LOOSEN_NOTE tells the owner a smaller number always applies at once",
+            !claimsDownIsInstant.containsMatchIn(Limits.LOOSEN_NOTE),
+        )
+        assertTrue(
+            "the plate tells the owner a smaller number always applies at once",
+            !claimsDownIsInstant.containsMatchIn(source(PLATE)),
+        )
+        // ...and it still says the thing that IS true of every row under it:
+        // the PC decides, and the row's own sentence says which way this one
+        // goes.
+        assertTrue(
+            "the note no longer says the row's own line carries the direction",
+            Limits.LOOSEN_NOTE.contains("line under each one says which"),
+        )
+    }
+
+    @Test
     fun `each kind gets the control it needs`() {
         val plate = source(PLATE)
         // int with choices -> chips; int without -> a step pair; bool -> Toggle.

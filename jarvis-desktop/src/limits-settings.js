@@ -7,11 +7,16 @@
  *  - set_limit:   POST /api/limits/settings - ONE limit, one value.
  *
  * The page decides nothing. It sends a key and a value; the BACKEND compares
- * it with the number already in force, and turning one UP that lets Jarvis do
- * more is a loosening it puts to the owner on an approval card before writing
- * anything. The sentence under the list is always the PC's own - `said` when it
- * worked, its refusal in the owner's words when it did not - never one made up
- * here, which is why nothing is drawn as changed until the PC answers.
+ * it with the number already in force, and a change that lets Jarvis do more is
+ * a loosening it puts to the owner on an approval card before writing anything.
+ * WHICH DIRECTION THAT IS, IS THE ROW'S OWN (corrected 2026-10-09): on most rows
+ * a bigger number is the loosening, and on the voice check's bar a SMALLER one
+ * is, so the line above the rows may not tell the owner that turning a number
+ * down always applies at once - that was false for the row right under it. The
+ * row's own `note`, written by the PC, says which way that row goes. The
+ * sentence under the list is always the PC's own - `said` when it worked, its
+ * refusal in the owner's words when it did not - never one made up here, which
+ * is why nothing is drawn as changed until the PC answers.
  *
  * @module limits-settings
  */
@@ -73,10 +78,16 @@ function paint(reading, keep) {
   }
   el.state.textContent = reading.rows.length ? "" : "There is nothing on this PC to change yet.";
   el.body.hidden = false;
-  const asked = reading.rows.some((r) => r.loosenUp);
   if (!keep) {
-    el.note.textContent = asked
-      ? "Turning a number down changes at once. Turning one up asks you first, on this PC."
+    // THE ONE LINE ABOVE THE ROWS may promise nothing about direction. It used
+    // to read "Turning a number down changes at once. Turning one up asks you
+    // first, on this PC." - and on the voice check's bar the loosening IS the
+    // way down, so the line contradicted the row right under it. Which way asks
+    // is the ROW's to say (`loosenUp` for up, the note for down); the list says
+    // only what holds for all of them.
+    el.note.textContent = reading.rows.length
+      ? "Some of these take effect at once. Others ask you first, on this PC - the line under "
+        + "each one says which."
       : "";
   }
   el.rows.replaceChildren(...reading.rows.map((limit) => {

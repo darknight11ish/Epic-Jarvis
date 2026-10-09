@@ -173,7 +173,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -182,7 +182,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -191,7 +191,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -200,7 +200,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -331,7 +331,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -358,7 +358,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -367,7 +367,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -445,7 +445,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -454,7 +454,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -463,7 +463,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -472,7 +472,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -490,7 +490,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -544,7 +544,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -615,7 +615,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -624,7 +624,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -689,7 +689,7 @@
        "fixed": false,
        "id": "browse_model_catalog",
        "lockdown": true,
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml). Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Look up AI models online"
@@ -698,7 +698,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -707,7 +707,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -716,7 +716,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -875,7 +875,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -893,7 +893,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -965,7 +965,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -974,7 +974,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -983,7 +983,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -992,7 +992,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -1001,7 +1001,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -1060,7 +1060,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -1069,7 +1069,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -1078,7 +1078,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -1087,7 +1087,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -1341,7 +1341,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -1350,7 +1350,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -1359,7 +1359,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -1368,7 +1368,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -1499,7 +1499,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -1526,7 +1526,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -1535,7 +1535,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -1613,7 +1613,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -1622,7 +1622,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -1631,7 +1631,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -1640,7 +1640,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -1658,7 +1658,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -1712,7 +1712,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -1783,7 +1783,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -1792,7 +1792,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -1857,7 +1857,7 @@
        "fixed": false,
        "id": "browse_model_catalog",
        "lockdown": true,
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml). Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Look up AI models online"
@@ -1866,7 +1866,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -1875,7 +1875,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -1884,7 +1884,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -2043,7 +2043,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -2061,7 +2061,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -2133,7 +2133,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -2142,7 +2142,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -2151,7 +2151,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -2160,7 +2160,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -2169,7 +2169,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -2228,7 +2228,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -2237,7 +2237,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -2246,7 +2246,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -2255,7 +2255,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -2506,7 +2506,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -2515,7 +2515,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -2524,7 +2524,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -2533,7 +2533,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -2664,7 +2664,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -2691,7 +2691,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -2700,7 +2700,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -2777,7 +2777,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -2786,7 +2786,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -2795,7 +2795,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -2804,7 +2804,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -2822,7 +2822,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -2876,7 +2876,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -2947,7 +2947,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -2956,7 +2956,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -3020,7 +3020,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -3029,7 +3029,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -3038,7 +3038,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -3047,7 +3047,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -3206,7 +3206,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -3224,7 +3224,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -3296,7 +3296,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -3305,7 +3305,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -3314,7 +3314,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -3323,7 +3323,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -3332,7 +3332,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -3391,7 +3391,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -3400,7 +3400,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -3409,7 +3409,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -3418,7 +3418,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -3664,7 +3664,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -3673,7 +3673,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -3682,7 +3682,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -3691,7 +3691,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -3822,7 +3822,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -3849,7 +3849,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -3858,7 +3858,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -3935,7 +3935,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -3944,7 +3944,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -3953,7 +3953,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -3962,7 +3962,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -3980,7 +3980,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -4034,7 +4034,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -4105,7 +4105,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -4114,7 +4114,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -4178,7 +4178,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -4187,7 +4187,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -4196,7 +4196,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -4205,7 +4205,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -4364,7 +4364,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -4382,7 +4382,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -4454,7 +4454,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -4463,7 +4463,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -4472,7 +4472,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -4481,7 +4481,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -4490,7 +4490,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -4549,7 +4549,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -4558,7 +4558,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -4567,7 +4567,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -4576,7 +4576,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -4822,7 +4822,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -4831,7 +4831,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -4840,7 +4840,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -4849,7 +4849,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -4980,7 +4980,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -5007,7 +5007,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -5016,7 +5016,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -5093,7 +5093,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -5102,7 +5102,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -5111,7 +5111,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -5120,7 +5120,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -5138,7 +5138,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -5192,7 +5192,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -5263,7 +5263,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -5272,7 +5272,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -5336,7 +5336,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -5345,7 +5345,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -5354,7 +5354,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -5363,7 +5363,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -5522,7 +5522,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -5540,7 +5540,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -5612,7 +5612,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -5621,7 +5621,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -5630,7 +5630,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -5639,7 +5639,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -5648,7 +5648,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -5707,7 +5707,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -5716,7 +5716,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -5725,7 +5725,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -5734,7 +5734,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -5992,7 +5992,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -6001,7 +6001,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -6010,7 +6010,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -6019,7 +6019,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -6150,7 +6150,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -6177,7 +6177,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -6186,7 +6186,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -6264,7 +6264,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -6273,7 +6273,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -6282,7 +6282,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -6291,7 +6291,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -6309,7 +6309,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -6363,7 +6363,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -6434,7 +6434,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -6443,7 +6443,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -6508,7 +6508,7 @@
        "fixed": false,
        "id": "browse_model_catalog",
        "lockdown": true,
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml). Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Look up AI models online"
@@ -6517,7 +6517,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -6526,7 +6526,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -6535,7 +6535,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -6694,7 +6694,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -6712,7 +6712,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -6784,7 +6784,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -6793,7 +6793,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -6802,7 +6802,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -6811,7 +6811,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -6820,7 +6820,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -6879,7 +6879,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -6888,7 +6888,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -6897,7 +6897,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -6906,7 +6906,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -7157,7 +7157,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -7166,7 +7166,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -7175,7 +7175,7 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
@@ -7184,7 +7184,7 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
@@ -7315,7 +7315,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -7342,7 +7342,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -7351,7 +7351,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -7428,7 +7428,7 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
@@ -7437,7 +7437,7 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
@@ -7446,7 +7446,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -7455,7 +7455,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -7473,7 +7473,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -7527,7 +7527,7 @@
        "action": "handoff_keep_offering",
        "fixed": false,
        "id": "handoff_keep_offering",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
@@ -7598,7 +7598,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -7607,7 +7607,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -7671,7 +7671,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -7680,7 +7680,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -7689,7 +7689,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -7698,7 +7698,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -7857,7 +7857,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -7875,7 +7875,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -7947,7 +7947,7 @@
        "action": "raise_api_limit",
        "fixed": false,
        "id": "raise_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Raise a chatbot's monthly spending limit"
@@ -7956,7 +7956,7 @@
        "action": "lower_api_limit",
        "fixed": false,
        "id": "lower_api_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower a chatbot's monthly spending limit"
@@ -7965,7 +7965,7 @@
        "action": "raise_attention_budget",
        "fixed": false,
        "id": "raise_attention_budget",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis interrupt you more often"
@@ -7974,7 +7974,7 @@
        "action": "raise_a_limit",
        "fixed": false,
        "id": "raise_a_limit",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let Jarvis do more, for longer, or more often"
@@ -7983,7 +7983,7 @@
        "action": "lower_the_voice_check_bar",
        "fixed": false,
        "id": "lower_the_voice_check_bar",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Lower the bar for your voice check"
@@ -8042,7 +8042,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -8051,7 +8051,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -8060,7 +8060,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -8069,7 +8069,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"

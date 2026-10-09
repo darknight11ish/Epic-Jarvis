@@ -938,6 +938,58 @@ def t_both_apps_read_the_current_contract():
           "(python3 tools/gen_asks_first_cases.py)", r.returncode == 0, r.stdout + r.stderr)
 
 
+def t_the_shared_note_does_not_name_the_wrong_place():
+    """THE NOTE UNDER A ROW MAY NOT SAY "not in the app" ABOUT A ROW AN APP
+    CHANGES (2026-10-09).
+
+    `NOTE_FILE` used to read "This can only be changed in your PC's settings
+    file (jarvis-framework.toml), not in the app." It sits under every row that
+    has no "Ask me first" switch - and the page shows it under rows that ARE
+    changed from an app, each with ONE approval card: raising one of the limits
+    (`raise_a_limit`), raising the interruption budget
+    (`raise_attention_budget`), and lowering the voice check's bar
+    (`lower_the_voice_check_bar`, whose loosening is the way DOWN). So the
+    sentence named the wrong place for exactly the changes the owner makes from
+    a Settings screen.
+
+    This is the check that keeps it honest, and it is deliberately about the
+    PROMISE rather than about the sentence: any note under a loosening row on
+    the page must not tell the owner that no app can change it. Writing the old
+    sentence back fails it.
+    """
+    page = AF.view(here=True)
+    #: The actions on this page that some app screen turns into one approval
+    #: card. Read from the page's own rows: each of these is named by a row, and
+    #: the card each raises is the app's own control.
+    card_actions = {"raise_a_limit", "raise_attention_budget", "lower_the_voice_check_bar"}
+    seen = {}
+    for group in page["groups"]:
+        for row in group.get("rows") or []:
+            if not isinstance(row, dict):
+                continue
+            key = row.get("action") or row.get("id")
+            if key in card_actions:
+                seen[key] = row
+    check("the page names every action an app raises a loosening card for",
+          card_actions <= set(seen), sorted(seen))
+    for action in sorted(seen):
+        note = str(seen[action].get("note") or "")
+        check(f"{action}: the page names it", bool(note), seen[action])
+        # Both shapes of the false claim, not just the first one written down:
+        # an earlier attempt at this fix ended "by hand - never from an app",
+        # which is the same promise with "never" moved.
+        check(f"{action}: ... and does not tell the owner an app cannot change it",
+              "not in the app" not in note.lower()
+              and "never from an app" not in note.lower(), note)
+    # And the shared note itself, said plainly: every row that carries it has no
+    # switch, so the one thing the note may claim is about the switch.
+    check("the shared note no longer points only at the settings file",
+          "not in the app" not in AF.NOTE_FILE.lower()
+          and "never from an app" not in AF.NOTE_FILE.lower(), AF.NOTE_FILE)
+    check("... and says what IS true of every row it sits under - there is no switch",
+          "no switch" in AF.NOTE_FILE.lower(), AF.NOTE_FILE)
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
