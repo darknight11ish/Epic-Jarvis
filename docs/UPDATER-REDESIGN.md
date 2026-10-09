@@ -615,6 +615,10 @@ What that commits the updater to, concretely:
   genuinely valuable and is what build step 5 asks for, but writing it well
   means first getting the re-apply to expose a "left alone" verdict **before**
   it applies — which is a code change, and this pass is deliberately not one.
+  **Built since (2026-10-08, §9):** build step 1's own test,
+  `test_apply_outcomes.py`'s `t_mini_state_json_classifies_every_patch`, pins the
+  *recording* on a made-up backend, not these numbers — the four numbers above
+  still have no test, exactly as argued here.
 
 ## 8. Risk
 

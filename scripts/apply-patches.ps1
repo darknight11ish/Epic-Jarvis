@@ -1792,7 +1792,7 @@ Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
 if ($RunLog) { Say "Log     : $RunLog (a copy of everything printed here)" }
 else { Say "Log     : none - the log file could not be started, so copy this window if you need a record" Yellow }
 
-# --- where the classification of this run is written (docs/UPDATER-REDESIGN §5
+# --- where the classification of this run is written (docs/UPDATER-REDESIGN section 5
 # step 1) ---------------------------------------------------------------------
 #
 # Resolved HERE, before the script changes directory: a relative name is then
