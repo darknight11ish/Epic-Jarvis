@@ -64,6 +64,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
+import _gitapply  # noqa: E402
 import _stack  # noqa: E402
 
 PASSED, FAILED = [], []
@@ -136,6 +137,18 @@ def mini_repo(root: Path, suites: dict | None = None, leave_out: tuple = (),
         if src.name == "requirements.txt" and requirements is not None:
             continue
         if src.name in ("__pycache__", ".pytest_cache"):
+            continue
+        # `exists()` follows the link, so a BROKEN one is skipped rather than
+        # carried into the repository of symlinks. `jarvis_gate.py` and
+        # `jarvis_hud.py` are the owner's own files: .gitignore keeps them out
+        # of the checkout, and run_suites.py links them in for the run that
+        # asked for them. Two runs at once - two agents, one checkout - see this
+        # folder both ways, and a symlink made to a file the other run is taking
+        # away is a dangling link inside the miniature backend. That is what a
+        # rehearsal then reports as "Could not find file
+        # ...\jarvis-rehearsal-<stamp>\jarvis_gate.py" on a run with nothing
+        # wrong with it.
+        if not src.exists():
             continue
         (root / "backend" / src.name).symlink_to(src)
     if requirements is not None:
@@ -1121,6 +1134,140 @@ def t_a_shifted_stack_is_still_recognised_as_on():
           not lone["present"], lone["out"][-900:])
 
 
+# ------------------ a patch that is BOTH "already on" AND "off the real files"
+
+#: The state these two patches are written against. `a1 a2 a3` is deliberately
+#: a run that appears three times: where the middle reverse lands is what makes
+#: this state behave the way it does, and that is reproduced with repeated lines
+#: rather than with the owner's own text, so the check stands on its own.
+REGRESSION_BASE = "".join(f"{n}\n" for n in ("a1", "a2", "a3") * 3)
+
+#: Y's hunk: it adds Y_LINE near the top. Y is the patch the rehearsal ends up
+#: answering "already on" for.
+REGRESSION_Y_HUNK = """@@ -1,6 +1,7 @@
+ a1
+ a2
+ a3
++Y_LINE
+ a1
+ a2
+ a3
+"""
+
+#: X's hunk: it adds X_LINE into the middle of the file, BELOW Y's hunk - so Y
+#: is the one the strip takes off first, and X is the one it can put back on.
+REGRESSION_X_HUNK = """@@ -4,2 +4,3 @@
+ a3
++X_LINE
+ a1
+"""
+
+
+def regression_patch(*hunks: str) -> str:
+    """A patch for the miniature backend, naming the file both the rehearsal and
+    the forward run resolve (`b/jarvis_hud.py`)."""
+    return "--- a/jarvis_hud.py\n+++ b/jarvis_hud.py\n" + "".join(hunks)
+
+
+def backend_with_y_applied(tmp: Path) -> str:
+    """The miniature backend: REGRESSION_BASE with Y applied and X not, the way
+    `mini_repo`'s other backends are made - Y's own hunk, applied with
+    `git apply`, so the starting state is the patch's real output rather than a
+    copy of it typed out here. Returns the file's text."""
+    git = shutil.which("git")
+    assert git, "this check needs git"
+    d = tmp / "preimage"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "jarvis_hud.py").write_text(REGRESSION_BASE, encoding="utf-8", newline="\n")
+    y = d / "y-alone.patch"
+    y.write_text(regression_patch(REGRESSION_Y_HUNK), encoding="utf-8", newline="\n")
+    subprocess.run([git, "init", "-q"], cwd=d, check=True, capture_output=True, text=True)
+    # _gitapply, for the same reason _stack uses it: a scratch folder inside a
+    # work tree would make `git apply` resolve jarvis_hud.py against the
+    # repository root instead of `d`, and it would exit 0 having done nothing.
+    env = _gitapply.env_for(git, d)
+    r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+                        "apply", str(y)], cwd=d, capture_output=True, text=True, env=env)
+    assert r.returncode == 0, r.stdout + r.stderr
+    return (d / "jarvis_hud.py").read_text(encoding="utf-8")
+
+
+def t_a_patch_answered_already_on_is_never_reversed_off():
+    """The 2026-10-09 09:40 bug: a patch in BOTH lists was switched off, and the
+    run still certified that every patch was on.
+
+    THE TWO LISTS. The strip answers "these are on your backend from an earlier
+    run" (`$found`), and the re-apply that follows answers "already on ... left
+    as it is" for the ones it could not put back on (`$alreadyOn`). The real run
+    reversed `$found` off the owner's files and re-applied everything EXCEPT
+    `$alreadyOn` - so a patch that landed in both was reversed OFF the real
+    files and then left out of the re-apply. It was deleted, silently, and the
+    line at the end still said every patch was on. Measured on the owner's PC,
+    in that run's own log: "already on   tutorials.patch  (left as it is)" and
+    "already on   screen-attach.patch  (left as it is)", then "Taking off 122
+    patch(es)", then "ok off tutorials.patch", then "ok Checked again on the
+    real files: all 131 patches are on" - with `jarvis_tutorials.install` and
+    `jarvis_screen_attach.install` both reading 0 in jarvis_hud.py and
+    `/api/tutorials` and `/api/screen/attach` both gone.
+
+    THE STATE, and why each half lands in the list it does. The backend carries
+    Y's work but not X's. The rehearsal applies X and then Y to a copy: X goes
+    on, Y does not, because X_LINE now sits between `a3` and the `a1` that Y's
+    own hunk prints under its added line. That is the "part of the stack" case,
+    so the strip runs: it takes Y off the copy first (`$found`), and then X -
+    after which the file has no Y_LINE, so X's own reverse-check no longer
+    matches and the re-apply cannot put X back on the copy either. X is answered
+    "already on" and the copy keeps it; Y is the one the re-apply DOES put back
+    on the copy, so Y is in `$found` and NOT in `$alreadyOn`, and the copy ends
+    up holding both while the result check (which skips `$alreadyOn`) still
+    passes. Y is therefore the patch at risk.
+
+    WHAT IS ASSERTED IS THE OUTCOME, not the script's insides: Y's work was on
+    the backend before the run, so it must still be on it afterwards. On the
+    script as it was, Y_LINE is gone and the run still exits 0 saying every
+    patch is on.
+
+    The state is Y-applied-only and the run is the REAL script, so the only
+    thing cut is the patch list (see `mini_repo`).
+    """
+    if not shutil.which("git"):
+        print("SKIP  git is not installed, so no patch can be taken off here")
+        return
+
+    tmp = tmpdir()
+    root = mini_repo(tmp / "r", patches=["X.patch", "Y.patch"],
+                     patch_files={"X.patch": regression_patch(REGRESSION_X_HUNK),
+                                  "Y.patch": regression_patch(REGRESSION_Y_HUNK)})
+    be = tmp / "be"
+    be.mkdir()
+    (be / "jarvis_hud.py").write_text(backend_with_y_applied(tmp),
+                                      encoding="utf-8", newline="\n")
+    before = (be / "jarvis_hud.py").read_text(encoding="utf-8")
+    check("SETUP: the backend starts with Y's work on it and not X's",
+          "Y_LINE" in before and "X_LINE" not in before, repr(before))
+
+    # -Force: the running-Jarvis guard is about the machine this runs on, and
+    # this check is about what the run does to the files. The temp folder is not
+    # a backend anything is running, but a real `python jarvis_hud.py` elsewhere
+    # on the same PC can still make the guard refuse, which would hide the
+    # answer (the other mini checks pass -Force for the same reason).
+    code, out = run(root / "scripts" / "apply-patches.ps1", be,
+                    "-SkipTests", "-SkipPackages", "-Force")
+
+    after = (be / "jarvis_hud.py").read_text(encoding="utf-8")
+    check("the run does not take off a patch it answered 'already on': Y's work "
+          "is still on the backend", "Y_LINE" in after, repr(after) + "\n" + out[-900:])
+    check("... and the patch that really was missing went on, so this is not a "
+          "run that did nothing", "X_LINE" in after, repr(after))
+    check("... and the run ends clean", code == 0 and "DONE WITH PROBLEMS" not in out,
+          out[-900:])
+    check("... and it says the patch it left alone, in its own words",
+          "already on   Y.patch  (left as it is)" in out, out[-2500:])
+    check("... and it does not print a 'Taking off' line any more, because there "
+          "is nothing of the owner's to take off", "Taking off" not in out,
+          out[-2500:])
+
+
 def main():
     if not PWSH:
         print("SKIP  no PowerShell 7 (pwsh) here")
@@ -1135,7 +1282,8 @@ def main():
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
                t_mini_revert_ends_plainly, t_mini_state_json_classifies_every_patch,
                t_already_on_is_proved_by_the_patchs_own_bytes,
-               t_a_shifted_stack_is_still_recognised_as_on):
+               t_a_shifted_stack_is_still_recognised_as_on,
+               t_a_patch_answered_already_on_is_never_reversed_off):
         try:
             fn()
         except Exception:

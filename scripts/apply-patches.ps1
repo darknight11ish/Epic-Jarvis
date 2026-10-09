@@ -3188,7 +3188,20 @@ try {
                             $script:ResultRefused = $why
                             $broken += @{ Name = "the state this run would leave"; Why = $why }
                         }
-                        $undoFirst = $found
+                        # NOT everything the strip found: a patch in BOTH lists
+                        # is one the strip took off the copy and the re-apply
+                        # above could not put back on, so it was answered
+                        # "already on" and this run leaves it alone - $todo
+                        # drops it, and so does the result check above. Reversing
+                        # it off the owner's real files and then skipping it is
+                        # how tutorials.patch and screen-attach.patch were
+                        # switched off silently by the run of 2026-10-09 09:40:
+                        # "already on ... (left as it is)" in its own log, then
+                        # "ok off tutorials.patch" two screens later, then "all
+                        # 131 patches are on" - with both features gone.
+                        $undoFirst = @($found | Where-Object {
+                            -not (@($alreadyOn | ForEach-Object { $_.Name }) -contains $_.Name)
+                        })
                     }
                 }
                 Pop-Location
