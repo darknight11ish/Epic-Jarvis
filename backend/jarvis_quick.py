@@ -2704,12 +2704,67 @@ _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+
 _TOOL_OFF = re.compile(
     r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 
+#: "How much Jarvis may interrupt you" (jarvis_arbiter.py, 2026-10-08) - the
+#: number of times a day it may speak up UNASKED, and the hour the brief
+#: arrives. Digits only, and whole sentences only, like every setting here:
+#: the number is the one thing this must never guess, and a sentence it does
+#: not match exactly falls through to the model rather than picking one.
+#:   "speak up 5 times a day", "let jarvis speak up 2 times a day"
+#:   "speak up less" / "speak up more"      (one step of one, that direction)
+#:   "the brief at 8pm", "the brief at 20", "the digest arrives at 7 in the morning"
+_BUDGET_PER_DAY = re.compile(
+    r"(?:let\s+)?(?:jarvis\s+)?speak\s+up\s+(?:to\s+)?(\d{1,2})\s+times?\s+(?:a|per)\s+day")
+_BUDGET_STEP = re.compile(
+    r"(?:let\s+)?(?:jarvis\s+)?speak\s+up\s+(less|less\s+often|more|more\s+often)")
+_BRIEF_AT = re.compile(
+    r"(?:the\s+)?(?:brief|digest)\s+(?:arrives?\s+|comes?\s+)?at\s+(\d{1,2})\s*"
+    r"(am|pm|in\s+the\s+morning|in\s+the\s+afternoon|in\s+the\s+evening|at\s+night)?")
+
+
+def _brief_hour(hour: int, part: Optional[str]) -> Optional[int]:
+    """A spoken hour as the 0-23 the settings file holds, or None.
+
+    "8" on its own is 8 (the owner reading their own file), "8pm" is 20, and
+    "7 in the morning" is 7. 12am is midnight and 12pm is noon - the two the
+    arithmetic gets wrong if it is not written down."""
+    part = (part or "").strip()
+    if not part:
+        return hour if 0 <= hour <= 23 else None
+    if part in ("am", "in the morning"):
+        if hour == 12:
+            return 0
+        return hour if 1 <= hour <= 11 else None
+    # pm / afternoon / evening / night
+    if hour == 12:
+        return 12
+    return hour + 12 if 1 <= hour <= 11 else None
+
+
+def _budget_intent(s: str) -> Optional[Intent]:
+    m = _BUDGET_PER_DAY.fullmatch(s)
+    if m:
+        return Intent("settings_budget", {"body": {"spoken_per_day": int(m.group(1))}})
+    m = _BUDGET_STEP.fullmatch(s)
+    if m:
+        return Intent("settings_budget", {"step": 1 if m.group(1).startswith("more") else -1})
+    m = _BRIEF_AT.fullmatch(s)
+    if m:
+        hour = _brief_hour(int(m.group(1)), m.group(2))
+        if hour is not None:
+            return Intent("settings_budget", {"body": {"digest_hour": hour}})
+    return None
+
 
 def _settings_adjust(s: str) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
     except Exception:
         return None
+    # The interruption budget first: its sentences are the most specific ones
+    # here ("speak up 3 times a day"), so nothing below can swallow one.
+    budget = _budget_intent(s)
+    if budget is not None:
+        return budget
     m = _TOOL_ON.fullmatch(s) or _TOOL_OFF.fullmatch(s)
     if m:
         tool = R.find_tool_target(m.group(1))
@@ -3654,6 +3709,31 @@ def _run_settings_bool(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_bool")
 
 
+def _run_settings_budget(f: dict, peer, local) -> Result:
+    """"How much Jarvis may interrupt you", by asking (2026-10-08).
+
+    The rule - and the ONE card a raise needs - lives in
+    jarvis_arbiter.change(), the same function the apps' own route calls, so
+    asking and using the screen cannot drift apart. `step` is the "+1/-1"
+    form ("speak up less"), read against the budget in force right now; a
+    plain number is applied as it is. A raise waits on a card that this lane
+    raises through the gate, exactly like a loosening from a screen."""
+    try:
+        import jarvis_arbiter as AR
+    except Exception:
+        return Result(SETTINGS_MISSING, "settings_budget")
+    body = f.get("body")
+    if body is None:
+        step = int(f.get("step") or 0)
+        now = AR._limit()
+        body = {"spoken_per_day": max(AR.SPOKEN_PER_DAY_MIN,
+                                      min(AR.SPOKEN_PER_DAY_MAX, now + step))}
+    code, out = AR.change(body, peer=peer, local=local)
+    if code >= 400 or out.get("ok") is False:
+        return Result(str(out.get("error") or "That did not work."), "settings_budget")
+    return Result(str(out.get("said") or "Done."), "settings_budget")
+
+
 def _run_settings_asks_first(f: dict, peer, local) -> Result:
     import jarvis_settings_registry as R
     out = R.set_asks_first(f["action"], f["ask"], peer=peer, local=local)
@@ -3730,6 +3810,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_menu_visibility(f)
     if n == "settings_bool":
         return _run_settings_bool(f, peer, local)
+    if n == "settings_budget":
+        return _run_settings_budget(f, peer, local)
     if n == "settings_asks_first":
         return _run_settings_asks_first(f, peer, local)
     if n == "settings_tool":
