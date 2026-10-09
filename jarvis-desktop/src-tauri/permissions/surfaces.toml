@@ -1506,3 +1506,20 @@ permissions = [
   "allow-mark-tutorial",
   "allow-get-faq",
 ]
+
+# How long "Solve it here" stays on offer (handoff.rs; backend/jarvis_handoff_mode.py;
+# docs/CAPTCHA-HANDOFF-DESIGN.md section 5; the owner's decision of 2026-10-08:
+# "make this a setting for both options with 1 as the default"). Read the
+# choice, its two names, the PC's own lines and whether a card is waiting; or
+# set it - "Stop early" is applied at once and NEVER held on a stale link
+# (it only makes Jarvis do less), "Keep offering it" is ONE approval card on
+# this PC with Windows Hello and is held on a stale link.
+#
+# Settings only, and deliberately NOT the hand-off's own routes: this carries
+# one word and fixed sentences. The live picture of the paused browser window
+# goes PC to the owner's own phone, and this PC's windows hold no command that
+# asks for it or passes a tap.
+[[set]]
+identifier = "handoff-mode"
+description = "How long the captcha hand-off stays on offer: read it, choose \"Stop early\" at once, or ask to keep offering it (one approval card on this PC). Settings only; never a picture of the browser window."
+permissions = ["allow-handoff-mode"]
