@@ -2281,6 +2281,48 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    // ------------------------------------------ limits and frequencies ----
+
+    /**
+     * `GET /api/limits` - the limits and frequencies the owner can change
+     * (`backend/jarvis_limits.py`, one table on the PC; [Limits.parse]). The PC
+     * answers with the PHONE's own view (`jarvis_limits.view(app="phone")`), so
+     * its own desktop-only rows never arrive; whatever does arrive is filtered
+     * by `pc_only` again in [Limits.offered]. A read, so it is not held on a
+     * stale link. A 404 means this PC's Jarvis predates the limit table.
+     */
+    suspend fun limits(): ApiResult<JsonObject> = probe(Limits.PATH)
+
+    /**
+     * `POST /api/limits/settings` with ONE change ([Limits.body]): the row's key
+     * and its new value. DOWN applies at once; UP is a loosening only on a row
+     * whose PC entry says so, and then the PC puts ONE approval card to the
+     * owner and writes nothing until it is answered - so a 2xx never means "it
+     * is on" and [limits] is read again afterwards.
+     *
+     * The BODY comes back rather than a bare status, because the PC's own
+     * sentence is the answer: `said` for a change (or a card now waiting), and
+     * `error` for a refusal (400 "That has to be between 1 and 1000.", 403
+     * "That can only be changed on the PC.", 409, 503 - all with a 200-shaped
+     * body). [Limits.answer] reads it; this app never words one of its own.
+     */
+    suspend fun setLimit(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(Limits.WRITE_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    Limits.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /**
      * `GET /api/sky` - the sun, moon and weather behind the animal faces
      * ([SkySettings.parse]): whether they show, the town as the PC's list

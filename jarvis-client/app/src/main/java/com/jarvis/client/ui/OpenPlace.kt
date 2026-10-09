@@ -84,6 +84,11 @@ object OpenPlace {
         "floating-avatar" to Where.Go(Screen.SETTINGS, "floating-avatar"),
         // Hidden navigation menus section (SettingsScreen.kt, item "menu-visibility").
         "menu-visibility" to Where.Go(Screen.SETTINGS, "menu-visibility"),
+        // "Limits and how often Jarvis does things" (2026-10-08): the PC's own
+        // backend/jarvis_limits.py table, as a Settings row of its own on the
+        // phone (SettingsScreen.kt, item "limits"; LimitsPlate.kt). So "open
+        // limits" lands on it instead of the top of Settings.
+        "limits" to Where.Go(Screen.SETTINGS, "limits"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).
@@ -142,14 +147,6 @@ object OpenPlace {
         "notifications",
         "first-run",
         "hud-window",
-        // "Limits and frequency" (2026-10-08): the PC's own card for the limits
-        // table (backend/jarvis_limits.py). The phone's screen for the same
-        // table is a separate piece of work, so on THIS branch "open limits"
-        // answers "only in Jarvis on your PC" rather than landing at the top of
-        // Settings - and OpenPlaceTest, which refuses a registry Section with no
-        // decision at all, is what made this line necessary. The phone's own
-        // place replaces it when that screen lands.
-        "limits",
     )
 
     /** Every id this file has made a decision about - for the test. */
