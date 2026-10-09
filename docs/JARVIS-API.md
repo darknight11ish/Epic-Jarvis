@@ -18178,3 +18178,107 @@ compare - the discipline `tasks.patch` cost three CI failures to learn.
 long it takes, are both unmeasured. The desktop card and the bar panel are
 covered by unit and headless-browser checks; the Kotlin is CI's, because this
 checkout has no Android SDK.
+
+## 121. Thinking levels: how long a model may think before it answers (added 2026-10-09)
+
+`backend/thinking.patch` (one `install()` call in `jarvis_hud.py`; `jarvis_thinking.py`
+is shipped whole), `backend/test_thinking.py`, and one row per running model on both
+apps (`jarvis-desktop/src/thinking-module.js`, `jarvis-client/.../net/Thinking.kt`,
+`JarvisApi.kt`). **This section exists because the route was live on both apps and
+written down nowhere**: before it, `docs/JARVIS-API.md` had no mention of
+`/api/thinking` at all.
+
+### 121.1 What the routes answer
+
+    GET  /api/thinking    every model Jarvis can run, the level it is set to, and
+                          the levels that model actually supports
+    POST /api/thinking    {"model": "...", "level": "off" | "quick" | "deep" | "auto"}
+
+A level is **per model**, not global: the everyday model, the second-card lane's
+model and the third-card lane's model each carry their own. `off` is the default.
+Only levels the loaded model really supports are offered - read from Ollama's own
+`/api/show` capabilities rather than assumed - so a model that cannot think is never
+offered "Deep". Both apps draw one row per running model.
+
+### 121.2 Changing one needs no card
+
+Changing a thinking level is not a new way out of the PC and not a loosening: it
+changes how much of the conversation room one answer may spend, on a model already
+loaded on this PC. It takes effect at once, needs no approval card, and is reachable
+by tapping, by typing, and by asking in words ("think harder").
+
+### 121.3 Thinking text is never shown, saved or learned from
+
+Reasoning a model produces while thinking is **never shown, saved or learned from** -
+not in chat history, not as a fact, not in a log. What the apps say instead is the
+cost the owner is choosing: thinking spends some of the conversation room.
+
+### 121.4 The honest limit
+
+`auto` - let Jarvis decide per question - is the one level that is not simply a
+setting: it must be measured before it is trusted, the way the tool list is
+(`tools/tool_eval/`). Voice answers are always generated fast whatever the level
+says, because a spoken turn cannot wait for a long think.
+
+## 122. The chatbot money limits and the price list (added 2026-10-06; §87.4.1 was referenced but never written)
+
+`backend/chatbot-limits.patch` and `backend/chatbot-limits-hud.patch` (one `install()`
+call in `jarvis_hud.py` and the three gate lines), the shipped
+`jarvis_chatbot_limits.py`, and `backend/test_chatbot_limits.py`. **§87.4.1 sent
+readers here and the section did not exist** - the routes were live, and the only
+in-repo prose about them was in `CLAUDE.md` and the design note.
+
+### 122.1 What the routes do
+
+    GET  /api/chatbot/money    every service: its monthly limit, what is spent, what
+                               is left, its model and that model's price WITH where
+                               the number came from and when it was set, and this
+                               PC's own words. A read.
+
+    POST /api/chatbot/money    ONE change, named by `action`:
+
+      {"action": "raise_limit",   "service": "openai", "dollars": 10}
+      {"action": "lower_limit",   "service": "openai", "dollars": 3}
+      {"action": "remove_limit",  "service": "openai"}
+      {"action": "set_price",     "service": "openai", "in": 0.25, "out": 2.00}
+      {"action": "reset_price",   "service": "openai"}
+
+The numbers themselves are **not this module's**: every read and every write goes
+through `jarvis_chatbot_api.py`'s own `limit_of` / `spent_of` / `money_view` /
+`price_of` / `set_limit` / `set_price` / `reset_price`, so there is one copy of the
+money rules and one file holding them (`chatbot/api-money.json`).
+
+### 122.2 The one rule that matters
+
+Raising a limit is a **loosening**: it gets ONE approval card naming the service, the
+old amount and the new amount, plus Windows Hello, and it is refused from any other
+device. Lowering a limit, removing one, correcting a price and resetting one all only
+make a turn stricter or fix a wrong number, so they need no card - the same "it only
+makes it stricter, so it does not ask" rule every other tightening follows.
+
+That is why there are **two** gate actions rather than one:
+`jarvis_owner_check.PC_ONLY_ACTIONS` attaches Windows Hello to the action NAME, not to
+a direction, so one action covering both directions would ask Hello for a lowering
+too. Two names keeps Hello on the loosening only, and this module is the single place
+that decides which name a request gets:
+
+    raise_limit   -> action `raise_api_limit`, in PC_ONLY_ACTIONS, tier ask
+    lower_limit   -> action `lower_api_limit`, tier auto, no card
+    remove_limit  -> action `lower_api_limit` (it only ever spends less)
+    set_price     -> no gate action at all; a correction is not a loosening
+    reset_price   -> no gate action at all
+
+A request that names no `action` is refused. A request from the phone, or from
+anything that is not this PC, is refused **403 `pc_only` before anything is read or
+written** - the owner's own decision, "a monthly amount per service, set on the PC",
+the same shape `jarvis_spending.py` uses for its own PC-only routes.
+
+### 122.3 Failing closed, and what the answer never holds
+
+`jarvis_chatbot_api` raises `MoneyFileError` when its money file is there but
+unreadable, and that must never read as "nothing spent": every path here turns it into
+a refusal in the module's own words (`_file_words`), never into a zero.
+
+The answer holds service ids, model names, dollars, dates and the PC's own sentences.
+No key, no message, no chat and no piece of one is ever read or written here, and the
+audit line carries the action, the service and the dollar amounts only.
