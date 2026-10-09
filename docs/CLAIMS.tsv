@@ -31,6 +31,13 @@
 # removed on 2026-10-05 while the file is still in the tree and still tracked.
 # A missing file could not be written down with `file:` (which asserts the
 # opposite) or with `absent:` (which needs the path to exist first).
+# Bucket E is the setup this project ships for a tool it needs installed
+# (2026-10-09): SearXNG, the default web-search provider, brought up by
+# docker/searxng/docker-compose.yml. Its rows exist because the compose file
+# and the code that calls the container are two files that can drift apart
+# silently - the port it publishes against the address jarvis_search.py
+# calls, and the one SearXNG setting Jarvis cannot work without (json in the
+# settings file's `formats:` list).
 A01	the desktop app has a Notifications settings screen (CLAUDE.md's queue item 1, first half)	grep:jarvis-desktop/src/settings.html:id="notifications"	built	CLAUDE.md:1816
 A02	that screen has one switch per notification kind (alarms, reminders, briefing, handoff)	grep:jarvis-desktop/src/settings.html:notif-handoff-row	built	CLAUDE.md:1815
 A03	that screen has a "Send test notification" button	grep:jarvis-desktop/src/settings.html:notif-send-test	built	CLAUDE.md:1815
@@ -153,3 +160,6 @@ D07	one command installs Jarvis from the published base: it copies it into place
 D08	one command updates the backend and the desktop app together, and the install command hands it the desktop half with -SkipPatches so the patcher does not run twice	grep:scripts/setup-jarvis.ps1:'-SkipPatches'	built	docs/INSTALL.md:1159
 D09	the update command's backend half is done by running scripts\apply-patches.ps1 in a child PowerShell, with the backend folder in its argument list	grep:scripts/update-jarvis.ps1:Invoke-Native 'powershell'	built	docs/INSTALL.md:1159
 D10	the one-step install and update scripts are run by CI, in the Windows PowerShell 5.1 job	grep:.github/workflows/ci.yml:The one-step scripts	built	CHANGELOG.md:9
+E01	one command brings up the default web-search provider (SearXNG) on this PC's own loopback, at the address jarvis_search.py calls by default (added 2026-10-09)	grep:docker/searxng/docker-compose.yml:127.0.0.1:8888:8080	built	docker/searxng/docker-compose.yml:46
+E02	the compose file publishes the same port jarvis_search.py names in DEFAULT_SEARXNG_URL, so the two cannot drift apart silently	number:docker/searxng/docker-compose.yml:backend/jarvis_search.py:8888	built	backend/jarvis_search.py:122
+E03	the SearXNG settings this repository ships switch its JSON output on, which jarvis_search.py needs (it asks format=json and is answered 403 without it)	grep:docker/searxng/settings.template.yml:- json	built	backend/jarvis_search.py:1011

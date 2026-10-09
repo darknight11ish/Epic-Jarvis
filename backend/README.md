@@ -10081,32 +10081,91 @@ also shows the two new approval lines, `search_the_web = "ask"` and
 
 **3a. SearXNG (the default).** Install Docker Desktop first
 (https://www.docker.com/products/docker-desktop/ - it needs WSL 2, which its
-installer offers to set up). Then this line makes a folder for SearXNG's
-settings and starts it **on this PC only** - `127.0.0.1:8888` means nothing
-on your network or the internet can reach it (never change it to plain
-`8888:8080`, which would open it to your whole network). It restarts by
-itself with Docker:
+installer offers to set up), then **start it from the Start menu** and leave it
+running: the command below fails while Docker Desktop is closed. **Docker
+Desktop also needs CPU virtualisation switched on in the PC's firmware** -
+"Intel Virtualization Technology" (VT-x) on Intel, "SVM" on AMD. Without that
+switched on, Docker cannot run a single container, and the command below stops
+with Docker's own error instead. Then, in PowerShell:
 
 ```powershell
-New-Item -ItemType Directory -Force "$env:USERPROFILE\searxng" | Out-Null; docker run -d --name searxng --restart unless-stopped -p 127.0.0.1:8888:8080 -v "$env:USERPROFILE\searxng:/etc/searxng" docker.io/searxng/searxng:latest; Start-Sleep -Seconds 20; if (Test-Path "$env:USERPROFILE\searxng\settings.yml") { Write-Host "SearXNG is running on this PC only, at http://127.0.0.1:8888. Its settings file is $env:USERPROFILE\searxng\settings.yml" } else { Write-Host "SearXNG has not written its settings file yet - wait a minute and check again, or run: docker logs searxng" }
+cd "C:\Users\pcadmin\Documents\Jarvis github\Epic-Jarvis-main\docker\searxng"; docker compose up -d
 ```
 
-SearXNG's settings file ends up in `C:\Users\pcadmin\searxng\settings.yml`.
-**Its JSON output is off out of the box** (the file says `formats:` then
-`- html` only), and Jarvis needs it. This line adds `- json` under `- html`
-(only once, however often you run it) and restarts SearXNG:
+That one line brings SearXNG up **on this PC only**, with everything Jarvis
+needs already switched on. The compose file and its settings live in
+`docker/searxng/`, and every line in them says why (added 2026-10-09; it
+replaces the `docker run` line that used to be here, which pulled the unpinned
+`:latest` image and left the JSON setting below for you to add by hand
+afterwards). Three of those choices are worth knowing:
+
+- **`127.0.0.1:8888`, and nothing else.** That is the address `jarvis_search.py`
+  calls by default (`DEFAULT_SEARXNG_URL`, line 122), the address its card names
+  and the address its error message prints. `127.0.0.1` means only this PC can
+  reach it - not your home network, not the internet. **Never change it to plain
+  `8888:8080`**, which would answer your whole network.
+- It keeps SearXNG's settings in `%USERPROFILE%\searxng\settings.yml`
+  (`C:\Users\pcadmin\searxng\settings.yml`) - the file you edit later.
+- It switches SearXNG's **JSON output** on before the first search.
+
+**The one setting Jarvis needs: `search: formats:` in `%USERPROFILE%\searxng\settings.yml`.**
+Jarvis asks `http://127.0.0.1:8888/search?q=...&format=json` (`jarvis_search.py`
+line 1011) and reads the answer's `results` list (lines 1034-1037). SearXNG's
+own settings ship `formats:` with `- html` only, so that same request is
+answered **403 Forbidden** and Jarvis says, in these words (lines 1020-1024):
+"SearXNG is running, but its JSON output is switched off (it answered 403
+Forbidden). Add json to the formats list in its settings.yml and restart it -
+backend/README.md, "Web search", has the exact steps."
+`docker/searxng/settings.template.yml` carries it, so the file the container
+writes on its first start already has `    - json` under `    - html`. Check it
+in one line - it prints the line, or prints nothing:
 
 ```powershell
-$f = "$env:USERPROFILE\searxng\settings.yml"; $t = [IO.File]::ReadAllText($f); if ($t -notmatch '(?m)^[ \t]+- json[ \t]*\r?$') { $t = $t -replace '(?m)^([ \t]+)- html([ \t]*)(\r?)$', "`$1- html`$2`$3`n`$1- json`$3"; [IO.File]::WriteAllText($f, $t) }; if ($t -match '(?m)^[ \t]+- json[ \t]*\r?$') { docker restart searxng; Write-Host "JSON output is switched on in $f, and SearXNG was restarted." } else { Write-Host "Could not find the '- html' line in $f. Open it in Notepad, find 'formats:', and add a line '    - json' under '    - html', then run: docker restart searxng" }
+Select-String -Path "$env:USERPROFILE\searxng\settings.yml" -Pattern '^\s*-\s*json\s*$'
 ```
 
-Then press **Test search** in Settings, Web search. It should say
-"SearXNG (on this PC) works: a test search for "wikipedia" found 5
-results." If it says JSON is off, the second line did not find the list; if
-it says SearXNG isn't running, open Docker Desktop and start the `searxng`
-container. If it says "too many searches (its limiter is on)", open the
-settings file, set `limiter: false` under `server:`, and run
-`docker restart searxng`.
+If it printed nothing, that file was already there before Docker wrote one: open
+it in Notepad, find `formats:`, put `    - json` under `    - html`, and run
+`docker compose restart` in `docker\searxng\`.
+
+**Check it answers.** Give it half a minute or so after the first start - its
+first search is slow while it fetches its search engines - then, from
+`docker\searxng\`:
+
+```powershell
+docker compose ps
+(Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8888/search?q=wikipedia&format=json").StatusCode
+```
+
+`docker compose ps` should list `searxng` with a status starting `Up`, and the
+second line should print `200`. Then press **Test search** in Settings, Web
+search. It should say "SearXNG (on this PC) works: a test search for "wikipedia"
+found 5 results." (the count varies with the day).
+
+**Jarvis's own setting needs no change.** With no settings file at all, Jarvis
+already uses SearXNG at this address (`settings()`, lines 294-298). The file the
+apps write when you pick a provider is `web-search.json`, in the config folder
+(`_config_dir()`, lines 257-277: `OPENJARVIS_CONFIG_DIR` if set, else
+`%USERPROFILE%\.openjarvis`), and what it holds for this provider is
+`{"provider": "searxng", "searxng_url": "http://127.0.0.1:8888"}`. Say "use
+SearXNG for web search", or choose it in Settings, Web search.
+
+**When it is not running, Jarvis says so in these words** (lines 999-1003) and
+offers to switch - a search is never quietly sent somewhere else:
+
+> SearXNG isn't running on this PC - nothing answered at http://127.0.0.1:8888. Start it in Docker Desktop (backend/README.md, "Web search"), or switch web search to another provider.
+> Switch web search to DuckDuckGo? Say "use DuckDuckGo for web search", or choose it in Settings, Web search.
+
+If it says "too many searches (its limiter is on)", set `limiter: false` under
+`server:` in `%USERPROFILE%\searxng\settings.yml` and run `docker compose
+restart` (the shipped settings already do this). To stop SearXNG:
+`docker compose down` in `docker\searxng\`.
+
+**Updating it later.** The image is pinned by a dated tag
+(`2026.10.9-f4822b3fc`), not `:latest`, so the default search provider cannot
+change under you one morning. To move on: change the tag in
+`docker/searxng/docker-compose.yml`, then `docker compose pull` and
+`docker compose up -d`.
 
 **3b. DuckDuckGo instead.** Step 1 installed `ddgs`. If it did not:
 
@@ -10203,11 +10262,20 @@ the model; and the patch applied to what the earlier patches wrote.
 - **Brave: nothing in Jarvis stops it charging your card.** Past the free
   credit Brave bills and answers normally; Jarvis cannot tell. Only a limit
   you set in Brave's dashboard can.
-- **Nothing has reached a real SearXNG, DuckDuckGo, Exa, Tavily or Brave.** The
+- **Nothing has reached a real DuckDuckGo, Exa, Tavily or Brave.** The
   answers were written from their documentation and read in the dev
-  container; the Docker and settings lines above have not been run on your
-  PC (the PowerShell here could not be run by this session either - its
-  checks blocked it - so read them once before pasting).
+  container; their setup lines above have not been run on your PC (the
+  PowerShell here could not be run by this session either - its checks blocked
+  it - so read them once before pasting). **SearXNG is no longer in that list,
+  as of 2026-10-09:** the compose file and its settings added that day were run
+  on your PC - on Docker engine 29.7.2, `docker compose up -d` brought
+  `searxng` up (`Up`, `127.0.0.1:8888->8080/tcp`), and
+  `http://127.0.0.1:8888/search?q=wikipedia&format=json` answered **200** with
+  20 results. That is the three things the first check in 3a asks at once: the
+  image pulls, SearXNG answers, and the settings file it writes on its first
+  start already has JSON switched on. Nothing here has yet been seen across a
+  reboot, where the container is meant to come back by itself
+  (`restart: unless-stopped`).
 - How Tavily, Exa and Brave say "your monthly credit is used up" (Tavily
   432/433 and Brave 402/429 from their documentation; Exa 402 or 429,
   assumed) has not been seen. Brave's "roughly 1,000 searches" for $5 is not
