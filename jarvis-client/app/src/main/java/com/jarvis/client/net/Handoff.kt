@@ -244,28 +244,6 @@ object Handoff {
     fun reasonWords(reason: String): String =
         WORDS["reason_$reason"] ?: WORDS.getValue("reason_captcha")
 
-    // ---- how long it stays on offer (the owner's setting, 2026-10-08) -------
-
-    /**
-     * The PC's own line for the window it is stuck on, from `handoff.stuck` in
-     * `GET /api/chatbot/status` - or null when the hand-off ended some other
-     * way (or is still on offer). "Stop early" (the default) is the moment this
-     * appears: the offer is gone AND the PC names the window to solve it in.
-     * Anything not in the PC's exact shape is null.
-     */
-    fun stuck(status: JsonObject?): Pair<String, String>? {
-        val o = (status?.get("handoff") as? JsonObject)
-            ?: status?.takeIf { it.containsKey("stuck") } ?: return null
-        val s = o["stuck"] as? JsonObject ?: return null
-        val title = s.text("title")?.takeIf { it.isNotBlank() } ?: return null
-        val text = s.text("text")?.takeIf { it.isNotBlank() } ?: return null
-        return title to text
-    }
-
-    /** Is the PC keeping the offer for the full ceiling? (older PCs: no) */
-    fun patient(o: JsonObject?): Boolean =
-        (o?.get("patient") as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull == true
-
     /**
      * The alert's title and text. [locked]: App lock (or "Hide memory lists
      * and chat history") is on - the words name nothing, not even the site.

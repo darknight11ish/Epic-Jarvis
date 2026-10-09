@@ -145,8 +145,13 @@ object HandoffMode {
     }
 
     fun view(status: JsonObject?): View {
+        // `read` is `String?`: a missing `mode` field, a damaged file or a
+        // word that is not one of the two is not a mode, so it reads as the
+        // fail-closed default rather than being forced to a non-null String
+        // (2026-10-09). Without the `null` arm the compiler refuses the
+        // `in` below, which is what CI caught.
         val read = status.text("mode")
-        if (read !in MODES) {
+        if (read == null || read !in MODES) {
             return View(false, DEFAULT, false, 0.0, 0.0, "", "")
         }
         return View(
