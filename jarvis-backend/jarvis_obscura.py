@@ -443,8 +443,20 @@ def _kill_tree(p) -> None:
         else:
             import signal
             try:
-                os.killpg(os.getpgid(p.pid), signal.SIGKILL)
-                gone = True
+                pgid = os.getpgid(p.pid)
+                # NEVER signal a group this process is in. The program is
+                # started with its own session (the Popen kwargs above), so its
+                # group is normally its own - but a caller whose child shares
+                # the caller's group would otherwise have killpg take the
+                # caller down with it, and under run_suites.py that is the whole
+                # sweep: the step dies with no output and the job is cancelled
+                # half an hour later, which is exactly what CI showed on
+                # 2026-10-08. Fall through and kill the one process instead.
+                if pgid != os.getpgrp():
+                    os.killpg(pgid, signal.SIGKILL)
+                    gone = True
+                else:
+                    gone = False
             except Exception:
                 gone = False
     except Exception:

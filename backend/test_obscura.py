@@ -728,15 +728,20 @@ def t_the_owners_check():
 
 
 def t_a_refused_taskkill_still_kills_the_program():
-    """`_kill_tree` must act on taskkill's answer, not merely run it.
+    """`_kill_tree` must act on its answer, not merely ask.
 
     On Windows it ran `taskkill /T /F`, ignored what that said, and then waited
     five seconds. When the call is refused - no rights over the process, or an
     environment that denies it - the program is still running, the wait times
     out, and the only symptom is a suite that hangs to its ceiling with exactly
-    one failure, "stop kills it" (measured on 2026-10-08: test_obscura.py and
-    test_browser_engine.py each carried that one failure and nothing else). A
-    refusal must fall back to killing the process we started."""
+    one failure, "stop kills it" (measured on 2026-10-08 in two suites, each
+    with that one failure and nothing else wrong).
+
+    The child here is deliberately NOT given its own session, unlike the real
+    program: on POSIX that makes `_kill_tree`'s own-group guard refuse `killpg`
+    (signalling it would take this suite, and the sweep running it, down too),
+    and on Windows the stub below is the refusal. Both platforms therefore
+    exercise the same fallback - the process we started is killed anyway."""
     import subprocess as _sp
     p = _sp.Popen([sys.executable, "-c", "import time; time.sleep(60)"],
                   stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
@@ -752,6 +757,8 @@ def t_a_refused_taskkill_still_kills_the_program():
             p.kill()
     check("a refused taskkill still kills the program", p.poll() is not None, p.poll())
     check("...and returns at once, instead of waiting out the timeout", took < 4.0, took)
+    # No third check is needed for the own-group guard: on POSIX, if `_kill_tree`
+    # had signalled this suite's own group, this line would never be reached.
 
 
 if __name__ == "__main__":
