@@ -15,6 +15,19 @@ signing with a random key (see "Why one fixed key", below).
 
 `.gitignore` refuses `*.keystore` everywhere, with no exceptions.
 
+## Building on your own PC
+
+CI gets the key from the secret automatically. **A local build does not** - and
+`app/build.gradle.kts` guards the keystore on `exists()`, so with no key here the
+build tools quietly sign with a throwaway key instead, and `adb install -r` over
+the app on the phone then fails with `INSTALL_FAILED_UPDATE_INCOMPATIBLE`.
+
+[`docs/LOCAL-APK-SIGNING.md`](../docs/LOCAL-APK-SIGNING.md) is the runbook:
+where the key must go (**this folder, at the repository root** - not inside
+`jarvis-client/`), `scripts/import-debug-keystore.ps1` to put it there from the
+`DEBUG_KEYSTORE_B64` secret, and the SHA-256 fingerprint check to run on the APK
+before installing it.
+
 ## Why one fixed key
 
 Without it, the Android build tools make a new `~/.android/debug.keystore` on
