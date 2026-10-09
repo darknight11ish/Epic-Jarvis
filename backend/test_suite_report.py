@@ -185,6 +185,52 @@ def t_the_real_runner_reports_a_suite_that_could_not_run():
         shutil.rmtree(work, ignore_errors=True)
 
 
+def t_a_summary_after_a_traceback_is_still_read():
+    """The suite's own summary is read wherever it is, not only in the last four
+    lines.
+
+    `test_news.py` failed with a traceback on stderr printed AFTER its counts,
+    and the sweep announced it as `FAIL test_news.py (exit 1) 65 passed, 0
+    skipped, 0 failed` - a failing suite whose numbers read as clean. The
+    verdict came from the exit code and was right; the numbers were not, and
+    the numbers are what a reader believes."""
+    out = ("ok    the feed is read\n"
+           "FAIL  a broken feed is reported\n"
+           "1 passed, 0 skipped, 1 failed\n"
+           "Traceback (most recent call last):\n"
+           "  File \"test_news.py\", line 1, in <module>\n"
+           "RuntimeError: boom\n")
+    got = R.counts(out)
+    check("a summary followed by a traceback is still read",
+          got == {"passed": 1, "skipped": 0, "failed": 1}, got)
+    status, n, line, echo = R.suite_result("test_news.py", " 1.0s", 1, out, None)
+    check("and the FAIL line quotes those numbers, not zeroes",
+          n == {"passed": 1, "skipped": 0, "failed": 1} and "1 passed" in line, (n, line))
+    check("CONTROL: a suite whose only summary-shaped line is real still reads it",
+          R.counts("ok    a\n2 passed, 0 skipped, 0 failed\n") ==
+          {"passed": 2, "skipped": 0, "failed": 0},
+          R.counts("ok    a\n2 passed, 0 skipped, 0 failed\n"))
+
+
+def t_a_named_suite_that_does_not_exist_is_a_failure():
+    """CONTROL, end to end: `run_suites.py test_typo.py` must fail, not pass.
+
+    It used to filter the suites to the names given and then run none of them:
+    "0 passed, 0 skipped, 0 failed", exit 0 - the same lie the runner exists to
+    catch one level down, and easy to hit because `test_jobs.py` is named in
+    the docs but lives only on the owner's PC."""
+    r = subprocess.run([sys.executable, str(HERE / "run_suites.py"),
+                        "test_no_suite_is_named_this.py"],
+                       cwd=HERE, capture_output=True, text=True, timeout=600,
+                       encoding="utf-8", errors="replace")
+    out = (r.stdout or "") + (r.stderr or "")
+    check("a name no suite has exits non-zero", r.returncode != 0, r.returncode)
+    check("and the line names it", "test_no_suite_is_named_this.py" in out, out[-800:])
+    check("and it is reported as a FAIL, in the sweep's own summary",
+          "FAIL  no suite here is named" in out
+          and "failed: test_no_suite_is_named_this.py" in out, out[-800:])
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

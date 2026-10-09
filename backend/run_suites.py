@@ -115,6 +115,29 @@ _UNITTEST_RAN = re.compile(r"^Ran (\d+) tests? in ", re.M)
 _UNITTEST_BAD = re.compile(r"^FAILED \(([^)]*)\)", re.M)
 _UNITTEST_SKIPPED = re.compile(r"skipped=(\d+)")
 
+#: A line that LOOKS like a suite's own summary: a count, then "passed" or
+#: "failed". Used to find the summary anywhere in the output rather than only in
+#: its last four lines - see `_last_summary_line`.
+_SUMMARY_LINE = re.compile(r"^\s*\d+\s+(?:passed|failed)\b")
+
+
+def _last_summary_line(out: str) -> str:
+    """The last line of `out` that carries a suite's own summary, or "".
+
+    WHY NOT THE LAST FOUR LINES. That is what this used to read, and a suite
+    that prints a traceback AFTER its summary pushed the summary out of the
+    window: `test_news.py` failed with a traceback on stderr and the runner
+    printed "FAIL test_news.py (exit 1) 65 passed, 0 skipped, 0 failed" beside
+    it. The verdict was still right - it comes from the exit code - but the
+    numbers were wrong, and the numbers are what a reader believes. The last
+    line that looks like a summary is the suite's own last word whatever
+    happens after it."""
+    last = ""
+    for line in out.splitlines():
+        if _SUMMARY_LINE.match(line):
+            last = line
+    return last
+
 
 def counts(out: str) -> dict:
     """{'passed': n, 'skipped': n, 'failed': n} for one suite's output.
@@ -123,10 +146,10 @@ def counts(out: str) -> dict:
     counted, and a `skip()` no longer lands in its "passed". A unittest suite
     is believed through unittest's own summary. Only a suite that prints
     neither is counted from its own lines."""
-    tail = "\n".join(out.strip().splitlines()[-4:])
+    summary = _last_summary_line(out)
     got = {}
     for word, pat in _SUMMARY.items():
-        m = pat.search(tail)
+        m = pat.search(summary)
         got[word] = int(m.group(1)) if m else None
     if got["passed"] is not None and got["failed"] is not None:
         return {"passed": got["passed"], "skipped": got["skipped"] or 0,
@@ -308,20 +331,29 @@ def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
 
 
 def main(only=()) -> int:
-    """Every suite, or only the ones named (`run_suites.py test_x.py ...`)."""
+    """Every suite, or only the ones named (`run_suites.py test_x.py ...`).
+
+    A name given on the command line that is not a suite here is a FAILURE, not
+    an empty run: a sweep that prints "0 passed, 0 skipped, 0 failed" and exits
+    0 for a mistyped name is the same lie one level up from the suites this
+    runner exists to distrust (`backend/test_jobs.py` is named in the docs but
+    lives only on the owner's PC, so a typo there was easy to make)."""
     real = os.environ.get("JARVIS_BACKEND")
     backend = Path(real).resolve() if real else stage()
     print(f"backend: {backend}" + ("" if real else "  (staged: every shipped module, flattened)"))
-    suites = sorted(HERE.glob("test_*.py"))
-    if only:
-        suites = [s for s in suites if s.name in only]
+    known = sorted(HERE.glob("test_*.py"))
+    suites = [s for s in known if s.name in only] if only else known
     names = {s.name for s in suites}
+    unknown = [n for n in only if n not in {s.name for s in known}]
     stale = [] if only else sorted(set(NEEDS_OWNER) - names)
     passed, failed, skipped = [], [], []
     # The checks inside the suites that ran, summed from what each suite
     # reported. A suite that exits 0 having skipped every check it has is still
     # "ok" here - the numbers beside it are what say so.
     ran = {"passed": 0, "skipped": 0, "failed": 0}
+    if unknown:
+        print(f"FAIL  no suite here is named: {', '.join(unknown)}")
+        failed += unknown
     if stale:
         print(f"FAIL  run_suites.py lists suites that do not exist: {stale}")
         failed += stale
