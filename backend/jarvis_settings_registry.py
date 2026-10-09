@@ -249,6 +249,13 @@ SECTIONS: tuple = (
     # uses, and the install line.
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
+    # "When the phone does not answer" (2026-10-08): how long the captcha
+    # hand-off stays on offer (jarvis_handoff_mode.py; the owner's own decision
+    # of that day, "make this a setting for both options with 1 as the default").
+    # A card on the desktop and a Settings row on the phone, both fed by the
+    # same words from the PC.
+    Section("handoff", ("when the phone does not answer", "the captcha hand-off",
+                        "how long the hand-off stays on offer", "solve it here settings")),
     # "Show or hide menus" (2026-09-30): a card on the desktop and Settings row on the phone.
     Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
                                 "the menus", "menus")),

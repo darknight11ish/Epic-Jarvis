@@ -82,21 +82,126 @@
     "ArrowRight"
   ],
   "limits": {
+    "ceiling_s": 900.0,
     "frames_per_s": 2.0,
-    "idle_s": 45.0,
-    "most_s": 900.0,
+    "idle_s": 60.0,
     "scroll_most": 1500,
     "text_most": 200
   },
+  "mode_default": "stop_early",
+  "mode_default_offer": {
+    "active": "ho_0000000000000004",
+    "available": true,
+    "ended": {},
+    "id": "chat_000000000001",
+    "kind": "chatbot",
+    "patient": false,
+    "reason": "captcha",
+    "reason_words": "a captcha (a \"prove you are a person\" check)",
+    "site": "Gemini",
+    "stuck": null,
+    "text": "Jarvis paused: a captcha (a \"prove you are a person\" check). Solve it here, or in the window on the PC.",
+    "title": "Gemini needs you"
+  },
+  "mode_default_start": {
+    "body": {
+      "ceiling_s": 900.0,
+      "frames_per_s": 2.0,
+      "handoff": "ho_0000000000000004",
+      "idle_s": 60.0,
+      "ok": true,
+      "patient": false,
+      "reason": "captcha",
+      "reason_words": "a captcha (a \"prove you are a person\" check)",
+      "site": "Gemini"
+    },
+    "code": 200
+  },
+  "mode_idle_frame": {
+    "body": {
+      "ended": "idle",
+      "error": "Nobody was looking at the picture for a while, so the hand-off ended.",
+      "ok": false
+    },
+    "code": 410
+  },
+  "mode_idle_offer": {
+    "active": "",
+    "available": true,
+    "ended": {
+      "ho_0000000000000004": "idle"
+    },
+    "id": "chat_000000000001",
+    "kind": "chatbot",
+    "patient": false,
+    "reason": "captcha",
+    "reason_words": "a captcha (a \"prove you are a person\" check)",
+    "site": "Gemini",
+    "stuck": {
+      "text": "Jarvis is stuck on a captcha (a \"prove you are a person\" check) in that window, so the hand-off to your phone has ended. Solve it in the browser window on this PC, then press Resume. Your phone can start it again (Solve it here) if you need it.",
+      "title": "Gemini is waiting on this PC"
+    },
+    "text": "Jarvis paused: a captcha (a \"prove you are a person\" check). Solve it here, or in the window on the PC.",
+    "title": "Gemini needs you"
+  },
+  "mode_patient": "keep_offering",
+  "mode_route_get": {
+    "body": {
+      "ceiling_s": 900.0,
+      "default": "stop_early",
+      "idle_s": 60.0,
+      "last": null,
+      "mode": "stop_early",
+      "mode_name": "stop_early",
+      "modes": [
+        "stop_early",
+        "keep_offering"
+      ],
+      "patient": false,
+      "pc_only": true,
+      "waiting": false,
+      "words": {
+        "damaged": "the hand-off settings file is damaged, so the hand-off stops early when nobody is looking. Choose \"Keep offering it\" again to rewrite it",
+        "detail": "When Jarvis is stuck on a captcha or a sign-in page, your phone can show a live picture of that one window. This chooses how long Jarvis keeps offering it.",
+        "keep_offering": "Keep offering it",
+        "keep_offering_detail": "The live picture stays on offer for the full 15 minutes, so you can pick your phone up late. That is more time for that window to be seen, so turning this on asks for your approval.",
+        "off_now": "Done. The hand-off stops early again when nobody is looking.",
+        "opens_windows_hello": "Turning \"Keep offering it\" on asks for your approval on the PC.",
+        "stop_early": "Stop early",
+        "stop_early_detail": "After about a minute with nobody looking, the hand-off ends and the PC says which window Jarvis is stuck on, so you can solve it there.",
+        "title": "When the phone does not answer",
+        "waiting": "Waiting for your approval. The hand-off keeps stopping early until you approve the card."
+      }
+    },
+    "route": "/api/chatbot/handoff_mode"
+  },
+  "mode_words": {
+    "damaged": "the hand-off settings file is damaged, so the hand-off stops early when nobody is looking. Choose \"Keep offering it\" again to rewrite it",
+    "detail": "When Jarvis is stuck on a captcha or a sign-in page, your phone can show a live picture of that one window. This chooses how long Jarvis keeps offering it.",
+    "keep_offering": "Keep offering it",
+    "keep_offering_detail": "The live picture stays on offer for the full 15 minutes, so you can pick your phone up late. That is more time for that window to be seen, so turning this on asks for your approval.",
+    "off_now": "Done. The hand-off stops early again when nobody is looking.",
+    "opens_windows_hello": "Turning \"Keep offering it\" on asks for your approval on the PC.",
+    "stop_early": "Stop early",
+    "stop_early_detail": "After about a minute with nobody looking, the hand-off ends and the PC says which window Jarvis is stuck on, so you can solve it there.",
+    "title": "When the phone does not answer",
+    "waiting": "Waiting for your approval. The hand-off keeps stopping early until you approve the card."
+  },
+  "modes": [
+    "stop_early",
+    "keep_offering"
+  ],
   "offer_active": {
     "active": "ho_0000000000000001",
     "available": true,
     "ended": {},
     "id": "chat_000000000001",
     "kind": "chatbot",
+    "patient": false,
     "reason": "captcha",
     "reason_words": "a captcha (a \"prove you are a person\" check)",
     "site": "Gemini",
+    "stuck": null,
     "text": "Jarvis paused: a captcha (a \"prove you are a person\" check). Solve it here, or in the window on the PC.",
     "title": "Gemini needs you"
   },
@@ -105,7 +210,9 @@
     "available": false,
     "ended": {
       "ho_0000000000000001": "resumed"
-    }
+    },
+    "patient": false,
+    "stuck": null
   },
   "offer_captcha": {
     "active": "",
@@ -113,21 +220,27 @@
     "ended": {},
     "id": "chat_000000000001",
     "kind": "chatbot",
+    "patient": false,
     "reason": "captcha",
     "reason_words": "a captcha (a \"prove you are a person\" check)",
     "site": "Gemini",
+    "stuck": null,
     "text": "Jarvis paused: a captcha (a \"prove you are a person\" check). Solve it here, or in the window on the PC.",
     "title": "Gemini needs you"
   },
   "offer_none": {
     "active": "",
     "available": false,
-    "ended": {}
+    "ended": {},
+    "patient": false,
+    "stuck": null
   },
   "offer_other_pause": {
     "active": "",
     "available": false,
-    "ended": {}
+    "ended": {},
+    "patient": false,
+    "stuck": null
   },
   "offer_support": {
     "active": "",
@@ -135,9 +248,11 @@
     "ended": {},
     "id": "sup_000000000001",
     "kind": "support",
+    "patient": false,
     "reason": "login",
     "reason_words": "a sign-in page",
     "site": "Groupon",
+    "stuck": null,
     "text": "Jarvis paused: a sign-in page. Solve it here, or in the window on the PC.",
     "title": "Groupon needs you"
   },
@@ -150,14 +265,17 @@
     "end": "/api/chatbot/handoff/end",
     "frame": "/api/chatbot/handoff/frame",
     "input": "/api/chatbot/handoff/input",
+    "mode": "/api/chatbot/handoff_mode",
     "start": "/api/chatbot/handoff/start"
   },
   "start": {
     "body": {
+      "ceiling_s": 900.0,
       "frames_per_s": 2.0,
       "handoff": "ho_0000000000000001",
-      "idle_s": 45.0,
+      "idle_s": 60.0,
       "ok": true,
+      "patient": false,
       "reason": "captcha",
       "reason_words": "a captcha (a \"prove you are a person\" check)",
       "site": "Gemini"
@@ -170,6 +288,10 @@
       "ok": false
     },
     "code": 409
+  },
+  "stuck_words": {
+    "text": "Jarvis is stuck on {reason} in that window, so the hand-off to your phone has ended. Solve it in the browser window on this PC, then press Resume. Your phone can start it again (Solve it here) if you need it.",
+    "title": "{site} is waiting on this PC"
   },
   "tap": {
     "body": {

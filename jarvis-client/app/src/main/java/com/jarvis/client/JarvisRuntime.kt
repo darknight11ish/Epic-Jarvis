@@ -4227,6 +4227,43 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------- how long the hand-off stays on offer ----------
+    // The owner's decision of 2026-10-08 ("make this a setting for both options
+    // with 1 as the default"); backend/jarvis_handoff_mode.py; see
+    // [com.jarvis.client.net.Handoff]. This phone shows what the PC says and
+    // sends one word: "Stop early" (the default) ends the offer after about a
+    // minute and the PC says which window it is stuck on, or "Keep offering it"
+    // keeps it for the full 15 minutes. Choosing the second is a loosening, so
+    // it raises ONE approval card on the PC with Windows Hello; choosing the
+    // first is instant, from either app.
+
+    /** `GET /api/chatbot/handoff_mode`. */
+    suspend fun handoffModeSettings(): ApiResult<JsonObject> = api.handoffModeSettings()
+
+    /**
+     * The choice. "Keep offering it" is held on a stale link (rule 4) and
+     * raises an approval card on the PC; "Stop early" is NEVER held - it only
+     * makes Jarvis do less (@return the sentence to show under the choices).
+     */
+    suspend fun setHandoffMode(mode: String): String {
+        val body = com.jarvis.client.net.HandoffMode.body(mode)
+            ?: return "That is not one of the two choices."
+        if (mode != com.jarvis.client.net.HandoffMode.STOP_EARLY) {
+            actionBlocker()?.let { return it }
+        }
+        return when (val r = writeNoticingCards { api.setHandoffMode(body) }) {
+            is ApiResult.Ok -> when (val o = r.value) {
+                is com.jarvis.client.net.DesktopWrite.Outcome.Refused ->
+                    "Not changed. " + o.why
+                is com.jarvis.client.net.DesktopWrite.Outcome.Done -> o.said
+                    ?: com.jarvis.client.net.HandoffMode.OFF_NOW
+                is com.jarvis.client.net.DesktopWrite.Outcome.Waiting ->
+                    com.jarvis.client.net.HandoffMode.WAITING_LINE
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     /**
      * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
      * to decide whether to store anything at all - the cached last-known
@@ -7091,6 +7128,16 @@ object JarvisRuntime {
     /** The alert already raised, so one pause alerts once. */
     @Volatile private var handoffAlerted: String? = null
 
+    private val _handoffStuck = MutableStateFlow<Pair<String, String>?>(null)
+
+    /**
+     * The PC's own line for the window Jarvis is stuck on (the owner's setting
+     * of 2026-10-08: "Stop early"), read from `handoff.stuck` - or null. Shown
+     * on the "Solve it here" screen once the offer has ended that way, so the
+     * owner is told plainly which window to solve the puzzle in on the PC.
+     */
+    val handoffStuck: StateFlow<Pair<String, String>?> = _handoffStuck.asStateFlow()
+
     private val _handoffOpen = MutableStateFlow(false)
 
     /**
@@ -7118,6 +7165,9 @@ object JarvisRuntime {
     private fun noteHandoff(status: JsonObject?) {
         val o = com.jarvis.client.net.Handoff.offer(status)
         _handoffOffer.value = o
+        // "Stop early" (the owner's setting of 2026-10-08): the PC's own line
+        // naming the window it is stuck on, or null. Never invented here.
+        _handoffStuck.value = com.jarvis.client.net.Handoff.stuck(status)
         val ctx = appContext ?: return
         if (o == null) {
             if (handoffAlerted != null) com.jarvis.client.service.HandoffNotifier.cancel(ctx)

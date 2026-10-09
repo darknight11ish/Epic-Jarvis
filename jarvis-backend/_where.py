@@ -173,11 +173,6 @@ SHIPPED = (
     "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
-    # The one connection class that CLOSES when its `with` block ends, shared
-    # by jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py
-    # (2026-10-08: the WinError 32 "schedule.json is being used by another
-    # process" failure, fixed by hand three times before it was shared).
-    "jarvis_sqlite.py",
     "jarvis_schedule.py", "jarvis_quick.py",
     # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
     # (already SHIPPED, above) is the only importer - no patch of its own.
@@ -530,25 +525,6 @@ SHIPPED = (
     "jarvis_jobs.py",
     # One pipeline for text that arrived from outside.
     "jarvis_content_risk.py",
-    # The job list (2026-10-08, tasks.patch, JARVIS-API section 118): work that
-    # outlives one chat turn - a task is a named job with steps, each step still
-    # goes through the one gate, and the list remembers where it got to through a
-    # restart. Copied in shape from OpenMuse's task worker
-    # (docs/COMPETITORS-OPENMUSE-2026-10-08.md, including a correction: the report
-    # first called the address check a gap, and Jarvis already had it).
-    # A lease so a crashed job is picked up again and never run twice at once, a
-    # checkpoint after every step, `outcome_unknown` for an interrupted send, an
-    # idempotency key so one request makes one action, and a card whose decision
-    # must carry the hash of the words that were shown. Local SQLite only,
-    # standard library only, no network, no child process, approves nothing.
-    "jarvis_tasks.py",
-    # The prompt coach (2026-10-08, prompt-coach.patch, JARVIS-API section
-    # 119): checks ONE prompt the owner is about to send and returns what is
-    # missing - a score, up to four gaps and a rewritten version. Advice only:
-    # it sends nothing, runs no tool, raises no card, keeps nothing, and the
-    # address it sends to is checked with jarvis_auto_learn.check_local_model
-    # before the request is built. Off until the owner turns it on.
-    "jarvis_prompt_coach.py",
 )
 
 

@@ -155,6 +155,10 @@
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
     },
     {
+      "action": "handoff_keep_offering",
+      "title": "Jarvis wants to keep the phone's live view on offer for 15 minutes"
+    },
+    {
       "action": "history_enable",
       "title": "Jarvis wants to keep your chat history"
     },

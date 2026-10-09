@@ -651,7 +651,12 @@ def t_the_patch_and_the_lists():
              # (POST /api/attention/settings), anchored on the attention routes
              # already there, and jarvis_gate.py not at all. It rewrites nothing
              # referee.patch's hunks anchor on.
-             "attention-settings.patch"}
+             "attention-settings.patch",
+             # handoff-mode.patch (2026-10-08): two hunks in jarvis_gate.py,
+             # both at the END of the two lists referee.patch's own hunks anchor
+             # on (the "acts only on tier ask" set and the _RISK table), so it
+             # rewrites none of referee.patch's lines either.
+             "handoff-mode.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

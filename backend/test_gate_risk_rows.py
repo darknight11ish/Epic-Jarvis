@@ -92,7 +92,12 @@ def t_the_patch_is_registered_last():
              # so it cannot rewrite the stale rows this patch removes. It goes
              # before screen-attach.patch, the patch every new one is written
              # before.
-             "attention-settings.patch"}
+             "attention-settings.patch",
+             # handoff-mode.patch (2026-10-08) also comes after it: its two hunks
+             # join the "acts only on tier ask" list and the _RISK table at the
+             # END of each, so it cannot rewrite the two rows this patch removes
+             # either.
+             "handoff-mode.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
