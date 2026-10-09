@@ -732,17 +732,6 @@
     ]
   },
   {
-    "id": "captcha-handoff",
-    "group": "Notes and files",
-    "title": "Solve it here: a captcha on your phone",
-    "what": "When a chatbot or support chat stops at a captcha or a sign-in, your phone can show you that one browser window so you solve it yourself.",
-    "where": "The phone gets an alert that the site needs you; tap \"Solve it here\" to see the page and tap or type on it. The PC shows the same alert and points at the window, and you can solve it there instead.",
-    "asks": "No card to look or to end it. Jarvis never solves it for you, and when you are done, Resume still asks with its card, as always.",
-    "limit": "It is a picture of that one window only, so a site that opens a new window for its sign-in has to be finished on the PC. Some captchas refuse taps passed on this way, and then the PC is the way. It ends by itself after 15 minutes, or after 45 seconds with nobody looking. A password you type is sent to the PC and never written down.",
-    "surface": "phone",
-    "covers": []
-  },
-  {
     "id": "projects",
     "group": "Notes and files",
     "title": "Projects",
