@@ -62,22 +62,31 @@ owner can choose, so those are questions at the end, not decisions taken here.
 
 ## What it costs
 
-- **One new desktop module** (`settings-search.js`, ~200 lines), one CSS
-  block, ~40 lines of markup, and the `data-search-row` attribute on the 19
-  toggle rows and the theme rows. **The generator that will splice toggle
-  rows in from `jarvis_settings_registry.py` must emit `data-search-row` and
-  keep the row's own id** - that is the one thing to tell whoever owns
-  `tools/gen_settings_cases.py`.
-- **One new phone file's worth of logic** in `SettingsScreen.kt` plus a small
-  pure Kotlin object (`SettingsSearch.kt`) with the same matching rules, so
-  the two apps cannot drift and a unit test can hold them together.
-- **Search is client-side and text-based only.** It finds what is written on
-  the page. A setting whose words do not contain what the owner typed will
-  not be found - that is what a keywords/hidden-synonyms list would fix, and
-  it is question 3.
+- **One new desktop module** (`settings-search.js`, ~300 lines with its own
+  notes), one CSS block, ~35 lines of markup, and the `data-search-row`
+  attribute on 43 rows (the 19 toggles, the 11 field blocks, the 7 labelled
+  fields and the 6 theme lists). **The generator that will splice toggle rows
+  in from `jarvis_settings_registry.py` must emit `data-search-row` and keep
+  each row's own id** - that is the one thing to tell whoever owns
+  `tools/gen_settings_cases.py`. A generated row WITHOUT the attribute is not
+  broken: it is simply matched as part of its card's text instead of as a row
+  of its own.
+- **The phone gained a search field and a pure index** (`SettingsSearch.kt`,
+  `SettingsSearchWords`, `SettingsJump.SEARCH_KEY`), one new row in
+  `SETTINGS_ITEM_INDEX` (the box is row 0, so every section number moved down
+  by one), and 20 one-line guards on the screen's own rows.
+- **Two new tests**: `jarvis-desktop/tests/settings-search.mjs` (9 checks) and
+  the phone's `SettingsSearchTest` (10), plus `SettingsJumpTest` learning that
+  a row key may be a `SettingsJump` constant rather than a quoted string.
+- **Search is client-side and text-based only.** It finds what is written in
+  the index (the phone) or on the page (the desktop). A setting whose words do
+  not contain what the owner typed will not be found - that is what a
+  keywords/hidden-synonyms list would fix, and it is question 3.
 - **Risk: low.** Nothing can be lost by typing in the box, and clearing it
-  restores the page. The real risk is a *stale* generated row losing its id -
-  which the existing tests already catch.
+  restores the page. The two real risks are a generated row losing its id
+  (which the existing tests already catch) and the two `hidden` owners
+  drifting apart - which is why the menu's decision is now recorded in
+  `data-menu-hidden` instead of being read back off `hidden`.
 
 ## What the prior art actually says
 
