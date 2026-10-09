@@ -63,6 +63,7 @@ Also current, for one area each:
 | [APPEARANCE-API.md](APPEARANCE-API.md) | The one address the face and colour picker uses. |
 | [UFO-SAFETY-DESIGN.md](UFO-SAFETY-DESIGN.md) | Why controlling Windows apps is done the careful way it is. |
 | [LIVE-DESIGN.md](LIVE-DESIGN.md) | "Jarvis Live": a back-and-forth voice conversation, plus the phone's camera (design only, not built). |
+| [CAPTCHA-HANDOFF-DESIGN.md](CAPTCHA-HANDOFF-DESIGN.md) | Handing a captcha or sign-in page to the owner's phone ("Solve it here"): the flow, what crosses to the phone and what is never saved, the limits, how the owner stops it, and the questions only the owner can answer. The backend and both apps are built; **never tried against a real captcha or a real phone**. |
 | [PEERS.md](PEERS.md), [COMPARISON.md](COMPARISON.md) | What other assistant projects built, and what Jarvis took from them. |
 | [MEMORY-SCOREBOARD.md](MEMORY-SCOREBOARD.md) | The memory/learning self-test numbers, updated after every change - not a one-day snapshot. |
 | [GRAPHENEOS.md](GRAPHENEOS.md) | What to check before moving the phone to GrapheneOS. Nothing needed building yet. |
