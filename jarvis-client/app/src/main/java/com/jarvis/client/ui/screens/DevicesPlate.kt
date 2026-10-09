@@ -23,10 +23,12 @@ import com.jarvis.client.net.Devices
 import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Refuse
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.delay
@@ -34,13 +36,21 @@ import kotlinx.coroutines.launch
 
 /**
  * Settings -> Devices (docs/PAIRING-DESIGN.md §7.2): every device with a key
- * of its own, "This phone" marked, each with Remove - which asks "are you
- * sure?" right here first, like Forget - and the old shared key's row.
+ * of its own, "This phone" marked, each with Name and Remove - Remove asks
+ * "are you sure?" right here first, like Forget - and the old shared key's row.
  *
  * Remove and "Retire for other devices" only take access away, so they are
  * immediate on the PC and not held on a stale link (design §12, rule 4).
  * "Bring it back" is on the PC only (a loosening, with Windows Hello), so it
  * is not offered here - one-sided on purpose (design §12).
+ *
+ * Naming a device (docs/MULTI-DEVICE-DESIGN.md, the first slice) is the
+ * owner's own name for a device he already paired: it grants nothing and
+ * revokes nothing, so it is immediate and never held on a stale link either.
+ * The box starts at the name the device has NOW (its label, else the name it
+ * gave itself at pairing), so pressing Save unchanged changes nothing and
+ * clearing it goes back. A label can NEVER approve a device: that stays the
+ * PC's own pairing card, on the PC, with Windows Hello.
  *
  * Removing this phone itself: its key stops working at once, and the event
  * stream is restarted so the refusal ("This phone's key was removed ...")
@@ -56,6 +66,8 @@ internal fun DevicesSection() {
     var missing by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf<String?>(null) }
     var askingRetire by remember { mutableStateOf(false) }
+    var naming by remember { mutableStateOf<String?>(null) }
+    var typed by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var local by remember { mutableStateOf(SignedApproval.Local.NONE) }
@@ -116,7 +128,7 @@ internal fun DevicesSection() {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                if (d.thisDevice) "${d.name} (${Devices.THIS_PHONE.lowercase()})" else d.name,
+                                if (d.thisDevice) "${d.displayName} (${Devices.THIS_PHONE.lowercase()})" else d.displayName,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = chrome.textHi,
                             )
@@ -125,12 +137,66 @@ internal fun DevicesSection() {
                                 style = MaterialTheme.typography.labelSmall,
                                 color = chrome.textLo,
                             )
+                            // The name the device gave itself, when the owner
+                            // has called it something else: what Save with an
+                            // empty box goes back to. Never shown twice, and
+                            // never a key.
+                            if (d.label.isNotBlank() && d.label != d.name) {
+                                Text(
+                                    "The phone calls itself ${d.name}.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textLo,
+                                )
+                            }
                         }
-                        if (d.removable && asking != d.id) {
-                            Quiet("Remove", color = chrome.badInk, enabled = !busy) {
-                                asking = d.id
-                                askingRetire = false
-                                said = null
+                        if (d.removable && asking != d.id && naming != d.id) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Quiet(Devices.LABEL_BUTTON, color = chrome.textMid, enabled = !busy) {
+                                    naming = d.id
+                                    // The box starts at the name it has NOW, so
+                                    // Save without typing changes nothing.
+                                    typed = d.label
+                                    asking = null
+                                    askingRetire = false
+                                    said = null
+                                }
+                                Quiet("Remove", color = chrome.badInk, enabled = !busy) {
+                                    asking = d.id
+                                    askingRetire = false
+                                    naming = null
+                                    said = null
+                                }
+                            }
+                        }
+                    }
+                    if (naming == d.id) {
+                        Gap(6)
+                        TextInput(
+                            value = typed,
+                            onValueChange = { typed = it },
+                            label = Devices.LABEL_BUTTON,
+                            placeholder = d.name,
+                            supportingText = Devices.LABEL_PROMPT,
+                        )
+                        Gap(6)
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Secondary("Cancel", modifier = Modifier.weight(1f)) {
+                                naming = null
+                                typed = ""
+                            }
+                            Primary("Save", enabled = !busy, modifier = Modifier.weight(1f)) {
+                                val next = typed.trim()
+                                busy = true
+                                scope.launch {
+                                    try {
+                                        said = JarvisRuntime.renameDevice(d, next)
+                                    } finally {
+                                        busy = false
+                                        naming = null
+                                        typed = ""
+                                        reads += 1
+                                    }
+                                }
                             }
                         }
                     }

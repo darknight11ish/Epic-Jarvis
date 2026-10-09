@@ -4392,6 +4392,27 @@ object JarvisRuntime {
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
         }
 
+    /**
+     * Name ONE device (docs/MULTI-DEVICE-DESIGN.md, the first slice): the
+     * owner's own name for a device he already paired, kept beside its key on
+     * the PC. Immediate and never held on a stale link, like Remove - a label
+     * grants nothing and revokes nothing. An empty [label] clears it, and the
+     * device goes back to the name it gave itself at pairing.
+     *
+     * A label the PC could never accept is refused here first, in the PC's own
+     * words, so it never makes the round trip. @return the sentence to show.
+     */
+    suspend fun renameDevice(device: com.jarvis.client.net.Devices.Device, label: String): String {
+        val problem = com.jarvis.client.net.Devices.labelProblem(label)
+        if (problem != null) return problem
+        return when (val r = api.devicesPost(com.jarvis.client.net.Devices.LABEL_PATH,
+            com.jarvis.client.net.Devices.labelBody(device.id, label))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Devices.labelSaid(
+                r.value.first, r.value.second, device.displayName)
+            is ApiResult.Failed -> "Not named. " + describe(r.error)
+        }
+    }
+
     // ------------------------------------------------ signed approvals ----
     // docs/PAIRING-DESIGN.md §11; the words and rules are in [SignedApproval].
 

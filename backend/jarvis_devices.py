@@ -273,6 +273,31 @@ DEVICES_WORDS = {
         "again."),
     "tier": ("pair_device is not set to \"ask\" in jarvis-framework.toml, so a pairing card "
              "cannot be raised."),
+    # Labelling a device (docs/MULTI-DEVICE-DESIGN.md, first slice, 2026-10-09).
+    # What a device calls itself today is its model ("Pixel 9"), sent once at
+    # pairing and part of the pairing sums, so it can never be rewritten. A
+    # label is the name the OWNER types: kept beside the key, shown in both
+    # apps, and never part of any key or sum. Removing a device drops its
+    # label with it. Not a secret, but never logged either.
+    "not_labelable": ("This PC has no label - it is always this PC."),
+    "bad_label": ("Use a shorter label, with letters, numbers, spaces and - _ . ' ( ) only. "
+                  "Leave it empty to go back to the name the device gave itself."),
+    # The three sentences the desktop and the phone both say, so one device is
+    # never called one thing on the PC and another on the phone. tools/
+    # gen_pairing_cases.py puts them in the shared cases file, and
+    # test_devices.py checks each app's own copy against this one - the same
+    # treatment the Remove question already gets.
+    #
+    # PLAIN ASCII, and deliberately: these three are read back out of
+    # `Devices.kt` and `devices-words.js` by test_devices.py, which reads
+    # those files as UTF-8 - while `devices.rs` is read by the compiler and
+    # by `tools/check_*.py` under whatever encoding the machine prefers. A
+    # curly quote or an ellipsis here would compare differently in one of
+    # those readers and fail on one machine only. "..." is three full stops.
+    "label_button": "Name this device...",
+    "label_prompt": ("What should Jarvis call this device? Leave it empty to go back to the "
+                     "name it gave itself."),
+    "label_done": "{name} is what this device is called now.",
 }
 
 #: The start route's address sentences - the phone's own, word for word:
@@ -641,6 +666,44 @@ def name_ok(name) -> bool:
     return True
 
 
+def label_ok(text) -> bool:
+    """The owner's own label for a device (docs/MULTI-DEVICE-DESIGN.md).
+
+    The SAME rule as `name_ok`, and for the same reason: a label is shown on
+    an approval card (`card_text` below) and in both apps' device lists, so
+    it must not be able to fake a card's words. The empty string is allowed
+    and means "no label": the device goes back to the name it gave itself.
+    Letters and digits of any script, space, and - _ . ' ( ) only - the same
+    `_NAME_EXTRA` set `name_ok` uses, so a label can never be made of
+    characters a paired name could not be. Never cleaned, only refused:
+    silently rewording what the owner typed is how a label stops matching
+    what he sees on the phone."""
+    if text == "":
+        return True
+    return name_ok(text)
+
+
+# ---------------------------------------------------------------------------
+# What a device is called (docs/MULTI-DEVICE-DESIGN.md, first slice)
+# ---------------------------------------------------------------------------
+
+
+def row_shown(row: Optional[dict]) -> str:
+    """The name to show for a registry row: the owner's label when he made
+    one, else the name the device gave itself at pairing ("Pixel 9"), else
+    the row's id. ONE rule for both apps, the approval card and this PC's own
+    command line - so the list on the PC and the sentence on a card can never
+    word the same device differently."""
+    row = row if isinstance(row, dict) else {}
+    label = row.get("label")
+    if isinstance(label, str) and label.strip():
+        return label
+    name = row.get("name")
+    if isinstance(name, str) and name.strip():
+        return name
+    return str(row.get("id") or "")
+
+
 def _nonce_ok(text) -> bool:
     raw = _unb64u(text)
     return isinstance(text, str) and len(text) == 22 and raw is not None and len(raw) == 16
@@ -848,6 +911,16 @@ def _valid(doc) -> dict:
             raise Broken("device hash")
         if not isinstance(row.get("name"), str):
             raise Broken("device name")
+        # `label`: the owner's own name for this device, added 2026-10-09
+        # (docs/MULTI-DEVICE-DESIGN.md). ABSENT IN EVERY ROW WRITTEN BEFORE
+        # IT, so it is optional on read and read as "" when it is missing -
+        # an older registry must never count as broken, and a fresh install
+        # must never see one. Checked with the SAME rule a new label is
+        # refused by, so a hand-edited file cannot put characters into an
+        # approval card that `label()` would have refused.
+        label = row.get("label")
+        if label is not None and not (isinstance(label, str) and label_ok(label)):
+            raise Broken("device label")
     if not isinstance(shared.get("retired"), bool):
         raise Broken("shared")
     base = _empty()["shared"]
@@ -1288,7 +1361,14 @@ def _verdict(v, action: str, tier_of) -> tuple:
 
 
 def card_text(name: str, words: list) -> str:
-    """The pair_device card's words (design 6.3)."""
+    """The pair_device card's words (design 6.3).
+
+    `name` is the name the PHONE sent at `claim` - on purpose, not
+    `row_shown`: a label belongs to a device that is already paired, and the
+    first thing this card does is make that device exist (the row is written
+    by `_mint`, in `collect`, after this card was approved). A device being
+    paired for the first time therefore has no label yet, and inventing one
+    here would put words on a card that came from nowhere."""
     return "\n".join([
         f"\"{name}\" is asking for its own key to talk to Jarvis.",
         "Check that phone shows these four words: " + " · ".join(words),
@@ -1677,10 +1757,16 @@ _U_LAST: dict = {}
 
 
 def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
-    """GET /api/devices. Never a key, never a hash."""
+    """GET /api/devices. Never a key, never a hash.
+
+    Each row carries the owner's `label` and the name the device gave itself
+    at pairing (`name`), plus `shown` - the one of the two to put on screen
+    (docs/MULTI-DEVICE-DESIGN.md). Both apps show `shown`; the row that lets
+    the owner change a label shows `name` as well, so he can see what he is
+    going back to by leaving the box empty."""
     doc, why = load()
-    rows = [{"id": "pc", "name": "This PC", "kind": "pc", "removable": False,
-             "this_device": you == "pc"}]
+    rows = [{"id": "pc", "name": "This PC", "shown": "This PC", "label": None,
+             "kind": "pc", "removable": False, "this_device": you == "pc"}]
     with _SEEN_LOCK:
         seen = dict(_SEEN)
         other = dict(_OTHER)
@@ -1689,7 +1775,11 @@ def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
             continue
         last = max([x for x in (r.get("last_seen"), seen.get(r["id"])) if isinstance(x, int)],
                    default=None)
-        rows.append({"id": r["id"], "name": r.get("name", ""), "kind": r.get("kind", "phone"),
+        label = r.get("label")
+        rows.append({"id": r["id"], "name": r.get("name", ""),
+                     "label": label if isinstance(label, str) and label else None,
+                     "shown": row_shown(r),
+                     "kind": r.get("kind", "phone"),
                      "created": r.get("created"), "last_seen": last,
                      "this_device": r["id"] == you, "removable": True,
                      "approval_key": approval_key_state(r["id"], r)})
@@ -1733,10 +1823,19 @@ def remove(body, *, you: str) -> tuple:
         row = _live_row(doc, device_id)
         if row is None:
             return
+        # Read the name to say back BEFORE the label is dropped: the owner
+        # pressed Remove on a row that showed him the label, so "Garden phone
+        # was removed" is the answer he is expecting.
+        holder["name"] = row_shown(row)
         row["removed"] = int(_wall())
         row["token_sha256"] = ""
         row["approval_key"] = None           # a removed device's signing key goes too
-        holder["name"] = row.get("name", "")
+        # The owner's label goes with the key: removing is how a lost or
+        # given-away device stops being trusted, and a name left behind
+        # would be a name the next owner of that phone could pair under
+        # (docs/MULTI-DEVICE-DESIGN.md). The row keeps `name` for the
+        # history, exactly as it keeps `created`.
+        row["label"] = None
 
     try:
         _mutate(change)
@@ -1753,6 +1852,74 @@ def remove(body, *, you: str) -> tuple:
     _audit("devices.removed", {"id": device_id})
     _publish("devices", {})
     return 200, {"ok": True, "id": device_id, "name": holder["name"],
+                 "was_this_device": device_id == you}
+
+
+def label(body, *, you: str) -> tuple:
+    """POST /api/devices/label {"id", "label"} - the owner's own name for a
+    device (docs/MULTI-DEVICE-DESIGN.md, the first slice, 2026-10-09).
+
+    NO approval card, and none is needed: a label is what the owner calls a
+    device he has ALREADY paired, and it changes nothing about what that
+    device may do. It grants nothing, revokes nothing, moves no key and
+    touches no other device; the worst a wrong label can do is make the list
+    harder to read, and typing it again fixes that. That is the same shape as
+    Rename on a topic or a chat tag, which have never had a card either -
+    while REMOVING a device, which takes access away, is equally card-free
+    for the opposite reason (it only ever narrows).
+
+    Any key may name any paired device: the PC's own key, and a device's own
+    key. A phone naming the devices on the list is the owner using his own
+    phone, on his own mesh, with a key he paired on this PC - and the phone's
+    Devices screen is one of the two places he asked to label them from.
+    What a device may NEVER do is approve a new one: `pair_device` stays in
+    `jarvis_owner_check.PC_ONLY_ACTIONS`, approved on the PC with Windows
+    Hello, and this route cannot raise, answer or approve any card.
+
+    An empty label clears it, and the device goes back to the name it gave
+    itself at pairing - so "clear the label" needs no second route and no
+    second sentence. The label is refused, never cleaned: silently rewording
+    what the owner typed is how the list stops matching his phone."""
+    if not isinstance(body, dict) or set(body) != {"id", "label"} \
+            or not isinstance(body["id"], str) or not isinstance(body["label"], str):
+        return 400, {"ok": False, "reason": "bad_request",
+                     "error": 'need {"id": "<one device id>", "label": "<the name to show>"} '
+                              'and nothing else'}
+    device_id = body["id"]
+    text = body["label"].strip()
+    if device_id == "pc":
+        return 400, {"ok": False, "reason": "not_labelable",
+                     "error": DEVICES_WORDS["not_labelable"]}
+    if not _ID_RE.fullmatch(device_id):
+        return 404, {"ok": False, "reason": "no_such_device", "error": "No such device."}
+    if not label_ok(text):
+        return 400, {"ok": False, "reason": "bad_label", "error": DEVICES_WORDS["bad_label"]}
+    holder = {}
+
+    def change(doc):
+        row = _live_row(doc, device_id)
+        if row is None:
+            return
+        row["label"] = text or None
+        holder.update(name=row.get("name", ""), shown=row_shown(row))
+
+    try:
+        _mutate(change)
+    except Broken:
+        return 503, {"ok": False, "error": DEVICES_WORDS["registry_unreadable"]}
+    except OSError as exc:
+        return 503, {"ok": False, "error": f"The device list could not be written "
+                                           f"({type(exc).__name__})."}
+    if "shown" not in holder:
+        return 404, {"ok": False, "reason": "no_such_device", "error": "No such device."}
+    # An id and whether a label is set - never the label itself. The audit log
+    # is read out loud by support and copied into bug reports, and what the
+    # owner calls his own phone is his to keep (the same rule that keeps every
+    # key, code and secret out of it).
+    _audit("devices.labelled", {"id": device_id, "cleared": not text})
+    _publish("devices", {})
+    return 200, {"ok": True, "id": device_id, "label": text or None,
+                 "name": holder["name"], "shown": holder["shown"],
                  "was_this_device": device_id == you}
 
 
@@ -2243,7 +2410,7 @@ def check_signed_approval(body, row: dict, device_id: str) -> Optional[tuple]:
 
 GET_ROUTES = ("/api/pair/session", "/api/devices")
 POST_ROUTES = ("/api/pair/start", "/api/pair/cancel", "/api/pair/claim", "/api/pair/collect",
-               "/api/devices/remove", "/api/devices/shared",
+               "/api/devices/remove", "/api/devices/label", "/api/devices/shared",
                "/api/devices/approval-key", "/api/approve/challenge")
 #: The only routes in Jarvis that take no key: the phone has none yet.
 KEYLESS = ("/api/pair/claim", "/api/pair/collect")
@@ -2354,6 +2521,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                     if out.get("was_this_device"):
                         # Its own answer still goes out; the next write does not.
                         self._jarvis_guard_device = None
+                elif route == "/api/devices/label":
+                    code, out = label(body, you=you)
                 else:
                     code, out = shared(body, you=you, here=here)
         except Exception as exc:
@@ -2389,6 +2558,9 @@ if __name__ == "__main__":
     live = [r for r in doc["devices"] if not r.get("removed") and r.get("token_sha256")]
     print(f"  devices    {len(live)} paired")
     for r in live:
-        print(f"             {r['id']}  {r.get('name', '')}")
+        # The owner's label when he gave one, else the name the phone sent -
+        # never a key, and never the label's absence spelled out (an older
+        # registry has no `label` key at all and must print exactly as before).
+        print(f"             {r['id']}  {row_shown(r)}")
     print(f"  shared key {'retired (this PC only)' if doc['shared']['retired'] else 'works'}"
           f"{'' if _first_pairing(doc) else ' - from this PC only now: the first device has its own key'}")

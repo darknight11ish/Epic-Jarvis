@@ -1121,6 +1121,7 @@ pub fn run() {
             devices::pair_cancel,
             devices::devices_list,
             devices::devices_remove,
+            devices::devices_label,
             devices::devices_shared,
             tool_updates::get_tool_updates,
             tool_updates::check_tool_updates,
