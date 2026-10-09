@@ -1900,6 +1900,50 @@ deliberate rather than an oversight:
   listening instead of spawning a second one, and keep it a setting, default
   off.
 
+Decided 2026-10-08, after the owner asked for a prompt-writing helper and
+offered four open-source projects to build it from: **the Prompt Coach comes
+first, and none of the four is used.** `backend/jarvis_prompt_coach.py` reads
+ONE prompt the owner is about to send, and the last few turns (the owner's
+answer), and returns a short critique with a rewritten version. It runs on the
+model already on the PC and **adds no dependency at all** - because
+`promptimal` requires an OpenAI API key and has no local-model support (Ollama
+is item 1 of its own roadmap), so using it would have sent the owner's own typed
+words to OpenAI, which is rule 1. `textgrad` is a pre-alpha research framework,
+`prompt-optimizer` is AGPL-3.0 rather than the MIT claimed, and `promptfoo` is
+a fine Node CLI for a different job (regression-testing Jarvis's own system
+prompts offline, noted for later). The full comparison is
+`docs/PROMPT-COACH-DESIGN.md`.
+
+- **A button, not an interceptor.** The owner was offered a mode that checks
+  every message and chose the button, with the switch as the master switch: off
+  means no button and nothing read. An 8B model is a mediocre prompt critic, so
+  it must not be in the path of every message, and a critique is a full model
+  call.
+- **Turning it on raises no card, and neither does turning it off.** Written
+  down as a decision so nobody "fixes" it later: the coach reads words the chat
+  is about to send to the same model on the same PC anyway, takes no action, and
+  opens no way out of the PC. The reasoning is in the setter's docstring.
+- **The score is never a gate.** A 1 out of 10 is still sendable, "this is
+  clear, send it" is a correct answer, and the module's own prompt says that
+  inventing a complaint is a failure.
+- **It never sends anything by itself and never changes the owner's words.**
+  Both apps offer Send mine and Send the suggestion, and nothing leaves without
+  one of those presses.
+- **It never leaves the PC and keeps nothing.** The address is checked with
+  `jarvis_auto_learn.check_local_model()` before the request is built, and no
+  prompt, critique or score is written to history, memory or a log.
+- **Unmeasured, and said so.** Nobody has run it against a real model, so the
+  quality of its advice and how long it takes are both unknown; the app's own
+  line under the switch says the advice is sometimes wrong.
+- **One thing found on the way, for later:** neither app renders its settings
+  from `jarvis_settings_registry.py` - every switch is hand-written in three
+  places (the backend's words, a desktop copy, a phone copy) and nothing tests
+  that the copies agree. The repo's cure for that exists and is used elsewhere
+  (`gen_menu_cases.py` generates both apps' menu catalogues from one source,
+  with a `--check` in CI). The owner chose to build the Coach the house way and
+  queue "one source for the settings screens" as its own task rather than
+  block the feature on it.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

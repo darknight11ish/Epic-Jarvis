@@ -17675,3 +17675,98 @@ module opens no file, prints nothing and uses the one cleaner, once.
 * **The phone gets no picture.** This is the PC's own screen; the phone's
   camera is a separate, already-designed thing, and the route refuses a request
   from anything but this PC.
+
+---
+
+## 119. The prompt coach: "Coach this" (added 2026-10-08)
+
+**What it is.** The owner asked whether any open-source project would help them
+write better prompts, and whether it could be a feature they can switch on and
+off. It is. `jarvis_prompt_coach.py` reads ONE prompt the owner is about to send
+- and, by the owner's decision of 2026-10-08, the last few turns, so "it" and
+"that" have an antecedent - and returns a strict JSON critique: a score out of
+ten, up to four gaps each with the smallest fix, questions it would have to ask,
+and one rewritten prompt. Both apps show it with **Send mine** and **Send the
+suggestion**.
+
+**119.1 The four libraries, and why none of them is used.** The suggestion came
+with `promptimal`, `textgrad`, `promptfoo` and `prompt-optimizer`. Each was
+checked against the repository and against the library itself
+(`docs/PROMPT-COACH-DESIGN.md` has the detail):
+- `promptimal` requires `OPENAI_API_KEY` and has **no local-model support** -
+  Ollama is item 1 of its own roadmap. Adopting it would send the owner's typed
+  words to OpenAI: rule 1 broken. It is also a genetic loop (dozens to hundreds
+  of model calls per prompt) which cannot run between typing and sending.
+- `textgrad` is MIT but pre-alpha (0.1.8) and pulls `openai`, `litellm`,
+  `datasets`, `pandas` and more, for an offline-optimisation framework.
+- `prompt-optimizer` is **AGPL-3.0**, not the MIT claimed, and is a Node web app.
+- `promptfoo` is MIT and genuinely good at a different job: regression-testing
+  Jarvis's own system prompts offline. Noted, not built.
+
+What was worth taking is the **list of what a prompt usually lacks**, which is a
+checklist and not a dependency.
+
+**119.2 The routes.** Three, and none of them approves anything:
+
+    GET  /api/prompt/coach          {"ok", "on", "why", "label", "detail",
+                                     "heading", "button", "send_mine",
+                                     "send_suggestion"}
+    POST /api/prompt/coach          {"text", "history": [{"who", "text"}]}
+                                     -> {"ok", "coach": {"score", "clear",
+                                        "issues": [{what, why, fix}],
+                                        "missing", "suggestion"}}
+    POST /api/prompt/coach/setting  {"enabled": bool} -> the GET shape
+
+`handle_post` and `handle_setting` answer the HTTP code themselves and
+`jarvis_hud.py` forwards the pair, which is the house shape (the string
+`Refused` appears nowhere in `jarvis_hud.py`). A body that is not an object is
+400; a refusal is 409 with a plain sentence; `enabled` must be a real true or
+false, because guessing would mean "your switch moved" when it did not.
+
+**119.3 The switch.** `prompt_coach` is a `BoolSetting` in
+`jarvis_settings_registry.py` with its own `Section("prompt-coach")` and the
+house setter contract `set_prompt_coach(on, *, peer=None, local=None)`, which
+calls `jarvis_prompt_coach.set_enabled()` - so the voice/chat path and both
+apps' switches end in **one writer**. It is off by default, and a missing,
+unreadable, malformed or non-boolean setting file all fail to off.
+
+**Both directions are instant and neither raises a card.** That is a decision,
+not an oversight: the coach reads words the chat is about to send to the same
+model on the same PC anyway, takes no action, and opens no way out of the PC.
+The reasoning is written in the setter's own docstring so the next reader does
+not "fix" it.
+
+**119.4 What it must never do**, each with a test in
+`backend/test_prompt_coach.py` reading the module's own source:
+- **never sends anything, never changes the owner's words**: it returns text;
+  the owner presses Send mine or Send the suggestion. There is no
+  improve-and-send, and no per-message mode - the owner chose the button.
+- **approves nothing, acts on nothing**: no import of `jarvis_gate`, no tool, no
+  card, and **the score is never a gate** - a 1 out of 10 still sends.
+- **never leaves the PC**: the model comes from
+  `jarvis_sensitive.learner_model()` and the address is checked with
+  `jarvis_auto_learn.check_local_model()` **before** the request is built. The
+  test asserts that order in the source, and that a failed check never reaches
+  the model.
+- **keeps nothing**: no chat history, no fact, no count, no log.
+- **a bad answer is a refusal, never half a card**: five kinds of malformed
+  answer are refused rather than shown.
+
+**119.5 The honest limit.** The model is an 8B one on the owner's PC and is a
+**mediocre prompt critic**. It will miss things a strong model catches and will
+sometimes be confidently wrong. That is why it is a button rather than an
+interceptor, why `DETAIL` says so in the app, and why **"clear: true with no
+issues" is a correct, expected answer** rather than a failure to find something
+- the module's own prompt says inventing a complaint is a failure. A model that
+claims `clear` while listing gaps is not believed; the gaps win.
+
+**119.6 Verification, and what is not proven.** `test_prompt_coach.py` runs with
+no model at all (`ask=` is an injectable seam, the same one
+`jarvis_entities.py` uses) and covers the switch's failure modes, the gate's
+ordering, the parse, and both routes. The patch is generated from the real
+`jarvis-backend/jarvis_hud.py` and proved by apply, reverse and a byte-for-byte
+compare - the discipline `tasks.patch` cost three CI failures to learn.
+**Nobody has run this against a real model**, so how good the advice is, and how
+long it takes, are both unmeasured. The desktop card and the bar panel are
+covered by unit and headless-browser checks; the Kotlin is CI's, because this
+checkout has no Android SDK.
