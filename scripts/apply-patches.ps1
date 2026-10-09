@@ -1448,6 +1448,7 @@ $SHIPPED = @(
     # jarvis_jobs, and jarvis_watch imports jarvis_content_risk.
     'jarvis_jobs.py'             # Long Fuse: work that outlives the conversation; imported by jarvis_arbiter.py and jarvis_watch.py - no patch
     'jarvis_content_risk.py'     # one pipeline for text that arrived from outside; imported by jarvis_watch.py - no patch
+    'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
 )
 
 # The settings file. Installed only where none exists; never overwritten.
