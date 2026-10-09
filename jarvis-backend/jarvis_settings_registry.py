@@ -210,6 +210,15 @@ SECTIONS: tuple = (
     Section("asks-first", ("what asks first", "asks first settings")),
     Section("prompt-coach", ("prompt coach settings", "the prompt coach page")),
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
+    # "Limits and frequency" (2026-10-08): the numbers the owner can change,
+    # ONE table on the PC behind one read route and one write route
+    # (backend/jarvis_limits.py; limits-read.patch + limits-settings.patch;
+    # src-tauri/src/limits.rs). The PHONE's own screen for the same table is a
+    # separate piece of work, so this says app="desktop" today; when that lands
+    # these become ONE entry, app="both", carrying both sets of words.
+    Section("limits", ("limits", "the limits", "limits and frequencies",
+                       "limits and frequency", "how often jarvis does things"),
+            app="desktop"),
     Section("email-sending", ("sending email", "email sending settings")),
     Section("about", ("about jarvis", "about")),
     # "Hang and crash notes": inside "More options" on the desktop (its own

@@ -102,7 +102,11 @@ def t_the_patch_is_registered_last():
              # jarvis_hud.py (POST /api/limits/settings) right after the budget's
              # own, and jarvis_gate.py not at all - so it cannot rewrite the stale
              # rows either.
-             "limits-settings.patch"}
+             "limits-settings.patch",
+             # limits-read.patch (2026-10-08) comes after it as well: GET
+             # /api/limits joins the HUD's read-only route set and jarvis_gate.py
+             # is not touched at all - so it cannot rewrite the stale rows either.
+             "limits-read.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

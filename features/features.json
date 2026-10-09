@@ -1405,6 +1405,19 @@
     ]
   },
   {
+    "id": "limits",
+    "group": "The PC itself",
+    "title": "Limits and frequency",
+    "what": "The numbers Jarvis keeps to: how long you can undo, how much it gets on with at once, what counts as news from a project you watch, how many cards a study run shows, how long a chat must sit before the overnight tag suggester may read it, and whether a model looks for people and things in what you save.",
+    "where": "Settings, Limits and frequency - on the PC and on the phone.",
+    "asks": "Turning a number down changes at once. Turning one up that lets Jarvis do more is a loosening, so the PC puts one approval card to you first and writes nothing until you answer.",
+    "limit": "Only what the PC's own table offers: every limit names a setting the PC already reads, and the phone may not change the ones the table marks for the PC alone.",
+    "surface": "both",
+    "covers": [
+      "settings.limits"
+    ]
+  },
+  {
     "id": "approvals",
     "group": "Safety",
     "title": "Approval cards",

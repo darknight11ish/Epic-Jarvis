@@ -661,7 +661,11 @@ def t_the_patch_and_the_lists():
              # (POST /api/limits/settings), right after the budget's own, and
              # jarvis_gate.py not at all. It rewrites nothing referee.patch's
              # hunks anchor on.
-             "limits-settings.patch"}
+             "limits-settings.patch",
+             # limits-read.patch (2026-10-08): GET /api/limits, joining the
+             # HUD's read-only route set. jarvis_gate.py not at all again, so it
+             # rewrites nothing referee.patch's hunks anchor on either.
+             "limits-read.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

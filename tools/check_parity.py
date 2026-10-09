@@ -200,6 +200,21 @@ CLASSIFICATION = {
     "/api/jobs": ("ported", ""),
     "/api/jobs/cancel": ("ported", ""),
     "/api/ledger": ("ported", "Brain screen, read-only."),
+    # The limits and frequencies the owner can change (2026-10-08): ONE table
+    # on the PC (backend/jarvis_limits.py) behind one read route and one write
+    # route. Both apps have a screen for them - the PC's Settings card
+    # (limits.rs, src/limits-settings.js) and the phone's Settings row
+    # (net/Limits.kt, ui/screens/LimitsPlate.kt, landed in its own pull
+    # request) - so these are "ported" rather than "todo". The rows carry the
+    # app each one belongs to, and each screen filters on that: the PC's card
+    # keeps what the PC may change, the phone's keeps what the phone may.
+    "/api/limits": ("todo", "The phone's own screen for these is in a pull "
+                            "request of its own (feat/limits-phone); this one "
+                            "is the PC's card. Move both rows to 'ported' when "
+                            "that lands."),
+    "/api/limits/settings": ("todo", "The phone's own screen for these is in a "
+                                     "pull request of its own (feat/limits-"
+                                     "phone); this one is the PC's card."),
     "/api/memory/decide": ("ported", "The review queue: one card, one decision."),
     "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
     "/api/memory/entities": ("ported", "\"People and things\" (owner, 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): the phone gets a plain grouped LIST of the names saved facts are linked to and the facts behind each (Brain, read-only, net/Entities.kt and ui/screens/EntitiesPlate.kt), hidden under Hide memory lists and chat history. Not the Galaxy or any map or links: the picture, the names under each fact, About <name> and the \"are these the same?\" merge card stay the desktop's. Backend: memory-entities.patch."),

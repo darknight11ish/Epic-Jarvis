@@ -541,6 +541,15 @@ permissions = [
   # asks first - written by the PC from its settings, never by the model.
   # A read: it changes nothing, and no key or private link is in it.
   "allow-get-reach",
+  # "Limits and frequency" (backend/limits-read.patch + limits-settings.patch,
+  # 2026-10-08): the limits the owner can change, read and written through ONE
+  # table on the PC. The READ changes nothing. The WRITE approves nothing: a
+  # number turned DOWN applies at once, and turning one UP that lets Jarvis do
+  # more is a loosening the BACKEND puts to the owner on its own approval card
+  # before writing anything. Held on a stale link in Rust, like every other
+  # change sent to the PC.
+  "allow-get-limits",
+  "allow-set-limit",
   # The sun, the moon and the weather behind the animal faces (backend/
   # sky.patch, the owner's decisions of 2026-09-28): the settings (a read),
   # and ONE change at a time - show them, the town (this PC only; the PC

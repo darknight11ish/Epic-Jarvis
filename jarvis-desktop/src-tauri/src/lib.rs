@@ -40,6 +40,7 @@ pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
+pub mod limits;
 pub mod live;
 pub mod lock;
 pub mod logfile;
@@ -1070,6 +1071,8 @@ pub fn run() {
             account_addresses::get_account_addresses,
             account_addresses::save_account_address,
             reach::get_reach,
+            limits::get_limits,
+            limits::set_limit,
             asks_first::get_asks_first,
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
