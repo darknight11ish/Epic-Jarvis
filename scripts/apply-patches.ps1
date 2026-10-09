@@ -2851,6 +2851,20 @@ try {
                             foreach ($nm in $bw2) {
                                 $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
                                 if (-not (Test-Path -LiteralPath $fp)) { continue }
+                                # A patch in $alreadyOn is ON the real files and is left
+                                # exactly as it is: the re-apply step below skips it for the
+                                # same reason (see the $todo filter further down). Asking this
+                                # loop to take it off the rehearsal copy asks for the one thing
+                                # it cannot do - screen-attach.patch is nested on
+                                # tutorials.patch's own block, so one of the two can never come
+                                # off that state however the taking-off went. Refusing the whole
+                                # run over it is what left the owner with no way to update at
+                                # all (2026-10-09: four runs, every one of them
+                                # "NOTHING HAS BEEN CHANGED", the owner still on the build from
+                                # the morning of 2026-10-08). It is not the half-applied backend
+                                # this check exists to prevent: those patches are not being
+                                # re-applied, they are staying on the owner's files untouched.
+                                if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $nm) { continue }
                                 $r2 = Invoke-Patch -File $fp -Reverse
                                 if (-not $r2.Ok) {
                                     $intact = $false
