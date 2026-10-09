@@ -35,8 +35,30 @@ setting with **two choices, defaulting to the quick cut-off**:
 Keeping a window of the owner's on offer fifteen times longer is *more*
 exposure, so choice 2 is **one approval card, decided on the PC with Windows
 Hello**; choice 1 is immediate from either app. Section 5 has the whole shape;
-both apps show it in the same words. This answers **Q1**, so section 8 now lists
-nine open questions, not ten.
+both apps show it in the same words. This answers **Q1**; section 8 takes it out
+of its open list below (Q5 and Q10 follow on 2026-10-09).
+
+**THE OWNER'S DECISIONS OF 2026-10-09.** Three more questions were answered, and
+section 8 records each one as answered rather than deleting it, so the list of
+what is still open stays checkable against the list of what was asked:
+
+1. **Q1 - how long the hand-off stays on offer. ANSWERED.** The owner chose **a
+   setting with both options, and the quick cut-off as the default** - what
+   section 5 already describes. It is **built and merged** (PR #134):
+   `stop_early` = "Stop early" (about 60 s of no interaction, then the hand-off
+   ends and the PC says which window is stuck) and `keep_offering` = "Keep
+   offering it" (up to the 900 s ceiling).
+2. **Q5 - whether starting a hand-off needs an approval card on the PC.
+   ANSWERED: no card.** In the owner's own words, *"your tap is the yes"* - he
+   tapped "Solve it here" on his own phone after Jarvis paused, and that tap is
+   the decision. This confirms the no-card rule the flow was built with (§2 step
+   5); it is not a change to it.
+3. **Q10 - whether a customer-support window's page may ever be shown on the
+   phone. ANSWERED: it may.** From three options the owner chose **"Send it -
+   it's my phone, my mesh"**: a support window may be pictured to the phone like
+   any other window. He did **not** choose "never send a support page", and did
+   **not** choose "ask me on the PC first, each session". §3 carries the cost in
+   its own "what is *not* protected" list; section 8 has the full statement.
 
 **In one paragraph:** when the visible browser window Jarvis is driving stops
 on a captcha, a sign-in page or an "unusual activity" page, Jarvis stops
@@ -194,6 +216,16 @@ tab** for its sign-in is finished on the PC: only the first window is passed
 on. Anyone who can already drive the owner's PC can take a picture of that
 window directly; this feature does not defend against a program already on the
 PC (that is `ARCHITECTURE.md` section 3's known limit, not a new one here).
+**A customer-support window is pictured to the phone like any other window**
+(the owner's decision of 2026-10-09, Q10 below, in his own words: *"Send it -
+it's my phone, my mesh"*). That is real and is not softened: a support session
+can show **order numbers, addresses and account details**, and this decision
+means those can appear on the phone whenever the hand-off is offered on that
+window. It is survivable only because every protection above is unchanged and
+still holds - the picture is **never saved**, it goes **only to the owner's own
+paired phone over Tailscale/Meshnet**, it is shown **only while the memory
+lists are not hidden** (the PC blanks that route in that state), cards are
+still decided by tapping, and **solving it on the PC still works**.
 
 ## 4. The rate and size limits
 
@@ -389,23 +421,85 @@ real captcha (§9). This pass changed nothing about them.
 
 ## 8. Questions only the owner can answer
 
-Listed, not answered. Each is a decision, and the design deliberately does not
-guess. (Q2 and Q5 are the ones most likely to change what is already built.)
+This section used to say "listed, not answered". Three of the ten have since
+been answered by the owner and are kept below in §8.1, each **in the words it
+was asked in**, so a narrower or easier question was never quietly put in its
+place. The rest, in §8.2, are still **listed, not answered**: each is a
+decision, and the design deliberately does not guess.
 
-**Q1 was answered on 2026-10-08** - see section 5: *"make this a setting for
-both options with 1 as the default"*. The idle clock is now the owner's own
-setting, "Stop early" (about a minute, the default) or "Keep offering it" (the
-full 15-minute ceiling, one approval card on the PC with Windows Hello), and the
-ceiling is 15 minutes for both. Nine questions remain open:
+**Q1 was answered on 2026-10-08, and Q5 and Q10 on 2026-10-09** - see the
+block at the top of this note, and section 5: *"make this a setting for both
+options with 1 as the default"*, *"your tap is the yes"*, and *"Send it - it's
+my phone, my mesh"*.
+
+### 8.1 Answered, kept here so the asking stays checkable
+
+**Q1 was answered on 2026-10-08, Q5 and Q10 on 2026-10-09** (the block at the
+top of this note, and section 5):
 
 - **Q1 - How long before it gives up?** **Answered by the owner on
-  2026-10-08** (see section 5): it is now a setting with two choices - "Stop
-  early" (about a minute, THE DEFAULT, which ends the hand-off and makes the PC
-  name the stuck window) and "Keep offering it" (the full 15-minute ceiling,
-  one approval card on the PC with Windows Hello). The ceiling is 15 minutes
-  for both. What is left of this question is a *measurement*, not a decision:
-  nobody has watched a real captcha hand-off run, so the two numbers are still
-  chosen rather than measured (section 9).
+  2026-10-08, and confirmed 2026-10-09** (see section 5): it is now a setting
+  with two choices - "Stop early" (about a minute, THE DEFAULT, which ends the
+  hand-off and makes the PC name the stuck window) and "Keep offering it" (the
+  full 15-minute ceiling, one approval card on the PC with Windows Hello). The
+  ceiling is 15 minutes for both. He chose **a setting with both options, and
+  the quick cut-off as the default**, and it is **built and merged** (PR #134;
+  `stop_early`, `keep_offering`). What is left of this question is a
+  *measurement*, not a decision: nobody has watched a real captcha hand-off
+  run, so the two numbers are still chosen rather than measured (section 9).
+- **Q5 - Does "Solve it here" need a card?** Today: **no card**, on the
+  grounds that nothing leaves the owner's own devices and nothing is done but
+  what the owner does by hand (this matches `ARCHITECTURE.md` section 4's "Not
+  a way out"). Keep it card-free, or put one card on the *first* hand-off per
+  session so the owner always consciously starts one?
+  **Answered by the owner on 2026-10-09: it stays card-free.** In his own
+  words, *"your tap is the yes"* - he tapped "Solve it here" on his own phone
+  after Jarvis paused, and that tap is the only yes this needs. No card is put
+  on the first hand-off of a session either; that option was not chosen. This
+  confirms what is built (§2 step 5) rather than changing it. What it commits
+  to: a hand-off still only ever starts because the owner tapped, on his own
+  paired phone, and the card-free start still does nothing but what he does by
+  hand. What it costs: nothing here gates the *decision* to open a live picture
+  of one of his own windows, so the protection is App lock and the frozen hosts
+  (§2 steps 5-6), not a card. How long that picture stays on offer is still the
+  owner's own setting (Q1, section 5), and the longer choice, "Keep offering
+  it", still carries its own approval card.
+- **Q10 - May a support chat's hand-off ever show the company's real page to
+  the phone?** Today: yes, it is the same one-window picture, and the widget's
+  page may contain the owner's own order details. Is that acceptable on a
+  phone screen (behind App lock), or should support-chat hand-offs be
+  PC-only?
+  **Answered by the owner on 2026-10-09: yes, it may.** From three options he
+  chose **"Send it - it's my phone, my mesh"**: a support window may be
+  pictured to the phone like any other window, with no separate rule for
+  support. He did **not** choose "never send a support page" (support
+  hand-offs PC-only) and did **not** choose "ask me on the PC first, each
+  session". What it commits to: a support chat's paused page - the company's
+  real page, not a copy - is offered to the phone on exactly the same terms as
+  every other window: one JPEG, only over Tailscale/Meshnet, only while the
+  hand-off is on offer, thrown away with the answer.
+  **What it costs, plainly.** A support session can show **order numbers,
+  addresses and account details**, and this decision means those can appear on
+  the phone whenever the hand-off is offered on that window. That is real, and
+  the note does not soften it; it is survivable only because the protections
+  that were already there are unchanged and still hold: the picture is
+  **never saved** (no file, no temp file, no cache, no log, no chat, no memory
+  - §3 and §6's three promise tests), it goes **only to the owner's own paired
+  phone over Tailscale/Meshnet** and never over a public tunnel, it is shown
+  **only while the memory lists are not hidden** (with App lock or "Hide memory
+  lists and chat history" on, the PC blanks that route and the lock screen
+  never names the site - §2 step 4), cards are still decided by **tapping**,
+  and **solving it on the PC still works** - the window itself is the fallback
+  and there is no rule that support must go through the phone. §3's "what is
+  *not* protected" list carries the same line.
+
+### 8.2 Still open - listed, not answered
+
+Each is a decision, and the design deliberately does not guess. (Q2 and Q5 were
+the ones most likely to change what is already built; Q5 is answered above, and
+Q2 is still open.) **Seven questions remain open**, each left in the words it
+was asked in:
+
 - **Q2 - A stream, or a still refreshed?** Today: a still, asked for about
   once a second, because it is simple, cheap, and nothing is sent when nobody
   is looking. A captcha whose picture itself rotates or animates (an audio
@@ -425,11 +519,6 @@ ceiling is 15 minutes for both. Nine questions remain open:
   it to the front when the phone taps "Solve it here", or when the hand-off
   starts? (Fronting a browser window takes focus away from whatever the owner
   is doing, and this project has been bitten by focus-stealing before.)
-- **Q5 - Does "Solve it here" need a card?** Today: **no card**, on the
-  grounds that nothing leaves the owner's own devices and nothing is done but
-  what the owner does by hand (this matches `ARCHITECTURE.md` section 4's "Not
-  a way out"). Keep it card-free, or put one card on the *first* hand-off per
-  session so the owner always consciously starts one?
 - **Q6 - How much of the picture may the phone keep while the screen is
   open?** Today: the latest frame only, in memory, dropped with the screen -
   so a brief network stall shows `WORDS["waiting"]` rather than a stale
@@ -449,11 +538,6 @@ ceiling is 15 minutes for both. Nine questions remain open:
   the Brain and points at the window; it does not ring, flash or front the
   window. If the owner is not looking at the PC when a captcha appears, is
   that enough, or should the PC also make a sound / raise the window (see Q4)?
-- **Q10 - May a support chat's hand-off ever show the company's real page to
-  the phone?** Today: yes, it is the same one-window picture, and the widget's
-  page may contain the owner's own order details. Is that acceptable on a
-  phone screen (behind App lock), or should support-chat hand-offs be
-  PC-only?
 
 ## 9. What is NOT verified, and the risk
 
@@ -489,7 +573,12 @@ ceiling is 15 minutes for both. Nine questions remain open:
   why the PC window is kept as the fallback and the app says so. (b) The
   picture shows a real page that may contain the owner's own account details
   (a support chat's order page), so it must stay behind App lock and never on
-  a lock screen. (c) A typed password lives in the PC's memory for one input
+  a lock screen. **This is now the owner's decision, not an assumption**
+  (2026-10-09, Q10): a support window's page may be pictured to the phone, and
+  he accepted that **order numbers, addresses and account details** can appear
+  there whenever the hand-off is offered on that window - §3 and Q10 carry the
+  cost and the protections that make it survivable. (c) A typed password lives
+  in the PC's memory for one input
   and on the mesh link; it is never logged, which is a promise kept in code
   and tested, but it is not extra-encrypted by this feature. (d) This feature
   does **not** narrow `ARCHITECTURE.md` section 3's known gap: a program
