@@ -6955,7 +6955,7 @@ from the real `view()`. `tools/check_parity.py` records all three routes as
 ```
 {"available": true, "title": "What asks first", "detail": <the sentence under it>,
  "switch_label": "Ask me first", "can_loosen": bool,
- "switchable": [the seven actions of 32.4],
+ "switchable": [the twelve actions of 32.4],
  "groups": [{"title": "Reading your own things",
              "rows": [{"id": "calendar_read", "action": "calendar_read",
                        "title": "Read your calendar",          the card's own words (jarvis_card_words)
@@ -7035,12 +7035,24 @@ rule (`_NO_RULE_FROM_DENIAL`).
 ### 32.4 The short safe list, and the settings file
 
 `calendar_read`, `email_read`, `notes_search`, `home_read` (loosened back to
-`auto`), `append_obsidian_daily`, `append_logseq_journal` (`auto`) and
-`create_joplin_note` (`notify`). The backend refuses every other action,
+`auto`), `append_obsidian_daily`, `append_logseq_journal` (`auto`),
+`create_joplin_note` (`notify`), and five rows a feature review added on
+2026-10-08 so that they can be made stricter like the rest:
+`read_files_readonly`, `read_joplin_note`, `read_logseq_page` and
+`create_logseq_page` (all `auto`), and `power_manage` (`auto` - Quiet,
+standby and a wake-up get a card). Every one of the five acts on the owner's
+own things on this PC, or on Jarvis's own power state, and none of them
+leaves the PC. The backend refuses every other action,
 and never anything in NEEDS_A_PERSON or its hard-limit list (anything that
 leaves the PC, deletes, sends, spends, moves a lock or door, touches secrets
 or loosens a security or privacy setting); `backend/test_asks_first.py`
 checks the two lists never meet.
+
+**Two rows of the same shape are deliberately not on it**, and the page says
+so rather than offering a switch that would not exist: `browse_model_catalog`
+is a way out of this PC (section 4's own list), and `rollback_model` is the
+automatic undo of a bad model swap - the one thing that must never wait for a
+card (`jarvis_tripwire.py`: "rolls back; rollback needs no approval").
 
 **The wiki is not on it, said plainly.** The owner's list named it, but
 since the security audit (L1) `jarvis_wiki.py` writes the wiki only on a
@@ -10026,9 +10038,10 @@ second version of any of it.
   voice, hardware/second-card/big-model's own multi-field controls,
   backups, Accounts).
 - **A device named in words for "loosen"/"enable a tool"** is limited to
-  the seven names `jarvis_asks_first.LOOSE`/`TOOLS_SWITCHABLE` already use
-  (calendar, email, notes, home status, and the three note-writes for
-  loosening only - the reading tools list is four, not seven). A phrase
+  the twelve names `jarvis_asks_first.LOOSE`/`TOOLS_SWITCHABLE` already use
+  (calendar, email, notes, home status, the three note-writes for loosening
+  only, and the five the 2026-10-08 feature review added: reading files and
+  notes, a new Logseq page, and Jarvis's own power state). A phrase
   naming anything else falls through to the model, same as an unknown
   section or setting.
 - **Ambiguity is never guessed at.** A sentence that fits the shape of

@@ -133,6 +133,7 @@ import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.SettingsIcon
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.VoiceButton
 import com.jarvis.client.ui.parts.VoiceStrip
@@ -626,6 +627,13 @@ data class HomeActions(
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
     val onOpenAppearance: () -> Unit,
+    /**
+     * Settings itself (2026-10-08): its own button in the row, beside
+     * Appearance - it used to be three taps and a scroll away. Always shown,
+     * like Help: "Settings and Help themselves always stay reachable"
+     * (MenuCatalog's `entry.settings`, which is not hideable).
+     */
+    val onOpenSettings: () -> Unit,
     val onOpenFaq: () -> Unit,
     val blockerFor: (PendingItem) -> String?,
     val onVoiceBegin: () -> Unit,
@@ -1638,15 +1646,17 @@ private fun NavToggle(shown: Boolean, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/** Mind, Inbox, Appearance and Help - the part of the old bar that may hide. */
+/** Mind, Inbox, Live, Appearance, Settings and Help - the part of the old bar
+ *  that may hide (Settings arrived 2026-10-08; see its own NavItem below). */
 @Composable
 private fun NavRow(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
     val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
     // from navigation by a rule, Brain gets a real button, "Look"
-    // becomes "Appearance". Four destinations, evenly weighted so the
-    // row balances regardless of phone width.
+    // becomes "Appearance". Every destination is weighted the same, so the
+    // row balances regardless of phone width - five when Appearance is
+    // hidden, six otherwise.
     Column(Modifier.fillMaxWidth().background(chrome.surface1)) {
         Rule()
         Row(Modifier.fillMaxWidth()) {
@@ -1679,6 +1689,16 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                     modifier = Modifier.weight(1f),
                 )
             }
+            // Settings, in the same shape as its neighbours (2026-10-08): one
+            // tap from Home instead of three and a scroll. Always shown -
+            // Settings is never hideable, and its own row is where the owner
+            // reaches everything the phone can change.
+            NavItem(
+                icon = { SettingsIcon(chrome.textMid) },
+                label = "Settings",
+                onClick = actions.onOpenSettings,
+                modifier = Modifier.weight(1f),
+            )
             NavItem(
                 icon = { HelpIcon(chrome.textMid) },
                 label = "Help",

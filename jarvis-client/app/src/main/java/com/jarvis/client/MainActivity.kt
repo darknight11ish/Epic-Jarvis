@@ -3107,7 +3107,30 @@ class MainActivity : FragmentActivity() {
                                     }
                                 },
                                 onDenyWithReset = { item, onReset ->
-                                    JarvisRuntime.decideDetached(item, approve = false)
+                                    // Same shape as the approve path above,
+                                    // and for the same reason: the card hands
+                                    // in `onReset` so a decision that never
+                                    // left the phone un-sticks it. This one
+                                    // took the callback and never called it
+                                    // (Android audit 2026-10-08), so a deny
+                                    // refused for a stale link, an expired
+                                    // card or one already on its way left the
+                                    // card's own `decided` flag set: Approve,
+                                    // Deny and the swipe stayed dead until the
+                                    // owner left Home and came back.
+                                    //
+                                    // The wait for the answer runs on the
+                                    // runtime's own scope - a screen going
+                                    // away mid-deny must not cancel a POST
+                                    // already on its way, which is exactly why
+                                    // decideDetached exists - and the card's
+                                    // reset comes back to this screen's scope,
+                                    // because that closure writes Compose
+                                    // state.
+                                    JarvisRuntime.launchDetached {
+                                        val sent = denyItem(item)
+                                        if (!sent) scope.launch { onReset() }
+                                    }
                                 },
                                 onReconnect = {
                                     // `force = true`, and only because a person
@@ -3130,6 +3153,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenInbox = { nav.go(Screen.INBOX) },
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                // Settings from Home's own row (2026-10-08).
+                                onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
@@ -3426,6 +3451,25 @@ class MainActivity : FragmentActivity() {
         )
         return true
     }
+
+    /**
+     * Deny [item], answering whether the decision actually went out.
+     *
+     * [JarvisRuntime.decide] is awaited rather than [JarvisRuntime.decideDetached]
+     * handed the job, because its answer is the whole point: [ApprovalCard]
+     * greys both buttons and the swipe out the moment a decision is sent, and
+     * only the `onReset` it passes in clears that again. [approveItem]'s own
+     * refusals (a cancelled fingerprint, a signed approval the PC is still
+     * waiting for) return false for the same reason; a deny had no equivalent,
+     * so anything `decide` refused before sending - a stale link, an expired
+     * card, one already on its way, the PC unreachable - left the card
+     * undecidable for the rest of its life (Android audit 2026-10-08).
+     *
+     * A deny carries no signature and no option to choose, so nothing is
+     * prepared first here, unlike [approveItem].
+     */
+    private suspend fun denyItem(item: PendingItem): Boolean =
+        JarvisRuntime.decide(item, approve = false) is ApiResult.Ok
 
     private fun currentSecurity(): Security = JarvisRuntime.settings.security.value
 

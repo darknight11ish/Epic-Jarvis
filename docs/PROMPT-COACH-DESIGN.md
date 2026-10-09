@@ -85,8 +85,10 @@ rule of 2026-10-05).
 
 ## What a critique contains
 
-One strict JSON object, produced through `jarvis_structured.py` so a malformed
-answer is structurally impossible rather than parsed hopefully:
+One strict JSON object, with the schema sent as Ollama's `format` so the shape is
+constrained while it decodes - the house norm, which every shipped module follows.
+(The research is why: `jarvis_structured.ollama_body()` has no shipped caller, so
+routing through it would have been a shape nothing else in the tree uses.)
 
 - `score` - 1 to 10, how complete the prompt is. Shown, never used as a gate.
 - `issues` - up to four, each with what is missing, why it matters, and the

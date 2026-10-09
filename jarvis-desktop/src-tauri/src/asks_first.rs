@@ -45,8 +45,11 @@ const LIGHTS_PATH: &str = "/api/asks_first/lights";
 const TOOLS_PATH: &str = "/api/asks_first/tools";
 
 /// The actions the apps may switch - `jarvis_asks_first.SWITCHABLE`, word for
-/// word (tests/fixtures/asks-first-cases.json checks it).
-pub(crate) const SWITCHABLE: [&str; 7] = [
+/// word (tests/fixtures/asks-first-cases.json checks it). Grew from 7 to 12 on
+/// 2026-10-08: the audit found five rows running without asking and switchable
+/// nowhere. `browse_model_catalog` (leaves this PC) and `rollback_model` (the
+/// undo for a switch must never wait) stay off the list, on purpose.
+pub(crate) const SWITCHABLE: [&str; 12] = [
     "calendar_read",
     "email_read",
     "notes_search",
@@ -54,6 +57,11 @@ pub(crate) const SWITCHABLE: [&str; 7] = [
     "append_obsidian_daily",
     "append_logseq_journal",
     "create_joplin_note",
+    "read_files_readonly",
+    "read_joplin_note",
+    "read_logseq_page",
+    "create_logseq_page",
+    "power_manage",
 ];
 
 /// Lockdown (2026-09-28, `jarvis_asks_first.LOCKDOWN`): not an action but
@@ -75,9 +83,10 @@ pub(crate) const ASKS_FIRST_MISSING: &str = "Your PC's Jarvis cannot show what a
      run apply-patches.ps1 on the PC.";
 
 /// An action off the list - `jarvis_asks_first.NOT_ON_LIST`, word for word.
-pub(crate) const NOT_ON_LIST: &str = "Only reading your calendar, email, notes and home \
-     status, and adding to your notes, can be changed from an app. Everything else changes \
-     only in your settings file (jarvis-framework.toml), and some things always ask.";
+pub(crate) const NOT_ON_LIST: &str = "Only reading your calendar, email, notes, home status \
+     and files, adding to your notes, and the power mode, can be changed from an app. \
+     Everything else changes only in your settings file (jarvis-framework.toml), and some \
+     things always ask.";
 
 /// A tool off [`TOOLS_SWITCHABLE`] - `jarvis_asks_first.TOOLS_NOT_ON_LIST`,
 /// word for word.

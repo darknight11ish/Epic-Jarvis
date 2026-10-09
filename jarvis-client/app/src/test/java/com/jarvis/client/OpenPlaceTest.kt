@@ -19,7 +19,19 @@ class OpenPlaceTest {
         assertEquals(OpenPlace.Where.Go(Screen.FAQ, null), OpenPlace.whereFor("faq"))
         assertEquals(OpenPlace.Where.Go(Screen.FAQ, "about"), OpenPlace.whereFor("about"))
         assertEquals(OpenPlace.Where.Go(Screen.CHECKS, "connection"), OpenPlace.whereFor("connection"))
-        assertEquals(OpenPlace.Where.Go(Screen.BRAIN, "briefing"), OpenPlace.whereFor("briefing-settings"))
+        // The phone's own Brain plates (BrainScreen.kt). "spending" belongs in
+        // this list and was missing from it - it sat in OpenPlace.PC_ONLY, so
+        // "open spending" on the phone answered "only in Jarvis on your PC"
+        // although the phone draws the Spending plate (`item(key =
+        // "spending")`, menu "settings.spending", available on the phone in
+        // contract/menu-cases.json). Adding it here is what would have caught
+        // that (2026-10-08).
+        for ((id, key) in listOf(
+            "briefing-settings" to "briefing",
+            "spending" to "spending",
+        )) {
+            assertEquals(id, OpenPlace.Where.Go(Screen.BRAIN, key), OpenPlace.whereFor(id))
+        }
         assertEquals(OpenPlace.Where.Go(Screen.VOICES, null), OpenPlace.whereFor("voices"))
     }
 

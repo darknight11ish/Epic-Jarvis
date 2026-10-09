@@ -379,7 +379,12 @@ private fun CapturedRow() {
 private fun NotificationPreferencesRow() {
     val chrome = LocalChrome.current
     val context = LocalContext.current
-    var testSent by remember { mutableStateOf(false) }
+    // What actually happened last time "Send test" was pressed: null before
+    // it is ever pressed, then whether the notification was really posted.
+    // It used to be a flag set to true by the tap itself, so the green line
+    // appeared even with notifications switched off - the one state where
+    // nothing is announced at all (Android audit 2026-10-08).
+    var testPosted by remember { mutableStateOf<Boolean?>(null) }
 
     Gap(16)
     Text(
@@ -391,7 +396,9 @@ private fun NotificationPreferencesRow() {
     Text(
         "Timers, scheduled reminders, and morning briefings go off while connected to your PC's Jarvis. " +
             "Alarms and urgent alerts ring through Do Not Disturb when alarms are allowed on your phone. " +
-            "If an alert arrives more than 10 minutes late, it appears as a silent \"Missed\" notice.",
+            "If an alert arrives more than 10 minutes late, it appears as a silent \"Missed\" notice. " +
+            "All of it needs Android's notification permission for Jarvis: switched off, none of these " +
+            "appear, and neither does an approval waiting for your answer.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
     )
@@ -410,7 +417,7 @@ private fun NotificationPreferencesRow() {
             "Send test",
             modifier = Modifier.weight(1f),
             onClick = {
-                com.jarvis.client.service.ScheduleNotifier.post(
+                testPosted = com.jarvis.client.service.ScheduleNotifier.post(
                     context,
                     jobId = "test-job",
                     kind = "reminder",
@@ -418,16 +425,18 @@ private fun NotificationPreferencesRow() {
                     text = "This is a test notification from Jarvis. Reminders and channels are working.",
                     lockScreen = "Jarvis: test notification",
                 )
-                testSent = true
             },
         )
     }
-    if (testSent) {
+    testPosted?.let { posted ->
         Gap(4)
         Text(
-            "Test notification sent.",
+            PhoneNotifications.testWords(posted),
             style = MaterialTheme.typography.labelSmall,
-            color = chrome.okInk,
+            // Green only for a notification that was really posted; a refusal
+            // is never dressed as success (the app's own rule for every other
+            // write: see PlainErrors and this plate's own lines above).
+            color = if (posted) chrome.okInk else chrome.badInk,
             modifier = Modifier.liveStatus(),
         )
     }

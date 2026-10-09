@@ -61,10 +61,13 @@
   are affected and the command to run.
 
 .PARAMETER Force
-  By default the script refuses to change anything while a Python program that
-  looks like Jarvis (its command line names the backend folder or jarvis_hud.py)
-  is running, because a running Jarvis has the files open and would go on
-  running the old code. Close Jarvis and run again; -Force skips that check.
+  By default the script refuses to change anything while the Jarvis that runs
+  THIS backend folder is still running - a Python program whose command line
+  names this folder's own jarvis_hud.py (see Test-NamesThisBackendsHud for the
+  exact rule, and for what it cannot see). It has to: a running Jarvis has the
+  files open and would go on running the old code. A Python program that is
+  not this folder's Jarvis - another backend folder's, or a test suite - is not
+  a reason to refuse. Close Jarvis and run again; -Force skips that check.
 
 .PARAMETER SkipPackages
   Do not run pip. The packages in backend/requirements.txt are then yours to
@@ -75,6 +78,20 @@
   the rest. A PARTIAL install: the features those patches carry will not be
   present. Only use it once you have looked for the missing files and they
   really are gone - the script prints the command to search for them.
+
+.PARAMETER StateJson
+  Write what the rehearsal decided about each patch to this file, as JSON, and
+  carry on exactly as before. Give it a path:
+  `-StateJson "C:\somewhere\jarvis-state.json"`. One entry per patch: "taken-off"
+  (the run found its work and took it off, to put the current text back on),
+  "taken-off-older-text" (the same, but what came off was an older committed
+  version of the patch), "on-but-unstrippable" (its work is there and no text of
+  it can take it off these files) or "not-recognised" (neither). Off unless
+  given: without it nothing is written and the run is unchanged. The file is
+  written even when the run then refuses - a refusal is when the record matters
+  most. No behaviour depends on it yet; it is the classification step 1 of
+  docs/UPDATER-REDESIGN.md section 5 asks for, and the manifest, the drift check
+  and the backup decision are built on top of it.
 
 .EXAMPLE
   From the folder this repository is cloned into. -ExecutionPolicy Bypass
@@ -94,7 +111,8 @@ param(
     [switch] $SkipMissing,
     [switch] $SkipPackages,
     [switch] $FixLineEndings,
-    [switch] $Force
+    [switch] $Force,
+    [string] $StateJson = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1784,6 +1802,20 @@ Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
 if ($RunLog) { Say "Log     : $RunLog (a copy of everything printed here)" }
 else { Say "Log     : none - the log file could not be started, so copy this window if you need a record" Yellow }
 
+# --- where the classification of this run is written (docs/UPDATER-REDESIGN section 5
+# step 1) ---------------------------------------------------------------------
+#
+# Resolved HERE, before the script changes directory: a relative name is then
+# relative to the folder the command was run from, not to whatever folder the
+# rehearsal is standing in when the file is written.
+$StateJsonPath = ''
+if ($StateJson) {
+    $StateJsonPath = $StateJson
+    if (-not [IO.Path]::IsPathRooted($StateJsonPath)) {
+        $StateJsonPath = Join-Path (Get-Location).Path $StateJsonPath
+    }
+}
+
 # --- a backend folder inside ANOTHER git repository --------------------------
 #
 # `git apply` behaves differently inside a repository than outside one: it
@@ -2102,12 +2134,85 @@ if ($crlfFiles.Count -gt 0) {
 }
 Say ""
 
+# Is this Python process the Jarvis that runs THIS backend folder?
+#
+# WHAT THIS REPLACED, AND WHY (2026-10-08). The rule used to be: a Python
+# process whose command line contains the backend folder, OR contains
+# "jarvis_hud.py". Neither half was anchored to the folder being patched:
+#
+#   * the second half matched the owner's own app in ITS folder while this
+#     script was rehearsing on a copy, so a run refused over a folder nothing
+#     was using. On the owner's PC that was 37 checks red in
+#     backend/test_apply_outcomes.py, and the process the refusal named
+#     (pid 34612) was the owner's live backend, which that run never touched.
+#     It had been read twice before as something else: once as "the owner's app
+#     is up" (true - but not the folder being patched) and once as a race.
+#   * the first half matched ANY file inside the folder, so
+#     `python.exe <backend folder>\test_x.py` - how run_suites.py starts every
+#     suite, and how a person runs one by hand - counted as Jarvis running too.
+#
+# A PORT PROBE WAS CONSIDERED AND REJECTED. jarvis_hud.py's port is a
+# machine-wide fact and the owner's app holds it while this script rehearses on
+# a copy, so probing it would refuse exactly the rehearsals the incident was
+# about - and it still could not say WHICH folder the answering program runs
+# from. The question here is per-folder, and only the command line carries the
+# folder. So: no port probe.
+#
+# WHAT THIS STILL CANNOT DO, PLAINLY. Windows will not let one process read
+# another's working directory, so a command line that names jarvis_hud.py with
+# no folder at all - `py -3 jarvis_hud.py`, the line setup-jarvis.ps1 gives the
+# owner - cannot be tied to a folder; it is read as a hit, the refusing side.
+# A process whose command line cannot be read at all (an elevated one) is
+# invisible to any of this, and Get-RunningBackend says how many of those there
+# were rather than pretending there were none.
+#
+# update-jarvis.ps1 carries the same rule, verbatim, and the two are checked
+# against each other - see backend/test_apply_outcomes.py.
+function Test-NamesThisBackendsHud {
+    param([string] $Cmd, [string] $Backend)
+
+    if (-not $Cmd) { return $false }
+    $bp = ([string]$Backend).TrimEnd('\', '/')
+    if (-not $bp) { return $false }
+
+    # 1. The shape the desktop app starts it with - the whole path:
+    #    python.exe "C:\...\Desktop program\jarvis_hud.py"
+    if ($Cmd.IndexOf($bp + '\jarvis_hud.py', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    if ($Cmd.IndexOf($bp + '/jarvis_hud.py', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+
+    # 2. A launch that names no folder: `py -3 jarvis_hud.py` from inside the
+    #    backend folder, or `python -m jarvis_hud`. See "cannot do" above.
+    if ($Cmd -match '(^|[\s"''=])jarvis_hud\.py([\s"'']|$)') { return $true }
+    if ($Cmd -match '-m\s+jarvis_hud([\s"''=]|$)') { return $true }
+
+    # 3. The same file spelled another way: an 8.3 short name, ./.., a forward
+    #    slash. Resolve each candidate's folder and compare it with the folder
+    #    being patched. Reached only when the command line already names
+    #    jarvis_hud.py somewhere, so the common path above stays cheap.
+    foreach ($m in [regex]::Matches($Cmd, '(?i)[^\s"'']*jarvis_hud\.py')) {
+        $t = $m.Value.Trim('"', "'")
+        $dir = Split-Path -Path $t -Parent
+        if (-not $dir) { continue }
+        $cand = $dir
+        # A relative one is read against the folder being patched, the only
+        # folder whose Jarvis this check is about.
+        if (-not [System.IO.Path]::IsPathRooted($dir)) { $cand = Join-Path $bp $dir }
+        try {
+            $full = (Get-Item -LiteralPath $cand -ErrorAction Stop).FullName.TrimEnd('\', '/')
+            if ($full -eq $bp) { return $true }
+        } catch { }
+    }
+    return $false
+}
+
 # A running Jarvis has its files open (Windows will not let a locked file be
 # replaced) and keeps running the OLD code from memory after they change. Best
-# effort: a Python program whose command line names the backend folder or
-# jarvis_hud.py. -Force skips it. Returns a list of short descriptions.
+# effort: a Python program whose command line names THIS backend's own
+# jarvis_hud.py - see Test-NamesThisBackendsHud above for what that means and
+# what it cannot see. -Force skips it. Returns a list of short descriptions.
 function Get-RunningBackend {
     $found = @()
+    $script:UnreadablePython = @()
     try {
         $bp = (Resolve-Path -LiteralPath $BackendPath).Path
         $rows = @()
@@ -2125,8 +2230,14 @@ function Get-RunningBackend {
         foreach ($r in $rows) {
             if ($r.Id -eq $PID) { continue }
             if ($r.Name -notmatch '^(py|pyw|python[0-9.]*|pythonw[0-9.]*)(\.exe)?$') { continue }
-            if (-not $r.Cmd) { continue }
-            if ($r.Cmd.IndexOf($bp, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or $r.Cmd -match 'jarvis_hud\.py') {
+            if (-not $r.Cmd) {
+                # A Python program that will not say what it is running (an
+                # elevated one). Named below, never silently counted as "not
+                # Jarvis".
+                $script:UnreadablePython += "$($r.Id)"
+                continue
+            }
+            if (Test-NamesThisBackendsHud -Cmd $r.Cmd -Backend $bp) {
                 $found += "process $($r.Id): $($r.Name)"
             }
         }
@@ -2137,6 +2248,9 @@ function Get-RunningBackend {
 function Assert-JarvisClosed {
     if ($Force) { return }
     $running = @(Get-RunningBackend)
+    if ($script:UnreadablePython.Count -gt 0) {
+        Warn "$($script:UnreadablePython.Count) Python program(s) would not say what they are running (pid $($script:UnreadablePython -join ', ')). If one of them is Jarvis, this check cannot see it - close Jarvis by hand first."
+    }
     if ($running.Count -eq 0) { return }
     Say ""
     Bad "Jarvis (or something else using this backend folder) looks like it is still running:"
@@ -2315,6 +2429,115 @@ if ($absent.Count -gt 0) {
 
 Push-Location -LiteralPath $BackendPath
 try {
+
+    # --- what the rehearsal decided about each patch, for -StateJson ---------
+    #
+    # docs/UPDATER-REDESIGN.md section 5, build step 1: the verdict the run
+    # reaches is written down per patch, in a form a program can read, instead
+    # of only in prose. Nothing here decides anything - every verdict is
+    # recorded at a decision the run was already making - and with no switch
+    # `$classify` is never read. Built on top of this and not here: the
+    # manifest (step 2), the drift check, and the backup-and-overwrite the owner
+    # chose on 2026-10-08 (step 4).
+    $classify = @{}
+    $classifyRound = @{}
+    function Set-PatchClass {
+        param([string] $Name, [string] $Verdict, [string] $Older = '', [int] $Round = 1)
+        # ONE ANSWER FROM THREE SOURCES (2026-10-08; every claim below measured on
+        # a copy of the owner's backend, and each one got the first version of
+        # this function wrong).
+        #
+        # Three phases of one run learn something about a patch, and they must be
+        # ranked, because "last one wins" is wrong in both directions:
+        #
+        #   0 - the first rehearsal. "This patch went on a clean copy", which is
+        #       the ONLY thing that ever says so: the strip below never runs when
+        #       the first rehearsal leaves nothing broken (measured - a backend
+        #       with its patches already on gets `found=0 alreadyOn=0` there, and
+        #       with this recorded nowhere, every verdict came out the default
+        #       "not-recognised").
+        #   1 - the re-apply, after the strip. What the state the run would leave
+        #       actually carries: it re-applies every patch and says so per patch.
+        #   2 - the strip. What was FOUND on the files, which is the only thing
+        #       that can say "an older committed text of this patch was what was
+        #       on them" - cloud-one-turn and ollama-direct, measured.
+        #
+        # A later, higher round overrides an earlier one - EXCEPT that the two
+        # stronger statements below outrank a round as well, because they are
+        # about what the RUN'S OWN RESULT carries rather than about what was
+        # found:
+        #
+        #   - "on-but-unstrippable" is worth more than "taken-off", in any round:
+        #     it says the work is on the files AND that this run cannot put the
+        #     current text there. Measured on the owner's state, tutorials.patch
+        #     and screen-attach.patch come off the strip (round 2, "taken off")
+        #     and then will NOT go back on (round 1, "on but unstrippable") - and
+        #     it is the second that the result gate refuses over.
+        #   - "not-recognised" is worth more than everything: it says the state
+        #     the run would leave does not carry that patch at all.
+        #
+        # Nothing else overrides round 2, so a "taken-off-older-text" is never
+        # replaced by a plain "taken-off" (cloud-one-turn and ollama-direct,
+        # measured: the first version of this threw away the only record that
+        # what the files carried was an older committed text).
+        if ($script:classifyRound.ContainsKey($Name)) {
+            $prevRound = $script:classifyRound[$Name]
+            $prev = $script:classify[$Name].Verdict
+            if ($Verdict -eq 'not-recognised') {
+                # upgraded only: never downgrade it back
+            } elseif ($Verdict -eq 'on-but-unstrippable' -and $prev -ne 'not-recognised') {
+                # upgraded only
+            } else {
+                if ($Round -lt $prevRound) { return }
+                if ($Round -eq $prevRound) {
+                    if ($prev -eq $Verdict) { return }
+                    if ($prev -eq 'taken-off-older-text' -and $Verdict -eq 'taken-off') { return }
+                    if ($prev -eq 'not-recognised') { return }
+                }
+            }
+        }
+        $script:classify[$Name] = @{ Verdict = $Verdict; Older = $Older }
+        $script:classifyRound[$Name] = $Round
+    }
+
+    function Write-StateJson {
+        param([string] $Path)
+        $order = @('taken-off', 'taken-off-older-text', 'on-but-unstrippable', 'not-recognised')
+        $counts = [ordered]@{}
+        foreach ($v in $order) { $counts[$v] = 0 }
+        $entries = @()
+        foreach ($n in $PATCHES) {
+            $v = 'not-recognised'; $older = ''
+            if ($script:classify.ContainsKey($n)) {
+                $v = $script:classify[$n].Verdict
+                $older = $script:classify[$n].Older
+            }
+            if ($counts.Contains($v)) { $counts[$v] = $counts[$v] + 1 }
+            $entries += [ordered]@{ Patch = $n; Verdict = $v; Older = $older }
+        }
+        $resolved = $BackendPath
+        try { $resolved = (Resolve-Path -LiteralPath $BackendPath).Path } catch { }
+        $doc = [ordered]@{
+            schema      = 'jarvis-updater-state/1'
+            backend     = $resolved
+            patches     = $entries
+            totals      = $counts
+        }
+        $why = ''
+        for ($try = 1; $try -le 3; $try++) {
+            try {
+                ($doc | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $Path -Encoding UTF8
+                Say "State   : wrote what this run decided about $($entries.Count) patch(es) to $Path" Cyan
+                Say ("          " + (@($order | ForEach-Object { "$_ $($counts[$_])" }) -join ', ')) Cyan
+                return $true
+            } catch {
+                $why = $_.Exception.Message
+                Start-Sleep -Milliseconds 200
+            }
+        }
+        Warn "could not write the classification file ($Path): $why"
+        return $false
+    }
 
     # --- revert ---------------------------------------------------------------
     if ($Revert) {
@@ -2695,7 +2918,13 @@ try {
                     continue
                 }
                 $r = Invoke-Patch -File $full
-                if ($r.Ok) { Say "  ok           $name" }
+                if ($r.Ok) {
+                    Say "  ok           $name"
+                    # Round 0: it goes on a clean copy from the text in this
+                    # list. Overridden later by anything the strip or the
+                    # re-apply learns.
+                    Set-PatchClass -Name $name -Verdict 'taken-off' -Round 0
+                }
                 else {
                     $broken += @{ Name = $name; Why = $r.Output }
                     # Not "FAIL" yet: on a backend an earlier run patched,
@@ -2744,6 +2973,7 @@ try {
                     if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
                         if ((Invoke-Patch -File $full -Reverse).Ok) {
                             $found += @{ Name = $name; File = $full; Older = $null }
+                            Set-PatchClass -Name $name -Verdict 'taken-off' -Round 2
                         }
                         continue
                     }
@@ -2756,6 +2986,7 @@ try {
                     if ($older) {
                         if ((Invoke-Patch -File $older.File -Reverse).Ok) {
                             $found += @{ Name = $name; File = $older.File; Older = $older.Label }
+                            Set-PatchClass -Name $name -Verdict 'taken-off-older-text' -Older $older.Label -Round 2
                         }
                         continue
                     }
@@ -2768,6 +2999,7 @@ try {
                     # two stay the same shape (see Test-PatchOnBackend).
                     if (Test-PatchOnBackend -File $full) {
                         $alreadyOn += @{ Name = $name; File = $full }
+                        Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
                     }
                 }
                 if ($found.Count -gt 0 -or $alreadyOn.Count -gt 0) {
@@ -2804,7 +3036,10 @@ try {
                         # reason (see Test-PatchOnBackend).
                         if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $name) { continue }
                         $r = Invoke-Patch -File $full
-                        if ($r.Ok) { Say "  ok           $name" }
+                        if ($r.Ok) {
+                            Say "  ok           $name"
+                            Set-PatchClass -Name $name -Verdict 'taken-off'
+                        }
                         elseif (Test-PatchOnBackend -File $full) {
                             # Not a failure: it is on the backend already, and
                             # this rehearsal is the thing that cannot put it
@@ -2812,10 +3047,19 @@ try {
                             # copy alone from here, and the real run leaves the
                             # real files alone too - $todo below drops it.
                             $alreadyOn += @{ Name = $name; File = $full }
+                            Set-PatchClass -Name $name -Verdict 'on-but-unstrippable'
                             Say "  already on   $name  (left as it is)" Cyan
                         }
                         else {
                             $again += @{ Name = $name; Why = $r.Output }
+                            # The final answer for this patch, and it overrides
+                            # the strip's: after re-applying, this patch is not
+                            # on the state the run would leave, whatever the
+                            # strip thought of it. Written as "not recognised"
+                            # rather than left as its earlier verdict, so the
+                            # file never says a patch is on a backend that would
+                            # not carry it.
+                            Set-PatchClass -Name $name -Verdict 'not-recognised'
                             Bad "$name - will not apply"
                         }
                     }
@@ -2890,6 +3134,12 @@ try {
     } finally {
         Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    # The rehearsal is over, so every verdict is in - including the ones from
+    # the re-apply, and including a refusal. Written here, before the refusal is
+    # printed and before anything of the owner's is touched: a run that refuses
+    # is exactly the run whose classification is worth having on disk.
+    if ($StateJsonPath) { [void](Write-StateJson -Path $StateJsonPath) }
 
     if ($broken.Count -gt 0) {
         Say ""

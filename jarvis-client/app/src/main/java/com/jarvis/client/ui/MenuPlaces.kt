@@ -94,7 +94,7 @@ object MenuPlaces {
      * id -> where (a sentence; the test only needs the id to be listed).
      */
     val INSIDE: Map<String, String> = mapOf(
-        "entry.appearance" to "HomeScreen: the Appearance button in the row of five",
+        "entry.appearance" to "HomeScreen: the Appearance button in the home row (six buttons since Settings joined it, 2026-10-08)",
         "entry.voices" to "SettingsScreen: the Jarvis's voice button in the Voice item",
         "entry.voice-check" to "SettingsScreen: the Voice check button in the Voice item",
         "brain.history.tag-suggestions" to "HistoryTags: the last row, Suggest tags overnight",

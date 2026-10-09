@@ -68,12 +68,28 @@ approve it. Only "approved" from a person writes the line (the stamp and
 the gate's outcome - never `allowed` alone).
 
 THE SHORT SAFE LIST, AND WHAT IS LEFT OFF IT
-SWITCHABLE = reading your own calendar, email, notes and home status, and
-the three note writes (Obsidian daily note, Logseq journal, a new Joplin
-note). Each acts only on the owner's own things on this PC. After outside
-text a note still waits for a yes (write_notes_after_outside_text, which is
-not on the list), and a read still marks the chat as having read outside
-text.
+SWITCHABLE = reading your own calendar, email, notes, home status and files,
+the four note writes (Obsidian daily note, Logseq journal, a new Joplin note,
+a new Logseq page), and the power mode. Each acts only on the owner's own
+things on this PC - the power mode is Jarvis's own state, changed on this PC
+and undone by one tap in either app. After outside text a note still waits
+for a yes (write_notes_after_outside_text, which is not on the list, and see
+NOTE_ROW for the one note write that rule does not name), and a read still
+marks the chat as having read outside text.
+The list grew on 2026-10-08, after an audit found seven rows running without
+asking and switchable nowhere. Five of the seven are on it now (the file
+reads, the two page reads, the Logseq page write and the power mode). The
+other two are NOT here, said plainly:
+  * browse_model_catalog is a way out of this PC (docs/ARCHITECTURE.md
+    section 4; LOCKDOWN_ACTIONS), and nothing that leaves the PC may be
+    loosened from an app - the only ways out on this list are the owner's own
+    account reads, which test_lockdown.py pins. Its row keeps NOTE_FILE, "only
+    your settings file changes this one", which is where it belongs.
+  * rollback_model is the UNDO for a model switch and never waits on purpose:
+    a revert that waits for permission arrives too late to be a revert
+    (rebuilt/jarvis-framework.toml), and jarvis_tripwire.py's "keep the
+    previous model" rolls back with no approval at all. A switch here would
+    let the owner break the recovery from a model that broke on the swap.
 The wiki was on the owner's list, and is NOT here, said plainly: since the
 security audit (L1) jarvis_wiki.py writes the wiki only on a person's yes
 whatever wiki_update's tier says, so a looser line would switch "Add to
@@ -216,6 +232,29 @@ NOTE_SUPPORT_OFFER = ("Always asks, one card per offer, showing the exact reply 
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
+#: One line for a row the list grew by on 2026-10-08, used for the row AND for
+#: the loosening card's last line (the same string twice, exactly as the three
+#: note writes already do with NOTE_NOTE). NOTE_READ and NOTE_NOTE above were
+#: written for the reads and the note writes that were on the list first, and
+#: say the wrong thing on a file read, a Logseq page or the power mode.
+NOTE_ROW = {
+    "read_files_readonly": ("Reading happens on this PC and writes nothing back. A chat that "
+                            "read a file counts as having read outside text, so a later web "
+                            "search or note in it still asks."),
+    "read_joplin_note": ("Reading happens on this PC and changes nothing in the vault. A chat "
+                         "that read a note counts as having read outside text, so a later web "
+                         "search or note in it still asks."),
+    "read_logseq_page": ("Reading happens on this PC and changes nothing in the graph. A chat "
+                         "that read a page counts as having read outside text, so a later web "
+                         "search or note in it still asks."),
+    "create_logseq_page": ("It only adds a page, and deleting it undoes it. The "
+                           "after-outside-text rule names the Obsidian daily note, the Logseq "
+                           "journal and a new Joplin note - not this one, so turning \"Ask me "
+                           "first\" on is what makes it ask every time."),
+    "power_manage": ("Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. "
+                     "With \"Ask me first\" on, every change - the standby schedule's at its "
+                     "start, and waking - waits for a card."),
+}
 
 #: The web search row (the owner's decisions of 2026-09-25 and 2026-09-26;
 #: jarvis_agent.py WEB_SEARCH_* are the reasons a search asks). It does not
@@ -253,6 +292,18 @@ LOOSE = {
     "append_obsidian_daily": "auto",
     "append_logseq_journal": "auto",
     "create_joplin_note": "notify",
+    # The five rows the audit of 2026-10-08 found running without asking and
+    # switchable nowhere (the header says which two of the seven are left out,
+    # and why). The same test as the seven above: each acts only on the
+    # owner's own things on this PC, or on Jarvis's own power mode, and each
+    # ships "auto" in rebuilt/jarvis-framework.toml - so "Ask me first" is the
+    # only thing a switch here can change today, and loosening writes back
+    # exactly what this repository ships.
+    "read_files_readonly": "auto",   # file_read, my_files, PDFs and Word files
+    "read_joplin_note": "auto",
+    "read_logseq_page": "auto",
+    "create_logseq_page": "auto",
+    "power_manage": "auto",
 }
 SWITCHABLE = tuple(LOOSE)
 
@@ -637,7 +688,8 @@ def _row(action: str, *, here: bool) -> dict:
         if tier != "never":
             row["switch"] = {"asks": tier == "ask", "loose": LOOSE[action],
                              "can_loosen": bool(here) and not lockdown_on()}
-        row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
+        row["note"] = NOTE_ROW.get(action) or (
+            NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE)
         if tier == "ask" and not here and not row.get("lockdown"):
             row["note"] += " " + PHONE_LOOSEN
         for old, new in OLDER_NAMES.items():
@@ -828,9 +880,10 @@ LOOSEN_LAST_WORDS = {
 
 PC_ONLY = ("Letting Jarvis do this without asking can only be done on the PC (Settings, "
            "What asks first), with an approval card and Windows Hello.")
-NOT_ON_LIST = ("Only reading your calendar, email, notes and home status, and adding to "
-               "your notes, can be changed from an app. Everything else changes only in "
-               "your settings file (jarvis-framework.toml), and some things always ask.")
+NOT_ON_LIST = ("Only reading your calendar, email, notes, home status and files, adding to "
+               "your notes, and the power mode, can be changed from an app. Everything else "
+               "changes only in your settings file (jarvis-framework.toml), and some things "
+               "always ask.")
 NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so nothing can be "
                   "loosened from the app - run apply-patches.ps1 on the PC.")
 TOOLS_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so no tool can "
@@ -843,10 +896,11 @@ def loosen_card(action: str) -> str:
     phrase = phrase[:1].lower() + phrase[1:]
     loose = LOOSE[action]
     after = " and tell you afterwards" if loose == "notify" else ""
-    extra = NOTE_NOTE if action in ("append_obsidian_daily", "append_logseq_journal",
-                                    "create_joplin_note") else (
-        "A chat where it reads something still counts as having read outside text, so a "
-        "later web search or note in that chat still asks.")
+    extra = NOTE_ROW.get(action) or (
+        NOTE_NOTE if action in ("append_obsidian_daily", "append_logseq_journal",
+                                "create_joplin_note") else (
+            "A chat where it reads something still counts as having read outside text, so a "
+            "later web search or note in that chat still asks."))
     return "\n".join([
         f"Let Jarvis {phrase} without asking you first?",
         "",
