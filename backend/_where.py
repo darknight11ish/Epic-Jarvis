@@ -173,6 +173,11 @@ SHIPPED = (
     "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
+    # The one connection class that CLOSES when its `with` block ends, shared
+    # by jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py
+    # (2026-10-08: the WinError 32 "schedule.json is being used by another
+    # process" failure, fixed by hand three times before it was shared).
+    "jarvis_sqlite.py",
     "jarvis_schedule.py", "jarvis_quick.py",
     # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
     # (already SHIPPED, above) is the only importer - no patch of its own.

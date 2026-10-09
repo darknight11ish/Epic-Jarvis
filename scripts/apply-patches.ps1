@@ -1285,6 +1285,9 @@ $SHIPPED = @(
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
+    'jarvis_sqlite.py'           # the one connection class that CLOSES when its `with` block ends, shared by
+                                 # jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py (2026-10-08; the
+                                 # WinError 32 "schedule.json is in use" failure, fixed by hand three times)
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
     'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
