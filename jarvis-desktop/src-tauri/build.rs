@@ -302,6 +302,14 @@ fn main() {
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // Settings' "Limits and frequency" (backend/limits-read.patch and
+            // backend/limits-settings.patch, 2026-10-08): the seven limits the
+            // owner can change, read and written through one table on the PC.
+            // The write refuses nothing this side - the BACKEND decides which
+            // way a change goes and puts one card to the owner before a
+            // loosening. Settings window only.
+            "get_limits",
+            "set_limit",
             // The sun, the moon and the weather behind the animal faces
             // (backend/sky.patch, 2026-09-28): the settings and the weather
             // now (a read - Settings, the Widget and the floating face keep

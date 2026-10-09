@@ -1209,6 +1209,13 @@ $PATCHES = @(
     # jarvis_limits.py (a module this repository ships whole), so every limit
     # after this one is a line in that table and no patch at all.
     'limits-settings.patch'
+    # The limits' READ route (2026-10-08): GET /api/limits, which answers the
+    # seven limits with the owner's words for each one, so a screen can show
+    # what the numbers are before changing one. It joins the HUD's read-only
+    # route set (the one that refuses cross-origin and bad-token requests) and
+    # changes nothing on its own - the write is still /api/limits/settings. It
+    # goes right after limits-settings.patch, whose table it reads.
+    'limits-read.patch'
     # "Look at this" can hand the owner the CLEANED picture of the look, for the
     # question box (the owner's decision of 2026-10-07;
     # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,

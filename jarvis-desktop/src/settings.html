@@ -162,6 +162,7 @@
             <span class="settings-jump-place-label">What Jarvis may do</span>
             <a href="#asks-first">What asks first</a>
             <a href="#reach">What Jarvis can reach</a>
+            <a href="#limits">Limits and frequency</a>
             <a href="#email-sending">Sending email</a>
           </div>
           <div class="settings-jump-place">
@@ -2404,6 +2405,31 @@
         </div>
       </section>
 
+      <!-- ── Limits and frequency ─────────────────────────────────────────
+           The audit of every feature (2026-10-08) found the numbers the owner
+           could see and change nowhere: how long an Undo stays possible, how
+           much Jarvis gets on with at once, what counts as news from a watched
+           project, how many cards a study run shows, how long a chat must sit
+           before the overnight tag suggester may read it, and whether a model
+           looks for people and things in what the owner saves.
+
+           ONE table on the PC owns them all (backend/jarvis_limits.py), read
+           through GET /api/limits (limits-read.patch) and changed through POST
+           /api/limits/settings (limits-settings.patch) - limits.rs, two
+           commands, Settings window only. Turning a number DOWN changes at
+           once; turning one UP that lets Jarvis do more is a loosening the
+           BACKEND puts to the owner on an approval card before writing
+           anything. -->
+      <section class="card" id="limits">
+        <h2>Limits and frequency</h2>
+        <p class="note">How often Jarvis does things, and how far it may go. Turning a number down changes at once. Turning one up that lets Jarvis do more asks you on this PC first.</p>
+        <p class="state" id="limits-state" role="status">Asking Jarvis…</p>
+        <div id="limits-body" hidden>
+          <ul class="sc-cards" id="limits-rows"></ul>
+          <p class="sc-line" id="limits-note"></p>
+        </div>
+      </section>
+
       <!-- ── Sending email ─────────────────────────────────────────────────
            The owner's decision of 2026-09-25, after the Muse audit
            (email-sending-settings.js; email_sending.rs get_email_sending).
@@ -2521,6 +2547,7 @@
     <script type="module" src="account-secrets-settings.js"></script>
     <script type="module" src="chatbot-api-keys-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
+<script type="module" src="limits-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
     <script type="module" src="sky-settings.js"></script>
     <script type="module" src="animal-settings.js"></script>

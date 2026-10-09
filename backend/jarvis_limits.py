@@ -414,17 +414,25 @@ def _raise_card(limit: Limit, old, new) -> tuple:
     return None, f"{limit.title} is now {limit.words(new)}."
 
 
-def view(*, app: str = "both") -> dict:
-    """Every limit this app may change, with what the owner's file says now."""
+def view(*, app: Optional[str] = None) -> dict:
+    """Every limit, with what the owner's file says now and the owner's words.
+
+    `app=None` - what the route asks for - returns EVERY row, each carrying its
+    own `app`, so each screen filters on what a row says rather than on a
+    filter guessed here. (Both call the same route: the PC's card must see the
+    PC-only limits and the phone must not, and neither can be told apart at the
+    route without the caller saying so.) `app="desktop"` / `"phone"` narrows it
+    here, which is what the tests and the voice lane ask for."""
     rows = []
-    for limit in limits_for(app if app in ("desktop", "phone") else "desktop"):
+    for limit in (LIMITS if app is None else limits_for(app)):
         now = value_of(limit)
         rows.append({"key": limit.key, "title": limit.title, "kind": limit.kind,
                      "value": now, "words": limit.words(now),
                      "choices": list(limit.choices), "low": limit.low,
                      "high": limit.high, "unit": limit.unit, "note": limit.note,
-                     "loosen_up": limit.loosen_up, "pc_only": limit.pc_only})
-    return {"ok": True, "limits": rows}
+                     "loosen_up": limit.loosen_up, "pc_only": limit.pc_only,
+                     "app": limit.app})
+    return {"ok": True, "available": True, "limits": rows}
 
 
 def change(body, *, peer=None, local=None) -> tuple:

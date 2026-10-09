@@ -150,7 +150,15 @@ RATCHET = {
     # with it, and `by_patch` names `retrieve-count.patch: 2` and
     # `attention-settings.patch: 1`, with `prompt-coach.patch` absent. A
     # ratchet: it may still only go down.
-    "jarvis_hud.py": 49,
+    # limits-read.patch (2026-10-08) adds two more, 49 -> 51: GET /api/limits.
+    # Both of its hunks materialise a pre-image for the same honest reason -
+    # they anchor on the HUD's read-only route set and its `/api/attention`
+    # dispatch, and that whole block is text only the owner's PC holds, so the
+    # walk cannot rebuild it. Measured, not argued:
+    # `_stack.materialised("jarvis_hud.py")` reads 49 without this patch and 51
+    # with it, and `by_patch` names `limits-read.patch: 2`. A ratchet: it may
+    # still only go down.
+    "jarvis_hud.py": 51,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
