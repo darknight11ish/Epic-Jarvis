@@ -1118,6 +1118,22 @@ class JarvisApi(
     }
 
     /**
+     * `GET /api/retrieve?q=...&count=1`: how many things the PC's own search
+     * reached for, and how many were near misses - **counts only, never the
+     * matched words** (the owner's decision of 2026-10-08, "Just the
+     * number"; docs/RETRIEVE-PORT-BRIEF.md option B;
+     * [RetrieveCount]). `count=1` is what makes the reply carry no `text`,
+     * no id and no kind at all. A read, and never sent at all unless the PC
+     * says it has the count-only read ([RetrieveCount.CAPABILITY]), because
+     * an older PC would answer with the words themselves.
+     */
+    suspend fun retrieveCount(question: String?): ApiResult<JsonObject> {
+        val path = RetrieveCount.path(question)
+            ?: return ApiResult.Failed(ApiError.Malformed("no question to count for"))
+        return probe(path)
+    }
+
+    /**
      * `GET /api/chat/table?id=` - the spending table a chat answer announced
      * with `: jarvis-table <id>` in its stream (docs/JARVIS-API.md section
      * 100.2). `X-Jarvis-Token` and `X-Jarvis-Client: hud` ride along like on

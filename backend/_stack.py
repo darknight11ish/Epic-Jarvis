@@ -114,12 +114,32 @@ RATCHET = {
     #: two no longer drift. 3 + 1 + 1 became 4 + 0 + 0, which is one hunk less
     #: and, more to the point, two patches that now anchor on real text. A
     #: ratchet: it may still only go down.
-    # 47, raised from 46 on 2026-10-08 for prompt-coach.patch: its POST hunk is
-# anchored on task-control.patch's own `if route in ("/api/task/pause"` block,
-# but the four lines of leading context above that line are the tail of a route
-# which predates every patch - text only the owner's real file holds. The other
-# hunk was re-anchored onto patch-written lines and no longer needs one.
-"jarvis_hud.py": 47,
+    #: Raised 2026-10-08, 46 -> 48, for `retrieve-count.patch`, and both extra
+    #: hunks are honest rather than drift - the patch is in `by_patch`:
+    #:
+    #:   * The count-only retrieval trace (the owner's decision of 2026-10-08,
+    #:     "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B;
+    #:     JARVIS-API section 119). Two hunks in `jarvis_hud.py`, both on text
+    #:     only the owner's PC holds: `retrieve()`'s own closing
+    #:     `return {"hits": pack(hits), ...}` line in the middle of the file,
+    #:     and the `/api/retrieve` handler's `q = (parse_qs(...))[0]` near the
+    #:     end. No earlier patch in this walk writes either, and nothing else
+    #:     in `jarvis_hud.py` was ever patched around them - the nearest
+    #:     patched region for the second is `brain-reads.patch`'s route table,
+    #:     hundreds of lines away. Both hunks were verified to apply to
+    #:     `jarvis-backend/jarvis_hud.py` (this repository's copy of the state
+    #:     the whole stack leaves) with `git apply`, which is the check this
+    #:     walk cannot make; `backend/test_retrieve_count.py` re-runs it. A
+    #:     ratchet: it may still only go down.
+    # prompt-coach.patch (2026-10-08) also contributed one, when it was raised to
+# 47 on this branch alone: its POST hunk is anchored on task-control.patch's own
+# `if route in ("/api/task/pause"` block, and the four lines of leading context
+# above that line are the tail of a route which predates every patch - text only
+# the owner's real file holds. The other hunk was re-anchored onto patch-written
+# lines and no longer needs one. The number above is the walk's own MEASUREMENT
+# with both features in it, not a sum worked out by hand: test_retrieve_count.py
+# asserts the pin equals what it measures, so it must be the measured value.
+    "jarvis_hud.py": 48,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`

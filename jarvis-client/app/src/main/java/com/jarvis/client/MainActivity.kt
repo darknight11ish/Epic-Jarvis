@@ -3087,6 +3087,11 @@ class MainActivity : FragmentActivity() {
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
                                 onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
                                 onLoadSources = { tid -> JarvisRuntime.chatSources(tid) },
+                                // "3 recalled · 2 near" (the owner's decision of
+                                // 2026-10-08, "Just the number"): counts only,
+                                // and the runtime sends nothing at all unless the
+                                // PC's handshake says it has the count-only read.
+                                onLoadRetrieveCount = { q -> JarvisRuntime.retrieveCount(q) },
                                 onLoadSpendingTable = { tid -> JarvisRuntime.spendingTable(tid) },
                                 onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that

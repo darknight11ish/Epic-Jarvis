@@ -472,9 +472,18 @@ def t_hygiene():
           and "jarvis_screen_attach.py" in __import__("_where").SHIPPED)
     check("its base copy is in the published backend too",
           (REPO / "jarvis-backend" / "jarvis_screen_attach.py").is_file())
+    # "Last" means last but for the patches written after it - the same rule
+    # test_devices.py, test_gate_risk_rows.py and test_referee.py use, and the
+    # same allow-list they declare. retrieve-count.patch (2026-10-08) is
+    # written after it: two hunks in jarvis_hud.py - `_retrieve_counts()`
+    # beside retrieve() and the /api/retrieve handler's own `count=1` branch -
+    # nowhere near the POST /api/screen route this patch's wrapper takes over,
+    # so the request body is still read once, and still by this wrapper.
+    stack_order = __import__("_stack").order()
     check("the patch that wires it is in the script's list, and last",
-          "'screen-attach.patch'" in ps1 and "screen-attach.patch" in __import__("_stack").order()
-          and __import__("_stack").order()[-1] == "screen-attach.patch")
+          "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
+          and [n for n in stack_order
+               if n not in {"retrieve-count.patch"}][-1] == "screen-attach.patch")
     patch = (HERE / "screen-attach.patch").read_text(encoding="utf-8")
     check("the patch wires it into jarvis_hud.py and edits no shipped file",
           "jarvis_screen_attach.install(Handler" in patch and "+++ b/jarvis_hud.py" in patch

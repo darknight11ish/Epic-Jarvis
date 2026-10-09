@@ -114,7 +114,7 @@ rewrite that answers the question instead of asking it better.
   by default. Both apps get it; `tools/check_parity.py` classifies the route.
 - The features list (`features.json`, three byte-identical copies) gets an
   entry - `tools/check_feature_list.py` refuses a Brain read nobody listed.
-- `docs/JARVIS-API.md` section 119, a `CHANGELOG.md` entry, a `docs/README.md`
+- `docs/JARVIS-API.md` section 120, a `CHANGELOG.md` entry, a `docs/README.md`
   row, and the decision recorded in `CLAUDE.md`.
 
 ## What is not claimed

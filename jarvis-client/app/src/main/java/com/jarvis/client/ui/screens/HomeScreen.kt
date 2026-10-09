@@ -773,6 +773,13 @@ data class HomeActions(
      */
     val onLoadSources: suspend (String?) -> com.jarvis.client.net.ChatSources.Read =
         { com.jarvis.client.net.ChatSources.Read.Missing },
+    /**
+     * "3 recalled · 2 near" (the owner's decision of 2026-10-08, "Just the
+     * number"): how many things the PC's own search reached for, counts
+     * only, never the words ([com.jarvis.client.JarvisRuntime.retrieveCount]).
+     */
+    val onLoadRetrieveCount: suspend (String?) -> com.jarvis.client.net.RetrieveCount.Read =
+        { com.jarvis.client.net.RetrieveCount.Read.Missing },
     /** The spending table under an answer ([com.jarvis.client.JarvisRuntime.spendingTable]). A read. */
     val onLoadSpendingTable: suspend (String?) -> com.jarvis.client.net.Spending.Read =
         { com.jarvis.client.net.Spending.Read.Gone(com.jarvis.client.net.Spending.TABLE_GONE) },
@@ -1412,6 +1419,15 @@ private fun ConversationList(
                     turnId = state.answerTurnId,
                     hidden = state.memoryHidden,
                     load = actions.onLoadSources,
+                ),
+                // "3 recalled · 2 near" (the owner's decision of 2026-10-08):
+                // counts only, and asked for only while the memory lists are
+                // not hidden - the PC blanks this route itself in that state,
+                // so this is the same rule rather than a second one.
+                retrieve = RetrieveAnswer(
+                    question = state.lastUserText,
+                    hidden = state.memoryHidden,
+                    load = actions.onLoadRetrieveCount,
                 ),
                 spending = SpendingAnswer(
                     tableId = state.answerTableId,
@@ -2689,6 +2705,10 @@ private fun Reply(
     // gave no turn_id at all - the same "nothing to show" the line below
     // already treats an empty `used.ids` as.
     sources: SourcesAnswer? = null,
+    // "3 recalled · 2 near" (the owner's decision of 2026-10-08, "Just the
+    // number"): counts only, never the words. Null when the caller gave no
+    // question to count for.
+    retrieve: RetrieveAnswer? = null,
     // The spending table under this answer (docs/JARVIS-API.md section 100):
     // drawn as sent, memory only, never copied, shared or read aloud.
     spending: SpendingAnswer? = null,
@@ -2875,6 +2895,34 @@ private fun Reply(
                         modifier = Modifier.liveStatus(),
                     )
                 }
+                // "3 recalled · 2 near" (the owner's decision of 2026-10-08,
+                // "Just the number"; docs/RETRIEVE-PORT-BRIEF.md option B):
+                // how many things the PC's own search reached for, and how
+                // many were near misses. The words the desktop's trace prints
+                // - a saved fact, a document, a Logseq page - are never sent:
+                // the phone asks with `count=1` and the PC answers with two
+                // numbers (jarvis_hud.py `_retrieve_counts`). Asked for only
+                // while the memory lists are not hidden, because the PC blanks
+                // this route itself under "Windows Hello for memory lists"
+                // (`lock/rules.rs` `redact_hud_read`) - the same rule, not a
+                // second one - so nothing is sent at all in that state.
+                if (retrieve != null && retrieve.question != null && !retrieve.hidden) {
+                    var retRead by remember(retrieve.question) {
+                        mutableStateOf<com.jarvis.client.net.RetrieveCount.Read?>(null)
+                    }
+                    LaunchedEffect(retrieve.question) { retRead = retrieve.load(retrieve.question) }
+                    val shown = retRead as? com.jarvis.client.net.RetrieveCount.Read.Shown
+                    val line = shown?.let { com.jarvis.client.net.RetrieveCount.line(it.count) }
+                    if (line != null) {
+                        Gap(4)
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                            modifier = Modifier.liveStatus(),
+                        )
+                    }
+                }
                 // "Where this came from" (feasibility I42/I132): fetched
                 // once, quietly, as soon as this answer's turn_id is known
                 // - there is no cheap count the way "Used 2 memories" has
@@ -3055,6 +3103,20 @@ internal data class SourcesAnswer(
     val turnId: String?,
     val hidden: Boolean,
     val load: suspend (String?) -> com.jarvis.client.net.ChatSources.Read,
+)
+
+/** What "3 recalled · 2 near" under the answer needs (the owner's decision of
+ *  2026-10-08, "Just the number"; docs/RETRIEVE-PORT-BRIEF.md option B) - see
+ *  [com.jarvis.client.net.RetrieveCount]. `question` is the owner's own last
+ *  question, which is what the PC's search is run against; null means there is
+ *  no answer to count for. `hidden` is the SAME "Hide memory lists and chat
+ *  history" flag [SourcesAnswer.hidden] reads: the PC itself blanks this route
+ *  while that is on, so nothing is asked for and nothing is shown. */
+@Immutable
+internal data class RetrieveAnswer(
+    val question: String?,
+    val hidden: Boolean,
+    val load: suspend (String?) -> com.jarvis.client.net.RetrieveCount.Read,
 )
 
 /**

@@ -17993,7 +17993,100 @@ was never sent renders nothing from it. `cargo test --lib` runs 689 tests;
 `tools/gen_tasks_cases.py --check` and the desktop suite in one step, and
 compiles the Kotlin.
 
-## 119. The prompt coach: "Coach this" (added 2026-10-08)
+---
+
+## 119. The retrieval trace on the phone: the count, never the words (added 2026-10-08)
+
+`backend/retrieve-count.patch` (two hunks in `jarvis_hud.py`, no new module),
+`backend/test_retrieve_count.py`, the phone's `net/RetrieveCount.kt` and
+`RetrieveCountTest.kt`. The decision, and the three options it came from, are
+in `docs/RETRIEVE-PORT-BRIEF.md`.
+
+### 119.1 What the route returns on the PC
+
+`GET /api/retrieve?q=<the question>` is the desktop HUD's "what the brain
+reached for" trace. It is served by the running backend (`jarvis_hud.py`,
+`retrieve()`), behind the token and the origin check because it "serves stored
+personal material". Its answer is:
+
+    {"available": true,
+     "hits": [{"id": "fact:12", "kind": "fact", "score": 0.71,
+               "text": "first 150 characters of the matched text"}, ... up to 7],
+     "near": [ ... the next 6, the same shape ... ]}
+
+The corpus is *everything in the brain that carries text*
+(`retrieval_corpus()`): saved memory facts, stored documents (up to 300),
+**every Logseq page read off disk**, and knowledge-graph entities. Joplin is
+deliberately excluded. So one answer can name a saved fact about the owner, a
+document, a work note, or a person - **the words themselves, not an id or a
+title**. That is exactly why the desktop blanks the whole route while "Windows
+Hello for memory lists and chat history" is on: `lock/rules.rs`
+`redact_hud_read` answers `{"available": false, "hidden": true}` and a Rust
+test proves the words never survive.
+
+### 119.2 What the phone shows, and why that is all it gets
+
+The owner chose **"Just the number"** (2026-10-08), from the brief's three
+options - not the actual lines, like the PC, and not nothing on the phone.
+Under an answer, beside "Used 2 memories", the phone shows one quiet line in
+the desktop's own two words:
+
+    3 recalled · 2 near
+
+the same sentence `jarvis_hud.html`'s trace bar already draws
+(`N recalled · M near`), with the words taken out. Nothing when the search
+reached for nothing. It is drawn under the answer and never enters Copy,
+Share or the thread.
+
+**The words never reach the phone at all.** The phone asks with `count=1`, and
+that flag is answered by `_retrieve_counts()` - a small function beside
+`retrieve()` that runs the *same* scoring (so the two numbers always agree
+with the desktop's own trace) and then returns four keys and nothing else:
+
+    {"available": true, "count_only": true, "recalled": 3, "near": 2}
+
+It contains no `hits`, no `near` list, no `id`, no `kind` and no `text`. The
+one step in `jarvis_hud.py` that puts matched text into a reply is never
+reached from it. The words are built on the PC and dropped on the PC.
+
+**And it is not asked for at all on a PC that would answer with the words.**
+An older backend ignores `count` and returns the full trace, so the phone
+sends nothing - not even the question - unless `/api/version`'s
+`capabilities.retrieve_count` is true (`jarvis_events._capability_probe`,
+asked of the running server as `_hud_has("_retrieve_counts")`, exactly the way
+`capabilities.temporary_chat` already works). The phone's own reader
+(`RetrieveCount.parse`) additionally refuses any reply that is not an explicit
+count-only one, and its `Count` can hold two whole numbers and no text field
+at all - so a count this app draws cannot contain a fact, a document or a note
+by construction, not by care.
+
+**The hiding rule is the same rule, not a second one.** While "Hide memory
+lists and chat history" is on, the phone asks for nothing and shows nothing -
+because the PC itself answers `{"available": false, "hidden": true}` for this
+route in that state. The count is not treated as exempt from that switch.
+
+### 119.3 What this costs, and what was not checked
+
+* The route re-scores the whole corpus on every question - measured at about
+  **494 ms plus 29 ms of disk reads** at the shipped caps
+  (`docs/audit-2026-10-07/G-performance.md`, G1). The phone now asks for it on
+  each finished answer, which is the cost the owner accepted by choosing the
+  number over nothing. It is a read on the PC either way; nothing is kept on
+  the phone.
+* `retrieve()`'s own body is not edited, and the desktop's request carries no
+  `count`, so the desktop's trace is byte-for-byte what it was. The patch's two
+  hunks were checked with `git apply` against `jarvis-backend/jarvis_hud.py` -
+  this repository's copy of the state the whole stack leaves - and
+  `backend/test_retrieve_count.py` re-runs that check.
+* **The phone half is not compiled here** (no Android SDK in this container and
+  virtualization is off in the firmware): CI's Gradle build is the first
+  compile. `RetrieveCountTest.kt` covers the pure logic only - the path, the
+  reading of the reply, the line, and the guarantee that no word can be drawn -
+  which runs on a plain JVM without a device.
+* Nobody has run this against a real backend on the owner's PC. The numbers the
+  brief quotes are from the 2026-10-07 audit, not re-measured here.
+
+## 120. The prompt coach: "Coach this" (added 2026-10-08)
 
 **What it is.** The owner asked whether any open-source project would help them
 write better prompts, and whether it could be a feature they can switch on and
@@ -18004,7 +18097,7 @@ ten, up to four gaps each with the smallest fix, questions it would have to ask,
 and one rewritten prompt. Both apps show it with **Send mine** and **Send the
 suggestion**.
 
-**119.1 The four libraries, and why none of them is used.** The suggestion came
+**120.1 The four libraries, and why none of them is used.** The suggestion came
 with `promptimal`, `textgrad`, `promptfoo` and `prompt-optimizer`. Each was
 checked against the repository and against the library itself
 (`docs/PROMPT-COACH-DESIGN.md` has the detail):
@@ -18021,7 +18114,7 @@ checked against the repository and against the library itself
 What was worth taking is the **list of what a prompt usually lacks**, which is a
 checklist and not a dependency.
 
-**119.2 The routes.** Three, and none of them approves anything:
+**120.2 The routes.** Three, and none of them approves anything:
 
     GET  /api/prompt/coach          {"ok", "on", "why", "label", "detail",
                                      "heading", "button", "send_mine",
@@ -18038,7 +18131,7 @@ checklist and not a dependency.
 400; a refusal is 409 with a plain sentence; `enabled` must be a real true or
 false, because guessing would mean "your switch moved" when it did not.
 
-**119.3 The switch.** `prompt_coach` is a `BoolSetting` in
+**120.3 The switch.** `prompt_coach` is a `BoolSetting` in
 `jarvis_settings_registry.py` with its own `Section("prompt-coach")` and the
 house setter contract `set_prompt_coach(on, *, peer=None, local=None)`, which
 calls `jarvis_prompt_coach.set_enabled()` - so the voice/chat path and both
@@ -18051,7 +18144,7 @@ model on the same PC anyway, takes no action, and opens no way out of the PC.
 The reasoning is written in the setter's own docstring so the next reader does
 not "fix" it.
 
-**119.4 What it must never do**, each with a test in
+**120.4 What it must never do**, each with a test in
 `backend/test_prompt_coach.py` reading the module's own source:
 - **never sends anything, never changes the owner's words**: it returns text;
   the owner presses Send mine or Send the suggestion. There is no
@@ -18067,7 +18160,7 @@ not "fix" it.
 - **a bad answer is a refusal, never half a card**: five kinds of malformed
   answer are refused rather than shown.
 
-**119.5 The honest limit.** The model is an 8B one on the owner's PC and is a
+**120.5 The honest limit.** The model is an 8B one on the owner's PC and is a
 **mediocre prompt critic**. It will miss things a strong model catches and will
 sometimes be confidently wrong. That is why it is a button rather than an
 interceptor, why `DETAIL` says so in the app, and why **"clear: true with no
@@ -18075,7 +18168,7 @@ issues" is a correct, expected answer** rather than a failure to find something
 - the module's own prompt says inventing a complaint is a failure. A model that
 claims `clear` while listing gaps is not believed; the gaps win.
 
-**119.6 Verification, and what is not proven.** `test_prompt_coach.py` runs with
+**120.6 Verification, and what is not proven.** `test_prompt_coach.py` runs with
 no model at all (`ask=` is an injectable seam, the same one
 `jarvis_entities.py` uses) and covers the switch's failure modes, the gate's
 ordering, the parse, and both routes. The patch is generated from the real
