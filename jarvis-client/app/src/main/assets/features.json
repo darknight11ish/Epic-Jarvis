@@ -1192,6 +1192,19 @@
     ]
   },
   {
+    "id": "job-list",
+    "group": "The PC itself",
+    "title": "Jobs that keep going after the chat ends",
+    "what": "Jarvis keeps a list of jobs on your PC. A job is a named set of steps; it runs one step at a time, remembers where it got to, and carries on after a restart instead of starting over.",
+    "where": "Brain, Work, under \"Background jobs\" - on the PC and on the phone. Each job has Pause, Resume, Cancel or Retry, and a job that stopped to ask something gets a box to answer it in.",
+    "asks": "Every step still raises its own approval card before it acts, exactly as if you had asked for it on its own. Resume and Retry only put the job back in the queue - they decide nothing. Pause and Cancel are instant: stopping is never held back.",
+    "limit": "The list shows how far each job got and which tools it will use, never what the job is about - the PC sends no titles or step text. Nothing runs while Jarvis is switched off, and the plan card that would start a job from a chat is still switched off.",
+    "surface": "both",
+    "covers": [
+      "tasks"
+    ]
+  },
+  {
     "id": "hardware",
     "group": "The PC itself",
     "title": "Hardware and models",

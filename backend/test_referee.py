@@ -637,7 +637,11 @@ def t_the_patch_and_the_lists():
              # route and one POST block, anchored on routes that predate it. It
              # touches jarvis_gate.py not at all, so it rewrites nothing
              # referee.patch's hunks anchor on.
-             "prompt-coach.patch"}
+             "prompt-coach.patch",
+             # tasks.patch (2026-10-08): two hunks in jarvis_hud.py - one GET
+             # route and one POST block - and jarvis_gate.py not at all. It
+             # rewrites nothing referee.patch's hunks anchor on.
+             "tasks.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

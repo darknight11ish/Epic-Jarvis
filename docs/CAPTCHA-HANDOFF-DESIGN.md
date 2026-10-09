@@ -1,0 +1,387 @@
+# Handing a captcha to the owner's phone ("Solve it here") - design
+
+**Read this with:** `docs/JARVIS-API.md` section 87.8 (the wire format, field
+by field), `docs/CHATBOT-DRIVER-DESIGN.md` (the driver that pauses),
+`docs/ARCHITECTURE.md` section 4 ("Not a way out: Solve it here") and section
+8 (the clients). This note is the *why* and the *end-to-end flow*; 87.8 is the
+*what the routes say*. Where the two differ, 87.8 is right - it is checked
+against the code.
+
+**Status: the backend half is already built on `main`** (commit `547efadf`,
+"Solve it here, backend", 2026-09-28; `backend/jarvis_handoff.py`,
+`backend/test_handoff.py`, the routes in `backend/jarvis_chatbot_routes.py`).
+This pass did **not** rewrite it. It wrote this note, checked the built
+backend against every rule below, and added the three promise tests
+`test_handoff.py` was missing (§6). **Nothing here has run against a real
+captcha, a real phone or a real Android build**: there is no captcha service,
+no phone and no Android SDK in this checkout. That is said again, plainly, in
+§9.
+
+For the owner's decision of 2026-09-28 (`CLAUDE.md`, "A captcha can be handed
+to the owner's phone"). Anything marked **unverified** has not been tried on a
+real machine.
+
+**In one paragraph:** when the visible browser window Jarvis is driving stops
+on a captcha, a sign-in page or an "unusual activity" page, Jarvis stops
+there and tells the phone. The owner taps "Solve it here" and sees a live
+picture of *that one window*, which travels only from the PC to the owner's
+own phone over Tailscale or NordVPN Meshnet, is never written down anywhere, and
+is thrown away with the answer. Their taps and typing go back to *that one
+window*, and only while Jarvis is still paused on that page. Jarvis never
+solves the captcha, never guesses where to tap, and never keeps a picture or
+a typed character. Solving it in the window on the PC still works just as it
+did, and is the fallback when a captcha refuses taps that came this way.
+
+## 1. What the existing captcha code already does (read before building)
+
+Three separate pieces already existed before this feature, and this feature
+was built **on** them, not beside them:
+
+1. **`jarvis_browser_engine.py`** (the headless browser, Obscura) already
+   detects a captcha or a sign-in page and stops the run. `wants_a_person()`
+   returns the word `"captcha"` (a challenge phrase, or a weaker one in the
+   title and the first part of the text) or `"signin"` (a password box plus
+   "sign in"/"log in" in the title or the address - or, for the email-first
+   kind with no password box yet, the same words plus a box for a username or
+   email), and the run stops with a plain sentence naming which and handing the
+   job to the visible browser. It reads a page's title and its first part and
+   nothing else; it has no window the owner can touch, so it can never be
+   handed over this way - and it does not need to be: it hands over by telling
+   the owner to ask again with the visible browser.
+2. **`jarvis_chatbot_web.py`** (the visible browser every chatbot site and the
+   support widget is built on) decides, on every step, whether the page wants
+   a person. `_status_here()` returns `CB.Status("needs_owner", <code>)` with
+   the code `"captcha"` (a captcha frame/selector), `"unusual"` (an "unusual
+   traffic/activity" warning page, or Google's `/sorry/...` address) or
+   `"login"` (a sign-in host, a sign-in address shape, a sign-in form or
+   signed-out marker, or a sign-in phrase in a heading). The driver turns any
+   `needs_owner` into a **pause** and keeps the window open. That pause is the
+   only thing that can start a hand-off.
+3. **`jarvis_browser_control.py`** already refuses to drive a captcha or a
+   sign-in with the headless engine, and its help text already promises the
+   owner that Jarvis "never types a password with it and never solves a
+   captcha". It is not part of the hand-off: a browser-control *run* has no
+   session the owner can take over, so a captcha there stops the run in words.
+
+So: **detection was already there; what this feature adds is the hand-over.**
+It does not add a second captcha detector, does not classify pages itself, and
+does not touch the headless engine's rules.
+
+## 2. The flow, end to end
+
+Every step names the real call, so a reader can check this against the code.
+
+1. **Detect.** The visible window's adapter sees the page
+   (`jarvis_chatbot_web._status_here`) and returns `needs_owner` with
+   `captcha`, `login` or `unusual`. The driver pauses the conversation or the
+   support chat with that code. The browser window stays open and untouched.
+2. **Offer.** `jarvis_handoff.offer()` (read by both apps on
+   `GET /api/chatbot/status`, key `handoff`) says whether a page is waiting,
+   for which site, and why - in words, never a picture and never a word from
+   the page. It publishes one `handoff` event on the bus, once per
+   target+reason, so the phone can raise an alert without polling blind.
+3. **Pause Jarvis.** Nothing else happens on its own. Jarvis sends nothing
+   more to that site, reads nothing from it, and does not retry the step.
+   On the PC the Brain shows the same alert and points at the window.
+4. **Alert the phone.** The phone's own notification channel (kept on the
+   phone, `setLocalOnly(true)`) says "{site} needs you"; with App lock or
+   "Hide memory lists and chat history" on, only "A website Jarvis is using
+   needs you", and the lock screen never says more. Tapping "Solve it here"
+   opens the screen.
+5. **Open the hand-off.** `POST /api/chatbot/handoff/start {"kind","id"}`
+   (`jarvis_handoff.start`). **No approval card**: nothing leaves the owner's
+   own devices and nothing is done but what the owner does themselves. The
+   hosts the window may show from now on are frozen: the site's own hosts, its
+   sign-in hosts, and the host it is on at this moment. One hand-off at a time;
+   a new one ends the old. It refuses with 409 and a plain sentence when
+   nothing is waiting.
+6. **Live view.** `GET /api/chatbot/handoff/frame?h=` (`frame()`), at most
+   twice a second. It is Playwright's own `page.screenshot(type="jpeg",
+   quality=60, scale="css")` of **that one page** - never the desktop, never
+   another window, never another tab the site opened - returned base64 in the
+   answer with its pixel size and a sequence number. Is it a stream or a still
+   refreshed at a rate? **A still, refreshed on demand** (the phone asks about
+   once a second while the screen is in front). See owner question Q2.
+7. **Taps and keys.** `POST /api/chatbot/handoff/input {"h","type",...}`
+   (`send_input()`), one input per call: `tap` (x,y as fractions of the last
+   picture), `text` (1-200 characters, no control characters), `key` (one of
+   ten named keys - Enter, Backspace, Delete, Tab, Escape, Space, the four
+   arrows), or `scroll` (capped at 1500 page pixels). `_relay()` passes exactly
+   that to `page.mouse.click` / `page.keyboard.type` / `page.keyboard.press` /
+   `page.mouse.wheel`. Jarvis adds nothing, clicks nothing by itself, and never
+   reads what the owner types.
+8. **Still paused? Check again.** *Every* picture and *every* input first
+   re-checks that the session is still paused at the same code with the same
+   window, and - on the window's own thread, in `_on_window()` - that the page
+   is alive and showing one of the frozen hosts, and checks the host **again
+   after** an input (an input can drive the page elsewhere). Any failure ends
+   the hand-off immediately with a reason and a sentence.
+9. **Resume.** The owner presses the driver's **Resume** (which still asks
+   with its card, as always) or "End" on the hand-off screen. Ending never
+   asks: it only makes Jarvis do less. `POST /api/chatbot/handoff/end {"h"}`,
+   or any of the enders in §5. The conversation carries on from where it
+   paused; the window is left exactly where the owner left it.
+
+## 3. The security shape: what crosses, and what is never kept
+
+**What crosses the boundary (PC -> the owner's own phone, and back).**
+
+- Only **one JPEG of one browser page**, PC to phone, on request.
+- Only the **owner's own input** - their tap coordinates, the characters they
+  typed, the key they pressed, their scroll - phone to PC.
+- Only **fixed sentences and counts**: the site's name, the reason code, and
+  the reasons a hand-off ended. No page text, no page title, no address bar,
+  never a word the site said.
+
+**What never crosses.** Nothing else on the PC: not the desktop, not other
+windows or tabs, not the clipboard, not memory, not email, not files, not
+credentials. Rule 1 holds because the only destination is the owner's own
+paired phone over their private mesh (Tailscale or NordVPN Meshnet); **no
+public tunnel is opened or reachable** (rule 2), no proxy exists in this path,
+and no spoofing code is added to the visible browser. Jarvis itself never
+solves, skips, anticipates or clicks a captcha, and never claims to be human.
+
+**Where the "never saved" promise is kept, in the code.** Three places, and a
+test for each (§6):
+
+- **No file, no temp file, no cache.** `frame()` returns the JPEG bytes in the
+  HTTP answer and keeps no path, no temp file and no on-disk cache anywhere;
+  the module contains no file write or open call at all (checked by reading its
+  own source), and the picture exists as bytes for the length of the answer and
+  is then gone. (The only thing this module records anywhere is an audit line,
+  and that carries no picture - see the next point.)
+- **No log line, no audit of content.** `_audit()` writes only counts and the
+  *name* of a special key: `start` (kind, reason, host count), `input` (type,
+  and `key` for a named key), `end` (why, frames, inputs, seconds). Typed text
+  never reaches it - `test_handoff.py` types "hunter two" and asserts the word
+  is in no audit record. This pass added the matching test for the picture: no
+  frame's base64, and no hand-off token, appears in any audit line.
+- **No chat history, no memory, no learner, no event.** The picture is not a
+  chat message, is never learned from, is never put on the event bus, and is
+  never handed to a model. An input's contents are not kept after the call
+  either.
+
+**The pairing token** is never logged by this path (rule 3, and the standing
+rule "never log the token"): the hand-off routes are answered by the chatbot
+route installer, which checks the token and passes the request on; the token
+value is never copied into a body, an audit line, an event or a sentence this
+module writes. A test asserts it (§6).
+
+**What is *not* protected, said plainly.** The typed characters (a password,
+a one-time code) travel live over the owner's mesh link and sit in the PC's
+memory for that one input; they are never logged or kept, but they are not
+encrypted end-to-end beyond what Tailscale/Meshnet themselves provide. A
+captcha may recognise a tap that arrived this way and refuse it - the apps
+say so in words (`WORDS["may_refuse"]`). A site that opens a **new window or
+tab** for its sign-in is finished on the PC: only the first window is passed
+on. Anyone who can already drive the owner's PC can take a picture of that
+window directly; this feature does not defend against a program already on the
+PC (that is `ARCHITECTURE.md` section 3's known limit, not a new one here).
+
+## 4. The rate and size limits
+
+| Thing | Limit | Where |
+|---|---|---|
+| Pictures | at most **2 a second**; a faster ask gets 429 with `retry_ms` | `FRAMES_PER_S = 2.0` |
+| Picture size | a JPEG at quality 60, in CSS (page) pixels - a page-sized picture, not a screen-sized one; no resize cap beyond the page itself | `JPEG_QUALITY = 60` |
+| One typed run | at most **200 characters**, and no control characters (use the named keys) | `TEXT_MOST = 200` |
+| Inputs | at most **30 in any 3 seconds**, else 429 "Slow down a little." | `INPUTS_MOST`, `INPUT_WINDOW_S` |
+| One scroll | at most **1500 page pixels** either way | `SCROLL_MOST` |
+| Keys | ten named keys only; no function keys, no `Ctrl`/`Alt` shortcuts, nothing that reaches the browser's own chrome | `KEYS` |
+| Hosts | fixed at `start()`: the site's own, its sign-in hosts, the host showing then. Anything else ends it | `hosts` |
+| Hand-offs | one at a time, globally - starting a new one **ends the old** | `_CURRENT` |
+
+## 5. How the owner stops it, and what times out
+
+Every ender writes one sentence into `jarvis_handoff.ENDED`, which both apps
+show; the routes answer **410** with `ended` and that sentence afterwards.
+
+| Enders | `ended` | Meaning |
+|---|---|---|
+| The owner's **End** button, or a repeated End (never refused, never a card) | `owner` | "You ended it." |
+| **Resume** on the conversation, or the session running again | `resumed` | "The page is no longer waiting for you..." |
+| **Stop** on the conversation | `stopped` | "The conversation stopped." |
+| The window **going to another site** | `left` | "...Nothing more is passed on - look at the window on the PC." |
+| The window **closing** | `closed` | "The browser window closed." |
+| **Nobody looking**: no picture asked for 45 s | `idle` | "Nobody was looking at the picture for a while..." |
+| **However it went**: 15 minutes | `time` | "The hand-off ended after 15 minutes." |
+| **Stop everything** (the global hotkey) | `stop_all` | "Stop everything ended it." |
+| A **new hand-off** starting | `replaced` | "A new hand-off started." |
+
+Timeout is therefore two clocks, both fail-closed: **45 seconds of no picture**
+(the phone left the screen, or the link died) and **15 minutes absolute**. The
+45-second clock is refreshed by pictures *and* by inputs, so an owner typing
+slowly on a sign-in form is not cut off mid-way. Nothing about ending a
+hand-off asks for approval: it only makes Jarvis do less, so it is never held
+on a stale link (rule 4 holds it the other way - input *is* held when the link
+is stale, ending never is).
+
+## 6. The tests, and what each one proves
+
+`backend/test_handoff.py` (104 checks pass here, including the three below;
+the real-browser half is skipped without Playwright):
+
+- **In code (AST):** one `screenshot` call and it is in `frame()`; the owner's
+  `click`/`type`/`press`/`wheel` are reached only in `_relay()`; `_on_window`
+  is called only from `frame()` and `send_input()`; `_mine()` (the
+  still-paused check) comes **before** the window is touched in both; no
+  `goto`/`evaluate`/`fill`/`launch` anywhere; no proxy, captcha-solving or
+  spoofing word from the chatbot sites' own FORBIDDEN list; no other chatbot
+  file pictures a page or moves a mouse.
+- **In behaviour:** nothing is offered, pictured or passed on while a session
+  is running, paused for another reason, part of a comparison, or has no
+  window; refused starts touch no page; a tap before any picture is refused;
+  a tap outside the picture, a 201-character text, a control character, `F5`,
+  `Control+L`, an unknown type and another hand-off's id are all refused - and
+  the page saw nothing; every ender above ends it and the page sees nothing
+  after.
+- **The three promise tests added this pass** (they were the gap):
+  1. **The picture is not written to disk.** During a frame and an input, every
+     write, open, move, copy or delete that could reach a file is trapped
+     (`Path.write_bytes`, `os.replace`, `shutil.copy`, `tempfile`, and the
+     builtin `open` itself); the check fails if any is attempted. This trap was
+     itself probed: with the trap armed, a save added to `frame()` is caught -
+     and a first version of the trap that only wrapped `Path` let a bare
+     `open(path, "wb")` through, which is why the builtin is wrapped too. A
+     second code-level check reads the module's own source (docstrings and
+     comments removed) for a list of write and open names, so a save that the
+     trap somehow cannot see still has to get past a reader.
+  2. **The picture and the token are never logged.** A frame is taken with a
+     known token in play, and the audit lines are searched for the picture's
+     own base64 and for the token: neither may appear. Fails if a frame's bytes
+     are put in the audit detail, or the token is.
+  3. **The routes are gated like every other route.** The chatbot routes are
+     installed into a stand-in handler and the hand-off frame/input/end routes
+     are asked for with a bad origin (403) and with a bad or missing token
+     (401) before any hand-off exists. Fails if a hand-off route is added to
+     the answered list without going through the installer's own `_allowed()`.
+
+Run it with `python backend\test_handoff.py`, or through
+`python backend\run_suites.py` with everything else.
+
+## 7. What the phone will need (the next step - not built in this pass)
+
+The phone calls these routes and nothing else; it never runs a browser, never
+sees another window, and holds no state of its own about what is on the PC.
+
+1. **A notification channel of its own**, kept on the phone
+   (`setLocalOnly(true)`), raised from the `handoff` event: "{site} needs
+   you", or "A website Jarvis is using needs you" while App lock or "Hide
+   memory lists and chat history" is on. The lock screen never says the site.
+2. **A screen behind App lock** showing the picture, with the fixed sentences
+   from `WORDS` (`tools/gen_handoff_cases.py` writes both apps'
+   `handoff-cases.json` from the real module, so the words cannot drift).
+3. **The picture loop**: ask `frame` about once a second, and **only while
+   that screen is in front and the app is unlocked** (not composed behind the
+   lock screen), hold it in memory for the screen only, drop it when the
+   screen goes, and block screenshots of Jarvis while it shows. The picture is
+   never put in saved state (`onSaveInstanceState`), never cached to disk,
+   never logged, and never sent anywhere else.
+4. **Taps as fractions** of the picture; a tap on the margin goes nowhere.
+   **Typing masked on a sign-in page**, held in memory for the input only,
+   never in the app's saved state. The ten named keys offered as buttons.
+5. **Stale-link handling**: hold `input` while the link is stale, with
+   `WORDS["held_stale"]`; **End and "Solve it on the PC instead" are never
+   held** (rule 4).
+6. **The plain warning** (`WORDS["may_refuse"]`) on the screen, not behind a
+   link: some captchas refuse taps passed on this way, and the PC window is
+   the fallback.
+7. **The 410 handling**: when a route answers 410 with `ended`, show the
+   sentence and close the screen; do not retry the picture.
+
+The desktop half is deliberately **one-sided**: the window is right there, so
+the Brain shows the same alert and points at it, and the desktop never calls
+the picture or input routes (`tests/handoff.mjs` checks). Note for the next
+pass: **both of these already exist on `main`** (`jarvis-client`'s
+`net/Handoff.kt`, `ui/screens/HandoffScreen.kt`, `service/HandoffNotifier.kt`;
+`jarvis-desktop/src/handoff.js`). They have never run on a real phone or a
+real captcha (§9). This pass changed nothing about them.
+
+## 8. Questions only the owner can answer
+
+Listed, not answered. Each is a decision, and the design deliberately does not
+guess. (Q2 and Q5 are the ones most likely to change what is already built.)
+
+- **Q1 - How long before it gives up?** Today: **45 s** with no picture asked
+  for, and **15 minutes** absolute. Is 15 minutes too long to leave a browser
+  window sitting on a captcha? Is 45 seconds too short if the owner is
+  fetching their phone or reading a 2-factor code? (The 45 s refreshes on
+  input, so slow typing is fine; walking away from the screen is not.)
+- **Q2 - A stream, or a still refreshed?** Today: a still, asked for about
+  once a second, because it is simple, cheap, and nothing is sent when nobody
+  is looking. A captcha whose picture itself rotates or animates (an audio
+  challenge, a moving slider) may want a faster rate or a real stream. Which
+  does the owner want - and if a stream, what stops it from being a live feed
+  of a window the owner forgot about?
+- **Q3 - What if the phone never answers?** Today: the conversation stays
+  paused, the window stays open, and the offer stays on `GET
+  /api/chatbot/status` until the 15 minutes pass or the owner deals with it on
+  the PC. Should Jarvis instead nudge again after a while, ring the phone,
+  give up after N minutes and stop the conversation, or stay paused
+  indefinitely until the owner acts? (Stopping on a timer risks losing a
+  half-typed sign-in; staying forever holds a browser window open.)
+- **Q4 - Is the window brought to the front?** Today: **no**. The hand-off
+  never calls focus, raise or activate; the window stays wherever the owner
+  left it, which is why the PC alert says "on this PC" and points at it. Bring
+  it to the front when the phone taps "Solve it here", or when the hand-off
+  starts? (Fronting a browser window takes focus away from whatever the owner
+  is doing, and this project has been bitten by focus-stealing before.)
+- **Q5 - Does "Solve it here" need a card?** Today: **no card**, on the
+  grounds that nothing leaves the owner's own devices and nothing is done but
+  what the owner does by hand (this matches `ARCHITECTURE.md` section 4's "Not
+  a way out"). Keep it card-free, or put one card on the *first* hand-off per
+  session so the owner always consciously starts one?
+- **Q6 - How much of the picture may the phone keep while the screen is
+  open?** Today: the latest frame only, in memory, dropped with the screen -
+  so a brief network stall shows `WORDS["waiting"]` rather than a stale
+  picture. Keep one previous frame to smooth a bad link (and say on screen that
+  it is a moment old), or never show anything but the latest?
+- **Q7 - May the owner also type a whole password at once, or must it go
+  character by character?** Today: up to 200 characters in one input, which
+  suits a password manager paste on the phone. If the owner would rather the
+  app never hold more than one character at a time, that is a different
+  screen and a different limit - and it would make long passwords painful.
+- **Q8 - What happens to the alert after the hand-off ends?** Today: the offer
+  disappears from `status` and `end` is reported; the phone's notification is
+  the phone's own to clear. Should the notification clear itself the moment
+  the hand-off ends (`closed`, `time`, `resumed`), or stay until the owner
+  dismisses it so they know something happened while they were away?
+- **Q9 - Is the PC's copy of the alert enough?** Today the PC shows a line on
+  the Brain and points at the window; it does not ring, flash or front the
+  window. If the owner is not looking at the PC when a captcha appears, is
+  that enough, or should the PC also make a sound / raise the window (see Q4)?
+- **Q10 - May a support chat's hand-off ever show the company's real page to
+  the phone?** Today: yes, it is the same one-window picture, and the widget's
+  page may contain the owner's own order details. Is that acceptable on a
+  phone screen (behind App lock), or should support-chat hand-offs be
+  PC-only?
+
+## 9. What is NOT verified, and the risk
+
+- **No real captcha has ever been met.** Every check in `test_handoff.py` runs
+  against a stand-in window that records calls, plus (when Playwright is
+  present) a fake page in a real Chromium. Whether a real reCAPTCHA/hCaptcha
+  frame accepts a passed-on tap is **unknown**, and the project says so in the
+  app's own words. It may simply refuse.
+- **No phone, no Android SDK, no emulator here.** The phone half is on `main`
+  but has never been built or run against this backend from this checkout. Its
+  behaviour - notification, App lock, the picture loop, masked typing - is
+  unverified **in this pass and, as far as this note can tell, in general**.
+- **No end-to-end run.** PC -> mesh -> phone -> tap -> PC has never been
+  exercised here, and cannot be: there is no second device, no mesh link and
+  no captcha in this environment.
+- **The picture quality is unmeasured.** JPEG quality 60 at a page's own size
+  may be too blurry to read a captcha's grid on a phone, or larger than the
+  link wants. `FRAMES_PER_S = 2`, `JPEG_QUALITY = 60` and `IDLE_S = 45` are
+  chosen numbers, not measured ones.
+- **The risk, plainly.** (a) A captcha may reject passed-on input, which is
+  why the PC window is kept as the fallback and the app says so. (b) The
+  picture shows a real page that may contain the owner's own account details
+  (a support chat's order page), so it must stay behind App lock and never on
+  a lock screen. (c) A typed password lives in the PC's memory for one input
+  and on the mesh link; it is never logged, which is a promise kept in code
+  and tested, but it is not extra-encrypted by this feature. (d) This feature
+  does **not** narrow `ARCHITECTURE.md` section 3's known gap: a program
+  already running on the PC can call these routes with the token like any
+  other. (e) The feature adds a new way for the owner's own screen content to
+  reach their phone, which is why every limit in §4 exists.

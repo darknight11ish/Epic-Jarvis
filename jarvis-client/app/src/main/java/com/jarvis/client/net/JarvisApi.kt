@@ -2318,6 +2318,34 @@ class JarvisApi(
     suspend fun pcHelp(): ApiResult<JsonObject> = probe(PcHelp.PATH)
 
     /**
+     * `GET /api/tasks` (section 118) - the job list, counted only: ids,
+     * states, step counts and tool names, never a task title or a step's text
+     * ([Tasks.parse]). Reads only. A 404 is an older backend.
+     */
+    suspend fun tasks(): ApiResult<JsonObject> = probe(Tasks.PATH)
+
+    /**
+     * `POST /api/tasks/act` (section 118.3) - pause, resume, cancel or retry
+     * one job. Approves nothing: every step of that job still raises its own
+     * approval card when its turn comes. A 409 means the job was not in the
+     * state the button assumed ([Tasks.NOT_IN_THAT_STATE]).
+     */
+    suspend fun taskAct(id: String, act: String): ApiResult<JsonObject> =
+        postForJob(Tasks.ACT_PATH, Tasks.actBody(id, act))
+
+    /**
+     * `POST /api/tasks/input` (section 118.3) - the owner's answer to a
+     * question a job stopped on. The only job-list request that carries the
+     * owner's own words, and it carries them into the job list, never out of
+     * the PC. A blank answer is not sent ([Tasks.inputBody] returns null).
+     */
+    suspend fun taskAnswer(id: String, answer: String): ApiResult<JsonObject> {
+        val body = Tasks.inputBody(id, answer)
+            ?: return ApiResult.Failed(ApiError.Malformed("the answer is empty"))
+        return postForJob(Tasks.INPUT_PATH, body)
+    }
+
+    /**
      * `GET /api/tutorials` (section 114) - one catalogue for both apps and
      * where the owner has read to ([Tutorials.parse]). Reads only: a 404 is an
      * older backend, and nothing here is held on a stale link.

@@ -869,6 +869,7 @@ pub fn run() {
             brain::brain_read,
             brain::brain_revert_undo,
             brain::brain_cancel_job,
+            brain::brain_task_act,
             brain::brain_cancel_hold,
             brain::brain_watch_add,
             brain::brain_watch_remove,

@@ -316,6 +316,43 @@ def t_private_fetch_problem():
         _socket.getaddrinfo = original
 
 
+def t_ranges_that_are_not_a_destination_are_refused():
+    """2026-10-08, reading OpenMuse's own egress allowlist
+    (`apps/worker/src/network.ts`) and then checking this file: the check
+    knew about private and loopback space but not about the ranges the
+    internet set aside for things that are not a destination at all.
+    Refusing them is the same rule, not a new one - none of them is
+    "somewhere on the open internet" either."""
+    for addr in ("192.0.0.1", "192.0.2.1", "198.18.0.5", "198.51.100.7",
+                 "203.0.113.9", "224.0.0.1", "240.0.0.1", "255.255.255.255"):
+        check(f"{addr} is refused (not a destination)",
+              LH.private_fetch_problem(f"http://{addr}/feed") != "")
+    for addr in ("ff02::1", "2001:db8::1"):
+        check(f"[{addr}] is refused (not a destination)",
+              LH.private_fetch_problem(f"http://[{addr}]/feed") != "")
+    check("a genuinely public address is still allowed",
+          LH.private_fetch_problem("http://93.184.216.34/feed") == "")
+
+
+def t_a_nat64_address_is_judged_as_the_ipv4_it_carries():
+    """NAT64 (RFC 6052) is how a DNS64 network reaches an IPv4-only site, so
+    the range cannot simply be refused - but 127.0.0.1 written as
+    `64:ff9b::7f00:1` must not slip through as a harmless-looking IPv6
+    address. Unwrap it and judge what it carries."""
+    check("64:ff9b::7f00:1 (127.0.0.1) is refused",
+          LH.private_fetch_problem("http://[64:ff9b::7f00:1]/feed") != "")
+    check("64:ff9b::a00:5 (10.0.0.5) is refused",
+          LH.private_fetch_problem("http://[64:ff9b::a00:5]/feed") != "")
+    check("64:ff9b::5db8:d822 (93.184.216.34, public) is still allowed",
+          LH.private_fetch_problem("http://[64:ff9b::5db8:d822]/feed") == "")
+    # And the same unwrapping at the place it matters most: the connection
+    # itself, which is what `_connect_public` checks.
+    check("_is_private unwraps a NAT64 address on its own",
+          LH._is_private(LH._as_address("64:ff9b::7f00:1")) is True)
+    check("... and leaves a public one alone",
+          LH._is_private(LH._as_address("64:ff9b::5db8:d822")) is False)
+
+
 def t_private_fetch_problem_checks_every_resolved_address():
     import socket as _socket
     original = _socket.getaddrinfo
@@ -467,6 +504,8 @@ if __name__ == "__main__":
                t_no_call_site_goes_back_to_plain_urllib,
                t_private_fetch_problem, t_private_fetch_problem_checks_every_resolved_address,
                t_an_ipv4_mapped_dns_answer_is_judged_as_ipv4,
+               t_ranges_that_are_not_a_destination_are_refused,
+               t_a_nat64_address_is_judged_as_the_ipv4_it_carries,
                t_public_urlopen_checks_the_address_it_connects_to,
                t_public_urlopen_connects_to_the_checked_address,
                t_news_and_page_watch_fetch_through_public_urlopen):

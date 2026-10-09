@@ -69,6 +69,12 @@ fn main() {
             "brain_read",
             "brain_revert_undo",
             "brain_cancel_job",
+            // The job list's steering command (2026-10-08, JARVIS-API section
+            // 118). Listed here as well as in lib.rs's generate_handler! - a
+            // command in one and not the other is refused by the ACL from every
+            // window, which is invisible at compile time
+            // (tools/check_command_acl.py is what catches it).
+            "brain_task_act",
             "brain_cancel_hold",
             "brain_watch_add",
             "brain_watch_remove",

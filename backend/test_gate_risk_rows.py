@@ -77,7 +77,10 @@ def t_the_patch_is_registered_last():
     # prompt-coach.patch (2026-10-08) also comes after it: two hunks in
     # jarvis_hud.py and jarvis_gate.py not at all, so it cannot rewrite the
     # stale rows this patch removes.
-    later = {"screen-attach.patch", "prompt-coach.patch"}
+    # tasks.patch (2026-10-08) comes after it too: two hunks in jarvis_hud.py -
+    # one GET route, one POST block - and jarvis_gate.py not at all, so it
+    # cannot rewrite the stale rows this patch removes either.
+    later = {"screen-attach.patch", "prompt-coach.patch", "tasks.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
