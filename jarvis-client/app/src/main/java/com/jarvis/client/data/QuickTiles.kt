@@ -166,6 +166,32 @@ object QuickTiles {
      */
     fun muteNeedsUnlock(appLock: Boolean?, phoneLocked: Boolean): Boolean = appLock != false && phoneLocked
 
+    /**
+     * What one tap on the link tile sends - true to mute, false to unmute -
+     * or null when the tap must do nothing at all.
+     *
+     * [shown] is what the tile is drawing now (`attention.muted`, which only
+     * moves when the PC answers a re-read). [asked] is a mute the owner has
+     * already asked for that no re-read has settled yet.
+     *
+     * The tile is a two-way toggle, and it used to send the same command
+     * twice: `muted` does not change until the round trip lands, so a quick
+     * second tap read the same old value and sent "mute" again - tap once to
+     * mute, tap again, still muted (Android audit 2026-10-08). A tap inside
+     * that round trip is now dropped rather than queued: the tile goes dark
+     * the moment the first one is sent, so the second tap was aimed at a tile
+     * already showing the new state.
+     *
+     * Once the re-read agrees, [shown] has caught up with [asked] and the
+     * next tap is a real toggle again - which is why the guard is
+     * `asked != shown` and not "a request is in flight": a state the PC has
+     * already confirmed is settled, whatever is still on its way back.
+     */
+    fun muteCommand(shown: Boolean, asked: Boolean?): Boolean? = when {
+        asked != null && asked != shown -> null
+        else -> !shown
+    }
+
     /** Said when a widget button is tapped under App lock before the widget redrew. */
     const val WIDGET_LOCKED = "App lock is on - open Jarvis first, then use it there."
 
