@@ -18114,22 +18114,40 @@ checked against the repository and against the library itself
 What was worth taking is the **list of what a prompt usually lacks**, which is a
 checklist and not a dependency.
 
-**120.2 The routes.** Three, and none of them approves anything:
+**120.2 The routes.** Three, and none of them approves anything. **The shape
+below is the CURRENT one** (extended 2026-10-09, §120.7 and §120.8): every key
+that was here on 2026-10-08 is still here, unchanged, so an app that knows only
+the old ones keeps working.
 
     GET  /api/prompt/coach          {"ok", "on", "why", "label", "detail",
                                      "heading", "button", "send_mine",
-                                     "send_suggestion"}
-    POST /api/prompt/coach          {"text", "history": [{"who", "text"}]}
+                                     "send_suggestion",
+                                     "settings": [one row per setting, each
+                                       {key, name, names, value, default,
+                                        choices: [{value, name, detail}]}],
+                                     "targets": ["local", "openai_api", ...],
+                                     "stale_days": 180}
+    POST /api/prompt/coach          {"text", "history": [{"who", "text"}],
+                                     "target": "<which AI this is for>"}
                                      -> {"ok", "coach": {"score", "clear",
                                         "issues": [{what, why, fix}],
-                                        "missing", "suggestion"}}
+                                        "missing", "suggestion",
+                                        "advice_given", "said",
+                                        "target": {known, id, name, advice,
+                                                   quirks, style, checked,
+                                                   source, stale},
+                                        "settings": {the four as they were}}}
     POST /api/prompt/coach/setting  {"enabled": bool} -> the GET shape
+                                    {"key", "value"}   -> the GET shape
+                                    both together      -> the GET shape
 
 `handle_post` and `handle_setting` answer the HTTP code themselves and
 `jarvis_hud.py` forwards the pair, which is the house shape (the string
 `Refused` appears nowhere in `jarvis_hud.py`). A body that is not an object is
 400; a refusal is 409 with a plain sentence; `enabled` must be a real true or
-false, because guessing would mean "your switch moved" when it did not.
+false, because guessing would mean "your switch moved" when it did not; and a
+`key` or a `value` that is not one of the four settings' real names or choices
+is a 409 that NAMES the real ones rather than a guess.
 
 **120.3 The switch.** `prompt_coach` is a `BoolSetting` in
 `jarvis_settings_registry.py` with its own `Section("prompt-coach")` and the
@@ -18178,6 +18196,90 @@ compare - the discipline `tasks.patch` cost three CI failures to learn.
 long it takes, are both unmeasured. The desktop card and the bar panel are
 covered by unit and headless-browser checks; the Kotlin is CI's, because this
 checkout has no Android SDK.
+
+**120.7 The four settings, beside the switch (added 2026-10-09).** The owner's
+verdict on a single on/off switch was *"make sure it's effective and has
+multiple settings, including an enable and disable"*, and the four they chose
+are: **when it speaks up** (`speaks_up`: `any` = today's behaviour, `weak` =
+only when the prompt is genuinely weak), **how blunt it is** (`bluntness`:
+`gentle` = today's, `direct`), **what it coaches on** (`coaches_on`: `shape` =
+today's, `content` = also the task and what was left out), and **per-platform
+behaviour** (`platform`: `same` = today's, `quieter_phone` = the phone shows the
+two gaps that matter most and never more than two questions).
+
+**Every one defaults to the behaviour the coach already had**, so turning the
+master switch on cannot silently change its character. They live in the SAME
+file as the switch, `prompt-coach.json`, so the locked backup already picks them
+up; a key that is missing or holds a value that is not one of its own choices
+falls back to its own default rather than to a guess.
+
+**They change the coach, and the test proves it.** `parse()` applies
+`speaks_up` and `platform` (a prompt the model itself scored 7 or more is passed
+with `advice_given: false` and the PC's own sentence in `said`, which is NOT the
+same as "nothing missing" and must not read as one); `prompt_for()` puts
+`bluntness` and `coaches_on` into the local model's own instructions. Both are
+ordinary settings: neither direction raises a card, for the same reason the
+master switch does not.
+
+**Where they are declared, and why that matters here.** `jarvis_prompt_coach.
+SETTINGS` is the ONE copy of every name and every word of explanation, and
+`settings_rows()` hands it to both apps through the GET. The desktop draws it
+into `#coach-groups` and the phone into `PromptCoachSection`, each with **no
+copy of any setting's name** - so a new choice appears in both apps by changing
+one Python tuple, and a PC that answers with no `settings` list (an older
+backend) draws the switch alone, exactly as it did before the four existed.
+**`tools/gen_settings_cases.py` does not exist on `main`**, so `settings.html`
+has no generated markers to splice into: its prompt-coach card is still
+hand-written and was edited by hand, with the four rows drawn at runtime rather
+than written into the HTML. When that generator lands, the card's own markup
+moves under it; the setting's DECLARATION is already in the right place.
+
+**Not by voice.** `jarvis_quick.py`'s grammar covers the `BoolSetting`
+`prompt_coach` ("turn on the prompt coach"), and none of the four: there is no
+spoken phrase that moves one, so `jarvis_settings_registry.py` is unchanged and
+this section claims nothing more.
+
+**120.8 Which AI the prompt is headed for (added 2026-10-09).** The owner's
+words: *"make sure it is aware of what model of cloud AI I am using because each
+kind has their own intricacies and make sure this can stay up to date."* The
+request carries `target` - a chatbot id, a website adapter's id, or a model name
+- and `jarvis_prompt_coach.advice_for()` looks it up in `DEFAULT_TARGETS`: one
+row per AI, each with what that one handles badly, what style suits it, and the
+date it was last checked. A known target's notes go into the local model's own
+instructions; an **unknown one is reported as unknown, in the app's words and in
+the model's instructions**, under an explicit "do not guess, do not describe how
+it behaves, do not invent a claim" - never a nearest-name guess and never the
+local model's notes by default.
+
+**How it stays current, three ways.** (1) `unknown_targets()` lists every
+service in `jarvis_chatbot_api.PRESETS` and every website in
+`jarvis_chatbot.ADAPTERS` that has no row, and `backend/test_prompt_coach.py`
+**fails while that list is not empty** - so a new AI cannot arrive unnoticed.
+(2) A row is added to `DEFAULT_TARGETS`. (3)
+`prompt-coach-targets.json` in the settings folder: the owner's own rows, laid
+over the shipped ones **field by field** (so one quirk can be corrected without
+retyping the row), or a brand-new target - which needs a name, and gets today's
+date and a source of its own so an undated claim never reads as fresh. A row
+older than `STALE_DAYS` (180) says "may be out of date" wherever its words are
+shown, in the app and to the model. A file that cannot be read is one plain
+sentence, not a crash, and the shipped table still answers.
+
+**From the chatbot driver, so it is the driver's own list.** The ids come from
+`jarvis_chatbot_api.PRESETS` (OpenAI `gpt-5-mini`, DeepSeek, Mistral, xAI,
+OpenRouter, Groq) and `jarvis_chatbot.ADAPTERS` (the website adapters), and the
+short names the owner types at a terminal (`py -3 jarvis_chatbot_api.py key
+openai`) are read from the presets' own `short` field rather than typed twice.
+Nothing about a target changes where the critique RUNS: still this PC's model,
+still `check_local_model()` before the request, still nothing sent anywhere.
+
+**120.9 What is still unmeasured (2026-10-09).** No test in this tree measures
+whether coaching **helps** - only that it fires, that it refuses properly and
+that the four settings change what it says. There is no before/after comparison
+of a prompt and its answer, and no feedback signal wired to the coach (the
+thumbs-up/down buttons mark a chat turn, not a critique). `test_prompt_coach.py`
+covers the gate's ordering, the parse, the four settings, the target table and
+both routes, with **no model at all**; nobody has run this against the real 8B
+model, so the advice's quality and its latency are both unmeasured.
 
 ## 121. Thinking levels: how long a model may think before it answers (added 2026-10-09)
 
