@@ -221,6 +221,57 @@ if (!K) {
     assert.notDeepEqual(centre, corner, "the middle of the picture is the flat background");
   });
 
+  await check("the floating window paints no background of its own - and the Widget and the HUD still do", async () => {
+    // 2026-10-11, the measured gap this closes: the click-through worked, but
+    // the window was still a visible dark square - its page painted the face's
+    // background edge to edge (`#04070c`, alpha 255 at the corner). A
+    // transparent WINDOW needs a page that paints nothing behind the face.
+    //
+    // The scoping is the whole point of this check. The eleven webviews share
+    // these files, and the Widget's round tray and the HUD embed the SAME
+    // faces.html: only `floating.html` asks for the clear background
+    // (`&clear=1`), so only its frame may come out see-through. A change that
+    // made the others transparent would be a worse bug than the one fixed.
+    //
+    // Real pixels, not computed styles: a screenshot with the page's own
+    // background left out, decoded and read back, is what the owner sees.
+    const cornerOf = async (file) => {
+      const p = await K.open(browser, base, file, {}, { width: 200, height: 200 });
+      await K.until(p, `the face in ${file} to draw`, async () => p.evaluate(() => {
+        const f = document.getElementById("face-frame");
+        const cv = (f && f.contentDocument ? f.contentDocument : document)
+          .getElementById("display-canvas");
+        return Boolean(cv && cv.width);
+      }), { ms: 15000 }).catch(() => {});
+      const png = await p.screenshot({ omitBackground: true });
+      const probe = await browser.newPage();
+      const at = await probe.evaluate(async (b64) => {
+        const img = new Image();
+        img.src = "data:image/png;base64," + b64;
+        await img.decode();
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, 1, 1).data;
+        return [d[0], d[1], d[2], d[3]];
+      }, png.toString("base64"));
+      await probe.close();
+      await p.close();
+      return at;
+    };
+    const floating = await cornerOf("floating.html");
+    assert.equal(floating[3], 0, `the floating window's own corner is still painted: rgba(${floating})`);
+    for (const [who, file] of [
+      ["the Widget's round tray", "faces.html?mode=display&feed=parent&clip=circle"],
+      ["the HUD's face", "faces.html?mode=display&feed=parent"],
+    ]) {
+      const opaque = await cornerOf(file);
+      assert.equal(opaque[3], 255,
+        `${who} lost its background: rgba(${opaque}) - the clear background leaked out of the floating window`);
+    }
+  });
+
   await browser.close();
   close();
 }
