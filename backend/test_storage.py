@@ -275,8 +275,31 @@ print()
 # --------------------------------------------------------------------------
 
 print("--- when the drive cannot be asked about ---")
-check("an unreadable drive reads as zero free, never as plenty",
-      S.free_bytes("Q:\\no\\such\\drive") == 0)
+# Why this asks the CONTRACT rather than handing over a made-up path:
+# `shutil.disk_usage("Q:\\no\\such\\drive")` and a POSIX path behave
+# differently. On POSIX a plain string is a relative path, so it resolves
+# against the working directory and happily reports the free space of the
+# drive the tests run from - which made this check pass on Windows and fail
+# in CI. What matters is not which nonsense path is refused, it is that a
+# drive which CANNOT be measured reads as zero, never as plenty, so
+# `disk_usage` raising is what is pinned here.
+import shutil as _shutil  # noqa: E402
+import tempfile as _tempfile  # noqa: E402
+
+
+def _raise(*_a, **_k):
+    raise OSError("no such drive")
+
+
+_orig = _shutil.disk_usage
+_shutil.disk_usage = _raise
+try:
+    got = S.free_bytes(_tempfile.gettempdir())
+finally:
+    _shutil.disk_usage = _orig
+check("a drive that cannot be measured reads as zero free, never as plenty", got == 0, str(got))
+check("and the real call still reads a real number for a real folder",
+      S.free_bytes(_tempfile.gettempdir()) > 0)
 yes, why = S.may_download("qwen3:8b", 4.9, {"installed": [], "free_bytes": 0,
                                            "models_drive": "Q:\\gone"}, agreed=True)
 check("so a download onto an unmeasurable drive is refused", yes is False, why)
