@@ -231,9 +231,19 @@ object SettingsSearch {
             // The heading and both sentences are `net/Limits.kt`'s own
             // constants - the plate draws them rather than writing its own -
             // so the quotes are looked for there, like the browser heading.
+            //
+            // The second quote is `LOOSEN_NOTE` as it reads now. It used to say
+            // "Turning something up asks you on the PC first", which stopped
+            // being true of every row under it: on the voice check's bar it is
+            // *lowering* the bar that asks (a lower bar means more clips count
+            // as the owner's voice), so the line above the rows had to say only
+            // what holds for all of them. The screen changed and this index did
+            // not, which is the drift `SettingsSearchTest` exists to catch - it
+            // caught it on `main` on 2026-10-10.
             quotes = listOf(
                 "How much Jarvis does at once, how long you can undo, and how long it waits before it ",
-                "Turning something up asks you on the PC first, and nothing changes until you answer ",
+                "Changing something here may take effect at once or ask you on the PC first, and " +
+                    "nothing changes until you answer there.",
             ),
             source = JUMP + listOf("net/Limits.kt"),
         ),
