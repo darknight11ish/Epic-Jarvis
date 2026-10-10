@@ -162,6 +162,18 @@ raise_api_limit           = "ask"
 # Hello, which the owner-check attaches to the ACTION and not to the
 # direction, lands on the raise alone.
 lower_api_limit           = "auto"
+# LOWERING the voice check's bar (jarvis_limits.py's own LOWER_ACTION,
+# f3fb3f55, 2026-10-09). NOT the same direction as the line above: the module's
+# own words are "LOWERING it is the loosening - a lower bar means MORE clips
+# count as the owner's voice - so `loosening="down"` and `LOWER_ACTION` is the
+# name its card is asked under. Raising it is the safe direction and applies at
+# once." So this one is "ask", and it must stay "ask".
+#
+# It shipped with no line here, so it reached "ask" only through
+# unknown_action_tier - the right tier for a reason nobody chose, and one edit
+# to that shared default would have moved a LOOSENING silently. That is the same
+# accident 57d089b0 fixed for four names on 2026-10-06.
+lower_the_voice_check_bar = "ask"
 # RAISING a spending limit (jarvis_limits.py's own RAISE_ACTION). The name says
 # only "this is a raise" - the card's own words carry which limit and how far.
 # It shipped with no line here, so it took unknown_action_tier ("ask") by
