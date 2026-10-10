@@ -7007,8 +7007,8 @@ the row's note names it.
 Let Jarvis read your calendar without asking you first?
 
 From now on Jarvis will read your calendar without an approval card. This
-changes one line of your settings file on this PC (jarvis-framework.toml):
-calendar_read = "auto". Nothing else in it changes.
+changes one line of your settings file on this PC: calendar_read = "auto".
+Nothing else in it changes.
 
 A chat where it reads something still counts as having read outside text,
 so a later web search or note in that chat still asks.
@@ -7031,6 +7031,23 @@ PC whether it is risky or not; no Windows Hello, no approval. The phone
 shows the card with Deny only and "Approve this one on the PC - it needs
 Windows Hello there. Deny still works here." A "no" proposes no standing
 rule (`_NO_RULE_FROM_DENIAL`).
+
+**Why the card does not name the settings file (fixed 2026-10-10).** The card
+text above IS the `prompt` handed to `jarvis_gate.check()`, and the gate's
+first rule - before it looks at the tier table, before any card is raised -
+searches that prompt for the names in its own `_PROTECTED` list
+(jarvis-framework.toml, jarvis_gate.py, jarvis_hud.py and six more). A prompt
+that names one is refused at tier `never`, so no card is shown and no Windows
+Hello prompt ever comes. This card used to say "(jarvis-framework.toml)"; the
+owner's audit log holds 21 `gate.refused_protected` lines for
+`loosen_what_asks_first`, each followed by
+`asks_first.loosen.card {"outcome": "refused"}` (2026-10-03 to 2026-10-10), so
+loosening anything from the app had never worked. `backend/test_asks_first.py`
+holds the card and the `detail` beside it against the gate's own list, read
+out of `jarvis-backend/jarvis_gate.py` with `ast`. The same bug and the same
+fix apply to the reading-tool card (section 43.2) and to the restore card
+(section 45.3; `jarvis_backup.restore_card()` used to say "the .py files
+beside jarvis_hud.py").
 
 ### 32.4 The short safe list, and the settings file
 
@@ -8353,9 +8370,8 @@ does not read this key.
 Offer "read your calendar" to the AI model?
 
 From now on the AI model may use this tool when it decides to - it can read
-your calendar. This changes one line of your settings file on this PC
-(jarvis-framework.toml): "calendar_read" is added to [tools].enabled.
-Nothing else in it changes.
+your calendar. This changes one line of your settings file on this PC:
+"calendar_read" is added to [tools].enabled. Nothing else in it changes.
 
 This is separate from whether it asks you first: that is set above, in "Ask
 me first", and is unchanged by this card.
@@ -8374,6 +8390,15 @@ Its title: "Jarvis wants to offer a reading tool to the AI model"
 shipped `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and
 `MUST_ASK` like `loosen_what_asks_first` (§32.3) - it always asks, and it is
 never itself on the switchable list.
+
+**Why this card does not name the settings file either (fixed 2026-10-10).**
+It had the same bug as §32.3's: the card IS the `prompt` the gate reads for
+its own `_PROTECTED` names, so naming `jarvis-framework.toml` got it refused
+at tier `never` and no card was ever shown - 21 `gate.refused_protected` lines
+for `enable_reading_tool` in the owner's audit log, each followed by
+`asks_first.tools.card {"outcome": "refused"}`. Offering a reading tool to the
+model from the app had therefore never worked. Both cards are now held against
+the gate's own list by `backend/test_asks_first.py`.
 
 ### 43.3 Writing `[tools].enabled`
 

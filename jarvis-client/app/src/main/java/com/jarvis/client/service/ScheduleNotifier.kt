@@ -24,12 +24,16 @@ import com.jarvis.client.R
  * ([com.jarvis.client.JarvisRuntime.onScheduleEvent]). Nothing here sets an
  * alarm on the phone, and no exact-alarm permission is asked for.
  *
- * On the existing approval channel (the one that makes a sound), with the
- * same lock-screen rule an approval has: the locked screen shows only what
- * KIND of thing is due ("Jarvis: a reminder is due."), never its words; the
- * words need the phone unlocked. While App lock or "Hide memory lists and
- * chat history" is on, the notification itself says only the kind, too -
- * the caller decides that ([com.jarvis.client.net.Schedule.notification]).
+ * On its own channel, [SCHEDULE_CHANNEL_ID] ("Reminders and timers" - the
+ * owner's decision of 2026-09-30), NOT the approval channel
+ * ([ApprovalNotifier.CHANNEL_ID], `jarvis_approval`): an alarm or an urgent
+ * "tell me when" goes on `jarvis_alarm` instead. It is a channel that makes a
+ * sound, with the same lock-screen rule an approval has: the locked screen
+ * shows only what KIND of thing is due ("Jarvis: a reminder is due."), never
+ * its words; the words need the phone unlocked. While App lock or "Hide
+ * memory lists and chat history" is on, the notification itself says only the
+ * kind, too - the caller decides that
+ * ([com.jarvis.client.net.Schedule.notification]).
  *
  * SNOOZE (2026-09-25): a timer, alarm or reminder carries one action,
  * "Snooze 10 minutes" ([com.jarvis.client.net.Schedule.SNOOZE]) - never

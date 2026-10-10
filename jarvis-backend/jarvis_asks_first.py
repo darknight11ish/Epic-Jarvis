@@ -37,6 +37,31 @@ answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md)
     only be added to [tools].enabled by hand (jarvis_reach.py's rows for
     them say so plainly).
 
+THE TWO CARDS HERE MUST NOT NAME A FILE THE GATE PROTECTS (fixed 2026-10-10)
+The loosening card (LOOSEN_ACTION, `loosen_card()`) and the reading-tool card
+(ENABLE_TOOL_ACTION, `tool_enable_card()`) are both handed to
+`jarvis_gate.check()` AS THE PROMPT. The gate's first rule, before it ever
+looks at the tier table, searches that prompt and the `detail` beside it for
+the names in its own `_PROTECTED` list (jarvis-framework.toml, jarvis_gate.py,
+jarvis_hud.py and six more); a prompt that names one is refused at tier
+"never", so NO CARD IS EVER RAISED - for anybody, on any device, with no
+Windows Hello prompt and nothing the owner could do about it.
+
+Both cards used to say "one line of your settings file on this PC
+(jarvis-framework.toml)". The owner's own audit log holds 21 pairs of
+`gate.refused_protected` lines naming a 21-character file for each of the two
+actions (2026-10-03 to 2026-10-10), each followed by that card's own
+`{"outcome": "refused"}`. So loosening anything from the app, and offering a
+reading tool to the model, had never once worked - which is the whole point of
+this module. They now say "one line of your settings file on this PC", which
+means the same thing and is plainer; the exact `<action> = "<tier>"` line, or
+the exact tool name added to [tools].enabled, is still shown, so the decision
+the owner is making is unchanged. backend/test_asks_first.py holds both cards
+(and the detail beside them) against the gate's own `_PROTECTED` list, read
+out of `jarvis-backend/jarvis_gate.py` with `ast` - never imported, never a
+hardcoded copy that could drift. `jarvis_backup.restore_card()` had the same
+bug with jarvis_hud.py and was fixed first.
+
 WHAT THE PAGE READS
 The same things the gate reads: each action's tier in [autonomy.tiers] of
 jarvis-framework.toml (jarvis_framework.action_tier - a missing line is
@@ -955,6 +980,29 @@ TOOLS_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, s
 
 
 def loosen_card(action: str) -> str:
+    # IT MUST NOT NAME A FILE THE GATE PROTECTS. This text is handed to
+    # jarvis_gate.check() as the card's `prompt`, and the gate reads that
+    # prompt (and the `detail` beside it) for the names in its own
+    # `_PROTECTED` list - jarvis-framework.toml, jarvis_gate.py,
+    # jarvis_hud.py and six more - BEFORE it looks at the tier table. A
+    # prompt that names one is refused at tier "never", so no card is ever
+    # raised, no Windows Hello is ever asked for, and nothing can approve it:
+    # not the PC app, not the phone, not anybody (2026-10-10, the same bug
+    # `jarvis_backup.restore_card()` had; that one was fixed first).
+    #
+    # Measured on the owner's PC, this line's old wording - "one line of your
+    # settings file on this PC (jarvis-framework.toml)" - produced 21 pairs of
+    # audit lines, `gate.refused_protected` for `loosen_what_asks_first`
+    # naming a "<redacted 21 chars>" file (twenty-one characters is
+    # "jarvis-framework.toml"), each followed by
+    # `asks_first.loosen.card {"outcome": "refused"}`. So loosening anything
+    # from the app has never once been possible.
+    #
+    # "your settings file on this PC" says the same thing without the name -
+    # the line below still shows the owner the exact `<action> = "<tier>"`
+    # they are agreeing to, so nothing about what they are deciding changed.
+    # backend/test_asks_first.py keeps it that way by holding this text
+    # against the gate's own list, read with `ast`.
     phrase = _title(action)
     phrase = phrase[:1].lower() + phrase[1:]
     loose = LOOSE[action]
@@ -968,7 +1016,7 @@ def loosen_card(action: str) -> str:
         f"Let Jarvis {phrase} without asking you first?",
         "",
         f"From now on Jarvis will {phrase} without an approval card{after}. This changes "
-        f"one line of your settings file on this PC (jarvis-framework.toml): "
+        f"one line of your settings file on this PC: "
         f"{action} = \"{loose}\". Nothing else in it changes.",
         "",
         extra,
@@ -1189,6 +1237,17 @@ def tools_enabled_set() -> set:
 
 
 def tool_enable_card(tool: str) -> str:
+    # THE SAME RULE AS loosen_card() ABOVE, AND THE SAME BUG (2026-10-10).
+    # The card this builds is the `prompt` jarvis_gate.check() is handed, and
+    # the gate reads it for its own `_PROTECTED` names before the tier table:
+    # the old wording named jarvis-framework.toml, so `enable_reading_tool`
+    # was refused at tier "never" and no card was ever shown. The owner's
+    # audit log holds 21 of them, each paired with
+    # `asks_first.tools.card {"outcome": "refused"}`.
+    #
+    # Offering a reading tool to the model was therefore impossible from the
+    # app - the one thing this whole section exists to do. "your settings file
+    # on this PC" says the same thing plainer, and the exact line still shows.
     real = real_tool(tool)
     phrase = _title(tool)
     phrase = phrase[:1].lower() + phrase[1:]
@@ -1196,7 +1255,7 @@ def tool_enable_card(tool: str) -> str:
         f"Offer \"{phrase}\" to the AI model?",
         "",
         f"From now on the AI model may use this tool when it decides to - it can {phrase}. "
-        f"This changes one line of your settings file on this PC (jarvis-framework.toml): "
+        f"This changes one line of your settings file on this PC: "
         f"\"{real}\" is added to [tools].enabled. Nothing else in it changes.",
         "",
         "This is separate from whether it asks you first: that is set above, in \"Ask me "
