@@ -505,6 +505,16 @@ fn main() {
             // itself has no button to call either from.
             "get_floating",
             "set_floating",
+            // Where the floating face's own page says its picture is drawn,
+            // so a click can be let past the window everywhere except on the
+            // animal (2026-10-10, the integration evaluation). A command
+            // rather than an event on purpose: `core:event:allow-emit` is
+            // forbidden to every window (apps security audit M1,
+            // tests/security.mjs), because a page that could emit could fake
+            // the voice check or an approval card. Granted to the floating
+            // window alone - permissions/surfaces.toml's "floating-hit-mask"
+            // set.
+            "note_floating_hit_mask",
             // Bug audit 2026-09-27, desktop-rust finding #2: crash_notes and
             // find_python were added to generate_handler! in lib.rs but
             // never added here, so no permission file ever existed for

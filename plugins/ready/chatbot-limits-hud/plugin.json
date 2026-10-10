@@ -1,0 +1,8 @@
+{
+  "name": "chatbot-limits-hud",
+  "summary": "the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app.",
+  "module": "jarvis_chatbot_limits",
+  "install": "handler",
+  "replaces_patch": "chatbot-limits-hud.patch",
+  "stack_order": 117
+}

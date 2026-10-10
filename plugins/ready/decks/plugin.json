@@ -1,0 +1,8 @@
+{
+  "name": "decks",
+  "summary": "review decks.",
+  "module": "jarvis_decks",
+  "install": "handler",
+  "replaces_patch": "decks.patch",
+  "stack_order": 108
+}
