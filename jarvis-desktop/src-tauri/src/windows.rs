@@ -1662,7 +1662,7 @@ fn parse_hit_mask(grid: &str) -> Option<Vec<bool>> {
 }
 
 #[cfg(test)]
-mod tests {
+mod floating_hit_tests {
     use super::*;
 
     /// A grid of `n` cells, all background except the ones named (row, col).
