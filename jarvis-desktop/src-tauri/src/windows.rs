@@ -995,7 +995,118 @@ pub fn resize_widget(app: &AppHandle, expanded: bool, height: Option<f64>) -> Re
 
     window
         .set_size(LogicalSize::new(WIDGET_WIDTH, target))
-        .map_err(|e| format!("unable to resize the widget: {e}"))
+        .map_err(|e| format!("unable to resize the widget: {e}"))?;
+
+    keep_widget_on_screen(&window)
+}
+
+/// Pulls the widget back inside the screen after it grows.
+///
+/// The widget is parked near the right edge, and an approval card makes it
+/// taller — and, on a scaled display, physically wider than its logical width
+/// suggests. Nothing re-clamped it after the grow, so on the owner's screen
+/// (1920x1080 at 150%) a 480x507 physical window at x=1509 ran 69px past the
+/// right edge, and `Approve` — the right-most button — was the part clipped off
+/// it. The owner reported exactly that, twice, as "there's only a deny button",
+/// and both times the pairing card behind it expired unanswered (measured
+/// 2026-10-10; docs/ANDROID-PAIRED-AUDIT-2026-10-10.md).
+///
+/// Physical throughout, for the reason `center_quickbar` above spells out at
+/// length: Windows has one coordinate space for the virtual screen and it is
+/// physical.
+fn keep_widget_on_screen(window: &WebviewWindow) -> Result<(), String> {
+    let Some(monitor) = window
+        .current_monitor()
+        .map_err(|e| format!("unable to query the current monitor: {e}"))?
+        .or(window
+            .primary_monitor()
+            .map_err(|e| format!("unable to query the primary monitor: {e}"))?)
+    else {
+        return Ok(());
+    };
+
+    let size = window
+        .outer_size()
+        .map_err(|e| format!("unable to read the widget's size: {e}"))?;
+    let position = window
+        .outer_position()
+        .map_err(|e| format!("unable to read the widget's position: {e}"))?;
+
+    let (x, y) = clamp_into(
+        (position.x, position.y),
+        (size.width, size.height),
+        (
+            monitor.position().x,
+            monitor.position().y,
+            monitor.size().width,
+            monitor.size().height,
+        ),
+    );
+
+    if (x, y) != (position.x, position.y) {
+        window
+            .set_position(PhysicalPosition::new(x, y))
+            .map_err(|e| format!("unable to move the widget back on screen: {e}"))?;
+    }
+    Ok(())
+}
+
+/// The arithmetic `keep_widget_on_screen` applies, on its own so it can be
+/// tested without a window: a `win`-sized window at `pos` inside `area`
+/// (x, y, width, height), moved the smallest distance that puts all of it
+/// inside. A window larger than the area is pinned to the area's origin rather
+/// than pushed off the far edge.
+fn clamp_into(pos: (i32, i32), win: (u32, u32), area: (i32, i32, u32, u32)) -> (i32, i32) {
+    let (ax, ay, aw, ah) = area;
+    let max_x = (ax + aw as i32 - win.0 as i32).max(ax);
+    let max_y = (ay + ah as i32 - win.1 as i32).max(ay);
+    (pos.0.clamp(ax, max_x), pos.1.clamp(ay, max_y))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clamp_into;
+
+    #[test]
+    fn a_widget_grown_past_the_edge_is_pulled_back() {
+        // 2026-10-10, the owner's screen: a 480x507 physical widget at
+        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
+        assert_eq!(
+            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
+            (1440, 573)
+        );
+    }
+
+    #[test]
+    fn a_widget_already_inside_is_left_exactly_where_it_is() {
+        assert_eq!(
+            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
+            (100, 100)
+        );
+    }
+
+    #[test]
+    fn a_monitor_to_the_left_of_the_primary_is_respected() {
+        // Windows' virtual screen starts at the left-most monitor, so a widget
+        // on a monitor at x=-1920 must not be dragged to 0...
+        assert_eq!(
+            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1900, 100)
+        );
+        // ...and one hanging off its left edge comes back to it.
+        assert_eq!(
+            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1920, 100)
+        );
+    }
+
+    #[test]
+    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
+        assert_eq!(
+            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
+            (0, 0)
+        );
+    }
 }
 
 /// Switches between floating above everything and sitting behind active windows.
