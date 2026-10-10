@@ -249,7 +249,12 @@ class LimitsTest {
         assertTrue("the jump list has no limits entry", jump.contains("Entry(\"Limits and how often Jarvis does things\", \"limits\")"))
         val map = screen.substringAfter("SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(")
             .substringBefore("\n)")
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 21"))
+        // 22, not 21: this branch's own row for what a captcha does about the
+        // window it blocks (2026-10-09) sits directly under the hand-off row
+        // at position 19, so every section below it moved down by one - the
+        // same +1 the rest of that map carries. `SettingsJumpTest` holds every
+        // number there to the row the screen really draws.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 22"))
     }
 
     // ------------------------------------------------------------- helpers --

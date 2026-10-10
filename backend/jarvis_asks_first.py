@@ -436,6 +436,13 @@ GROUPS = (
                       # owner's own browser windows on offer for 15 minutes instead of
                       # about a minute is a loosening, so a card can name it on this page.
                       "handoff_keep_offering",
+                      # What a captcha does about its browser window
+                      # (jarvis_handoff_front.py, the owner's decision of
+                      # 2026-10-09): raising that one window takes the owner's
+                      # screen and their keyboard away from what they were
+                      # doing, which is a loosening, so a card can name it on
+                      # this page too.
+                      "handoff_bring_to_front",
                       "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",

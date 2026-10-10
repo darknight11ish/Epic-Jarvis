@@ -517,6 +517,21 @@ watch_notifications_enable = "ask"
 # line become your yes.
 handoff_keep_offering = "ask"
 
+# --- What a captcha does about its browser window (jarvis_handoff_front.py,
+# 2026-10-09) ----------------------------------------------------------------
+# Whether the ONE browser window a captcha or sign-in page is blocking is left
+# exactly where it is, or is raised and activated the moment Jarvis is stuck.
+# "Leave it where it is" is the default: the window keeps its size, its place
+# and whatever is in front of it, and the PC says plainly which window Jarvis
+# is stuck on. "Bring it to the front" takes the owner's screen and their
+# keyboard away from whatever they were doing - the window may be showing
+# their own account details - so choosing it is ONE card and
+# (jarvis_owner_check.PC_ONLY_ACTIONS) approved on this PC with Windows Hello.
+# Going back to leaving the window alone is immediate and never asks. Must stay
+# "ask": jarvis_handoff_front.py refuses any other tier rather than let this
+# line become your yes.
+handoff_bring_to_front = "ask"
+
 # --- Backups (jarvis_backup.py, the owner's decision of 2026-09-27) ------
 # Restoring from a locked backup file replaces memory, chat history,
 # settings and notes with what was saved then, so it is ONE card, always

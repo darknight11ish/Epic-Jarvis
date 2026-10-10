@@ -106,7 +106,12 @@ def t_the_patch_is_registered_last():
              # limits-read.patch (2026-10-08) comes after it as well: GET
              # /api/limits joins the HUD's read-only route set and jarvis_gate.py
              # is not touched at all - so it cannot rewrite the stale rows either.
-             "limits-read.patch"}
+             "limits-read.patch",
+             # handoff-front.patch (2026-10-09) is the same shape as
+             # handoff-mode.patch: its two hunks join the "acts only on tier ask"
+             # list and the _RISK table at the END of each, so it cannot rewrite
+             # the two rows this patch removes either.
+             "handoff-front.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

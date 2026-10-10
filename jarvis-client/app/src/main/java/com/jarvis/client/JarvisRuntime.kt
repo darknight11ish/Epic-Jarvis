@@ -4336,6 +4336,44 @@ object JarvisRuntime {
         }
     }
 
+    // --------------- what a captcha does about its browser window ---------
+    // The owner's decision of 2026-10-09 ("1 by default with the option for 2
+    // in the settings of Jarvis"); backend/jarvis_handoff_front.py; see
+    // [com.jarvis.client.net.HandoffFront]. This phone shows what the PC says
+    // and sends one word: "Leave it where it is" (the default) touches no
+    // window at all, while "Bring it to the front" raises and activates that
+    // one stuck window. Choosing the second is a loosening, so it raises ONE
+    // approval card on the PC with Windows Hello; choosing the first is
+    // instant, from either app.
+
+    /** `GET /api/chatbot/handoff_front`. */
+    suspend fun handoffFrontSettings(): ApiResult<JsonObject> = api.handoffFrontSettings()
+
+    /**
+     * The choice. "Bring it to the front" is held on a stale link (rule 4) and
+     * raises an approval card on the PC; "Leave it where it is" is NEVER held -
+     * it only makes Jarvis do less (@return the sentence to show under the
+     * choices).
+     */
+    suspend fun setHandoffFront(mode: String): String {
+        val body = com.jarvis.client.net.HandoffFront.body(mode)
+            ?: return "That is not one of the two choices."
+        if (mode != com.jarvis.client.net.HandoffFront.LEAVE_IN_PLACE) {
+            actionBlocker()?.let { return it }
+        }
+        return when (val r = writeNoticingCards { api.setHandoffFront(body) }) {
+            is ApiResult.Ok -> when (val o = r.value) {
+                is com.jarvis.client.net.DesktopWrite.Outcome.Refused ->
+                    "Not changed. " + o.why
+                is com.jarvis.client.net.DesktopWrite.Outcome.Done -> o.said
+                    ?: com.jarvis.client.net.HandoffFront.OFF_NOW
+                is com.jarvis.client.net.DesktopWrite.Outcome.Waiting ->
+                    com.jarvis.client.net.HandoffFront.WAITING_LINE
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     /**
      * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
      * to decide whether to store anything at all - the cached last-known

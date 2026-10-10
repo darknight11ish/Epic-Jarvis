@@ -47,6 +47,11 @@ object SettingsJump {
         // goes between them here too - the label is the desktop jump list's own
         // words for the same section (settings.html, `#handoff`).
         Entry("When the phone does not answer", "handoff"),
+        // "When a captcha stops Jarvis" (2026-10-09): the new captcha-window row
+        // sits between these two on the screen (SettingsScreen.kt), so it goes
+        // between them here too - the label is the desktop jump list's own words
+        // for the same section (settings.html, `#handoff-front`).
+        Entry("When a captcha stops Jarvis", "handoff-front"),
         Entry("Devices", "devices"),
         Entry("Quick Settings tiles", "quick-tiles"),
         // "Limits and how often Jarvis does things" (the PC's own

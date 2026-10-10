@@ -2146,6 +2146,28 @@ class JarvisApi(
         postWrite(HandoffMode.PATH, body)
 
     /**
+     * What a captcha does about the browser window it is blocking
+     * ([HandoffFront]; the owner's decision of 2026-10-09: "1 by default with
+     * the option for 2 in the settings of Jarvis"). Decided on the PC like every
+     * other approval-card switch here: "Leave it where it is" is the default,
+     * "Bring it to the front" is ONE card on the PC with Windows Hello.
+     */
+
+    /**
+     * `GET /api/chatbot/handoff_front`: `{"mode", "modes", "default", "words",
+     * "brings_to_front", "waiting", "last", ...}`. A read.
+     */
+    suspend fun handoffFrontSettings(): ApiResult<JsonObject> = probe(HandoffFront.PATH)
+
+    /**
+     * The choice. "Bring it to the front" answers 202 waiting while its approval
+     * card is up; "Leave it where it is" is immediate, and withdraws a card
+     * still waiting. Nothing but a body [HandoffFront.body] made is sent.
+     */
+    suspend fun setHandoffFront(body: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(HandoffFront.PATH, body)
+
+    /**
      * `GET /api/form-review/picture?id=` - the screenshot of a web form Jarvis
      * filled in, for the card that asks to submit it (FormReview). A read: not
      * held on a stale link. The token and the base64 are never logged. A 404

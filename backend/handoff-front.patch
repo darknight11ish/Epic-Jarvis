@@ -1,0 +1,23 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -196,3 +196,4 @@
+     "handoff_keep_offering",  # jarvis_handoff_mode.py acts only on tier "ask": ONE card to keep the captcha hand-off on offer for the full 15 minutes instead of stopping early (handoff-mode.patch)
++    "handoff_bring_to_front",  # jarvis_handoff_front.py acts only on tier "ask": ONE card to raise and activate the one browser window a captcha is blocking, instead of leaving it exactly where it is (handoff-front.patch)
+ })
+ 
+@@ -950,3 +951,14 @@
+     "handoff_keep_offering": ("yes", "local", "keeps the captcha hand-off - a live picture of ONE of your browser windows, shown only to your own phone over your private network - on offer for the full 15 minutes instead of ending it after about a minute with nobody looking, so a window that may show your own account details stays available fifteen times longer; the picture is still never saved, your taps and typing still go to that one window only, and going back to stopping early is instant"),
++    # handoff-front.patch (jarvis_handoff_front.py; the owner's OWN decision of
++    # 2026-10-09, his words: "1 by default with the option for 2 in the
++    # settings of Jarvis"). It changes ONE thing: whether the browser window
++    # Jarvis is stuck on in is left exactly where it is, or is raised and
++    # activated as soon as the captcha or sign-in page appears. "Leave it where
++    # it is" is the default and touches nothing; "Bring it to the front" takes
++    # the owner's screen and their keyboard away from whatever they were doing,
++    # so it is approved on the PC with Windows Hello and refused from anywhere
++    # else. Jarvis still never solves a captcha for you, and going back to
++    # leaving the window alone is instant.
++    "handoff_bring_to_front": ("yes", "local", "raises and activates the one browser window Jarvis is stuck on a captcha or sign-in page in, so it takes your screen and your keyboard away from whatever you are doing the moment it happens - the window may be showing your own account details; Jarvis still never solves the captcha for you, and going back to leaving the window exactly where it is (the default) is instant"),
+ }
+ 
+ 

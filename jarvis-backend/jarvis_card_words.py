@@ -193,6 +193,10 @@ TITLES = {
     # 2026-10-08): keeping the live picture of one of the owner's own browser
     # windows on offer for the full 15 minutes instead of about a minute.
     "handoff_keep_offering": "keep the phone's live view on offer for 15 minutes",
+    # --- what a captcha does about its browser window (jarvis_handoff_front.py,
+    # the owner's decision of 2026-10-09): bringing that one stuck window to
+    # the front instead of leaving it exactly where it is.
+    "handoff_bring_to_front": "bring the stuck browser window to the front",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
     # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)

@@ -280,6 +280,16 @@ SECTIONS: tuple = (
     # same words from the PC.
     Section("handoff", ("when the phone does not answer", "the captcha hand-off",
                         "how long the hand-off stays on offer", "solve it here settings")),
+    # "When a captcha stops Jarvis" (2026-10-09): what a captcha does about the
+    # browser window it is blocking (jarvis_handoff_front.py; the owner's own
+    # decision of that day, "1 by default with the option for 2 in the settings
+    # of Jarvis"). A card on the desktop and a Settings row on the phone, both
+    # fed by the same words from the PC - the same shape as the row above, and
+    # deliberately its own id: this is a different question (does the window
+    # come forward) from that one (how long the phone may watch it).
+    Section("handoff-front", ("when a captcha stops jarvis", "the captcha window",
+                              "does the browser window come to the front",
+                              "bring the window to the front", "leave it where it is")),
     # "Show or hide menus" (2026-09-30): a card on the desktop and Settings row on the phone.
     Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
                                 "the menus", "menus")),
