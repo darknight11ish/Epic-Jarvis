@@ -1615,8 +1615,11 @@ fn parse_hit_mask(grid: &str) -> Option<Vec<bool>> {
         .then(|| grid.bytes().map(|b| b == b'1').collect())
 }
 
+// NOT `mod tests`: this file already has one, for `clamp_into` above, and two
+// top-level `mod tests` blocks make every test target fail to compile (E0428).
+// Both modules' tests still run.
 #[cfg(test)]
-mod tests {
+mod floating_hit_tests {
     use super::*;
 
     #[test]
