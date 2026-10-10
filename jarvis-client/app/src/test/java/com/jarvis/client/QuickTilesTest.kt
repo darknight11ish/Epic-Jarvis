@@ -171,6 +171,78 @@ class QuickTilesTest {
     }
 
     @Test
+    fun everyTileLabelSaysWhatItsTapDoes() {
+        // Two labels did not, found by the sweep of 2026-10-10 and both
+        // confirmed in the code. A tile has no room to explain itself: whatever
+        // the label says IS the promise, so a label that promises something the
+        // tap does not do is a trap.
+
+        // 1. "Brief me" only OPENS the app on the Briefing screen
+        // ([QuickTiles.decide] answers OpenBriefing and never asks the PC for
+        // one). It is not made to start one instead: a briefing names new
+        // senders, and a tile draws on a locked screen. The smaller, honest
+        // change is the label.
+        assertEquals("Open briefing", QuickTiles.tileLabel(TileAction.BRIEF_ME, 0))
+        assertEquals("the Settings chooser says the same thing", "Open briefing",
+            TileAction.BRIEF_ME.choiceLabel)
+        assertEquals("the tap itself is unchanged", Decision.OpenBriefing, decide(TileAction.BRIEF_ME))
+        // The fix is the TILE's own words, not the shared list's: TileAction
+        // .tileLabel is the PC's `jarvis_widgets.ACTIONS`, drawn by the
+        // home-screen widget's buttons on both apps and held byte for byte by
+        // contract/widget-cases.json (JarvisWidgetsTest) - so it stays exactly
+        // as the PC has it.
+        assertEquals("the PC's shared word is untouched", "Brief me", TileAction.BRIEF_ME.tileLabel)
+        val tile = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/service/QuickTileService.kt")
+            .readText()
+        assertTrue("the tile draws the tile's own words",
+            tile.contains("tile.label = QuickTiles.tileLabel(action, slot)"))
+        assertFalse("never the shared word straight onto a tile again",
+            tile.contains("action?.tileLabel"))
+        // The other four are unchanged, so this cannot quietly rename them.
+        assertEquals("Focus session", QuickTiles.tileLabel(TileAction.FOCUS, 0))
+        assertEquals("Play/pause PC", QuickTiles.tileLabel(TileAction.PC_PLAY_PAUSE, 2))
+        assertEquals("an empty slot still says which tile it is",
+            "Jarvis tile 3", QuickTiles.tileLabel(null, 2))
+        // ...and the words the owner reads elsewhere were corrected with it.
+        assertFalse("the lock note still promises a briefing",
+            QuickTiles.LOCK_NOTE.contains("\"Brief me\""))
+        assertTrue(QuickTiles.LOCK_NOTE.contains("\"Open briefing\""))
+
+        // 2. The link tile is a MUTE SWITCH ([QuickTiles.muteCommand],
+        // LinkTileService). It used to draw "Jarvis" - the app's own name - so
+        // tapping the tile with Jarvis's name on it silently muted Jarvis.
+        assertEquals("Mute Jarvis", QuickTiles.LINK_TILE_LABEL)
+        val link = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/service/LinkTileService.kt")
+            .readText()
+        assertTrue("the tile draws that label", link.contains("tile.label = QuickTiles.LINK_TILE_LABEL"))
+        assertFalse("never the app's own name again", link.contains("tile.label = \"Jarvis\""))
+
+        // Android's own tile editor reads the MANIFEST, not the runtime label,
+        // so the service must be declared with the same words - and the string
+        // it points at must be those words.
+        val manifest = repoFile("jarvis-client/app/src/main/AndroidManifest.xml").readText()
+        val at = manifest.indexOf(".service.LinkTileService\"")
+        assertTrue("the link tile is declared", at >= 0)
+        val block = manifest.substring(at, manifest.indexOf("</service>", at))
+        assertTrue("the manifest label names the tap:\n$block",
+            block.contains("android:label=\"@string/link_tile_label\""))
+        val strings = repoFile("jarvis-client/app/src/main/res/values/strings.xml").readText()
+        assertTrue("and that string is the same label",
+            strings.contains("<string name=\"link_tile_label\">${QuickTiles.LINK_TILE_LABEL}</string>"))
+    }
+
+    /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
+    private fun repoFile(rel: String): File {
+        var d: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (d != null) {
+            val f = File(d, rel)
+            if (f.isFile) return f
+            d = d.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
+    }
+
+    @Test
     fun theTileServiceNeverDecidesACard() {
         val src = listOf(
             File("src/main/java/com/jarvis/client/service/QuickTileService.kt"),
