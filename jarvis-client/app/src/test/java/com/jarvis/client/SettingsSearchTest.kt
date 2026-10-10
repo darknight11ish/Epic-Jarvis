@@ -67,6 +67,49 @@ class SettingsSearchTest {
         assertEquals("no key is listed twice", sections.size, sections.toSet().size)
     }
 
+    /**
+     * The bug this holds shut, found during the rebase of 2026-10-09: being in
+     * [SettingsSearch.ROWS] is not the same as being filtered. Four rows -
+     * `jarvis-notify`, `handoff-front`, `limits` and `idle-new` - joined the
+     * index without the `if (drawn("<key>"))` guard every other row carries,
+     * so on the phone a search hid the other twenty cards and left those four
+     * on screen, while the desktop hid every one. The index above cannot see
+     * that: it lists a section's words whether or not the row is guarded, so
+     * this is the assertion that makes the two different things one.
+     */
+    @Test
+    fun `every indexed section is really filtered by the search box`() {
+        val screen = repoFile(
+            "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt"
+        ).readText()
+        val unfiltered = mutableListOf<String>()
+        var checked = 0
+        // The guard sits on the row's own line, beside its `item(key = ...)` -
+        // the shape every guarded row on this screen has (`drawn` is
+        // SettingsScreen's own lambda; a row with no guard is composed even
+        // while a search is on). The line is read rather than a fixed window,
+        // because a hideable row's guard chain is longer than any window that
+        // has to stop short of the row above it.
+        for (row in Regex("item\\(key\\s*=\\s*\"([\\w.-]+)\"").findAll(screen)) {
+            val key = row.groupValues[1]
+            if (key !in SettingsSearch.SECTION_KEYS) continue
+            checked += 1
+            val line = screen.substring(screen.lastIndexOf('\n', row.range.first) + 1, row.range.first)
+            if (!line.contains("drawn(\"$key\")")) unfiltered += key
+        }
+        assertEquals(
+            "every section SettingsSearch.ROWS lists must be a row of the screen, or " +
+                "this test is checking fewer rows than the search indexes",
+            SettingsSearch.SECTION_KEYS.size,
+            checked,
+        )
+        assertTrue(
+            "these rows carry no `if (drawn(\"<key>\"))` guard, so a search hides every " +
+                "card but these: $unfiltered",
+            unfiltered.isEmpty(),
+        )
+    }
+
     @Test
     fun `the search box is a row of its own, above the jump list`() {
         val screen = repoFile(

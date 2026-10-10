@@ -536,7 +536,12 @@ fun SettingsScreen(
             // the "Open Android's notification access" button in the row above -
             // which is why "jarvis-notify" is one of MenuVisibilityTest's
             // deliberately-not-menus keys.
-            item(key = "jarvis-notify") {
+            //
+            // Filtered by the search box like every other row (`drawn` above):
+            // being listed in SettingsSearch.ROWS is not the same thing as
+            // being hidden by a search, and this row had the index entry
+            // without the guard (found during the rebase, 2026-10-09).
+            if (drawn("jarvis-notify")) item(key = "jarvis-notify") {
                 NotificationsFromJarvisSection(onOpen = onOpenNotificationSettings)
             }
 
@@ -565,7 +570,13 @@ fun SettingsScreen(
             // for 2 in the settings of Jarvis"). "Leave it where it is" is the
             // default and touches no window; "Bring it to the front" is one
             // approval card on the PC with Windows Hello.
-            if (menus.shows("settings.handoff-front")) item(key = "handoff-front") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows` on this row rather than inside
+            // it (every other hideable row writes shows-drawn-shows) - the same
+            // shape as the two rows below, where a test pins the whole
+            // `if (menus.shows(...)) item(key = ...)` line. The two guards are
+            // ANDed either way, and the search hides this row like every other.
+            if (drawn("handoff-front")) if (menus.shows("settings.handoff-front")) item(key = "handoff-front") {
                 MenuFrame(menus, "settings.handoff-front") { HandoffFrontSection(canAct = canAct) }
             }
 
@@ -605,7 +616,11 @@ fun SettingsScreen(
             // backend/jarvis_menus.py and generated into MenuCatalog.kt, and
             // MenuVisibilityTest checks both halves - the place in MenuPlaces
             // and this check in a real screen.
-            if (menus.shows("settings.limits")) item(key = "limits") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows`, like the row above: LimitsTest
+            // asserts this exact `if (menus.shows(...)) item(key = ...)` line,
+            // and the search must hide the row all the same (2026-10-09).
+            if (drawn("limits")) if (menus.shows("settings.limits")) item(key = "limits") {
                 MenuFrame(menus, "settings.limits") { LimitsSection(canAct = canAct) }
             }
 
@@ -617,7 +632,12 @@ fun SettingsScreen(
             // every other row (MenuVisibilityTest), and needs no canAct gate.
             // Last of the settings rows, so that adding it moves no other row's
             // position (see SETTINGS_ITEM_INDEX).
-            if (menus.shows("settings.idle-new")) item(key = "idle-new") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows`, like the two rows above:
+            // HistoryContractTest pins this exact `if (menus.shows(...))
+            // item(key = ...)` line, and the search must hide the row all the
+            // same (2026-10-09).
+            if (drawn("idle-new")) if (menus.shows("settings.idle-new")) item(key = "idle-new") {
                 MenuFrame(menus, "settings.idle-new") {
                     IdleNewSection(choice = idleNewChoice, onChange = onIdleNewChoiceChange)
                 }
