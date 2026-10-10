@@ -871,4 +871,111 @@ script without this change:
 applied" to the record's own wording, because on a backend the record covers the
 second run no longer asks the stack that question.
 
+---
+
+## 11. Build step 3, built (2026-10-11): the base can be re-taken, and says when it differs
+
+**Step 3 of §5 is built: `tools/gen_base_from_backend.py`.** One switch is the
+whole of it. With `--source <backend folder>` it re-takes `jarvis-backend/`
+from that folder by the rule the folder's own README already carried
+("The exact rule, so it can be re-taken"): every top-level `*.py` except
+`test_*.py`, `patch_openjarvis.py` and `spike_sandbox.py`, plus six files - five
+of them this repository's own copies (`jarvis_hud.html` from
+`jarvis-desktop/src/`, the settings **template** from `backend/rebuilt/`,
+`requirements.lock`, `quiz_grader_cases.json`, `rust-crates.lock`) and
+`jarvis-visual-spec.json`, which is the owner's. With `--check` it derives the
+folder **in memory** and compares: exit 0 if `jarvis-backend/` is exactly what
+that folder produces, exit 1 naming every file that is not - in both directions,
+a copy edited here and a live file this repository has never seen. `--source` is
+only ever read; `jarvis-backend/README.md` and `.gitignore` are left alone, and
+so is `jarvis-backend/_where.py`, which is a resource this repository owns and
+whose two copies are deliberately different.
+
+**The one exception is now the script's rule, not four line numbers.**
+`jarvis-backend/README.md`'s "one deliberate difference" is that the owner's
+live `jarvis_gate.py` writes keys into one dict literal twice, and the base was
+published with the dead earlier lines removed (CPython keeps the last one
+silently; `tools/check_literal_keys.py` is what found them). The tool applies
+that rule generally: inside one dict literal a key written more than once keeps
+its last line and the dead earlier lines go, every drop printed with its line
+number, and a drop that would not compile is refused rather than written. The
+rule is validated against the published base itself - see below.
+
+### What it measured on the owner's folder (read only)
+
+Run against the owner's live folder in `--check` mode, the tool prints
+`FAIL 7 file(s) differ from what this folder produces` and names them:
+
+| file | committed base | the owner's folder produces | what the difference is |
+|---|---|---|---|
+| `jarvis_gate.py` | 120,109 B | 124,410 B | the two dead duplicate lines come off correctly (the tool names both), and what is left is the base **plus** the entries newer patches add |
+| `jarvis_hud.py` | 339,860 B | 356,080 B | `screen-attach.patch` and later work (§4.3's "one patch behind", and more) |
+| `jarvis_asks_first.py` | 109,780 B | 108,570 B | live is **smaller**: this repository's copy has moved on and the live folder has not |
+| `jarvis_limits.py` | 46,884 B | 42,314 B | the same, the other way |
+| `jarvis_voice.py` | 125,754 B | 122,054 B | the same |
+| `jarvis_voice_enroll.py` | 74,262 B | 72,824 B | the same |
+| `jarvis_framework.py` | 28,620 B | 27,077 B | the same |
+
+**The exception rule reproduces the published base exactly.** Derived from the
+owner's folder, `jarvis_gate.py` is the committed base plus the `raise_api_limit`,
+`lower_api_limit`, `handoff_keep_offering` and `handoff_bring_to_front` entries
+and nothing else, with the two dead duplicate lines dropped by name - which is
+what §4.3's "deliberately differs from his `jarvis_gate.py` in four dead lines"
+describes, now reproduced by a rule instead of by hand. (Four keys are named in
+the README's table; two of the four were written only once in the file measured
+here, so two lines are dropped.)
+
+### What this means for step 3's own verification, honestly
+
+§5 says to verify step 3 by regenerating from a copy of the owner's folder and
+confirming `backend/test_base_matches_repo.py` still passes. **On today's
+folders that cannot pass, and it is worth saying why rather than dressing it
+up.** `test_base_matches_repo.py` requires the base's copy of every module this
+repository ships whole to be *this repository's* copy, and the table above shows
+seven files where the live folder and this repository disagree - in both
+directions. So a base re-taken from the owner's folder today would fail that
+suite on those seven, by design: the suite is the second line of defence
+against a stale twin, and it is doing its job. The regeneration is *correct*;
+what is not yet true is that the owner's folder, this repository's copies and
+the published base are the same program on the same day. They converge when his
+folder has been taken through steps 4 and 5 - which is the same blocker step 4
+already has (§10: his machine still refuses, so it has no `_jarvis-state.json`).
+
+What **is** verified, and by what:
+
+- `backend/test_base_regeneration.py` (25 checks, passes anywhere including CI)
+  builds folders whose answer is known in advance and reads the tool's own plan:
+  the two files the rule copies and the three it refuses; the six beside-files
+  and where each comes from (the owner's live settings file is *not* what the
+  base's `.toml` is made from); the duplicate-key rule on one literal, on two
+  literals, and with the result required to compile; a folder with no
+  `jarvis_hud.py` refused rather than half-copied; and `--check` exiting 1 on a
+  base that has been edited here and on a base holding a file the source no
+  longer produces, **without writing a byte**. Two checks read this repository:
+  the tool is pure ASCII, and the five files whose source is this repository's
+  own copy are byte-identical to it in the base.
+- `backend/test_base_matches_repo.py` still passes (13 checks) - step 3 changed
+  no file the base is checked against.
+
+**What this step does not do, plainly.** It does not update the base: the seven
+files above are a report to act on, not something this change acts on by
+itself, because re-taking the base from the owner's folder would overwrite four
+files this repository's copies are ahead on and would publish his newer
+`jarvis_hud.py` and `jarvis_gate.py` without the repository's copies moving -
+which is exactly what `test_base_matches_repo.py` exists to refuse. It does not
+apply patches, so it cannot tell a half-patched folder from a patched one; that
+stays `test_base_matches_repo.py`'s job. And it does not change the result gate
+or anything in `apply-patches.ps1`.
+
+**A question this step puts to the owner, with the numbers in front of him:**
+the base and his folder have drifted apart in both directions, so should the
+repository (a) re-take `jarvis-backend/` and move this repository's own copies
+of those seven files to match at the same time - the base becomes his folder on
+the day it is taken, and `test_base_matches_repo.py` is what proves the two
+moved together; or (b) leave the base as the 2026-10-06 snapshot and let
+`--check` keep reporting the seven until steps 4 and 5 have taken his folder
+through the stack, so the base never describes a state the patches have not
+produced? This is the one decision in step 3 that is not in §5, and it is his
+because (a) publishes his newer files and (b) leaves the base knowingly stale.
+
 
