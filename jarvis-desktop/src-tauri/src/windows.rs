@@ -400,6 +400,24 @@ pub fn publish_bar_state(app: &AppHandle) {
     crate::push_to_hud(app, "bar", &is_quickbar_visible(app));
 }
 
+/// The bar is on screen: put the caret in its input.
+///
+/// Split out of [`show_quickbar_unlocked`] so [`toggle_quickbar`] can do the
+/// same thing on the way *up* without duplicating it - the tray icon's left
+/// click toggles (2026-10-10) and needs the identical "ready to type" the
+/// hotkey gives. Harmless on the way down: nothing is emitted unless the bar
+/// really is visible, so a hide never leaves a stray focus request behind.
+pub fn focus_quickbar_input(app: &AppHandle) -> bool {
+    let visible = app
+        .get_webview_window(QUICKBAR_LABEL)
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
+    if visible {
+        crate::emit_quickbar(app, crate::events::FOCUS_INPUT, ());
+    }
+    visible
+}
+
 /// Hides the quickbar and drops any pin, so the next summon starts clean.
 pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
     QUICKBAR_PINNED.store(false, Ordering::Relaxed);
@@ -421,6 +439,17 @@ pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
 }
 
 /// Toggles the quickbar. Returns its new visibility.
+///
+/// `Ok(false)` also covers the one case where the bar was hidden and is still
+/// hidden: App lock asked Windows Hello first (lock.rs shows it once the owner
+/// confirms), so this is "not on screen yet", never an error.
+///
+/// On the way up it puts the caret in the input, the same as
+/// [`show_quickbar_unlocked`] does for the hotkey. Before 2026-10-10 only the
+/// hotkey path did that (lib.rs emitted `FOCUS_INPUT` itself after this
+/// returned `true`); the tray icon's left click calls this function directly
+/// and never did, so a bar summoned from the notification area was on screen
+/// and not ready to type in.
 pub fn toggle_quickbar(app: &AppHandle) -> Result<bool, String> {
     let window = app
         .get_webview_window(QUICKBAR_LABEL)
@@ -432,11 +461,12 @@ pub fn toggle_quickbar(app: &AppHandle) -> Result<bool, String> {
 
     if visible {
         hide_quickbar(app)?;
-        Ok(false)
-    } else {
-        show_quickbar(app)?;
-        Ok(true)
+        return Ok(false);
     }
+    show_quickbar(app)?;
+    // `show_quickbar` returns `Ok` while Windows Hello waits, so ask the
+    // window itself rather than trusting the `Ok`: a locked PC emits nothing.
+    Ok(focus_quickbar_input(app))
 }
 
 /// Resizes the quickbar to fit its answer card, clamped to sane bounds.

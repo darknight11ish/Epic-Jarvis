@@ -484,6 +484,11 @@ SHIPPED = (
     # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
     # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
     "jarvis_menus.py",
+    # "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the
+    # owner's request): which app, Windows panel or Jarvis Settings section the
+    # owner's own words name. jarvis_quick.py calls it. No patch, no route, NO
+    # card and no model tool - the same shape as jarvis_media.py.
+    "jarvis_open.py",
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",
@@ -587,6 +592,16 @@ SHIPPED = (
     # Uses Ollama's own import of a local .gguf path and the existing switch;
     # no route, no tool, and it never writes jarvis-framework.toml.
     "jarvis_optin_models.py",
+    # What this machine can hold, and what may be offered on it (2026-10-10,
+    # the owner's Decision 6): free space on the drive models live on, card
+    # count and video memory, then the Lean / Comfortable / Generous tiers with
+    # their size on disk, what each is for, which card it uses and what it
+    # leaves free. may_download() is the one gate every download passes: never
+    # a silent download, and never one leaving under MIN_FREE_AFTER_DOWNLOAD -
+    # the night C: hit 5.7 GB free and every build broke. Reads no network,
+    # starts nothing, downloads nothing; the work setups use it rather than
+    # building a second chooser.
+    "jarvis_storage.py",
 )
 
 

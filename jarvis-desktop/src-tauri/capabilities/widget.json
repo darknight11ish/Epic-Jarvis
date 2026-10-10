@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/windows-schema.json",
   "identifier": "widget",
-  "description": "The always-on-desktop widget. Telemetry is pushed to it, so it needs no command for that; it calls only its own geometry, its preferences and quick capture.",
+  "description": "The always-on-desktop widget. Telemetry is pushed to it, so it needs no command for that; it calls only its own geometry, its preferences, quick capture, and the navigation-only `open_fix_place` behind its gear and its offline card's fix buttons (`open-fix-place`: opens or focuses the Settings window at a named place; it changes no setting and approves nothing).",
   "windows": [
     "widget"
   ],
@@ -19,6 +19,7 @@
     "approvals",
     "task-control",
     "widget-surface",
+    "open-fix-place",
     "appearance-read",
     "focus",
     "widget-board",

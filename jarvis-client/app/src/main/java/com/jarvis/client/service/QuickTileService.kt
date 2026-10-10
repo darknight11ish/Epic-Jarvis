@@ -128,7 +128,10 @@ abstract class QuickTileService(private val slot: Int) : TileService() {
         } else {
             Tile.STATE_INACTIVE
         }
-        tile.label = action?.tileLabel ?: "${QuickTiles.UNASSIGNED_LABEL} ${slot + 1}"
+        // The label is the tile's OWN words ([QuickTiles.tileLabel]): the tile
+        // used to draw the PC's shared button word, which for the briefing
+        // slot promised a briefing the tap does not start.
+        tile.label = QuickTiles.tileLabel(action, slot)
         // minSdk is 33, so the subtitle (API 29) is always there.
         tile.subtitle = QuickTiles.subtitle(action, paired, connected, stale)
         tile.updateTile()

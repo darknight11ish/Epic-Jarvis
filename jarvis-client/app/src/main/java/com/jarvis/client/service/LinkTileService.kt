@@ -175,7 +175,14 @@ class LinkTileService : TileService() {
             muted || askedFor == true -> Tile.STATE_INACTIVE
             else -> Tile.STATE_ACTIVE
         }
-        tile.label = "Jarvis"
+        // The label SAYS WHAT THE TAP DOES: this tile mutes and unmutes
+        // Jarvis's spoken interruptions. It used to draw "Jarvis" - the app's
+        // own name - so tapping the tile with Jarvis's name on it silently
+        // muted Jarvis (QuickTiles.LINK_TILE_LABEL has the whole reasoning).
+        // The manifest gives the same words to this service
+        // (`@string/link_tile_label`), so Android's tile editor and the shade
+        // never disagree.
+        tile.label = QuickTiles.LINK_TILE_LABEL
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             tile.subtitle = when {
                 link != LinkState.CONNECTED -> "Offline"

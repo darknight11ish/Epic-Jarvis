@@ -1588,6 +1588,8 @@ $SHIPPED = @(
     'jarvis_readpage.py'         # readpage.patch: the model's read_web_page tool - ONE card per address (read_web_page, tier ask, risky: the PC contacts that one site), then ONE plain GET and the words a reader would see, handed back as outside text; never a link on the page, never a second page, no new dependency
     # --- "Show or hide menus" (2026-09-30, no patch) ---
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
+    # --- "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the owner's request; no patch) ---
+    'jarvis_open.py'             # which app, Windows panel or Jarvis Settings section the owner's own words name; jarvis_quick.py (already SHIPPED) calls it - no patch, no route, NO card, and no model tool, like jarvis_media.py
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
     # --- The page `GET /` serves (2026-10-07) ---
@@ -1623,6 +1625,8 @@ $SHIPPED = @(
     'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
     # --- The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5) ---
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
+    # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
+    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -2982,11 +2986,13 @@ try {
                 Bad "$($drift.Count) file(s) have changed since this backend was last recorded:"
                 foreach ($d in $drift) { Say "        $d" Red }
                 Say "        That is drift: an edit by hand, or a patch that was not put on" Cyan
-                Say "        by this tool. Nothing has been changed yet. The rehearsal runs" Cyan
-                Say "        now, and the record of the last good run is left exactly as it" Cyan
+                Say "        by this tool. The record of the last good run is left exactly as it" Cyan
                 Say "        was, so the next run says this again rather than forgetting it." Cyan
+                Say "        Each file above is backed up and then OVERWRITTEN by this run, as" Cyan
+                Say "        you asked - the copy of your own file goes into the backup folder" Cyan
+                Say "        and the patched version goes in its place. Named again at the end." Cyan
                 $mfDriftList = ($drift -join ', ')
-                Add-Note "$($drift.Count) file(s) have changed since the last recorded run and are NOT recorded by a patch of this list: $mfDriftList. They have not been touched by this run."
+                Add-Note "$($drift.Count) file(s) have changed since the last recorded run and are NOT recorded by a patch of this list: $mfDriftList. Each one is backed up and overwritten by this run, as you asked; your own copy is in the run's backup folder and the patched version is in place."
                 $script:ManifestCurrent = $null
                 $script:ManifestDrifted = $true
             } else {
@@ -3564,20 +3570,56 @@ try {
                         # on either. The real run leaves it alone for the same
                         # reason (see Test-PatchOnBackend).
                         if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $name) { continue }
+                        # (docs/UPDATER-REDESIGN.md section 5, build step 5.)
+                        #
+                        # THE "LEFT ALONE" VERDICT IS OBTAINED HERE, BEFORE THE
+                        # APPLY, AND NOT FROM THE APPLY FAILING (2026-10-11).
+                        # Until now the only way this loop learned that a patch
+                        # was already on was `Invoke-Patch` failing first and
+                        # Test-PatchOnBackend explaining it afterwards - "the
+                        # verdict was obtained by failing to put it on", which is
+                        # not proof that the work is there. That is a real
+                        # distinction and not a cosmetic one: on 2026-10-09 a
+                        # patch that IS on the owner's files was treated as a
+                        # patch this run had PUT on (`taken-off`, the same word a
+                        # genuine apply gets), and the strip/undo step then took
+                        # it back OFF the real files while `$todo` dropped it from
+                        # the re-apply - tutorials.patch and screen-attach.patch
+                        # were deleted, silently, and the run still said every
+                        # patch was on (commit ba344211 closed that half).
+                        #
+                        # Asking first cannot change WHERE the work ends up,
+                        # because Test-PatchOnBackend reads the real backend
+                        # folder and never the rehearsal copy: the question and
+                        # its answer are the same before and after the apply. It
+                        # also cannot turn a patch that used to go on into one
+                        # that is skipped: a patch whose work is genuinely absent
+                        # still answers no here and is applied exactly as before,
+                        # and one whose apply would have SUCCEEDED -- the case
+                        # the design note's own acceptance test names, "a test
+                        # whose expected answer is 'left alone' must answer the
+                        # same way whether the patch would have applied or not"
+                        # -- is now answered from the file instead of from
+                        # whichever way the text happened to land on it.
+                        if (Test-PatchOnBackend -File $full) {
+                            # On the backend already, and this rehearsal is the
+                            # thing that cannot put it back on without changing
+                            # the state it is asked to build (see
+                            # Test-PatchOnBackend). It leaves the copy alone from
+                            # here, and the real run leaves the real files alone
+                            # too - $todo below drops it. Round 2, the same round
+                            # the strip records it in: this is what was FOUND on
+                            # the files, which outranks round 0's "it went on a
+                            # clean copy".
+                            $alreadyOn += @{ Name = $name; File = $full }
+                            Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
+                            Say "  already on   $name  (left as it is - not put on this run)" Cyan
+                            continue
+                        }
                         $r = Invoke-Patch -File $full
                         if ($r.Ok) {
                             Say "  ok           $name"
                             Set-PatchClass -Name $name -Verdict 'taken-off'
-                        }
-                        elseif (Test-PatchOnBackend -File $full) {
-                            # Not a failure: it is on the backend already, and
-                            # this rehearsal is the thing that cannot put it
-                            # back on (see Test-PatchOnBackend). It leaves the
-                            # copy alone from here, and the real run leaves the
-                            # real files alone too - $todo below drops it.
-                            $alreadyOn += @{ Name = $name; File = $full }
-                            Set-PatchClass -Name $name -Verdict 'on-but-unstrippable'
-                            Say "  already on   $name  (left as it is)" Cyan
                         }
                         else {
                             $again += @{ Name = $name; Why = $r.Output }
@@ -3912,6 +3954,200 @@ try {
             Finish-Run
         }
     }
+
+# --- 4. what this run could not reproduce: backed up, overwritten, NAMED ----
+#
+# docs/UPDATER-REDESIGN.md section 5, build step 4, and the owner's answer to
+# section 6 question 1 (2026-10-08, "back it up and overwrite"), widened by his
+# own words of 2026-10-11: a file the run could NOT reproduce triggers the
+# backup-and-overwrite ON THE RUN THAT NOTICED IT, and Jarvis says what it
+# replaced, BY NAME. Nothing here may be silent.
+#
+# WHERE THIS SITS, AND WHY IT IS *BEFORE* STEP 3. Both halves of the owner's
+# answer are already carried out by the two steps above and below this one, and
+# this block is their one honest voice - it writes no file itself:
+#
+#   * the files a patch of this list names are rewritten by applying the patch
+#     (step 2), and step 2 copied each of them into `_jarvis-backup-$Stamp`
+#     BEFORE anything touched it;
+#   * the modules this repository ships whole are copied over by step 3, which
+#     backs the old copy up first ("replaced an older copy (the old one is in
+#     ...)" is its own line).
+#
+# It has to run BEFORE step 3 and not after, and that is the whole reason it is
+# here rather than beside the record. Measured 2026-10-11: run after step 3, the
+# evidence is already gone - step 3 has replaced the owner's hand-edited module
+# with this repository's copy, so the file on disk matches the source, the
+# detection finds nothing, and a hand-edit that WAS just overwritten is reported
+# nowhere. Before step 3 the owner's own bytes are still on the disk and the
+# question can be answered.
+#
+# WHAT "COULD NOT REPRODUCE" MEANS, in one rule. The record of the last run that
+# finished wrote a hash for every `.py` file it left. A file whose hash is no
+# longer that one is a file whose bytes this run did not produce - the record
+# cannot speak for it. That is the owner's `verified: false` and his "a hash that
+# has moved" in a single test, and it needs no separate vocabulary:
+#
+#   * a hash that has moved  -> the record cannot speak for it (its bytes are
+#     not the ones the last good run produced);
+#   * `verified: false`      -> the record never could speak for it.
+#
+# Both end the same way, which is what the owner asked for: the copy of HIS file
+# goes into the backup folder and the version this run produces - the patch's
+# output, or this repository's own copy - goes in its place, and the run says so
+# by name.
+#
+# WHAT A FILE WITH NO SOURCE IS, AND WHY IT IS NAMED RATHER THAN REPLACED.
+# Measured (read only) on the owner's folder 2026-10-11, of its 201 `.py` files:
+# 7 are named by a patch header, 180 are shipped by this repository, and 17 have
+# no version anywhere in this repository at all - `jarvis_preview.py`,
+# `jarvis_style.py`, `jarvis_undo.py`, `patch_openjarvis.py`,
+# `spike_sandbox.py` and twelve `test_*.py`. There is nothing to write for
+# those. Overwriting them from the published base is not possible (they are not
+# in it) and would in any case move files BACKWARDS: section 11 measures
+# `jarvis-backend/` differing from the owner's folder in both directions, and
+# `test_base_matches_repo.py` exists to refuse exactly that. So they are NAMED,
+# in the run's own words, and left alone. Nothing about them is silent and
+# nothing of the owner's is destroyed with nothing to restore it from.
+#
+# IT RUNS ON THE FAST PATH TOO. A hand-edited module this repository ships whole
+# does not make the record unusable - `Test-ManifestCurrent` checks the patch
+# list and every file a PATCH names, and a shipped module is in neither - so the
+# next run prints "No rehearsal was needed" and goes straight to step 3. A
+# report that only existed after a rehearsal would be missing for exactly the
+# file that needs it (measured 2026-10-11), so this runs on both paths. On the
+# first run there is no record at all, so there is nothing for it to compare
+# against and nothing for it to claim.
+if ($ManifestPath -and $script:ManifestExisting -and $script:ManifestExisting.files) {
+    $script:Replaced = @()
+    $script:ReplacedWhy = @{}
+    $script:NoSource = @()
+
+    # What the last run that finished said about each file.
+    $hadRecord = @{}
+    foreach ($p in $script:ManifestExisting.files.PSObject.Properties) {
+        $hadRecord[[string]$p.Name] = $p.Value
+    }
+
+    foreach ($f in @(Get-ChildItem -LiteralPath $BackendPath -Filter '*.py' -File -ErrorAction SilentlyContinue)) {
+        $rel = $f.Name
+        if (-not $hadRecord.ContainsKey($rel)) { continue }
+        $rec = $hadRecord[$rel]
+
+        # The source this run owns for the file, if any: a patch of this list
+        # that names it, or a module this repository ships whole. Both are
+        # byte-exact, which is what makes an overwrite honest rather than a
+        # guess. A file with neither is named and left alone (see above).
+        $srcPatch = ''
+        if ($rec -and [string]$rec.patch) { $srcPatch = [string]$rec.patch }
+        # The full $SHIPPED entry, not just the leaf: ten of them live under
+        # `rebuilt/`, so joining the leaf onto the backend folder would look for
+        # a source that is not there (measured 2026-10-11).
+        $srcShipped = ''
+        foreach ($m in $SHIPPED) {
+            if ((Split-Path -Leaf $m) -eq $rel) { $srcShipped = $m; break }
+        }
+        $hasSource = ($srcPatch -ne '' -or $srcShipped -ne '')
+        if (-not $hasSource) {
+            $script:NoSource += $rel
+            Add-Note "$rel is a file the patches do not produce and this repository does not ship whole. The record cannot speak for it, and there is nothing this tool could restore it from, so nothing in it was changed - it is named here so that is not a silent gap."
+            continue
+        }
+
+        # THE QUESTION, asked against the bytes of the SOURCE this run owns -
+        # not against the record's `verified` flag, and this distinction was
+        # measured the hard way (2026-10-11).
+        #
+        # `verified` alone is not the answer. On the owner's folder the first run
+        # that finishes records EVERY module this repository ships whole as
+        # `verified: false`, because no patch of the list names one - so reading
+        # `verified: false` as "this run could not reproduce it" made a run name
+        # 180 modules, when in truth step 3 had reproduced every one of them
+        # perfectly from this repository, and the one file that had really been
+        # missed was lost in the middle of the list.
+        #
+        # So ask the source. For a module this repository ships whole the source
+        # is a file in this checkout and the answer is exact: are the bytes on
+        # the disk the ones this repository holds? For a file a patch of the list
+        # names the source is the patch output the record wrote down, and the
+        # record's hash is the only thing that can say what that was.
+        $srcPath = ''
+        if ($srcShipped -ne '') { $srcPath = Join-Path $PatchDir $srcShipped }
+        $nowSha = Get-Sha256Hex -Path $f.FullName -AsLf
+        $wasSha = [string]$rec.sha256
+
+        $unreproduced = $false
+        $why = ''
+        if ($srcPath -and (Test-Path -LiteralPath $srcPath -PathType Leaf)) {
+            $srcSha = Get-Sha256Hex -Path $srcPath -AsLf
+            if ($nowSha -and $srcSha -and $nowSha -eq $srcSha) {
+                # The bytes on the disk are exactly what this repository holds,
+                # so this run reproduced the file perfectly - whether the record
+                # could speak for it or not. Nothing was missed and nothing is
+                # reported.
+                continue
+            }
+            $unreproduced = $true
+            if ($srcPatch -ne '') {
+                $why = 'this run replaced it with the version the patches and this repository produce'
+            } else {
+                $why = 'this run replaced it with this repository''s own copy'
+            }
+        } elseif ($srcPatch -ne '' -and $rec) {
+            if ($rec.verified -ne $true) {
+                # The record could never tie this file to the patch that was
+                # supposed to produce it. That is the owner's case - the half
+                # that did nothing until now.
+                $unreproduced = $true
+                $why = 'the last finished run could not tie it to the patch that produces it'
+            } elseif ($nowSha -and $wasSha -and $nowSha -ne $wasSha) {
+                $unreproduced = $true
+                $why = 'its hash has moved past the one the last finished run produced'
+            }
+        }
+        if ($unreproduced) {
+            $script:Replaced += $rel
+            $script:ReplacedWhy[$rel] = $why
+        }
+    }
+
+# --- 4b. the report, AFTER step 3 has actually replaced them --------------------
+#
+# The DETECTION above runs before step 3 because that is the only moment the
+# owner's own bytes are still on the disk to be compared against. The REPORT
+# runs here, after step 3, because until step 3 has run the overwrite has not
+# happened - and a run that says it replaced something it did not replace is
+# the same class of untruth this whole step exists to remove. Here the claim
+# is also true of the backup folder, which steps 2 and 3 have created by now.
+
+    if ($script:Replaced.Count -gt 0) {
+        Say ""
+        Say "Replaced: $($script:Replaced.Count) file(s) this run could not reproduce have been" Cyan
+        Say "          backed up and overwritten, exactly as you asked. By name:" Cyan
+        foreach ($r in ($script:Replaced | Sort-Object)) {
+            Say "            $r  -  $($script:ReplacedWhy[$r])" Yellow
+        }
+        if ($script:State.Backup) {
+            Say "          Your own copy of each one, byte for byte, is in:" Cyan
+            Say "            $($script:State.Backup)" Cyan
+        } else {
+            Say "          Each one is backed up by the step that replaces it; see the" Cyan
+            Say "          _jarvis-backup-* folder in the backend folder." Cyan
+        }
+        Say "          The version this run produces is in place. Anything you added by hand to" Yellow
+        Say "          those files is NO LONGER in the live ones until you put it back from the" Yellow
+        Say "          backup folder." Yellow
+        $mfBackupSaid = '_jarvis-backup-<date>'
+        if ($script:State.Backup) { $mfBackupSaid = $script:State.Backup }
+        Add-Note "$($script:Replaced.Count) file(s) were backed up and overwritten because this run could not reproduce them: $(($script:Replaced | Sort-Object) -join ', '). Your copies are in $mfBackupSaid. Any hand-edit in them is no longer in the live files until it is put back."
+    }
+    if ($script:NoSource.Count -gt 0) {
+        Say ""
+        Say "Left alone: $($script:NoSource.Count) file(s) have no version in this repository to" Yellow
+        Say "          write, so nothing in them was changed. By name:" Yellow
+        foreach ($r in ($script:NoSource | Sort-Object)) { Say "            $r" Yellow }
+    }
+}
 
     # --- 3. every module this repository ships whole -------------------------
     #
