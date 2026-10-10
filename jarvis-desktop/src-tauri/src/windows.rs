@@ -1619,6 +1619,47 @@ fn parse_hit_mask(grid: &str) -> Option<Vec<bool>> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_widget_grown_past_the_edge_is_pulled_back() {
+        // 2026-10-10, the owner's screen: a 480x507 physical widget at
+        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
+        assert_eq!(
+            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
+            (1440, 573)
+        );
+    }
+
+    #[test]
+    fn a_widget_already_inside_is_left_exactly_where_it_is() {
+        assert_eq!(
+            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
+            (100, 100)
+        );
+    }
+
+    #[test]
+    fn a_monitor_to_the_left_of_the_primary_is_respected() {
+        // Windows' virtual screen starts at the left-most monitor, so a widget
+        // on a monitor at x=-1920 must not be dragged to 0...
+        assert_eq!(
+            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1900, 100)
+        );
+        // ...and one hanging off its left edge comes back to it.
+        assert_eq!(
+            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1920, 100)
+        );
+    }
+
+    #[test]
+    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
+        assert_eq!(
+            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
+            (0, 0)
+        );
+    }
+
     /// A grid of `n` cells, all background except the ones named (row, col).
     fn grid_with(drawn: &[(usize, usize)]) -> String {
         let mut cells = vec!['0'; FLOATING_HIT_GRID * FLOATING_HIT_GRID];
