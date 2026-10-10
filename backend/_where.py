@@ -484,6 +484,11 @@ SHIPPED = (
     # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
     # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
     "jarvis_menus.py",
+    # "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the
+    # owner's request): which app, Windows panel or Jarvis Settings section the
+    # owner's own words name. jarvis_quick.py calls it. No patch, no route, NO
+    # card and no model tool - the same shape as jarvis_media.py.
+    "jarvis_open.py",
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",

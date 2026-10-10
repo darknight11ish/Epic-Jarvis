@@ -1146,6 +1146,29 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    # --- "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    # the owner's request of 2026-10-10) --------------------------------------
+    # LAST among the real matchers, and the placement is the fix, not a
+    # preference. `jarvis_open.parse` reads any sentence beginning with
+    # "open"/"launch"/"start" as naming a program, and `_watch` above owns
+    # "start watching my screen" (jarvis_screen.py, 2026-09-29). Tried before
+    # `_watch`, this claimed that phrase: "start watching my screen" resolved to
+    # a program called "watching my", so the watch session never started and no
+    # screen was ever read. backend/test_screen_turn.py caught it on CI. Last,
+    # it can only claim a phrase no other feature already owns - exactly what
+    # the owner's request adds, and nothing already answered changes hands.
+    #
+    # It still runs before the model: like music and video control (the owner,
+    # 2026-09-27, "no card, only from the owner's own words"), opening a program
+    # the owner already has changes nothing Jarvis holds, and the model gets no
+    # tool for it, so outside text cannot reach it either. "open a chat" (about
+    # this conversation, not a program) and "open web search" (the settings
+    # block's own phrase, always answered `settings_open`) are matched above and
+    # keep their own answers.
+    got = _open(s)
+    if got is not None:
+        return got
+
     # --- an animal request nothing above understood (2026-09-28) ------------------
     # Last, so a reminder or a list that happens to mention "the animal" is
     # never taken for one: a plain question back, never a guess.
@@ -3086,6 +3109,27 @@ _OPEN_CHAT = re.compile(
     r"|bring\s+up\s+(?:the\s+)?jarvis\s+bar")
 
 
+def _open(s: str) -> Optional[Intent]:
+    """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    the owner's request of 2026-10-10).
+
+    The grammar lives in that module and this only asks it - one place decides
+    what the owner's words name, so the desktop and the phone cannot drift
+    apart over it. A phrase it cannot place (anything that is not an "open
+    ..." sentence) falls through to the model exactly as before.
+    """
+    try:
+        import jarvis_open as OPEN
+    except Exception:
+        return None
+    got = OPEN.parse(s)
+    if got is None:
+        return None
+    what, is_jarvis = got
+    opened = OPEN.resolve(what, is_jarvis)
+    return Intent("open_app", {"opened": opened})
+
+
 def _run_sayable(intent: Intent) -> Result:
     """"Things you can say" (jarvis_sayable.py), said in one answer for "what
     can you do?" and close phrasings. No model, reads no state."""
@@ -3606,6 +3650,30 @@ class Result:
     # sensitive one stays on screen like any memory answer (route_fields).
     facts: list = field(default_factory=list)
     facts_sensitive: int = 0
+    # "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    # the owner's request of 2026-10-10): what the app that heard the words
+    # should open, and which of the four kinds it is. Additive, like every
+    # field above - a client that does not know `open_app` (the phone) shows
+    # the answer and opens nothing, which is why the reply says "on this PC".
+    open_app: Optional[str] = None
+    open_app_kind: Optional[str] = None
+    # True when `open_app` is a program the BACKEND named itself (Windows'
+    # own accessories - notepad, calc), so the app opens it as it stands. False
+    # for a name in the owner's own words, which the app resolves against this
+    # PC's own Start menu rather than trusting a guess. Only meaningful when
+    # `open_app_kind` is "app".
+    open_app_built: bool = False
+    # The Jarvis Settings section id when the owner named one ("open web
+    # search" -> "web-search"), or "" for the top of the window ("open Jarvis
+    # settings"). Only ever set when `open_app_kind` is "jarvis": the other
+    # kinds have their own target. A separate field because "" is a real
+    # answer here and `open_app` above is dropped from the route line when it
+    # is empty.
+    open_place: Optional[str] = None
+    # The one extra sentence for a phrase with two real readings ("open
+    # settings" is Windows'; this is how to ask for Jarvis's). Never an error,
+    # never a card: the request was answered.
+    open_app_note: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -3868,6 +3936,23 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # (commands.rs, stream_chat, for its floating face); this file does
         # not know or care which app asked.
         return Result("Here you go.", n)
+    if n == "open_app":
+        # "open Notion", "open settings", "open Jarvis settings"
+        # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app
+        # that heard the owner's words reads `open_app` off its own route
+        # line (route_fields below) and opens it. The desktop does that in
+        # Rust through the Windows shell; the phone cannot, so it says so -
+        # which is also why the sentence says "on this PC".
+        import jarvis_open as OPEN
+        opened = intent.f.get("opened")
+        if opened is None:
+            return Result("I could not tell what to open.", n)
+        return Result(OPEN.words(opened), n,
+                      open_app=(None if opened.kind == "jarvis" else opened.target),
+                      open_app_kind=opened.kind,
+                      open_app_built=(opened.kind == "app" and opened.built),
+                      open_place=(opened.target if opened.kind == "jarvis" else None),
+                      open_app_note=opened.note or None)
     if n.startswith("media_"):
         return _run_media(intent)
     if n.startswith("next_time_"):
@@ -4704,6 +4789,30 @@ def route_fields(res: Result) -> dict:
         # existing reader of X-Jarvis-Route that does not look for this key
         # is unaffected, exactly like `gate` above.
         out["open_settings"] = res.open_settings
+    if res.open_app or res.open_app_kind == "jarvis":
+        # "open Notion", "open settings", "open Jarvis settings"
+        # (jarvis_open.py, the owner's request of 2026-10-10): what to open
+        # and which kind it is. An app that reads this opens it itself (the
+        # desktop, in Rust, through the Windows shell); an app that does not
+        # - the phone - shows the answer and opens nothing, and the answer
+        # says "on this PC" so that is not a claim it cannot keep. Additive,
+        # like open_settings above.
+        #
+        # `jarvis` carries `open_place` instead of `open_app`: it is the
+        # Settings section id, and "" means the top of the window - a real
+        # answer that an empty `open_app` could not carry.
+        if res.open_app:
+            out["open_app"] = res.open_app
+        if res.open_app_kind:
+            out["open_app_kind"] = res.open_app_kind
+        # A boolean, like `inject_memory` above: True when the backend named
+        # the program itself (Windows' own accessories), so the app opens it
+        # straight away instead of looking it up on this PC's Start menu.
+        out["open_app_built"] = bool(res.open_app_built)
+        if res.open_app_kind == "jarvis":
+            out["open_place"] = res.open_place or ""
+        if res.open_app_note:
+            out["open_app_note"] = res.open_app_note
     if res.menu_visibility:
         # "Hide the finance menu" (jarvis_menus.py, 2026-09-30): per device, so each
         # app that hears this applies it to its own menu list. Additive, like

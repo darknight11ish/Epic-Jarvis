@@ -1588,6 +1588,8 @@ $SHIPPED = @(
     'jarvis_readpage.py'         # readpage.patch: the model's read_web_page tool - ONE card per address (read_web_page, tier ask, risky: the PC contacts that one site), then ONE plain GET and the words a reader would see, handed back as outside text; never a link on the page, never a second page, no new dependency
     # --- "Show or hide menus" (2026-09-30, no patch) ---
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
+    # --- "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the owner's request; no patch) ---
+    'jarvis_open.py'             # which app, Windows panel or Jarvis Settings section the owner's own words name; jarvis_quick.py (already SHIPPED) calls it - no patch, no route, NO card, and no model tool, like jarvis_media.py
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
     # --- The page `GET /` serves (2026-10-07) ---

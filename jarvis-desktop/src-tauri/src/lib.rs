@@ -46,6 +46,7 @@ pub mod lock;
 pub mod logfile;
 pub mod look;
 pub mod notifications;
+pub mod open_app;
 pub mod plain_errors;
 pub mod proctree;
 pub mod prompt_coach;
@@ -1311,16 +1312,14 @@ pub fn run() {
                     match action {
                         // With Watch with me on, a fresh look is taken first,
                         // while the program the owner is in is still in front
-                        // (look.rs).
+                        // (look.rs). `toggle_quickbar` centres and focuses the
+                        // window AND tells the WebView to put the caret in the
+                        // input itself (windows.rs `focus_quickbar_input`), so
+                        // there is no second emit here any more - the tray
+                        // icon's left click goes through the same function and
+                        // gets the same caret.
                         "toggle_quickbar" => match look::toggle_bar_with_look(app) {
-                            Ok(visible) => {
-                                if visible {
-                                    // `toggle_quickbar` has already centred and
-                                    // focused the window; tell the WebView to
-                                    // put the caret in the input.
-                                    emit_quickbar(app, events::FOCUS_INPUT, ());
-                                }
-                            }
+                            Ok(_) => {}
                             Err(err) => eprintln!("[jarvis] quickbar toggle failed: {err}"),
                         },
                         "ingest_clipboard" => ingest_clipboard(app),
@@ -1425,6 +1424,13 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // "open Notion" (jarvis_open.py, the owner's request of 2026-10-10):
+            // read this PC's Start menu shortcuts now, once, rather than on the
+            // first sentence that needs them. It is two shallow folder reads -
+            // milliseconds - and doing it here means the first "open Notion" of
+            // a session opens the app instead of saying "still reading".
+            open_app::warm_up();
 
             // Before anything reads the token (the HUD bootstrap, the backend
             // it may start): a token an older version kept in the settings
