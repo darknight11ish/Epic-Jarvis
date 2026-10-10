@@ -644,6 +644,24 @@
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
       {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
+      },
+      {
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
@@ -1803,6 +1821,24 @@
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
       {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
+      },
+      {
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
@@ -2958,6 +2994,24 @@
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
       {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
+      },
+      {
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
@@ -4107,6 +4161,24 @@
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
       {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
+      },
+      {
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
@@ -5254,6 +5326,24 @@
        },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
       },
       {
        "action": "app_merge_change",
@@ -6418,6 +6508,24 @@
        "title": "Change its power mode (Active, Quiet or Standby)"
       },
       {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
+      },
+      {
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
@@ -7571,6 +7679,24 @@
        },
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "docker_service_start",
+       "fixed": false,
+       "id": "docker_service_start",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start one of the containers it uses on this PC"
+      },
+      {
+       "action": "docker_service_stop",
+       "fixed": false,
+       "id": "docker_service_stop",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Stop one of the containers it uses on this PC"
       },
       {
        "action": "app_merge_change",
