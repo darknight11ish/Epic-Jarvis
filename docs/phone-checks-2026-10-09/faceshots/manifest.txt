@@ -1,0 +1,34 @@
+setup: SecurityException: Error granting runtime permission
+Jarvis face photographs - FaceShotTest
+device: OnePlus CPH2419, API 35
+gpu: Adreno (TM) 730
+each face: IDLE, 360dp square, ~1200ms after it was laid out
+capture: UiAutomation.takeScreenshot() (the composited display, GL layers included), cropped to the face
+display before: Physical size: 1080x2412 Override size: 1080x2160 / Physical density: 480 Override density: 420
+display during: Physical size: 1080x2412 Override size: 1080x2160 / Physical density: 480 Override density: 420
+01-arc.png: 945x945px (360dp at 2.625x), screen 1080x2160, 4.9% of pixels brighter than the ground, quality high at up to 60 fps
+02-orbit.png: 945x945px (360dp at 2.625x), screen 1080x2160, 9.2% of pixels brighter than the ground, quality high at up to 60 fps
+03-comb.png: 945x945px (360dp at 2.625x), screen 1080x2160, 11.3% of pixels brighter than the ground, quality high at up to 60 fps
+04-spiral.png: 945x945px (360dp at 2.625x), screen 1080x2160, 9.9% of pixels brighter than the ground, quality medium at up to 60 fps
+05-iris.png: 945x945px (360dp at 2.625x), screen 1080x2160, 8.6% of pixels brighter than the ground, quality medium at up to 60 fps
+06-fullerene.png: 945x945px (360dp at 2.625x), screen 1080x2160, 10.2% of pixels brighter than the ground, quality medium at up to 60 fps
+07-rime.png: 945x945px (360dp at 2.625x), screen 1080x2160, 6.3% of pixels brighter than the ground, quality medium at up to 60 fps
+08-orbital.png: 945x945px (360dp at 2.625x), screen 1080x2160, 6.8% of pixels brighter than the ground, quality low at up to 60 fps
+09-geodesic.png: 945x945px (360dp at 2.625x), screen 1080x2160, 4.5% of pixels brighter than the ground, quality low at up to 60 fps
+10-kirkwood.png: 945x945px (360dp at 2.625x), screen 1080x2160, 5.0% of pixels brighter than the ground, quality medium at up to 60 fps
+11-spectrum.png: 945x945px (360dp at 2.625x), screen 1080x2160, 6.3% of pixels brighter than the ground, quality medium at up to 60 fps
+12-coreplate.png: 945x945px (360dp at 2.625x), screen 1080x2160, 13.5% of pixels brighter than the ground, quality medium at up to 60 fps
+13-workbench.png: 945x945px (360dp at 2.625x), screen 1080x2160, 6.7% of pixels brighter than the ground, quality medium at up to 60 fps
+14-swarm.png: 945x945px (360dp at 2.625x), screen 1080x2160, 6.8% of pixels brighter than the ground, quality medium at up to 60 fps
+15-shoal.png: 945x945px (360dp at 2.625x), screen 1080x2160, 4.9% of pixels brighter than the ground, quality medium at up to 60 fps
+16-accretion.png: 945x945px (360dp at 2.625x), screen 1080x2160, 4.7% of pixels brighter than the ground, quality low at up to 60 fps
+17-cascade.png: 945x945px (360dp at 2.625x), screen 1080x2160, 5.9% of pixels brighter than the ground, quality low at up to 60 fps
+18-nucleus.png: 945x945px (360dp at 2.625x), screen 1080x2160, 7.0% of pixels brighter than the ground, quality medium at up to 60 fps
+19-tokamak.png: 945x945px (360dp at 2.625x), screen 1080x2160, 6.6% of pixels brighter than the ground, quality medium at up to 60 fps
+20-membrane.png: 945x945px (360dp at 2.625x), screen 1080x2160, 4.5% of pixels brighter than the ground, quality medium at up to 60 fps
+21-redpanda.png: 945x945px (360dp at 2.625x), screen 1080x2160, 27.7% of pixels brighter than the ground, quality high at up to 60 fps
+22-pygmyowl.png: 945x945px (360dp at 2.625x), screen 1080x2160, 28.8% of pixels brighter than the ground, quality high at up to 60 fps
+23-seaotter.png: 945x945px (360dp at 2.625x), screen 1080x2160, 20.8% of pixels brighter than the ground, quality max at up to 60 fps
+24-monkey.png: 945x945px (360dp at 2.625x), screen 1080x2160, 22.4% of pixels brighter than the ground, quality max at up to 60 fps
+25-robot.png: 945x945px (360dp at 2.625x), screen 1080x2160, 29.2% of pixels brighter than the ground, quality max at up to 60 fps
+display override removed
