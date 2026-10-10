@@ -376,6 +376,15 @@ permissions = [
   "allow-capture-note-status",
   # Which of those note apps this PC is set up for: names only.
   "allow-note-targets",
+  # The gear on the widget's own bar, and the fix buttons on its offline card
+  # ("Reconnect", "Show me where"). Both call the same navigation-only command
+  # the Jarvis bar and the Brain already hold: it opens or focuses the Settings
+  # window (or the Brain) at a named place, changes no setting and approves
+  # nothing (plain_errors.rs `open_fix_place`). The widget's offline card had
+  # been invoking it since it was written, and every one of those taps was
+  # refused at the ACL - the permission was never granted to this surface, so
+  # the one button offered when Jarvis is unreachable did nothing at all.
+  "allow-open-fix-place",
 ]
 
 # ---------------------------------------------------------------------------

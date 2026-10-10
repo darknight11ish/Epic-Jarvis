@@ -1957,6 +1957,24 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         // one). The page checks both again, and nothing is filed until the
         // owner taps a chat.
         "history_q",
+        // "open Notion", "open settings", "open Jarvis settings"
+        // (jarvis_open.py, the owner's request of 2026-10-10). `open_app` is
+        // the program or the `ms-settings:` address, `open_app_kind` says
+        // which of the four it is, `open_app_built` says whether the backend
+        // named the program itself (read as a boolean below), and
+        // `open_app_note` is the one extra sentence for a phrase with two
+        // readings. `open_place` is the Jarvis Settings section id, and ""
+        // means the top of that window - a real answer, so it is passed on
+        // exactly as it arrives.
+        //
+        // Rust reads these itself in [`open_app_from_route`] (the app has to
+        // be started here, not by a page); the page reads the same values
+        // from this line only for the `jarvis` kind, which is a Settings-window
+        // door and not a program.
+        "open_app",
+        "open_app_kind",
+        "open_app_note",
+        "open_place",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
@@ -2018,6 +2036,14 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
             out.insert(key.to_string(), serde_json::json!(b));
         }
     }
+    // "open Notion" (jarvis_open.py, 2026-10-10): whether the backend named
+    // the program itself. A boolean, like the two above. Missing (an older
+    // backend) is read as false, which sends the app looking the name up on
+    // this PC's Start menu - the safe direction, since a name that is not
+    // found opens nothing rather than starting something else.
+    if let Some(b) = route.get("open_app_built").and_then(|v| v.as_bool()) {
+        out.insert("open_app_built".to_string(), serde_json::json!(b));
+    }
     // "Used in this answer": which remembered facts went in, as the fact ids
     // alone (`injected_ids`' "mem:<id>" entries, as numbers) - never a word
     // of them. The quickbar asks for the words only when the owner opens the
@@ -2058,6 +2084,71 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
 pub fn quick_intent_from_route(header: &str) -> Option<String> {
     let route: serde_json::Value = serde_json::from_str(header).ok()?;
     route.get("quick")?.as_str().map(str::to_string)
+}
+
+/// "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+/// the owner's request of 2026-10-10): opens what the owner named, and answers
+/// with the one plain sentence to show when it could not.
+///
+/// Runs on the `X-Jarvis-Route` header of a fast-path answer, from
+/// [`stream_chat`], so nothing here crosses the IPC boundary and no window
+/// needs a grant to start a program. Only the four kinds `jarvis_open.py`
+/// produces are acted on, and only the `app`, `panel` and `other` kinds start
+/// anything - `jarvis` is a door to the Settings window, which main.js opens
+/// from the same header (`openSettingsFromRoute`).
+///
+/// A failure is never silent: it comes back as one plain sentence for the
+/// owner, because the backend has already answered "Opening Notion on this
+/// PC." and a sentence that promised something which did not happen is the
+/// one outcome this must not leave standing.
+pub fn open_app_from_route(header: &str, _app: &AppHandle) -> Result<Option<String>, String> {
+    let Ok(route) = serde_json::from_str::<serde_json::Value>(header) else {
+        return Ok(None);
+    };
+    if route.get("quick").and_then(|v| v.as_str()) != Some("open_app") {
+        return Ok(None);
+    }
+    let kind = route
+        .get("open_app_kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let target = route.get("open_app").and_then(|v| v.as_str()).unwrap_or("");
+    let built = route
+        .get("open_app_built")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // `jarvis`: not a program. main.js's own `openSettingsFromRoute` opens the
+    // Settings window from this same route line, so this returns "nothing to
+    // say" rather than a second, competing door.
+    if kind == "jarvis" {
+        return Ok(None);
+    }
+    if target.is_empty() || kind.is_empty() {
+        return Ok(None);
+    }
+
+    match crate::open_app::open(kind, target, built) {
+        Ok(crate::open_app::Opened::Started) => Ok(None),
+        Ok(crate::open_app::Opened::NotFound) => Ok(Some(format!(
+            "I could not find an app called {} on this PC. Open it once from the \
+             Start menu, then ask me again.",
+            target
+        ))),
+        Ok(crate::open_app::Opened::Ambiguous(_)) => Ok(Some(format!(
+            "There is more than one shortcut called {} on this PC, so I have not \
+             opened either. Open the one you want from the Start menu.",
+            target
+        ))),
+        Ok(crate::open_app::Opened::NotReady) => Ok(Some(
+            "I am still reading this PC's Start menu. Ask me again in a moment.".to_string(),
+        )),
+        // A real failure to start something: a policy blocking it, or nothing
+        // on this PC set up to handle it. The backend's own sentence has
+        // already told the owner it was opening, so the reason is appended to
+        // it rather than replacing it.
+        Err(why) => Ok(Some(why)),
+    }
 }
 
 /// The fact ids in `X-Jarvis-Route`'s `injected_ids`: each `"mem:<id>"`
@@ -2316,6 +2407,24 @@ async fn pump_chat(
             eprintln!("[jarvis] \"open a chat\": the Jarvis bar could not be shown: {err}");
         } else {
             crate::emit_quickbar(app, crate::events::FOCUS_INPUT, ());
+        }
+    }
+
+    // "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    // the owner's request of 2026-10-10): acted on HERE, in Rust, for the same
+    // reason "open a chat" is - the owner's words arrive on this stream, which
+    // this side already owns, so no page has to hold a permission to start a
+    // program. The `jarvis` kind is not started here: it is a door to the
+    // Settings window, and main.js opens that from the same route line
+    // (`openSettingsFromRoute`), exactly as "open the web search settings"
+    // already does.
+    if let Some(header) = response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Ok(Some(note)) = open_app_from_route(header, app) {
+            let _ = on_event.send(note);
         }
     }
 
@@ -6199,6 +6308,62 @@ mod turn_tests {
                 "{}",
                 case["name"]
             );
+        }
+    }
+
+    /// "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    /// the owner's request of 2026-10-10): every field of that answer reaches
+    /// the page, an EMPTY `open_place` reaches it too (it means the top of the
+    /// Settings window, which is a real answer), and a value of the wrong type
+    /// is left out rather than guessed at.
+    #[test]
+    fn the_route_line_carries_what_open_named() {
+        let line = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app":"notion","open_app_kind":"app","open_app_built":false}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["quick"], "open_app");
+        assert_eq!(got["open_app"], "notion");
+        assert_eq!(got["open_app_kind"], "app");
+        assert_eq!(got["open_app_built"], serde_json::json!(false));
+
+        let panel = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app":"ms-settings:display","open_app_kind":"panel","open_app_built":true,"open_app_note":"That is Windows' own display page."}"#,
+        )
+        .unwrap();
+        let panel: serde_json::Value = serde_json::from_str(&panel).unwrap();
+        assert_eq!(panel["open_app"], "ms-settings:display");
+        assert_eq!(panel["open_app_kind"], "panel");
+        assert_eq!(panel["open_app_built"], serde_json::json!(true));
+        assert!(panel["open_app_note"].as_str().unwrap().contains("Windows"));
+
+        // The Jarvis kind: `open_place` is the section id, and "" means the
+        // top of the window - dropped here, the page would never open it.
+        let jarvis = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app_kind":"jarvis","open_place":""}"#,
+        )
+        .unwrap();
+        let jarvis: serde_json::Value = serde_json::from_str(&jarvis).unwrap();
+        assert_eq!(jarvis["open_app_kind"], "jarvis");
+        assert_eq!(jarvis["open_place"], "");
+        assert!(jarvis.get("open_app").is_none());
+
+        let section = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app_kind":"jarvis","open_place":"web-search"}"#,
+        )
+        .unwrap();
+        let section: serde_json::Value = serde_json::from_str(&section).unwrap();
+        assert_eq!(section["open_place"], "web-search");
+
+        // Wrong types are left out: the page then opens nothing for them,
+        // which is the safe direction.
+        let odd = super::route_line_from_header(
+            r#"{"lane":"x","open_app":7,"open_app_kind":true,"open_place":[],"open_app_built":"yes"}"#,
+        )
+        .unwrap();
+        for key in ["open_app", "open_app_kind", "open_place", "open_app_built"] {
+            assert!(!odd.contains(key), "{key} should be left out: {odd}");
         }
     }
 
