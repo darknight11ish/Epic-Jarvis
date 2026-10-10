@@ -1621,6 +1621,8 @@ $SHIPPED = @(
     'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
     # --- Drop-in modules (feat/plug-and-play-modules) ---
     'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
+    # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
+    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
 )
 
 # The settings file. Installed only where none exists; never overwritten.

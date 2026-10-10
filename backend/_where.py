@@ -578,6 +578,16 @@ SHIPPED = (
     # plugins/registry.json says which features fit and why the rest do not.
     # Standard library only, no network, no child process, writes nothing.
     "jarvis_plugins.py",
+    # What this machine can hold, and what may be offered on it (2026-10-10,
+    # the owner's Decision 6): free space on the drive models live on, card
+    # count and video memory, then the Lean / Comfortable / Generous tiers with
+    # their size on disk, what each is for, which card it uses and what it
+    # leaves free. may_download() is the one gate every download passes: never
+    # a silent download, and never one leaving under MIN_FREE_AFTER_DOWNLOAD -
+    # the night C: hit 5.7 GB free and every build broke. Reads no network,
+    # starts nothing, downloads nothing; the work setups use it rather than
+    # building a second chooser.
+    "jarvis_storage.py",
 )
 
 
