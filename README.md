@@ -223,6 +223,7 @@ has all four steps.
 | `jarvis-client/` | The Android app. **This is the one to install.** |
 | `jarvis-backend/` | **The backend itself**, as plain source: a checked copy of the author's, 181 files. [`jarvis-backend/README.md`](jarvis-backend/README.md) says where it came from and what it is not. |
 | `backend/` | Changes (patches) for the backend, the modules it needs, and a test for each. The patches are written against the author's own backend folder. [`backend/README.md`](backend/README.md) has the table. |
+| `plugins/` | Drop-in modules: a feature whose only wiring was one startup call is a folder you add or take out, with no patch. [`docs/PLUG-AND-PLAY.md`](docs/PLUG-AND-PLAY.md) explains it. |
 | `docs/` | How it all works. [`docs/README.md`](docs/README.md) says which documents are current. |
 | `scripts/` | The install, update and patch scripts described above. |
 | `tools/` | Generators for the test fixtures and the third-party notices, and the checkers CI runs. |

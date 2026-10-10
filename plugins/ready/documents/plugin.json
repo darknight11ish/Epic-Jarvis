@@ -1,0 +1,8 @@
+{
+  "name": "documents",
+  "summary": "\"Folders Jarvis may look in\": finding files by name, searching inside notes and text files, reading PDFs, Word, Excel and PowerPoint files one part at a time, and bringing in a Notion export.",
+  "module": "jarvis_documents",
+  "install": "handler",
+  "replaces_patch": "documents.patch",
+  "stack_order": 67
+}

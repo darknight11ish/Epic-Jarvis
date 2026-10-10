@@ -3,6 +3,13 @@
 
     python3 tools/check_same_tick_paths.py [-v] [path ...]
 
+Reads `*.py` (parsed), `*.patch` (added lines only) and `*.ps1` (line by line).
+The PowerShell half was added on 2026-10-09, when five clock-named %TEMP%
+folders in `scripts/apply-patches.ps1` turned out to be the cause of the
+"staging race" several agents had been re-running suites around all day - and a
+comment in `scripts/update-jarvis.ps1` already claimed this checker read
+`*.ps1`. It did not. See `ps1_findings` below.
+
 THE BUG THIS EXISTS FOR. A name taken from a clock is much less unique than it
 looks, because on Windows the clock does not move on every call:
 
@@ -85,6 +92,7 @@ names it decided on, so a wrong decision is visible rather than mysterious.
 from __future__ import annotations
 
 import ast
+import re
 import subprocess
 import sys
 import warnings
@@ -406,6 +414,85 @@ def patch_findings(text: str) -> list[tuple[int, str]]:
     return out
 
 
+#: A PowerShell folder under the temp path, named from a clock.
+#:
+#: WHY POWERSHELL IS READ HERE (2026-10-09). `scripts/update-jarvis.ps1` said in
+#: a comment that this checker "reads every *.ps1 for it", and it did not - it
+#: read *.py and *.patch only. The claim was load-bearing: scripts/
+#: apply-patches.ps1 named FIVE throwaway folders under %TEMP% from `$Stamp`, a
+#: `Get-Date -Format 'yyyy-MM-dd-HHmmss'` clock reading (jarvis-patches-lf-,
+#: jarvis-rehearsal-, jarvis-result-check-, jarvis-undo-check- and
+#: jarvis-suite-state-, the last handed to `run_suites.py --state-env`). Two
+#: runs started inside one second computed the same five names, and because
+#: every one is created with `-Force` and removed with `Remove-Item -Force`,
+#: whichever run ended first DELETED the other's folders underneath it. That is
+#: what "a suite that passes alone fails in a combined run" was, and what "the
+#: staging was snapshotted mid-revert" was: the state folder the suites were
+#: configured to write into had been deleted by the other run's teardown.
+#:
+#: The rule is the same one the Python half applies, in the two shapes a person
+#: actually writes in PowerShell: the folder named from a clock on ONE line
+#: (`Join-Path (GetTempPath) "x-$Stamp"`), or named on the line immediately
+#: above. `-Force` is NOT treated as safe: on Python a shared name is the bug
+#: with or without exist_ok, and in PowerShell `-Force` is exactly how the
+#: second run silently takes the first run's folder and then deletes it. A GUID
+#: clears it, the same fix the Python half names.
+#: `[IO.Path]::GetTempPath()` and `[System.IO.Path]::GetTempPath()` are both
+#: this, and apply-patches.ps1 spells the fifth one the long way.
+PS_TEMP_PATH = re.compile(r"GetTempPath\(\)", re.I)
+PS_CLOCK = re.compile(r"\$Stamp|Get-Date|\[DateTime\]::Now|\[datetime\]::Now"
+                      r"|::UtcNow|\$PID\b", re.I)
+PS_SAFE_NAME = re.compile(r"Guid|NewGuid|Get-Random", re.I)
+#: What makes the folder: it is MADE under that path, or it is taken away with
+#: `-Force` at the end - which is just as damaging, because the teardown is what
+#: deletes the other run's folder. `jarvis-suite-state-<Stamp>` in
+#: `apply-patches.ps1` is only ever REMOVED by the patcher (it is handed to
+#: `run_suites.py --state-env`, which makes it), so a rule that only recognised
+#: `New-Item` missed one of the five. PowerShell nearly always writes the name
+#: and the act in two steps, and the second can be a dozen lines down.
+PS_CREATES = re.compile(r"New-Item[^\n]*-ItemType\s+Directory|\.CreateDirectory\("
+                        r"|New-Item[^\n]*-Force|Remove-Item[^\n]*-Force", re.I)
+#: How far forward to look. Twelve would be enough for apply-patches.ps1's own
+#: first four (the furthest is fifteen): `jarvis-suite-state-<Stamp>` is the
+#: exception, handed to `run_suites.py --state-env` and removed sixty lines
+#: later, after the suite loop. Seventy covers it and still cannot reach from
+#: one folder's line to an unrelated `New-Item`.
+PS_CREATE_LOOKAHEAD = 70
+
+
+def ps1_findings(text: str) -> list[tuple[int, str]]:
+    """The same rule for `*.ps1`: a %TEMP% folder named from a clock and acted on.
+
+    Read line by line, like the .patch half, because PowerShell is not
+    parseable here and a wrong parser would be worse than this. Narrow on
+    purpose: a folder built from the temp path whose OWN name carries a clock
+    reading, and within the next `PS_CREATE_LOOKAHEAD` lines either made with
+    `-Force` or removed with `-Force`. The name is deliberately NOT traced back
+    to its `$x = ...` assignment: that is nearly always on the line that built
+    the path, and filtering by it made this rule miss
+    `jarvis-suite-state-<Stamp>` - the one of the five that mattered most -
+    because the line that removes it hands it to `run_suites.py` first. A
+    clock-named path that is neither made nor removed - a log file appended to,
+    a value read back - is not this bug, and guessing would be this check
+    inventing a violation.
+    """
+    out: list[tuple[int, str]] = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if not PS_TEMP_PATH.search(line):
+            continue
+        window = "\n".join(lines[max(0, i - 2):i + 1])
+        if not PS_CLOCK.search(window) or PS_SAFE_NAME.search(window):
+            continue
+        # The folder is made or taken away within the next few lines, under a
+        # name assigned at or just above the line that built it.
+        made = "\n".join(lines[i:min(len(lines), i + PS_CREATE_LOOKAHEAD + 1)])
+        if not PS_CREATES.search(made):
+            continue
+        out.append((i + 1, line.strip()))
+    return out
+
+
 # ---------------------------------------------------------------------------
 #   The run
 # ---------------------------------------------------------------------------
@@ -418,9 +505,15 @@ def _rel(path: Path) -> str:
 
 
 def repo_files(ignored: set[str]) -> list[Path]:
-    """Every `*.py` and `*.patch` this repository carries, in a stable order."""
+    """Every `*.py`, `*.patch` and `*.ps1` this repository carries, in a
+    stable order.
+
+    The `*.ps1` half is not decoration: the five clock-named %TEMP% folders
+    that cost several agents a day (2026-10-09) live in
+    `scripts/apply-patches.ps1`, and this check could not see them.
+    """
     kept = []
-    for pattern in ("*.py", "*.patch"):
+    for pattern in ("*.py", "*.patch", "*.ps1"):
         for path in sorted(REPO.rglob(pattern)):
             if not path.is_file():
                 continue
@@ -458,6 +551,10 @@ def main() -> int:
         read += 1
         if path.suffix == ".patch":
             for line, what in patch_findings(text):
+                problems.append((_rel(path), line, what))
+            continue
+        if path.suffix == ".ps1":
+            for line, what in ps1_findings(text):
                 problems.append((_rel(path), line, what))
             continue
         try:
@@ -498,8 +595,8 @@ def main() -> int:
     if problems or unreadable:
         return 1
 
-    print(f"{read} Python and patch file(s) read; no filesystem path is named from "
-          f"a coarse clock and created without exist_ok.")
+    print(f"{read} Python, patch and PowerShell file(s) read; no filesystem path "
+          f"is named from a coarse clock and created without exist_ok.")
     print("A name from time.time_ns()/time.strftime()/datetime.now() is not unique: "
           "on Windows those only move on the system timer tick (about 15.6 ms; "
           "measured on the owner's PC, 399 of 399 consecutive time.time_ns() calls "

@@ -11,6 +11,7 @@
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, LogicalSize, Manager, PhysicalPosition, WebviewWindow, WindowEvent};
@@ -1107,52 +1108,6 @@ fn clamp_into(pos: (i32, i32), win: (u32, u32), area: (i32, i32, u32, u32)) -> (
     (pos.0.clamp(ax, max_x), pos.1.clamp(ay, max_y))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::clamp_into;
-
-    #[test]
-    fn a_widget_grown_past_the_edge_is_pulled_back() {
-        // 2026-10-10, the owner's screen: a 480x507 physical widget at
-        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
-        assert_eq!(
-            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
-            (1440, 573)
-        );
-    }
-
-    #[test]
-    fn a_widget_already_inside_is_left_exactly_where_it_is() {
-        assert_eq!(
-            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
-            (100, 100)
-        );
-    }
-
-    #[test]
-    fn a_monitor_to_the_left_of_the_primary_is_respected() {
-        // Windows' virtual screen starts at the left-most monitor, so a widget
-        // on a monitor at x=-1920 must not be dragged to 0...
-        assert_eq!(
-            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
-            (-1900, 100)
-        );
-        // ...and one hanging off its left edge comes back to it.
-        assert_eq!(
-            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
-            (-1920, 100)
-        );
-    }
-
-    #[test]
-    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
-        assert_eq!(
-            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
-            (0, 0)
-        );
-    }
-}
-
 /// Switches between floating above everything and sitting behind active windows.
 ///
 /// `false` is the "pin to desktop" mode: the widget stops being topmost, so any
@@ -1250,6 +1205,12 @@ pub struct FloatingPrefs {
     /// the tray and its hotkey all flip this; a restart reopens the window
     /// only if the owner had turned it on and never turned it off.
     pub enabled: bool,
+    /// "Click through to what is behind", off by default (2026-10-10, the
+    /// integration evaluation): every click on this window goes to whatever
+    /// is behind it EXCEPT where the face's own picture is drawn, so the
+    /// animal can still be grabbed and moved. Cosmetic, so it applies at
+    /// once and asks for no approval card.
+    pub click_through: bool,
 }
 
 /// In-memory copy of [`FloatingPrefs`], flushed to disk by the telemetry
@@ -1258,6 +1219,11 @@ pub struct FloatingPrefs {
 pub struct FloatingState {
     prefs: Mutex<FloatingPrefs>,
     dirty: AtomicBool,
+    /// Where the floating face's own page last said its picture is drawn
+    /// (see [`note_floating_hit_mask`]). `None` until it has said once, and
+    /// `None` again if it ever says it cannot — both keep every click on the
+    /// window, which is the safe way round.
+    hit_mask: Mutex<Option<Vec<bool>>>,
 }
 
 impl FloatingState {
@@ -1285,6 +1251,22 @@ impl FloatingState {
         if let Err(err) = write_floating_prefs(app, &prefs) {
             eprintln!("[jarvis] unable to persist floating face prefs: {err}");
         }
+    }
+
+    /// The face's own picture, as last measured, or `None` when there is not
+    /// one to go on.
+    fn hit_mask(&self) -> Option<Vec<bool>> {
+        self.hit_mask
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    fn set_hit_mask(&self, cells: Option<Vec<bool>>) {
+        *self
+            .hit_mask
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = cells;
     }
 }
 
@@ -1391,6 +1373,12 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
 
     attach_floating_listeners(app, &window);
 
+    // Clicks pass through this window except over the animal, if the owner
+    // has asked for that (windows.rs's own note above explains the hit test).
+    // Started here rather than in `setup` so the watcher exists exactly while
+    // the window does; it does nothing at all until the setting is on.
+    start_floating_hit_watch(app);
+
     window
         .show()
         .map_err(|e| format!("unable to show the floating face: {e}"))
@@ -1457,4 +1445,307 @@ pub fn floating_is_open(app: &AppHandle) -> bool {
     app.get_webview_window(FLOATING_LABEL)
         .and_then(|w| w.is_visible().ok())
         .unwrap_or(false)
+}
+
+// ---------------------------------------------------------------------------
+// Click-through ("pass my clicks on, except over the animal")
+// ---------------------------------------------------------------------------
+
+// WHICH TAURI CALL, AND WHY.
+//
+// Tauri 2.11.6 offers one thing that makes a whole window transparent to the
+// pointer and nothing finer: `WebviewWindow::set_ignore_cursor_events(bool)`
+// (its own `window/mod.rs:2224`, and the same method on `WebviewWindow`,
+// `webview/webview_window.rs:2132`). On Windows it puts `WS_EX_TRANSPARENT`
+// on the window, so the click goes to whatever is behind - all of it or none
+// of it. There is no per-pixel form of it in this version, and no
+// `hit_test`-shaped method beside it.
+//
+// So the finer question - "is the pointer on the animal?" - is answered HERE,
+// by watching the pointer and flipping that one switch. The pointer's screen
+// position comes from `WebviewWindow::cursor_position()`
+// (`webview/webview_window.rs:1906`), which is a plain "where is the mouse
+// now" query: it keeps answering while this window is ignoring the cursor,
+// which is the whole reason it can be used to decide when to stop ignoring
+// it. `inner_position()` and `inner_size()` give the window's own rectangle
+// in the same physical pixels, so the pointer can be turned into a fraction
+// of the window with no DPI arithmetic of our own.
+//
+// WHERE THE ANIMAL IS comes from the face's own page, not from geometry
+// guessed at here: `floating.js` has the picture in front of it, so it
+// samples its own drawing into a [`FLOATING_HIT_GRID`]-square grid of
+// "something is drawn in this cell" and hands it over through the one command
+// `commands::note_floating_hit_mask` (a command, not an event:
+// `core:event:allow-emit` is forbidden to every window, apps security audit
+// M1). Guessing instead - a circle round the middle - would be wrong for a
+// real animal: measured with the real shader on 2026-10-10, every one of the
+// five faces reaches the very edge of its square in some pose (the panda's
+// tail, the monkey's vine, the owl's branch), so any circle small enough to
+// let clicks past the animal would also have cut a limb off.
+
+/// Cells a side in the grid the floating face measures its own picture on.
+///
+/// 32 is a compromise, not a measurement: at 200 px a side each cell is
+/// about 6 px, fine enough that the outline of an animal reads and coarse
+/// enough that the whole grid is 1,024 characters on the wire. The page
+/// dilates the grid by one cell before sending it (see `floating.js`), so an
+/// edge that falls between two cells still counts as the animal.
+pub const FLOATING_HIT_GRID: usize = 32;
+
+/// How often the pointer is looked at while click-through is on. 16 ms is
+/// about a 60 Hz display's frame: a click that lands on the animal is one
+/// frame from being treated as one.
+const FLOATING_HIT_POLL: Duration = Duration::from_millis(16);
+
+/// How often it is looked at the rest of the time. Nothing needs doing then
+/// (the window takes every click), but the switch can be turned on from
+/// Settings at any moment and must take effect at once - so this is short
+/// enough to feel immediate and long enough not to spin a core for a
+/// window the owner may never turn the setting on for.
+const FLOATING_HIT_IDLE: Duration = Duration::from_millis(40);
+
+/// Starts the pointer watcher for the floating face, once per run.
+///
+/// Called from [`show_floating`], so it exists exactly while the window does.
+/// The thread ends by itself the moment the window is gone.
+fn start_floating_hit_watch(app: &AppHandle) {
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let handle = app.clone();
+    std::thread::spawn(move || {
+        // What this thread last told the window. Kept so a pointer resting
+        // still does not call into the window sixty times a second, and so a
+        // failing call is logged once rather than on every tick.
+        let mut applied: Option<bool> = None;
+        let mut complained = false;
+        loop {
+            let Some(window) = handle.get_webview_window(FLOATING_LABEL) else {
+                // Closed for good: nothing left to watch, and never a second
+                // watcher (STARTED is one-way), so simply stop.
+                return;
+            };
+            let visible = window.is_visible().unwrap_or(false);
+            let click_through = visible && handle.state::<FloatingState>().snapshot().click_through;
+            // TRUE means "ignore the cursor", i.e. clicks pass through.
+            let ignore = if click_through {
+                // `None` - the face has not said where it is drawn, or the
+                // pointer or the window's own rectangle could not be read -
+                // leaves the window taking every click. The house rule for
+                // this feature is that the animal must never become
+                // unclickable, so every doubt goes that way.
+                pointer_over_face(&window, &handle)
+                    .map(|over| !over)
+                    .unwrap_or(false)
+            } else {
+                false
+            };
+            if applied != Some(ignore) {
+                match window.set_ignore_cursor_events(ignore) {
+                    Ok(()) => {
+                        applied = Some(ignore);
+                        complained = false;
+                    }
+                    Err(err) => {
+                        if !complained {
+                            eprintln!(
+                                "[jarvis] the floating face could not change its click-through: {err}"
+                            );
+                            complained = true;
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(if click_through {
+                FLOATING_HIT_POLL
+            } else {
+                FLOATING_HIT_IDLE
+            });
+        }
+    });
+}
+
+/// Whether the pointer is over the face's own drawing, or `None` when that
+/// cannot be decided (no grid yet, a pointer or a window rectangle that
+/// could not be read) - which the caller treats as "let the window have the
+/// click", never as "pass it on".
+fn pointer_over_face(window: &WebviewWindow, app: &AppHandle) -> Option<bool> {
+    let mask = app.state::<FloatingState>().hit_mask()?;
+    if mask.len() != FLOATING_HIT_GRID * FLOATING_HIT_GRID {
+        return None;
+    }
+    let cursor = window.cursor_position().ok()?;
+    let origin = window.inner_position().ok()?;
+    let size = window.inner_size().ok()?;
+    if size.width == 0 || size.height == 0 {
+        return None;
+    }
+    let fx = (cursor.x - origin.x as f64) / size.width as f64;
+    let fy = (cursor.y - origin.y as f64) / size.height as f64;
+    if !(0.0..1.0).contains(&fx) || !(0.0..1.0).contains(&fy) {
+        // Off the window's own rectangle: nothing to hit. This is decided
+        // from the pointer's real position rather than from the window
+        // receiving a move event, which it never does while it is ignoring
+        // the cursor - so there is no way for the pointer to be "stuck" on
+        // the animal and leave the window swallowing clicks beside it.
+        return Some(false);
+    }
+    let gx = ((fx * FLOATING_HIT_GRID as f64) as usize).min(FLOATING_HIT_GRID - 1);
+    let gy = ((fy * FLOATING_HIT_GRID as f64) as usize).min(FLOATING_HIT_GRID - 1);
+    Some(mask[gy * FLOATING_HIT_GRID + gx])
+}
+
+/// The floating face's own page reporting where its picture is drawn.
+///
+/// `grid` is one character per cell, left to right and top to bottom, `1` for
+/// a cell the face is drawn in. Anything else - a grid of the wrong length, or
+/// the empty string the page sends when it cannot measure itself - clears the
+/// grid, and a window with no grid takes every click (see
+/// [`start_floating_hit_watch`]).
+pub fn note_floating_hit_mask(app: &AppHandle, grid: &str) {
+    app.state::<FloatingState>()
+        .set_hit_mask(parse_hit_mask(grid));
+}
+
+/// The command's own argument, read into cells - or `None` for anything that
+/// is not exactly one grid.
+fn parse_hit_mask(grid: &str) -> Option<Vec<bool>> {
+    (grid.len() == FLOATING_HIT_GRID * FLOATING_HIT_GRID)
+        .then(|| grid.bytes().map(|b| b == b'1').collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A grid of `n` cells, all background except the ones named (row, col).
+    fn grid_with(drawn: &[(usize, usize)]) -> String {
+        let mut cells = vec!['0'; FLOATING_HIT_GRID * FLOATING_HIT_GRID];
+        for (row, col) in drawn {
+            cells[row * FLOATING_HIT_GRID + col] = '1';
+        }
+        cells.into_iter().collect()
+    }
+
+    /// The page's grid is the only thing that says where the animal is, so a
+    /// grid that is not exactly one is refused rather than half-believed: a
+    /// grid of the wrong length would be read as a different geometry, and
+    /// the empty string the page sends when it cannot measure itself must
+    /// leave the window taking every click.
+    #[test]
+    fn only_exactly_one_grid_is_a_grid() {
+        let full = FLOATING_HIT_GRID * FLOATING_HIT_GRID;
+        assert!(parse_hit_mask(&grid_with(&[])).is_some());
+        for bad in [
+            String::new(),
+            "1".repeat(full - 1),
+            "0".repeat(full + 1),
+            "1".repeat(FLOATING_HIT_GRID),
+            "not a grid at all".repeat(100),
+        ] {
+            assert!(
+                parse_hit_mask(&bad).is_none(),
+                "accepted a grid of {} cells",
+                bad.len()
+            );
+        }
+    }
+
+    /// `1` is the animal and every other character is not, and a cell is
+    /// found by row and column the way the page wrote it: left to right,
+    /// top to bottom.
+    #[test]
+    fn a_grid_reads_left_to_right_top_to_bottom() {
+        let cells = parse_hit_mask(&grid_with(&[
+            (0, 0),
+            (3, 5),
+            (FLOATING_HIT_GRID - 1, FLOATING_HIT_GRID - 1),
+        ]))
+        .expect("a full grid");
+        assert_eq!(cells.len(), FLOATING_HIT_GRID * FLOATING_HIT_GRID);
+        assert!(cells[0]);
+        assert!(cells[3 * FLOATING_HIT_GRID + 5]);
+        assert!(cells[FLOATING_HIT_GRID * FLOATING_HIT_GRID - 1]);
+        assert_eq!(cells.iter().filter(|on| **on).count(), 3);
+        assert!(!cells[FLOATING_HIT_GRID - 1]);
+    }
+
+    /// The house rule this feature is built around: a face that has not said
+    /// where it is drawn is never "click through" - the window keeps taking
+    /// every click, so the animal can never become unclickable.
+    #[test]
+    fn there_is_no_mask_until_the_page_sends_one() {
+        let state = FloatingState::default();
+        assert!(state.hit_mask().is_none());
+        state.set_hit_mask(Some(vec![true; 4]));
+        assert_eq!(state.hit_mask().map(|m| m.len()), Some(4));
+        state.set_hit_mask(None);
+        assert!(state.hit_mask().is_none());
+    }
+
+    /// Off by default, like every cosmetic switch in this app, and a
+    /// `floating.json` written before this setting existed reads as off
+    /// rather than failing to load.
+    #[test]
+    fn click_through_is_off_by_default_and_an_old_file_still_loads() {
+        assert!(!FloatingPrefs::default().click_through);
+        let old: FloatingPrefs =
+            serde_json::from_str(r#"{"x":10.0,"y":20.0,"enabled":true}"#).expect("an old file");
+        assert!(old.enabled);
+        assert!(!old.click_through);
+        let round = serde_json::to_string(&FloatingPrefs {
+            click_through: true,
+            ..Default::default()
+        })
+        .expect("serialisable");
+        assert!(round.contains("\"clickThrough\":true"), "{round}");
+    }
+
+    // The four below came from a second `mod tests` above `set_widget_always_on_top`,
+    // added by a different change on the same day. Two `mod tests` in one file is
+    // a hard compile error the moment anything builds the test targets, which is
+    // how `cargo clippy --all-targets` found it (2026-10-10). They test
+    // `clamp_into`, which keeps an approval widget on the screen after it grows.
+
+    #[test]
+    fn a_widget_grown_past_the_edge_is_pulled_back() {
+        // 2026-10-10, the owner's screen: a 480x507 physical widget at
+        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
+        assert_eq!(
+            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
+            (1440, 573)
+        );
+    }
+
+    #[test]
+    fn a_widget_already_inside_is_left_exactly_where_it_is() {
+        assert_eq!(
+            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
+            (100, 100)
+        );
+    }
+
+    #[test]
+    fn a_monitor_to_the_left_of_the_primary_is_respected() {
+        // Windows' virtual screen starts at the left-most monitor, so a widget
+        // on a monitor at x=-1920 must not be dragged to 0...
+        assert_eq!(
+            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1900, 100)
+        );
+        // ...and one hanging off its left edge comes back to it.
+        assert_eq!(
+            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1920, 100)
+        );
+    }
+
+    #[test]
+    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
+        assert_eq!(
+            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
+            (0, 0)
+        );
+    }
 }

@@ -1287,6 +1287,30 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # --- drop-in modules (feat/plug-and-play-modules) ------------------------
+    # Last, like every new patch, and its context is tutorials.patch's own
+    # install block - the last one in the file. It adds ONE more block of the
+    # same shape, calling jarvis_plugins.install(), which loads every folder
+    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
+    # own install(). Nothing else about the core changes, and nothing about
+    # the 18 features it can carry changes: each still ships its own module
+    # and each module still wraps the Handler itself.
+    #
+    # This patch is applied ONCE, and it is the only core change the whole
+    # plug-in system needs. After it, adding or removing one of those features
+    # is a folder - scripts\add-plugin.ps1 and remove-plugin.ps1 - and never
+    # another patch. plugins/registry.json says which features those are, and
+    # for every other patch in this list, in plain words, what it does that
+    # stops it being one (a gate entry, a route in the core, an edit to a line
+    # the core already has).
+    #
+    # It cannot be applied on its own: its context is the output of the stack
+    # above it, so it needs that stack, which is what this script rehearses
+    # and enforces. If your tree differs, the dry run stops and nothing at all
+    # is changed - the safe failure this script already has. A tree that
+    # differs on purpose can skip the patch and paste the four lines by hand;
+    # plugins/loader/README.md prints them.
+    'plugin-loader.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1576,6 +1600,8 @@ $SHIPPED = @(
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
     'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
     'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
+    # --- Drop-in modules (feat/plug-and-play-modules) ---
+    'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -1609,6 +1635,25 @@ $REBUILT_SUPERSEDES = @{
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
 $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+# The name every throwaway folder under %TEMP% is built from - and it is NOT
+# $Stamp above (2026-10-09, the staging race several agents hit on this PC).
+#
+# $Stamp is a clock reading to the second, and on Windows the clock only moves
+# on the system timer tick, so a second run started inside the same second as
+# the first reads the SAME value. Five folders under %TEMP% were named from it:
+# jarvis-patches-lf-, jarvis-rehearsal-, jarvis-result-check-,
+# jarvis-undo-check- and - the one that cost the time - jarvis-suite-state-,
+# which is handed to `run_suites.py --state-env`. Every one of them is then
+# created with -Force, and removed with Remove-Item -Force at the end of the
+# run, so two runs in one second do not merely share a folder: whichever ends
+# first DELETES it underneath the other. `remove` (the patcher) then reports
+# spurious patch failures, and the suites that `update` started report spurious
+# test failures against a config folder that has been deleted mid-run - which
+# is why "run it alone again" always made them pass. A name that cannot collide
+# is the fix, so it comes from the operating system rather than from a clock.
+# `update-jarvis.ps1` names its source folder this way for the same reason.
+$RunId      = $([Guid]::NewGuid().ToString('N').Substring(0, 12))
+$TempName   = "$Stamp-$RunId"
 
 # The list above is hand-ordered because the order matters, which means it can
 # fall behind the directory - and it did: event-allowlist.patch was written,
@@ -2004,7 +2049,7 @@ if ($UsingRebuilt) {
 # is. That half is pinned at the one call that writes anything (Invoke-Patch,
 # with `-c core.autocrlf=false -c core.eol=lf`); the comment there has the
 # measured bytes.
-$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
+$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$TempName"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
 
 # Copies $Src to $Dest with every CRLF made LF. Returns how many it changed.
@@ -3062,7 +3107,7 @@ try {
     #
     # Both rehearsals run on a throwaway copy, so the real files are not
     # opened until an answer is known.
-    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
+    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$TempName"
     $broken    = @()
     $already   = $false
     # Set only by (c): the patches an earlier run left on, newest first,
@@ -3545,7 +3590,7 @@ try {
                         # is the half-applied backend this script exists to
                         # prevent, so it is refused here, on the copy, while
                         # nothing of the owner's has been changed.
-                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$Stamp"
+                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$TempName"
                         $intact = $true
                         $why = ""
                         try {
@@ -3745,7 +3790,7 @@ try {
             # So the same strip is done once more on a throwaway copy of the
             # real files first; if it cannot finish, nothing of the owner's has
             # been touched.
-            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$Stamp"
+            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$TempName"
             $undoOk = $false
             $why = ""
             try {
@@ -4364,7 +4409,7 @@ $ErrorActionPreference = 'Continue'
 # audit log in .openjarvis\logs. So for this run the config folder and the
 # audit log are a temporary folder, deleted afterwards. run_suites.py works
 # out the variables (the same ones CI's runner uses), one KEY=VALUE a line.
-$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $Stamp)
+$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $TempName)
 $savedEnv = @{}
 $stateLines = & $py.Exe (Join-Path $PatchDir 'run_suites.py') --state-env $stateDir 2>$null
 foreach ($line in @($stateLines)) {

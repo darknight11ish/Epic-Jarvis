@@ -146,16 +146,18 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 26 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 26);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 26);
+await check("the fixture says how many rows there are, and it is 27 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 27);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 27);
   assert.equal(FIX.counts.phone, 2);
-  assert.equal(FIX.counts.all, 28);
+  assert.equal(FIX.counts.all, 29);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
+  // "Click through to what is behind" (2026-10-10) is a bare one, so both
+  // numbers moved by one together.
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 19, "the bare-label count moved - re-read the 26 claim");
+  assert.equal(bare, 20, "the bare-label count moved - re-read the 27 claim");
   assert.equal(FIX.counts.desktop, bare + 7);
 });
 

@@ -175,6 +175,80 @@ Two details from the diagnosis worth keeping, because the error misleads:
 That second point strengthens the case for the proposal above: a convention
 without a test is exactly how a one-character defect blocked every install.
 
+## The third report, and the correction: `prompt-coach.patch` and `3478`
+
+Reported 2026-10-10 as a live blocker of the same kind, with the same wording:
+
+```
+FAIL  prompt-coach.patch - will not apply
+error: patch failed: jarvis_hud.py:3478
+```
+
+**It is not the anchor, and it is not live.** Two independent measurements say
+so, and both are worth keeping, because this report cost an agent a whole
+attempt and the number in it is the thing that misleads.
+
+**1. That exact failure was real on 2026-10-08 and was fixed the same day.**
+It is the commit message of `45175c86` ("prompt-coach.patch: anchor the POST
+hunk so it applies after tasks.patch"), which is on `main` — and it was fixed
+by this document's own method: the POST hunk was re-anchored onto
+`tasks.patch`'s last lines, where it really lands, with the added lines left
+byte for byte. Both patches inserted at the same point and both named the same
+neighbour, so whichever went second failed; the anchor moved down one block and
+`@@ -3478,7 +3478,32 @@` became `@@ -3544,6 +3544,31 @@`. **`3478` is the pre-fix header.** It
+survives today in exactly one place — `backend/patch-history/prompt-coach/f56e6ab.patch`,
+the archived older text — so a `git apply` of *that* file is the only thing
+that still prints 3478. Grepping the owner's own `_jarvis-logs` finds `3478`
+in **none** of them, and `FAIL  prompt-coach.patch` in none either.
+
+**2. The owner's own newest log ran the repair pass and passed.**
+`apply-patches-2026-10-09-214407.txt` (his file, his machine):
+
+```
+  not onto the files as they are   prompt-coach.patch
+132 of these are already on your backend from an earlier run.
+Rehearsing again: take those off, newest first, then put all 133 back on in order.
+  ok    prompt-coach.patch
+```
+
+and it ends `Checked again on the real files: all 133 patches are on.` /
+`DONE - no problems`. Re-measured here on a fresh GUID copy of his live folder:
+stripping all 133 with `-Revert` and then applying all 133 forward in list
+order from the shipped base ends `EXIT=0` with `ok prompt-coach.patch` at
+line 140 and line 277. The repair pass is the pass that fails first, and it
+passes.
+
+### What the report really was: the patch's own line endings
+
+The one real defect next to this patch is that `prompt-coach.patch` was the
+**only one of 135 patches stored with CRLF endings**, and it arrived in that
+state with `45175c86` — a Windows editor wrote the file, and `.gitattributes`'
+`*.patch -text` (deliberately "no conversion, ever") meant nothing normalised
+it. Measured on a copy of the owner's live `jarvis_hud.py`:
+
+```
+git apply --check          backend/prompt-coach.patch   -> exit 1
+    error: patch failed: jarvis_hud.py:2457
+git apply --reverse --check backend/prompt-coach.patch  -> exit 1
+    error: patch failed: jarvis_hud.py:2457
+the same text with LF endings:
+git apply --reverse --check <the LF copy>               -> exit 0
+```
+
+Both directions failing against a file that already carries the patch is
+*indistinguishable*, from the outside, from a stale anchor — which is how this
+report was born, and why `.gitattributes`' own warning ("the error it prints
+says nothing about line endings, so the natural conclusion is that the patch is
+wrong rather than that git edited it in transit") belongs in a test and not
+only in a comment. The patch is now stored LF, and
+`test_patch_wellformed.py` fails if any patch is stored with CRLF again — the
+half `test_patch_history.py` already held for the archived versions.
+
+Nothing else moved: not one byte of content changed (`git diff
+--ignore-cr-at-eol` is empty), the installer normalised the file to LF before
+applying it anyway (`Copy-AsLf`) and the manifest hashes that same LF copy, so
+no run's behaviour or record changes.
+
 ## What is proven, and what is not
 
 - **Proven:** the failure reproduces deterministically in the repair pass; the
