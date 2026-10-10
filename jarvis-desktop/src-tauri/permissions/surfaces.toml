@@ -1557,12 +1557,33 @@ permissions = ["allow-open-features"]
 #
 # It does not read `onboarding_seen` — `lib.rs` decides whether to build this
 # window at all from that flag, before the page exists. The one thing the page
-# itself can do is say "seen" and close, once, so it never reopens.
+# itself can do is say "seen" and close, once, so it never reopens by itself.
+#
+# "By itself" is the precise word, and it is the owner's decision of
+# 2026-10-10: the walkthrough still opens unprompted exactly once, and the
+# owner can now also REPLAY it from Settings (see `onboarding-replay` below).
+# The set below is the page's own power and is unchanged by that.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "onboarding-surface"
-description = "Mark the first-run walkthrough as seen and close it. Opens at most once."
+description = "Mark the first-run walkthrough as seen and close it. Opens at most once on its own."
 permissions = ["allow-finish-onboarding"]
+
+# Settings' "Show the intro again" button (the owner's request of 2026-10-10:
+# the walkthrough is interactive and skippable, but a skip should not be
+# final). It re-opens that same window through the same
+# `windows::show_onboarding` the first run uses.
+#
+# Settings only, and deliberately here rather than in `onboarding-surface`:
+# that set belongs to the walkthrough PAGE, and a window that can open itself
+# is a different power from one that can close itself. This carries no state
+# at all — it takes no argument, reads and writes no marker, and cannot make
+# the walkthrough appear by itself on the next start. The marker stays
+# `finish_onboarding`'s alone.
+[[set]]
+identifier = "onboarding-replay"
+description = "Open the first-run walkthrough again on demand. Reads and writes no marker; changes nothing about when it appears by itself."
+permissions = ["allow-replay-onboarding"]
 
 
 # Tutorials and the FAQ (the owner's request of 2026-10-05; src/tutorials.rs,

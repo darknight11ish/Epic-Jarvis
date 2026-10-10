@@ -1040,6 +1040,10 @@ pub fn run() {
             // read-only, opened from Settings and the tray.
             commands::open_features,
             commands::mark_answer,
+            // Re-opening the walkthrough on demand, from Settings (the owner,
+            // 2026-10-10). It reads and writes no marker: the automatic
+            // first-run show below is unchanged.
+            commands::replay_onboarding,
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
@@ -1632,6 +1636,11 @@ pub fn run() {
             // this line is what makes Jarvis actually work, and a walkthrough
             // that opened before the tray icon or the event stream existed
             // would be explaining surfaces that were not there yet.
+            //
+            // ONCE, and only here. `commands::replay_onboarding` opens the
+            // same window on demand from Settings (the owner, 2026-10-10) and
+            // never touches the marker, so this gate still means exactly what
+            // it always did: unprompted, the walkthrough appears one time.
             if !commands::onboarding_seen(&handle) {
                 if let Err(err) = windows::show_onboarding(&handle) {
                     logfile::log(&format!(

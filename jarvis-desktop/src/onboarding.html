@@ -282,9 +282,15 @@
   // shipped (tray, approvals, memory) and are unchanged apart from the
   // counter; 4 and 5 answer "how do I talk to it" and "where is everything",
   // which the UI audit of 2026-10-05 (section 5) found the old walkthrough
-  // never taught. `commands.rs`'s ONBOARDING_VERSION stays 2 on purpose: the
-  // owner's rule is "shown once, never again", and a new owner has no marker
-  // at all, so they see all five.
+  // never taught. `commands.rs`'s ONBOARDING_VERSION stays 2 on purpose: a
+  // new owner has no marker at all, so they see all five.
+  //
+  // This page is shown ONCE BY ITSELF — `lib.rs` opens it unprompted only
+  // while the marker is missing. It is no longer a one-shot: Settings'
+  // "Show the intro again" re-opens this same page on demand
+  // (`commands.rs`'s `replay_onboarding`), and that path never writes the
+  // marker, so finishing a replay changes nothing about the next start. The
+  // only thing this page itself can do is still `finish_onboarding` below.
   const STEPS = 5;
   let step = 1;
 
