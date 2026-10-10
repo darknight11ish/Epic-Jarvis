@@ -194,15 +194,38 @@ await check("the press, not the click, is where the card is fixed", async () => 
   assert.match(close, /state\.cards\.clear\(\)/, "a closed card leaves its pin behind");
 });
 
-await check("the buttons' rules are unchanged: Deny is never disabled by a swap, and a locked or heavy card still opens the bar", async () => {
+await check("the buttons' rules are unchanged: Deny is never disabled by a swap, and a card the widget may not decide still opens the bar", async () => {
   const decide = uncommented(fnBody(widget, "async function decide(approved, optionId = null) {"));
   assert.match(decide,
-    /approved && \(state\.appLock \|\| isEmailCard\(approval\) \|\| isHeavy\(approval\)\)/,
-    "the redirect to the Jarvis bar no longer covers lock, email and heavy cards");
+    /approved && \(state\.appLock \|\| isEmailCard\(approval\) \|\| needsFullCard\(approval\)\)/,
+    "the redirect to the Jarvis bar no longer covers lock, email and cards whose text is clamped");
   assert.match(decide, /await approveInBar\(\)/);
   const sync = uncommented(fnBody(widget, "function syncApprovalButtons() {"));
   assert.match(sync, /dom\.btnApprNo\.disabled = blocked;/, "Deny is no longer always available");
   assert.doesNotMatch(sync, /state\.cards/, "the swap guard was put in the disable rule instead of the decision");
+});
+
+await check("the clamped-detail rule is the gate's, not this file's (DEEP-AUDITS finding D1)", async () => {
+  // widget.css clamps `.appr-detail` to two lines on purpose, so the widget
+  // cannot claim the whole card was read. That decision lives in one place
+  // (heavy-approve.js `needsFullCard`, tested in tests/heavy-approve.mjs) and
+  // the widget must ask it rather than re-implementing `notice.weight` here -
+  // re-implementing it is exactly how the unclassified card was missed.
+  assert.match(widget, /import \{ needsFullCard \} from "\.\/heavy-approve\.js"/,
+    "the widget does not import the clamped-detail rule");
+  assert.doesNotMatch(widget, /isHeavy\s*\(/,
+    "the widget is reading notice.weight again instead of asking needsFullCard");
+  const decide = uncommented(fnBody(widget, "async function decide(approved, optionId = null) {"));
+  assert.match(decide, /needsFullCard\(approval\)/,
+    "decide() would still approve a card whose text it never showed in full");
+  const paint = uncommented(fnBody(widget, "function openApproval(approval) {"));
+  assert.match(paint, /const needsFull = !locked && !email && needsFullCard\(approval\)/);
+  // The label the owner sees must be the same sentence as the button's own
+  // tooltip's subject: the bar is where this card is decided.
+  assert.match(paint, /locked \|\| needsFull \? LOCKED_APPROVE/,
+    "the Approve button still says Approve on a card the widget will refuse to decide");
+  assert.match(paint, /needsFull \? SPOTLIGHT_APPROVE_TITLE : ""/,
+    "a redirected card's Approve button has no title saying why");
 });
 
 await check("CONTROL: the card still shows slot 0, and the count is still a number only", async () => {

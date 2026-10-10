@@ -45,7 +45,7 @@ import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./not
 import { ApprovalTarget, GONE_DETAIL, GONE_LINE } from "./approval-target.js";
 import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
-import { isHeavy } from "./heavy-approve.js";
+import { needsFullCard } from "./heavy-approve.js";
 import { faceWords } from "./face-words.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { relayFaceMoments } from "./face-moments.js";
@@ -989,13 +989,21 @@ const LOCKED_APPROVE = "Approve in the Jarvis bar";
 /** Feasibility I110, "Slower Approve on risky cards": this widget clamps its
  * detail to two lines on purpose ("the full diff belongs in the spotlight,
  * this is a decision surface, not a reading one" - widget.css, `.appr-detail`).
- * A `notice.weight: "heavy"` card cannot honestly satisfy "the whole card's
- * text has been in view" on a surface that never shows the whole text, so -
- * like `locked` and `email` above - its Approve opens the Jarvis bar
- * instead, where the full card and the actual delay-and-scroll gate live
+ * A card whose reach or reversibility matters cannot honestly satisfy "the
+ * whole card's text has been in view" on a surface that never shows the whole
+ * text, so - like `locked` and `email` above - its Approve opens the Jarvis
+ * bar instead, where the full card and the actual delay-and-scroll gate live
  * (main.js, heavy-approve.js). The detail text itself is UNCHANGED here
- * (unlike `locked`, this is not about hiding anything) - only the button. */
-const HEAVY_APPROVE_TITLE =
+ * (unlike `locked`, this is not about hiding anything) - only the button.
+ *
+ * `needsFullCard` (heavy-approve.js) decides which cards those are: anything
+ * that leaves this PC, anything that cannot simply be undone, and anything the
+ * backend did not classify at all (docs/DEEP-AUDITS-2026-10-05.md finding D1).
+ * `isHeavy` alone missed the unclassified card - it keys on `notice.weight`,
+ * which reads as `"normal"` when there is no notice, so a 320x44 strip could
+ * approve a card nobody had read. The widget's own Approve label for this is
+ * the locked one, because it is the same sentence: approve it in the bar. */
+const SPOTLIGHT_APPROVE_TITLE =
   "This cannot be undone, leaves this PC, or was pushed up by outside text - " +
   "read it in full and approve it in the Jarvis bar.";
 
@@ -1072,22 +1080,23 @@ function openApproval(approval) {
   // (the owner's decision of 2026-09-25). Rust refuses an email's Approve
   // from this window too (commands.rs, `waiting_email`).
   const email = isEmailCard(approval);
-  // Feasibility I110: see HEAVY_APPROVE_TITLE's own comment above for why
-  // this redirects rather than trying to gate on scroll in a 2-line-clamped
-  // view. `locked` and `email` already redirect for their own reasons, and
-  // take priority when more than one applies (App lock hides the words
-  // heavy would otherwise still show).
-  const heavy = !locked && !email && isHeavy(approval);
+  // Feasibility I110 + DEEP-AUDITS finding D1: see SPOTLIGHT_APPROVE_TITLE's
+  // own comment above for why a card whose reach or reversibility matters
+  // redirects rather than trying to gate on scroll in a 2-line-clamped view.
+  // `locked` and `email` already redirect for their own reasons, and take
+  // priority when more than one applies (App lock hides the words a full card
+  // would otherwise still show).
+  const needsFull = !locked && !email && needsFullCard(approval);
   // The PC's own words for it (card-words.js), never the code name.
   dom.apprAction.textContent = locked ? lockedTitle(approval) : cardTitle(approval);
   // textContent, never innerHTML: this string comes from a model.
   dom.apprDetail.textContent = locked ? LOCKED_DETAIL
     : email ? emailDetail(approval) : approvalDetail(approval);
-  dom.btnApprYes.textContent = locked || heavy ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
+  dom.btnApprYes.textContent = locked || needsFull ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
   dom.btnApprYes.title = locked
     ? "App lock is on: opens the Jarvis bar, which asks Windows Hello, to approve there"
     : email ? "Opens the Jarvis bar on this email, to read all of it and approve there"
-    : heavy ? HEAVY_APPROVE_TITLE : "";
+    : needsFull ? SPOTLIGHT_APPROVE_TITLE : "";
   // A note changes the plan, so it waits for the unlocked Jarvis bar too.
   const noteRow = dom.apprNoteInput.closest(".appr-note-row");
   if (noteRow) noteRow.hidden = locked;
@@ -1308,9 +1317,12 @@ async function decide(approved, optionId = null) {
   const approval = target.card;
   // App lock on: this window approves nothing (see `applyAppLock`). Nor,
   // lock or not, an email: all of it is read in the Jarvis bar first. Nor a
-  // heavy card (feasibility I110): the whole card cannot honestly be said
-  // to have been "in view" on a surface that clamps it to two lines.
-  if (approved && (state.appLock || isEmailCard(approval) || isHeavy(approval))) {
+  // card whose reach or reversibility matters, or that the backend never
+  // classified (heavy-approve.js `needsFullCard`, DEEP-AUDITS finding D1):
+  // the whole card cannot honestly be said to have been "in view" on a surface
+  // that clamps it to two lines. The card on screen says the same thing - its
+  // label is LOCKED_APPROVE and its title SPOTLIGHT_APPROVE_TITLE.
+  if (approved && (state.appLock || isEmailCard(approval) || needsFullCard(approval))) {
     await approveInBar();
     return;
   }

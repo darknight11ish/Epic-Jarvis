@@ -23,6 +23,12 @@
  * all (an older backend, or a row this normaliser could not read), is
  * untouched - [`isHeavy`] returns `false` for both, so callers keep doing
  * exactly what they did before this feature existed.
+ *
+ * ALSO HERE: [`needsFullCard`] - the same thought taken one step further.
+ * A card whose reach or reversibility matters may not be decided on a surface
+ * that clamps its text to two lines, whether or not the backend labelled it
+ * `heavy`. The widget redirects those to the Jarvis bar, exactly as it
+ * already does for App lock and email cards. See that function's own comment.
  */
 
 /** How long Approve stays disabled at minimum, whatever else is true. */
@@ -33,6 +39,50 @@ export const MIN_DELAY_MS = 2000;
  * treated as `"normal"` - see the module doc comment's "stricter only". */
 export function isHeavy(approval) {
   return Boolean(approval && approval.notice && approval.notice.weight === "heavy");
+}
+
+/**
+ * Does deciding this card need the WHOLE card, not the widget's two clamped
+ * lines? (docs/DEEP-AUDITS-2026-10-05.md finding D1; docs/HANDOFF-UI-RESEARCH-
+ * 2026-10-09.md Phase A(b); docs/SUMMARY-UI-RESEARCH-2026-10-09.md "a second,
+ * smaller bug in the same widget".)
+ *
+ * `isHeavy` alone was not enough. It reads `notice.weight`, so a card the
+ * backend did not label - an older backend, or a row whose `notice` this
+ * app's normaliser could not build - read as `"normal"`, and a 320x44 strip
+ * with two clamped lines could approve something that sends email or switches
+ * the model. The widget's own `.appr-detail` is `-webkit-line-clamp: 2` on
+ * purpose (widget.css), so "the whole text has been in view" is a claim that
+ * surface cannot honestly make about ANY card whose reach or reversibility
+ * matters - labelled or not.
+ *
+ * So this reads the data every card already carries and never invents a
+ * default in the unsafe direction:
+ *
+ *   - `risk` missing or unreadable (`null`, `{}`) -> `true`. A backend that
+ *     sends no risk classification has not told this surface what the action
+ *     costs, and the app must not guess "cheap". `riskLine()` in
+ *     `jarvis-link.js` already treats the same input as
+ *     "not classified, so treat it as irreversible" - this is that sentence,
+ *     as a gate.
+ *   - `risk.reach !== "local"` -> `true`. It leaves this PC.
+ *   - `risk.reversible !== "yes"` -> `true`. It cannot simply be undone
+ *     ("hard" and "no" alike; the card's own line says which).
+ *
+ * `false` therefore means exactly one thing: a card that stays on this
+ * machine, can be undone, and said so. That is the only shape the widget's
+ * clamped strip may decide by itself.
+ *
+ * NOTE the deliberate asymmetry with [`isHeavy`], which stays `"stricter
+ * only"`: this is a *redirect*, not a lock-out. A `true` here only sends the
+ * decision to the Jarvis bar, where the whole card is shown and Windows Hello
+ * decides - it never disables Deny, and it never decides anything by itself.
+ */
+export function needsFullCard(approval) {
+  if (!approval) return true;
+  const risk = approval.risk;
+  if (!risk || typeof risk !== "object") return true;
+  return risk.reach !== "local" || risk.reversible !== "yes";
 }
 
 /**
