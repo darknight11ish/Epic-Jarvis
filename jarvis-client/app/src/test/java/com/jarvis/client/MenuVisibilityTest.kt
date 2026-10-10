@@ -325,6 +325,14 @@ class MenuVisibilityTest {
         }
         // The other way: no item on either screen is a menu without a place (a plate added to
         // Brain or Settings must be decided - listed here, or one of the fixed ones below).
+        //
+        // The three `group-*` keys were Brain's own group headings until
+        // 2026-10-10; they are replaced by the headings in BrainSections.kt,
+        // drawn as `item(key = BrainSections.SECTIONS[i].key)` - which this
+        // regex does not match at all, so no heading needs a menu id.
+        // "features" (the way into "Everything Jarvis can do", drawn by
+        // `onOpenFeatures?.let { item { ... } }`) has no key of its own and so
+        // never appears in `brainKeys` either.
         val fixed = setOf("rush", "freshness", "notice", "group-now", "group-memory", "group-model-pc",
             "menus-hidden", "tail", "memory-hidden", "wiki-hidden", "memory-as-of-hidden",
             "deep-questions-hidden")
