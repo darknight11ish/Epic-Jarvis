@@ -119,6 +119,14 @@
       "title": "Jarvis wants to delete a page in Logseq"
     },
     {
+      "action": "docker_service_start",
+      "title": "Jarvis wants to start one of the containers it uses on this PC"
+    },
+    {
+      "action": "docker_service_stop",
+      "title": "Jarvis wants to stop one of the containers it uses on this PC"
+    },
+    {
       "action": "download_model",
       "title": "Jarvis wants to download an AI model"
     },
