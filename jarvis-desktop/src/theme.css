@@ -11,7 +11,7 @@
    UI. Adding a theme is now filling in a table, not editing components.
 
    THE RULE. A literal colour belongs in `:root` or in a `[data-theme]` block
-   in this file. Anywhere else it is a bug, and `scripts/check-tokens.mjs`
+   in this file. Anywhere else it is a bug, and `scripts/check-tokens.py`
    fails the build for it.
 
    HOW A THEME IS APPLIED. `data-theme` on `<html>`, set before first paint by
@@ -20,7 +20,7 @@
    inherits from `:root`.
 
    CONTRAST. Every text-on-surface pair below is checked by
-   `scripts/check-contrast.mjs` against BOTH a black and a white backdrop,
+   `tests/contrast.mjs` against BOTH a black and a white backdrop,
    because these windows are transparent and the desktop behind them is not
    ours to choose. A pair that passes over black and fails over white is a pair
    that fails on somebody's wallpaper.
