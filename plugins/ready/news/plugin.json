@@ -1,0 +1,8 @@
+{
+  "name": "news",
+  "summary": "news headlines in the morning briefing, from RSS/Atom feed addresses the owner names.",
+  "module": "jarvis_news",
+  "install": "handler",
+  "replaces_patch": "news.patch",
+  "stack_order": 76
+}

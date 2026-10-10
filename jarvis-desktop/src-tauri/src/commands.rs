@@ -3268,18 +3268,27 @@ pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
 // Floating face
 // ---------------------------------------------------------------------------
 
-/// Whether the floating face is on, and where it last sat. Settings'
-/// "Floating face" toggle reads this to paint itself correctly on load.
+/// Whether the floating face is on, where it last sat, and whether clicks
+/// pass through it. Settings' "Floating face" toggle reads this to paint
+/// itself correctly on load, and so does "Click through to what is behind".
 #[tauri::command]
 pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
     app.state::<windows::FloatingState>().snapshot()
 }
 
-/// Turns the floating face on or off. Off by default, like every new surface
-/// in this app; on, it opens at once with no approval card — it changes
-/// nothing Jarvis does, asks or remembers, only how its own state is shown
-/// on screen, so `asks_first.rs`'s list of things that ask first does not
-/// apply here.
+/// Turns the floating face on or off, and - with `click_through` - whether
+/// clicks on it go to whatever is behind it instead. Both are off by default,
+/// like every new surface in this app; both apply at once with no approval
+/// card — neither changes anything Jarvis does, asks or remembers, only how
+/// its own state is shown on screen, so `asks_first.rs`'s list of things that
+/// ask first does not apply here.
+///
+/// ONE command for the two, rather than a second `set_floating_click_through`:
+/// a new command means the whole ACL path (a line in `build.rs`, a set in
+/// `permissions/surfaces.toml`, a grant in `capabilities/settings.json` and
+/// the generated permission file), and what this buys is a second checkbox on
+/// the row below the first one. `click_through` is `Option`, so the existing
+/// callers and tests that send only `enabled` keep working.
 ///
 /// `async`, not a plain command: the first time it turns the face on,
 /// `show_floating` builds a window, and Tauri 2.11.5's own docs say that
@@ -3287,7 +3296,21 @@ pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
 /// callback thread rather than off it (bug audit 2026-09-27, desktop-rust
 /// finding #3).
 #[tauri::command]
-pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
+pub async fn set_floating(
+    app: AppHandle,
+    enabled: bool,
+    click_through: Option<bool>,
+) -> Result<bool, String> {
+    if let Some(click_through) = click_through {
+        // Only the preference: the window itself is dealt with by the
+        // pointer watcher (`windows::start_floating_hit_watch`), which reads
+        // this every tick and changes the window a moment later of its own
+        // accord. Nothing is forced here on purpose - the watcher is what
+        // knows where the animal is, and until it does, the window keeps
+        // taking every click.
+        app.state::<windows::FloatingState>()
+            .update(|prefs| prefs.click_through = click_through);
+    }
     if enabled {
         windows::show_floating(&app)?;
     } else if windows::floating_is_open(&app) {
@@ -3302,6 +3325,24 @@ pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String>
     // this while the window is open (bug audit 2026-09-27, finding #5).
     crate::emit_all(&app, crate::events::FLOATING_CHANGED, enabled);
     Ok(enabled)
+}
+
+/// The floating face's own page reporting where its picture is drawn: one
+/// character per cell of a `windows::FLOATING_HIT_GRID`-square grid, `1` for
+/// a cell the face is drawn in, read left to right and top to bottom; or the
+/// empty string when the page cannot measure itself.
+///
+/// A COMMAND, not an event, and the difference matters. `core:event:allow-emit`
+/// would be the shorter road, and `tests/security.mjs` (apps security audit
+/// M1) forbids it to every window on purpose: the quickbar trusts what it
+/// hears, so a page able to emit could fake the owner's checked voice or an
+/// approval card. A command is granted to exactly one window and can do
+/// exactly one thing. This one carries geometry only - no words, no picture,
+/// nothing about the owner - and clears the grid for anything that is not
+/// exactly one grid (`windows::note_floating_hit_mask`).
+#[tauri::command]
+pub fn note_floating_hit_mask(app: AppHandle, grid: String) {
+    windows::note_floating_hit_mask(&app, &grid);
 }
 
 /// Whether App lock is on - all the widget needs to know to show an approval

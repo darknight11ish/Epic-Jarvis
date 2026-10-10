@@ -1,0 +1,8 @@
+{
+  "name": "photo-reminder",
+  "summary": "\"Photo to reminder\": a picture in, a PROPOSED reminder out. Nothing is set up here.",
+  "module": "jarvis_photo_remind",
+  "install": "handler",
+  "replaces_patch": "photo-reminder.patch",
+  "stack_order": 89
+}

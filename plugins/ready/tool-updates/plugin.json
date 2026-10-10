@@ -1,0 +1,8 @@
+{
+  "name": "tool-updates",
+  "summary": "\"Check for tool updates\", on request: is each Python package, Rust building block and pinned GitHub-hosted tool Jarvis is built from still the newest version, or is a newer one out.",
+  "module": "jarvis_tool_updates",
+  "install": "handler",
+  "replaces_patch": "tool-updates.patch",
+  "stack_order": 79
+}

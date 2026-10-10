@@ -1172,6 +1172,11 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::get_floating,
             commands::set_floating,
+            // Where the floating face's own page says its picture is drawn,
+            // so clicks can pass through the window everywhere except on the
+            // animal (2026-10-10). The floating window is the only one
+            // granted it - permissions/surfaces.toml's "floating-hit-mask".
+            commands::note_floating_hit_mask,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -1392,6 +1397,11 @@ pub fn run() {
         // the first one drawn rather than a swap after the default.
         let appearance = app.state::<appearance::AppearanceState>().snapshot();
         push_to_hud(app, "appearance", &appearance);
+
+        // And same reason again, for the button beside the box: a HUD that
+        // reloads while the Jarvis bar is already up would otherwise offer to
+        // open a bar that is on screen (`windows.rs` `publish_bar_state`).
+        windows::publish_bar_state(app);
     });
 
     let app = builder
