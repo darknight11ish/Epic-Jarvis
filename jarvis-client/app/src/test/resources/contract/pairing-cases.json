@@ -697,7 +697,12 @@
    "unretire_waiting": "Waiting for your approval. Other devices can use the old shared key again only if you approve the card, on this PC.",
    "registry_unreadable": "The device list on this PC cannot be read (devices/registry.json in the Jarvis settings folder), so no device key works and only this PC can reach Jarvis. To start fresh, run  py -3 jarvis_devices.py --start-fresh  on the PC - every phone then pairs again.",
    "no_owner_check": "This PC does not check approvals itself yet (jarvis_owner_check.py is not running), so a pairing card could never be approved. Run apply-patches.ps1 again.",
-   "tier": "pair_device is not set to \"ask\" in jarvis-framework.toml, so a pairing card cannot be raised."
+   "tier": "pair_device is not set to \"ask\" in jarvis-framework.toml, so a pairing card cannot be raised.",
+   "not_labelable": "This PC has no label - it is always this PC.",
+   "bad_label": "Use a shorter label, with letters, numbers, spaces and - _ . ' ( ) only. Leave it empty to go back to the name the device gave itself.",
+   "label_button": "Name this device...",
+   "label_prompt": "What should Jarvis call this device? Leave it empty to go back to the name it gave itself.",
+   "label_done": "{name} is what this device is called now."
   },
   "address_off_network": "Jarvis's address {address} is not on your own networks, so this app will not send your pairing key there: on this phone, use your PC's Tailscale name (ending in .ts.net) or its NordVPN Meshnet name (ending in .nord).",
   "address_not_a_name": "Jarvis's address {address} is on your own network, but this phone can only reach your PC by its Tailscale name (ending in .ts.net) or its NordVPN Meshnet name (ending in .nord), not by a number or a home-network name: type the name the Tailscale or NordVPN app shows for your PC."

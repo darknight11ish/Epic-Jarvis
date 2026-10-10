@@ -571,7 +571,7 @@ await check("App lock: the widget shows the notice title only, and Approve opens
   assert.deepEqual(denied.map((d) => d.approved), [false], "Deny does not work from the locked widget");
 });
 
-await check("App lock: a card with no notice gets a plain title, and turning the lock off shows it all (M3)", async () => {
+await check("App lock: a card with no notice gets a plain title, and turning the lock off shows the risk line (M3)", async () => {
   // Not an email: an email's card is approved in the Jarvis bar lock or not
   // (email-send.mjs), and this test is about the lock.
   const card = { ...K.APPROVAL_RAISED, action: "run_shell_on_host", notice: undefined };
@@ -586,8 +586,13 @@ await check("App lock: a card with no notice gets a plain title, and turning the
   const open = await widgetCard(page);
   // Unlocked, a row with no notice gets the PC's own fallback (card-words.js), not the code name.
   assert.equal(open.action, "Jarvis wants your OK for \"run shell on host\"");
-  assert.equal(open.approve, "Approve");
   assert.equal(open.noteHidden, false);
+  // But this card carries an OUTBOUND, irreversible risk and no notice at all -
+  // exactly the card docs/DEEP-AUDITS-2026-10-05.md finding D1 says a 320x44
+  // two-line strip must not decide. So its Approve is the bar's, even
+  // unlocked, and clicking it sends no decision. The positive control (a card
+  // the widget MAY decide) is the last check in this file.
+  assert.equal(open.approve, "Approve in the Jarvis bar");
   await page.locator("#btn-appr-yes").click();
   await page.waitForTimeout(250);
   const sent = await page.evaluate(() => ({ bar: window.__openedInBar || 0, decides: window.__decides || [] }));
@@ -597,9 +602,28 @@ await check("App lock: a card with no notice gets a plain title, and turning the
   await page.waitForTimeout(250);
   const relocked = await widgetCard(page);
   await page.close();
-  assert.equal(sent.bar, 0);
-  assert.deepEqual(sent.decides.map((d) => d.approved), [true], "CONTROL: an unlocked widget cannot approve");
+  assert.equal(sent.bar, 1, "an unclassified outbound card did not open the Jarvis bar");
+  assert.deepEqual(sent.decides.map((d) => d.approved), [],
+    "the widget decided a card whose text it clamps to two lines");
   assert.equal(relocked.action, "Jarvis is waiting for your approval");
+});
+
+await check("CONTROL: a card that stays local and can be undone IS still decided in the widget (finding D1)", async () => {
+  // The redirect must not swallow the whole surface: `switch_model` is
+  // `RISK_LOCAL` (reversible, stays on this machine), so the widget keeps
+  // deciding it exactly as before. Without this, "redirect risky cards" could
+  // pass by redirecting everything, which would be a different bug.
+  const page = await K.open(browser, base, "widget.html", { pending: [K.APPROVAL_PLAIN] }, { width: 320, height: 520 });
+  await page.waitForTimeout(400);
+  const card = await widgetCard(page);
+  assert.equal(card.approve, "Approve");
+  await page.locator("#btn-appr-yes").click();
+  await page.waitForTimeout(250);
+  const sent = await page.evaluate(() => ({ bar: window.__openedInBar || 0, decides: window.__decides || [] }));
+  await page.close();
+  assert.equal(sent.bar, 0, "a local reversible card should not need the Jarvis bar");
+  assert.deepEqual(sent.decides.map((d) => d.approved), [true],
+    "the widget no longer decides a card it is allowed to decide");
 });
 
 await browser.close();

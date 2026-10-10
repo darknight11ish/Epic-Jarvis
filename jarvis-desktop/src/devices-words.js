@@ -94,6 +94,42 @@ export function removeQuestion(name) {
     "again with the QR code.";
 }
 
+/* ── Naming a device (docs/MULTI-DEVICE-DESIGN.md, the first slice) ────────
+ *
+ * The owner's own name for a device he already paired, kept beside its key on
+ * the PC and shown in both apps. Three sentences, shared with the phone so
+ * one device is never called one thing on the PC and another on the phone:
+ * the same treatment `removeQuestion` above gets. Each is the PC's own string
+ * (`DEVICES_WORDS` in backend/jarvis_devices.py), checked word for word by
+ * backend/test_devices.py - so a reworded backend sentence fails there rather
+ * than silently leaving the two apps behind.
+ */
+
+/** The button on a device's row. Plain ASCII "..." on purpose - the PC's own
+ * string is compared word for word by backend/test_devices.py, which reads
+ * the app files as UTF-8 while devices.rs is read under the machine's own
+ * encoding. */
+export const LABEL_BUTTON = "Name this device...";
+
+/** What the box asks. */
+export const LABEL_PROMPT = "What should Jarvis call this device? Leave it empty to go " +
+  "back to the name it gave itself.";
+
+/** What is said once the PC has taken it: "{name} is what this device is called now." */
+export function labelDone(name) {
+  return `${name} is what this device is called now.`;
+}
+
+/**
+ * The PC's own sentence for a label it could not accept, from
+ * `DEVICES_WORDS["bad_label"]`. Used when the PC is the one that refused;
+ * Rust refuses the same label first with the same words
+ * (`devices::LABEL_BAD`), so this is only the sentence for a refusal that
+ * got past it.
+ */
+export const LABEL_BAD = "Use a shorter label, with letters, numbers, spaces and " +
+  "- _ . ' ( ) only. Leave it empty to go back to the name the device gave itself.";
+
 /** One device's second line: "Phone · paired 3 Sep · last used 2 minutes ago". */
 export function deviceLine(d, now = Date.now()) {
   if (d.kind === "pc") return "This PC - it cannot be removed.";

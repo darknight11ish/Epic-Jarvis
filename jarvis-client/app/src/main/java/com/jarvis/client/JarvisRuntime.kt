@@ -2171,6 +2171,34 @@ object JarvisRuntime {
     }
 
     /**
+     * ONE of the four settings beside the switch (the owner's answers,
+     * 2026-10-09): when it speaks up, how blunt it is, what it coaches on,
+     * per-platform behaviour. The same route, the same rules and the same link
+     * gate as [setPromptCoach] - at once, no card either way.
+     *
+     * The line it returns is built by the PC's own answer ([PromptCoach.View],
+     * which the screen re-reads straight after) rather than from words kept on
+     * this side; `view` is the state as last read, so the row's own name is the
+     * PC's.
+     */
+    suspend fun setPromptCoachChoice(
+        key: String,
+        value: String,
+        view: com.jarvis.client.net.PromptCoach.View? = null,
+    ): String {
+        actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPromptCoachChoice(key, value) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.saidChoice(key, r.value, view)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                    com.jarvis.client.net.PromptCoach.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
      * "Coach this": the words in the box, with the last few turns, read for
      * advice. A read - never held on a stale link (see the block above).
      *
@@ -2468,6 +2496,37 @@ object JarvisRuntime {
             api.setLimit(com.jarvis.client.net.Limits.body(key, value)),
         )
         if (!answer.changed) _notice.value = answer.sentence
+        return answer.sentence
+    }
+
+    // ---------------------------------------- the interruption budget ----
+
+    /**
+     * ONE change to the interruption budget ([com.jarvis.client.net.AttentionSettings.body]):
+     * how many times a day Jarvis may speak up unasked, or the hour the morning
+     * brief arrives - the two numbers the Attention card used to be able to read
+     * and not change.
+     *
+     * Held on a stale link like every change sent to the PC ([actionBlocker],
+     * rule 4), exactly as [setLimit] and [setMuted] are: raising the count puts
+     * an approval card to the owner on the PC, and a card is a decision, not a
+     * setting. The PC's OWN sentence is what comes back and what the plate
+     * shows, and anything that did not go through ALSO goes into the shared
+     * [notice], so a refusal is never only a line inside one plate.
+     *
+     * `GET /api/attention` is re-read after EVERY attempt, whatever the answer
+     * was - the `LimitsPlate` habit, and for the same reason: a 2xx can mean "a
+     * card is waiting there" and never means "it is on", and an out-of-date
+     * count or hour on this card would be a number the owner reads and trusts.
+     * A read is cheap, never held on a stale link, and this card draws from it.
+     */
+    suspend fun setAttentionSettings(key: String, value: Int): String {
+        actionBlocker()?.let { return it }
+        val answer = com.jarvis.client.net.AttentionSettings.answer(
+            api.setAttentionLimit(com.jarvis.client.net.AttentionSettings.body(key, value)),
+        )
+        if (!answer.changed) _notice.value = answer.sentence
+        refreshAttention()
         return answer.sentence
     }
 
@@ -4305,6 +4364,44 @@ object JarvisRuntime {
         }
     }
 
+    // --------------- what a captcha does about its browser window ---------
+    // The owner's decision of 2026-10-09 ("1 by default with the option for 2
+    // in the settings of Jarvis"); backend/jarvis_handoff_front.py; see
+    // [com.jarvis.client.net.HandoffFront]. This phone shows what the PC says
+    // and sends one word: "Leave it where it is" (the default) touches no
+    // window at all, while "Bring it to the front" raises and activates that
+    // one stuck window. Choosing the second is a loosening, so it raises ONE
+    // approval card on the PC with Windows Hello; choosing the first is
+    // instant, from either app.
+
+    /** `GET /api/chatbot/handoff_front`. */
+    suspend fun handoffFrontSettings(): ApiResult<JsonObject> = api.handoffFrontSettings()
+
+    /**
+     * The choice. "Bring it to the front" is held on a stale link (rule 4) and
+     * raises an approval card on the PC; "Leave it where it is" is NEVER held -
+     * it only makes Jarvis do less (@return the sentence to show under the
+     * choices).
+     */
+    suspend fun setHandoffFront(mode: String): String {
+        val body = com.jarvis.client.net.HandoffFront.body(mode)
+            ?: return "That is not one of the two choices."
+        if (mode != com.jarvis.client.net.HandoffFront.LEAVE_IN_PLACE) {
+            actionBlocker()?.let { return it }
+        }
+        return when (val r = writeNoticingCards { api.setHandoffFront(body) }) {
+            is ApiResult.Ok -> when (val o = r.value) {
+                is com.jarvis.client.net.DesktopWrite.Outcome.Refused ->
+                    "Not changed. " + o.why
+                is com.jarvis.client.net.DesktopWrite.Outcome.Done -> o.said
+                    ?: com.jarvis.client.net.HandoffFront.OFF_NOW
+                is com.jarvis.client.net.DesktopWrite.Outcome.Waiting ->
+                    com.jarvis.client.net.HandoffFront.WAITING_LINE
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     /**
      * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
      * to decide whether to store anything at all - the cached last-known
@@ -4399,6 +4496,27 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Devices.retireSaid(r.value.first, r.value.second)
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
         }
+
+    /**
+     * Name ONE device (docs/MULTI-DEVICE-DESIGN.md, the first slice): the
+     * owner's own name for a device he already paired, kept beside its key on
+     * the PC. Immediate and never held on a stale link, like Remove - a label
+     * grants nothing and revokes nothing. An empty [label] clears it, and the
+     * device goes back to the name it gave itself at pairing.
+     *
+     * A label the PC could never accept is refused here first, in the PC's own
+     * words, so it never makes the round trip. @return the sentence to show.
+     */
+    suspend fun renameDevice(device: com.jarvis.client.net.Devices.Device, label: String): String {
+        val problem = com.jarvis.client.net.Devices.labelProblem(label)
+        if (problem != null) return problem
+        return when (val r = api.devicesPost(com.jarvis.client.net.Devices.LABEL_PATH,
+            com.jarvis.client.net.Devices.labelBody(device.id, label))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Devices.labelSaid(
+                r.value.first, r.value.second, device.displayName)
+            is ApiResult.Failed -> "Not named. " + describe(r.error)
+        }
+    }
 
     // ------------------------------------------------ signed approvals ----
     // docs/PAIRING-DESIGN.md §11; the words and rules are in [SignedApproval].

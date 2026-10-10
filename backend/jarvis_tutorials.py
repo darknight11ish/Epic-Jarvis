@@ -84,35 +84,40 @@ CATALOGUE = (
                      "it, not a second Jarvis: it talks to this PC over "
                      "Tailscale or NordVPN Meshnet, both private networks "
                      "between your own devices.",
-             "where": "The tray icon, or the Jarvis bar on the PC"},
+             "where": "The tray icon, or the Jarvis bar on the PC",
+             "point": {"desktop": None, "phone": None}},
             {"title": "Your private things never leave it",
              "body": "Email, files, passwords and saved memory are only ever "
                      "read by the model on this PC. A few named things do go "
                      "out - web search, the chatbot driver, online weather - "
                      "and each one asks you first. Web search can be your own "
                      "SearXNG, running on this PC.",
-             "where": "Brain → What asks first"},
+             "where": "Brain → What asks first",
+             "point": {"desktop": "asks-first", "phone": "asks-first"}},
             {"title": "It asks before it acts",
              "body": "Anything that changes something shows you a card first: "
                      "what it will do, and what it will touch. You decide with "
                      "a tap or a click - never by voice. Risky approvals also "
                      "ask for Windows Hello on the PC, or your screen lock on "
                      "the phone.",
-             "where": "The card, wherever you are"},
+             "where": "The card, wherever you are",
+             "point": {"desktop": "approval-card", "phone": "approval-card"}},
             {"title": "Things you can ask for today",
              "body": "Timers and reminders, notes and your Obsidian wiki, "
                      "reading a document or a screenshot, focus sessions, "
                      "projects, the morning briefing, web search, home "
                      "control, and a voice conversation you can interrupt.",
              "where": "Type or press the talk button - that is the quickest way "
-                      "to see"},
+                      "to see",
+             "point": {"desktop": "prompt-field", "phone": "talk-button"}},
             {"title": "Five rules it will not break",
              "body": "Nothing private goes to the cloud. It never opens a "
                      "public tunnel. An API key goes only to the one service it "
                      "belongs to. It never approves anything by itself. It is "
                      "yours alone - sideloaded, never sold.",
              "where": "Brain → About, and docs/ARCHITECTURE.md for the long "
-                      "version"},
+                      "version",
+             "point": {"desktop": "brain-about", "phone": "phone-pc-only"}},
         ),
     },
     {
@@ -126,30 +131,35 @@ CATALOGUE = (
             {"title": "The talk button",
              "body": "Press and hold, speak, let go. This is the way that always "
                      "works, and it is trusted by default.",
-             "where": "The talk button on the PC's Jarvis bar, or the phone's Home"},
+             "where": "The talk button on the PC's Jarvis bar, or the phone's Home",
+             "point": {"desktop": "prompt-field", "phone": "talk-button"}},
             {"title": "\"Hey Jarvis\"",
              "body": "Hands-free: say the words, then speak. A voice setting can "
                      "make hands-free stricter than the talk button - under the "
                      "stricter choice, a turn started by \"Hey Jarvis\" cannot "
                      "save facts without a card.",
-             "where": "Brain → Voice → Hands-free (\"Hey Jarvis\")"},
+             "where": "Brain → Voice → Hands-free (\"Hey Jarvis\")",
+             "point": {"desktop": "hud-talk", "phone": None}},
             {"title": "What the voice check does - and does not - prove",
              "body": "Every clip is checked against your voice print before it "
                      "is used. It is honest about its limit: it cannot tell a "
                      "recording or a copy from the real you, and it says so.",
-             "where": "Settings → Voice → Your voice"},
+             "where": "Settings → Voice → Your voice",
+             "point": {"desktop": None, "phone": None}},
             {"title": "Jarvis Live",
              "body": "A back-and-forth conversation with no wake word between "
                      "turns, which you can interrupt. It pauses during a phone "
                      "or video call, and nothing is approved by voice in it "
                      "either.",
-             "where": "The Live button, on both apps"},
+             "where": "The Live button, on both apps",
+             "point": {"desktop": None, "phone": "live-tile"}},
             {"title": "Read aloud, and when it stays on screen",
              "body": "Answers that used web search, weather or home status are "
                      "read out. Answers that used email, files, notes, memory or "
                      "the screen stay on screen by default - and a sensitive "
                      "fact always keeps an answer on screen.",
-             "where": "Brain → How Jarvis talks"},
+             "where": "Brain → How Jarvis talks",
+             "point": {"desktop": "hud-talk", "phone": None}},
         ),
     },
     {
@@ -729,19 +739,22 @@ CATALOGUE = (
                      "While the button is down the microphone is open; when it is "
                      "not, it is not. That is deliberate on a phone, which "
                      "travels into pockets, cars and other people's houses.",
-             "where": "The talk button on the phone's Home screen"},
+             "where": "The talk button on the phone's Home screen",
+             "point": {"desktop": None, "phone": "talk-button"}},
             {"title": "Slide away to cancel",
              "body": "A hold is easy to start by accident, and once the PC has "
                      "checked a clip it cannot be unsent. So sliding your finger "
                      "off the button before you let go throws the recording away "
                      "without sending it.",
-             "where": "The talk button on the phone's Home screen"},
+             "where": "The talk button on the phone's Home screen",
+             "point": {"desktop": None, "phone": "talk-button"}},
             {"title": "The words are worked out on the PC",
              "body": "Your voice is sent to this PC, where the voice check runs "
                      "and the model makes the words. The phone never turns speech "
                      "into text itself, and it never keeps the model or your "
                      "memory.",
-             "where": "Nothing to change - this is how it is built"},
+             "where": "Nothing to change - this is how it is built",
+             "point": {"desktop": None, "phone": "phone-pc-only"}},
             {"title": "Stopping it",
              "body": "There is a Stop control while an answer is coming, and "
                      "ending a Live session stops that. Nothing is ever approved "
@@ -768,13 +781,15 @@ CATALOGUE = (
                      "Home screen, over the conversation. It names the action, "
                      "what it will touch, and whether the turn had read "
                      "something outside this PC.",
-             "where": "The phone's Home screen"},
+             "where": "The phone's Home screen",
+             "point": {"desktop": None, "phone": "approval-card"}},
             {"title": "Buttons, or a swipe",
              "body": "Every card can be decided with its own Approve and Deny "
                      "buttons. Swiping is a setting, on by default, that lets a "
                      "swipe decide instead. Turn it off and every card is decided "
                      "with buttons only.",
-             "where": "Settings → Security → Swipe to approve or deny"},
+             "where": "Settings → Security → Swipe to approve or deny",
+             "point": {"desktop": None, "phone": "approval-card"}},
             {"title": "The fingerprint for risky ones",
              "body": "A risky approval - one that loosens a rule or cannot be "
                      "undone - needs your screen lock as well. On a phone with no "
@@ -806,13 +821,15 @@ CATALOGUE = (
              "body": "When a card is raised while you are not looking at the "
                      "phone, Jarvis sends a notification for it. Tapping the "
                      "notification opens the card, so you can decide from there.",
-             "where": "The phone's notification shade"},
+             "where": "The phone's notification shade",
+             "point": {"desktop": None, "phone": "notifications"}},
             {"title": "Urgent alerts keep ringing",
              "body": "\"Tell me when\" can watch for one thing you name - a "
                      "sender's email, a device change. A match only ever "
                      "notifies. An urgent one is a notification that keeps "
                      "ringing until you have seen it.",
-             "where": "Brain → Work → Coming up → Tell me when"},
+             "where": "Brain → Work → Coming up → Tell me when",
+             "point": {"desktop": None, "phone": "notifications"}},
             {"title": "A late alarm does not pretend",
              "body": "If the phone hears about an alarm more than ten minutes "
                      "late, it does not ring as though it were happening now. It "
@@ -1089,6 +1106,30 @@ def _by_id(tid: str) -> Optional[dict]:
 def _record(records: dict, tid: str) -> Optional[dict]:
     rec = records.get(tid)
     return rec if isinstance(rec, dict) else None
+
+
+def point_of(step: dict, app: str) -> Optional[str]:
+    """The real control a step points at in `app`, or None.
+
+    A step may carry `point` with one target per app - `{"desktop": "prompt",
+    "phone": None}` - because the two apps point at different things and a
+    phone step naming a PC control is exactly the failure this exists to stop.
+    `None` means "this app never shows this step as a thing to do".
+
+    The name is not a selector and not a widget: it is a key in the app's own
+    declared registry (`CONTROL_POINTS` in jarvis-desktop/src/tutorials.js and
+    in jarvis-client's net/Tutorials.kt). That is deliberate. The catalogue
+    cannot name a div that happens to exist, both apps can be checked against
+    their own registry, and a control that moves is fixed in one place per app.
+
+    A tutorial POINTS. It never presses: rule 4 says the app never approves
+    anything by itself, and a tutorial that can press a button can approve.
+    """
+    point = step.get("point")
+    if not isinstance(point, dict):
+        return None
+    name = point.get(app)
+    return name.strip() if isinstance(name, str) and name.strip() else None
 
 
 def one(tutorial: dict, records: dict) -> dict:

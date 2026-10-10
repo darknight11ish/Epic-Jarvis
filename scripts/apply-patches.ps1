@@ -1264,6 +1264,19 @@ $PATCHES = @(
     # hand-off's own picture and input routes are untouched, and the desktop
     # still names none of them (tests/handoff.mjs).
     'handoff-mode.patch'
+    # What a captcha does about the browser window it is blocking (the owner's
+    # OWN decision of 2026-10-09, his words: "1 by default with the option for 2
+    # in the settings of Jarvis"; backend/jarvis_handoff_front.py). TWO hunks in
+    # jarvis_gate.py ONLY - the new action joins the "acts only on tier ask" list
+    # and gets its _RISK line, both right after the last patch that wrote those
+    # two tables, so it goes last, like every new patch - and NO jarvis_hud.py
+    # hunk at all: the route is answered by jarvis_chatbot_routes.py, which
+    # chatbot-routes.patch already installs. Needs jarvis_handoff_front.py copied
+    # in; without it, or on any error, the route answers 503 in plain words and
+    # the window is left exactly where it is - the safe direction. The hand-off's
+    # own picture and input routes are untouched, and the desktop still names
+    # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
+    'handoff-front.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1490,6 +1503,7 @@ $SHIPPED = @(
     # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
     'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
     'jarvis_handoff_mode.py'     # how long that hand-off stays on offer (the owner's OWN setting of 2026-10-08): "Stop early" by default, or keep offering it for the full 15 minutes - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
+    'jarvis_handoff_front.py'    # what a captcha does about its browser window (the owner's OWN setting of 2026-10-09): leave it exactly where it is by default, or bring it to the front - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
@@ -1551,6 +1565,7 @@ $SHIPPED = @(
     # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 118) ---
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
     'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
+    'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -3188,7 +3203,20 @@ try {
                             $script:ResultRefused = $why
                             $broken += @{ Name = "the state this run would leave"; Why = $why }
                         }
-                        $undoFirst = $found
+                        # NOT everything the strip found: a patch in BOTH lists
+                        # is one the strip took off the copy and the re-apply
+                        # above could not put back on, so it was answered
+                        # "already on" and this run leaves it alone - $todo
+                        # drops it, and so does the result check above. Reversing
+                        # it off the owner's real files and then skipping it is
+                        # how tutorials.patch and screen-attach.patch were
+                        # switched off silently by the run of 2026-10-09 09:40:
+                        # "already on ... (left as it is)" in its own log, then
+                        # "ok off tutorials.patch" two screens later, then "all
+                        # 131 patches are on" - with both features gone.
+                        $undoFirst = @($found | Where-Object {
+                            -not (@($alreadyOn | ForEach-Object { $_.Name }) -contains $_.Name)
+                        })
                     }
                 }
                 Pop-Location

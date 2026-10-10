@@ -1802,6 +1802,19 @@ class JarvisApi(
         postWrite(PromptCoach.SETTING_PATH, PromptCoach.enabledBody(on))
 
     /**
+     * `POST /api/prompt/coach/setting {"key", "value"}` - ONE of the four
+     * settings beside the switch ([PromptCoach.choiceBody], the owner's answers
+     * of 2026-10-09). The same route and the same rules as the switch: at once,
+     * no card either way, for the same reason - none of the four opens a way
+     * out of the PC, takes an action, or changes what the coach may read.
+     *
+     * A key or a value the PC does not have is its own 409 sentence, which
+     * [com.jarvis.client.net.PromptCoach.saidChoice] shows as it came.
+     */
+    suspend fun setPromptCoachChoice(key: String, value: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PromptCoach.SETTING_PATH, PromptCoach.choiceBody(key, value))
+
+    /**
      * `POST /api/prompt/coach {"text", "history"}` - "Coach this"
      * ([PromptCoach.coachBody]): the words in the box and the last few turns,
      * answered with a critique. This SENDs nothing; the owner still presses
@@ -2146,6 +2159,28 @@ class JarvisApi(
         postWrite(HandoffMode.PATH, body)
 
     /**
+     * What a captcha does about the browser window it is blocking
+     * ([HandoffFront]; the owner's decision of 2026-10-09: "1 by default with
+     * the option for 2 in the settings of Jarvis"). Decided on the PC like every
+     * other approval-card switch here: "Leave it where it is" is the default,
+     * "Bring it to the front" is ONE card on the PC with Windows Hello.
+     */
+
+    /**
+     * `GET /api/chatbot/handoff_front`: `{"mode", "modes", "default", "words",
+     * "brings_to_front", "waiting", "last", ...}`. A read.
+     */
+    suspend fun handoffFrontSettings(): ApiResult<JsonObject> = probe(HandoffFront.PATH)
+
+    /**
+     * The choice. "Bring it to the front" answers 202 waiting while its approval
+     * card is up; "Leave it where it is" is immediate, and withdraws a card
+     * still waiting. Nothing but a body [HandoffFront.body] made is sent.
+     */
+    suspend fun setHandoffFront(body: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(HandoffFront.PATH, body)
+
+    /**
      * `GET /api/form-review/picture?id=` - the screenshot of a web form Jarvis
      * filled in, for the card that asks to submit it (FormReview). A read: not
      * held on a stale link. The token and the base64 are never logged. A 404
@@ -2319,6 +2354,46 @@ class JarvisApi(
                     val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
                         .getOrNull()
                     Limits.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // ---------------------------------------- the interruption budget ----
+
+    /**
+     * `POST /api/attention/settings` with ONE number ([AttentionSettings.body]):
+     * how many times a day Jarvis may speak up unasked, or the hour the morning
+     * brief arrives. The route the PC's own Brain writes through
+     * (`set_attention_limits`), reached here so the phone is not the one surface
+     * that can only read them.
+     *
+     * No direction is sent. The NUMBER decides it on the PC, against the budget
+     * already in force: DOWN and the hour apply at once, UP is a loosening and
+     * the PC puts ONE approval card to the owner first and writes nothing until
+     * it is answered - so a 2xx never means "it is on" and [attention] is read
+     * again afterwards.
+     *
+     * The BODY comes back rather than a bare status, because the PC's own
+     * sentence is the answer: `said` for a change (or for a card now waiting on
+     * the PC), and `error` for a refusal (400 "That has to be a whole number
+     * between 0 and 24.", 409 "You said no, so ...", 503 - all with a 200-shaped
+     * body). [AttentionSettings.answer] reads it; this app never words one of its
+     * own. A 404 means this PC has not run apply-patches.ps1 since the route
+     * arrived.
+     */
+    suspend fun setAttentionLimit(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(AttentionSettings.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    AttentionSettings.classifyPost(resp.code, obj)
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }

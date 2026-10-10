@@ -67,6 +67,7 @@ object MenuCatalog {
         Menu("settings.screen-look", "Look at this and Watch with me", "The screen feature's lists and picture mode.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.browser-engine", "Browser without a window", "Which browser Jarvis uses for plain reading.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.handoff", "When the phone does not answer", "How long the captcha hand-off stays on offer.", true, true, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.handoff-front", "When a captcha stops Jarvis", "Whether the stuck browser window comes to the front.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.backup", "Backups", "One locked backup file into a folder you pick.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.updates", "Updates", "New versions of this app.", true, false, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.tool-updates", "Check for tool updates", "Outdated packages and tools.", true, false, "settings", "", "card", null, null, true, true, ""),

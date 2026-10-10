@@ -123,6 +123,62 @@ object Watch {
         }
     }
 
+    /**
+     * The all-clear, and the only state that may draw it is an empty
+     * [Report.Read]. Never a failed read: see [Report] (N1, 2026-10-09).
+     */
+    const val ALL_CLEAR = "Nothing new since you last marked the list read."
+
+    /**
+     * The last read of [REPORT_PATH], as the "What is new" block keeps it.
+     *
+     * Three states, and the all-clear is reachable from exactly one of them: a
+     * read that answered and had nothing in it. Added 2026-10-09 for the second
+     * Android audit's N1 (`docs/ANDROID-AUDIT-2-2026-10-09.md`): the plate
+     * wrote its findings only on success, so a failed report kept the previous
+     * list on screen - and once a read this visit had come back empty, a later
+     * failed one went on drawing "Nothing new since you last marked the list
+     * read." over a read that never happened. That is the same lie as the
+     * notification all-clear fixed in #128, on a security-watch list, so a
+     * failed report is now a state of its own.
+     */
+    sealed interface Report {
+        /** Not answered yet on this visit: nothing is drawn, because nothing is known. */
+        data object Waiting : Report
+
+        /** The route answered. An empty [findings] is a real all-clear - the only one. */
+        data class Read(val findings: List<Finding>) : Report
+
+        /** The route did not answer: [reason] says so, in place of any list. */
+        data class Failed(val reason: String) : Report
+    }
+
+    /**
+     * One read of [REPORT_PATH], as [Report]. A failure never comes back as a
+     * [Report.Read], whatever the error: that is the whole point of the type
+     * (N1, 2026-10-09). The words are [failure]'s where they fit (a PC with no
+     * `jarvis_watch.py`), the plain sentence both apps use otherwise - the same
+     * choice the topics read above makes.
+     */
+    fun reportOf(result: ApiResult<JsonObject>): Report = when (result) {
+        is ApiResult.Ok -> Report.Read(findings(result.value))
+        is ApiResult.Failed -> Report.Failed(failure(result.error) ?: PlainErrors.forApiError(result.error).text)
+    }
+
+    /**
+     * The one sentence the "What is new" block draws where the rows would be,
+     * or null when the rows are drawn (a [Report.Read] with something in it) or
+     * nothing is known yet ([Report.Waiting]). A failed report gets its own
+     * line, in this plate's own voice, because the "Couldn't read the watch
+     * list" line above is about the topics read and says nothing about this one
+     * (N1, 2026-10-09).
+     */
+    fun reportLine(report: Report): String? = when (report) {
+        Report.Waiting -> null
+        is Report.Read -> ALL_CLEAR.takeIf { report.findings.isEmpty() }
+        is Report.Failed -> "Couldn't read what is new: ${report.reason}"
+    }
+
     /** The line above the topics - the desktop's, in words. */
     fun headLine(v: View): String = listOfNotNull(
         "${v.topics} ${if (v.topics == 1) "topic" else "topics"} · " +

@@ -30,7 +30,25 @@ import kotlinx.serialization.json.contentOrNull
  *
  * A row whose `kind` this app has no control for (the table's "float") is not
  * offered either: a number with no step and no chip would be a control that
- * cannot be worked. Only "int" and "bool" reach the screen.
+ * cannot be worked. "int", "bool" and "time" reach the screen.
+ *
+ * ## This PC's own notifications, which the phone may change too
+ *
+ * The owner's decision of 2026-10-08: THIS PC's notification choices - which of
+ * the PC's own toasts fire (alarms, reminders, the morning briefing, the "Solve
+ * it here" hand-off) and the quiet hours around them - are rows in this same
+ * table, so the phone can change them. Every one of their titles says
+ * "(on your PC)", because the phone's OWN notification settings are a different
+ * feature entirely and the two must never be mistaken for each other.
+ *
+ * Those rows bring the third kind, "time": a clock time the owner reads and
+ * types ("22:00"), never a number of minutes - "1320" with no explanation would
+ * be worse than not offering the row at all. [Row.clock] holds that string, and
+ * [validTime] is this app's own look-ahead so a half-typed time never leaves the
+ * phone and the PC's own check is never made to refuse one the owner did not
+ * need to earn. [Row.quietOn] is the PC's answer to "do the two quiet-hours
+ * times matter": they decide nothing while quiet hours are off, so this app does
+ * not offer a clock that changes nothing.
  *
  * ONE TAP IS ONE CHANGE, and the PC decides what it means. Some changes take
  * effect at once; others are a loosening, and the PC then puts ONE approval card
@@ -52,6 +70,16 @@ object Limits {
 
     /** `POST /api/limits/settings` - ONE limit at a time. */
     const val WRITE_PATH = "/api/limits/settings"
+
+    /** The kind a clock time carries - the quiet hours' two ends (2026-10-08). */
+    const val TIME = "time"
+
+    /**
+     * A time of day, the PC's own shape: one or two digits, a colon, two digits
+     * (`jarvis_notify_prefs._TIME`). One home for one rule - this is a copy of
+     * the PC's expression, and [validTime] normalises to "HH:MM".
+     */
+    private val TIME_SHAPE = Regex("^([01]?\\d|2[0-3]):([0-5]\\d)$")
 
     const val TITLE = "Limits and how often Jarvis does things"
     const val DETAIL =
@@ -78,6 +106,18 @@ object Limits {
     /** The row's own mark, when turning this one up is what asks. */
     const val ASKS_ON_PC = "Turning this up asks you on the PC."
 
+    /** The button on a clock-time row, and what it opens. */
+    const val CHANGE_TIME = "Change"
+
+    /**
+     * Said instead of that button while quiet hours are off (`quiet_on`): the
+     * two times are still shown with their value, but an hour that decides
+     * nothing is not offered as a control the owner would have to work out.
+     */
+    const val TIME_QUIET_OFF =
+        "Quiet hours are off, so this hour decides nothing. Turn \"Be quiet during quiet hours\" " +
+            "on to change it."
+
     const val READING = "Reading…"
     const val DONE = "Done."
     /** Nothing to offer: either an older PC, or every row is one this phone may not change. */
@@ -95,7 +135,7 @@ object Limits {
     data class Row(
         val key: String,
         val title: String,
-        /** "int" or "bool" - the two this app has a control for. */
+        /** "int", "bool" or "time" - the kinds this app has a control for. */
         val kind: String,
         val value: JsonElement,
         /** The value in the PC's own words ("keep undo for a day", "24 hours"). */
@@ -112,9 +152,28 @@ object Limits {
         val pcOnly: Boolean,
         /** Who owns this row: "both", "desktop" or "phone". */
         val app: String,
+        /**
+         * Is quiet hours on? The PC sends the same answer on every row
+         * (`jarvis_limits.view`'s additive `quiet_on`), so a time row knows
+         * whether it decides anything. A PC that does not send the field reads
+         * as "on", so an unknown field never hides a control.
+         */
+        val quietOn: Boolean = true,
     ) {
         val on: Boolean get() = (value as? JsonPrimitive)?.booleanOrNull ?: false
         val number: Long get() = (value as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong() ?: 0L
+
+        /** Is this a clock-time row? */
+        val isTime: Boolean get() = kind == TIME
+
+        /**
+         * "HH:MM" on a clock-time row, and null on every other kind. The value
+         * stays the STRING the PC sent: a time of day is never turned into a
+         * number of minutes anywhere in this app.
+         */
+        val clock: String? get() = if (kind != TIME) null else {
+            (value as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+        }
 
         /** The next value down, or null at the bottom of the PC's own range. */
         val down: Long? get() = if (kind == "int" && choices.isEmpty() && number > low) number - 1 else null
@@ -138,8 +197,14 @@ object Limits {
         val kind = o.text("kind") ?: return null
         // A kind with no control here (the table's "float") is not a row this
         // app can offer: it would be a number with no step and no chip.
-        if (kind != "int" && kind != "bool") return null
+        if (kind != "int" && kind != "bool" && kind != TIME) return null
         val value = o["value"] ?: return null
+        // A clock-time row must carry the clock string itself. A number of
+        // minutes, or anything else, is not a time this app can draw - so the
+        // row is left out rather than shown as a value no control can change.
+        if (kind == TIME && (value as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull == null) {
+            return null
+        }
         val choices = (o["choices"] as? JsonArray)
             ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull?.toDoubleOrNull()?.toLong() }
             .orEmpty()
@@ -157,6 +222,7 @@ object Limits {
             loosenUp = o.flag("loosen_up") == true,
             pcOnly = o.flag("pc_only") == true,
             app = o.text("app") ?: "both",
+            quietOn = o.flag("quiet_on") != false,
         )
     }
 
@@ -198,6 +264,13 @@ object Limits {
 
     /** ONE change on a bool row. */
     fun body(key: String, value: Boolean): String = body(key, JsonPrimitive(value))
+
+    /**
+     * ONE change on a clock-time row: the clock string itself, quoted on the
+     * wire. NEVER a number of minutes - `body(key, 1320)` would be the exact
+     * mistake this kind exists to prevent, and the PC refuses it in plain words.
+     */
+    fun timeJson(text: String): JsonElement = JsonPrimitive(text)
 
     // --------------------------------------------------------- answers ----
 
@@ -274,4 +347,37 @@ object Limits {
         val unit = if (r.unit.isBlank()) "" else " ${r.unit}"
         return "Between ${r.low}$unit and ${r.high}$unit."
     }
+
+    // ------------------------------------------------ a time of day ----
+
+    /**
+     * A time of day this phone will send, `HH:MM` - or null for anything else.
+     *
+     * The same shape the PC enforces (`jarvis_notify_prefs.check_time`'s
+     * `^([01]?\d|2[0-3]):([0-5]\d)$`), checked here too so a half-typed time
+     * never leaves the phone and comes back as a refusal the owner did not need
+     * to earn. Like the PC, one-digit hours are accepted and normalised ("7:05"
+     * becomes "07:05"). It is also what keeps the promise that a time is never a
+     * number of minutes: 1320 has no "HH:MM" shape and cannot pass this.
+     */
+    fun validTime(text: String): String? {
+        val m = TIME_SHAPE.matchEntire(text.trim()) ?: return null
+        val h = m.groupValues[1].toInt()
+        return "%02d:%s".format(h, m.groupValues[2])
+    }
+
+    /** "22:00" as two numbers, for a picker that starts where the value is. */
+    fun hourMinute(text: String): Pair<Int, Int> {
+        val good = validTime(text) ?: return 22 to 0
+        return good.substring(0, 2).toInt() to good.substring(3, 5).toInt()
+    }
+
+    /**
+     * What the screen reader says for a clock-time row's own control. The app's
+     * switches and steps carry their words deliberately, so a clock is never
+     * just "Change".
+     */
+    fun timeWords(r: Row): String =
+        "$CHANGE_TIME ${r.title}. Now ${r.clock.orEmpty()}." +
+            if (r.quietOn) "" else " $TIME_QUIET_OFF"
 }

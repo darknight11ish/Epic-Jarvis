@@ -406,14 +406,15 @@ fn main() {
             // address for the QR code, start / watch / cancel a pairing
             // (the QR code drawn in Rust; the window hidden from screen
             // capture while a code shows), the device list, Remove ONE
-            // device, and retire / bring back the old shared key. Settings
-            // window only.
+            // device, label ONE device (docs/MULTI-DEVICE-DESIGN.md), and
+            // retire / bring back the old shared key. Settings window only.
             "pair_phone_address",
             "pair_start",
             "pair_session",
             "pair_cancel",
             "devices_list",
             "devices_remove",
+            "devices_label",
             "devices_shared",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
@@ -814,6 +815,16 @@ fn main() {
             // and fixed sentences - never a picture of the paused browser
             // window, which this PC's windows have no route to.
             "handoff_mode",
+            // What a captcha does about the browser window it is blocking
+            // (handoff.rs `handoff_front`; the owner's decision of 2026-10-09:
+            // "1 by default with the option for 2 in the settings of Jarvis").
+            // One command for the setting alone: read it, put it back to
+            // "Leave it where it is" at once, or ask to bring that one window
+            // to the front (ONE card on this PC). Settings only, and it carries
+            // one word and fixed sentences - it never raises a window itself
+            // and never pictures the paused browser window, which this PC's
+            // windows have no route to.
+            "handoff_front",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

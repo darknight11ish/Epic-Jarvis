@@ -66,7 +66,33 @@ object Tutorials {
     /** The states the route accepts; `notStarted` clears the record. */
     val STATES = listOf("in_progress", "done", "skipped", "not_started")
 
-    data class Step(val title: String, val body: String, val where: String)
+    /**
+     * One step. `point` is the name of the REAL control this step sends the
+     * owner to, in this app's own registry ([CONTROL_POINTS]) - empty when the
+     * step has nothing to point at here.
+     *
+     * It is a registry name and never a widget or a coordinate, so the PC's
+     * catalogue cannot name something this screen does not have, and a control
+     * that moves is fixed in one place. A phone step is never sent a PC
+     * control's name: the catalogue carries one target per app, and a step
+     * meant only for the PC arrives with no phone target at all.
+     *
+     * A tutorial POINTS; it never presses. Nothing here may tap a control on
+     * the owner's behalf - the app never approves anything by itself, and a
+     * tutorial that can press a button can approve.
+     */
+    data class Step(
+        val title: String,
+        val body: String,
+        val where: String,
+        val point: String = "",
+    ) {
+        /** What this step points at here, or null when it points at nothing. */
+        val target: String? get() = CONTROL_POINTS[point]
+
+        /** True when the catalogue points this step at a control THIS app has. */
+        val pointsHere: Boolean get() = target != null
+    }
 
     data class Tutorial(
         val id: String,
@@ -131,11 +157,42 @@ object Tutorials {
         data class Failed(val reason: String) : Read
     }
 
+    /**
+     * The real controls on the PHONE that a tutorial may point at, by the name
+     * the catalogue uses (`backend/jarvis_tutorials.py`'s per-step
+     * `point.phone`).
+     *
+     * This list is the phone's alone and shares no entry with the desktop's
+     * (`jarvis-desktop/src/tutorials.js`'s CONTROL_POINTS), which is the whole
+     * point of the request: a phone tutorial talks about tapping, swiping and
+     * notifications, a PC tutorial talks about hotkeys, windows and the HUD.
+     * A step that names a PC control arrives with no phone target, so it is
+     * never shown here as something to do.
+     *
+     * Each name says where the owner should look, in the phone's own words.
+     * Nothing here is tapped for them.
+     */
+    val CONTROL_POINTS = mapOf(
+        "approval-card" to "The approval card on Home - tap it, or swipe it",
+        "talk-button" to "The talk button at the bottom of Home",
+        "pairing" to "Pairing, in Brain",
+        "notifications" to "Your phone's own notification shade",
+        "live-tile" to "The Live tile in Quick Settings",
+        "phone-pc-only" to "Nothing to tap - this one is worth knowing",
+    )
+
     private fun str(obj: JsonObject, key: String): String =
         (obj[key] as? JsonPrimitive)?.contentOrNull.orEmpty()
 
+    /** The phone's own target for a step: `point.phone`, empty when None. */
+    private fun point(obj: JsonObject): String {
+        val points = obj["point"] as? JsonObject ?: return ""
+        return str(points, "phone")
+    }
+
     private fun step(obj: JsonObject): Step =
-        Step(title = str(obj, "title"), body = str(obj, "body"), where = str(obj, "where"))
+        Step(title = str(obj, "title"), body = str(obj, "body"),
+             where = str(obj, "where"), point = point(obj))
 
     /** A tutorial, or null when it is not the shape `read()` makes. */
     fun parseTutorial(obj: JsonObject): Tutorial? {

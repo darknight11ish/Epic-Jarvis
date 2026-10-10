@@ -40,6 +40,11 @@ object SettingsJump {
         Entry("Backups", "backup"),
         Entry("Smartwatch notifications", "watch-notify"),
         Entry("Phone notifications", "phone-notify"),
+        // "Notifications from Jarvis" (the owner's decision of 2026-10-09): the
+        // phone's own per-kind switches are Android's, so this row points at
+        // Android's screen instead of copying the PC's card. It sits with the
+        // other notification rows on the screen, so it goes here.
+        Entry("Notifications from Jarvis", "jarvis-notify"),
         Entry("Look at this and Watch with me", "screen-look"),
         Entry("Browser without a window", "browser-engine"),
         // "When the phone does not answer" (2026-10-08): the new captcha hand-off
@@ -47,6 +52,11 @@ object SettingsJump {
         // goes between them here too - the label is the desktop jump list's own
         // words for the same section (settings.html, `#handoff`).
         Entry("When the phone does not answer", "handoff"),
+        // "When a captcha stops Jarvis" (2026-10-09): the new captcha-window row
+        // sits between these two on the screen (SettingsScreen.kt), so it goes
+        // between them here too - the label is the desktop jump list's own words
+        // for the same section (settings.html, `#handoff-front`).
+        Entry("When a captcha stops Jarvis", "handoff-front"),
         Entry("Devices", "devices"),
         Entry("Quick Settings tiles", "quick-tiles"),
         // "Limits and how often Jarvis does things" (the PC's own

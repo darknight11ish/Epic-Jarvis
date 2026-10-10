@@ -759,13 +759,19 @@ body {
   gap: 6px;
 }
 
+/* Approve and Deny. `--text-sm`, not `--text-xs`: these two are the controls
+   that decide whether an action runs, and theme.css's own rule is that
+   "nothing that protects or warns the owner is set below" `--text-sm`
+   (10-11px here was the audit's own example - docs/DEEP-AUDITS-2026-10-05.md
+   §5, item 8). The Jarvis bar's `.approval-button` already sits on the same
+   floor (style.css:1851), so this also makes the two surfaces agree. */
 .btn {
   flex: 1;
   padding: 5px;
   border: none;
   border-radius: 5px;
   font-family: var(--font-ui);
-  font-size: var(--text-xs);
+  font-size: var(--text-sm);
   font-weight: 650;
   cursor: pointer;
   transition:

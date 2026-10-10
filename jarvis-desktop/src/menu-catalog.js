@@ -758,6 +758,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.handoff-front",
+    "title": "When a captcha stops Jarvis",
+    "about": "Whether the stuck browser window comes to the front.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "when a captcha stops jarvis",
+      "the captcha window",
+      "does the browser window come to the front",
+      "bring the window to the front",
+      "leave it where it is"
+    ]
+  },
+  {
     "id": "settings.backup",
     "title": "Backups",
     "about": "One locked backup file into a folder you pick.",
@@ -2492,10 +2516,12 @@ export const ALIASES = {
   "briefing": "brain.work.briefing",
   "briefing settings": "settings.briefing-settings",
   "bring in old chats": "brain.memory.history-import",
+  "bring the window to the front": "settings.handoff-front",
   "browser settings": "settings.browser-engine",
   "browser without a window": "settings.browser-engine",
   "bubble": "settings.floating-avatar",
   "captcha hand-off": "settings.handoff",
+  "captcha window": "settings.handoff-front",
   "chat card": "settings.second-card.chat-card",
   "chat history": "brain.tab.history",
   "chat history and conversations": "brain.history.conversations",
@@ -2521,6 +2547,7 @@ export const ALIASES = {
   "decks": "brain.work.decks",
   "deep questions": "brain.memory.deep",
   "devices": "settings.devices",
+  "does the browser window come to the front": "settings.handoff-front",
   "email sending": "settings.email-sending",
   "everyday chat runs on": "settings.second-card.chat-card",
   "faces": "settings.appearance-card",
@@ -2569,6 +2596,7 @@ export const ALIASES = {
   "keyboard shortcuts": "settings.shortcuts",
   "learning": "brain.memory.learning",
   "leave it to ollama": "settings.second-card.chat-card",
+  "leave it where it is": "settings.handoff-front",
   "limits": "settings.limits",
   "limits and frequencies": "settings.limits",
   "limits and frequency": "settings.limits",
@@ -2690,6 +2718,7 @@ export const ALIASES = {
   "what jarvis is doing": "brain.now.trace",
   "what jarvis knows about you": "brain.memory.known",
   "what this backend supports": "settings.backend-supports",
+  "when a captcha stops jarvis": "settings.handoff-front",
   "when the phone does not answer": "settings.handoff",
   "which card runs chat": "settings.second-card.chat-card",
   "widgets": "brain.work.widgets",

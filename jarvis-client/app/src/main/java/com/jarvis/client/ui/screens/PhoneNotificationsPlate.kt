@@ -33,6 +33,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.PhoneNotifications
 import com.jarvis.client.net.ScreenPlateText
+import com.jarvis.client.net.SettingsCatalog
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -104,9 +105,14 @@ internal fun PhoneNotificationsSwitch(canAct: Boolean, refresh: Int) {
         )
         return
     }
+    // The words come from the generated catalogue (net/SettingsCatalog.kt,
+    // tools/gen_settings_cases.py) because this row's words are the PHONE's
+    // own - no PC route sends them. The literals are the fallback, so a
+    // missing catalogue row can never leave the switch blank.
+    val row = SettingsCatalog.row("phone-notify")
     SwitchRow(
-        title = "Let your phone read notifications",
-        detail = "Off by default. Jarvis never sees a phone notification unless you turn " +
+        title = row?.label ?: "Let your phone read notifications",
+        detail = row?.detail ?: "Off by default. Jarvis never sees a phone notification unless you turn " +
             "this on AND add at least one app below.",
         checked = enabled == true || cardWaiting,
         enabled = !busy && when {

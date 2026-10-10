@@ -157,6 +157,7 @@ CLASSIFICATION = {
     "/api/chatbot/support/answer": ("ported", "The owner's choice about a waiting offer OTHER than accepting (accepting is only ever the offer's own card, support_offer): Decline, Say something else (through the same last check), or Take over. Both apps; Decline and Say are held on a stale link, Take over is not (support_answer, JarvisRuntime.supportAnswer)."),
     "/api/chatbot/support/export": ("deliberate", "\"Export transcript\" is the PC's alone (docs/CHATBOT-DRIVER-DESIGN.md \"Customer-support chats\" section 6: \"the owner's tap on the PC, to a folder they pick\"): the desktop reads the plain text and saves it with the Windows \"Save as\" dialog in Rust (brain/support.rs support_export). The file is not encrypted, and a phone has no folder on the PC to put it in; the phone says \"Export transcript is on the PC only.\" ARCHITECTURE.md section 8."),
     "/api/chatbot/handoff_mode": ("ported", "How long the captcha hand-off stays on offer (backend/jarvis_handoff_mode.py; the owner's OWN decision of 2026-10-08, his words: \"make this a setting for both options with 1 as the default\"; docs/CAPTCHA-HANDOFF-DESIGN.md section 5): \"Stop early\" is the DEFAULT - about a minute with nobody looking, then the hand-off ends AND the PC says plainly which window Jarvis is stuck on, leaving it for the owner to solve there - and \"Keep offering it\" keeps the live picture on offer for the full 15-minute ceiling, so the owner can pick their phone up late. Keeping a window of the owner's on offer fifteen times longer is MORE exposure, so choosing it is ONE approval card (handoff_keep_offering, tier ask) approved on the PC with Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS); going back to \"Stop early\" is instant, from either app, and never held on a stale link. It is a SIBLING of the hand-off's own routes, never under /api/chatbot/handoff/, because the desktop must never name one of those (tests/handoff.mjs). Both apps show the same two choices in the PC's own words: Desktop: Settings, When the phone does not answer (handoff.rs handoff_mode, handoff-mode.js, handoff-mode-rules.js). Phone: Settings, the same row (net/Handoff.kt, HandoffModePlate.kt, JarvisRuntime.setHandoffMode)."),
+    "/api/chatbot/handoff_front": ("ported", "What a captcha does about the browser window it is blocking (backend/jarvis_handoff_front.py; the owner's OWN decision of 2026-10-09, his words: \"1 by default with the option for 2 in the settings of Jarvis\"; docs/CAPTCHA-HANDOFF-DESIGN.md): \"Leave it where it is\" is the DEFAULT - that one window keeps its size, its place and whatever is in front of it, and the PC goes on saying plainly which window Jarvis is stuck on - and \"Bring it to the front\" raises and activates that one window the moment Jarvis is stuck, so it is ready to type into. Taking the owner's screen and their keyboard away from whatever they were doing is MORE than Jarvis was doing before, so choosing it is ONE approval card (handoff_bring_to_front, tier ask) approved on the PC with Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS); going back to leaving the window alone is instant, from either app, and never held on a stale link. It is a SIBLING of the hand-off's own routes and of handoff_mode, never under /api/chatbot/handoff/, for the same reason. This module raises no window itself - it stores one word, and the hand-off on the PC asks it - and it never pictures a page or reads a title. Both apps show the same two choices in the PC's own words: Desktop: Settings, When a captcha stops Jarvis (handoff.rs handoff_front, handoff-front.js, handoff-front-rules.js). Phone: Settings, the same row (net/HandoffFront.kt, HandoffFrontPlate.kt, JarvisRuntime.setHandoffFront)."),
     "/api/media": ("ported", "\"Playing on your PC\" on the phone's Home (2026-09-28; backend jarvis_media.py, media.patch): what is playing on the PC, in its own sentence (net/PcMedia.kt). Since 2026-09-28 (\"Widgets you describe\", JARVIS-API.md section 86) the desktop reads it too, ONLY to decide play or pause for a widget's \"Play/pause PC\" button (brain/widgets.rs widget_board_action) - the same rule as the phone's tile (QuickTiles.playPauseAction). The desktop still shows no \"what's playing\" of its own: Windows' media controls are right there."),
     "/api/media/control": ("ported", "Play or pause on the PC, ONE action per tap, no card (the owner's decision of 2026-09-27). Phone: Home's media buttons and the Play/pause tile (JarvisRuntime.pcMediaControl). Desktop: only a widget's \"Play/pause PC\" button (brain/widgets.rs widget_board_action, 2026-09-28). Both held on a stale link."),
     "/api/widgets": ("ported", "\"Widgets you describe\" (the owner's choice of 2026-09-28, the SAFE version; docs/JARVIS-API.md section 86; backend jarvis_widgets.py): the saved widgets, the previews and the menu. A read. Desktop: Brain, Work, Widgets (brain/widgets.rs brain_widgets) and the widget window's picker (widget_board). Phone: Brain, Widgets (WidgetsPlate.kt). Names and parts hidden with the private lists."),
@@ -176,11 +177,29 @@ CLASSIFICATION = {
     "/api/attention/mute": ("ported", ""),
     "/api/attention/unmute": ("ported", ""),
     # The interruption budget's two numbers (2026-10-08): the PC's own Brain
-    # card sets them, through set_attention_limits. The phone's control is
-    # still to come, so this is "todo" and not "ported" - and it is a settings
-    # write, not a decision, so it approves nothing on either side.
-    "/api/attention/settings": ("todo", "The phone's own control for the "
-                                        "interruption budget is still to come."),
+    # card sets them through set_attention_limits, and since the same day so
+    # does the phone's Attention card - so this is "ported", not "todo". It is
+    # a settings write, not a decision, so it approves nothing on either side;
+    # what it can do is RAISE the budget, and that asks on the PC.
+    "/api/attention/settings": ("ported", "ONE number for the interruption "
+                                          "budget at a time: how many times a day "
+                                          "Jarvis may speak up unasked, or the "
+                                          "hour the morning brief arrives. The "
+                                          "NUMBER decides the direction on the "
+                                          "PC, never the caller: down, and the "
+                                          "hour, apply at once; UP is a loosening "
+                                          "and the PC puts ONE approval card to "
+                                          "the owner first, so a 2xx can mean "
+                                          "'a card is waiting'. The body comes "
+                                          "back whole so each screen shows the "
+                                          "PC's own sentence (said, or error for "
+                                          "a refusal). Both apps have it: the "
+                                          "PC's Brain card (attention.rs "
+                                          "set_attention_limits, brain.js "
+                                          "setAttentionLimit) and the phone's "
+                                          "Attention card (net/AttentionBudget.kt, "
+                                          "JarvisRuntime.setAttentionBudget, "
+                                          "BrainScreen.kt AttentionPlate)."),
     "/api/chat": ("ported", ""),
     "/api/compute": ("ported", "Brain screen, read-only."),
     # /api/config is NOT here: it is only in the Brain's read allow-list
@@ -481,6 +500,7 @@ CLASSIFICATION = {
     # phase 1, docs/JARVIS-API.md section 90; backend/jarvis_devices.py).
     "/api/devices": ("ported", "The device list (docs/JARVIS-API.md section 90.4): This PC, every paired device with its own Remove, and the old shared key's row - never a key or a hash. Desktop: Settings, Devices. Phone: Settings, Devices (DevicesPlate.kt)."),
     "/api/devices/remove": ("ported", "Remove ONE device, immediate, no card (it only takes access away, like Forget); a list is refused. Both apps ask \"Remove <name>?\" first."),
+    "/api/devices/label": ("ported", "The owner's own name for a device he already paired (docs/MULTI-DEVICE-DESIGN.md, the first slice, 2026-10-09): kept beside the key and shown in both apps; immediate, no card, and never held - a label grants nothing and revokes nothing, unlike the pairing card it can never raise. An empty label clears it, and the device goes back to the name it gave itself. Both apps: Settings, Devices (devices.js, DevicesPlate.kt)."),
     "/api/devices/shared": ("ported", "Retire the old shared key for other devices ({\"retired\": true}): immediate, from either app; refused (409 uses_it_yourself) when the request itself used the shared key from another device. Bring it back ({\"retired\": false}) is the desktop's only: PC only, ONE unretire_shared_key card with Windows Hello, refused under Lockdown - the phone never sends it (docs/PAIRING-DESIGN.md 7.2, ARCHITECTURE section 8)."),
     "/api/pair/start": ("deliberate", "Starting a pairing is the PC's alone (docs/PAIRING-DESIGN.md 6.1 and section 12): the QR code and the typed code are shown on the PC and the pair_device card is approved there with Windows Hello; the backend refuses the route from any other device (403 pc_only). ARCHITECTURE section 8."),
     "/api/pair/session": ("deliberate", "Watching a pairing is the PC's alone: the Devices panel that shows the QR code reads it every 2 s; PC only on the backend (403 pc_only). ARCHITECTURE section 8."),

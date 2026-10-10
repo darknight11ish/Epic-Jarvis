@@ -633,7 +633,15 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # jarvis_hud.py at all - so it cannot rewrite a
                                 # line devices.patch wrote. The later_rewriting()
                                 # half below proves it.
-                                "handoff-mode.patch"}
+                                "handoff-mode.patch",
+                                # handoff-front.patch (2026-10-09) is what a
+                                # captcha does about the browser window it is
+                                # blocking: the same two hunks in jarvis_gate.py,
+                                # both at the END of the same two lists, and none
+                                # in jarvis_hud.py - so it cannot rewrite a line
+                                # devices.patch wrote either. The
+                                # later_rewriting() half below proves it.
+                                "handoff-front.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
@@ -1129,6 +1137,12 @@ def t_the_device_list():
     check("the caller's own row says this_device", mine["this_device"] is True
           and mine["approval_key"] is False and mine["removable"] is True, mine)
     check("you = the device id", v["you"] == dev)
+    check("a device with no label yet shows the name it sent at pairing",
+          mine["name"] == "Pixel 9" and mine["label"] is None and mine["shown"] == "Pixel 9",
+          mine)
+    check("the PC's own row shows This PC, and has no label",
+          v["devices"][0]["shown"] == "This PC" and v["devices"][0]["label"] is None,
+          v["devices"][0])
     check("the shared key's row, and Bring back only here",
           v["shared"]["retired"] is False and v["shared"]["can_bring_back_here"] is False)
     check("pairing available", v["pairing"] == {"available": True, "why_not": None}, v["pairing"])
@@ -1136,6 +1150,142 @@ def t_the_device_list():
     v = D.devices_view(you="pc", here=True, armed=lambda: True)
     check("a removed device is not listed", [r["id"] for r in v["devices"]] == ["pc", dev])
     check("the PC's own row says this_device for the PC", v["devices"][0]["this_device"] is True)
+
+
+def t_labelling_a_device():
+    """The owner's own name for a device (docs/MULTI-DEVICE-DESIGN.md, the
+    first slice): a label beside the key, shown in both apps, changeable any
+    time, gone with the key. Never a card: it grants and revokes nothing."""
+    fresh()
+    with Clock():
+        dev, token, _ = pair()
+        other, other_token, _ = pair(name="Tablet")
+    keep_gate, keep_spawn = D._gate, D._spawn
+    raised = []
+    D._gate = lambda *a, **k: raised.append(a)
+    D._spawn = now_spawn
+    try:
+        code, out = D.label({"id": dev, "label": "Garden phone"}, you="pc")
+    finally:
+        D._gate, D._spawn = keep_gate, keep_spawn
+    check("labelling: 200, and it says the name to show",
+          code == 200 and out == {"ok": True, "id": dev, "label": "Garden phone",
+                                  "name": "Pixel 9", "shown": "Garden phone",
+                                  "was_this_device": False}, out)
+    check("no approval card was raised for it", raised == [], raised)
+    check("the registry row holds the label beside the key's hash",
+          json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"][0]["label"]
+          == "Garden phone")
+    check("the audit line is the id and whether it was cleared - never the label",
+          ("devices.labelled", {"id": dev, "cleared": False}) in AUDIT
+          and not any("Garden phone" in json.dumps(d) for _e, d in AUDIT), AUDIT)
+    v = D.devices_view(you="pc", here=True, armed=lambda: True)
+    mine = next(r for r in v["devices"] if r["id"] == dev)
+    check("the list shows the label, and still carries the phone's own name",
+          mine["label"] == "Garden phone" and mine["name"] == "Pixel 9"
+          and mine["shown"] == "Garden phone", mine)
+    check("another device keeps its own name (one label changes one device)",
+          next(r for r in v["devices"] if r["id"] == other)["shown"] == "Tablet", v["devices"])
+
+    # A phone may name the devices on its own list: it holds a key the owner
+    # paired on this PC, and it can never approve a new device.
+    code, out = D.label({"id": other, "label": "Spare"}, you=dev)
+    check("a paired device may label another device", code == 200 and out["shown"] == "Spare", out)
+    code, out = D.label({"id": dev, "label": "Pocket"}, you=dev)
+    check("... and itself", code == 200 and out["was_this_device"] is True, out)
+
+    # Empty clears it, and the device goes back to the name it gave itself.
+    code, out = D.label({"id": dev, "label": ""}, you="pc")
+    check("an empty label clears it and the phone's own name comes back",
+          code == 200 and out["label"] is None and out["shown"] == "Pixel 9", out)
+    code, out = D.label({"id": dev, "label": "   "}, you="pc")
+    check("whitespace-only is the same as empty", code == 200 and out["label"] is None, out)
+    check("clearing is written down as a clear",
+          ("devices.labelled", {"id": dev, "cleared": True}) in AUDIT, AUDIT)
+
+    check("row_shown prefers the label, then the name the phone sent",
+          D.row_shown({"id": "d1", "name": "Pixel 9", "label": "Garden phone"}) == "Garden phone"
+          and D.row_shown({"id": "d1", "name": "Pixel 9", "label": None}) == "Pixel 9"
+          and D.row_shown({"id": "d1", "name": "Pixel 9"}) == "Pixel 9"
+          and D.row_shown({"id": "d1"}) == "d1"
+          and D.row_shown({"id": "d1", "name": "Pixel 9", "label": "  "}) == "Pixel 9")
+
+    for body, code, reason in (
+            ({"id": "pc", "label": "Jarvis"}, 400, "not_labelable"),
+            ({"id": dev}, 400, "bad_request"),
+            ({"id": dev, "label": 3}, 400, "bad_request"),
+            ({"id": dev, "label": "Two", "also": 1}, 400, "bad_request"),
+            ({"label": "Two"}, 400, "bad_request"),
+            ([dev], 400, "bad_request"),
+            ({"id": "d00000000", "label": "Nowhere"}, 404, "no_such_device"),
+            ({"id": "shared", "label": "Nowhere"}, 404, "no_such_device"),
+            # Refused, never cleaned: a label is never silently reworded, and
+            # the same rule as a paired name (letters and digits of any
+            # script, space, and - _ . ' ( ) ), because a label is shown on
+            # the device list in BOTH apps and inside a pair_device card.
+            ({"id": dev, "label": "A" * 41}, 400, "bad_label"),
+            ({"id": dev, "label": "Phone\nsecond line"}, 400, "bad_label"),
+            ({"id": dev, "label": "Phone\u202egnihs"}, 400, "bad_label"),
+            ({"id": dev, "label": "Phone | Fake card"}, 400, "bad_label"),
+            ({"id": dev, "label": "<b>Phone</b>"}, 400, "bad_label")):
+        got = D.label(body, you="pc")
+        check(f"label {body!r}: {code} {reason}", got[0] == code
+              and got[1].get("reason") == reason, got)
+    check("a 40-character label is allowed (the same limit as a name)",
+          D.label({"id": dev, "label": "A" * 40}, you="pc")[0] == 200)
+    check("a label with spaces, apostrophes and brackets is allowed",
+          D.label({"id": dev, "label": "Sam's (old) phone"}, you="pc")[0] == 200)
+
+    D.label({"id": dev, "label": "Garden phone"}, you="pc")
+    code, out = D.remove({"id": dev}, you="pc")
+    check("Remove answers with the label the owner was looking at",
+          code == 200 and out["name"] == "Garden phone", out)
+    row = json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"][0]
+    check("... and takes the label with the key (nothing left to pair under)",
+          row["label"] is None and row["token_sha256"] == "" and row["removed"]
+          and row["name"] == "Pixel 9", row)
+    check("removing an already-removed device is still 404",
+          D.remove({"id": dev}, you="pc")[0] == 404)
+    check("a removed device's label cannot be set either",
+          D.label({"id": dev, "label": "Back"}, you="pc")[0] == 404)
+    check("the device's own key no longer works after Remove",
+          D.wrap_token_ok(lambda h: False)(FakeHandler(token=token, peer=MESH)) is False)
+    check("... while the other device's key is untouched",
+          D.label({"id": other, "label": "Spare"}, you="pc")[0] == 200
+          and D.wrap_token_ok(lambda h: False)(FakeHandler(token=other_token, peer=MESH)) is True)
+
+
+def t_an_older_registry_has_no_label_and_still_reads():
+    """A registry written before labels existed has no `label` key on any
+    row. That must read as "no label" - never as a broken registry, which
+    would refuse every device key and lock every phone out."""
+    fresh()
+    with Clock():
+        dev, token, _ = pair()
+    p = D.registry_path()
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    check("a device row is written WITHOUT a label - no label means no label",
+          "label" not in doc["devices"][0], doc["devices"][0])
+    doc["devices"][0].pop("label", None)          # exactly the pre-2026-10-09 shape
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    D._reset_for_tests()
+    v = D.devices_view(you="pc", here=True, armed=lambda: True)
+    mine = next(r for r in v["devices"] if r["id"] == dev)
+    check("an old row reads as no label, and still names the device",
+          mine["label"] is None and mine["shown"] == "Pixel 9", mine)
+    check("... and the phone's key still works",
+          D.wrap_token_ok(lambda h: False)(FakeHandler(token=token, peer=MESH)) is True)
+    check("the same row can be labelled now",
+          D.label({"id": dev, "label": "Garden phone"}, you="pc")[0] == 200)
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    doc["devices"][0]["label"] = "Phone\nsecond line"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    D._reset_for_tests()
+    _doc, why = D.load()
+    check("a hand-edited label that breaks the rule is refused by the same rule",
+          why != "", why)
+    check("... and that fails closed for other devices, never for this PC",
+          D.wrap_token_ok(lambda h: False)(FakeHandler(token=token, peer=MESH)) is False)
 
 
 def t_remove():
@@ -1161,6 +1311,9 @@ def t_remove():
     check("a devices event, {}", EVENTS == [("devices", {})], EVENTS)
     row = json.loads(D.registry_path().read_text(encoding="utf-8"))["devices"][0]
     check("the row stays, its hash emptied", row["token_sha256"] == "" and row["removed"])
+    check("a row written before labels existed still shows the phone's own name",
+          D.devices_view(you="pc", here=True, armed=lambda: True)["devices"][0]["shown"]
+          == "This PC")
     check("removing it again: 404", D.remove({"id": dev}, you="pc")[0] == 404)
 
 
@@ -1275,6 +1428,16 @@ def t_the_routes():
         code, got = h.sent[-1]
         check("POST /api/pair/collect: 200 with the key", code == 200 and "token" in got, h.sent)
         token = got["token"]
+        h = H("/api/devices/label", token=token, peer=MESH,
+              body={"id": got["device_id"], "label": "Garden phone"})
+        h.do_POST()
+        check("POST /api/devices/label with a device's own key: 200",
+              h.sent[-1][0] == 200 and h.sent[-1][1]["shown"] == "Garden phone", h.sent)
+        h = H("/api/devices", token=token, peer=MESH)
+        h.do_GET()
+        check("... and GET /api/devices shows it",
+              next(r for r in h.sent[-1][1]["devices"]
+                   if r["id"] == got["device_id"])["shown"] == "Garden phone", h.sent)
         before = orig.calls
         h = H("/api/devices/remove", token=token, peer=MESH, body={"id": got["device_id"]})
         h.do_POST()
@@ -1457,6 +1620,87 @@ def t_the_apps_know_the_first_pairing_state():
           "s.first_pair_only === true" in js and "bringBack: false," in js)
     check("... and neither app offers a card for it (the PC refuses with words)",
           "unretire_first_pair" in D.DEVICES_WORDS)
+
+
+def t_the_apps_word_a_label_the_same_way():
+    """Naming a device (docs/MULTI-DEVICE-DESIGN.md, the first slice): the
+    three sentences the owner reads are the PC's own, word for word, on the
+    phone and on the PC - and each app has the way in.
+
+    Neither app builds in this repository, so a reworded backend sentence
+    would leave both behind without a single test going red (the same reason
+    `t_the_apps_know_the_first_pairing_state` above reads these files). This
+    pins:
+
+      * `DEVICES_WORDS`' label sentences are the phone's `Devices` constants
+        and the desktop's `devices-words.js` exports, word for word;
+      * the desktop's Rust refuses a bad label with the PC's own sentence
+        (`devices::LABEL_BAD`) rather than a new one;
+      * both apps offer the way in, and both read the name to show off the
+        wire (`shown`), never rebuilding it from the label themselves;
+      * the desktop's list is never held on a stale link for a label (nothing
+        to hold: a label grants nothing and revokes nothing).
+    """
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
+          "client" / "net" / "Devices.kt").read_text(encoding="utf-8")
+    plate = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /
+             "client" / "ui" / "screens" / "DevicesPlate.kt").read_text(encoding="utf-8")
+    js = (REPO / "jarvis-desktop" / "src" / "devices-words.js").read_text(encoding="utf-8")
+    page = (REPO / "jarvis-desktop" / "src" / "devices.js").read_text(encoding="utf-8")
+    rust = (REPO / "jarvis-desktop" / "src-tauri" / "src" / "devices.rs").read_text(encoding="utf-8")
+
+    def quoted(src, start, end):
+        i = src.index(start)
+        return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', src[i:src.index(end, i)]))
+
+    def flat(src, marker):
+        """One sentence read out of a source file: the double-quoted runs
+        between `marker` and the end of that statement (`;` in JavaScript and
+        Rust, the next blank line or declaration in Kotlin), joined. The apps
+        and the PC's own module all break a long sentence across two literals,
+        so the joined text is what has to match - never the way it happens to
+        be wrapped. The scan is bounded on purpose: a marker that moved would
+        otherwise read the whole rest of the file and pass on some other
+        sentence that happened to contain the same words."""
+        i = src.index(marker) + len(marker)
+        tail = src[i:i + 400]
+        for stop in (";", "\n\n", "\n    @", "\n}"):
+            at = tail.find(stop)
+            if at >= 0:
+                tail = tail[:at]
+        return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', tail))
+
+    want = [D.DEVICES_WORDS["label_button"], D.DEVICES_WORDS["label_prompt"],
+            D.DEVICES_WORDS["bad_label"]]
+    got = [flat(kt, "const val LABEL_BUTTON").strip(),
+           flat(kt, "const val LABEL_PROMPT"),
+           flat(kt, "const val LABEL_BAD")]
+    check("the phone's three label sentences are the PC's, word for word", got == want, (got, want))
+    js_got = [flat(js, "export const LABEL_BUTTON = ").strip(),
+              flat(js, "export const LABEL_PROMPT = "),
+              flat(js, "export const LABEL_BAD = ")]
+    check("... and the desktop's are too", js_got == want, (js_got, want))
+    rust_got = flat(rust, "pub(crate) const LABEL_BAD: &str = ")
+    check("the desktop's own refusal sentence is the PC's own (devices::LABEL_BAD)",
+          rust_got == want[2], rust_got)
+
+    check("the PC's own row can never be labelled", "not_labelable" in kt and "not_labelable" in D.DEVICES_WORDS)
+    check("the phone takes the name to show off the wire, and falls back only for an older PC",
+          'val shown: String = ""' in kt and "shown.ifBlank { label.ifBlank { name } }" in kt
+          and 'o.str("shown").orEmpty()' in kt)
+    check("the phone offers the way in, with the box starting at the name it has now",
+          "Devices.LABEL_BUTTON" in plate and "typed = d.label" in plate
+          and "JarvisRuntime.renameDevice(d, next)" in plate)
+    check("the phone shows what Save with an empty box goes back to",
+          'The phone calls itself ${d.name}.' in plate)
+    check("the desktop offers the way in, and never waits for a live link for it",
+          "devices_label" in page and "LABEL_BUTTON" in page and "labelDevice" in page
+          and 'invoke("devices_label", { id: d.id, label: next })' in page)
+    check("the desktop shows the name to show (`shown`), never rebuilding it",
+          "d.shown || d.name || d.id" in page)
+    check("a label never approves anything: pair_device stays PC only, with Windows Hello",
+          "pair_device" in OC.PC_ONLY_ACTIONS and D.ACTION in OC.PC_ONLY_ACTIONS
+          and "devices_label" not in OC.PC_ONLY_ACTIONS)
 
 
 def main() -> int:

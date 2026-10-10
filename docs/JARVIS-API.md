@@ -14402,6 +14402,69 @@ Meshnet, scrambled) and through the PC's memory for that one input; it is
 never logged or kept. Tried against a fake page in a real Chromium
 (`test_handoff.py`); not yet against a real captcha.
 
+### 87.8.1 What that window does while it waits (`jarvis_handoff_front.py`, 2026-10-09)
+
+The owner's own decision of 2026-10-09, his words: **"1 by default with the
+option for 2 in the settings of Jarvis"**. When a captcha or a sign-in page
+blocks the browser window Jarvis is driving, that one window on the PC either
+stays exactly where it is or is brought to the front - and the owner chose
+which. A NEW, WHOLE-SHIPPED module (`jarvis_handoff_front.py`; no patch of its
+own), whose one route is answered by `jarvis_chatbot_routes.py` (shipped
+whole), the same shape as the hand-off's own "when the phone does not answer"
+setting.
+
+| The choice | What happens to the window | Gated? |
+|---|---|---|
+| **"Leave it where it is"** (THE DEFAULT, and the narrower one) | The window is not touched: it keeps its size, its place and whatever is in front of it. The PC goes on saying plainly which window Jarvis is stuck on (`jarvis_handoff.STUCK`), so the owner solves it there when they are ready | **No** - it is the default, it touches nothing, and going back to it is immediate from either app, never held on a stale link |
+| **"Bring it to the front"** | That one window is raised and activated the moment Jarvis is stuck, so it is in front and ready to type into | **ONE approval card** (`handoff_bring_to_front`, tier "ask"), **and on `jarvis_owner_check.PC_ONLY_ACTIONS`**: decided on the PC with Windows Hello, and refused from any other device |
+
+**Why raising it is gated, and leaving it alone is not** (the repo's own rule
+for a setting that takes over something it was not taking before -
+`ARCHITECTURE.md` section 3; the same shape as 87.8's "Keep offering it"):
+raising and ACTIVATING a window takes the owner's screen attention and their
+keyboard focus away from whatever they were doing, whenever it happens -
+possibly in the middle of typing somewhere else, possibly into an account page
+of their own. Going back to "Leave it where it is" does less, so it needs no
+card.
+
+| Route | Body / query | What it does |
+|---|---|---|
+| `GET /api/chatbot/handoff_front` | | The choice, its two names, the default, every word both apps show (`words`), `brings_to_front`, `waiting`, `last`, `pc_only: true`, and `why` when the settings file is damaged. A read: never held on a stale link, no card |
+| `POST /api/chatbot/handoff_front` | `{"mode": "leave_in_place"}` | Applied at once, from either app: **no card**, and it withdraws a card still waiting. `{"mode": "bring_to_front"}` raises ONE card on the PC and changes nothing until a person says yes (`202` with `waiting: true` until then; a card already waiting is answered with its own message). Anything else is `400` with the two names in plain words |
+
+**The route is a SIBLING**, never one of the hand-off's own
+(`/api/chatbot/handoff/...`) and never 87.8's `handoff_mode`: it carries one
+word and fixed sentences, no picture, no page, no window title and no tap. The
+desktop must never name the hand-off's own routes (`tests/handoff.mjs` and
+`tests/handoff-front.mjs` check), because it has the real window.
+
+**What this module never does.** It raises no window itself: it stores one
+word and answers whether that word is the raising choice
+(`brings_to_front()`, and `should_raise_now(stuck, handoff_active)`, which is
+true only when the owner chose it, a page really is waiting, AND no hand-off is
+being solved on the phone). The window belongs to the hand-off, and
+`jarvis_handoff.py` is where a real raise would be asked for, on the PC that
+has the window. Nothing here pictures a page, moves a mouse, types a
+character, reads a title or holds a window handle.
+
+**Fail closed.** No file at all is the owner's default ("Leave it where it
+is"). A file that is unreadable, is not JSON, or holds anything but the two
+names reads as the default too, with a plain `why` - a damaged file must never
+quietly start taking the owner's screen. Nothing is kept but one word and the
+time it changed, in `handoff-front.json` (deliberately not 87.8's
+`handoff-mode.json`: one damaged file must not be able to change the other's
+answer).
+
+**Where both apps show it** (one id, `settings.handoff-front`): desktop
+Settings, "When a captcha stops Jarvis" (`handoff-front.js`,
+`handoff-front-rules.js`, `src-tauri/src/handoff.rs` `handoff_front`, set
+`handoff-front` in `permissions/surfaces.toml`, granted to the Settings window
+in `capabilities/settings.json`); the phone's Settings, the same row
+(`net/HandoffFront.kt`, `ui/screens/HandoffFrontPlate.kt`,
+`JarvisRuntime.setHandoffFront`). Both read the same words from the PC, and
+`tools/gen_handoff_cases.py` carries them into both apps' contract file so
+neither can drift.
+
 ## 88. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §61 on the `claude/jarvis-ai-assistant-research-ff37vy` branch; §61 is already taken on main's side (reading phone notifications). References that came with that branch were renumbered with it.
@@ -14891,9 +14954,20 @@ shared key now works on this PC only.") and neither offers a button that
 could not work. An older PC does not send the field, and the apps read an
 absent field as `false`.
 
+Each device row carries three names (2026-10-09, docs/MULTI-DEVICE-DESIGN.md):
+`name` is what the phone sent at pairing ("Pixel 9", part of the pairing sums
+and so never rewritten), `label` is what the owner typed (`null` when he has
+not), and `shown` is the one to put on screen - the label, else `name`, else
+the id, decided by `jarvis_devices.row_shown()` alone so the PC's list and the
+phone's can never word one device differently. Both apps show `shown`; the row
+that lets him change a label shows `name` as well, so leaving the box empty has
+a visible destination. A device row written before this has no `label` key at
+all, which reads as "no label" - never as a broken registry.
+
 | Route | Body | Answers |
 |---|---|---|
-| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. |
+| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. The label goes with the key, and `name` in the answer is the name the owner was looking at (label, else the name the phone sent). |
+| `POST /api/devices/label` | `{"id": "d3f9a1c2e", "label": "Garden phone"}` and nothing else | The owner's own name for a device he already paired (docs/MULTI-DEVICE-DESIGN.md, 2026-10-09): **200** `{"ok": true, "id", "label", "name", "shown", "was_this_device"}`, immediate, **no card** from either app - a label grants nothing and revokes nothing, so it is never held on a stale link either. An empty `label` clears it, and `shown` goes back to the name the phone sent at pairing. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_labelable"}` for `"pc"`, `{"reason": "bad_label"}` when the label is over 40 characters or holds anything but letters and digits of any script, space and `- _ . ' ( )`, `{"reason": "bad_request"}` for anything else. Audit line `devices.labelled` with the id and whether it was cleared - **never the label**; a `devices` event. It can raise, answer and approve no card at all: `pair_device` stays PC only with Windows Hello. |
 | `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
 | `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, **409** `{"first_pair_only": true}` while a device holds a key of its own (removing every device first is the way back), else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
 
@@ -18114,22 +18188,40 @@ checked against the repository and against the library itself
 What was worth taking is the **list of what a prompt usually lacks**, which is a
 checklist and not a dependency.
 
-**120.2 The routes.** Three, and none of them approves anything:
+**120.2 The routes.** Three, and none of them approves anything. **The shape
+below is the CURRENT one** (extended 2026-10-09, §120.7 and §120.8): every key
+that was here on 2026-10-08 is still here, unchanged, so an app that knows only
+the old ones keeps working.
 
     GET  /api/prompt/coach          {"ok", "on", "why", "label", "detail",
                                      "heading", "button", "send_mine",
-                                     "send_suggestion"}
-    POST /api/prompt/coach          {"text", "history": [{"who", "text"}]}
+                                     "send_suggestion",
+                                     "settings": [one row per setting, each
+                                       {key, name, names, value, default,
+                                        choices: [{value, name, detail}]}],
+                                     "targets": ["local", "openai_api", ...],
+                                     "stale_days": 180}
+    POST /api/prompt/coach          {"text", "history": [{"who", "text"}],
+                                     "target": "<which AI this is for>"}
                                      -> {"ok", "coach": {"score", "clear",
                                         "issues": [{what, why, fix}],
-                                        "missing", "suggestion"}}
+                                        "missing", "suggestion",
+                                        "advice_given", "said",
+                                        "target": {known, id, name, advice,
+                                                   quirks, style, checked,
+                                                   source, stale},
+                                        "settings": {the four as they were}}}
     POST /api/prompt/coach/setting  {"enabled": bool} -> the GET shape
+                                    {"key", "value"}   -> the GET shape
+                                    both together      -> the GET shape
 
 `handle_post` and `handle_setting` answer the HTTP code themselves and
 `jarvis_hud.py` forwards the pair, which is the house shape (the string
 `Refused` appears nowhere in `jarvis_hud.py`). A body that is not an object is
 400; a refusal is 409 with a plain sentence; `enabled` must be a real true or
-false, because guessing would mean "your switch moved" when it did not.
+false, because guessing would mean "your switch moved" when it did not; and a
+`key` or a `value` that is not one of the four settings' real names or choices
+is a 409 that NAMES the real ones rather than a guess.
 
 **120.3 The switch.** `prompt_coach` is a `BoolSetting` in
 `jarvis_settings_registry.py` with its own `Section("prompt-coach")` and the
@@ -18178,6 +18270,90 @@ compare - the discipline `tasks.patch` cost three CI failures to learn.
 long it takes, are both unmeasured. The desktop card and the bar panel are
 covered by unit and headless-browser checks; the Kotlin is CI's, because this
 checkout has no Android SDK.
+
+**120.7 The four settings, beside the switch (added 2026-10-09).** The owner's
+verdict on a single on/off switch was *"make sure it's effective and has
+multiple settings, including an enable and disable"*, and the four they chose
+are: **when it speaks up** (`speaks_up`: `any` = today's behaviour, `weak` =
+only when the prompt is genuinely weak), **how blunt it is** (`bluntness`:
+`gentle` = today's, `direct`), **what it coaches on** (`coaches_on`: `shape` =
+today's, `content` = also the task and what was left out), and **per-platform
+behaviour** (`platform`: `same` = today's, `quieter_phone` = the phone shows the
+two gaps that matter most and never more than two questions).
+
+**Every one defaults to the behaviour the coach already had**, so turning the
+master switch on cannot silently change its character. They live in the SAME
+file as the switch, `prompt-coach.json`, so the locked backup already picks them
+up; a key that is missing or holds a value that is not one of its own choices
+falls back to its own default rather than to a guess.
+
+**They change the coach, and the test proves it.** `parse()` applies
+`speaks_up` and `platform` (a prompt the model itself scored 7 or more is passed
+with `advice_given: false` and the PC's own sentence in `said`, which is NOT the
+same as "nothing missing" and must not read as one); `prompt_for()` puts
+`bluntness` and `coaches_on` into the local model's own instructions. Both are
+ordinary settings: neither direction raises a card, for the same reason the
+master switch does not.
+
+**Where they are declared, and why that matters here.** `jarvis_prompt_coach.
+SETTINGS` is the ONE copy of every name and every word of explanation, and
+`settings_rows()` hands it to both apps through the GET. The desktop draws it
+into `#coach-groups` and the phone into `PromptCoachSection`, each with **no
+copy of any setting's name** - so a new choice appears in both apps by changing
+one Python tuple, and a PC that answers with no `settings` list (an older
+backend) draws the switch alone, exactly as it did before the four existed.
+**`tools/gen_settings_cases.py` does not exist on `main`**, so `settings.html`
+has no generated markers to splice into: its prompt-coach card is still
+hand-written and was edited by hand, with the four rows drawn at runtime rather
+than written into the HTML. When that generator lands, the card's own markup
+moves under it; the setting's DECLARATION is already in the right place.
+
+**Not by voice.** `jarvis_quick.py`'s grammar covers the `BoolSetting`
+`prompt_coach` ("turn on the prompt coach"), and none of the four: there is no
+spoken phrase that moves one, so `jarvis_settings_registry.py` is unchanged and
+this section claims nothing more.
+
+**120.8 Which AI the prompt is headed for (added 2026-10-09).** The owner's
+words: *"make sure it is aware of what model of cloud AI I am using because each
+kind has their own intricacies and make sure this can stay up to date."* The
+request carries `target` - a chatbot id, a website adapter's id, or a model name
+- and `jarvis_prompt_coach.advice_for()` looks it up in `DEFAULT_TARGETS`: one
+row per AI, each with what that one handles badly, what style suits it, and the
+date it was last checked. A known target's notes go into the local model's own
+instructions; an **unknown one is reported as unknown, in the app's words and in
+the model's instructions**, under an explicit "do not guess, do not describe how
+it behaves, do not invent a claim" - never a nearest-name guess and never the
+local model's notes by default.
+
+**How it stays current, three ways.** (1) `unknown_targets()` lists every
+service in `jarvis_chatbot_api.PRESETS` and every website in
+`jarvis_chatbot.ADAPTERS` that has no row, and `backend/test_prompt_coach.py`
+**fails while that list is not empty** - so a new AI cannot arrive unnoticed.
+(2) A row is added to `DEFAULT_TARGETS`. (3)
+`prompt-coach-targets.json` in the settings folder: the owner's own rows, laid
+over the shipped ones **field by field** (so one quirk can be corrected without
+retyping the row), or a brand-new target - which needs a name, and gets today's
+date and a source of its own so an undated claim never reads as fresh. A row
+older than `STALE_DAYS` (180) says "may be out of date" wherever its words are
+shown, in the app and to the model. A file that cannot be read is one plain
+sentence, not a crash, and the shipped table still answers.
+
+**From the chatbot driver, so it is the driver's own list.** The ids come from
+`jarvis_chatbot_api.PRESETS` (OpenAI `gpt-5-mini`, DeepSeek, Mistral, xAI,
+OpenRouter, Groq) and `jarvis_chatbot.ADAPTERS` (the website adapters), and the
+short names the owner types at a terminal (`py -3 jarvis_chatbot_api.py key
+openai`) are read from the presets' own `short` field rather than typed twice.
+Nothing about a target changes where the critique RUNS: still this PC's model,
+still `check_local_model()` before the request, still nothing sent anywhere.
+
+**120.9 What is still unmeasured (2026-10-09).** No test in this tree measures
+whether coaching **helps** - only that it fires, that it refuses properly and
+that the four settings change what it says. There is no before/after comparison
+of a prompt and its answer, and no feedback signal wired to the coach (the
+thumbs-up/down buttons mark a chat turn, not a critique). `test_prompt_coach.py`
+covers the gate's ordering, the parse, the four settings, the target table and
+both routes, with **no model at all**; nobody has run this against the real 8B
+model, so the advice's quality and its latency are both unmeasured.
 
 ## 121. Thinking levels: how long a model may think before it answers (added 2026-10-09)
 

@@ -55,7 +55,10 @@ internal fun WatchSection(canAct: Boolean) {
     val scope = rememberCoroutineScope()
     val tick by JarvisRuntime.watchTick.collectAsState()
     var view by remember { mutableStateOf<Watch.View?>(null) }
-    var findings by remember { mutableStateOf<List<Watch.Finding>?>(null) }
+    // Its own state, not a list that a failure leaves untouched: a read that
+    // did not happen must never be drawn as a read that came back empty
+    // (N1, 2026-10-09 - docs/ANDROID-AUDIT-2-2026-10-09.md).
+    var report by remember { mutableStateOf<Watch.Report>(Watch.Report.Waiting) }
     var readError by remember { mutableStateOf<String?>(null) }
     var reads by remember { mutableIntStateOf(0) }
     var said by remember { mutableStateOf<String?>(null) }
@@ -74,10 +77,11 @@ internal fun WatchSection(canAct: Boolean) {
             is ApiResult.Failed ->
                 readError = Watch.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
         }
-        when (val r = JarvisRuntime.watchReport()) {
-            is ApiResult.Ok -> findings = Watch.findings(r.value)
-            is ApiResult.Failed -> Unit // the topics line above already says why
-        }
+        // A second read with its own state, so it draws its own line on
+        // failure: the topics line above says nothing about this one, and the
+        // old `is Failed -> Unit` here kept a list it could not refresh
+        // (N1, 2026-10-09 - docs/ANDROID-AUDIT-2-2026-10-09.md).
+        report = Watch.reportOf(JarvisRuntime.watchReport())
     }
 
     fun act(block: suspend () -> String) {
@@ -170,12 +174,15 @@ internal fun WatchSection(canAct: Boolean) {
             }
 
             Gap(12)
+            val rep = report
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("What is new", style = MaterialTheme.typography.titleSmall, color = chrome.textHi,
                     modifier = Modifier.weight(1f))
                 Quiet(
                     "Mark these read",
-                    enabled = !busy && !findings.isNullOrEmpty(),
+                    // Only over a list that was actually read: marking read
+                    // acts on the PC's list, not on this screen's (N1, 2026-10-09).
+                    enabled = !busy && (rep as? Watch.Report.Read)?.findings?.isNotEmpty() == true,
                     onClick = { act { JarvisRuntime.markWatchSeen() } },
                 )
             }
@@ -185,16 +192,16 @@ internal fun WatchSection(canAct: Boolean) {
                 color = chrome.textLo,
             )
             Gap(6)
-            val list = findings
-            when {
-                list == null -> Unit
-                list.isEmpty() -> Text(
-                    "Nothing new since you last marked the list read.",
+            val words = Watch.reportLine(rep)
+            if (words != null) {
+                Text(
+                    words,
                     style = MaterialTheme.typography.bodySmall,
-                    color = chrome.textLo,
+                    color = if (rep is Watch.Report.Failed) chrome.warnInk else chrome.textLo,
                 )
-                else -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    list.forEach { f -> FindingRow(f) }
+            } else if (rep is Watch.Report.Read) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    rep.findings.forEach { f -> FindingRow(f) }
                 }
             }
         }

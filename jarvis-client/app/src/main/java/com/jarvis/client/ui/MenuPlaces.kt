@@ -50,6 +50,12 @@ object MenuPlaces {
         // phone could not hide it and its row was an undecided item key -
         // MenuVisibilityTest caught both halves in CI.
         "handoff" to "settings.handoff",
+        // "When a captcha stops Jarvis" (2026-10-09): SettingsScreen.kt draws it
+        // behind `menus.shows("settings.handoff-front")` with a MenuFrame of its
+        // own, and without this line the new section would have no PLACE here -
+        // the phone could not hide it and its row would be an undecided item key
+        // (MenuVisibilityTest checks both halves).
+        "handoff-front" to "settings.handoff-front",
         "devices" to "settings.devices",
         "quick-tiles" to "settings.quick-tiles",
     )

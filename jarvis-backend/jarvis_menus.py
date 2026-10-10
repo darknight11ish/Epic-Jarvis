@@ -228,6 +228,20 @@ MENUS: tuple = (
        "How long the captcha hand-off stays on offer.",
        names=("when the phone does not answer", "the captcha hand-off",
               "how long the hand-off stays on offer", "solve it here settings")),
+    # "When a captcha stops Jarvis" (the owner's decision of 2026-10-09: "1 by
+    # default with the option for 2 in the settings of Jarvis"): what a captcha
+    # does about the browser window it is blocking - leave that one window
+    # exactly where it is (the default, touching nothing) or bring it to the
+    # front, which takes the owner's screen and keyboard and is therefore one
+    # approval card on the PC with Windows Hello. Its own section, not a row
+    # inside "When the phone does not answer": that one is about how long the
+    # phone may watch a window; this one is about whether the window moves at
+    # all. Same id in both apps, like every other settings row.
+    _m("settings.handoff-front", "When a captcha stops Jarvis",
+       "Whether the stuck browser window comes to the front.",
+       names=("when a captcha stops jarvis", "the captcha window",
+              "does the browser window come to the front",
+              "bring the window to the front", "leave it where it is")),
     _m("settings.backup", "Backups", "One locked backup file into a folder you pick.",
        names=("backups", "backup settings")),
     _m("settings.updates", "Updates", "New versions of this app.", (DESKTOP,),

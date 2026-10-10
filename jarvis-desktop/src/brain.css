@@ -4,7 +4,7 @@
    A rail and a stage. The rail never moves, the stage swaps.
 
    Not one literal colour in this file — every value comes from theme.css, and
-   `scripts/check-tokens.mjs` fails the build if one creeps back in. That is
+   `scripts/check-tokens.py` fails the build if one creeps back in. That is
    the whole reason a theme switch can reach this window at all.
 
    Density is deliberately tighter than the quickbar's. The quickbar is glanced
@@ -3064,3 +3064,109 @@ mark.find-current {
   display: none !important;
 }
 
+
+/* ── Tutorials and the FAQ (tutorials.js, JARVIS-API section 114) ──────────
+   The panel itself has always gone without styling here; the one rule that
+   matters is the last one. "Show me" marks the REAL control a step names
+   (tutorials.js's CONTROL_POINTS), so the owner is sent to the thing rather
+   than to a picture of it - and an unmarked highlight would be a button that
+   silently does nothing. */
+
+.tutorial-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  padding: 12px 14px;
+  margin: 10px 0;
+}
+
+.tutorial-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.tutorial-show-said {
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.tutorial-pointed {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 6px var(--accent-faint);
+  transition: outline-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+
+/* ==========================================================================
+   Windows high-contrast (forced-colors)
+   --------------------------------------------------------------------------
+   The system palette replaces ours, so box-shadows and tinted fills vanish.
+   Keep every control's edge and its focus outline visible, in the system's own
+   colours — the same four rules the quickbar (style.css), the widget
+   (widget.css) and Settings (settings.css) already carry. Brain was the one
+   window with none (finding D6, 2026-10-05; Phase H of the UI research).
+
+   `forced-color-adjust: none` is added only where colour IS the data, never to
+   ordinary text or controls. */
+@media (forced-colors: active) {
+  /* Controls whose edge is a tinted fill, a `border: none` or a transparent
+     border: forced colours repaints the fill to the page's own background, so
+     only an explicit border keeps the control readable *as* a control. Panels
+     need no rule here — `.card` and `.inspector` already carry a full 1px
+     border, which forced colours repaints to the system colour for them. */
+  .btn,
+  .icon-btn,
+  .rail-item,
+  .legend-item,
+  .inspector-links button,
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    border: 1px solid ButtonText;
+  }
+
+  /* One ring for everything focusable in this window, rather than a list of
+     selectors that goes stale as the Brain grows: `--focus-ring` is a token,
+     so forced colours would repaint it to a colour that can disappear into
+     the surface it is drawn on. */
+  :focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  /* The canvas takes focus so the graph is keyboard-reachable; its ring goes
+     inside, because an offset ring on a full-bleed element is clipped. */
+  #graph-canvas:focus-visible {
+    outline-offset: -3px;
+  }
+
+  /* The interruption budget is this window's bar-shaped data: how many pips
+     are still lit IS the number of interruptions left, and lit-vs-spent is a
+     fill colour with no second channel. So the lit ones take the system's own
+     highlight and every pip keeps an edge, rather than both becoming the same
+     blank rectangle. */
+  .pip {
+    border: 1px solid CanvasText;
+  }
+
+  .pip[data-spent="false"] {
+    background: Highlight;
+  }
+
+  /* Colour is the data here and nowhere else on this page:
+       - the Galaxy legend's swatch, which has to stay the colour the canvas
+         drew. A canvas bitmap is an image, so the system does not recolour the
+         nodes; a legend that no longer matched them would be worse than none;
+       - the link pill's state dot and the Now face, whose colour is which
+         state the PC is in — the same call settings.css makes for its own
+         `.dot`.
+     Everything else, `.row-tag`'s state included, keeps the system's colours. */
+  .legend-swatch,
+  .link-pill i,
+  .now-face {
+    forced-color-adjust: none;
+  }
+}

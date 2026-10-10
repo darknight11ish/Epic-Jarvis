@@ -145,6 +145,7 @@
             <a href="#screen-look">Look at this and Watch with me</a>
             <a href="#browser-engine">Browser without a window</a>
             <a href="#handoff">When the phone does not answer</a>
+            <a href="#handoff-front">When a captcha stops Jarvis</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Where things are kept</span>
@@ -436,6 +437,7 @@
           stays dark. Your phone picks its own theme.
         </p>
 
+        <!-- settings-toggles:begin (tools/gen_settings_cases.py writes these; do not edit) -->
         <label class="toggle">
           <input id="follow-system" type="checkbox" />
           <span>
@@ -931,10 +933,21 @@
            the one setting in this window that is not (see the module's own
            note, and prompt_coach.rs's). The label and the paragraph under the
            switch are the PC's own words, with a byte-identical copy in the
-           module (LABEL, DETAIL) if the read fails. -->
+           module (LABEL, DETAIL) if the read fails.
+
+           THE FOUR SETTINGS BESIDE THE SWITCH (the owner's answers,
+           2026-10-09): when it speaks up, how blunt it is, what it coaches on,
+           and per-platform behaviour. `#coach-groups` is where
+           prompt-coach-settings.js draws them - and it draws NOTHING BY HAND:
+           every row, every choice's name and every word of explanation comes
+           from the PC (`jarvis_prompt_coach.SETTINGS` through
+           `settings_rows()`), so a new choice appears in both apps by changing
+           that one Python tuple. An older backend that answers without them
+           leaves this box empty and hidden, and the switch alone is drawn,
+           exactly as before. -->
       <section class="card" id="prompt-coach">
         <h2>Prompt coach</h2>
-        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one.</p>
+        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one. It also coaches for the AI you are sending to, using what Jarvis knows about that one.</p>
 
         <p class="state" id="coach-state" role="status">Asking Jarvis…</p>
 
@@ -947,6 +960,7 @@
             </span>
           </label>
           <p class="sc-line" id="coach-enabled-status" role="status"></p>
+          <div id="coach-groups" hidden></div>
           <div class="row">
             <span class="status" id="coach-status" role="status"></span>
           </div>
@@ -1006,6 +1020,21 @@
         <p class="note">
           Choose what Jarvis notifies you about on this PC. Decisions waiting for your yes
           always notify you and cannot be turned off.
+        </p>
+        <!-- The owner's decision of 2026-10-08: these seven values now live in
+             the owner's own settings file ([notifications] in
+             jarvis-framework.toml, backend/jarvis_notify_prefs.py) and BOTH apps
+             change them through the one limits route - because a phone can never
+             read this window's localStorage, and the phone must be able to change
+             them. This card READS them from the PC when it opens and WRITES every
+             change through it (notifications-prefs.js readFromBackend /
+             writeToBackend); localStorage is only this page's cache of what it
+             last read. The line below says the same thing, plainly, and the
+             matching rows in Limits and frequency say "(on your PC)". -->
+        <p class="sub">
+          These are this PC's notifications. Your phone can change them too, in its own
+          Settings, and it is told there that they are the PC's. Decisions waiting for your
+          yes never go quiet.
         </p>
 
         <h3 class="subhead">What notifies you</h3>
@@ -2128,6 +2157,32 @@
         <p class="state" id="ho-state" role="status">Asking Jarvis…</p>
       </section>
 
+      <!-- ── What a captcha does about that window ──────────────────────────
+           The owner's own decision of 2026-10-09, in his words: "1 by default
+           with the option for 2 in the settings of Jarvis" (handoff-front.js;
+           handoff.rs handoff_front; backend jarvis_handoff_front.py). When a
+           captcha or a sign-in page blocks the browser window Jarvis is
+           driving: "Leave it where it is" is the DEFAULT - the window keeps its
+           size, its place and whatever is in front of it, and the PC says which
+           window Jarvis is stuck on. "Bring it to the front" raises and
+           activates that one window, taking the owner's screen and keyboard, so
+           choosing it is ONE approval card on this PC with Windows Hello;
+           choosing "Leave it where it is" again is instant. Every word comes
+           from the PC. -->
+      <section class="card" id="handoff-front">
+        <h2 id="hf-title">When a captcha stops Jarvis</h2>
+        <div id="hf-body" hidden>
+          <p class="note" id="hf-detail"></p>
+          <div id="hf-choices" role="radiogroup" aria-labelledby="hf-title"></div>
+          <p class="sc-line" id="hf-line" role="status"></p>
+          <p class="note" id="hf-hello"></p>
+          <p class="note" id="hf-waiting-link" hidden></p>
+          <p class="note" id="hf-why" hidden></p>
+          <span class="status" id="hf-status" role="status"></span>
+        </div>
+        <p class="state" id="hf-state" role="status">Asking Jarvis…</p>
+      </section>
+
       <!-- ── Backups ────────────────────────────────────────────────────────
            The owner's decision of 2026-09-27: "one locked backup file into
            a folder the owner picks ... locked with a recovery code only
@@ -2353,6 +2408,7 @@
             <input id="autostart" type="checkbox" />
             <span>Start Jarvis Desktop when Windows starts</span>
           </label>
+        <!-- settings-toggles:end -->
           <p class="note" id="autostart-note">
             This starts this app, not Jarvis itself. Jarvis starts with it only
             if "Let Jarvis Desktop start and stop Jarvis" (above) is on. It
@@ -2588,6 +2644,7 @@
     <script type="module" src="look-settings.js"></script>
     <script type="module" src="browser-engine.js"></script>
 <script type="module" src="handoff-mode.js"></script>
+    <script type="module" src="handoff-front.js"></script>
     <script type="module" src="backup-settings.js"></script>
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>

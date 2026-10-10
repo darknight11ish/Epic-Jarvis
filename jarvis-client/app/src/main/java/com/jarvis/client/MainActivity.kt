@@ -17,10 +17,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,6 +36,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -58,6 +61,7 @@ import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PromptCoach
 import com.jarvis.client.net.Provenance
@@ -125,6 +129,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The one activity.
@@ -139,6 +144,21 @@ import kotlinx.serialization.json.JsonObject
 class MainActivity : FragmentActivity() {
 
     private val permissionTick = mutableIntStateOf(0)
+
+    /**
+     * What the last "Set Jarvis as the assistant app" tap ended up doing, or
+     * null. Android offers no way to ask whether the role can actually be
+     * REQUESTED before asking for it: on the owner's handset
+     * `isRoleAvailable` answers yes while the permission controller refuses
+     * with "Role is not requestable: android.app.role.ASSISTANT" and closes
+     * its own screen without drawing anything (measured on the attached
+     * phone, 2026-10-09). The screen used to swallow that, so the button
+     * looked dead; the outcome is reported here instead.
+     */
+    private val assistantRoleNote = mutableStateOf<String?>(null)
+
+    /** The plain line the last "Start link" tap produced, or null. */
+    private val linkStartNote = mutableStateOf<String?>(null)
 
     /** The approval a notification asked us to open, or null. */
     private val focusApproval = mutableStateOf<String?>(null)
@@ -294,7 +314,16 @@ class MainActivity : FragmentActivity() {
      *  whatever this Activity assumes a dialog dismissal meant. */
     private val assistantRolePermission = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { permissionTick.intValue += 1 }
+    ) {
+        permissionTick.intValue += 1
+        // A role request that comes back without the role is not always the
+        // owner saying no: the phone may have refused to open a screen at all
+        // (see [assistantRoleNote]). Say so, and point at the route that does
+        // work, rather than leaving the tap silent.
+        if (!PlatformReadiness.assistantRoleHeld(this)) {
+            assistantRoleNote.value = ASSISTANT_ROLE_NOT_DONE
+        }
+    }
 
     /**
      * Android's own screen-sharing question for "Watch with me" on this phone
@@ -916,13 +945,28 @@ class MainActivity : FragmentActivity() {
         // rollback: the setting was never written and the card was gone until
         // tomorrow. The suppressing flag and the work it belongs to now share
         // a lifetime, so a rotation re-offers the card instead of eating it.
-        // `cachedSleepOffer` stays plain `remember`: a raw
-        // JsonObject isn't Bundle-saveable, and it doesn't need to be - the
-        // LaunchedEffect(brain.memory) block below re-populates it from the
-        // still-cached server data on the next recomposition, and the
-        // survived `dismissed` flag is what stops that from re-adopting the
-        // offer just turned down.
-        var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
+        // `cachedSleepOffer` used to be plain `remember`, on the grounds that a
+        // raw JsonObject isn't Bundle-saveable. That was the whole of finding 5
+        // in the first Android audit: the suppression flag is saveable and the
+        // payload was not, so after a process death the payload was gone, the
+        // restart's read returned no offer (the PC marks the day as made when it
+        // SERVES one), and the card could not appear again that day. A Saver
+        // carries the offer's own JSON text across that boundary and gives it
+        // back as the same object, so the payload now has the lifetime its
+        // suppression flag already had.
+        val sleepOfferSaver = remember {
+            Saver<JsonObject?, String>(
+                save = { it?.toString().orEmpty() },
+                restore = { text ->
+                    text.takeIf { it.isNotBlank() }?.let {
+                        runCatching { JarvisJson.parseToJsonElement(it).jsonObject }.getOrNull()
+                    }
+                },
+            )
+        }
+        var cachedSleepOffer by rememberSaveable(stateSaver = sleepOfferSaver) {
+            mutableStateOf<JsonObject?>(null)
+        }
         // A date string, not a bare Boolean - "not now" means not now, not
         // forever. See [todayLocal]'s own doc comment for the bug a plain
         // Boolean had: rememberSaveable outlives the exact process death
@@ -1796,7 +1840,44 @@ class MainActivity : FragmentActivity() {
                 // jumps there at once, so the page behind every screen would
                 // cut while everything drawn on it faded.
                 .background(LocalChrome.current.surface0)
-                .windowInsetsPadding(WindowInsets.systemBars)
+                // The system bars UNION the display cutout (2026-10-09,
+                // Android 15 / targetSdk 35+).
+                //
+                // `WindowInsets.systemBars` is statusBars + navigationBars +
+                // captionBar and has never included `displayCutout`. That was
+                // survivable while the cutout was on the top edge and the
+                // status bar (which IS in systemBars) happened to be at least
+                // as deep. Android 15 changed the default: for an app
+                // targeting 35+, `layoutInDisplayCutoutMode` is
+                // LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS for a non-floating
+                // window, so the platform lays this window under the cutout and
+                // leaves the inset to the app - the same hand-over
+                // `enableEdgeToEdge` already made for the bars and the keyboard.
+                //
+                // Checked on the real phone (f0a5b32b, Android 15, API 35):
+                // `dumpsys window` reports
+                // `layoutInDisplayCutoutMode=always` and
+                // `EDGE_TO_EDGE_ENFORCED` for
+                // com.jarvis.client/.MainActivity, and its frame is the whole
+                // display. That phone's notch is 107px / 35.7dp deep. In
+                // portrait the status bar is also 107px, so systemBars alone
+                // covered it and nothing looked wrong - which is exactly why
+                // this went unnoticed. Rotated to landscape the notch becomes a
+                // 35.7dp strip down one SIDE edge and the status bar is a strip
+                // along the top: nothing in systemBars covers it, so the first
+                // ~36dp of every full-width row (the Brain plates, Settings,
+                // History) sat under the camera.
+                //
+                // `union`, not two `windowInsetsPadding` calls in a row: each
+                // one consumes the insets it applies, and the cutout is a
+                // different type from the bars, so a second call would ADD the
+                // full cutout depth under a status bar that already covers it -
+                // 71dp of dead space at the top in portrait. `union` takes the
+                // larger of the two per side, so portrait is byte-for-byte
+                // unchanged and landscape gains the strip it was missing.
+                .windowInsetsPadding(
+                    WindowInsets.systemBars.union(WindowInsets.displayCutout),
+                )
                 // The keyboard inset, on the root so every screen gets it
                 // (UI audit 2026-10-05, finding A2). `enableEdgeToEdge` means
                 // this app owns the IME inset, and the root only asked for the
@@ -2050,20 +2131,37 @@ class MainActivity : FragmentActivity() {
                         ReadinessScreen(
                             items = items,
                             onRequestNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                                    if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
-                                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        runCatching { startActivity(intent) }.onFailure {
-                                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                    }
+                                // One helper, one screen: the same Android page the
+                                // Settings row ("Notifications from Jarvis") opens,
+                                // because Android owns the per-kind switches. The
+                                // permission prompt stays as the fallback, for a
+                                // phone where even that page cannot be opened.
+                                val explainFirst = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    shouldShowRequestPermissionRationale(
+                                        Manifest.permission.POST_NOTIFICATIONS,
+                                    )
+                                if (explainFirst) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else if (!openAppNotificationSettings()) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                             },
                             onRequestBatteryExemption = ::requestBatteryExemption,
-                            onStartService = { EventService.start(this@MainActivity) },
+                            // The card used to read exactly the same before and
+                            // after this tap, so an owner who tapped twice could
+                            // not tell the first tap worked (device tour,
+                            // 2026-10-09). The note below is the line that
+                            // changes, and it names where the real answer shows.
+                            onStartService = {
+                                EventService.start(this@MainActivity)
+                                linkStartNote.value = if (paired) {
+                                    "Asked Android to start the link. The Connection card " +
+                                        "above says whether your desktop has answered."
+                                } else {
+                                    "Asked Android to start the link. This phone is not paired " +
+                                        "yet, so there is nothing for it to reach."
+                                }
+                            },
                             onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
                             // remember(tick), like `items` above: both of these
                             // are RoleManager binder calls, and unkeyed they ran
@@ -2072,16 +2170,23 @@ class MainActivity : FragmentActivity() {
                             // `tick` is what already drives the permission
                             // re-read, so keying on it keeps the answer as fresh
                             // as every other check on this screen.
+                            //
+                            // Shown whenever the role is NOT held, not only when
+                            // the role also claims to be available: on the
+                            // owner's phone that claim is true while the request
+                            // itself is refused, and hiding the button there
+                            // would hide the only way to the explanation. The
+                            // card's own words still say which case it is.
                             onRequestAssistantRole = remember(tick) {
-                                if (
-                                    PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
-                                    !PlatformReadiness.assistantRoleHeld(this@MainActivity)
-                                ) {
+                                if (!PlatformReadiness.assistantRoleHeld(this@MainActivity)) {
                                     { requestAssistantRole() }
                                 } else {
                                     null
                                 }
                             },
+                            onOpenAssistantSettings = ::openAssistantSettings,
+                            assistantRoleNote = assistantRoleNote.value,
+                            linkStartNote = linkStartNote.value,
                             wakeWord = wakeWord,
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
@@ -2350,6 +2455,10 @@ class MainActivity : FragmentActivity() {
                             brain = brain,
                             onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
                             onBack = { nav.back() },
+                            // The Attention card's own re-read, after a mute or
+                            // a change to "Speak up" / "Brief at": one route,
+                            // not the dozen refreshBrain probes.
+                            onRefreshAttention = { scope.launch { JarvisRuntime.refreshAttention() } },
                             memoryDecideBusyId = memoryDecideBusyId,
                             onDecideMemory = { id, accept ->
                                 if (memoryDecideBusyId == null) {
@@ -2752,6 +2861,11 @@ class MainActivity : FragmentActivity() {
                                 .contains(packageName)
                         },
                         onOpenNotificationAccess = ::openNotificationAccessSettings,
+                        // "Notifications from Jarvis" (the owner's decision of
+                        // 2026-10-09; SettingsScreen.kt's "jarvis-notify" row):
+                        // Android's own per-app notification screen, where this
+                        // phone's per-kind switches really are.
+                        onOpenNotificationSettings = { openAppNotificationSettings() },
                         quickTiles = quickTiles,
                         onQuickTileChange = { slot, action ->
                             JarvisRuntime.settings.setQuickTile(slot, action)
@@ -3802,6 +3916,31 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Android's own per-app notification screen, under Jarvis's own entry -
+     * where this phone's per-kind switches really are, because the app's
+     * channels (alarm, schedule, approval, handoff) are Android's own
+     * ([com.jarvis.client.service.ScheduleNotifier], `ApprovalNotifier`,
+     * `HandoffNotifier`).
+     *
+     * The owner's decision of 2026-10-09 was to point at this screen from
+     * Settings ("Notifications from Jarvis") rather than build a second copy
+     * of the PC's Notifications card, which would then have to agree with
+     * Android's own settings and could drift. This phone's own screen for it
+     * was seen working in the device tour of the same day ("Allow
+     * notifications" opened Jarvis's page in Android's Settings).
+     *
+     * @return whether a screen actually opened, so the caller on Platform
+     *   checks can fall back to the permission prompt when this phone has
+     *   neither screen.
+     */
+    private fun openAppNotificationSettings(): Boolean {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (runCatching { startActivity(intent) }.isSuccess) return true
+        return runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }.isSuccess
+    }
+
+    /**
      * Opens the platform's own exemption dialog. Never granted silently, and the
      * readiness screen keeps reporting the real state either way.
      */
@@ -3816,18 +3955,51 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Opens the system's own "make Jarvis the assistant app" dialog.
+     * Opens the system's own "make Jarvis the assistant app" dialog, and says
+     * what happened when it will not.
      *
      * `RoleManager.createRequestRoleIntent` is the only way onto this dialog -
      * there is no direct grant, and there should not be one: choosing the
      * assistant app is the owner's decision, made in the system's own UI,
      * the same as every other role request on the platform.
+     *
+     * It used to return silently on both failure paths, so the button looked
+     * dead while the card said the owner needed the role (device tour,
+     * 2026-10-09). Both paths report now, and
+     * [openAssistantSettings] is the second route the card offers beside it,
+     * because that is the one that works on a phone which refuses the request.
      */
     private fun requestAssistantRole() {
-        val rm = getSystemService(RoleManager::class.java) ?: return
-        if (!runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)) return
-        val intent = rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
-        runCatching { assistantRolePermission.launch(intent) }
+        val rm = getSystemService(RoleManager::class.java)
+        val available = rm != null &&
+            runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+        if (!available) {
+            assistantRoleNote.value = "This phone's Android does not offer Jarvis the " +
+                "assistant role, so there is nothing to ask it for. Tap Open Android's " +
+                "assistant settings to see whether it can be picked there."
+            return
+        }
+        val intent = rm!!.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
+        if (!runCatching { assistantRolePermission.launch(intent) }.isSuccess) {
+            assistantRoleNote.value = ASSISTANT_ROLE_NOT_DONE
+        }
+    }
+
+    /**
+     * Android's own screen for choosing the assistant app - the route that
+     * worked on the owner's phone when the role request did not (measured
+     * 2026-10-09: `ACTION_VOICE_INPUT_SETTINGS` resolves to ColorOS's
+     * `Settings$ManageAssistActivity` there, which is where the assistant app
+     * is picked). Falls back to the default-apps list and then to Settings
+     * itself, so the button always opens something rather than nothing - the
+     * same runCatching ladder [requestBatteryExemption] uses.
+     */
+    private fun openAssistantSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+            .onFailure {
+                runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+                    .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+            }
     }
 
     companion object {
@@ -3894,6 +4066,17 @@ class MainActivity : FragmentActivity() {
  * the work is gone and the flag starts `false` again.
  */
 private val pairingBusy = mutableStateOf(false)
+
+/**
+ * What the Digital assistant card says when Android did not hand the role
+ * over. Deliberately true of both shapes of "no": the owner declining the
+ * system's own dialog, and a phone that refuses to show one at all. It names
+ * the second button in the same card, which is the route that works on the
+ * owner's handset.
+ */
+private const val ASSISTANT_ROLE_NOT_DONE =
+    "Android has not made Jarvis your assistant. Use Open Android's assistant " +
+        "settings and pick Jarvis there."
 
 /**
  * The app lock's clock ([LockSession]): whether Jarvis is unlocked and

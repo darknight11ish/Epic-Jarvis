@@ -550,6 +550,15 @@
        "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -1718,6 +1727,15 @@
        "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -2882,6 +2900,15 @@
        "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -4040,6 +4067,15 @@
        "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -5196,6 +5232,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
       },
       {
        "fixed": true,
@@ -6369,6 +6414,15 @@
        "title": "Keep the phone's live view on offer for 15 minutes"
       },
       {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -7531,6 +7585,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Keep the phone's live view on offer for 15 minutes"
+      },
+      {
+       "action": "handoff_bring_to_front",
+       "fixed": false,
+       "id": "handoff_bring_to_front",
+       "note": "There is no switch for this one: going looser is only possible by hand in your PC's settings file (jarvis-framework.toml).",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Bring the stuck browser window to the front"
       },
       {
        "fixed": true,

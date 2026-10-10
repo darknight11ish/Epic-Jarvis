@@ -866,6 +866,10 @@ select:focus-visible {
 
 .sc-gpu-name { font-size: var(--text-sm); color: var(--text); }
 .sc-gpu-role { font-size: var(--text-xs); color: var(--text-muted); }
+/* "Limits and frequency": a clock-time row (the quiet hours' two ends,
+   2026-10-08) draws the browser's own time input - the same control the
+   Notifications card has always used - never "−/+" over a clock string. */
+.sc-gpu-time { font: inherit; margin-left: 8px; }
 /* Lockdown: the state line, each note and the button sit on their own lines. */
 .af-lockdown > strong, .af-lockdown > .sc-gpu-role { display: block; margin-top: 4px; }
 .af-lockdown > .btn { margin-top: 8px; }

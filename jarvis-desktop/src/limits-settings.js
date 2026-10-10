@@ -22,7 +22,7 @@
  */
 
 import { onQueue } from "./jarvis-link.js";
-import { normaliseLimits, stepped, valueFor, rowWords, problemWords } from "./limits.js";
+import { normaliseLimits, stepped, validTime, valueFor, rowWords, problemWords } from "./limits.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -103,6 +103,28 @@ function paint(reading, keep) {
       controls.append(button(limit.value ? "Turn off" : "Turn on",
                              `${limit.title}: turn it ${limit.value ? "off" : "on"}`,
                              true, () => send(limit, !limit.value)));
+    } else if (limit.kind === "time") {
+      // A clock time is drawn as a clock - the same `<input type="time">` the
+      // Notifications card has always used - not as "−/+" over a string that is
+      // not a number. While the PC says quiet hours are off (`quiet_on`) the
+      // hour decides nothing, so the control is disabled and says so rather
+      // than being a clock that changes nothing.
+      if (limit.quietOn) {
+        const input = node("input", "sc-gpu-time");
+        input.type = "time";
+        input.value = validTime(limit.value) || "";
+        input.setAttribute("aria-label", `${limit.title}: ${rowWords(limit)}`);
+        input.addEventListener("change", () => {
+          const t = validTime(input.value);
+          // Only a real "HH:MM" is sent. An empty or half-typed box sends
+          // nothing at all - it is never turned into a number of minutes.
+          if (t) send(limit, t);
+        });
+        controls.append(input);
+      } else {
+        controls.append(node("span", "sc-gpu-role",
+                             "Quiet hours are off, so this hour decides nothing."));
+      }
     } else if (limit.choices.length) {
       for (const choice of [...limit.choices].sort((a, b) => a - b)) {
         const chosen = choice === limit.value;

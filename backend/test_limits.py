@@ -38,6 +38,16 @@ table (`jarvis_limits.LIMITS`) and ONE route. What this file proves:
    flag; a number the voice module itself would refuse never reaches a card;
    and the print stays the only home of the number, with nothing about it
    logged.
+8. **This PC's own notifications** (the owner's decision of 2026-10-08: they
+   must be changeable from the phone too). Seven more rows - four toggles, the
+   quiet-hours switch and the window's two times - owned by
+   `jarvis_notify_prefs.py` in the owner's `[notifications]` table. They are
+   offered to BOTH apps on the wire, every title says plainly that the setting
+   is the PC's own, a change from a phone really lands in
+   `jarvis-framework.toml`, a time of day is carried and stored as a clock time
+   and never as a number of minutes, no direction of any of the seven raises a
+   card (so an alarm is never left waiting on one), and `quiet_on` - the one
+   additive field this view ever gained - follows the quiet-hours switch.
 """
 from __future__ import annotations
 
@@ -766,6 +776,163 @@ def t_the_voice_bar_is_the_number_the_check_actually_uses():
               code == 400 and len(cards) == 1
               and f"{floor_pct}%" in str(out.get("error")), (code, cards, out))
     _no_print()
+
+
+# --------------------------------------------------------------------------
+#   This PC's own notifications - the seven the phone may change too
+#   (the owner's decision of 2026-10-08)
+# --------------------------------------------------------------------------
+#: The seven values `jarvis_notify_prefs.py` owns, in the order the table
+#: carries them, and the kind each row must have.
+NOTIFY_ROWS = (
+    ("notif_alarms", "bool"),
+    ("notif_reminders", "bool"),
+    ("notif_briefing", "bool"),
+    ("notif_handoff", "bool"),
+    ("notif_quiet_enabled", "bool"),
+    ("notif_quiet_start", "time"),
+    ("notif_quiet_end", "time"),
+)
+
+
+def t_the_notification_rows_are_on_the_table_and_say_whose_they_are():
+    """Seven rows, one per value in the owner's `[notifications]` table, and the
+    TWO things the owner's decision of 2026-10-08 demands of their words: every
+    title says the setting is the PC's own ("on your PC"), and the quiet-hours
+    switch keeps its own words for the state so a switch turned off is not a
+    sentence pretending it is on."""
+    check("all seven rows are on the table",
+          [k for k, _ in NOTIFY_ROWS if L.find(k) is None] == [],
+          [k for k, _ in NOTIFY_ROWS if L.find(k) is None])
+    for key, kind in NOTIFY_ROWS:
+        limit = L.find(key)
+        if limit is None:
+            continue
+        check(f"{key}: carries the kind both screens draw for it",
+              limit.kind == kind, (limit.kind, kind))
+        check(f"{key}: says the setting is the PC's own",
+              "(on your PC)" in limit.title, limit.title)
+        check(f"{key}: names the value it owns in [notifications]",
+              limit.section == "notifications"
+              and limit.name == key[len("notif_"):], (limit.section, limit.name))
+        check(f"{key}: carries no `[table].key` beyond its own",
+              limit.source == "", limit.source)
+        check(f"{key}: has the owner's own note", bool(limit.note), limit.note)
+        check(f"{key}: is offered to BOTH apps", limit.app == "both", limit.app)
+        check(f"{key}: and is not PC-only, so a phone may change it",
+              limit.pc_only is False, limit.pc_only)
+    # The defaults are `jarvis_notify_prefs.py`'s own, not typed twice.
+    import jarvis_notify_prefs as NP
+    for key, _kind in NOTIFY_ROWS:
+        pref = key[len("notif_"):]
+        check(f"{key}: defaults to the value the owning module uses",
+              L.find(key).default == NP.DEFAULTS[pref],
+              (L.find(key).default, NP.DEFAULTS[pref]))
+    check("the quiet-hours switch is the row that decides whether the two "
+          "times matter, and the table names it once",
+          L.NOTIFY_QUIET_ON == "notif_quiet_enabled"
+          and L.find(L.NOTIFY_QUIET_ON) is not None, L.NOTIFY_QUIET_ON)
+
+
+def t_the_notification_rows_reach_both_apps_and_the_pc_keeps_them():
+    """What the ROUTE answers, not what the table says. Each screen filters the
+    one answer on each row's own `app`, so "offered to both apps" has to be
+    proved on the wire - and it has to be proved that NOTHING turns a change
+    into an approval card, because the one thing these rows must never do is
+    leave an alarm unanswered while a card about it waits."""
+    fresh()
+    every = {r["key"]: r for r in L.view()["limits"]}
+    desk = {r["key"]: r for r in L.view(app="desktop")["limits"]}
+    phone = {r["key"]: r for r in L.view(app="phone")["limits"]}
+    for key, kind in NOTIFY_ROWS:
+        check(f"{key}: the unfiltered view the route serves has it",
+              key in every, sorted(every))
+        check(f"{key}: the desktop's own view has it", key in desk, sorted(desk))
+        check(f"{key}: the phone's own view has it", key in phone, sorted(phone))
+        row = phone.get(key) or {}
+        check(f"{key}: the wire carries the kind the phone's plate draws",
+              row.get("kind") == kind, row.get("kind"))
+        check(f"{key}: the wire carries the owner's words",
+              bool(row.get("words")) and bool(row.get("note")), row)
+        if kind == "bool":
+            check(f"{key}: a switch row sends true/false, never a number",
+                  isinstance(row.get("value"), bool), row.get("value"))
+        else:
+            check(f"{key}: a time row sends the clock time itself, never a "
+                  f"number of minutes",
+                  isinstance(row.get("value"), str) and ":" in str(row.get("value")),
+                  row.get("value"))
+    # `quiet_on` is the one additive field this view ever gained: the two time
+    # rows are worth drawing only while quiet hours are on, and each screen asks
+    # the answer rather than guessing.
+    check("the view says whether quiet hours are on, for every row",
+          all("quiet_on" in r for r in L.view()["limits"]),
+          [r["key"] for r in L.view()["limits"] if "quiet_on" not in r])
+    check("... and it is the quiet-hours switch's own value",
+          all(r["quiet_on"] is False for r in L.view()["limits"]))
+    L.handle_post(L.ROUTE, {"key": L.NOTIFY_QUIET_ON, "value": True})
+    check("... and it follows that switch",
+          all(r["quiet_on"] is True for r in L.view()["limits"]))
+    # The direction rule: "none" on all seven, so neither direction asks.
+    for key, _kind in NOTIFY_ROWS:
+        check(f"{key}: no direction of this row is a loosening",
+              L.find(key).loosening == "none", L.find(key).loosening)
+        check(f"{key}: ... and the legacy wire flag says so too",
+              L.find(key).loosen_up is False, L.find(key).loosen_up)
+
+
+def t_a_notification_write_lands_in_the_owners_toml():
+    """A change from EITHER app goes through the one route and ends up in the
+    owner's own `jarvis-framework.toml`, which is the whole point: the phone
+    cannot reach the desktop's localStorage, and this is what the phone can
+    reach. Proved by reading the FILE, not by reading the module's answer."""
+    import jarvis_notify_prefs as NP
+    cards = []
+    reset(lambda action, detail, prompt: (cards.append((action, prompt)),
+                                         Verdict(True, "approved"))[1])
+    p = fresh()
+    before = p.read_text(encoding="utf-8")
+    code, out = L.handle_post(L.ROUTE, {"key": "notif_alarms", "value": False})
+    check("a phone-sized change is accepted", code == 200 and out["ok"], (code, out))
+    check("... with NO approval card, so an alarm is never left waiting on one",
+          cards == [], cards)
+    check("... and the file really says so",
+          "alarms = false" in p.read_text(encoding="utf-8")
+          and NP.read()["alarms"] is False, p.read_text(encoding="utf-8")[-320:])
+    check("... and the answer is a sentence the owner can read",
+          out["said"] == "Speak up when an alarm rings (on your PC): off.",
+          out["said"])
+    changed = [i for i, (a, b) in enumerate(
+        zip(before.splitlines(), p.read_text(encoding="utf-8").splitlines()), 1)
+        if a != b]
+    check("exactly one line moved", len(changed) == 1, changed)
+    check("every comment in the owner's file survives",
+          before.count("#") == p.read_text(encoding="utf-8").count("#"))
+
+    code, out = L.handle_post(L.ROUTE, {"key": "notif_quiet_start",
+                                        "value": "23:30"})
+    check("a quiet-hours time is accepted and written as a QUOTED clock time",
+          code == 200 and 'quiet_start = "23:30"' in p.read_text(encoding="utf-8"),
+          p.read_text(encoding="utf-8")[-320:])
+    check("... and it reads back exactly", NP.read()["quiet_start"] == "23:30",
+          NP.read()["quiet_start"])
+    check("... and it never asked either", cards == [], cards)
+
+    before_bad = p.read_bytes()
+    for bad in (1320, "1320", "25:00", "nonsense"):
+        code, out = L.handle_post(L.ROUTE, {"key": "notif_quiet_start",
+                                            "value": bad})
+        check(f"a time of day given as {bad!r} is refused, not stored as a "
+              f"bare number", code == 400 and out.get("error"), (code, out))
+        check(f"... in plain words that name the shape wanted ({bad!r})",
+              "22:00" in str(out.get("error")), out.get("error"))
+    check("... and not one byte was written by any of them",
+          p.read_bytes() == before_bad)
+    code, out = L.handle_post(L.ROUTE, {"key": "notif_alarms", "value": "perhaps"})
+    check("a switch given a word that is neither on nor off is refused",
+          code == 400 and "on or off" in str(out.get("error")), (code, out))
+    code, out = L.handle_post(L.ROUTE, {"key": "notif_nonsense", "value": True})
+    check("a row that does not exist is refused", code == 400, (code, out))
 
 
 def main():

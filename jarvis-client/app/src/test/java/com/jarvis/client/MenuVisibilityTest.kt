@@ -337,9 +337,14 @@ class MenuVisibilityTest {
         // (LimitsPlate.kt): a menu id is generated into the desktop's own
         // catalogue by tools/gen_menu_cases.py, and that row is visible always -
         // like Security and What asks first, which are never hideable either.
+        // "jarvis-notify" joined on 2026-10-09 (JarvisNotifyPlate.kt): it only
+        // opens Android's own per-app notification screen, so there is no menu
+        // id for it on the phone - the registry's "notifications" Section is
+        // desktop-only because the PC's four switches and quiet hours are the
+        // PC's (docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md).
         // The assertion is unchanged: any OTHER undecided key still fails it.
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
-            setOf("menus-hidden", "tail", "jump-list", "limits")
+            setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
     }
 

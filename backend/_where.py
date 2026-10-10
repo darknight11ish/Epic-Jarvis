@@ -418,6 +418,12 @@ SHIPPED = (
     # 15 minutes). No patch: jarvis_chatbot_routes.py answers its one route,
     # and jarvis_handoff.py reads it.
     "jarvis_handoff_mode.py",
+    # what a captcha does about its browser window (the owner's setting of
+    # 2026-10-09: "1 by default with the option for 2 in the settings of
+    # Jarvis": leave it exactly where it is, or bring it to the front). No
+    # patch: jarvis_chatbot_routes.py answers its one route, and
+    # jarvis_handoff.py reads it.
+    "jarvis_handoff_front.py",
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
@@ -551,6 +557,13 @@ SHIPPED = (
     # address it sends to is checked with jarvis_auto_learn.check_local_model
     # before the request is built. Off until the owner turns it on.
     "jarvis_prompt_coach.py",
+    # This PC's own notification choices - which of its toasts fire and the
+    # quiet hours around them - in the OWNER'S SETTINGS FILE instead of one
+    # webview's localStorage, so the phone can change them too (the owner's
+    # decision of 2026-10-08). jarvis_limits.py rides the same seven values as
+    # rows and calls this module's check_time for the two clock times, which is
+    # why it is shipped whole. No patch, no route of its own.
+    "jarvis_notify_prefs.py",
 )
 
 

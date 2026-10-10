@@ -40,6 +40,7 @@ sys.modules["jarvis_framework"] = _fw
 import jarvis_chatbot as CB  # noqa: E402
 import jarvis_chatbot_routes as R  # noqa: E402
 import jarvis_handoff as HO  # noqa: E402
+import jarvis_handoff_front as HF  # noqa: E402
 import jarvis_handoff_mode as HM  # noqa: E402
 import jarvis_support as SUP  # noqa: E402
 
@@ -102,6 +103,7 @@ def fresh():
     with CB._LOCK:
         CB._SESSIONS.clear()
     SUP._reset_for_tests()
+    HF._reset_for_tests()
     CLOCK.t = 1000.0
     HO._reset_for_tests(clock=CLOCK)
 
@@ -147,12 +149,18 @@ def cases() -> dict:
            # default.
            "mode_words": dict(HM.WORDS), "modes": list(HM.MODES),
            "mode_default": HM.DEFAULT, "mode_patient": HM.KEEP_OFFERING,
+           # The owner's setting of 2026-10-09 ("1 by default with the option
+           # for 2 in the settings of Jarvis"): what a captcha does about the
+           # window it is blocking. Read from the real module too, so neither
+           # app can carry a different pair of names or a different default.
+           "front_words": dict(HF.WORDS), "front_modes": list(HF.MODES),
+           "front_default": HF.DEFAULT, "front_looser": HF.BRING_TO_FRONT,
            "limits": {"frames_per_s": HO.FRAMES_PER_S,
                       "idle_s": HO.idle_seconds(), "ceiling_s": HO.ceiling_seconds(),
                       "text_most": HO.TEXT_MOST, "scroll_most": HO.SCROLL_MOST},
            "routes": {"start": R.HANDOFF_START_ROUTE, "frame": R.HANDOFF_FRAME_ROUTE,
                       "input": R.HANDOFF_INPUT_ROUTE, "end": R.HANDOFF_END_ROUTE,
-                      "mode": R.HANDOFF_MODE_ROUTE}}
+                      "mode": R.HANDOFF_MODE_ROUTE, "front": R.HANDOFF_FRONT_ROUTE}}
     fresh()
     out["offer_none"] = offer()
     out["start_nothing"] = answer(R.handle_post(R.HANDOFF_START_ROUTE,
@@ -207,6 +215,19 @@ def cases() -> dict:
     out["mode_idle_offer"] = offer()
     # The setting's own route, as both apps read it (GET /api/chatbot/handoff_mode).
     out["mode_route_get"] = {"route": R.HANDOFF_MODE_ROUTE, "body": HM.view()}
+    # ---- the owner's captcha-window setting (2026-10-09) ------------------
+    # "Leave it where it is" is the default and touches nothing: a stopped
+    # hand-off still carries the PC's own line naming the window, and the
+    # front setting never raises anything by itself.
+    out["front_default_view"] = HF.view()
+    out["front_stuck_default"] = HF.should_raise_now(stuck=True, handoff_active=False)
+    out["front_stuck_chosen"] = (
+        HF.set_mode(HF.BRING_TO_FRONT)["mode"] == HF.BRING_TO_FRONT
+        and HF.should_raise_now(stuck=True, handoff_active=False))
+    out["front_active_chosen"] = HF.should_raise_now(stuck=True, handoff_active=True)
+    out["front_nothing_waiting_chosen"] = HF.should_raise_now(stuck=False, handoff_active=False)
+    HF.set_mode(HF.LEAVE_IN_PLACE)
+    out["front_route_get"] = {"route": R.HANDOFF_FRONT_ROUTE, "body": HF.view()}
     fresh()
     return out
 
