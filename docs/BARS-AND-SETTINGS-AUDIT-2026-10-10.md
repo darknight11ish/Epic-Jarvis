@@ -469,3 +469,82 @@ Adding to §9: that the gear is **findable at a glance** on the HUD's stage bar
 at the window's real size, and that tapping it opens Settings at the top. No
 build, no restart and no window was opened by this work.
 
+---
+
+## 11. The rebase onto `main` (348ffbb2, 2026-10-10), and what CI found
+
+`main` had moved 29 commits and `gh pr update-branch` refused the PR
+("Cannot update PR branch due to conflicts"), so this was a real hand rebase in
+`.dsh-scratch/bars-ux` (detached at the old tip, `8918fc97`, because the local
+branch ref was stale at `02de7ac2`).
+
+**Two conflicts, both resolved as a union — nothing dropped from either side:**
+
+* **`jarvis-desktop/package.json`** — `test:ui`. `main` had added
+  `galaxy-constellation`/`galaxy-button-engine`; this branch puts
+  `bar-chrome.mjs` first. Kept both.
+* **`jarvis-desktop/src-tauri/capabilities/hud.json`** — the window's
+  `description`. `main`'s copy of that sentence is **truncated**: it reads
+  "...mark on one answer, and hide it again.\" (two yes/no answers,
+  `get_lock_flags`, ...)", with the clause that parenthetical explains missing
+  and a stray `\"` left behind. The union restores the missing clause
+  (`whether App lock and "Hide memory lists" are on`) and keeps this branch's
+  `open-fix-place` paragraph and grant. The `hide_quickbar` wording from
+  `main`'s 2026-10-09 HUD toggle is kept too — it is the same sentence both
+  sides had rewritten.
+
+**Two defects CI found after the push — both real, both fixed here:**
+
+1. **`origin/main` does not compile with `--all-targets`.** `windows.rs`
+   carried TWO `#[cfg(test)] mod tests` blocks — one from the floating
+   click-through work (`parse_hit_mask`, `FloatingState`), one from the
+   widget-clamp work (`clamp_into`) — so `cargo clippy --all-targets -- -D
+   warnings` and `cargo check --offline --all-targets` both died with
+   `error[E0428]: the name tests is defined multiple times`. It is `main`'s,
+   not this branch's (this branch never touched a test module): main's own CI
+   run for `348ffbb2` fails its `rust` job on exactly this. The two are merged
+   into ONE module, every test from both sides kept verbatim. **Any other
+   branch rebased onto this `main` inherits the same red gate.**
+2. **`backend/test_screen_turn.py` failed — a regression this branch caused.**
+   "start watching my screen" was being claimed by the new `open_app` matcher
+   (it resolved to a program called "watching my"), because `jarvis_quick.py`
+   tried `_open(s)` *before* `_watch(s)`. The watch session never started and
+   no screen was ever read. `_open(s)` now runs **last** among the real
+   matchers, so it can only claim a phrase no other feature already owns;
+   `test_screen_turn.py` is back to **99 passed, 0 failed** and
+   `test_jarvis_open.py` stays at **88 passed**.
+
+`tools/check_literal_keys.py` also failed on this branch's new module: a
+duplicate `"ms-settings:bluetooth"` key in `_PANEL_NAMES` (lines 570 and 589,
+identical values — CPython kept the last and said nothing). The duplicate is
+removed, in `backend/jarvis_open.py` and its byte-identical twin.
+
+**Fresh evidence after the rebase and the fixes above** (§4's numbers are from
+before the rebase):
+
+| Gate | Result |
+|---|---|
+| `cargo fmt --check` | **clean** (0) |
+| `cargo clippy --all-targets -- -D warnings` | **clean** (0) |
+| `cargo check --offline --all-targets` | **clean** (0) |
+| `cargo test` | **not run** — it OOMs this machine, as briefed; `check --all-targets` type-checks the merged test module |
+| `tools/check_stale_twins.py` (now on `main`) | **all 183 modules match**, line endings ignored (0) |
+| `tools/check_command_acl.py` | **360 commands agree** (0) |
+| `tools/check_invoke_grants.py` | **321 calls from 11 pages, every one granted** (0) |
+| `tools/check_parity.py` | **No undecided drift** (0) |
+| `tools/gen_menu_cases.py --check`, `gen_settings_cases.py --check` | **both match** (0) |
+| `tools/check_claims.py` | **125 claims; every `built` holds, every `open` is open** (0) |
+| `tools/check_literal_keys.py`, `check_event_names.py`, `check_media_csp.py`, `check_same_tick_paths.py`, `check_tutorial_places.py`, `check_vacuous_checks.py`, `gen_notices.py --check` | **all 0** |
+| Backend: `test_jarvis_open` 88, `test_settings_registry` 125, `test_settings_rows` 21, `test_shipped_modules` 604, `test_base_matches_repo` 20, `test_claims` 45, `test_menu_visibility` 393, `test_screen_turn` 99, `test_patch_history` 24 | **0 failed in every one** |
+| Desktop: `bar-chrome` **18 checks**, `hud-window`, `hud`, `security`, `csp`, `csp-inline`, `settings-catalogue` (**27 toggle rows**), `settings-search`, `settings-failures`, `a11y`, `ia`, `palette`, `widget-board`, `menu-visibility` | **all exit 0** |
+| `faces.mjs` | **39 passed, 1 skipped** — no `glslangValidator` on this PC; the `backend` job runs that check |
+| `scripts/apply-patches.ps1` pure ASCII | **0 non-ASCII bytes** of 280,351 |
+
+No settings row was added or moved by this branch, so no `SETTINGS_ITEM_INDEX`
+position and no `LimitsTest` pin moved: `test_settings_registry.py` still
+recomputes the index from `SettingsScreen.kt`'s real `item(key = ...)` order and
+matches it, and all four generated settings copies agree (27 toggle rows). The
+one test pin this rebase did move is `tests/hud.mjs`'s exact permission list for
+the HUD window, which now names `open-fix-place` — the gear the owner asked for.
+
+

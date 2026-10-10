@@ -1070,22 +1070,6 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
-    # --- "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
-    # the owner's request of 2026-10-10) --------------------------------------
-    # AFTER "open a chat" above (that one is about this conversation, not a
-    # program) and AFTER the settings block, which must keep the first turn at
-    # "open web search" - that answer has always been `settings_open`, with the
-    # `open_settings` field both apps already know, and jarvis_open.py agrees
-    # with it rather than competing for the phrase.
-    #
-    # Before the model: like music and video control (the owner, 2026-09-27,
-    # "no card, only from the owner's own words"), opening a program the owner
-    # already has changes nothing Jarvis holds, and the model gets no tool for
-    # it, so outside text cannot reach it either.
-    got = _open(s)
-    if got is not None:
-        return got
-
     # --- music and video control on this PC (jarvis_media.py, I91) -------------------
     got = _media(s)
     if got is not None:
@@ -1162,6 +1146,29 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    # --- "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    # the owner's request of 2026-10-10) --------------------------------------
+    # LAST among the real matchers, and the placement is the fix, not a
+    # preference. `jarvis_open.parse` reads any sentence beginning with
+    # "open"/"launch"/"start" as naming a program, and `_watch` above owns
+    # "start watching my screen" (jarvis_screen.py, 2026-09-29). Tried before
+    # `_watch`, this claimed that phrase: "start watching my screen" resolved to
+    # a program called "watching my", so the watch session never started and no
+    # screen was ever read. backend/test_screen_turn.py caught it on CI. Last,
+    # it can only claim a phrase no other feature already owns - exactly what
+    # the owner's request adds, and nothing already answered changes hands.
+    #
+    # It still runs before the model: like music and video control (the owner,
+    # 2026-09-27, "no card, only from the owner's own words"), opening a program
+    # the owner already has changes nothing Jarvis holds, and the model gets no
+    # tool for it, so outside text cannot reach it either. "open a chat" (about
+    # this conversation, not a program) and "open web search" (the settings
+    # block's own phrase, always answered `settings_open`) are matched above and
+    # keep their own answers.
+    got = _open(s)
+    if got is not None:
+        return got
+
     # --- an animal request nothing above understood (2026-09-28) ------------------
     # Last, so a reminder or a list that happens to mention "the animal" is
     # never taken for one: a plain question back, never a guess.

@@ -586,7 +586,6 @@ _PANEL_NAMES = {
     "ms-settings:storagesense": "Storage settings",
     "ms-settings:backup": "Windows Backup",
     "ms-settings:recovery": "Recovery",
-    "ms-settings:bluetooth": "Bluetooth and devices",
     "ms-settings:printers": "Printers and scanners",
     "ms-settings:network-ethernet": "Ethernet settings",
     "ms-settings:network-vpn": "VPN settings",
