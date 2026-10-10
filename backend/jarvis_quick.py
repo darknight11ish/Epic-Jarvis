@@ -1066,6 +1066,9 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _settings_open(s)
     if got is not None:
         return got
+    got = _settings_help(s)
+    if got is not None:
+        return got
     got = _settings_adjust(s)
     if got is not None:
         return got
@@ -2676,6 +2679,27 @@ def _settings_open(s: str) -> Optional[Intent]:
     return Intent("settings_open", {"id": section.id})
 
 
+#: "What can I change?" (the owner's decision, 2026-10-10). Without this the
+#: question reached the AI model, which invented an answer: some switches it
+#: named did not exist, and it never said that a change which loosens a rule
+#: still raises a card. The answer is built by
+#: jarvis_settings_registry.changeable_words, straight off the real switches.
+_SETTINGS_HELP = re.compile(
+    r"what\s+can\s+i\s+change"
+    r"|what\s+settings\s+can\s+i\s+change"
+    r"|what\s+can\s+(?:you|i)\s+change\s+by\s+(?:talking|asking|voice)(?:\s+to\s+(?:you|jarvis))?"
+    r"|which\s+settings\s+can\s+i\s+change"
+    r"|what\s+settings\s+(?:do\s+you\s+have|are\s+there)"
+    r"|list\s+(?:my\s+|the\s+)?settings"
+    r"|what\s+can\s+i\s+change\s+in\s+settings")
+
+
+def _settings_help(s: str) -> Optional[Intent]:
+    if _SETTINGS_HELP.fullmatch(s):
+        return Intent("settings_help")
+    return None
+
+
 #: The plain on/off settings (jarvis_settings_registry.BOOL_SETTINGS): "turn
 #: on background learning", "switch off lights without asking", "enable
 #: smartwatch notifications", "disable senders in my briefing".
@@ -3692,6 +3716,18 @@ def _run_settings_open(f: dict) -> Result:
     return Result(f"Opening {name} in Settings.", "settings_open", open_settings=f["id"])
 
 
+def _run_settings_help() -> Result:
+    """"What can I change?" (the owner's decision, 2026-10-10).
+
+    Nothing is changed and no model is used: the words come straight from the
+    real switches (jarvis_settings_registry.changeable_words), so the list
+    cannot promise a setting that is not there. It says plainly that a change
+    which loosens a rule still raises a card, so the answer cannot be read as
+    "everything happens at once"."""
+    import jarvis_settings_registry as R
+    return Result(R.changeable_words(), "settings_help")
+
+
 def _run_menu_visibility(f: dict) -> Result:
     """"Hide the finance menu": no state here, no gate, no model. The reply is the
     same for every device; the route field tells each app what to apply."""
@@ -3806,6 +3842,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
+    if n == "settings_help":
+        return _run_settings_help()
     if n == "menu_visibility":
         return _run_menu_visibility(f)
     if n == "settings_bool":
