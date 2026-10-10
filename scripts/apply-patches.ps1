@@ -93,6 +93,15 @@
   docs/UPDATER-REDESIGN.md section 5 asks for, and the manifest, the drift check
   and the backup decision are built on top of it.
 
+.PARAMETER Manifest
+  Where the record of a finished run goes. Defaults to `_jarvis-state.json`
+  beside the backend, which is what this script reads on a later run to know
+  what the files are supposed to hold. Off with `-Manifest none`. The record is
+  written only after a run that finished with no problem at all: a run that
+  refused, or that stopped part way, leaves any earlier record exactly as it
+  was, so the baseline it holds is never quietly replaced. See the note under
+  step 2 in this script, and docs/UPDATER-REDESIGN.md sections 4.1 and 5.
+
 .EXAMPLE
   From the folder this repository is cloned into. -ExecutionPolicy Bypass
   lets Windows run a script file for this one command, without changing any
@@ -112,7 +121,8 @@ param(
     [switch] $SkipPackages,
     [switch] $FixLineEndings,
     [switch] $Force,
-    [string] $StateJson = ''
+    [string] $StateJson = '',
+    [string] $Manifest = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1277,6 +1287,30 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # --- drop-in modules (feat/plug-and-play-modules) ------------------------
+    # Last, like every new patch, and its context is tutorials.patch's own
+    # install block - the last one in the file. It adds ONE more block of the
+    # same shape, calling jarvis_plugins.install(), which loads every folder
+    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
+    # own install(). Nothing else about the core changes, and nothing about
+    # the 18 features it can carry changes: each still ships its own module
+    # and each module still wraps the Handler itself.
+    #
+    # This patch is applied ONCE, and it is the only core change the whole
+    # plug-in system needs. After it, adding or removing one of those features
+    # is a folder - scripts\add-plugin.ps1 and remove-plugin.ps1 - and never
+    # another patch. plugins/registry.json says which features those are, and
+    # for every other patch in this list, in plain words, what it does that
+    # stops it being one (a gate entry, a route in the core, an edit to a line
+    # the core already has).
+    #
+    # It cannot be applied on its own: its context is the output of the stack
+    # above it, so it needs that stack, which is what this script rehearses
+    # and enforces. If your tree differs, the dry run stops and nothing at all
+    # is changed - the safe failure this script already has. A tree that
+    # differs on purpose can skip the patch and paste the four lines by hand;
+    # plugins/loader/README.md prints them.
+    'plugin-loader.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1567,6 +1601,8 @@ $SHIPPED = @(
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
     'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
     'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
+    # --- Drop-in modules (feat/plug-and-play-modules) ---
+    'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -1600,6 +1636,25 @@ $REBUILT_SUPERSEDES = @{
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
 $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+# The name every throwaway folder under %TEMP% is built from - and it is NOT
+# $Stamp above (2026-10-09, the staging race several agents hit on this PC).
+#
+# $Stamp is a clock reading to the second, and on Windows the clock only moves
+# on the system timer tick, so a second run started inside the same second as
+# the first reads the SAME value. Five folders under %TEMP% were named from it:
+# jarvis-patches-lf-, jarvis-rehearsal-, jarvis-result-check-,
+# jarvis-undo-check- and - the one that cost the time - jarvis-suite-state-,
+# which is handed to `run_suites.py --state-env`. Every one of them is then
+# created with -Force, and removed with Remove-Item -Force at the end of the
+# run, so two runs in one second do not merely share a folder: whichever ends
+# first DELETES it underneath the other. `remove` (the patcher) then reports
+# spurious patch failures, and the suites that `update` started report spurious
+# test failures against a config folder that has been deleted mid-run - which
+# is why "run it alone again" always made them pass. A name that cannot collide
+# is the fix, so it comes from the operating system rather than from a clock.
+# `update-jarvis.ps1` names its source folder this way for the same reason.
+$RunId      = $([Guid]::NewGuid().ToString('N').Substring(0, 12))
+$TempName   = "$Stamp-$RunId"
 
 # The list above is hand-ordered because the order matters, which means it can
 # fall behind the directory - and it did: event-allowlist.patch was written,
@@ -1895,6 +1950,27 @@ if ($StateJson) {
     }
 }
 
+# --- where the record of a finished run is kept (docs/UPDATER-REDESIGN section 5
+# step 2) ----------------------------------------------------------------------
+#
+# Beside the backend, which is what section 4.1 asks for ("a file the owner's
+# folder carries"), and only ever a HASH of a backend file: nothing of the
+# owner's own text is copied into it. `-Manifest none` turns the whole step off,
+# exactly as -StateJson's absence turns step 1 off. -Manifest <path> puts it
+# somewhere else (used by the tests to keep two records apart).
+$ManifestPath = Join-Path $BackendPath '_jarvis-state.json'
+if ($Manifest -eq 'none') { $ManifestPath = '' }
+elseif ($Manifest) { $ManifestPath = $Manifest }
+# The record this run reads at the start, once it is known to be usable, and the
+# files whose hashes this run could NOT tie to a patch verdict.
+$script:ManifestCurrent = $null
+$script:ManifestUnmatched = @()
+$script:ManifestKeep = @()
+# Set when a recorded file has changed since the last good run: a run that found
+# drift must not replace the record it found the drift against (see the write
+# step near the end).
+$script:ManifestDrifted = $false
+
 # --- a backend folder inside ANOTHER git repository --------------------------
 #
 # `git apply` behaves differently inside a repository than outside one: it
@@ -1974,7 +2050,7 @@ if ($UsingRebuilt) {
 # is. That half is pinned at the one call that writes anything (Invoke-Patch,
 # with `-c core.autocrlf=false -c core.eol=lf`); the comment there has the
 # measured bytes.
-$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
+$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$TempName"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
 
 # Copies $Src to $Dest with every CRLF made LF. Returns how many it changed.
@@ -2579,6 +2655,355 @@ try {
         $script:classifyRound[$Name] = $Round
     }
 
+    # --- the manifest: what the files held after a run that finished ----------
+    #
+    # docs/UPDATER-REDESIGN.md section 5, build step 2 (built 2026-10-09). After
+    # a run that finishes, this writes _jarvis-state.json beside the backend:
+    # each patch's own text hash, and the hash of every .py this run left in
+    # place. On a later run it is read FIRST, and if nothing it records has
+    # changed the rehearsal is not run at all - "what is on?" becomes a read.
+    # That is the whole of step 2, and it is why it is worth having: the
+    # rehearsal cannot agree with itself on a stack where any patch came off and
+    # would not go back on (section 1).
+    #
+    # It does NOT relax the result gate. The gate still runs, unchanged, on every
+    # run where the manifest is absent, does not cover this list, or disagrees
+    # with the files (sections 8 and 9: the gate is the only thing catching the
+    # four patches that re-apply on top of themselves, and step 5 is what fixes
+    # the underlying verdict - not this).
+    #
+    # The owner's answers of 2026-10-09, recorded in section 6 of that note and
+    # honoured here:
+    #   * question 2 - the FIRST run takes the owner's current files as the
+    #     starting baseline (hashes only; nothing of his is modified) and then
+    #     names whatever it could not tie to a patch. See Write-Manifest: a file
+    #     whose patch has no verdict is recorded "unverified" and LISTED, because
+    #     a baseline that silently said "all good" about a file the patches
+    #     cannot reproduce is exactly the silence section 8 warns about.
+    #   * question 4 - still open, and deliberately not answered here: a run that
+    #     had to skip patches reports exactly what it reported before.
+    #
+    # A file the patches DO produce but that the owner edited by hand does not
+    # silently become the new baseline either: drift is named and the record is
+    # left alone (see Test-ManifestDrift and the note on Write-Manifest).
+    if ($ManifestPath) {
+
+        function Get-Sha256Hex {
+            param([string] $Path, [switch] $AsLf)
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
+            # -AsLf: on a backend whose files carry Windows line endings, the
+            # ending is not what "the same file" means (section 7 of the design
+            # note measured that LF and CRLF have both been the state at
+            # different times), so the text is normalised the way
+            # test_apply_line_endings.py compares it. In memory only.
+            if ($AsLf) {
+                try { $t = [IO.File]::ReadAllText($Path) -replace "`r`n", "`n" } catch { return '' }
+            } else {
+                try { $t = [IO.File]::ReadAllText($Path) } catch { return '' }
+            }
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try {
+                $h = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($t))
+            } finally {
+                $sha.Dispose()
+            }
+            return (($h | ForEach-Object { $_.ToString('x2') }) -join '')
+        }
+
+        function Read-Manifest {
+            if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { return $null }
+            try { return ([IO.File]::ReadAllText($ManifestPath) | ConvertFrom-Json) } catch { return $null }
+        }
+
+        # Is a record usable for the list this run is about to work on? It has to
+        # name this run's own list, in order, and it has to name every patch of
+        # that list as the thing some file's hash came from.
+        function Test-ManifestCurrent {
+            param($Doc)
+            if (-not $Doc) { return $false }
+            $listed = @($Doc.patchList)
+            if ($listed.Count -ne $PATCHES.Count) { return $false }
+            for ($i = 0; $i -lt $PATCHES.Count; $i++) {
+                if ($listed[$i] -ne $PATCHES[$i]) { return $false }
+            }
+            $named = @()
+            if ($Doc.files) {
+                foreach ($p in $Doc.files.PSObject.Properties) {
+                    if ($p.Value.patch) { $named += $p.Value.patch }
+                }
+            }
+            foreach ($n in $PATCHES) { if ($named -notcontains $n) { return $false } }
+            return $true
+        }
+
+        # What this run's OWN rehearsal decided about one patch, in the words
+        # Write-StateJson uses, so the two files cannot disagree about a backend.
+        function Get-PatchVerdict {
+            param([string] $Name)
+            if ($script:classify.ContainsKey($Name)) { return $script:classify[$Name].Verdict }
+            return 'not-recognised'
+        }
+
+        # Where a patch's text is (the run's own LF copy, or the directory it
+        # came from). Both are tried: in a repository that ships no patches of
+        # its own, the LF copy has none of them, and the hash and the file a
+        # patch names have to be read from wherever the text really is.
+        function Get-PatchFile {
+            param([string] $Name)
+            $leaf = $Name
+            try { $leaf = Split-Path -Leaf $Name } catch { $leaf = $Name }
+            foreach ($d in @($PatchSrc, $PatchDir)) {
+                $p = Join-Path $d $leaf
+                if (Test-Path -LiteralPath $p -PathType Leaf) { return $p }
+            }
+            return ''
+        }
+
+        # Every file a patch of this list names, tied to that patch's own name.
+        function Get-TargetOwners {
+            $own = [ordered]@{}
+            foreach ($n in $PATCHES) {
+                $full = Get-PatchFile -Name $n
+                if (-not $full) { continue }
+                $leaf = Split-Path -Leaf $full
+                foreach ($line in [IO.File]::ReadAllLines($full)) {
+                    if ($line -match '^\+\+\+ b/([^\t]+)') { $own[$Matches[1].Trim()] = $leaf }
+                }
+            }
+            return $own        }
+
+        # A file two patches of this list both write is never called verified:
+        # its hash cannot say which of the two put the text there, so a hand-edit
+        # in it would read as a clean record. It is named instead.
+        function Get-SharedFiles {
+            $owner = [ordered]@{}
+            foreach ($n in $PATCHES) {
+                $full = Get-PatchFile -Name $n
+                if (-not $full) { continue }
+                $leaf = Split-Path -Leaf $full
+                foreach ($line in [IO.File]::ReadAllLines($full)) {
+                    if ($line -match '^\+\+\+ b/([^\t]+)') {
+                        $f = $Matches[1].Trim()
+                        if ($owner.Contains($f)) { $owner[$f] = $owner[$f] + ' ' + $leaf }
+                        else { $owner[$f] = $leaf }
+                    }
+                }
+            }
+            $shared = New-Object System.Collections.Generic.List[string]
+            foreach ($k in $owner.Keys) {
+                # A patch's own name cannot contain a space, so MORE THAN ONE
+                # word here is exactly "more than one patch writes this file".
+                # (@($s -split ' ').Count is 1 for every string - measured
+                # 2026-10-09, and it made every file read as shared.)
+                if (($owner[$k] -split ' ').Count -gt 1) { $shared.Add([string]$k) }
+            }
+            return $shared.ToArray()
+        }
+
+        # What the record says about the files as they are RIGHT NOW. A file it
+        # cannot speak for is named, never silently called fine.
+        function Test-ManifestDrift {
+            param($Doc)
+            # A real list, added to one name at a time and handed back with
+            # `return ,$bad.ToArray()`: a plain `@()` that a caller wraps again
+            # comes back as a LIST INSIDE A LIST, and "$($drift.Count)" then
+            # prints the file name as "System.Object[]" (measured 2026-10-09).
+            # An empty string cannot be a file name, so one is never added.
+            $bad = New-Object System.Collections.Generic.List[string]
+            foreach ($f in @($Doc.files.PSObject.Properties)) {
+                $rel = [string]$f.Name
+                if (-not $rel) { continue }
+                $rec = $f.Value
+                if ($rec.verified -eq $false -or $script:ManifestShared -contains $rel) {
+                    $script:ManifestUnmatched += $rel
+                    continue
+                }
+                $now = Get-Sha256Hex -Path (Join-Path $BackendPath $rel) -AsLf
+                if (-not $now -or $now -ne [string]$rec.sha256) { $bad.Add($rel) }
+            }
+            # No comma before the array: PowerShell unrolls what a function
+            # returns, and the caller's @() puts it back together. With the comma
+            # the caller gets a LIST INSIDE A LIST - measured 2026-10-09, where
+            # the run then printed one "file" whose name was "System.Object[]".
+            return $bad.ToArray()        }
+
+        # The one moment the record is written. It preserves any file it cannot
+        # speak for this run, so the baseline the owner's own files were first
+        # recorded with is never quietly replaced.
+        function Write-Manifest {
+            param($Doc, [array] $Entries, [string] $State, [string[]] $NameList, [hashtable] $Verified, $Owners)
+            # `$patchRecs`, never `$patches`: PowerShell compares variable names
+            # case-insensitively, so a local `$patches` inside a function that
+            # also reads the run's `$PATCHES` is the SAME variable (measured
+            # 2026-10-09 - the record's patch list came out as the patch objects
+            # instead of their names, which made the record unusable to the run
+            # that read it). The list and the verified map are parameters for the
+            # same reason: the function is given what it records, not left to
+            # find it by name in whatever scope happens to be above it.
+            $files = [ordered]@{}
+            $oldSha = @{}
+            if ($script:ManifestCurrent -and $script:ManifestCurrent.patches) {
+                foreach ($p in $script:ManifestCurrent.patches) { $oldSha[[string]$p.Patch] = [string]$p.Sha256 }
+            }
+            $patchRecs = @()
+            $unmatched = @()
+            foreach ($e in $Entries) {
+                if ($e.Verified) {
+                    $full = Get-PatchFile -Name $e.Patch
+                    $sha = ''
+                    if ($full) { $sha = Get-Sha256Hex -Path $full }
+                    if (-not $sha -and $oldSha.ContainsKey($e.Patch)) { $sha = $oldSha[$e.Patch] }
+                    $patchRecs += [ordered]@{
+                        Patch   = [string]$e.Patch
+                        Sha256  = $sha
+                        Verdict = [string]$e.Verdict
+                    }
+                } else {
+                    $script:ManifestKeep += [string]$e.Name
+                    $unmatched += [ordered]@{
+                        Patch   = [string]$e.Name
+                        Verdict = [string]$e.Verdict
+                    }
+                }
+            }
+            # Carry forward what an earlier record said about a file this run
+            # does not hash itself (the modules step 3 copies), so the record
+            # does not lose what it knows. A file this run HAS produced is
+            # written fresh below and always wins; a carried entry is kept only
+            # while its hash is still the one on disk AND it was verified.
+            if ($script:ManifestCurrent -and $script:ManifestCurrent.files -and $Doc.Count -gt 0) {
+                foreach ($p in $script:ManifestCurrent.files.PSObject.Properties) {
+                    if ($p.Value.verified -ne $true) { continue }
+                    if ($files.Contains($p.Name)) { continue }
+                    $nowSha = Get-Sha256Hex -Path (Join-Path $BackendPath $p.Name) -AsLf
+                    if ($nowSha -and $nowSha -eq [string]$p.Value.sha256) { $files[$p.Name] = $p.Value }
+                }
+            }
+            # $Verified and $Owners are the CALLER's, given to this function by
+            # name, so this function never reaches for a variable it does not
+            # own (see the note at the top of it).
+            foreach ($rel in @($Doc.Keys | Sort-Object)) {
+                if ($Verified[$rel]) {
+                    $files[$rel] = [ordered]@{
+                        sha256   = [string]$Doc[$rel]
+                        patch    = [string]$Owners[$rel]
+                        verified = $true
+                    }
+                } else {
+                    $files[$rel] = [ordered]@{
+                        sha256   = [string]$Doc[$rel]
+                        patch    = ''
+                        verified = $false
+                    }
+                    if ($script:ManifestUnmatched -notcontains $rel) { $script:ManifestUnmatched += $rel }
+                }
+            }
+            $out = [ordered]@{}
+            $out['schema']    = 'jarvis-updater-manifest/1'
+            $out['written']   = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+            $out['backend']   = (Resolve-Path -LiteralPath $BackendPath).Path
+            $out['run']       = $State
+            $out['patches']   = @($patchRecs)
+            $out['patchList'] = [string[]]$NameList
+            $out['unmatched'] = @($unmatched)
+            $out['files']     = $files
+            $why = ''
+            $wrote = $false
+            $attempt = 0
+            while (-not $wrote -and $attempt -lt 3) {
+                $attempt = $attempt + 1
+                try {
+                    $json = $out | ConvertTo-Json -Depth 6
+                    # No byte-order mark: Python and PowerShell both read this
+                    # file, and plain UTF-8 keeps the first byte an honest one.
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                    [IO.File]::WriteAllText($ManifestPath, $json, $utf8NoBom)
+                    $wrote = $true
+                } catch {
+                    $why = $_.Exception.Message
+                    Start-Sleep -Milliseconds 200
+                }
+            }
+            if (-not $wrote) {
+                Warn "could not write the record of this run ($ManifestPath): $why"
+                return $false
+            }
+            Say "Record  : wrote what the backend holds to $ManifestPath" Cyan
+            Say "          $($files.Count) file hash(es), $($patchRecs.Count) patch(es) named by their own text" Cyan
+            if ($unmatched.Count -gt 0) {
+                Say "          could not be tied to a patch (recorded, not overwritten):" Yellow
+                foreach ($u in $unmatched) { Say "            $($u.Patch) ($($u.Verdict))" Yellow }
+            }
+            return $true
+        }
+
+        # --- read it, and need no rehearsal at all if nothing has moved --------
+        #
+        # Everything above is definitions; this is the one decision, and it is
+        # taken BEFORE the rehearsal: "the files are still the ones the last
+        # successful run left" makes the strip, the re-apply and the result gate
+        # unnecessary work. Nothing here applies a patch - the $already flag
+        # further down is what stops the real files being touched, and it is
+        # only ever set here after every hash has agreed.
+        $script:ManifestOwner = @{}
+        $script:ManifestExisting = $null
+        $script:ManifestShared = @()
+        if ($ManifestPath) {
+            $script:ManifestExisting = Read-Manifest
+        }
+        if ($script:ManifestExisting -and (Test-ManifestCurrent $script:ManifestExisting)) {
+            $script:ManifestOwner = Get-TargetOwners
+            $script:ManifestShared = @(Get-SharedFiles)
+            $script:ManifestCurrent = $script:ManifestExisting
+            $script:ManifestUnmatched = @()
+            $drift = @(Test-ManifestDrift $script:ManifestExisting)
+            if ($drift.Count -gt 0) {
+                Say ""
+                Bad "$($drift.Count) file(s) have changed since this backend was last recorded:"
+                foreach ($d in $drift) { Say "        $d" Red }
+                Say "        That is drift: an edit by hand, or a patch that was not put on" Cyan
+                Say "        by this tool. Nothing has been changed yet. The rehearsal runs" Cyan
+                Say "        now, and the record of the last good run is left exactly as it" Cyan
+                Say "        was, so the next run says this again rather than forgetting it." Cyan
+                $mfDriftList = ($drift -join ', ')
+                Add-Note "$($drift.Count) file(s) have changed since the last recorded run and are NOT recorded by a patch of this list: $mfDriftList. They have not been touched by this run."
+                $script:ManifestCurrent = $null
+                $script:ManifestDrifted = $true
+            } else {
+                $already = $true
+                # No rehearsal ran, so nothing filled the classification in.
+                # Leaving it empty would say "not-recognised" about every patch
+                # in a run that has just proved they are all on - in the record
+                # this run is about to write, and in -StateJson. The record says
+                # what this run established: every patch of the list is on the
+                # files (that is what every hash agreeing means), so that is the
+                # verdict, in the same words step 1 already uses.
+                foreach ($n in $PATCHES) { Set-PatchClass -Name $n -Verdict 'taken-off' -Round 0 }
+                # ... and the same for the list the record names each file with:
+                # this run established that every patch of it is on, so every
+                # file of theirs may be tied to its patch in the record this run
+                # writes. Without this, a fast-path run's own record called its
+                # files unverified, and the run AFTER it could not use the record
+                # at all (measured 2026-10-09).
+                $verifiedPatches = @($PATCHES)
+                Say ""
+                Ok "All $($PATCHES.Count) patches are already on your backend (recorded by the last run)."
+                Say "          No rehearsal was needed: the record of that run says what these files hold." Cyan
+                if ($script:ManifestUnmatched.Count -gt 0) {
+                    Say "          $($script:ManifestUnmatched.Count) file(s) this record cannot speak for - a patch of this" Yellow
+                    Say "          list was not found on them when it was written:" Yellow
+                    foreach ($u in $script:ManifestUnmatched) { Say "            $u" Yellow }
+                }
+            }
+        } elseif ($script:ManifestExisting) {
+            Say ""
+            Say "Note    : $ManifestPath is from a different patch list, so it cannot be" Cyan
+            Say "          used for this one. Rehearsing as usual; it is not replaced" Cyan
+            Say "          unless this run finishes cleanly." Cyan
+        }
+    }
+
+
     function Write-StateJson {
         param([string] $Path)
         $order = @('taken-off', 'taken-off-older-text', 'on-but-unstrippable', 'not-recognised')
@@ -2683,7 +3108,7 @@ try {
     #
     # Both rehearsals run on a throwaway copy, so the real files are not
     # opened until an answer is known.
-    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
+    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$TempName"
     $broken    = @()
     $already   = $false
     # Set only by (c): the patches an earlier run left on, newest first,
@@ -2693,6 +3118,11 @@ try {
     # cannot take off and put back on. They are on the real files already, so
     # the real run leaves them alone - see Test-PatchOnBackend.
     $alreadyOn = @()
+    # For the manifest (step 2), both set by the branch that actually applied the
+    # list. Empty means "this run did not get to the point of applying", which is
+    # what keeps a run that refused from recording anything about the files.
+    $verifiedPatches = @()
+    $targetFiles     = @()
 
     function Reset-Rehearsal {
         if (Test-Path -LiteralPath $rehearsal) {
@@ -3161,7 +3591,7 @@ try {
                         # is the half-applied backend this script exists to
                         # prevent, so it is refused here, on the copy, while
                         # nothing of the owner's has been changed.
-                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$Stamp"
+                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$TempName"
                         $intact = $true
                         $why = ""
                         try {
@@ -3342,6 +3772,9 @@ try {
         }
         Say ""
         Ok "Backed up $($touched.Count) file(s) to $backup"
+        # For the manifest (step 2), written below: the files this list's own
+        # patch headers name.
+        $targetFiles = @($touched.Keys)
 
         # From (c): what an earlier run left on, taken off newest first -
         # exactly what the rehearsal did before the whole list applied, with
@@ -3358,7 +3791,7 @@ try {
             # So the same strip is done once more on a throwaway copy of the
             # real files first; if it cannot finish, nothing of the owner's has
             # been touched.
-            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$Stamp"
+            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$TempName"
             $undoOk = $false
             $why = ""
             try {
@@ -3449,6 +3882,9 @@ try {
                 Say "  $($alreadyOn.Count) of them were on already and were left as they were:" Cyan
                 foreach ($a in $alreadyOn) { Say "    $($a.Name)" Cyan }
             }
+            # The whole list really is on the files, so every patch of it can be
+            # named in the manifest as the thing this file's text came from.
+            $verifiedPatches = @($PATCHES)
             $script:State.Patching = $false
         } else {
             Bad "Every patch said ok, but the real files do not show them all."
@@ -3750,6 +4186,99 @@ if (-not (Test-Path -LiteralPath $cfgSrc)) {
     }
 }
 
+# --- write the record of this run (docs/UPDATER-REDESIGN.md section 5 step 2) ----
+#
+# Here, and not earlier, on purpose: the patches are on, every module this
+# repository ships has been copied in, and the settings file is as settled as it
+# gets. What is hashed is therefore the state the rest of this run proved, not a
+# state it is about to change. The tests below cannot change a .py file, so the
+# record is still true when they have finished.
+#
+# The record is written on EVERY run that gets here, not only where no record
+# existed, and that is the point of "run it twice": the second run reads it,
+# finds the files unchanged, and needs no rehearsal at all - while still
+# re-checking the modules and the settings, which no hash of a .py file covers.
+#
+# What it records about a file it could not tie to a patch (see Write-Manifest)
+# is decided by the verdicts above, never assumed. On a refusal this line is
+# never reached, so the baseline an earlier good run wrote is left exactly as it
+# was - the one thing that would make a hand-edit invisible on the next run.
+if ($ManifestPath) {
+    # Built here as well as on the fast path: a run whose record was unusable
+    # still has to write down which patch produced which file, or the next run
+    # could never tie a hash to a patch and the record would never become usable.
+    $script:ManifestOwner = Get-TargetOwners
+    if (-not $already) {
+        $script:ManifestShared = @(Get-SharedFiles)
+    }
+    # This line is only reached by a run that got here with the whole list on the
+    # files - either the rehearsal applied it and checked it again, or the record
+    # said so and every hash agreed. So the patch list of this run is the list
+    # this run can speak for, and a file only one patch of it writes may be tied
+    # to that patch. (Setting this only on the fast path left the record written
+    # by a drift run calling its own files unverified - measured 2026-10-09.)
+    $verifiedPatches = @($PATCHES)
+    $mfEntries = @()
+    # $script:ManifestDrifted is set when a recorded file has changed since the
+    # last good run. A run that found drift does NOT rewrite the record: writing
+    # it would bless the hand-edit as the new baseline, and the next run would
+    # then whistle past it - the one failure mode section 8 of the design note
+    # warns about. Measured 2026-10-09: the first version of this wrote anyway,
+    # and the run after a drift reported no drift at all.
+    if ($script:ManifestDrifted) {
+        Say "Record  : left as it was - this run found drift, so the record of the last" Cyan
+        Say "          good run is not replaced (that is what makes the next run say so again)." Cyan
+    } else {
+    foreach ($n in $PATCHES) {
+        $mfEntries += @{
+            Name     = Split-Path -Leaf $n
+            Patch    = $n
+            Verdict  = Get-PatchVerdict -Name $n
+            Verified = (@($verifiedPatches) -contains $n)
+        }
+    }
+    $mfDoc = [ordered]@{}
+    $mfDocVerified = [ordered]@{}
+    # The files a patch of THIS list names, taken from the patch headers rather
+    # than from what the apply branch happened to touch: on the fast path that
+    # branch never runs, so its list is empty - and a record written there with
+    # no verified file in it cannot be used by the run after it (measured
+    # 2026-10-09).
+    foreach ($rel in @($script:ManifestOwner.Keys)) {
+        $full = Join-Path $BackendPath $rel
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+        $mfDoc[$rel] = Get-Sha256Hex -Path $full -AsLf
+        # A file is tied to a patch only when exactly one patch of this list
+        # names it AND that patch was applied by this run. Everything else - a
+        # file two patches write, a file no patch of the list names - is recorded
+        # as a hash the record cannot speak for, and is LISTED by the run's own
+        # words. That is the owner's answer of 2026-10-09 (question 2): the first
+        # run snapshots what his files hold, and then tells him what it could not
+        # match. Without this, a file no patch can reproduce would be blessed as
+        # verified on the very first run - the silence section 8 warns about.
+        $mfOwner = [string]$script:ManifestOwner[$rel]
+        $mfDocVerified[$rel] = ($mfOwner -ne '' -and (@($verifiedPatches) -contains $mfOwner))
+    }
+    foreach ($f in @(Get-ChildItem -LiteralPath $BackendPath -Filter '*.py' -File -ErrorAction SilentlyContinue)) {
+        $rel = $f.Name
+        if ($mfDoc.Contains($rel)) { continue }
+        $mfDoc[$rel] = Get-Sha256Hex -Path $f.FullName -AsLf
+        $mfDocVerified[$rel] = $false
+    }
+    # The first run has no record at all, so every file it names is what the
+    # owner's files hold RIGHT NOW - the baseline he chose on 2026-10-09
+    # (question 2: "snapshot first, then tell me what it could not match").
+    # Nothing of his is modified by this: it is a hash, written beside the
+    # backend, and the run's own words name whatever it could not tie to a patch.
+    $mfNames = New-Object System.Collections.Generic.List[string]
+    foreach ($pn in $PATCHES) { $mfNames.Add([string]$pn) }
+    $runState = 'baseline'
+    if ($script:ManifestCurrent) { $runState = 'checked' }
+    elseif ($script:ManifestExisting) { $runState = 'partial' }
+    [void](Write-Manifest -Doc $mfDoc -Entries $mfEntries -State $runState -NameList $mfNames.ToArray() -Verified $mfDocVerified -Owners $script:ManifestOwner)
+    }
+}
+
 # --- 5. Python packages ---------------------------------------------------------
 #
 # The backend starts without any of these - every import is guarded - but
@@ -3881,7 +4410,7 @@ $ErrorActionPreference = 'Continue'
 # audit log in .openjarvis\logs. So for this run the config folder and the
 # audit log are a temporary folder, deleted afterwards. run_suites.py works
 # out the variables (the same ones CI's runner uses), one KEY=VALUE a line.
-$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $Stamp)
+$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $TempName)
 $savedEnv = @{}
 $stateLines = & $py.Exe (Join-Path $PatchDir 'run_suites.py') --state-env $stateDir 2>$null
 foreach ($line in @($stateLines)) {

@@ -32,11 +32,12 @@ WHAT IT CHECKS
   4. each row's `indent` is the page's real indentation - the number the
      generator needs to put the row back where it found it;
   5. the count is stated out loud, so a number that moves is noticed rather
-     than absorbed. It is **26**, and it has been mis-reported as 19: a bare
-     `<label class="toggle">` string match misses the seven rows that also
+     than absorbed. It is **27** (26 until "Click through to what is behind"
+     was added on 2026-10-10), and it has been mis-reported as 19: a bare
+     `<label class="toggle">` string match misses the rows that also
      carry a label id;
   6. every row's `setting` names a real BoolSetting, or is None. None is the
-     normal case (20 of the 26): those rows have no spoken "adjust", and
+     normal case (21 of the 27): those rows have no spoken "adjust", and
      putting them in BOOL_SETTINGS would make the phrase match and the
      dispatch then fail - `jarvis_quick.py:2788` matches on that table and
      `:3703` dispatches on the same key.
@@ -68,7 +69,7 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: The number of `<label class="toggle">` rows the page has. Stated rather
 #: than computed so that a row quietly disappearing is a failure here rather
 #: than a smaller number that every other check happily agrees with.
-EXPECTED_ROWS = 26
+EXPECTED_ROWS = 27
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -133,8 +134,8 @@ def t_no_row_without_a_toggle():
 def t_the_count_is_what_it_is():
     """The number, said out loud.
 
-    It has been wrong twice: "19" (a bare-string match that misses the seven
-    rows carrying a label id) and "12 PC-worded rows" (which counted
+    It has been wrong twice: "19" (a bare-string match that misses the rows
+    carrying a label id) and "12 PC-worded rows" (which counted
     `spd-accept`, whose span starts empty and is filled by a local constant).
     A test cannot know the right number by itself, so it pins the measured one
     and explains what to re-measure if it moves."""
@@ -145,11 +146,11 @@ def t_the_count_is_what_it_is():
           f"re-count and update EXPECTED_ROWS and SETTINGS_ROWS together")
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
-    check("19 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
-          bare == 19 and len(page) - bare == 7,
+    check("20 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
+          bare == 20 and len(page) - bare == 7,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 26 desktop rows are described",
+    check("all 27 desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
     check("the two phone rows are described too",
           len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 2, str(len(R.SETTINGS_ROWS)))

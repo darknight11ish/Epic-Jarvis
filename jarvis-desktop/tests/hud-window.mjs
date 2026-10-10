@@ -229,6 +229,13 @@ function runBootstrap({ saved = {}, shell = true, raw = null } = {}) {
   if (shell) {
     const invoked = [];
     window.__invokes = invoked;
+    // The shell's own feed, in the form hud_bootstrap.js defines it. The
+    // shell pushes by evaluating a call to it - `__jarvisFeed("bar", true)`
+    // for the Jarvis bar coming on screen and `("bar", false)` for it going
+    // (lib.rs `push_to_hud`). Anything else is deliberately not delivered.
+    window.__jarvisFeed = function (channel, payload) {
+      if (channel === "bar") window.__barFeed = payload;
+    };
     window.__TAURI__ = {
       core: {
         Channel: class { constructor() { this.onmessage = null; } },
@@ -245,6 +252,10 @@ function runBootstrap({ saved = {}, shell = true, raw = null } = {}) {
   // eslint-disable-next-line no-new-func
   new Function("window", "document", "console", source)(window, document, quiet);
 
+  /* The bootstrap defines the feed itself (its section 2), as it does in the
+   * real page: this is the function the shell pushes into, not a stand-in. */
+  const feed = window.__jarvisFeed;
+
   return {
     window,
     document,
@@ -256,6 +267,16 @@ function runBootstrap({ saved = {}, shell = true, raw = null } = {}) {
     /** What a write in ANOTHER Jarvis window delivers to this one. */
     storageEvent(key) {
       window.dispatchEvent({ type: "storage", key, target: window });
+    },
+    /** What the shell's `push_to_hud(app, "bar", visible)` evaluates in this
+     *  page (src-tauri/src/windows.rs `publish_bar_state`): whether the Jarvis
+     *  bar is on screen. This is the state the label follows. */
+    barState(visible) {
+      feed("bar", visible);
+    },
+    /** A push on some other channel: nothing to do with this button. */
+    otherChannel(channel, payload) {
+      feed(channel, payload);
     },
   };
 }
@@ -335,6 +356,70 @@ await check("pressing the button asks the shell to open the Jarvis bar, and send
   await new Promise((r) => setTimeout(r, 0));
   assert.deepEqual(run.window.__invokes.map((c) => c[0]), ["hud_open_bar"],
     "the button must ask the shell for hud_open_bar, and nothing else");
+});
+
+await check("the label follows the bar: Open while it is hidden, Hide while it is shown", () => {
+  // THE OWNER'S ASK (2026-10-09, with a screenshot): the button beside the
+  // HUD's chat box said "Open the Jarvis bar" whether the bar was open or
+  // not. Whether it is on screen reaches this page from the shell, which
+  // knows (src-tauri/src/windows.rs `publish_bar_state`, pushed on the feed's
+  // own "bar" channel) - never guessed from a click.
+  const run = runBootstrap({ shell: true });
+  const button = run.button();
+
+  // Nothing has said the bar is up: the label is the wording that was there.
+  assert.equal(button.textContent, "Open the Jarvis bar");
+  assert.equal(button.textContent, button.title, "the visible label and its tooltip disagree");
+
+  run.barState(true);
+  assert.equal(button.textContent, "Hide the Jarvis bar", "the label did not follow the bar being open");
+  // A screen reader must not contradict the visible label (the same wording,
+  // not the old "it opens now" line, which would be false here).
+  assert.equal(button.title, button.textContent, "the tooltip contradicts the visible label");
+  assert.doesNotMatch(button.title, /opens now/, "a bar already open is still announced as opening");
+
+  run.barState(false);
+  assert.equal(button.textContent, "Open the Jarvis bar", "the label did not follow the bar closing");
+  assert.equal(button.title, button.textContent, "the tooltip contradicts the visible label");
+});
+
+await check("a push about something else leaves the label alone", () => {
+  // The feed carries the whole event stream too (the shim's own `deliver`),
+  // and only the bar channel is this button's business. The payload is a real
+  // frame, so a handler that ran would really run.
+  const run = runBootstrap({ shell: true });
+  const before = run.button().textContent;
+  run.otherChannel("event", { kind: "power", id: 1, data: { mode: "awake", by: "owner" } });
+  assert.equal(run.button().textContent, before, "an unrelated push moved the label");
+});
+
+await check("clicking it is a real toggle: open when hidden, hide when shown", async () => {
+  const run = runBootstrap({ shell: true });
+  const click = async () => {
+    const button = run.button();
+    assert.ok(button, "the button is gone");
+    button.listeners.click[0]();
+    await new Promise((r) => setTimeout(r, 0));
+  };
+
+  // Hidden: one click opens the bar.
+  await click();
+  assert.deepEqual(run.window.__invokes.map((c) => c[0]), ["hud_open_bar"],
+    "with the bar hidden, the button must ask the shell to open it");
+
+  // The shell says it is up now: the same click must close it.
+  run.barState(true);
+  run.window.__invokes.length = 0;
+  await click();
+  assert.deepEqual(run.window.__invokes.map((c) => c[0]), ["hide_quickbar"],
+    "with the bar shown, the button must ask the shell to hide it");
+
+  // And back the other way, so it is a toggle and not a one-way door.
+  run.barState(false);
+  run.window.__invokes.length = 0;
+  await click();
+  assert.deepEqual(run.window.__invokes.map((c) => c[0]), ["hud_open_bar"],
+    "the button must open the bar again once it is hidden");
 });
 
 await check("a change made in Settings while the window is open is obeyed at once", () => {

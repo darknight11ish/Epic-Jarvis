@@ -27,6 +27,20 @@ object Devices {
     const val REMOVE_PATH = "/api/devices/remove"
     const val LABEL_PATH = "/api/devices/label"
     const val SHARED_PATH = "/api/devices/shared"
+
+    /**
+     * Every route [JarvisApi.devicesPost] is allowed to send.
+     *
+     * One list, checked in one place, because the alternative has already cost
+     * a feature: the label route was added to this object but not to the guard
+     * inside `devicesPost`, so "Name this device…" never left the phone. It
+     * failed locally with "not a devices route" - an answer the UI then
+     * reported as *"Your PC answered in a way this app can't read"*, sending
+     * the owner to run `apply-patches.ps1` against a PC that was perfectly up to
+     * date. Measured 2026-10-10 (`docs/ANDROID-PAIRED-AUDIT-2026-10-10.md`).
+     */
+    val POST_PATHS: Set<String> = setOf(REMOVE_PATH, LABEL_PATH, SHARED_PATH)
+
     const val SHARED_PROMPT_RETIRE =
         "Your phone now signs risky approvals. Retire the old shared key now so unverified devices cannot approve risky actions."
 

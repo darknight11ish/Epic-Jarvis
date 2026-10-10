@@ -1,0 +1,8 @@
+{
+  "name": "screen-attach",
+  "summary": "\"look at this\" can hand the owner the PICTURE, so they can say \"look at this\" with a chart or an error message and ask about it.",
+  "module": "jarvis_screen_attach",
+  "install": "handler",
+  "replaces_patch": "screen-attach.patch",
+  "stack_order": 129
+}

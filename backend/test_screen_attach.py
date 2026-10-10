@@ -486,7 +486,8 @@ def t_hygiene():
     # block this patch installs either - and handoff-front.patch (2026-10-09)
     # is the same shape, after that one.
     stack_order = __import__("_stack").order()
-    later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch"}
+    later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
+             "plugin-loader.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

@@ -266,6 +266,25 @@ const SPEC = window.JARVIS_SPEC;
  */
 const DISPLAY_MODE = new URLSearchParams(location.search).get("mode") === "display";
 
+/**
+ * `&clear=1`: NOTHING is painted behind the face - the canvas is emptied
+ * every frame instead of filled with the shell's background (`BG`).
+ *
+ * Exactly one page passes it: the floating face's own window
+ * (`floating.html`), which is a transparent, click-through hole on the
+ * desktop, so a background here would be the visible dark square the owner
+ * asked to be rid of (`docs/INTEGRATION-EVAL-2026-10-10.md`). The Widget's
+ * round tray (`widget.js`, `&clip=circle`) and the HUD's frame
+ * (`jarvis_hud.html`) load this same page WITHOUT it and keep the opaque
+ * background they have always had - this flag is the whole of the scoping,
+ * rather than a change to any shared rule.
+ *
+ * The 2D context is created with alpha only for this page (see
+ * `makeSurface`): an opaque context would flatten every see-through pixel to
+ * black however carefully it was drawn.
+ */
+const CLEAR_BG = DISPLAY_MODE && new URLSearchParams(location.search).get("clear") === "1";
+
 /* ============================ shared maths ============================ */
 const STATES = ["idle","listening","thinking","speaking"];
 const TAU = Math.PI * 2;
@@ -1862,8 +1881,11 @@ function critterFace(o){
         G.uniform3f(L.uCool, cool[0]/255, cool[1]/255, cool[2]/255);
         G.uniform3f(L.uBg, bg[0]/255, bg[1]/255, bg[2]/255);
         // The sky is drawn behind (paintSky): leave the picture's uncovered
-        // part see-through so it shows, instead of laying it over uBg.
-        if(L.uSeeThrough) G.uniform1f(L.uSeeThrough, SKY_UNDER ? 1 : 0);
+        // part see-through so it shows, instead of laying it over uBg. On the
+        // floating face's own window (CLEAR_BG) there is nothing behind it at
+        // all, so its uncovered part is left see-through for the same reason -
+        // that is what lets the desktop show through the window.
+        if(L.uSeeThrough) G.uniform1f(L.uSeeThrough, (SKY_UNDER || CLEAR_BG) ? 1 : 0);
         G.uniform1f(L.uYaw, VIEW.yaw);
         G.uniform1f(L.uPit, VIEW.pitch);
         G.uniform1f(L.uZoom, VIEW.zoom || 1);
@@ -1984,11 +2006,24 @@ function critterFace(o){
     // Standby, banked (and, slightly, error) dim the WHOLE animal toward its
     // background - see faceDim. Drawn over the picture: a fill of the
     // background at (1 - dim) is exactly mix(bg, pixel, dim).
+    //
+    // On the floating face's own window there is no background to blend it
+    // toward (CLEAR_BG): the same fade is taken out of the picture's own
+    // alpha instead, so the animal goes faint against whatever is on the
+    // desktop rather than being replaced by the dark square this window no
+    // longer paints. `destination-in` keeps the destination where the source
+    // is opaque, scaled by the source's alpha - a plain fill colour is
+    // exactly right, and its own alpha is the dim.
     dimOver(g, w, h, bg){
       if(!(FACE_DIM < 0.999)) return;
       g.save();
-      g.globalAlpha = 1 - Math.max(0, FACE_DIM);
-      g.fillStyle = bg;
+      if(CLEAR_BG){
+        g.globalCompositeOperation = "destination-in";
+        g.globalAlpha = Math.max(0, FACE_DIM);
+      } else {
+        g.globalAlpha = 1 - Math.max(0, FACE_DIM);
+        g.fillStyle = bg;
+      }
       g.fillRect(0, 0, w, h);
       g.restore();
     },
@@ -4934,7 +4969,13 @@ function makeSurface(theme, canvas, fpsEl){
   const f = FACE[theme.id];
   return {
     theme, f, canvas, fpsEl,
-    ctx: canvas.getContext("2d", { alpha:false }),
+    // `alpha: false` everywhere but the floating face's own window: an opaque
+    // context is what every other surface wants (the editor's tiles and the
+    // solo view paint over the panel), and it is also why a page that must be
+    // see-through (CLEAR_BG, floating.html) cannot simply stop filling its
+    // background - an opaque context flattens every see-through pixel to
+    // black. The flag is false in every other window, so nothing else changes.
+    ctx: canvas.getContext("2d", { alpha: CLEAR_BG }),
     view:{ yaw:0, pitch:0, zoom:1 },
     touch:{ x:0, y:0, on:0, hover:0, f:0 },
     speed:1, clock:0, last:0, vis:true,
@@ -5371,8 +5412,15 @@ function drawSurface(s, dt, state){
   const g = s.ctx, w = s.w, h = s.h;
   g.setTransform(1,0,0,1,0,0);
   const paintBg = () => {
-    g.fillStyle = BG;
-    g.fillRect(0,0,w,h);
+    // On the floating face's own window (CLEAR_BG) there is no background at
+    // all: the canvas is emptied instead of filled, so the transparent window
+    // behind it shows the desktop through every pixel the face leaves alone.
+    if(CLEAR_BG){
+      g.clearRect(0,0,w,h);
+    } else {
+      g.fillStyle = BG;
+      g.fillRect(0,0,w,h);
+    }
     // The sky behind an animal, when the owner has switched it on (paintSky).
     if(th.family === "critter"){ paintSky(g, w, h); paintSeason(s, g, w, h, state); }
     else SKY_UNDER = false;
