@@ -103,13 +103,22 @@ and `focus`; `MainActivity.kt:1553` re-reads).
 - Classified `ported` in `tools/check_parity.py:103-104`, which is why the
   phone must keep reading its words from the PC
   (`PromptCoachPlate.kt`, `net/PromptCoach.kt`).
-- **No generated settings row.** `tools/gen_settings_cases.py` is **not on
-  `main`** (checked: `tools/` has 60 `gen_*.py` files and that is not one of
-  them), so the claim that `settings.html`'s toggle rows are spliced between
-  markers does not hold in this checkout yet. The prompt-coach card in
-  `jarvis-desktop/src/settings.html:904` is **hand-written markup**, and this
-  change edited it by hand - which is why the four rows are drawn at runtime
-  from the PC's own data instead of being written into the HTML (see §5).
+- **No settings row of its own, and none needed - the container is not a row.**
+  When this branch was written, `tools/gen_settings_cases.py` was **not on
+  `main`** (checked: `tools/` had 60 `gen_*.py` files and that was not one of
+  them), so the prompt-coach card in `jarvis-desktop/src/settings.html` was
+  **hand-written markup** and this change edited it by hand to add exactly one
+  empty container, `#coach-groups`, whose words the PC sends at runtime (see
+  §5). **Rebased onto `main` after PR #163 landed (2026-10-09)**, which changed
+  the answer and not the design: the one `<label class="toggle">` this card owns
+  is `coach-enabled`, already row **8** of
+  `backend/jarvis_settings_registry.py`'s `SETTINGS_ROWS`, so the generator - not
+  this branch - writes that row. `#coach-groups` sits **outside** every toggle
+  row's markup (between `coach-enabled`'s `</label>` and the card's `<div
+  class="row">`), so the splice leaves it byte for byte alone. The four settings
+  inside it are drawn from the PC and are not toggle rows, so they correctly have
+  no `SETTINGS_ROWS` entry either: adding one would make the table describe 27
+  rows against the page's 26 and fail the generator by design.
 
 ## 4. Is it effective? What the tests prove, and what nothing measures
 
@@ -195,12 +204,15 @@ key or value with a 409 naming the real ones.
 - **`jarvis_prompt_coach.SETTINGS` is the table.** Not
   `jarvis_settings_registry.py`'s `BOOL_SETTINGS`, because these are not
   booleans and the registry's setter contract is one `on: bool`.
-- **`settings.html` rows are not generated in this checkout**:
-  `tools/gen_settings_cases.py` is **not on `main`** (see §3), so there are no
-  markers to splice between. The card's markup was edited by hand **to add one
-  empty container**, and every word inside it comes from the PC at runtime. When
-  that generator lands, the card's markup should move under it; the
-  *declaration* is already in the one right place.
+- **`settings.html`'s toggle rows are generated on `main`, and this branch now
+  sits under that**: after the rebase `tools/gen_settings_cases.py` is present
+  and splices the page between its two `settings-toggles` markers from
+  `SETTINGS_ROWS`, in which `coach-enabled` is declared (see §3). The card was
+  edited by hand **to add one empty container** - `#coach-groups` - which the
+  generator leaves alone because it is not part of any toggle row, and every word
+  inside it comes from the PC at runtime. No toggle row is hand-written on this
+  branch, so nothing here can be overwritten by the tool; the *declaration* stays
+  in the one right place.
 - **No new phone settings place was needed.** `MenuPlaces.SETTINGS`
   (`MenuPlaces.kt:26`), `OpenPlace` (`:57`), `SettingsJump` (`:35`) and
   `SETTINGS_ITEM_INDEX` (`SettingsScreen.kt:109`) already declare
@@ -340,15 +352,26 @@ this change: **1,981** — the 9 new `PromptCoachTest` tests, and **none
 regressed**. The task's "1,974 currently pass" was 2 higher than this checkout's
 own measurement; the important numbers are the ones taken here.
 
+**Re-measured after the rebase onto `main` at `646a070e`** (2026-10-09, the same
+run that proved the settings row): **1,999 tests, 0 failures, 0 errors, 0
+skipped** across 182 suites. The 18 more than 1,981 are `main`'s own new tests,
+not a change here — but the point of re-running is that `SettingsJumpTest` (6),
+`SettingsCatalogTest` (9), `WebSearchTest` (7) and `PromptCoachTest` (9) are all
+green on the rebased branch, and nothing is skipped. (There is no
+`SettingsSearchTest` anywhere in this repository; `WebSearchTest` is the
+search-related suite that exists.)
+
 ## 6. What is still blocked or not done
 
-1. **`tools/gen_settings_cases.py` is not on `main`.** A generated toggle row is
-   what the brief described; this checkout has none, so the prompt-coach card's
-   markup is hand-written and was edited by hand (one empty container, no words
-   of its own). Nothing was invented to look generated.
+1. ~~**`tools/gen_settings_cases.py` is not on `main`.**~~ **Closed by the
+   rebase onto `main`** (2026-10-09, after PR #163 merged): the generator is
+   there, it writes `coach-enabled` from `SETTINGS_ROWS`, `py -3
+   tools/gen_settings_cases.py --check` matches, and the one hand-edited
+   container (`#coach-groups`, no words of its own) is outside every toggle row,
+   so the splice never touches it. See §3.
 2. **No voice control for the four.** `jarvis_quick.py`'s grammar covers the
-   `BoolSetting` `prompt_coach` and none of the four, so
-   `jarvis_settings_registry.py` is unchanged and nothing claims otherwise.
+   `BoolSetting` `prompt_coach` and none of the four, so this change does not
+   touch `jarvis_settings_registry.py` and nothing claims otherwise.
 3. **No measurement of whether coaching helps.** See §4.
 4. **Nothing has run against the real 8B model.** Every suite here uses the
    `ask=` seam; the advice's quality and latency are the owner's to judge.
