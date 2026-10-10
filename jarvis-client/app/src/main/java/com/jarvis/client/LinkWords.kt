@@ -75,7 +75,7 @@ object LinkWords {
 
     /**
      * The line under the composer's Send while the link is down, or null
-     * while it is up (feature sweep on the owner's phone, 2026-10-09).
+     * while it is up (feature sweep on the owner's phone, 2026-10-10).
      *
      * The composer greys Send unless the link is [LinkState.CONNECTED]
      * (`canSend`), and a greyed button never reaches the runtime's own

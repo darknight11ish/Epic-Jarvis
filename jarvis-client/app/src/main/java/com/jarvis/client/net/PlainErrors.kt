@@ -304,7 +304,7 @@ object PlainErrors {
      * The platform's own text must never reach a screen. OkHttp writes the
      * address it tried and BOTH ports into a connect failure's message, and
      * the owner's Home screen showed it word for word (feature sweep,
-     * 2026-10-09): "failed to connect to
+     * 2026-10-10): "failed to connect to
      * marioirelan11-alps.nord/100.75.21.228 (port 4719) from
      * /100.124.30.77 (port 42892) after 10000ms" - a mesh address, a port and
      * this phone's own address, where a glance-sized sentence belongs. A name

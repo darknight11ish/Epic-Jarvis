@@ -16,7 +16,7 @@ import java.net.UnknownHostException
 
 /**
  * The composer and the status line on Home, found on the owner's real phone
- * by a feature sweep (2026-10-09). Two faults, both about words the owner
+ * by a feature sweep (2026-10-10). Two faults, both about words the owner
  * reads and neither about anything the app was doing wrong underneath:
  *
  * 1. With the link down, Send was greyed and nothing anywhere said why. The

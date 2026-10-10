@@ -267,7 +267,7 @@ class EventStream(private val api: JarvisApi) {
                 // is down (`JarvisRuntime.linkDetail`), and OkHttp's own text
                 // for a failed dial carries the address and both ports - the
                 // owner's Home screen showed exactly that (feature sweep,
-                // 2026-10-09). The exception itself is in the log line above,
+                // 2026-10-10). The exception itself is in the log line above,
                 // where a bug report can still find it.
                 trySend(Signal.Down(PlainErrors.networkSays(t), attempt))
                 delay(backoff(attempt, retryMs))

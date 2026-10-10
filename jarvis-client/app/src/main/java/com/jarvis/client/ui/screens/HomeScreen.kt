@@ -3438,7 +3438,7 @@ private fun Composer(
         }
     }
     // Why Send is greyed, while the link is down (feature sweep on the
-    // owner's phone, 2026-10-09). It said nothing at all before: the owner
+    // owner's phone, 2026-10-10). It said nothing at all before: the owner
     // typed a message, pressed Send and nothing happened, with no sentence
     // anywhere naming the link as the reason. The runtime's own blocker cannot
     // cover this one - a disabled button never reaches it. It is the line
