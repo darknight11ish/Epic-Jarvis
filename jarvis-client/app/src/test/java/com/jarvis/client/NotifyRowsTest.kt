@@ -229,6 +229,29 @@ class NotifyRowsTest {
     }
 
     @Test
+    fun `each of the six controls is really drawn by the card`() {
+        // The desktop's card has six: four kinds, quiet hours with its two
+        // times, and the Test button. On the phone that is three blocks - the
+        // kinds, the quiet group, the test row - and deleting any one of them
+        // fails here, which is what "the control exists" has to mean.
+        assertTrue(screen.contains("SubHead(NotifyRows.SUBHEAD_KINDS)"))
+        assertTrue(screen.contains("NotifyRows.kindRows(v).forEach"))
+        assertTrue(screen.contains("SubHead(NotifyRows.SUBHEAD_QUIET)"))
+        assertTrue(screen.contains("NotifyRows.quietRows(v).forEach"))
+        assertTrue(screen.contains("SubHead(NotifyRows.SUBHEAD_TEST)"))
+        assertTrue(screen.contains("NotifyRows.TEST_LABEL"))
+        // Every row's own control is the shared one, wired to that row's own
+        // key - so no control can be drawn without a key to write. Both groups
+        // (the four kinds, and quiet hours with its two times) wire it the same
+        // way, which is why the count is two: deleting either group fails here.
+        assertEquals(
+            "a control is drawn without the row's own key",
+            2,
+            Regex(Regex.escape("onChange = { value -> change(r.key, value) }")).findAll(screen).count(),
+        )
+    }
+
+    @Test
     fun `the test control is the desktop's words, and says what it cannot do`() {
         assertEquals("Send test notification", NotifyRows.TEST_LABEL)
         assertTrue(screen.contains("NotifyRows.TEST_LABEL"))
