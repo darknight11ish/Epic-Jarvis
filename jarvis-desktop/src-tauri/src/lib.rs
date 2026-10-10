@@ -480,7 +480,7 @@ fn spawn_telemetry_loop(app: AppHandle) {
             // and a change made HERE still applies at once, through
             // `set_notification_prefs`.
             tick = tick.wrapping_add(1);
-            if tick % notifications::SYNC_EVERY == 0 {
+            if tick.is_multiple_of(notifications::SYNC_EVERY) {
                 notifications::refresh_notification_prefs(app.clone()).await;
             }
 
