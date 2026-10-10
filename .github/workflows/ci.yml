@@ -1414,6 +1414,11 @@ jobs:
       # reproduced on the owner's PC, where the tick is about 0.5 ms. All three
       # were fixed with `tempfile.mkdtemp`, which asks the filesystem for a free
       # name. This is what keeps the next one from being found the same way.
+      # It reads *.ps1 too (2026-10-09): five %TEMP% folders in
+      # scripts/apply-patches.ps1 were named from `Get-Date -Format
+      # 'yyyy-MM-dd-HHmmss'`, so two runs started inside one second shared them
+      # and each one's teardown deleted the other's - which is what "a suite
+      # that passes alone fails in a combined run" was, for a day.
       - name: No path is named from a clock and created without exist_ok
         run: python3 ../../tools/check_same_tick_paths.py
       # The tutorials are data, so nothing compiles them and nothing reads them.

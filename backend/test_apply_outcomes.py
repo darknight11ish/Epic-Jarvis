@@ -1268,6 +1268,92 @@ def t_a_patch_answered_already_on_is_never_reversed_off():
           out[-2500:])
 
 
+def t_the_throwaway_folders_cannot_collide_with_another_run():
+    """No folder apply-patches.ps1 makes under %TEMP% is named from the clock.
+
+    WHY (2026-10-09, the staging race). Several agents spent a day re-running
+    suites around "a suite that passes alone fails in a combined run" and "the
+    staging was snapshotted mid-revert". The cause was here: five folders under
+    %TEMP% were named from `$Stamp`, a `Get-Date -Format 'yyyy-MM-dd-HHmmss'`
+    reading - $LfDir, $rehearsal, $check, $undoTest and $stateDir, the last
+    handed to `run_suites.py --state-env`. On Windows the clock only moves on
+    the system timer tick, so two runs started inside one second computed the
+    SAME five names; every one is created with `-Force` and removed with
+    `Remove-Item -Force`, so whichever run ended first DELETED the other run's
+    folders underneath it. `remove` then reported patch failures that were not
+    there, and `update`'s suites failed against a config folder that had been
+    deleted mid-run.
+
+    This is the deterministic half of that, and it holds on every platform:
+    the checker the repository already has for this bug
+    (`tools/check_same_tick_paths.py`) is run over the patcher's real text, and
+    the FIVE lines above are fed to its PowerShell rule as a control - a rule
+    that says "safe" to the old text proves nothing about the new one. Nothing
+    here waits on a stopwatch or on two processes actually racing.
+    """
+    sys.path.insert(0, str(HERE.parent / "tools"))
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "check_same_tick_paths", HERE.parent / "tools" / "check_same_tick_paths.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    # CONTROL FIRST: the five exact lines this bug was, as $Stamp named them.
+    old = "\n".join([
+        "$RepoRoot = Split-Path -Parent $PSScriptRoot",
+        "$Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'",
+        '$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"',
+        "New-Item -ItemType Directory -Path $LfDir -Force | Out-Null",
+        "",
+        '$rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"',
+        "New-Item -ItemType Directory -Path $rehearsal -Force | Out-Null",
+        "",
+        '$check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$Stamp"',
+        "New-Item -ItemType Directory -Path $check -Force | Out-Null",
+        "",
+        '$undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$Stamp"',
+        "New-Item -ItemType Directory -Path $undoTest -Force | Out-Null",
+        "",
+        '$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $Stamp)',
+        "Remove-Item -LiteralPath $stateDir -Recurse -Force -ErrorAction SilentlyContinue",
+        "",
+    ]) + "\n"
+    control = mod.ps1_findings(old)
+    check("CONTROL: the clock-named %TEMP% folders this incident was are FOUND by "
+          "tools/check_same_tick_paths.py's PowerShell rule (otherwise the check "
+          "below proves nothing)", len(control) == 5,
+          f"the rule found {len(control)} of the 5 old sites: {control}")
+
+    # ... and the rule must not fire on a name that cannot collide. The ONLY
+    # difference here is where the name comes from.
+    safe = ("$TempName = $([Guid]::NewGuid().ToString('N').Substring(0, 12))\n"
+            + old.replace("$Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'\n", "")
+                 .replace("$Stamp", "$TempName"))
+    check("... and does NOT fire when the name comes from a GUID instead",
+          mod.ps1_findings(safe) == [], mod.ps1_findings(safe))
+
+    # The real script, and the rule the repository actually runs.
+    real, _why = mod.gitignored_paths()
+    findings = mod.ps1_findings(REAL_PS1.read_text(encoding="utf-8"))
+    check("apply-patches.ps1 names no folder under %TEMP% from the clock: two runs "
+          "started inside one second cannot share (and then delete) each other's "
+          "rehearsal, LF copy, result check, undo check or suite-state folder",
+          findings == [], findings)
+    offenders = [f for f in mod.repo_files(real) if f.suffix == ".ps1"
+                 and mod.ps1_findings(f.read_text(encoding="utf-8-sig"))]
+    check("... and no *.ps1 anywhere in the checkout does, read the way CI reads it",
+          offenders == [], [f.name for f in offenders])
+
+    # The name is one value, so the five places cannot drift apart again: one
+    # build plus the five folders is six uses of the same name, and no use of
+    # any OTHER name for a throwaway folder.
+    text = REAL_PS1.read_text(encoding="utf-8")
+    used = re.findall(r'\$Temp(?:Name|Id)\b', text)
+    check("the run-unique name is built once and used for every throwaway folder, "
+          "rather than five copies of a clock reading",
+          len(set(used)) == 1 and len(used) >= 6, sorted(set(used)))
+
+
 def main():
     if not PWSH:
         print("SKIP  no PowerShell 7 (pwsh) here")
@@ -1277,6 +1363,7 @@ def main():
                t_mini_midway_failure_restore, t_mini_running_jarvis, t_mini_inside_outer_repo,
                t_an_unrelated_python_is_not_jarvis, t_the_live_jarvis_is_named_and_a_copy_is_not,
                t_the_running_rule_itself, t_both_scripts_share_one_running_rule,
+               t_the_throwaway_folders_cannot_collide_with_another_run,
                t_mini_test_suites_summary, t_a_failing_suites_reason_is_printed,
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,

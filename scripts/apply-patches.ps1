@@ -1599,6 +1599,25 @@ $REBUILT_SUPERSEDES = @{
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
 $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+# The name every throwaway folder under %TEMP% is built from - and it is NOT
+# $Stamp above (2026-10-09, the staging race several agents hit on this PC).
+#
+# $Stamp is a clock reading to the second, and on Windows the clock only moves
+# on the system timer tick, so a second run started inside the same second as
+# the first reads the SAME value. Five folders under %TEMP% were named from it:
+# jarvis-patches-lf-, jarvis-rehearsal-, jarvis-result-check-,
+# jarvis-undo-check- and - the one that cost the time - jarvis-suite-state-,
+# which is handed to `run_suites.py --state-env`. Every one of them is then
+# created with -Force, and removed with Remove-Item -Force at the end of the
+# run, so two runs in one second do not merely share a folder: whichever ends
+# first DELETES it underneath the other. `remove` (the patcher) then reports
+# spurious patch failures, and the suites that `update` started report spurious
+# test failures against a config folder that has been deleted mid-run - which
+# is why "run it alone again" always made them pass. A name that cannot collide
+# is the fix, so it comes from the operating system rather than from a clock.
+# `update-jarvis.ps1` names its source folder this way for the same reason.
+$RunId      = $([Guid]::NewGuid().ToString('N').Substring(0, 12))
+$TempName   = "$Stamp-$RunId"
 
 # The list above is hand-ordered because the order matters, which means it can
 # fall behind the directory - and it did: event-allowlist.patch was written,
@@ -1973,7 +1992,7 @@ if ($UsingRebuilt) {
 # is. That half is pinned at the one call that writes anything (Invoke-Patch,
 # with `-c core.autocrlf=false -c core.eol=lf`); the comment there has the
 # measured bytes.
-$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
+$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$TempName"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
 
 # Copies $Src to $Dest with every CRLF made LF. Returns how many it changed.
@@ -2682,7 +2701,7 @@ try {
     #
     # Both rehearsals run on a throwaway copy, so the real files are not
     # opened until an answer is known.
-    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
+    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$TempName"
     $broken    = @()
     $already   = $false
     # Set only by (c): the patches an earlier run left on, newest first,
@@ -3160,7 +3179,7 @@ try {
                         # is the half-applied backend this script exists to
                         # prevent, so it is refused here, on the copy, while
                         # nothing of the owner's has been changed.
-                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$Stamp"
+                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$TempName"
                         $intact = $true
                         $why = ""
                         try {
@@ -3357,7 +3376,7 @@ try {
             # So the same strip is done once more on a throwaway copy of the
             # real files first; if it cannot finish, nothing of the owner's has
             # been touched.
-            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$Stamp"
+            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$TempName"
             $undoOk = $false
             $why = ""
             try {
@@ -3880,7 +3899,7 @@ $ErrorActionPreference = 'Continue'
 # audit log in .openjarvis\logs. So for this run the config folder and the
 # audit log are a temporary folder, deleted afterwards. run_suites.py works
 # out the variables (the same ones CI's runner uses), one KEY=VALUE a line.
-$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $Stamp)
+$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $TempName)
 $savedEnv = @{}
 $stateLines = & $py.Exe (Join-Path $PatchDir 'run_suites.py') --state-env $stateDir 2>$null
 foreach ($line in @($stateLines)) {
