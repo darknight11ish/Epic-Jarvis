@@ -146,7 +146,9 @@ class SettingsSearchTest {
     fun `the index quotes the app's own words`() {
         val client = "jarvis-client/app/src/main/java/com/jarvis/client/"
         for (row in SettingsSearch.ROWS) {
-            val sources = row.source.joinToString("\n") { file -> repoFile(client + file).readText() }
+            val sources = row.source.joinToString("\n") { file ->
+                wordsOf(repoFile(client + file).readText())
+            }
             for (quote in row.quotes) {
                 assertTrue(
                     "${row.key}: nothing in ${row.source} says \"$quote\" - the index is " +
@@ -155,6 +157,25 @@ class SettingsSearchTest {
                 )
             }
         }
+    }
+
+    @Test
+    fun `a sentence the app folds across two literals still counts`() {
+        // The mismatch that made this file red on main on 2026-10-10: the
+        // Limits screen says one sentence, and writes it as two literals. The
+        // index quotes the sentence, which is right; reading the raw file for
+        // it is what was wrong.
+        val folded = "\"Turning something up asks you on the PC first, and \" +\n" +
+            "                \"nothing changes until you answer there.\""
+        val words = "Turning something up asks you on the PC first, and nothing changes until you answer there."
+        assertFalse(
+            "the raw file must NOT contain it, or this test proves nothing",
+            folded.contains(words),
+        )
+        assertTrue(
+            "a quote spanning a folded literal is the app's own words, and must be found",
+            wordsOf(folded).contains(words),
+        )
     }
 
     @Test
@@ -244,4 +265,19 @@ class SettingsSearchTest {
         }
         error("$rel not found above ${System.getProperty("user.dir")}")
     }
+
+    /**
+     * A source file's words as the app really says them.
+     *
+     * The app folds a long sentence across two literals — `"one " + "two"` — so
+     * the sentence a screen shows is not a contiguous run of characters in the
+     * file it is written in. Reading the file raw for a quote therefore fails
+     * on the `" + "` in the middle, which says nothing about whether the screen
+     * still says it: that is a reader artefact, not drift. Joining adjacent
+     * literals first is what makes the check mean what its name says.
+     *
+     * (Measured 2026-10-10: this made the `limits` row red on `main` while the
+     * Limits screen still carried the sentence word for word.)
+     */
+    private fun wordsOf(source: String): String = source.replace(Regex("\"\\s*\\+\\s*\""), "")
 }
