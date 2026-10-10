@@ -3127,6 +3127,20 @@ def _heartbeat(out: _Out, stop: threading.Event, every: float, delay: float) -> 
 REASONING_OFF = {"reasoning_effort": "none"}
 _reasoning_field_refused = False
 
+#: The room an answer needs before thinking may have any of the same budget
+#: (2026-10-09). Reasoning and the answer are ONE allowance on this endpoint:
+#: Ollama stops the reply - reasoning included - at `max_tokens`, so a short
+#: turn that thinks first can spend the whole allowance before it writes a
+#: single word of answer. Measured on this PC with qwen3:8b: a one-line
+#: factual question at max_tokens 128 spent all 128 tokens thinking (561
+#: characters of reasoning) and came back EMPTY in 3.5 s; the same question
+#: with thinking off answered correctly in 0.29 s. Below this floor,
+#: thinking is switched off for the turn and the model answers directly - a
+#: turn that was going to be cut off mid-thought loses nothing it could have
+#: used. 192 leaves room for a couple of sentences, which is what a turn
+#: this short was going to get anyway.
+REASONING_MIN_ANSWER_TOKENS = 192
+
 # --------------------------------------------------------------------------
 #   How much of each prompt Ollama reused (feasibility audit I03, 2026-09-26)
 # --------------------------------------------------------------------------
@@ -3143,6 +3157,68 @@ _reasoning_field_refused = False
 # that does not know the field ignores it (unknown JSON fields are skipped)
 # and nothing is recorded.
 PROMPT_USAGE = {"stream_options": {"include_usage": True}}
+
+# --------------------------------------------------------------------------
+#   When the model was not given the whole conversation (2026-10-09)
+# --------------------------------------------------------------------------
+#
+# Ollama deletes the FRONT of a prompt that is too long and answers anyway:
+# no error, no note, and the reply comes back naming the smaller prompt it
+# read instead. Measured on this PC (Ollama 0.40.2, qwen3:8b): eight prompts
+# of growing length, and every one past the limit reported a prompt of
+# EXACTLY 8,194 tokens - the same figure to the token, whatever was sent,
+# where the two prompts that still fitted reported what they really were.
+# (The owner's own benchmark saw the same shape at 16384, everything cut to
+# 16,382.) The beginning of the conversation is what the model cannot see,
+# while both apps show the whole thing as sent.
+#
+# So the answer's own request is measured against the answer that came back.
+# `prompt_tokens` is Ollama's count of what it really read; what Jarvis sent
+# is estimated the same way the prompt's own trimming is (estimate_tokens).
+# That estimator is deliberately pessimistic - 3 characters a token where
+# English is nearer 4 - so its number is not the model's number, and only a
+# gap too big for that margin to explain is treated as a loss. Measured here
+# with qwen3:8b: the two prompts that fitted reported 2.55x the estimate
+# (this content was word-heavy, which the estimator UNDER-counts) and the
+# six that were cut reported 0.18-0.67 of it. So the ratio alone separates
+# them, well clear of either band.
+#
+# Hence a shortfall is called material only when the model read less than
+# DROPPED_PROMPT_RATIO of what was sent, and only once the prompt is long
+# enough (DROPPED_PROMPT_MIN_TOKENS) for that gap to be a passage of text
+# rather than an artefact of the estimate. Under-reporting this is the safe
+# way to be wrong: a missed warning leaves today's silent behaviour, while a
+# false one would teach the owner to distrust the line.
+DROPPED_PROMPT_RATIO = 0.6
+DROPPED_PROMPT_MIN_TOKENS = 1200
+
+#: Said in the same place as every other "what Jarvis is doing" line - the
+#: activity line both apps already show for a link or a model that is in
+#: trouble (jarvis_hud.py's announce -> jarvis_events.set_activity). No
+#: address, no port, no token: what was lost and what to do about it.
+DROPPED_PROMPT_NOTE = (
+    "The model was not given the whole conversation - it reads only the end of "
+    "a prompt that is too long, so the earliest part of this chat was dropped "
+    "before it answered. Anything it says about earlier messages may be wrong. "
+    "Start a new conversation, or ask again in a shorter message.")
+
+
+def dropped_prompt_note(sent_tokens: Optional[int],
+                        read_tokens: Optional[int]) -> Optional[str]:
+    """DROPPED_PROMPT_NOTE when the model read materially less than was sent,
+    else None.
+
+    `sent_tokens` is this turn's own estimate of its biggest prompt,
+    `read_tokens` what Ollama said it read. Either being absent means the
+    question cannot be asked - an Ollama that reports no count says nothing
+    about what it read, and a guess must not become an accusation."""
+    if not sent_tokens or not read_tokens:
+        return None
+    if sent_tokens < DROPPED_PROMPT_MIN_TOKENS:
+        return None
+    if read_tokens >= sent_tokens * DROPPED_PROMPT_RATIO:
+        return None
+    return DROPPED_PROMPT_NOTE
 
 
 def _note_prompt_use(prompt_tokens: Optional[int], cached_tokens: Optional[int],
@@ -6296,16 +6372,25 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
     app's temperature/top_p and max_tokens (`opts`), reasoning_effort
     (from jarvis_thinking unless this Ollama refused it once), tools. No `options`,
     no num_ctx, no keep_alive: the model's own settings decide those
-    (jarvis-primary.Modelfile says why)."""
+    (jarvis-primary.Modelfile says why).
+
+    Thinking is left off when the answer's own allowance is too small to
+    share with it (REASONING_MIN_ANSWER_TOKENS): both come out of `max_tokens`,
+    so a turn that thinks first can lose the whole answer - see that constant.
+    Every other turn keeps whatever level the owner chose."""
     body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
     if not _reasoning_field_refused:
         reasoning = None
         try:
-            import jarvis_thinking
-            reasoning = jarvis_thinking.reasoning_parameters(
-                model, question=question, spoken=spoken,
-                ollama_url=ollama_url, role=role
-            )
+            room = opts.get("max_tokens")
+            too_little_room = (isinstance(room, int) and not isinstance(room, bool)
+                               and room < REASONING_MIN_ANSWER_TOKENS)
+            if not too_little_room:
+                import jarvis_thinking
+                reasoning = jarvis_thinking.reasoning_parameters(
+                    model, question=question, spoken=spoken,
+                    ollama_url=ollama_url, role=role
+                )
         except Exception:
             pass
         if reasoning:
@@ -6861,6 +6946,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     rounds = 0
     # Ollama's prompt counts, summed over this turn's rounds (PROMPT_USAGE).
     prompt_use: dict = {"prompt": None, "cached": None}
+    # This turn's biggest prompt and what the model said it read of it - see
+    # dropped_prompt_note. `tokens` is Jarvis's own estimate of what it sent.
+    sent_use: dict = {"tokens": 0, "read": None}
 
     def say_step(phase: str, tool: Optional[str] = None, **kw) -> None:
         try:
@@ -6921,13 +7009,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     question_text = c
                     break
         base_url = chat_url().rsplit("/v1", 1)[0] if "/v1" in chat_url() else chat_url()
-        body = chat_body(cur["model"],
-                         dress_messages(fit_messages(clear_old_tool_results(msgs, room), room),
-                                        manner=manner,
-                                        focus=focus_brief, next_time=next_time["note"],
-                                        spoken=watch.spoken, live=watch.live,
-                                        cut_off=watch.cut_off, crisis=watch.crisis),
-                         opts, offer["schemas"] if offer_tools else None,
+        # Held out of the call so that what this round really sends can be
+        # measured against what the model says it read - see sent_use.
+        sent_messages = dress_messages(
+            fit_messages(clear_old_tool_results(msgs, room), room),
+            manner=manner, focus=focus_brief, next_time=next_time["note"],
+            spoken=watch.spoken, live=watch.live,
+            cut_off=watch.cut_off, crisis=watch.crisis)
+        body = chat_body(cur["model"], sent_messages, opts,
+                         offer["schemas"] if offer_tools else None,
                          spoken=watch.spoken, question=question_text, role="everyday",
                          ollama_url=base_url)
         stripper = _ThinkStripper()
@@ -7042,6 +7132,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
             if got is not None:
                 prompt_use[key] = (prompt_use[key] or 0) + got
+        # What this round SENT, against what the model said it read (see
+        # "When the model was not given the whole conversation"). Kept per
+        # round: the longest prompt is the one with the most to lose, and a
+        # tool round's own results are in neither figure.
+        seen = estimate_tokens(sent_messages)
+        if seen > sent_use["tokens"]:
+            sent_use.update(tokens=seen, read=rnd.prompt_tokens)
         return rnd
 
     def deliver_table(text: str) -> None:
@@ -7322,6 +7419,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             # The last round asked for a tool anyway, after tools were taken
             # away (max_rounds). Nothing ran; to the app the answer is over.
             finish = "stop"
+        # The model read less of the prompt than was sent (see "When the model
+        # was not given the whole conversation"): said in the activity line,
+        # the same place as any other link or model trouble. After the answer,
+        # so the owner is never kept waiting for a warning about it, and
+        # through `announce` because a backend without an activity line must
+        # still answer - this is a note, never a failure.
+        dropped = dropped_prompt_note(sent_use["tokens"], sent_use["read"])
+        if dropped and announce is not None:
+            try:
+                announce(dropped)
+            except Exception:
+                pass
         if out.sse:
             if last is not None and (last.ended or last.finish):
                 out.send(_sse(_chunk(cid, created, cur["model"], {}, finish or "stop")))
