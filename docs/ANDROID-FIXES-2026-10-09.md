@@ -160,10 +160,13 @@ warning is in the build output.
 ## 4. Tests and what ran where
 
 - `.\gradlew.bat testDebugUnitTest` from `jarvis-client`, with `ANDROID_HOME`
-  set: **BUILD SUCCESSFUL, 2,000 tests, 0 failures, 0 errors, 0 skipped**
-  across 184 JUnit XML files, read from the XML rather than the exit code.
-  **19 of those are new** (4 for the three dead ends, 3 for the notification
-  row, 3 for N3/N4, 1 for N2, 8 for the first audit's leftovers below).
+  set, **on this branch after it was rebased onto today's `main`**:
+  **BUILD SUCCESSFUL, 2,037 tests, 0 failures, 0 errors, 0 skipped** across 187
+  JUnit XML files, read from the XML rather than the exit code. (The first pass
+  measured 1,992 before the eight fixes below; the count grew because `main`
+  kept moving, not because tests were removed.) **19 of the total are new from
+  these two passes**: 4 for the three dead ends, 3 for the notification row,
+  3 for N3/N4, 1 for N2, and 8 for the first audit's leftovers.
 - `.\gradlew.bat assembleDebug`: BUILD SUCCESSFUL, and that APK was installed
   on the phone with `adb install -r` (in place — the app is debuggable, and no
   app data was cleared, nothing uninstalled, nothing paired, no credential
@@ -228,6 +231,12 @@ Each is held by one assertion in `FirstAuditLeftoversTest`.
 attempts died on the phone's lock screen. This run was on the attached CPH2419,
 unlocked (`dumpsys trust` → `deviceLocked=0`) and awake, with
 `adb reverse tcp:4719 tcp:4719` already in place.
+
+The **check-only record** of the same phone run — and the same diagnosis of the
+four failures, reached independently by the other conversation, which changed no
+app source — is `docs/ANDROID-PHONE-CHECKS-2026-10-09.md` (PR #181). Where that
+report says those two classes are false-red on hardware, **this branch is the
+fix**: after it, the whole suite is green in one run (table below).
 
 **The one real defect was in the tests, not the app.** `LaunchTest` and
 `FaceRenderTest` call `UiAutomation.grantRuntimePermission` in `@Before`, and
