@@ -91,19 +91,22 @@ await check("the limits, colours, icons and starters are the contract's", () => 
     CASES.tag_starters.map(({ order, ...rest }) => rest));
 });
 
-await check("theme.css carries the palette: light ink in Daylight, dark ink elsewhere, with the tints", () => {
-  const css = read("src/theme.css");
-  const rootAt = css.indexOf(":root {");
-  const paperAt = css.indexOf('[data-theme="paper"] {');
-  assert.ok(rootAt >= 0 && paperAt > rootAt);
-  const dark = css.slice(rootAt, css.indexOf("\n}\n", rootAt));
-  const light = css.slice(paperAt, css.indexOf("\n}\n", paperAt));
+await check("the tokens carry the palette: light ink in Daylight, dark ink elsewhere, with the tints", () => {
+  // This used to scrape `src/theme.css` as text, keyed to how that file laid its
+  // blocks out (`:root {` ... `[data-theme="paper"] {`). `theme.css` became
+  // GENERATED on 2026-10-09 (PR #187) and joins `:root` with the default theme's
+  // block, so that scrape broke on a formatting change in a file this test only
+  // reads. The values it wants are in the token file the CSS is generated from -
+  // the stronger place to check them, because that is the source and `theme.css`
+  // is a rendering of it. The same fix `tools/gen_progress_cases.py` needed.
+  const tokens = JSON.parse(readFileSync(join(HERE, "..", "..", "tokens", "themes.tokens.json"), "utf8"));
+  const value = (theme, key) => tokens.themes[theme][key].$value;
   for (const c of CASES.tag_palette) {
-    assert.match(dark, new RegExp(`--tag-${c.slot}: ${c.dark};`), `dark ${c.slot}`);
-    assert.match(light, new RegExp(`--tag-${c.slot}: ${c.light};`), `light ${c.slot}`);
+    assert.equal(value("deep-space", `tag${c.slot}`).toLowerCase(), c.dark.toLowerCase(), `dark ${c.slot}`);
+    assert.equal(value("paper", `tag${c.slot}`).toLowerCase(), c.light.toLowerCase(), `light ${c.slot}`);
   }
-  assert.match(dark, new RegExp(`--tag-tint: ${Math.round(CASES.tag_tint.dark * 100)}%;`));
-  assert.match(light, new RegExp(`--tag-tint: ${Math.round(CASES.tag_tint.light * 100)}%;`));
+  assert.equal(value("deep-space", "tagTint"), `${Math.round(CASES.tag_tint.dark * 100)}%`);
+  assert.equal(value("paper", "tagTint"), `${Math.round(CASES.tag_tint.light * 100)}%`);
 });
 
 await check("the ink meets 4.5:1 on its own tinted header, in both variants", () => {

@@ -111,6 +111,13 @@ jobs:
           done
         shell: bash
       - run: node scripts/markdown-test.mjs
+      # One source of truth for both clients' theme colours: this fails if either
+      # generated file (the desktop's theme.css, the phone's Themes.kt) has been
+      # edited by hand or has fallen behind tokens/themes.tokens.json. It runs
+      # BEFORE the token checks because a stale generated file makes their
+      # results meaningless - they measure what it produced. `../tools`, because
+      # this job's working directory is jarvis-desktop/.
+      - run: node ../tools/tokens/build.mjs --check
       - run: python3 scripts/check-tokens.py
       # EVERY suite in tests/, not a hand-picked few. Most of them open the
       # real pages in a headless Chromium (tests/uikit.mjs), which is why only

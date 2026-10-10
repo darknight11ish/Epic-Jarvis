@@ -1628,10 +1628,11 @@ def score_clips(clips: list, embedder=None, sample_rate: Optional[int] = None,
                                     "train it again first"}
     strictness = settings()["strictness"]
     strong = _pick_strong(strong, emb, strictness)
-    steps = plan(strictness, emb, strong, prof)
-    dec, role = steps[-1]
-    if not prof.subprints(dec.name):
-        dec, role = emb, strictness            # a print from before the strong model
+    name, which = deciding_model(prof, emb, strong, strictness)
+    # Back to the loaded model `name` belongs to: it is one of exactly these two
+    # (`plan` asks no others), and the two are asked for by name above.
+    dec = strong if (strong is not None and strong.name == name) else emb
+    role = BAR_ROLE
     scores, passed = [], []
     for c in clips:
         vecs = _vectors(c, emb, strong, sample_rate)
@@ -1839,6 +1840,72 @@ def raw_bar(prof: VoiceProfile, name: str, role: str) -> float:
     else:
         own = float(prof.thresholds.get(name, 0.0) or 0.0)
     return max(table, own)
+
+
+def own_bar(prof: VoiceProfile, name: str, role: str) -> float:
+    """The OWNER'S own bar for model `name` in `role` - the number the print
+    holds, before the model's measured floor is applied to it.
+
+    A settings screen wants this one, not `raw_bar`: it is the number the
+    owner set and the number a card would change, and a print holding
+    something under the floor (a hand-edited file) must still read back as
+    what it holds - `raw_bar` would answer with the floor instead and the
+    screen would show a value nobody chose. The floor is not lost by asking
+    for it separately: it is what `set_threshold` and the card both refuse a
+    lower number against, and it is in force when a clip is judged.
+    """
+    if name == prof.embedder or not prof.embedder:
+        return float(prof.threshold) if role != "paired" else 0.0
+    return float(prof.thresholds.get(name, 0.0) or 0.0)
+
+
+#: The role to read or write a bar in when nothing is being judged at that
+#: moment (the limits row, which only wants the model's own bar - not a
+#: verdict). `_judge` uses the role `plan` gave it, which is `balanced` for
+#: the deciding model in every case but a very-strict pair, where the pair's
+#: own bars are a different pair of numbers entirely.
+BAR_ROLE = BALANCED
+
+
+def deciding_model(prof: VoiceProfile, emb, strong, strictness: str) -> tuple:
+    """(name, which) - the NAME of the model whose similarity decides whether
+    this is the owner, and the name the owner's own bar for that model goes
+    under: "small" (the print's `threshold`) or "strong" (its
+    `thresholds[<that model>]`).
+
+    A NAME, never an object, because its callers pass it straight to
+    `own_bar`/`set_threshold`, which file a bar by name and would quietly
+    miss a model object.
+
+    THE ONE RULE, IN ONE PLACE. Three callers used to answer "which model's
+    bar is this?" separately and could disagree. `_judge` asks every model
+    `plan` returns but lets only the last one decide; `score_clips` (the
+    "someone else" check, whose reply names the model its suggested bar is
+    for) and `jarvis_voice_enroll.stage_threshold` (the card that writes
+    that bar) both have to name THAT model. When they did not, the card
+    wrote `thresholds[<strong model>]` while the limits row read and wrote
+    `threshold`, leaving one print holding two numbers with only one of them
+    deciding - the owner could see one and be judged by the other.
+
+    A print can hold both fields at once: `threshold` is the small model's,
+    and `thresholds[...]` holds one bar per OTHER model. `raw_bar` and
+    `own_bar` read whichever field belongs to `deciding_model`'s answer;
+    this function is what says which that is, so no caller has to open-code
+    the rule - the fallback included, which is a print made before the
+    stronger model was installed (`plan` then keeps the small model for it,
+    and the print's own bar is the one that decides).
+
+    `emb` is only ever asked for its NAME, and the stronger model is
+    recognised by `prof.embedder` - the name the print itself recorded. That
+    is deliberate: an embedder object is not always the one the print was
+    made with (`verify` refuses such a pair outright, and the enrolment
+    module builds its own), so comparing objects would answer this question
+    differently depending on who asked.
+    """
+    if strong is not None and getattr(strong, "name", "") != prof.embedder \
+            and prof.subprints(strong.name):
+        return strong.name, "strong"
+    return (prof.embedder or getattr(emb, "name", "") or emb), "small"
 
 
 def _judge(vecs: dict, prof: VoiceProfile, emb, strong, strictness: str) -> tuple:

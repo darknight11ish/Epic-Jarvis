@@ -61,13 +61,16 @@ import kotlinx.serialization.json.JsonPrimitive
  * (`quiet_on`), and the two clock rows then show their value with a line saying
  * the hour decides nothing rather than a picker that would change nothing.
  *
- * WHAT IT WILL NOT PRETEND. A number turned DOWN applies at once; a number
- * turned UP - on a row the PC marks `loosen_up` - is a loosening, and the PC
- * puts ONE approval card to the owner and writes nothing until it is answered
- * THERE. So the plate says that once, plainly, and every change re-reads the
- * rows afterwards: a 2xx can mean "a card is waiting", never "it is done". The
- * sentence under the list is always the PC's own ([JarvisRuntime.setLimit]),
- * and a refusal goes into the shared notice too.
+ * WHAT IT WILL NOT PRETEND. A change applies at once, or it is a loosening and
+ * the PC puts ONE approval card to the owner and writes nothing until it is
+ * answered THERE. WHICH ONE IS THE ROW'S OWN BUSINESS, and the plate never says
+ * it in the blanket: most rows ask when a number goes up, and the voice check's
+ * bar asks when it goes DOWN, so the line above the rows promises nothing about
+ * direction and each row's own note (the PC's words) says which. So the plate
+ * says that once, plainly, and every change re-reads the rows afterwards: a 2xx
+ * can mean "a card is waiting", never "it is done". The sentence under the list
+ * is always the PC's own ([JarvisRuntime.setLimit]), and a refusal goes into the
+ * shared notice too.
  *
  * [Limits.offered] is what is drawn, so a row the PC marks `pc_only` cannot
  * appear here even if a PC sends one.

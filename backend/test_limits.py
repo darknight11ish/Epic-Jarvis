@@ -665,6 +665,119 @@ def t_the_voice_bar_loosening_is_wired_like_the_other_ones():
           and L.find("undo_window").action == "", L.find("voice_bar").action)
 
 
+def t_the_voice_bar_is_the_number_the_check_actually_uses():
+    """ONE PRINT, TWO BARS - and this row must be the one in force.
+
+    THE BUG THIS EXISTS FOR (found 2026-10-09). A print can hold two bars at
+    once: `threshold` (the small model's, the field `VoiceProfile` has always
+    had) and `thresholds[<strong model>]` (one per other model, written by the
+    "someone else" check's card). Which one is IN FORCE is decided by which
+    model actually judges the clip, and `jarvis_voice.raw_bar` reads that one.
+
+    `jarvis_voice_enroll.stage_threshold` used to work that out for itself -
+    "the stronger model decides when it is installed and has a sub-print" -
+    while `score_clips`, which NAMES the model on the card, fell back to the
+    small model for a print that has no strong sub-print. The two therefore
+    disagreed, and the card wrote `thresholds[<strong model>]` for a print the
+    check went on judging with `threshold`. The row then showed the old number
+    and changing it did nothing: `set_threshold` filed the approved value under
+    a bar nothing read.
+
+    So this walks the whole way with the STRONGER model deciding: the card the
+    backend raises, the bar it writes, the number the row reads back, and - the
+    part that matters - what `jarvis_voice` itself would judge a clip by. It
+    fails if the row and the check are ever looking at different fields, which
+    is the only thing that makes the number on screen a lie.
+    """
+    import jarvis_voice as V
+    from unittest import mock
+
+    class Bar:
+        def __init__(self, name, bar):
+            self.name, self.bar = name, bar
+
+    small = Bar("small-model-000000000000", 0.35)
+    strong = Bar("strong-model-00000000000", 0.40)
+    fresh()
+    reset(_says_yes([]))
+
+    # A real print, written by jarvis_voice's own writer, holding BOTH models'
+    # sub-prints - which is what `enroll(..., strong=...)` produces - and BOTH
+    # bars: the small model's own (0.35) and the stronger model's (0.40), the
+    # second one having been set by the "someone else" check's card. The
+    # stronger model decides this print, so 0.40 is the bar in force and 0.35
+    # is a number the check never reads.
+    VOICE_PROFILE.parent.mkdir(parents=True, exist_ok=True)
+    V.VoiceProfile(name="owner", embedder=small.name, threshold=0.35,
+                   centroid=[0.1, 0.2, 0.3, 0.4], samples=5,
+                   thresholds={strong.name: 0.40},
+                   models={small.name: [{"condition": "general",
+                                         "centroid": [0.1, 0.2, 0.3, 0.4],
+                                         "samples": 5, "self_scores": [0.6]}],
+                           strong.name: [{"condition": "general",
+                                          "centroid": [0.1, 0.2, 0.3, 0.4],
+                                          "samples": 5, "self_scores": [0.7]}]}
+                   ).save(VOICE_PROFILE)
+
+    with mock.patch.object(V, "strong_embedder", lambda *a: strong):
+        check("the stronger model is the one that decides this print",
+              V.deciding_model(V.load_profile(VOICE_PROFILE), small, strong,
+                               "balanced")[1] == "strong")
+        check("... and jarvis_voice judges a clip by ITS bar, not the print's",
+              V.raw_bar(V.load_profile(VOICE_PROFILE), strong.name, V.BAR_ROLE) == 0.40,
+              V.raw_bar(V.load_profile(VOICE_PROFILE), strong.name, V.BAR_ROLE))
+        #: The one fact every check below rests on: which model's bar the check
+        #: itself reads. Printed in the failure detail by name, so a reader can
+        #: tell "the row is wrong" from "the stand-in is wrong".
+        live = L.SOURCES[L.VOICE_BAR_SOURCE]._live(V, V.load_profile(VOICE_PROFILE))
+
+        check("the row starts at the bar in force, 40% - not the small model's 35%",
+              L.value_of(L.find("voice_bar")) == 40,
+              (L.value_of(L.find("voice_bar")), live))
+
+        cards = []
+        reset(_says_yes(cards))
+        code, out = L.handle_post(L.ROUTE, {"key": "voice_bar", "value": 65})
+        check("raising it applies at once and asks nobody",
+              code == 200 and cards == [] and out.get("changed") is True, (code, cards, out))
+        p = V.load_profile(VOICE_PROFILE)
+        check("... and lands in the STRONGER model's own bar, the one the check reads",
+              p.thresholds.get(strong.name) == 0.65
+              and V.raw_bar(p, strong.name, V.BAR_ROLE) == 0.65,
+              (p.thresholds, p.threshold))
+        check("... and the print's small-model bar is untouched",
+              p.threshold == 0.35, p.threshold)
+        check("... so the row reads back what was written, 65%",
+              L.value_of(L.find("voice_bar")) == 65, L.value_of(L.find("voice_bar")))
+
+        code, out = L.handle_post(L.ROUTE, {"key": "voice_bar", "value": 50})
+        check("lowering it raises exactly ONE card, under the lowering's own action",
+              len(cards) == 1 and cards[0][0] == L.LOWER_ACTION
+              and out.get("loosening") is True and out.get("approved") is True,
+              (code, cards, out))
+        check("it is applied once approved, and the STRONGER model's bar is what moves",
+              V.load_profile(VOICE_PROFILE).thresholds.get(strong.name) == 0.50
+              and L.value_of(L.find("voice_bar")) == 50,
+              (code, V.load_profile(VOICE_PROFILE).thresholds))
+        check("... and the check would judge a clip by that same 0.50",
+              V.raw_bar(V.load_profile(VOICE_PROFILE), strong.name, V.BAR_ROLE) == 0.50)
+        check("the print's small-model bar still holds its own number, 0.35 - "
+              "one print may hold two, but only one is in force",
+              V.load_profile(VOICE_PROFILE).threshold == 0.35)
+
+        # The floor is the DECIDING model's - read from jarvis_voice rather than
+        # restated, the same way the row itself reads it. If it ever stops being
+        # above 25%, this check stops being about anything and says so.
+        floor_pct = L._cosine_to_percent(V.floor_for(strong.name, V.BALANCED))
+        check("the stronger model's own floor is above the number about to be asked for",
+              floor_pct > 25, floor_pct)
+        code, out = L.handle_post(L.ROUTE, {"key": "voice_bar", "value": 25})
+        check("a lowering under THAT model's floor is refused before any card",
+              code == 400 and len(cards) == 1
+              and f"{floor_pct}%" in str(out.get("error")), (code, cards, out))
+    _no_print()
+
+
 # --------------------------------------------------------------------------
 #   This PC's own notifications - the seven the phone may change too
 #   (the owner's decision of 2026-10-08)

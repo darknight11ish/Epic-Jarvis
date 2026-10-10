@@ -1186,7 +1186,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/ledger` | GET | `routes.rs:22` | via `probe` | Audit chain. |
 | `/api/content-risk` | GET | `routes.rs:23` | **no** | Read-only by design. |
 | `/api/watch` | GET | `routes.rs:24` | **no** | |
-| `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. |
+| `/api/watch/report` | GET | `routes.rs:27` | **no** | A peek. Marking read is a POST on purpose. **The shape, verified against the owner's running backend and `jarvis_watch.py` on 2026-10-09** (it was unverified before, and both apps guessed wrong): `{available, new, updated, count, topics, note}` - the module splits its rows by `kind`, and its own consumer reads `new` + `updated`, in that order (`jarvis_watch.py:524`). A row is `{topic, kind, repo, url, stars, licence, archived, description, what_changed, at}`: a repository is named **`repo`**, not `full_name`/`name`, and there is no `descr`, no per-row `note`, and no `findings`/`items` anywhere in it. A repository with **no licence file** carries the two words **`"none stated"`** (`jarvis_watch.py:492`), not an empty string - so it draws the warning "no licence stated - no permission to use it", never a settled licence. Both apps read `findings`/`items` until 2026-10-09, so every *successful* read came back empty and both screens drew "Nothing new since you last marked the list read." over a list they had not read, while the badge above could say "Watches · 3 new" at the same moment. Held now by `jarvis-desktop/tests/fixtures/watch-report-cases.json` and the phone's copy under `contract/`, both written from the module by `tools/gen_watch_report_cases.py`; `backend/test_watch_notify.py` fails if either goes stale. |
 | `/api/memory/status` | GET | `routes.rs:28` | `JarvisRuntime.memoryStatus` (`MemoryCounts.STATUS_PATH`; Brain, "What Jarvis remembers", `MemoryCountsPlate.kt`) | `{available, db, facts, current, retired, erased, entities, embedder, semantic, vector_search, unembedded, reranker, said_again, sleep_time}` - `MemoryStore.status()` plus the route's own two. `facts` counts retired ones too; `current` is what is in use; `erased` (since 2026-09-24) counts facts whose words were erased; `entities` (since 2026-09-25) counts the people and things facts are linked to (one per group), and `entity_errors` appears only when linking a saved fact failed (the fact is saved either way). `reranker` (since 2026-09-26, §34) is `{"state": "on" \| "loading" \| "off" \| "not started", "model", "why", "used", "slow"?}`; `said_again` (since 2026-09-26, §34) is how many "said again" rows are kept. `embedder` is the meaning model's name as the store keeps it (a model that needs its maker's prefixes carries `+prefixes-1`, e.g. `Qwen/Qwen3-Embedding-0.6B-Q+prefixes-1`); `embedder_refused` (since 2026-09-28, "Model tryouts", `tools/model_tryout/README.md`) appears only when `JARVIS_MEMORY_EMBED_MODEL` named a model that could not be used - why, in plain words, with the default in use - and neither app shows it yet (the backend's window says it once). Both apps show the same rows in the same words (`memory-words.js` `statusRows`, `MemoryWords.statusRows`, one shared fixture - §34 "In the apps"); only the desktop shows `db`, a path on the PC. The phone reads this route too - this table used to say it did not (the memory review's B19, 2026-09-27). |
 | `/api/memory/pending` | GET | `routes.rs` (`memory_pending`), as `?retire_cards=1&sleep_offer=1&merge_cards=1` (the "are these the same?" card, desktop only - below) | via `probe`, as `/api/memory/pending?retire_cards=1&sleep_offer=1` (`MemoryCards.PENDING_PATH`, read by `JarvisRuntime.refreshBrain`/`refreshMemoryQueue`) | The review QUEUE, never the corpus. Both apps ask for retire cards because they label them correctly, and for the overnight-tidy card because they show it - see below. The HUD page reads it plainly, for a count only. |
 | `/api/memory/facts` | GET | `routes.rs:32`, `brain.rs:413` | `JarvisApi.kt:429` | Takes `?known_at=<unix seconds>` — "what did I believe then?" Each fact's `current` is judged as Jarvis knew it at that moment, not as of today: a fact retired later (`retired_at` after that moment) was current then; `valid_to` counts only while `retired_at` is empty (`bitemporal.patch`). Every row carries `erased_at` (a column since 2026-09-24): a number means "Erase the words" was used on it - its `text` is then only the marker `[erased]`, and both apps show "Erased on <date>" instead, never the marker (`/api/memory/erase`, under Writes). |
@@ -18458,3 +18458,148 @@ a refusal in the module's own words (`_file_words`), never into a zero.
 The answer holds service ids, model names, dollars, dates and the PC's own sentences.
 No key, no message, no chat and no piece of one is ever read or written here, and the
 audit line carries the action, the service and the dollar amounts only.
+
+## 123. The limits and frequencies, and the interruption budget (added 2026-10-09)
+
+`backend/limits-read.patch` and `backend/limits-settings.patch` (one read route, one
+write route), the shipped `jarvis_limits.py`, `backend/test_limits.py`,
+`backend/attention-settings.patch` (one more write route), the shipped
+`jarvis_arbiter.py`, and the two apps' own screens
+(`jarvis-desktop/src/limits.js` + `limits-settings.js` + `src-tauri/src/limits.rs`;
+`jarvis-client/.../net/Limits.kt` + `ui/screens/LimitsPlate.kt`). **This section
+exists because neither route was written down anywhere**: before it,
+`docs/JARVIS-API.md` had no mention of `/api/limits` or
+`/api/attention/settings` at all, and §31's own "limits" prose only pointed at the
+Brain's read of `/api/attention`.
+
+### 123.1 One table, one route, for every limit
+
+    GET  /api/limits             every limit this app may change, with what the
+                                 owner's file says now and the owner's words
+
+    POST /api/limits/settings    {"key": "undo_window", "value": 24}
+                                 ONE limit, one value
+
+The limits are not a module each: they are **rows in one table**
+(`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
+the next limit is a line in that table. Each row says where its value lives,
+whether a bigger number is the direction that asks, which app may change it, and
+the owner's own words for it. Seven of them:
+
+| `key` | what it is | the loosening | app |
+|---|---|---|---|
+| `undo_window` | how long an Undo stays possible | a BIGGER number (it keeps more of the owner's files recoverable on disk) | both |
+| `jobs_per_tick` | how much Jarvis gets on with at once | neither direction asks | desktop, and the route itself refuses another device |
+| `watch_star_jump` | what counts as news from a watched project | neither direction asks | desktop |
+| `watch_star_floor` | ...but never below this many stars | neither direction asks | desktop |
+| `study_run_cards` | cards in one study run before "Do 10 more" | neither direction asks | both |
+| `tag_suggest_age` | how long a chat must sit untouched before the overnight tag suggester may read it | neither direction asks | desktop |
+| `memory_people` | whether a model reads what the owner saves, looking for people and things | turning it ON | phone |
+| `voice_bar` | how sure the voice check must be that it is the owner's voice | a SMALLER number (a lower bar means more clips count as the owner's voice) | both |
+
+Two fields, two different jobs, and the difference is worth knowing when you add a
+row: **`app` is what each screen draws** (`"desktop"` never reaches the phone at all,
+`"phone"` never reaches the PC), and **`pc_only` is what the route refuses** - a
+change to a `pc_only` row from any device but this PC is `403` before anything is
+read or written. Only `jobs_per_tick` carries both today; the other desktop rows are
+merely not offered to the phone, and a phone that sent one anyway would be answered.
+
+**`voice_bar` is the one row whose number is not in `jarvis-framework.toml`.** It
+lives in the owner's enrolled voice print, which is encrypted and which
+`jarvis_voice.py` alone reads and writes, so the row names a `source`
+(`jarvis_limits.SOURCES`) instead of a `[table].key`. It is also the one row whose
+loosening goes DOWN, which is why the card it raises has a name of its own -
+`lower_the_voice_check_bar` - rather than the shared `raise_a_limit`, whose words
+say the opposite of what the owner is agreeing to. The row reads and writes **the
+bar that actually decides**: a print can hold both `threshold` (the small model's)
+and `thresholds[<strong model>]`, and `jarvis_voice.deciding_model` is the single
+rule that says which of them is in force, so the number on screen is the number
+clips are judged by.
+
+### 123.2 What `GET /api/limits` answers
+
+    200 {"ok": true, "available": true,
+         "limits": [
+           {"key": "undo_window", "title": "How long you can undo", "kind": "int",
+            "value": 24, "words": "keep undo for a day", "choices": [1, 24, 168],
+            "low": 1, "high": 720, "unit": "hours",
+            "note": "A longer window keeps older copies of your files on this PC.",
+            "loosen_up": true, "pc_only": false, "app": "both"}
+         ]}
+
+`value` is the number (or `true`/`false`) the row holds now, and `words` is that
+same value in the owner's own sentence. `low`, `high` and `choices` are the range
+and the fixed set the owner picks from; `unit` is what one step means. `note` is the
+row's second line in plain words - and on this page **it is the row that knows which
+direction asks**, because `loosen_up` can only describe an UP loosening, so a row
+whose loosening goes down says `false` there and says so in its own `note` instead.
+
+`app` is `"both"`, `"desktop"` or `"phone"`, and `pc_only` marks a row only this PC
+may change. **`app=None` - what the route itself asks for - returns EVERY row**,
+each carrying its own `app`, so each screen filters on what a row says rather than
+on a filter guessed at the route. (Both apps call the same route, and the PC's card
+must see the PC-only limits while the phone must not; nothing at the route could
+tell them apart without the caller saying so.)
+
+There is deliberately **no second copy of any of these numbers** in this document,
+in either app or in `features.json`: the table is the one place they are described,
+and a hand-typed copy would drift from it.
+
+### 123.3 What `POST /api/limits/settings` answers
+
+    POST /api/limits/settings {"key": "undo_window", "value": 168}
+    200 {"ok": true, "key": "undo_window", "changed": true, "loosening": false,
+         "approved": false, "from": 24, "to": 168,
+         "said": "How long you can undo is now keep undo for a week."}
+
+**The direction is read from the VALUE against the number already in force, never
+from anything the caller sends.** There is no "raise" or "lower" in the body: a
+request names a key and a value, and the table's own `loosening` says which way
+that is. A change that is not this row's loosening applies at once (`loosening`
+and `approved` both `false`); the one that is raises ONE approval card and writes
+nothing until it is answered (`loosening` and `approved` both `true`, and `said`
+is the card's own words, so a 2xx can mean "a card is waiting" and never "it is
+done"). A denial or a timeout is `409` in the owner's words; a card that could not
+be raised at all is `503`.
+
+| answer | when |
+|---|---|
+| `400` `{"ok": false, "error": "That is not a limit Jarvis knows."}` | no such `key` |
+| `400` `{"ok": false, "error": "Send a limit and the number you want."}` | no `key`, or no `value` |
+| `400` `{"ok": false, "error": "\"<x>\" is not a number."}` | a value that is not one |
+| `400` `{"ok": false, "error": "Choose one of: 1, 24, 168."}` | a value outside the row's fixed set |
+| `400` `{"ok": false, "error": "That has to be between 1 hours and 720 hours."}` | a value outside the row's range |
+| `400` `{"ok": false, "error": "The lowest this voice check allows is 35%, so nothing was changed"}` | `voice_bar`, below the deciding model's own floor - refused **before** any card, so the owner is never asked to approve a change that could not happen |
+| `403` `{"ok": false, "pc_only": true, "error": "That can only be changed on the PC."}` | a `pc_only` row, from anything but this PC |
+| `409` `{"ok": false, "error": "You said no, so nothing was changed."}` | the card was denied (`"timed_out"` and `"That was not approved, so nothing was changed."` are its siblings) |
+| `503` `{"ok": false, "error": "Your PC's Jarvis cannot ask you about that yet, so nothing was changed."}` | the gate action's tier is not `"ask"` |
+
+### 123.4 The interruption budget: `POST /api/attention/settings`
+
+    GET  /api/attention          the budget: how many times Jarvis may speak up
+                                 today, how many are left, the brief's hour, and
+                                 whether the brief is due (section 31)
+
+    POST /api/attention/settings {"spoken_per_day": 6}
+    POST /api/attention/settings {"digest_hour": 9}
+
+Two numbers, **one at a time** - they are different kinds of thing, and a card that
+asked about both would be a card nobody could answer well. A body naming neither, or
+both, is `400` `{"ok": false, "error": "Send one of these: spoken_per_day,
+digest_hour."}`; a `spoken_per_day` that is not a whole number in range is `400` in
+the same words the limits route uses.
+
+`digest_hour` never asks: moving the hour the brief arrives only moves when the owner
+reads it, so it is `200` `{"ok": true, "changed": true, "loosening": false, "from":
+18, "to": 9, "said": "The morning brief arrives at 09:00 now."}`. **`spoken_per_day`
+follows the same rule as every limit: the NUMBER decides the direction, not the
+caller.** Raising it is a loosening - Jarvis may interrupt more - so it raises ONE
+card under the action `raise_attention_budget` (tier `ask`, Windows Hello on the PC)
+and writes nothing until it is approved; lowering it applies at once. The answer
+carries `loosening` and `approved` so a client can tell which happened, and `said` is
+always the PC's own sentence (`"Jarvis will not speak up on its own today."` at 0).
+
+Both routes are reached by tapping on either app's own screen (the PC's
+Settings → "Limits and frequency" and its Brain Attention card; the phone's
+Settings → Limits, and its Brain card for the budget) and by asking in words.
+`tools/check_parity.py` carries both.

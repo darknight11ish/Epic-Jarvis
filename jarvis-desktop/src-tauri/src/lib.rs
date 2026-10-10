@@ -463,9 +463,26 @@ pub struct RouteState {
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut system = telemetry_system();
+        //: Which wake-up we are on, so the notification choices are re-read
+        //: every `SYNC_EVERY` ticks rather than every three seconds (2026-10-09).
+        let mut tick: u32 = 0;
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
+
+            // A choice made on the PHONE has to reach the toasts without anyone
+            // opening this PC's Settings window (notifications.rs,
+            // `refresh_notification_prefs`). It rides this loop because the loop
+            // already runs whether or not a window is open, and it is the lowest
+            // -risk place to put it: one plain GET, nothing raised, nothing
+            // written, and every failure leaves the choices already in force.
+            // The interval is the loop's own, so this is at most ~30 s late -
+            // and a change made HERE still applies at once, through
+            // `set_notification_prefs`.
+            tick = tick.wrapping_add(1);
+            if tick.is_multiple_of(notifications::SYNC_EVERY) {
+                notifications::refresh_notification_prefs(app.clone()).await;
+            }
 
             // A drag is persisted even while the widget is collapsed or
             // hidden - and the same for the floating face. `flush` writes a

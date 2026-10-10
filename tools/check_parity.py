@@ -241,8 +241,26 @@ CLASSIFICATION = {
                                        "body comes back so the owner sees the "
                                        "PC's own sentence (said, or error for a "
                                        "refusal)."),
-    "/api/memory/decide": ("ported", "The review queue: one card, one decision."),
-    "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
+    # The PC's own notification choices, read BY the PC (2026-10-09). Not a
+    # feature either app shows: `notifications.rs`'s toast gate reads this route
+    # so a choice made on the PHONE reaches the toasts without anyone opening
+    # the desktop's Settings window - an alarm switched on from the phone did
+    # not ring until that card was opened, and one switched off from the phone
+    # still rang. The desktop's own Settings page still writes through
+    # `set_notification_prefs`, which applies at once.
+    #
+    # "todo" and not "ported" because there is nothing here for the phone to
+    # call: the phone's control is the limits routes above (the seven
+    # `[notifications]` rows ride `/api/limits`), and this is the read half the
+    # PC's own toast engine needs. The route itself lands with that workstream's
+    # backend (`jarvis_notify_prefs.py` + its `[notifications]` section); until
+    # it is applied, the refresh answers 404 and nothing changes - which is
+    # exactly what happened before this call existed.
+    "/api/notifications": ("todo", "Read by the PC's own toast gate, not a screen: "
+                                   "a change made on the phone reaches the toasts "
+                                   "without the desktop's Settings window being "
+                                   "opened."),
+    "/api/memory/decide": ("ported", "The review queue: one card, one decision."),    "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
     "/api/memory/entities": ("ported", "\"People and things\" (owner, 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): the phone gets a plain grouped LIST of the names saved facts are linked to and the facts behind each (Brain, read-only, net/Entities.kt and ui/screens/EntitiesPlate.kt), hidden under Hide memory lists and chat history. Not the Galaxy or any map or links: the picture, the names under each fact, About <name> and the \"are these the same?\" merge card stay the desktop's. Backend: memory-entities.patch."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),

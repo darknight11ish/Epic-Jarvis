@@ -20,8 +20,14 @@ import org.junit.Test
 /**
  * Watches on the phone, read the way the desktop's Brain window reads them
  * (`brain.js`, `renderWatch` / `renderWatchReport`; `brain.rs`,
- * `brain_watch_add`). The module behind the routes is on the owner's PC, so
- * these shapes are the desktop's reading of it - see [Watch].
+ * `brain_watch_add`).
+ *
+ * The module behind the routes is on the owner's PC, and these shapes used to
+ * be the desktop's *guess* at it - which is how both apps came to read
+ * `findings`/`items` from a route that serves `new`/`updated` (2026-10-09).
+ * `GET /api/watch/report` is now verified against the running backend and the
+ * module's own source; `WatchReportShapeTest` holds the client to the file the
+ * module itself produced, and this class covers the routes' own words.
  */
 class WatchTest {
 
@@ -66,6 +72,12 @@ class WatchTest {
 
     @Test
     fun noLicenceStatedIsAWarningNotABlank() {
+        // The fallback shape (`findings`/`items`), kept readable so a future
+        // backend rename does not silently empty the list. `"none"` is the
+        // value this test used to use - the module does NOT send it: it sends
+        // the two words `"none stated"` (jarvis_watch.py:492), which the filter
+        // of the day let through as a licence. The real shape and the real
+        // words are covered in `WatchReportShapeTest`; both are here too.
         val f = Watch.findings(
             obj(
                 """{"findings":[
@@ -73,7 +85,7 @@ class WatchTest {
                     {"name":"c/d","license":"none","archived":true,"note":"one flagged line"},
                     {"full_name":"e/f"}]}""",
             ),
-        )
+        )!!
         assertEquals(listOf("a/b", "c/d", "e/f"), f.map { it.title })
         assertEquals("MIT", f[0].licence)
         assertEquals(listOf("fast thing", "★ 42 · topic: whisper · licence: MIT"), Watch.findingLines(f[0]))
@@ -86,9 +98,52 @@ class WatchTest {
     }
 
     @Test
+    fun noLicenceFileMeansNoPermissionInTheBackendsOwnWords() {
+        // What the route really sends for a repository with no licence file.
+        val f = Watch.findings(
+            obj(
+                """{"new":[{"repo":"example/tray-badge","licence":"none stated","stars":96,
+                            "topic":"tauri plugins","archived":false,"kind":"new"}],
+                    "updated":[{"repo":"example/vec0","licence":"Apache-2.0","kind":"updated"}],
+                    "count":2,"topics":["tauri plugins"],"note":"..."}""",
+            ),
+        )!!
+        assertEquals(listOf("example/tray-badge", "example/vec0"), f.map { it.title })
+        assertNull("\"none stated\" is the module's way of saying there is no licence", f[0].licence)
+        assertTrue(
+            "the no-permission warning must draw: ${Watch.findingLines(f[0])}",
+            Watch.findingLines(f[0]).any { it.contains("no permission") },
+        )
+        assertEquals("Apache-2.0", f[1].licence)
+        assertFalse(Watch.findingLines(f[1]).any { it.contains("no permission") })
+    }
+
+    @Test
+    fun theReportIsReadFromNewAndUpdated() {
+        // The route's own keys, in the module's own order: its consumer reads
+        // `peek["new"] + peek["updated"]` (jarvis_watch.py:524). Until
+        // 2026-10-09 this read `findings`/`items`, which the route has never
+        // served, so every successful read came back empty and the screen said
+        // "Nothing new..." over a list it had not read.
+        val f = Watch.findings(
+            obj("""{"new":[{"repo":"n/one"}],"updated":[{"repo":"u/two"}],"count":2}"""),
+        )!!
+        assertEquals(listOf("n/one", "u/two"), f.map { it.title })
+        assertTrue(Watch.findings(obj("""{"new":[],"updated":[],"count":0}"""))!!.isEmpty())
+    }
+
+    @Test
     fun theReportMayUseItems() {
-        assertEquals(1, Watch.findings(obj("""{"items":[{"name":"x/y"}]}""")).size)
-        assertTrue(Watch.findings(obj("""{"available":true}""")).isEmpty())
+        assertEquals(1, Watch.findings(obj("""{"items":[{"name":"x/y"}]}"""))!!.size)
+        // A 200 with a body nobody can read is NOT an empty list. This used to
+        // assert `isEmpty()`, which is the reassuring reading of a read that
+        // never happened - the fiction that let the wrong keys live on both
+        // apps (2026-10-09). Null is what makes the screen say it could not read.
+        assertNull(
+            "a body with no key this app knows must not read as 'nothing new'",
+            Watch.findings(obj("""{"available":true}""")),
+        )
+        assertNull(Watch.findings(obj("{}")))
     }
 
     @Test

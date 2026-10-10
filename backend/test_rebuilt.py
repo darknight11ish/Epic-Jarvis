@@ -203,6 +203,57 @@ class Framework(unittest.TestCase):
                 os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
             FW.reload_framework()
 
+    def test_a_byte_order_mark_does_not_blank_every_setting(self):
+        """A settings file saved as "UTF-8 with BOM" must still be READ.
+
+        `tomllib` refuses a byte-order mark - U+FEFF is not a legal first
+        character of a TOML document - and this function answers a parse
+        failure with an empty dict, so before 2026-10-09 a BOM turned the
+        owner's whole settings file into "every setting falls back to its
+        default", silently. Notepad's "UTF-8" option wrote that BOM for years,
+        and every Windows tool that offers "UTF-8 with BOM" writes one, so one
+        open-and-save of jarvis-framework.toml was enough.
+
+        Both halves are checked: the BOM'd file parses, AND a file that really
+        is malformed is still refused - the fix must not paper over a genuine
+        mistake. (A raw control byte inside a value is the probe, because
+        `tomllib` does accept U+FEFF anywhere but the very first character: a
+        mark in the middle is legal TOML text, so it proves nothing.)
+        """
+        good = Path(_TMP) / "bom-good.toml"
+        good.write_bytes(b"\xef\xbb\xbf" + b'[autonomy]\nunknown_action_tier = "never"\n')
+        keep = os.environ.get("JARVIS_FRAMEWORK_TOML")
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(good)
+        try:
+            FW.reload_framework()
+            self.assertEqual(FW.load_framework().get("autonomy", {})
+                             .get("unknown_action_tier"), "never",
+                             "a BOM'd settings file was read as empty")
+            # Read through the module's own public reader, not the raw dict:
+            # this is the call fifteen modules actually make.
+            self.assertEqual(FW.unknown_action_tier(), "never")
+        finally:
+            if keep:
+                os.environ["JARVIS_FRAMEWORK_TOML"] = keep
+            else:
+                os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+            FW.reload_framework()
+        # A file that is genuinely malformed still refuses, and still falls
+        # back rather than raising.
+        bad = Path(_TMP) / "bom-bad.toml"
+        bad.write_bytes(b'[autonomy]\nunknown_action_tier = "nev\x01ter"\n')
+        os.environ["JARVIS_FRAMEWORK_TOML"] = str(bad)
+        try:
+            FW.reload_framework()
+            self.assertEqual(FW.load_framework(), {},
+                             "a file that is really malformed must still be refused")
+        finally:
+            if keep:
+                os.environ["JARVIS_FRAMEWORK_TOML"] = keep
+            else:
+                os.environ.pop("JARVIS_FRAMEWORK_TOML", None)
+            FW.reload_framework()
+
     def test_audit_log_survives_an_unserialisable_value(self):
         d = Path(_TMP) / "logs1"
         orig = FW.load_framework

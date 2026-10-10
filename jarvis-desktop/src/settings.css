@@ -75,7 +75,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 14px 18px;
-  margin-bottom: 8px;
+  margin-bottom: 16px;
 }
 
 .settings-jump-title {
@@ -149,6 +149,87 @@ body {
    controlled there, not on this page, and this page has no card for either. */
 .settings-brain-note {
   margin: 0 0 20px;
+}
+
+/* --------------------------------------------------------------------------
+   Search (the owner's request of 2026-10-09). The first thing on the page, in
+   the same raised box the jump list uses, so the two read as one toolbar
+   rather than two competing panels.
+
+   Every value here is an existing token or the same 10px radius the cards
+   use - no new colour, no new size, nothing for scripts/check-tokens.py to
+   find, and nothing that changes with the theme because all of it is aliased
+   in theme.css.
+   -------------------------------------------------------------------------- */
+.settings-search {
+  background: var(--bg-raised);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+
+/* The field's own name, in `.settings-jump-title`'s style: two toolbars in a
+   row should not look like two different kinds of thing. */
+.settings-search-title {
+  margin: 0 0 8px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-search-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Grows to fill the row at every window width, and takes the same border,
+   radius and sunken fill as `select` above it - the page already has one
+   look for "a box you type or pick in". */
+.settings-search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  font-size: var(--text-sm);
+}
+
+.settings-search-input::placeholder { color: var(--text-muted); }
+
+.settings-search-input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* The Clear button sits where `.btn.small` already puts a small action, and
+   `margin-left: auto` is overridden because the input has taken the space. */
+.settings-search-row .btn.small { margin-left: 0; flex: none; }
+
+.settings-search-hint {
+  margin: 8px 0 0;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+/* Nothing matched. Said in words, with the way back under it - a blank page
+   would read as "this setting does not exist". */
+.settings-search-none {
+  margin: 8px 0 0;
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.settings-search-none-back {
+  display: block;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
 }
 
 /* Everyday / Rare / Read-only dividers between groups of cards. Deliberately

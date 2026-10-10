@@ -118,27 +118,48 @@ def _mix(under, over, alpha):
 
 
 def _theme_tokens() -> dict:
-    """--surface-2 and --accent-rgb of every desktop theme, read from theme.css
-    (a translucent surface is laid over black, the usual dark desktop)."""
-    css = (ROOT / "jarvis-desktop" / "src" / "theme.css").read_text(encoding="utf-8")
-    blocks = {"deep-space": css[css.index(":root {"):css.index("\n}\n", css.index(":root {"))]}
-    for name in ("paper", "high-contrast"):
-        i = css.index(f'[data-theme="{name}"] {{')
-        blocks[name] = css[i:css.index("\n}\n", i)]
+    """--surface-2 and --accent-rgb of every desktop theme, read from the TOKEN
+    file both clients' palettes are generated from (a translucent surface is laid
+    over black, the usual dark desktop).
+
+    It used to scrape `jarvis-desktop/src/theme.css` as text, keyed to exactly
+    how that file laid its blocks out. That worked only while the CSS was
+    hand-written: on 2026-10-09 `theme.css` became generated (PR #187), the
+    blocks were joined because they now share one selector group, and this
+    function raised `'NoneType' object has no attribute 'group'` - taking the
+    whole backend suite red for a formatting change in a file it merely read.
+    Reading the tokens instead removes that coupling: the values here are the
+    source, not a rendering of it.
+    """
+    tokens = json.loads((ROOT / "tokens" / "themes.tokens.json").read_text(encoding="utf-8"))
     out = {}
-    for name, text in blocks.items():
-        m = re.search(r"--surface-2:\s*rgba?\(([^)]*)\)", text)
-        a = re.search(r"--accent-rgb:\s*(\d+)\s+(\d+)\s+(\d+)", text)
-        if name != "deep-space":
-            assert m and a, name
-        if name == "deep-space":
-            base = css[:css.index('[data-theme="deep-space"]')]
-            m = re.search(r"--surface-2:\s*rgba?\(([^)]*)\)", base)
-            a = re.search(r"--accent-rgb:\s*(\d+)\s+(\d+)\s+(\d+)", base)
-        parts = [float(x) for x in re.split(r"[ ,/]+", m.group(1).strip()) if x]
+    for name in ("deep-space", "paper", "high-contrast"):
+        theme = tokens["themes"][name]
+
+        def value(key):
+            return theme[key]["$value"]
+
+        def to_rgb(text, key):
+            """A colour from the token file -> a list of numbers, alpha last when
+            the colour carries one. Three shapes appear there: `rgba(4, 7, 12,
+            0.86)`, `rgb(237, 241, 246)`, `#edf1f6`, and the bare channel triple
+            `56 240 255` the `-rgb` tokens carry for `rgb(var(--x) / a)`."""
+            s = text.strip()
+            hexa = re.fullmatch(r"#([0-9a-fA-F]{6})", s)
+            if hexa:
+                h = hexa.group(1)
+                return [int(h[i:i + 2], 16) for i in (0, 2, 4)]
+            m = re.fullmatch(r"rgba?\(([^)]*)\)", s)
+            parts = s if m is None else m.group(1)
+            numbers = [x for x in re.split(r"[ ,/]+", parts.strip()) if x]
+            if not numbers or not all(re.fullmatch(r"\d+(\.\d+)?", x) for x in numbers):
+                raise AssertionError(f"{name}.{key}: cannot read the colour {s!r}")
+            return [float(x) for x in numbers]
+
+        parts = to_rgb(value("surface2"), "surface2")
         alpha = parts[3] if len(parts) > 3 else 1.0
         surface = _mix([0, 0, 0], parts[:3], alpha)
-        out[name] = {"surface": surface, "accent": [int(x) for x in a.groups()]}
+        out[name] = {"surface": surface, "accent": [int(x) for x in to_rgb(value("accentRgb"), "accentRgb")[:3]]}
     return out
 
 
