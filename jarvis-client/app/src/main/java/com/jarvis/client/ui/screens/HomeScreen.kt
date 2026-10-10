@@ -3437,6 +3437,22 @@ private fun Composer(
             )
         }
     }
+    // Why Send is greyed, while the link is down (feature sweep on the
+    // owner's phone, 2026-10-09). It said nothing at all before: the owner
+    // typed a message, pressed Send and nothing happened, with no sentence
+    // anywhere naming the link as the reason. The runtime's own blocker cannot
+    // cover this one - a disabled button never reaches it. It is the line
+    // every other plate already shows under a control it has greyed for the
+    // link (this screen's own PhoneWatchStartPlate, just above), and only
+    // while the link is down: an empty box on a live link is not a fault.
+    com.jarvis.client.LinkWords.composerHeldLine(state.link)?.let { waiting ->
+        Text(
+            waiting,
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+            modifier = Modifier.padding(top = 6.dp).liveStatus(),
+        )
+    }
     }
 }
 
