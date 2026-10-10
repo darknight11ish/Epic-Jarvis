@@ -63,7 +63,15 @@ internal fun TasksSection(canAct: Boolean) {
     var line by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(Unit) {
-        if (read is Tasks.Read.NotAsked) read = JarvisRuntime.tasks()
+        if (read is Tasks.Read.NotAsked) {
+            // The plate has a "Reading…" line and a colour for it, and neither
+            // could ever appear: `read` was only ever assigned the call's own
+            // result, so the state existed and was never constructed (first
+            // Android audit, finding 10). This is also the truth: the first read
+            // is in flight. The assignment is visible while the call suspends.
+            read = Tasks.Read.Reading
+            read = JarvisRuntime.tasks()
+        }
     }
 
     Section(Tasks.HEADING) {
