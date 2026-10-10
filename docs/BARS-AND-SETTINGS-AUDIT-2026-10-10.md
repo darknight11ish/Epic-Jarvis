@@ -519,6 +519,15 @@ duplicate `"ms-settings:bluetooth"` key in `_PANEL_NAMES` (lines 570 and 589,
 identical values — CPython kept the last and said nothing). The duplicate is
 removed, in `backend/jarvis_open.py` and its byte-identical twin.
 
+3. **`jarvis-desktop/tests/plain-errors.mjs` failed — a pin this branch moved on
+   purpose.** It named the exact permission sets holding `open_fix_place` as
+   `["open-fix-place", "quickbar-surface"]`, written before this branch fixed
+   the widget's dead grant (§1 finding 4). `widget-surface` now holds it too —
+   that *is* the fix, for the widget's offline card's "Show me where" and for
+   its new settings gear — so the pin names it, with the reason beside it. The
+   command is still one narrow, navigation-only one: it opens or focuses the
+   Settings window at a named place, changes no setting and approves nothing.
+
 **Fresh evidence after the rebase and the fixes above** (§4's numbers are from
 before the rebase):
 
