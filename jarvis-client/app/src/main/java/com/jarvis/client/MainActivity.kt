@@ -142,6 +142,21 @@ class MainActivity : FragmentActivity() {
 
     private val permissionTick = mutableIntStateOf(0)
 
+    /**
+     * What the last "Set Jarvis as the assistant app" tap ended up doing, or
+     * null. Android offers no way to ask whether the role can actually be
+     * REQUESTED before asking for it: on the owner's handset
+     * `isRoleAvailable` answers yes while the permission controller refuses
+     * with "Role is not requestable: android.app.role.ASSISTANT" and closes
+     * its own screen without drawing anything (measured on the attached
+     * phone, 2026-10-09). The screen used to swallow that, so the button
+     * looked dead; the outcome is reported here instead.
+     */
+    private val assistantRoleNote = mutableStateOf<String?>(null)
+
+    /** The plain line the last "Start link" tap produced, or null. */
+    private val linkStartNote = mutableStateOf<String?>(null)
+
     /** The approval a notification asked us to open, or null. */
     private val focusApproval = mutableStateOf<String?>(null)
 
@@ -296,7 +311,16 @@ class MainActivity : FragmentActivity() {
      *  whatever this Activity assumes a dialog dismissal meant. */
     private val assistantRolePermission = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { permissionTick.intValue += 1 }
+    ) {
+        permissionTick.intValue += 1
+        // A role request that comes back without the role is not always the
+        // owner saying no: the phone may have refused to open a screen at all
+        // (see [assistantRoleNote]). Say so, and point at the route that does
+        // work, rather than leaving the tap silent.
+        if (!PlatformReadiness.assistantRoleHeld(this)) {
+            assistantRoleNote.value = ASSISTANT_ROLE_NOT_DONE
+        }
+    }
 
     /**
      * Android's own screen-sharing question for "Watch with me" on this phone
@@ -2089,20 +2113,37 @@ class MainActivity : FragmentActivity() {
                         ReadinessScreen(
                             items = items,
                             onRequestNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                                    if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
-                                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        runCatching { startActivity(intent) }.onFailure {
-                                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                    }
+                                // One helper, one screen: the same Android page the
+                                // Settings row ("Notifications from Jarvis") opens,
+                                // because Android owns the per-kind switches. The
+                                // permission prompt stays as the fallback, for a
+                                // phone where even that page cannot be opened.
+                                val explainFirst = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    shouldShowRequestPermissionRationale(
+                                        Manifest.permission.POST_NOTIFICATIONS,
+                                    )
+                                if (explainFirst) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else if (!openAppNotificationSettings()) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                             },
                             onRequestBatteryExemption = ::requestBatteryExemption,
-                            onStartService = { EventService.start(this@MainActivity) },
+                            // The card used to read exactly the same before and
+                            // after this tap, so an owner who tapped twice could
+                            // not tell the first tap worked (device tour,
+                            // 2026-10-09). The note below is the line that
+                            // changes, and it names where the real answer shows.
+                            onStartService = {
+                                EventService.start(this@MainActivity)
+                                linkStartNote.value = if (paired) {
+                                    "Asked Android to start the link. The Connection card " +
+                                        "above says whether your desktop has answered."
+                                } else {
+                                    "Asked Android to start the link. This phone is not paired " +
+                                        "yet, so there is nothing for it to reach."
+                                }
+                            },
                             onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
                             // remember(tick), like `items` above: both of these
                             // are RoleManager binder calls, and unkeyed they ran
@@ -2111,16 +2152,23 @@ class MainActivity : FragmentActivity() {
                             // `tick` is what already drives the permission
                             // re-read, so keying on it keeps the answer as fresh
                             // as every other check on this screen.
+                            //
+                            // Shown whenever the role is NOT held, not only when
+                            // the role also claims to be available: on the
+                            // owner's phone that claim is true while the request
+                            // itself is refused, and hiding the button there
+                            // would hide the only way to the explanation. The
+                            // card's own words still say which case it is.
                             onRequestAssistantRole = remember(tick) {
-                                if (
-                                    PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
-                                    !PlatformReadiness.assistantRoleHeld(this@MainActivity)
-                                ) {
+                                if (!PlatformReadiness.assistantRoleHeld(this@MainActivity)) {
                                     { requestAssistantRole() }
                                 } else {
                                     null
                                 }
                             },
+                            onOpenAssistantSettings = ::openAssistantSettings,
+                            assistantRoleNote = assistantRoleNote.value,
+                            linkStartNote = linkStartNote.value,
                             wakeWord = wakeWord,
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
@@ -2795,6 +2843,11 @@ class MainActivity : FragmentActivity() {
                                 .contains(packageName)
                         },
                         onOpenNotificationAccess = ::openNotificationAccessSettings,
+                        // "Notifications from Jarvis" (the owner's decision of
+                        // 2026-10-09; SettingsScreen.kt's "jarvis-notify" row):
+                        // Android's own per-app notification screen, where this
+                        // phone's per-kind switches really are.
+                        onOpenNotificationSettings = { openAppNotificationSettings() },
                         quickTiles = quickTiles,
                         onQuickTileChange = { slot, action ->
                             JarvisRuntime.settings.setQuickTile(slot, action)
@@ -3845,6 +3898,31 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Android's own per-app notification screen, under Jarvis's own entry -
+     * where this phone's per-kind switches really are, because the app's
+     * channels (alarm, schedule, approval, handoff) are Android's own
+     * ([com.jarvis.client.service.ScheduleNotifier], `ApprovalNotifier`,
+     * `HandoffNotifier`).
+     *
+     * The owner's decision of 2026-10-09 was to point at this screen from
+     * Settings ("Notifications from Jarvis") rather than build a second copy
+     * of the PC's Notifications card, which would then have to agree with
+     * Android's own settings and could drift. This phone's own screen for it
+     * was seen working in the device tour of the same day ("Allow
+     * notifications" opened Jarvis's page in Android's Settings).
+     *
+     * @return whether a screen actually opened, so the caller on Platform
+     *   checks can fall back to the permission prompt when this phone has
+     *   neither screen.
+     */
+    private fun openAppNotificationSettings(): Boolean {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (runCatching { startActivity(intent) }.isSuccess) return true
+        return runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }.isSuccess
+    }
+
+    /**
      * Opens the platform's own exemption dialog. Never granted silently, and the
      * readiness screen keeps reporting the real state either way.
      */
@@ -3859,18 +3937,51 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Opens the system's own "make Jarvis the assistant app" dialog.
+     * Opens the system's own "make Jarvis the assistant app" dialog, and says
+     * what happened when it will not.
      *
      * `RoleManager.createRequestRoleIntent` is the only way onto this dialog -
      * there is no direct grant, and there should not be one: choosing the
      * assistant app is the owner's decision, made in the system's own UI,
      * the same as every other role request on the platform.
+     *
+     * It used to return silently on both failure paths, so the button looked
+     * dead while the card said the owner needed the role (device tour,
+     * 2026-10-09). Both paths report now, and
+     * [openAssistantSettings] is the second route the card offers beside it,
+     * because that is the one that works on a phone which refuses the request.
      */
     private fun requestAssistantRole() {
-        val rm = getSystemService(RoleManager::class.java) ?: return
-        if (!runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)) return
-        val intent = rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
-        runCatching { assistantRolePermission.launch(intent) }
+        val rm = getSystemService(RoleManager::class.java)
+        val available = rm != null &&
+            runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+        if (!available) {
+            assistantRoleNote.value = "This phone's Android does not offer Jarvis the " +
+                "assistant role, so there is nothing to ask it for. Tap Open Android's " +
+                "assistant settings to see whether it can be picked there."
+            return
+        }
+        val intent = rm!!.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
+        if (!runCatching { assistantRolePermission.launch(intent) }.isSuccess) {
+            assistantRoleNote.value = ASSISTANT_ROLE_NOT_DONE
+        }
+    }
+
+    /**
+     * Android's own screen for choosing the assistant app - the route that
+     * worked on the owner's phone when the role request did not (measured
+     * 2026-10-09: `ACTION_VOICE_INPUT_SETTINGS` resolves to ColorOS's
+     * `Settings$ManageAssistActivity` there, which is where the assistant app
+     * is picked). Falls back to the default-apps list and then to Settings
+     * itself, so the button always opens something rather than nothing - the
+     * same runCatching ladder [requestBatteryExemption] uses.
+     */
+    private fun openAssistantSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+            .onFailure {
+                runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+                    .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+            }
     }
 
     companion object {
@@ -3937,6 +4048,17 @@ class MainActivity : FragmentActivity() {
  * the work is gone and the flag starts `false` again.
  */
 private val pairingBusy = mutableStateOf(false)
+
+/**
+ * What the Digital assistant card says when Android did not hand the role
+ * over. Deliberately true of both shapes of "no": the owner declining the
+ * system's own dialog, and a phone that refuses to show one at all. It names
+ * the second button in the same card, which is the route that works on the
+ * owner's handset.
+ */
+private const val ASSISTANT_ROLE_NOT_DONE =
+    "Android has not made Jarvis your assistant. Use Open Android's assistant " +
+        "settings and pick Jarvis there."
 
 /**
  * The app lock's clock ([LockSession]): whether Jarvis is unlocked and

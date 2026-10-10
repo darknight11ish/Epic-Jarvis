@@ -114,29 +114,36 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "backup" to 13,
     "watch-notify" to 14,
     "phone-notify" to 15,
-    "screen-look" to 16,
-    "browser-engine" to 17,
+    // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
+    // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
+    // Android's own per-app notification screen, not a second copy of the PC's
+    // Notifications card. It sits with the two other notification rows, which
+    // moved every index below it down by one on that day.
+    "jarvis-notify" to 16,
+    "screen-look" to 17,
+    "browser-engine" to 18,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
     // rows are together; every index below it moved down by one on that day.
-    "handoff" to 18,
+    "handoff" to 19,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
-    // captcha rows are together; every index below it moved down by one.
-    "handoff-front" to 19,
-    "devices" to 20,
-    "quick-tiles" to 21,
+    // captcha rows are together; every index below it moved down by one - and
+    // by one more for "Notifications from Jarvis" above it.
+    "handoff-front" to 20,
+    "devices" to 21,
+    "quick-tiles" to 22,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 22,
+    "limits" to 23,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
-    // limits row" pins 22). A row added at the end moves nothing.
-    "idle-new" to 23,
+    // limits row" pins 23). A row added at the end moves nothing.
+    "idle-new" to 24,
 )
 
 /**
@@ -206,6 +213,15 @@ fun SettingsScreen(
      */
     notificationAccessGranted: Boolean = false,
     onOpenNotificationAccess: () -> Unit = {},
+    /**
+     * "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
+     * docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): opens Android's own
+     * per-app notification screen - under Jarvis's own entry - where this
+     * phone's real per-kind switches live (Android's own channels: alarm,
+     * schedule, approval, handoff). Nothing here reaches the desktop, so it
+     * needs no pairing and no `canAct` gate.
+     */
+    onOpenNotificationSettings: () -> Unit = {},
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -448,6 +464,20 @@ fun SettingsScreen(
                         onOpenNotificationAccess = onOpenNotificationAccess,
                     )
                 }
+            }
+
+            // "Notifications from Jarvis" (the owner's decision of 2026-10-09,
+            // after docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): the PC's
+            // Notifications card owns which kinds Jarvis sends and when it stays
+            // quiet; on the phone those same kinds are Android's own per-app
+            // switches, so this row points at Android's screen instead of
+            // building a second copy that would then have to agree with it.
+            // Deliberately not a menu and not hideable - it is a way in, like
+            // the "Open Android's notification access" button in the row above -
+            // which is why "jarvis-notify" is one of MenuVisibilityTest's
+            // deliberately-not-menus keys.
+            item(key = "jarvis-notify") {
+                NotificationsFromJarvisSection(onOpen = onOpenNotificationSettings)
             }
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's

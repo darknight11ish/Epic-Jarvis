@@ -171,8 +171,11 @@ class TouchTargetAndInsetsTest {
         // The audit's worst two, FaqScreen's GitHub link and third-party
         // notices, go back to about 19dp tall if either opts out - each of
         // those Text nodes would then be free to shrink below its own line.
+        // Window starts, four lines above each call site - they move when a
+        // FAQ answer above them grows (moved 444/473 -> 454/483 when the
+        // "Train my voice" answer explained the pairing condition, 2026-10-09).
         val faq = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/FaqScreen.kt").readLines()
-        for (lineNumber in listOf(444, 473)) {
+        for (lineNumber in listOf(454, 483)) {
             val window = faq.drop(lineNumber - 1).take(12).joinToString("\n")
             assertTrue("FaqScreen.kt:$lineNumber still pressable:\n$window", window.contains(".pressable("))
             assertFalse(
