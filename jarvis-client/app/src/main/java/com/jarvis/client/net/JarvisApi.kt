@@ -2552,6 +2552,46 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    // ------------------------------------------------------- work setups ----
+
+    /**
+     * `GET /api/work` - the five work setups for THIS PC's cards, each with
+     * what it is for, which model goes on which card, what it costs and what it
+     * is worse at ([WorkSetups.parse]). Reads only: the PC starts, loads and
+     * changes nothing. A 404 means the backend predates `work.patch`.
+     */
+    suspend fun workSetups(): ApiResult<JsonObject> = probe(WorkSetups.PATH)
+
+    /**
+     * One of the two work-setup POSTs: choosing a setup
+     * ([WorkSetups.CHOOSE_PATH]) or asking which setup to offer for the owner's
+     * own words ([WorkSetups.RECOMMEND_PATH]). Anything else is refused here,
+     * before anything is sent - neither of these routes switches a model, and
+     * the switch a chosen setup may need is the existing
+     * `/api/models/switch` card, posted through [hardwarePost] like every other
+     * step. A success never means a model changed; re-read [workSetups].
+     */
+    suspend fun workPost(path: String, json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            if (path != WorkSetups.CHOOSE_PATH && path != WorkSetups.RECOMMEND_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a work-setup route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WorkSetups.classifyPost(resp.code, obj)
+                }
+            }.getOrElse {
+                ApiResult.Failed(ApiError.Unreachable(it.readableMessage(),
+                    PlainErrors.networkKind(it)))
+            }
+        }
+
     // --------------------------------------------------------- big model ----
 
     /**

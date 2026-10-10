@@ -36,6 +36,7 @@ import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.Tasks
 import com.jarvis.client.net.VersionInfo
+import com.jarvis.client.net.WorkSetups
 import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
 import com.jarvis.client.widget.QuickLinkWidget
@@ -448,6 +449,23 @@ object JarvisRuntime {
      */
     private val _hardware = MutableStateFlow<Hardware.Read>(Hardware.Read.NotAsked)
     val hardware: StateFlow<Hardware.Read> = _hardware.asStateFlow()
+
+    /**
+     * `/api/work`: the five work setups for THIS PC's cards, each explained in
+     * plain words before the owner starts ([WorkSetups]). Read under the
+     * Hardware plate and after every choice and step. Nothing here switches a
+     * model: the one step a setup can need is the existing `/api/models/switch`
+     * card ([WorkSetups.SWITCH_PATH], posted through `api.hardwarePost`).
+     */
+    private val _workSetups = MutableStateFlow<WorkSetups.Read>(WorkSetups.Read.NotAsked)
+    val workSetups: StateFlow<WorkSetups.Read> = _workSetups.asStateFlow()
+
+    /**
+     * What Jarvis offers for the owner's own words ([WorkSetups.Offer]), or
+     * null. Shown once, as a suggestion; it never changes a model by itself.
+     */
+    private val _workOffer = MutableStateFlow<WorkSetups.Offer?>(null)
+    val workOffer: StateFlow<WorkSetups.Offer?> = _workOffer.asStateFlow()
 
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
@@ -1414,6 +1432,13 @@ object JarvisRuntime {
                 if (hw is Hardware.Read.Loaded && hw.status.applying != null) {
                     scope.launch { refreshHardware() }
                 }
+                // A work setup's step whose card was up: a decided card is the
+                // moment the model is really switched, and whether the setup's
+                // model is the running one changes with it. No event for it.
+                val ws = _workSetups.value
+                if (ws is WorkSetups.Read.Loaded && ws.status.chosen != null) {
+                    scope.launch { refreshWorkSetups() }
+                }
                 // And the voice cards: "hey Jarvis" ON and a voice training.
                 // Neither has an event of its own either, so without this the
                 // Checks screen said "Waiting" over a card already decided.
@@ -2113,6 +2138,71 @@ object JarvisRuntime {
         val result = api.hardwarePost(Hardware.MEASURE_PATH, "{}")
         refreshHardware()
         return Hardware.replyLine(result)
+    }
+
+    // ------------------------------------------------------- work setups ----
+
+    /** Re-reads `/api/work`. Reads only; a failed read is said in words. */
+    suspend fun refreshWorkSetups() {
+        _workSetups.value = WorkSetups.readOf(api.workSetups())
+    }
+
+    /**
+     * Chooses a work setup, or forgets the choice ([id] null). Choosing changes
+     * no model and no setting on the PC: it remembers the preference and lists
+     * the one step that would switch a model. Held on a stale link (rule 4);
+     * forgetting is not - it only narrows what runs.
+     */
+    suspend fun chooseWorkSetup(id: String?): String {
+        if (id != null) actionBlocker()?.let { return it }
+        val result = api.workPost(WorkSetups.CHOOSE_PATH, WorkSetups.chooseBody(id))
+        refreshWorkSetups()
+        return WorkSetups.replyLine(result)
+    }
+
+    /**
+     * Asks for the ONE step a chosen setup needs - the model switch - and
+     * nothing else. The route and body are read from the PC's own answer
+     * ([WorkSetups.stepRequest]) and posted through the existing switch path,
+     * so the card it raises is the card the owner already knows. There is no
+     * "do them all" and no download from here.
+     */
+    suspend fun workSetupStep(id: String): String {
+        actionBlocker()?.let { return it }
+        refreshWorkSetups()
+        val status = (_workSetups.value as? WorkSetups.Read.Loaded)?.status
+            ?: return WorkSetups.readLine(_workSetups.value) ?: WorkSetups.UPDATE
+        val setup = status.setup(id)
+            ?: return "That work setup is not there any more. Open it again."
+        return when (val ask = WorkSetups.stepRequest(status, setup)) {
+            is WorkSetups.StepAsk.No -> ask.reason
+            is WorkSetups.StepAsk.Post -> {
+                val result = api.hardwarePost(ask.route, ask.body)
+                if (result is ApiResult.Ok) refreshPending()
+                refreshHardware()
+                refreshWorkSetups()
+                Hardware.replyLine(result)
+            }
+        }
+    }
+
+    /**
+     * Asks the PC which setup to offer for the owner's own words, and keeps the
+     * answer for one look. It SWITCHES NOTHING: the PC's answer carries
+     * `switched: false`, and acting on the offer is the owner's tap. A PC whose
+     * backend predates work.patch answers nothing and nothing is shown.
+     */
+    suspend fun offerWorkSetup(words: String): WorkSetups.Offer? {
+        if (words.isBlank()) return null
+        val result = api.workPost(WorkSetups.RECOMMEND_PATH, WorkSetups.recommendBody(words))
+        val offer = (result as? ApiResult.Ok)?.value?.let { WorkSetups.parseOffer(it) }
+        _workOffer.value = offer?.takeIf { it.offered }
+        return _workOffer.value
+    }
+
+    /** The offer has been read (or dismissed). Nothing on the PC changes. */
+    fun clearWorkOffer() {
+        _workOffer.value = null
     }
 
     // ------------------------------------------------------- web search ----
@@ -3408,6 +3498,7 @@ object JarvisRuntime {
                 val secondCardRead = async { refreshSecondCard() }
                 val bigModelRead = async { refreshBigModel() }
                 val hardwareRead = async { refreshHardware() }
+                val workRead = async { refreshWorkSetups() }
                 val deepRead = async { refreshDeep() }
                 val (computeData, computeRead) = compute.await()
                 val (memoryData, memoryRead) = memory.await()
@@ -3463,6 +3554,7 @@ object JarvisRuntime {
                 secondCardRead.await()
                 bigModelRead.await()
                 hardwareRead.await()
+                workRead.await()
                 deepRead.await()
             }
         } finally {
