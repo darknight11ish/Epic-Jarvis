@@ -2171,6 +2171,34 @@ object JarvisRuntime {
     }
 
     /**
+     * ONE of the four settings beside the switch (the owner's answers,
+     * 2026-10-09): when it speaks up, how blunt it is, what it coaches on,
+     * per-platform behaviour. The same route, the same rules and the same link
+     * gate as [setPromptCoach] - at once, no card either way.
+     *
+     * The line it returns is built by the PC's own answer ([PromptCoach.View],
+     * which the screen re-reads straight after) rather than from words kept on
+     * this side; `view` is the state as last read, so the row's own name is the
+     * PC's.
+     */
+    suspend fun setPromptCoachChoice(
+        key: String,
+        value: String,
+        view: com.jarvis.client.net.PromptCoach.View? = null,
+    ): String {
+        actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPromptCoachChoice(key, value) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.saidChoice(key, r.value, view)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                    com.jarvis.client.net.PromptCoach.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
      * "Coach this": the words in the box, with the last few turns, read for
      * advice. A read - never held on a stale link (see the block above).
      *

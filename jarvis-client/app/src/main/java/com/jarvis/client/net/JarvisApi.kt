@@ -1802,6 +1802,19 @@ class JarvisApi(
         postWrite(PromptCoach.SETTING_PATH, PromptCoach.enabledBody(on))
 
     /**
+     * `POST /api/prompt/coach/setting {"key", "value"}` - ONE of the four
+     * settings beside the switch ([PromptCoach.choiceBody], the owner's answers
+     * of 2026-10-09). The same route and the same rules as the switch: at once,
+     * no card either way, for the same reason - none of the four opens a way
+     * out of the PC, takes an action, or changes what the coach may read.
+     *
+     * A key or a value the PC does not have is its own 409 sentence, which
+     * [com.jarvis.client.net.PromptCoach.saidChoice] shows as it came.
+     */
+    suspend fun setPromptCoachChoice(key: String, value: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PromptCoach.SETTING_PATH, PromptCoach.choiceBody(key, value))
+
+    /**
      * `POST /api/prompt/coach {"text", "history"}` - "Coach this"
      * ([PromptCoach.coachBody]): the words in the box and the last few turns,
      * answered with a critique. This SENDs nothing; the owner still presses

@@ -103,6 +103,14 @@ pub(crate) fn coach_answer(status: u16, body: &str) -> Result<serde_json::Value,
 /// (`"Prompt coach is on."` / `"is off."`), so a body without the yes-or-no
 /// would have it claim a state the PC never named. It says so in words
 /// instead, and the read that follows paints the truth.
+///
+/// THE FOUR SETTINGS RIDE ON THIS SAME CALL. `{"key", "value"}` moves one of
+/// them, and the PC sends the whole state back (the switch's answer and this
+/// one are the same body), so the one required field covers both. Nothing here
+/// validates a key or a value: the PC owns the list (`jarvis_prompt_coach.
+/// SETTINGS`) and refuses an unknown one in its own words, which is the
+/// sentence this passes on rather than a second copy of the list written in
+/// Rust.
 pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
     if (200..300).contains(&status) {
         return serde_json::from_str::<serde_json::Value>(body)
@@ -188,15 +196,59 @@ pub async fn get_prompt_coach(app: AppHandle) -> Result<serde_json::Value, Strin
     coach_answer(status, &body)
 }
 
-/// The switch. BOTH directions apply at once, and neither asks for a card
-/// (see this module's own note at the top): no stale-link check, on purpose.
+/// ONE change to the prompt coach: the master switch, or one of the four
+/// settings beside it. `{"enabled": bool}` for the switch, `{"key", "value"}`
+/// for a setting, and both may be sent together.
+///
+/// A STRUCT, not three loose `Option`s, and that is the whole point. Tauri
+/// binds a page's argument object onto the command's parameters POSITIONALLY,
+/// so a command declared `(enabled, key, value)` given `{key, value}` arrives
+/// as `enabled = <the key>` - which is not a theory: tests/prompt-coach.mjs
+/// caught exactly that with the first version of this. One nested object has
+/// no order to get wrong, and `#[serde(default)]` on every field means a
+/// request that names only one still deserialises.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default)]
+pub struct CoachChange {
+    /// The master switch. Absent: the switch did not move.
+    pub enabled: Option<bool>,
+    /// One of `jarvis_prompt_coach.SETTING_KEYS`, and one of that key's own
+    /// values. Neither is checked here: the PC owns the list, and its own
+    /// sentence for an unknown key or value is what the owner is shown.
+    pub key: Option<String>,
+    pub value: Option<String>,
+}
+
+/// The switch, or ONE of the four settings beside it. BOTH directions apply at
+/// once, and none of them asks for a card (see this module's own note at the
+/// top): no stale-link check, on purpose.
+///
+/// One command carries both jobs, the way `set_web_search` carries its four
+/// fields, so the page still calls it by name (no dynamic invoke for
+/// `check_invoke_grants.py` to list) and no new route or permission is needed.
+/// The body is built from the fields that were actually given, so the
+/// switch's own call still sends exactly `{"enabled": bool}`.
 #[tauri::command]
-pub async fn set_prompt_coach(app: AppHandle, enabled: bool) -> Result<serde_json::Value, String> {
+pub async fn set_prompt_coach(
+    app: AppHandle,
+    change: CoachChange,
+) -> Result<serde_json::Value, String> {
     let base = jarvis_base(&app);
+    let mut body = serde_json::Map::new();
+    if let Some(name) = change.key {
+        body.insert("key".to_string(), serde_json::json!(name));
+        body.insert(
+            "value".to_string(),
+            serde_json::json!(change.value.unwrap_or_default()),
+        );
+    }
+    if let Some(on) = change.enabled {
+        body.insert("enabled".to_string(), serde_json::json!(on));
+    }
     let response = jarvis_client(Some(WRITE_TIMEOUT))?
         .post(format!("{base}{SETTING_PATH}"))
         .headers(jarvis_headers(&app)?)
-        .json(&serde_json::json!({ "enabled": enabled }))
+        .json(&serde_json::Value::Object(body))
         .send()
         .await
         .map_err(|e| backend_unreachable(&e, &base))?;
@@ -216,10 +268,29 @@ mod tests {
     /// which the route forwards). Nothing here repaints or renames a word of
     /// it - the app falls back to its own byte-identical copy only when a word
     /// is missing.
+    ///
+    /// `settings` is the four settings the owner chose on 2026-10-09, exactly
+    /// as `settings_rows()` builds them - `key`, the row's own `name`, its
+    /// value, and every choice with the words that explain it. This side never
+    /// holds a second copy of any of those words.
     const VIEW: &str = r#"{"ok": true, "on": false, "why": "", "label": "Prompt coach",
         "detail": "Off (the default): nothing is read and there is no Coach this button.",
         "heading": "Prompt coach", "button": "Coach this", "send_mine": "Send mine",
-        "send_suggestion": "Send the suggestion"}"#;
+        "send_suggestion": "Send the suggestion",
+        "targets": ["local", "openai_api"],
+        "stale_days": 180,
+        "settings": [
+          {"key": "speaks_up", "name": "when it speaks up", "value": "any",
+           "default": "any",
+           "choices": [
+             {"value": "any", "name": "Whenever it has something to say", "detail": "Every gap."},
+             {"value": "weak", "name": "Only when the prompt is weak", "detail": "Score 7 or more is passed."}]},
+          {"key": "bluntness", "name": "how blunt it is", "value": "gentle",
+           "default": "gentle",
+           "choices": [
+             {"value": "gentle", "name": "A gentle nudge", "detail": "Suggestions."},
+             {"value": "direct", "name": "Direct about what is wrong", "detail": "Said plainly."}]}
+        ]}"#;
 
     #[test]
     fn the_real_view_is_passed_on_unchanged_and_the_routes_are_the_agreed_ones() {
@@ -248,6 +319,63 @@ mod tests {
             PROMPT_COACH_MISSING,
             "Your PC's Jarvis cannot show the prompt coach yet - run apply-patches.ps1 on the PC."
         );
+    }
+
+    /// THE FOUR SETTINGS (the owner's answers, 2026-10-09). They ride on the
+    /// two calls that already existed, so this is the whole of this side's
+    /// half: the read passes the PC's own rows on untouched, and a change
+    /// carries whatever key and value the page was given. Both fail on the
+    /// module as it was before that change - there was no `key`/`value` on the
+    /// change at all, and `VIEW` carried no `settings` for the page to draw.
+    #[test]
+    fn the_four_settings_ride_on_the_calls_that_already_existed() {
+        // 1. The read: every row, name and explanation is the PC's own.
+        let view = coach_answer(200, VIEW).unwrap();
+        let rows = view["settings"]
+            .as_array()
+            .expect("the rows the page draws");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0]["key"], "speaks_up");
+        assert_eq!(rows[0]["name"], "when it speaks up");
+        assert_eq!(rows[0]["value"], "any");
+        assert_eq!(rows[0]["choices"][1]["value"], "weak");
+        assert_eq!(
+            rows[0]["choices"][1]["name"],
+            "Only when the prompt is weak"
+        );
+        assert!(rows[0]["choices"][1]["detail"].as_str().unwrap().len() > 10);
+        // The AIs Jarvis has notes for, so the card can say what it knows
+        // about - and the number behind "may be out of date".
+        assert_eq!(view["targets"][0], "local");
+        assert_eq!(view["stale_days"], 180);
+
+        // 2. A change: a body that held only `enabled` before, and now holds
+        //    the pair the page sent as well. The PC sends the whole state back,
+        //    so the page never has to guess where the picker should sit.
+        let after = r#"{"ok": true, "on": true, "why": "", "settings": [
+            {"key": "bluntness", "name": "how blunt it is", "value": "direct",
+             "default": "gentle",
+             "choices": [{"value": "gentle", "name": "A gentle nudge"},
+                         {"value": "direct", "name": "Direct about what is wrong"}]}]}"#;
+        let got = change_answer(200, after).unwrap();
+        assert_eq!(got["settings"][0]["value"], "direct");
+        assert_eq!(got["on"], true);
+
+        // 3. A refusal is STILL the PC's own sentence - which is what an
+        //    unknown key or value comes back as, because this side deliberately
+        //    keeps no copy of the list to check against.
+        for said in [
+            "The prompt coach has no setting called \"wittiness\". It has: speaks_up, bluntness, coaches_on, platform.",
+            "\"shouty\" is not one of the choices for bluntness; it has: gentle, direct.",
+        ] {
+            let body = serde_json::json!({ "ok": false, "error": said }).to_string();
+            assert_eq!(change_answer(409, &body).unwrap_err(), said);
+        }
+
+        // 4. An older PC: the switch still works and the page draws no pickers.
+        let old = change_answer(200, r#"{"ok": true, "on": true, "why": ""}"#).unwrap();
+        assert_eq!(old["on"], true);
+        assert!(old.get("settings").is_none());
     }
 
     #[test]

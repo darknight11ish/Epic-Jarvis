@@ -933,10 +933,21 @@
            the one setting in this window that is not (see the module's own
            note, and prompt_coach.rs's). The label and the paragraph under the
            switch are the PC's own words, with a byte-identical copy in the
-           module (LABEL, DETAIL) if the read fails. -->
+           module (LABEL, DETAIL) if the read fails.
+
+           THE FOUR SETTINGS BESIDE THE SWITCH (the owner's answers,
+           2026-10-09): when it speaks up, how blunt it is, what it coaches on,
+           and per-platform behaviour. `#coach-groups` is where
+           prompt-coach-settings.js draws them - and it draws NOTHING BY HAND:
+           every row, every choice's name and every word of explanation comes
+           from the PC (`jarvis_prompt_coach.SETTINGS` through
+           `settings_rows()`), so a new choice appears in both apps by changing
+           that one Python tuple. An older backend that answers without them
+           leaves this box empty and hidden, and the switch alone is drawn,
+           exactly as before. -->
       <section class="card" id="prompt-coach">
         <h2>Prompt coach</h2>
-        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one.</p>
+        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one. It also coaches for the AI you are sending to, using what Jarvis knows about that one.</p>
 
         <p class="state" id="coach-state" role="status">Asking Jarvis…</p>
 
@@ -949,6 +960,7 @@
             </span>
           </label>
           <p class="sc-line" id="coach-enabled-status" role="status"></p>
+          <div id="coach-groups" hidden></div>
           <div class="row">
             <span class="status" id="coach-status" role="status"></span>
           </div>
