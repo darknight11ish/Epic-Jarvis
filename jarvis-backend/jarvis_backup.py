@@ -167,6 +167,18 @@ the backup. Said plainly on the restore card: this can bring back an erased
 fact's original words, if an older backup still has them - the same limit
 CLAUDE.md itself states.
 
+TWO THINGS THE ROUTE MUST NOT DO (both fixed 2026-10-10, after a restore
+that could never be approved). It must not promise a card to a caller that
+can never approve one: a restore request from anything but this PC is
+refused up front, in RESTORE_PC_ONLY's words, before the body is read. And
+the card it raises must not NAME a file jarvis_gate.py protects
+(jarvis_hud.py among them): the gate reads the card's own text for those
+names and refuses at tier "never" if it finds one, so a card that names
+them is never shown to anybody - and no Windows Hello prompt ever comes.
+The refusal the owner reads is plain words with the next step in them
+(RESTORE_LAST_WORDS); the technical reason is kept in the record's `why`,
+for a bug report.
+
 Standard library plus `cryptography` (already required by chat history;
 without it, backing up and restoring both refuse, in words, rather than
 ever writing anything unencrypted).
@@ -295,6 +307,21 @@ NO_CRYPTO = ("Backing up needs the `cryptography` package, which is not installe
              "until it is installed")
 NO_FOLDER = "Choose a folder for backups first (Settings, Backups)."
 PC_ONLY = "Backups are set up on the PC only (Settings, Backups)."
+#: The two RESTORE routes' own refusal, said before anything is read
+#: (2026-10-10). `PC_ONLY` above is the backups-PANEL line: it tells a caller
+#: where the setting lives, which for a restore reads as advice to go and set
+#: backups up. What a caller trying to RESTORE needs to hear is that
+#: restoring happens at the PC, and that this attempt changed nothing.
+#: Measured that night: an API caller was answered 202 "Waiting for your
+#: approval, with Windows Hello" and the restore was refused a millisecond
+#: later, with no card and no prompt - the route had promised a card that
+#: could never appear. A caller that is not this PC is now refused BEFORE the
+#: body is looked at, in these words, and is never told to wait: the action is
+#: in jarvis_owner_check.PC_ONLY_ACTIONS, so such a caller can never approve
+#: it, and the route already knows that (the same `_from_this_pc` the folder
+#: route uses). No address and no port is named here.
+RESTORE_PC_ONLY = ("Restoring has to be done in Jarvis on your PC, so nothing was restored. "
+                   "Open Jarvis there, then Settings, Backups.")
 LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not show it "
              "again, and cannot recover it. If it is lost, this backup can never be "
              "opened again; there is no other way in.")
@@ -1192,7 +1219,7 @@ def preview_restore(body, *, peer=None, local=None, here: Optional[bool] = None)
     any other file inside. Nothing is changed."""
     is_here = bool(here) if here is not None else _from_this_pc(peer, local)
     if not is_here:
-        return 403, {"ok": False, "error": PC_ONLY, "pc_only": True}
+        return 403, {"ok": False, "error": RESTORE_PC_ONLY, "pc_only": True}
     if not isinstance(body, dict) or not isinstance(body.get("name"), str) or \
             not isinstance(body.get("code"), str):
         return 400, {"ok": False, "error": 'need {"name": "<backup file>", "code": '
@@ -1237,7 +1264,16 @@ RESTORE_LAST_WORDS = {
     "timed_out": "Nobody answered the card in time, so nothing was restored.",
     "withdrawn": "You changed your mind before the card was answered, so nothing was "
                 "restored.",
-    "refused": "The card could not be answered, so nothing was restored.",
+    # WHAT THE OWNER READS WHEN A RESTORE IS REFUSED (2026-10-10). It used to
+    # be "The card could not be answered, so nothing was restored." - true and
+    # useless: it did not say the one thing that helps, which is where a
+    # restore can be approved at all. This is the sentence the desktop shows
+    # (`last_restore.message`, jarvis-desktop/src/backup-settings.js), so it is
+    # plain words with the next step in it. The technical reason for the
+    # refusal stays in the record's own `why` (GET /api/backup), for a bug
+    # report: it is never what the owner is shown.
+    "refused": "Nothing was restored. Restoring has to be done in Jarvis on your PC - open "
+               "Jarvis there, then Settings, Backups, and start the restore again.",
     "failed": "It was approved, but the restore itself failed. Everything it had already "
               "changed was put back, so your data is as it was - the safety backup made just "
               "before it is still there.",
@@ -1260,6 +1296,18 @@ KEY_WARNING = ("WARNING: the key that opens your restored chat history could not
 def restore_card(name: str, manifest: dict) -> str:
     when = manifest.get("created_at")
     when_text = time.strftime("%Y-%m-%d %H:%M", time.localtime(when)) if when else "an unknown time"
+    # IT MUST NOT NAME A FILE THE GATE PROTECTS. This text is handed to
+    # jarvis_gate.check() as the card's `prompt`, and the gate reads that
+    # prompt for the names in its own `_PROTECTED` list (jarvis-framework.toml,
+    # jarvis_gate.py, jarvis_hud.py, ...) before it raises anything: a prompt
+    # that names one is refused at tier "never", and NO CARD IS EVER SHOWN.
+    # Measured on the owner's PC, 2026-10-10: this card said "(the .py files
+    # beside jarvis_hud.py)" and the audit log reads
+    # `gate.refused_protected / restore_backup / <redacted 13 chars>` followed
+    # by `backup.restore.card / outcome "refused"` - so a restore could never
+    # be approved by anyone, at the PC or anywhere else. The folder is named
+    # instead of the file, which is also plainer; test_backup.py keeps it that
+    # way by checking this text against the gate's own list.
     return "\n".join([
         "Restore Jarvis from this backup?",
         "",
@@ -1267,8 +1315,8 @@ def restore_card(name: str, manifest: dict) -> str:
         f"Made: {when_text}",
         "",
         "This REPLACES your memory and chat files, review decks, settings and notes with that day's "
-        "copies, and puts that day's copy of Jarvis's own program files (the .py files beside "
-        "jarvis_hud.py) back into the folder Jarvis runs from. Anything you added or changed in "
+        "copies, and puts that day's copy of Jarvis's own program files (the .py files in the "
+        "folder Jarvis runs from) back into it. Anything you added or changed in "
         "them since is lost - unless it is in the safety backup Jarvis makes first. Only files "
         "the backup does not have at all are left as they are.",
         "",
@@ -1515,9 +1563,20 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
     vtier = getattr(v, "tier", "unknown")
     outcome = getattr(v, "outcome", None)
     if vtier != "ask" or tier_of(RESTORE_ACTION) != "ask":
+        # The gate answered WITHOUT asking anybody: it refused before any card
+        # existed (its own protected-file rule sees a name it protects in the
+        # card's text, the tier is "never", or the policy cannot be read).
+        # The owner is told what happened and what to do next, in the plain
+        # words the app shows (RESTORE_LAST_WORDS["refused"]); the diagnosis -
+        # which tier, and the gate's own sentence - goes in `why`, which only
+        # GET /api/backup returns, for a bug report. This line used to be the
+        # other way round: the record kept `the gate answered at tier 'never',
+        # which is not a person saying yes` - accurate, and no use at all to
+        # the owner, who read it as the answer to a restore that never
+        # happened (2026-10-10).
         return _restore_finish(pid, "refused",
-                               why=f"the gate answered at tier {vtier!r}, which is not a "
-                                   f"person saying yes")
+                               why=f"the gate answered at tier {vtier!r} without asking anyone: "
+                                   f"{str(getattr(v, 'reason', '') or 'no reason given')[:300]}")
     if not _person_said_yes(v):
         if outcome in ("denied", "timed_out"):
             return _restore_finish(pid, outcome)
@@ -1559,7 +1618,11 @@ def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
     """POST /api/backup/restore {"name","code"}. (code, body). 202 and ONE
     card that always needs Windows Hello and always comes from this PC -
     jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from anywhere
-    else, whatever the gate's own risk table says about `restore_backup`."""
+    else, whatever the gate's own risk table says about `restore_backup`.
+
+    A caller that is not this PC can never approve that card, so it is
+    refused here, in plain words and before the body is read - never with a
+    202 that promises a card which cannot appear (2026-10-10)."""
     gate = gate or _gate
     tier_of = tier_of or _tier
     spawn = spawn or _spawn
@@ -1567,7 +1630,7 @@ def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
     armed = armed or _owner_check_armed
     is_here = bool(here) if here is not None else _from_this_pc(peer, local)
     if not is_here:
-        return 403, {"ok": False, "error": PC_ONLY, "pc_only": True}
+        return 403, {"ok": False, "error": RESTORE_PC_ONLY, "pc_only": True}
     if not isinstance(body, dict) or not isinstance(body.get("name"), str) or \
             not isinstance(body.get("code"), str):
         return 400, {"ok": False, "error": 'need {"name": "<backup file>", "code": '
