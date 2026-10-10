@@ -65,6 +65,14 @@ object MenuPlaces {
         // MenuVisibilityTest's "not a menu" list, so the row is hideable like
         // every other section and the test's own rule is kept, not relaxed.
         "screen-rate" to "settings.screen-rate",
+        // "Jarvis's voice" (the parity audit of 2026-10-10): ONE id for ONE
+        // feature. This row used to be menu `entry.voices`, while the desktop's
+        // own card for the SAME feature was `settings.voices` - two ids for one
+        // feature, against backend/jarvis_menus.py's own rule. The duplicate id
+        // is gone and the row now hides under the one id both apps use: the
+        // phone's "Jarvis's voice" button in the Voice item still disappears
+        // when it is hidden, because SettingsScreen.kt reads this id now.
+        "voice" to "settings.voices",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */
@@ -82,7 +90,7 @@ object MenuPlaces {
         "focus" to "brain.work.focus",
         "chatbot" to "brain.work.chatbot",
         "support" to "brain.work.support",
-        "briefing" to "brain.work.briefing",
+        "briefing" to "settings.briefing-settings",
         "progress" to "brain.projects.progress",
         "projects" to "brain.tab.projects",
         "attention" to "brain.now.budget",
@@ -125,7 +133,12 @@ object MenuPlaces {
      */
     val INSIDE: Map<String, String> = mapOf(
         "entry.appearance" to "HomeScreen: the Appearance button in the home row (six buttons since Settings joined it, 2026-10-08)",
-        "entry.voices" to "SettingsScreen: the Jarvis's voice button in the Voice item",
+        // "entry.voices" was here until 2026-10-10. It was one of TWO ids for
+        // the same feature - this row and the desktop's own `settings.voices`
+        // card - against backend/jarvis_menus.py's rule that one id means one
+        // feature. The duplicate id is gone (the parity audit of 2026-10-10)
+        // and the row is now the menu both apps use, `settings.voices`, listed
+        // in SETTINGS above.
         "entry.voice-check" to "SettingsScreen: the Voice check button in the Voice item",
         "brain.history.tag-suggestions" to "HistoryTags: the last row, Suggest tags overnight",
         "settings.second-card.study-helper" to "SecondCardPlate: the Study helper switch",

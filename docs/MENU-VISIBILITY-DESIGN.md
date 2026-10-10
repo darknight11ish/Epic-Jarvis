@@ -233,6 +233,17 @@ Rules:
 - Desktop Settings ids reuse the existing card ids from `jarvis_settings_registry.py`
   `SECTIONS` where they exist, so the quick intent (section 6) and deep links
   agree. Brain and phone ids are new.
+- **`apps` says which app HAS the feature; it is not the same as having a row
+  to hide.** The parity audit of 2026-10-10 found eight ids marked
+  `(DESKTOP,)` while the phone really drew the feature (Animal options inside
+  Appearance, the briefing settings inside the briefing plate, and so on), and
+  people read "desktop-only" as "the phone does not have this". So a feature
+  both apps have, with no separate phone row, is written as both with
+  `hide=False` and a `why` naming the phone menu that hides it instead. A
+  `(DESKTOP,)` id needs a recorded reason the phone lacks it, in
+  `tools/check_registry_phone.py`'s `PHONE_LACKS`; the reverse check
+  (`backend/test_registry_phone.py`) fails when the registries under-report the
+  phone again.
 
 ### Storage
 
