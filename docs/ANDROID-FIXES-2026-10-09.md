@@ -274,10 +274,14 @@ physical 1080×2412, density 480, `font_scale` 1.0, rotation 0.
 
 - **The 12 of 16 screens behind pairing** (handoff item 3): they need the
   owner's Windows Hello tap on the PC. Unchanged by either pass.
-- **`docs/ANDROID-TOUR-2026-10-09.md` is not on `main`.** The handoff cites it
-  as if it were; it exists only on the `audit/android-tour` branch
-  (`3370ca32`). Its evidence directory is there too. Nothing here depends on it
-  being merged, but the citation should not stay dangling.
+- ~~**`docs/ANDROID-TOUR-2026-10-09.md` is not on `main`.**~~ **Corrected:** this
+  was written while the tour report existed only on `audit/android-tour`
+  (`3370ca32`); **PR #165 merged it into `main` the same day**, so the handoff's
+  citation resolves and the branch-only note above was stale. The evidence
+  directory named by that report is still only in its own worktree
+  (`.dsh-scratch/device-tour/.evidence/`), which is untracked by design - and
+  the second audit's report (`docs/ANDROID-AUDIT-2-2026-10-09.md`) is on `main`
+  too (PR #154), so nothing this pass references is missing.
 - **App lock and the black frame** are still unmeasured, for the reason the tour
   gave: turning either switch on is instant, turning it off asks for the owner's
   fingerprint. The two-tap procedure for the owner is in the tour's Q2.
