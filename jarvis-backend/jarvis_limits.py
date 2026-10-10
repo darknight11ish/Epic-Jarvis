@@ -166,6 +166,23 @@ class _VoiceBar:
     file, nothing here reads anything from a print but the bar, and nothing here
     logs anything about one.
 
+    WHICH NUMBER ON THE PRINT (2026-10-09). A print can hold TWO bars:
+    `threshold` (the small model's, the field it has always had) and
+    `thresholds[<strong model>]`. Which one is the owner's real bar is not a
+    choice this table gets to make: it is the one belonging to the model whose
+    similarity actually decides, and `jarvis_voice.deciding_model` is the single
+    rule for that - the same rule the "someone else" card writes through and the
+    same field `raw_bar` reads when a clip is judged. Asking for it here is what
+    stops the row showing one number while the check uses another: before this,
+    the row read and wrote `threshold` while the card wrote
+    `thresholds[<strong model>]` whenever the stronger model decided, so a print
+    could hold both with only one of them in force.
+
+    The floor is asked for the same model, for the same reason: a number below
+    THAT model's own floor is refused here, before a card, instead of being
+    refused afterwards by `set_threshold` - which is the one place a refusal is
+    invisible to the owner, because it happens after they have already said yes.
+
     `read` returns jarvis_voice's own clamped value: `load_profile` holds every
     bar inside `MIN_THRESHOLD` (5%) .. 1.0 (100%), so a hand-edited print cannot
     show the owner a number the check itself would never use.
@@ -186,8 +203,47 @@ class _VoiceBar:
             return None
         return jarvis_voice
 
+    def _live(self, v, prof):
+        """(the name of the model whose similarity decides, the bar in force).
+
+        The deciding model is asked of `jarvis_voice.deciding_model`, and it is
+        asked with the name the PRINT recorded (`prof.embedder`) rather than with
+        a freshly built embedder: the print's own name is the one that says
+        whether the stronger model's bar is a second number on this print or the
+        print's one bar, and building a model to answer that would load a file
+        for a question that needs no audio.
+
+        Falls back, on a `jarvis_voice` from before `deciding_model` existed, to
+        exactly what this row did then: the print's own `threshold` and the
+        model it was enrolled with. That keeps an installed backend older than
+        this patch working, and is the ONLY case where the row and the check can
+        still be looking at different fields - a print that has a stronger
+        model's bar at all can only exist on a backend new enough to have both.
+        """
+        try:
+            strong = v.strong_embedder(None)
+        except Exception:                    # pragma: no cover - no stronger model
+            strong = None
+        try:
+            dec, _which = v.deciding_model(prof, prof.embedder, strong, v.BAR_ROLE)
+        except AttributeError:               # pragma: no cover - older jarvis_voice
+            return prof.embedder, float(prof.threshold)
+        # A name, whichever the deciding model came as: `deciding_model` answers
+        # with the `emb` object it was given when the small model decides, and
+        # `emb` here is a name, not a loaded model.
+        model = dec if isinstance(dec, str) else dec.name
+        try:
+            # `own_bar`, not `raw_bar`: the row shows the number the owner SET.
+            # `raw_bar` raises it to the model's measured floor, which is a
+            # different number and would show a value nobody chose - and the
+            # floor is enforced where it belongs, by the card's own check above
+            # and by `set_threshold` behind it.
+            return model, float(v.own_bar(prof, model, v.BAR_ROLE))
+        except AttributeError:               # pragma: no cover - older jarvis_voice
+            return model, float(prof.threshold)
+
     def read(self):
-        """The bar in the print, as a whole percentage."""
+        """The bar in force, as a whole percentage."""
         v = self._voice()
         if v is None:
             return VOICE_BAR_DEFAULT
@@ -197,7 +253,8 @@ class _VoiceBar:
             return VOICE_BAR_DEFAULT
         if prof is None:
             return VOICE_BAR_DEFAULT
-        return _cosine_to_percent(prof.threshold)
+        _model, bar = self._live(v, prof)
+        return _cosine_to_percent(bar)
 
     def check(self, percent) -> None:
         """Refuse, in plain words and BEFORE any card is raised, a number the
@@ -216,7 +273,8 @@ class _VoiceBar:
         if prof is None:
             raise SettingsFileError("No voice has been trained yet, so there is "
                                     "no bar to change")
-        lowest = _cosine_to_percent(v.floor_for(prof.embedder, v.BALANCED))
+        model, _bar = self._live(v, prof)
+        lowest = _cosine_to_percent(v.floor_for(model, v.BALANCED))
         if float(percent) < lowest:
             raise SettingsFileError(f"The lowest this voice check allows is "
                                     f"{lowest}%, so nothing was changed")
@@ -224,14 +282,32 @@ class _VoiceBar:
     def write(self, percent) -> None:
         """Write the bar into the print, through `jarvis_voice.set_threshold`.
 
+        The model is named explicitly, and it is the deciding one: `set_threshold`
+        files a bar under `threshold` for the model the print was enrolled with
+        and under `thresholds[model]` for any other. Without the name, a lowering
+        the owner approved for the bar in force would be written to the OTHER
+        field - the row would read back unchanged and the check would go on
+        judging clips by the number the owner had just asked to change.
+
         jarvis_voice checks its own floor again here, so this is a second gate
         that fails closed rather than the only one."""
         v = self._voice()
         if v is None:
             raise SettingsFileError("The voice check is not installed on this PC, "
                                     "so nothing was changed")
+        prof, _label = v.find_profile("")
+        if prof is None:
+            raise SettingsFileError("No voice has been trained yet, so there is "
+                                    "no bar to change")
+        model, _bar = self._live(v, prof)
         try:
-            v.set_threshold(_percent_to_cosine(percent))
+            v.set_threshold(_percent_to_cosine(percent), model=model)
+        except TypeError:                    # pragma: no cover - older jarvis_voice
+            try:
+                v.set_threshold(_percent_to_cosine(percent))
+            except ValueError as exc:
+                raise SettingsFileError(f"Your voice check would not take that "
+                                        f"({exc}), so nothing was changed")
         except ValueError as exc:
             raise SettingsFileError(f"Your voice check would not take that "
                                     f"({exc}), so nothing was changed")
