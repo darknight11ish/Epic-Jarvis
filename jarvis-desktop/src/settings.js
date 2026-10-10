@@ -785,37 +785,71 @@ document.addEventListener("visibilitychange", () => {
 
 /* Floating face: a small, always-on-top window with just Jarvis's face -
    no chat box, voice only (2026-09-27). Off by default; read and written
-   through get_floating/set_floating (windows::FloatingState, Rust side). */
+   through get_floating/set_floating (windows::FloatingState, Rust side).
+
+   Two boxes on the same command: this one, and "Click through to what is
+   behind" below it (2026-10-10, the integration evaluation). `set_floating`
+   sets what it is told and leaves the other half alone, so the page keeps
+   what it last read and hands BOTH halves back on every click - otherwise
+   changing one box would quietly reset the other. */
 const floatingEnabled = $("floating-enabled");
+const floatingClickThrough = $("floating-click-through");
+
+/** Both of the floating face's switches, as this page last read them. */
+let floatingPrefs = { enabled: false, clickThrough: false };
 
 async function paintFloating() {
-  if (!floatingEnabled || !IS_TAURI) return;
+  if (!IS_TAURI) return;
   try {
     const prefs = await invoke("get_floating");
-    floatingEnabled.checked = Boolean(prefs && prefs.enabled);
+    floatingPrefs = {
+      enabled: Boolean(prefs && prefs.enabled),
+      clickThrough: Boolean(prefs && prefs.clickThrough),
+    };
+    if (floatingEnabled) floatingEnabled.checked = floatingPrefs.enabled;
+    if (floatingClickThrough) floatingClickThrough.checked = floatingPrefs.clickThrough;
   } catch (error) {
     console.error("[settings] could not read the floating face setting:", error);
   }
 }
 paintFloating();
 
-if (floatingEnabled) {
-  floatingEnabled.addEventListener("change", async () => {
-    const want = floatingEnabled.checked;
-    try {
-      await invoke("set_floating", { enabled: want });
-    } catch (error) {
-      // The checkbox is the only record of intent here - put it back so it
-      // never claims a state the window is not actually in - and say so, or the
-      // switch just snaps back with no words (settings-audit, 2026-10-08).
-      floatingEnabled.checked = !want;
-      if (dom.appearanceStatus) {
-        report(dom.appearanceStatus,
-          `Could not ${want ? "show" : "hide"} the floating face. ${problemWords(error)}`,
-          "bad");
-      }
-      console.error("[settings] could not change the floating face:", error);
+/** One of those two boxes was clicked. `key` says which half of
+ *  `floatingPrefs` it changes; the other half goes back as it was. Both
+ *  apply at once and neither asks for an approval card - they change how
+ *  Jarvis's own face is shown, not anything Jarvis does. */
+async function setFloating(key, box, what) {
+  const want = box.checked;
+  const next = { ...floatingPrefs, [key]: want };
+  try {
+    await invoke("set_floating", {
+      enabled: next.enabled,
+      clickThrough: next.clickThrough,
+    });
+    floatingPrefs = next;
+  } catch (error) {
+    // The checkbox is the only record of intent here - put it back so it
+    // never claims a state the window is not actually in - and say so, or the
+    // switch just snaps back with no words (settings-audit, 2026-10-08).
+    box.checked = !want;
+    if (dom.appearanceStatus) {
+      report(dom.appearanceStatus,
+        `Could not ${what}. ${problemWords(error)}`,
+        "bad");
     }
+    console.error("[settings] could not change the floating face:", error);
+  }
+}
+
+if (floatingEnabled) {
+  floatingEnabled.addEventListener("change", () => {
+    setFloating("enabled", floatingEnabled, `show or hide the floating face`);
+  });
+}
+if (floatingClickThrough) {
+  floatingClickThrough.addEventListener("change", () => {
+    setFloating("clickThrough", floatingClickThrough,
+      "change whether clicks pass through the floating face");
   });
 }
 
@@ -825,7 +859,8 @@ if (floatingEnabled) {
 // sending the wrong state (bug audit 2026-09-27, desktop-rust finding #5).
 if (IS_TAURI) {
   TAURI.event.listen("floating-changed", (event) => {
-    if (floatingEnabled) floatingEnabled.checked = Boolean(event.payload);
+    floatingPrefs.enabled = Boolean(event.payload);
+    if (floatingEnabled) floatingEnabled.checked = floatingPrefs.enabled;
   });
 }
 

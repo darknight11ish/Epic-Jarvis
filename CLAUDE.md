@@ -1967,6 +1967,28 @@ apps show the list on Brain -> Work. Nothing new leaves the PC.
   earn were closed the same day: the ranges that are never a destination, and
   NAT64, where `127.0.0.1` is spelled `64:ff9b::7f00:1`.
 
+Decided 2026-10-10, the owner's two answers after the integration evaluation
+(`docs/INTEGRATION-EVAL-2026-10-10.md`, PR #207, which read eight outside
+projects and found one idea worth taking): **the floating face passes clicks
+through to whatever is behind it, as a setting that is off by default** -
+every click goes to the window underneath except on the animal itself, so the
+face stops getting in the way over a full-screen app while the animal can
+still be dragged (and stroked, wherever stroking reaches it). It is one
+cosmetic switch in the desktop's Appearance card, under "Floating face",
+declared in the one settings table like every other row; it applies at once
+and asks for no approval card, because it changes only how Jarvis's own face
+is shown. The hit test is measured off the face's own drawn picture rather
+than guessed from the shader's camera (every one of the five faces reaches
+the edge of its square in some pose, so no circle round the middle would do),
+and every doubt - no measurement yet, a pointer that cannot be read - leaves
+the animal clickable. **And the faces stay as they are: no Live2D and no VRM
+importer** - Open-LLM-VTuber and amica both draw Jarvis a different way
+entirely, which would *replace* the ray-marched shader faces the desktop and
+the phone share (`docs/CRITTERS.md`) rather than extend them, and buy a
+second renderer, a second face picker and an SDK licence for it. The one idea
+worth borrowing was borrowed as an idea: no code, no dependency, no licence
+exposure.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

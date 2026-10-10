@@ -1172,6 +1172,11 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::get_floating,
             commands::set_floating,
+            // Where the floating face's own page says its picture is drawn,
+            // so clicks can pass through the window everywhere except on the
+            // animal (2026-10-10). The floating window is the only one
+            // granted it - permissions/surfaces.toml's "floating-hit-mask".
+            commands::note_floating_hit_mask,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,

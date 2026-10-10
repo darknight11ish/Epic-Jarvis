@@ -1502,6 +1502,25 @@ identifier = "sky-read"
 description = "Read whether the sun and moon show behind the face, the rough position and the weather now. Cosmetic and read-only."
 permissions = ["allow-get-sky"]
 
+# THE ONE SET A PAGE WRITES THROUGH, and it is one command with one window
+# holding it (2026-10-10, the integration evaluation). With "click through to
+# what is behind" on, the floating face has to tell Rust where its own picture
+# is drawn before Rust can decide which clicks to let past the window
+# (`windows.rs`'s pointer watcher). The shorter road would have been an event
+# from the page, and that road is closed on purpose: `core:event:allow-emit`
+# is forbidden to every window (apps security audit M1), because the quickbar
+# trusts what it hears and a page that could emit could fake the owner's
+# checked voice or an approval card. So it is a granted command, and the
+# floating window is the only one granted it.
+# What it carries: 1,024 characters of geometry - "1" where the face's own
+# drawing is, "0" where the background is. No words, no picture, nothing about
+# the owner, nothing written down; a grid that is not exactly one clears it,
+# and a window with no grid keeps every click (the animal stays clickable).
+[[set]]
+identifier = "floating-hit-mask"
+description = "Tell Rust where the floating face's own picture is drawn, so clicks pass through everywhere else. Geometry only; cosmetic."
+permissions = ["allow-note-floating-hit-mask"]
+
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.
 [[set]]
 identifier = "faces-open"
