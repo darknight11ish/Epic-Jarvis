@@ -222,7 +222,55 @@ Part 1 recorded all eight as still standing. One line each:
 
 Each is held by one assertion in `FirstAuditLeftoversTest`.
 
-## 6. Still open, honestly
+## 6. The instrumented suite, on the phone, at last
+
+**All six instrumented classes had never run successfully** — two earlier
+attempts died on the phone's lock screen. This run was on the attached CPH2419,
+unlocked (`dumpsys trust` → `deviceLocked=0`) and awake, with
+`adb reverse tcp:4719 tcp:4719` already in place.
+
+**The one real defect was in the tests, not the app.** `LaunchTest` and
+`FaceRenderTest` call `UiAutomation.grantRuntimePermission` in `@Before`, and
+ColorOS refuses it to the shell the instrumentation runs as:
+
+```
+java.lang.SecurityException: Error granting runtime permission
+Caused by: java.lang.SecurityException: grantRuntimePermission: Neither user 2000
+nor current process has android.permission.GRANT_RUNTIME_PERMISSIONS.
+```
+
+So all three `LaunchTest` tests failed before asserting anything, and the run
+stopped there: `TokenStoreTest` (which never grants) and `FaceRenderTest` never
+ran at all. `FaceShotTest`'s JUnit entry came back with an **empty** `<failure>`
+in that run and two classes missing — the same abort, recorded where it landed.
+
+Each class now treats a refused grant as a fact of the device, logs it
+(`W/JarvisFaceRender`, `W/JarvisLaunch`), and carries on. The oracles are
+unchanged: the crash log, the shader-build marker, and the lifecycle assertion —
+which stays **RESUMED** whenever the grant did happen, and falls back to
+**STARTED** only when an OS permission dialog this test must not touch is on top.
+
+**Measured after the fix, in one `connectedDebugAndroidTest` run:**
+
+| Class | Tests | Failures | Time |
+| --- | --- | --- | --- |
+| `ApiContractTest` | 32 | 0 | 4.7 s |
+| `EventStreamContractTest` | 3 | 0 | 16.5 s |
+| `FaceRenderTest` | 1 | 0 | 52.0 s (every face really drew) |
+| `FaceShotTest` | 1 | 0 | 40.1 s |
+| `LaunchTest` | 3 | 0 | 4.5 s |
+| `TokenStoreTest` | 6 | 0 | 0.1 s |
+| **Total** | **46** | **0** | 2 m 11 s |
+
+`FaceShotTest` photographed **all 25 faces** (20 shader faces, 4 animals and the
+robot) into `/data/local/tmp/jarvis-face-shots`, 945×945 px each at 2.625×, plus
+one whole-screen image, and its own `manifest.txt` recorded every one with a
+lit-pixel share and the quality tier in use — so the faces can be looked at, not
+just asserted. The display override it applies (`wm size 1080x2160`,
+`wm density 420`) was removed by its own `finally`; measured afterwards:
+physical 1080×2412, density 480, `font_scale` 1.0, rotation 0.
+
+## 7. Still open, honestly
 
 - **The 12 of 16 screens behind pairing** (handoff item 3): they need the
   owner's Windows Hello tap on the PC. Unchanged by either pass.

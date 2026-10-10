@@ -12,6 +12,7 @@ import com.jarvis.client.platform.CrashLog
 import android.util.Log
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,16 +65,41 @@ class FaceRenderTest {
      * UiAutomation rather than androidx.test's GrantPermissionRule, so this
      * does not add a dependency that cannot be resolved or verified from this
      * branch. grantRuntimePermission is public API from 28; minSdk here is 33.
+     *
+     * **Returns whether the grant really happened.** Some OEM builds refuse it
+     * to the shell the instrumentation runs as, and say so from inside the
+     * platform: measured on the owner's OnePlus CPH2419 (Android 15) on
+     * 2026-10-09, `UiAutomation.grantRuntimePermission` throws
+     * `SecurityException: grantRuntimePermission: Neither user 2000 nor current
+     * process has android.permission.GRANT_RUNTIME_PERMISSIONS`, and before
+     * this that threw out of `@Before`, failing the whole class for a reason
+     * the app had nothing to do with - and taking `LaunchTest` and
+     * `TokenStoreTest`, which had not run yet, down with it. The faces'
+     * rendering is what this class is for, so a refused grant is reported and
+     * the test carries on with the lifecycle check adjusted (see
+     * [everyOfferedFaceRendersWithoutCrashing]).
      */
-    private fun grantNotifications() {
+    private fun grantNotifications(): Boolean = runCatching {
         InstrumentationRegistry.getInstrumentation().uiAutomation.grantRuntimePermission(
             context.packageName,
             Manifest.permission.POST_NOTIFICATIONS,
         )
+        true
+    }.getOrElse {
+        Log.w(
+            "JarvisFaceRender",
+            "the shell could not grant POST_NOTIFICATIONS (${it.javaClass.simpleName}: ${it.message}); " +
+                "the app's own prompt may cover the activity, so only STARTED is asserted",
+        )
+        false
     }
 
     @Test
     fun everyOfferedFaceRendersWithoutCrashing() {
+        // Whether the platform let the permission be granted. It was attempted
+        // in @Before; asked again here so the reason is in this method's own
+        // output (and so a change to @Before cannot silently weaken the check).
+        val granted = grantNotifications()
         JarvisRuntime.initialize(context)
         JarvisRuntime.settings.setHost("127.0.0.1:1")
         JarvisRuntime.tokens.setToken("instrumentation-test-token")
@@ -94,11 +120,24 @@ class FaceRenderTest {
             Log.i("JarvisFaceRender", "drawing face ${face.id}")
             JarvisRuntime.appearance.setFace(face.id)
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
-                assertEquals(
-                    "MainActivity did not reach RESUMED with face '${face.id}' active",
-                    Lifecycle.State.RESUMED,
-                    scenario.state,
-                )
+                if (granted) {
+                    assertEquals(
+                        "MainActivity did not reach RESUMED with face '${face.id}' active",
+                        Lifecycle.State.RESUMED,
+                        scenario.state,
+                    )
+                } else {
+                    // The permission prompt is on top because the platform
+                    // refused the grant, so RESUMED is not reachable without
+                    // dismissing an OS dialog this test must not touch. The
+                    // activity must still have come up, and the render checks
+                    // below are unchanged and still exact.
+                    assertTrue(
+                        "MainActivity did not even reach STARTED with face '${face.id}' active " +
+                            "(state ${scenario.state})",
+                        scenario.state.isAtLeast(Lifecycle.State.STARTED),
+                    )
+                }
                 settle()
                 assertNull(
                     "face '${face.id}' threw while rendering:\n" + (CrashLog.read(context) ?: ""),
