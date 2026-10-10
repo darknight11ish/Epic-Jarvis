@@ -18367,14 +18367,80 @@ written down nowhere**: before it, `docs/JARVIS-API.md` had no mention of
 ### 121.1 What the routes answer
 
     GET  /api/thinking    every model Jarvis can run, the level it is set to, and
-                          the levels that model actually supports
-    POST /api/thinking    {"model": "...", "level": "off" | "quick" | "deep" | "auto"}
+                          the levels that model actually supports, plus WHEN
+                          thinking happens and the two choices for it
+    POST /api/thinking    {"when": "when_asked" | "always"}   - WHEN (2026-10-11)
+                          {"model": "...", "level": "off" | "quick" | "deep" | "auto"}
 
 A level is **per model**, not global: the everyday model, the second-card lane's
 model and the third-card lane's model each carry their own. `off` is the default.
 Only levels the loaded model really supports are offered - read from Ollama's own
 `/api/show` capabilities rather than assumed - so a model that cannot think is never
 offered "Deep". Both apps draw one row per running model.
+
+### 121.1.1 WHEN thinking happens is a separate, two-choice setting (added 2026-10-11)
+
+The level says **how hard** a model may think. It never said **when**, and the
+everyday model is becoming one that thinks before it answers (`qwen3.5:9b`;
+`qwen3:8b` and `ornith:9b` behave the same). Measured on the owner's PC with
+`qwen3:8b`: thinking left on with a normal answer allowance spent every token
+reasoning and returned an **empty** answer on all three test questions
+(`done_reason: "length"`, `content: ""`); with thinking off the same questions were
+answered correctly in 0.29 s. So WHEN is the owner's choice, in two plain words,
+stored in the same `thinking.json` beside the levels:
+
+    "when_asked"   ordinary answers are written straight away; thinking happens on
+                   the questions the owner asks for it
+    "always"       every answer may think first - the longer wait and the
+                   conversation room it spends are said in plain words beside it
+
+`GET /api/thinking` answers `when` (the choice in force), `when_title`,
+`when_detail` and `when_choices` - one row per choice with `id`, `label`, `why` and
+`selected` - so both apps draw the same two rows from the PC's own words, exactly as
+the prompt coach's settings do. A PC older than this answers none of those fields:
+both apps then draw the same two rows from their own copy in the same words, marked
+with `when_asked`, so the row is never empty and never shows a choice nobody made.
+
+**A missing, empty, truncated or unreadable `thinking.json` reads as `when_asked`.**
+That is deliberate and it is the reason the field exists: falling back to `always`
+would fall back to the exact fault it prevents - a blank answer - and the owner would
+have no way to tell a wrong answer from no answer at all. Changing the choice needs
+no approval card (121.2), and it is not a new way out of the PC.
+
+### 121.1.2 Thinking about ONE question: `"think": true` (added 2026-10-11)
+
+`/api/chat` now reads one more field from the request body:
+
+    {"messages": [...], "think": true}
+
+It is the owner asking Jarvis to think about **that one question**, and it is the
+whole of what it does. It is read by `jarvis_agent.run_local_turn` through
+`jarvis_thinking.asked_for_this_turn` and passed to `jarvis_agent.chat_body`, which
+hands it to `reasoning_parameters`; it is **never stored**, and it never changes the
+`when` setting, so the question after it is ordinary again. It is never sent as
+`false` - the field is present or absent, the same rule `temporary` and `cloud_yes`
+follow - and only the app's own `true` counts (`"yes"`, `1` and `"true"` do not).
+
+**Three rules outrank it**, and each is checked in `backend/test_thinking_when.py`:
+
+  * a **spoken** turn - `jarvis_thinking.reasoning_parameters(spoken=True)` returns
+    `reasoning_effort: "none"` first, because a voice answer cannot wait for a long
+    think;
+  * a model that **cannot** think - `supports_thinking()` is false, so nothing is
+    offered it;
+  * the answer's own room - `jarvis_agent.REASONING_MIN_ANSWER_TOKENS` (192, the
+    measured floor from §121.3's own fix): thinking and the answer share one
+    `max_tokens`, so a turn with too little room answers directly rather than coming
+    back blank whatever the request asked for.
+
+A model the owner explicitly set to `off` is also never overridden by it. A role with
+no level of the owner's own thinks **quickly** when asked for rather than not at all,
+so the key does something on a PC where no level was ever picked.
+
+Both apps offer the control only on a PC that reports it:
+`/api/version`'s `capabilities.think_per_question`, which `jarvis_events.py` answers by
+asking whether the running `jarvis_agent` defines `think_asked_for`. A PC without it
+gets no key at all rather than a key that does nothing.
 
 ### 121.2 Changing one needs no card
 
@@ -18395,6 +18461,35 @@ cost the owner is choosing: thinking spends some of the conversation room.
 setting: it must be measured before it is trusted, the way the tool list is
 (`tools/tool_eval/`). Voice answers are always generated fast whatever the level
 says, because a spoken turn cannot wait for a long think.
+
+### 121.5 What the desktop needs for this (written down, NOT built - 2026-10-11)
+
+The choice itself (`{"when": ...}`) and the per-question field (`"think": true`) are
+the **PC's**, so the desktop already reads and changes the setting through the code it
+has: `jarvis-desktop/src/thinking-module.js` reads `GET /api/thinking` and
+`thinking-settings.js` posts to it. Two pieces are missing there, and this is exactly
+what they are:
+
+1. **The WHEN row on Settings → "Thinking levels"**, above the per-model rows. Read
+   `when`, `when_title`, `when_detail` and `when_choices` off the same `get_thinking`
+   reply `thinking-module.js` already parses, draw one row per choice from the PC's
+   own `label`/`why`, and post the chosen `id` with
+   `invoke("set_thinking_when", { mode })` - one new Tauri command beside
+   `set_thinking`, sending `{"when": mode}` to the same `POST /api/thinking` (no card,
+   exactly as a level). A reply with no `when_choices` (an older PC) draws the same two
+   rows from a local copy, marked `when_asked`.
+2. **A per-question key**, beside the chat box in the Jarvis bar, that adds
+   **`"think": true`** to the `/api/chat` body of **the next question only** - the
+   same field `jarvis-client`'s "Think" key sends. In
+   `jarvis-desktop/src-tauri/src/commands.rs` that is one more optional field on
+   whatever struct/JSON the chat command builds (today it forwards `model / messages /
+   stream / temperature / max_tokens`), set from one boolean parameter on the command;
+   the page clears it as the question goes, exactly as `ChatSession.send` does. Offer
+   the key only when `capabilities.think_per_question` is true in `/api/version`, and
+   send nothing for it otherwise.
+
+Nothing else is needed: the PC reads the field out of the request body it already
+forwards, and no patch supplies it.
 
 ## 122. The chatbot money limits and the price list (added 2026-10-06; §87.4.1 was referenced but never written)
 

@@ -2561,6 +2561,17 @@ _THINK_AUTO_CMD = re.compile(
 _THINK_STATUS_CMD = re.compile(
     r"^(?:what\s+is\s+(?:the\s+)?thinking\s+level|how\s+is\s+thinking\s+set|thinking\s+status|thinking\s+level)\??$", re.I)
 
+# WHEN thinking happens (jarvis_thinking.WHEN_ASKED / ALWAYS, 2026-10-11): the
+# owner's two-choice setting, said out loud. Two whole sentences, the same
+# shape as every other command here, and the wording the mode's own answer
+# tells the owner to use ("say \"always think\" ...").
+_THINK_ALWAYS_CMD = re.compile(
+    r"^(?:please\s+)?(?:always\s+think|think\s+(?:about\s+)?(?:everything|every\s+(?:answer|question|time))"
+    r"|think\s+every\s+time|use\s+thinking\s+(?:always|everywhere))\.?$", re.I)
+_THINK_ONLY_ASKED_CMD = re.compile(
+    r"^(?:please\s+)?(?:only\s+think\s+(?:when|if)\s+i\s+ask|think\s+only\s+when\s+i\s+ask"
+    r"|don'?t\s+think\s+(?:unless|until)\s+i\s+ask|only\s+think\s+when\s+asked)\.?$", re.I)
+
 
 def _thinking_cmd(s: str) -> Optional[Intent]:
     if _THINK_DEEP_CMD.match(s):
@@ -2571,6 +2582,10 @@ def _thinking_cmd(s: str) -> Optional[Intent]:
         return Intent("thinking_set", {"level": "off"})
     if _THINK_AUTO_CMD.match(s):
         return Intent("thinking_set", {"level": "auto"})
+    if _THINK_ALWAYS_CMD.match(s):
+        return Intent("thinking_when", {"when": "always"})
+    if _THINK_ONLY_ASKED_CMD.match(s):
+        return Intent("thinking_when", {"when": "when_asked"})
     if _THINK_STATUS_CMD.match(s):
         return Intent("thinking_status")
     return None
@@ -3520,11 +3535,22 @@ def _run_from_now_on(f: dict, conversation: Optional[str], temporary: bool) -> R
 
 def _run_thinking_set(f: dict, temporary: bool = False) -> Result:
     level = f.get("level", "off")
+    warn = ""
     try:
         import jarvis_thinking
         code, out = jarvis_thinking.set_level("everyday", level)
         if code != 200:
             return Result(out.get("error", f"Could not set thinking level to {level}."), "thinking_set")
+        # "From now on, think harder" is a level, and a level is WHEN-gated
+        # (jarvis_thinking.WHEN_ASKED, 2026-10-11): on "Only when I ask" a
+        # level is used on the questions the owner asks for thinking about and
+        # nowhere else. Left unsaid, the owner would hear "from now on" and
+        # get it only when he asked - so the sentence says which of the two he
+        # is on and what to say to change it. Nothing is changed here but the
+        # level he asked for.
+        if level != jarvis_thinking.OFF and jarvis_thinking.get_when() != jarvis_thinking.ALWAYS:
+            warn = (" Jarvis thinks on the questions you ask him to think about - "
+                    "say \"always think\" to have every answer think first.")
     except Exception:
         return Result("Your PC's Jarvis does not have thinking controls yet.", "thinking_set")
     desc = {
@@ -3533,14 +3559,38 @@ def _run_thinking_set(f: dict, temporary: bool = False) -> Result:
         "off": "thinking is off",
         "auto": "automatic thinking",
     }.get(level, f"thinking {level}")
-    return Result(f"Done: {desc} from now on. You can change this in Settings.", "thinking_set")
+    return Result(f"Done: {desc} from now on. You can change this in Settings.{warn}",
+                  "thinking_set")
+
+
+def _run_thinking_when(f: dict) -> Result:
+    """"Always think" / "only think when I ask": WHEN thinking happens at all
+    (jarvis_thinking.set_when, 2026-10-11) - the same function the setting's
+    own row calls, no card, and never the per-question flag."""
+    try:
+        import jarvis_thinking
+        code, out = jarvis_thinking.set_when(f.get("when"))
+        if code != 200:
+            return Result(out.get("error", "Jarvis could not change that just now."), "thinking_when")
+    except Exception:
+        return Result("Your PC's Jarvis does not have thinking controls yet.", "thinking_when")
+    if jarvis_thinking.get_when() == jarvis_thinking.ALWAYS:
+        return Result("Done: Jarvis may think before every answer. Thinking uses part "
+                      "of your conversation room, and answers can take longer.", "thinking_when")
+    return Result("Done: Jarvis thinks only on the questions you ask him to think about.",
+                  "thinking_when")
 
 
 def _run_thinking_status() -> Result:
     try:
         import jarvis_thinking
         lvl = jarvis_thinking.get_level("everyday")
-        return Result(f"Thinking is currently {lvl}. {jarvis_thinking.WHY.get(lvl, '')}", "thinking_status")
+        when = jarvis_thinking.get_when()
+        said = f"Thinking is currently {lvl}. {jarvis_thinking.WHY.get(lvl, '')}"
+        if when != jarvis_thinking.ALWAYS:
+            said += (" Jarvis uses it only on the questions you ask him to think "
+                     "about - say \"always think\" to change that.")
+        return Result(said, "thinking_status")
     except Exception:
         return Result("Thinking is currently off.", "thinking_status")
 
@@ -3822,6 +3872,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_from_now_on(f, conversation, temporary)
     if n in ("thinking_set", "thinking_from_now_on"):
         return _run_thinking_set(f, temporary)
+    if n == "thinking_when":
+        return _run_thinking_when(f)
     if n == "thinking_status":
         return _run_thinking_status()
     if n == "bulk":

@@ -3141,6 +3141,30 @@ _reasoning_field_refused = False
 #: this short was going to get anyway.
 REASONING_MIN_ANSWER_TOKENS = 192
 
+#: When thinking happens at all is the owner's choice, not this file's
+#: (2026-10-11): jarvis_thinking.WHEN_ASKED - ordinary answers are written
+#: straight away, and thinking happens on the questions the owner asks for it
+#: - or jarvis_thinking.ALWAYS. The safe one, WHEN_ASKED, is what a missing or
+#: unreadable setting falls to, and the reason is written at that constant.
+#: The floor above is NOT part of that choice: a turn whose own allowance is
+#: too small to share still answers directly, asked for or not - the floor
+#: exists so that no answer comes back blank, and a question the owner asked
+#: for thinking is not a reason to hand him an empty one. Below this many
+#: tokens of room, thinking is off whatever the request says.
+
+
+def think_asked_for(request) -> bool:
+    """Did the app ask for thinking on THIS question alone - `think: true` on
+    the chat request (the phone's "Think" key, and the same field from the
+    desktop)? One turn only: nothing here is stored, and it never changes the
+    owner's own setting. Without jarvis_thinking, or on anything that is not a
+    plain `true`, this is False and the turn is answered exactly as before."""
+    try:
+        import jarvis_thinking
+        return bool(jarvis_thinking.asked_for_this_turn(request))
+    except Exception:
+        return False
+
 # --------------------------------------------------------------------------
 #   How much of each prompt Ollama reused (feasibility audit I03, 2026-09-26)
 # --------------------------------------------------------------------------
@@ -6366,7 +6390,8 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
 
 def chat_body(model: str, messages: list, opts: dict, tools=None, *,
               spoken: bool = False, question: str = "", role: str = "everyday",
-              ollama_url: Optional[str] = None) -> dict:
+              ollama_url: Optional[str] = None,
+              per_turn: bool = False) -> dict:
     """One request to Ollama's /v1/chat/completions, in the order its fields
     have always been sent: model, messages, stream, stream_options, the
     app's temperature/top_p and max_tokens (`opts`), reasoning_effort
@@ -6377,7 +6402,16 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
     Thinking is left off when the answer's own allowance is too small to
     share with it (REASONING_MIN_ANSWER_TOKENS): both come out of `max_tokens`,
     so a turn that thinks first can lose the whole answer - see that constant.
-    Every other turn keeps whatever level the owner chose."""
+    Every other turn keeps whatever the owner chose, and a question the owner
+    asked for thinking on is passed through as such (`per_turn`).
+
+    `per_turn` is the owner asking for thinking on THIS one question - the
+    "Think" key on the phone, `think: true` on the chat request, read by
+    run_local_turn with jarvis_thinking.asked_for_this_turn. It turns thinking
+    ON for one turn and can do nothing else: it is not stored, it does not
+    touch the owner's setting, and it does not overrule the floor above, a
+    spoken turn, a model that cannot think, or a model the owner set to
+    answer directly."""
     body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
     if not _reasoning_field_refused:
         reasoning = None
@@ -6389,7 +6423,7 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
                 import jarvis_thinking
                 reasoning = jarvis_thinking.reasoning_parameters(
                     model, question=question, spoken=spoken,
-                    ollama_url=ollama_url, role=role
+                    ollama_url=ollama_url, role=role, per_turn=per_turn
                 )
         except Exception:
             pass
@@ -6753,7 +6787,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
 
     `request` is the app's request body; `temperature`, `top_p` and
     `max_tokens` are taken from it (max_tokens defaults to
-    DEFAULT_MAX_TOKENS, so every window gets the same length of answer).
+    DEFAULT_MAX_TOKENS, so every window gets the same length of answer), and
+    so is `think: true` - the owner asking for thinking on THIS question only
+    (see chat_body's `per_turn`).
 
     `enabled_tools` is the set of tool names to offer - see offered_tools().
     Empty, or none of them real: the model gets no `tools` at all.
@@ -6869,6 +6905,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 pass
     sink = on_step if on_step is not None else _publish_step
     req = request or {}
+    # "Think about this one" (2026-10-11): the owner asked for thinking on THIS
+    # question - the phone's Think key, or the same `think: true` from the
+    # desktop. Read once, here, and passed to every round of this turn only.
+    # It is the turn's own request field, never a setting: nothing is written,
+    # and the next question is an ordinary one again. A caller that sends
+    # nothing (the desktop today, the HUD page, any older app) gets exactly
+    # what it got before - see chat_body's own note on `per_turn`.
+    think_per_turn = think_asked_for(request)
     # What the model is shown (the short tool list, I06): `names` stays every
     # tool this turn ALLOWS - what a call is checked against - and `offer`
     # holds what each round SHOWS. With the short list off and no plug-in
@@ -7019,7 +7063,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         body = chat_body(cur["model"], sent_messages, opts,
                          offer["schemas"] if offer_tools else None,
                          spoken=watch.spoken, question=question_text, role="everyday",
-                         ollama_url=base_url)
+                         ollama_url=base_url, per_turn=think_per_turn)
         stripper = _ThinkStripper()
         first = {"text": True}
         # A spending table is on the screen for this answer: the model's words

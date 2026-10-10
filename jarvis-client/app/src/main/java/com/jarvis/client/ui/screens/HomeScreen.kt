@@ -512,6 +512,22 @@ data class HomeState(
      */
     val temporary: Boolean = false,
     /**
+     * The owner asked Jarvis to think about the NEXT question
+     * ([com.jarvis.client.net.Thinking.ONE_SHOT], the owner's decision of
+     * 2026-10-11): the "Think" key beside the chat box is lit, and the key
+     * goes out by itself the moment that question is sent. One question only -
+     * never a setting, and never the reason a message fails to send.
+     */
+    val thinkOnce: Boolean = false,
+    /**
+     * Is the one-question "Think" key offered on this PC
+     * (`/api/version`'s `capabilities.think_per_question`,
+     * [com.jarvis.client.net.Thinking.offered])? False on an older PC, and
+     * then the key is not drawn at all rather than sending a field that PC
+     * would ignore.
+     */
+    val thinkOffered: Boolean = false,
+    /**
      * The facts the answer on screen used, by id, for "Used 2 memories"
      * under it ([com.jarvis.client.net.MemoryUsed]). Ids only.
      */
@@ -762,6 +778,13 @@ data class HomeActions(
      * ([com.jarvis.client.JarvisRuntime.setTemporaryChat]).
      */
     val onToggleTemporary: () -> Unit = {},
+    /**
+     * Turn "Think about this one" on or off for the NEXT question
+     * ([com.jarvis.client.JarvisRuntime.setThinkOnce]). Memory only: no
+     * request, no card, nothing stored - it adds one field to the next
+     * question's request and clears itself as that question goes.
+     */
+    val onToggleThinkOnce: () -> Unit = {},
     /** Read the words of these facts from the PC, by id ([com.jarvis.client.JarvisRuntime.memoryUsed]). */
     val onLoadUsed: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read =
         { com.jarvis.client.net.MemoryUsed.Read.Missing },
@@ -3356,6 +3379,32 @@ private fun Composer(
                 color = chrome.textMid,
                 enabled = !state.streaming,
                 onClick = actions.onAttachNotifications,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        // "Think about this one" (the owner's decision, 2026-10-11): Jarvis
+        // thinks about THIS question before answering it - the everyday model
+        // thinks before every answer by default, and a normal answer allowance
+        // spent thinking comes back EMPTY, so it is asked for one question at
+        // a time rather than left on. It lights while it is on, and goes out
+        // by itself when the question is sent: it is not a setting, and the
+        // next question is an ordinary one again. Drawn only on a PC that says
+        // it understands the field (HomeState.thinkOffered) - a PC that would
+        // ignore it is never offered a key that does nothing.
+        if (state.thinkOffered) {
+            Quiet(
+                com.jarvis.client.net.Thinking.ONE_SHOT_LABEL,
+                color = if (state.thinkOnce) chrome.okInk else chrome.textMid,
+                enabled = !state.streaming,
+                modifier = Modifier.semantics {
+                    contentDescription = if (state.thinkOnce) {
+                        "Thinking about this one: on. " +
+                            com.jarvis.client.net.Thinking.ONE_SHOT_WHY
+                    } else {
+                        com.jarvis.client.net.Thinking.ONE_SHOT_WHY
+                    }
+                },
+                onClick = actions.onToggleThinkOnce,
             )
             Spacer(Modifier.width(4.dp))
         }

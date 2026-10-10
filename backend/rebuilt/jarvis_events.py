@@ -821,6 +821,18 @@ def _capability_probe() -> dict:
         # so the phone sends NOTHING, not even the question, unless this is
         # true. It then shows "3 recalled · 2 near", or nothing at all.
         "retrieve_count": _hud_has("_retrieve_counts"),
+        # Asking for thinking on ONE question ("Think" on the phone's chat box;
+        # the owner's decision of 2026-10-11). True once the running server's
+        # chat turn really sends thinking for a turn that carries
+        # `"think": true` - asked of jarvis_agent.py, where that is carried out
+        # (jarvis_agent.think_asked_for), not of the hud: the hud forwards the
+        # request body untouched, so it is the agent that has to know the
+        # field. Both apps offer the key only when this is true, rather than
+        # send a flag a PC would ignore and leave the owner thinking he had
+        # asked for something. False on an older backend: no key, and every
+        # question is answered the way it was before - never an error, and
+        # never a blank answer.
+        "think_per_question": _module_has("jarvis_agent", "think_asked_for"),
         # "backend" when POST /api/approve on this PC asks Windows Hello
         # itself for a risky approval from this PC (owner-check.patch,
         # jarvis_owner_check.py; docs/APPROVAL-GAP-DESIGN.md step 1). The
@@ -929,6 +941,19 @@ def _hud_has(name: str) -> bool:
         if mod is not None and callable(getattr(mod, name, None)):
             return True
     return False
+
+
+def _module_has(mod: str, name: str) -> bool:
+    """Does `mod` - a module of the backend this PC is running, not the server
+    itself - define the callable `name`? The import is a real one, exactly as
+    `has()` above does it: not importable, or no such name, is False. An
+    import that raises is a False too, never an exception out of the
+    handshake - a capability probe must not be able to stop a phone
+    connecting."""
+    try:
+        return callable(getattr(__import__(mod), name, None))
+    except Exception:
+        return False
 
 
 def hello(client: str = "") -> dict:
