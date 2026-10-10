@@ -24,116 +24,105 @@ import com.jarvis.client.face.Palette
  * already ruled unacceptable elsewhere. The mist tiers converge toward white,
  * and white has no hue to lose.
  */
+
+// GENERATED - DO NOT EDIT. `tools/tokens/build.mjs` writes the three
+// `Chrome(...)` blocks below from `tokens/themes.tokens.json`, and writes the
+// desktop's `theme.css` from the same tokens. A colour that differs from the
+// desktop's carries its reason in the token file, because a difference is a
+// decision and never an accident. Change the token file, then run:
+//
+//     node tools/tokens/build.mjs
+
 object Themes {
 
-    /**
-     * The default. Cool near-black, the product's established look, reconciled
-     * with the HUD's `--plate` and the spec's `renderer.background`.
-     *
-     * Tightest pair in the system: text-lo on surface-2 at 4.57:1, clearing AA
-     * by 0.07. The HUD's own `#6b8496` sat at 3.5:1 there and failed; this is
-     * the smallest change that clears it.
-     */
     val REACTOR = Chrome(
         id = "reactor",
         label = "Reactor",
         blurb = "The default. Cool near-black, built around the reactor's own light.",
         dark = true,
-        surface0 = Color(0xFF04070C),
-        surface1 = Color(0xFF0A1119),
-        surface2 = Color(0xFF0E1822),
-        well = Color(0xFF04070C),
-        textHi = Palette.NEUTRAL_5,   // 14.32:1 worst
-        textMid = Palette.NEUTRAL_4,  // 6.91:1 worst
-        textLo = Color(0xFF6E8397),   // 4.57:1 worst
-        hairline = Color(0xFF172836),
-        hairlineStrong = Color(0xFF24485E),
-        hairlineFocus = Color(0xFF4E7690), // 3.68:1 worst
-        okInk = Palette.VERDANT_4,
-        warnInk = Palette.AMBER_4,
-        badInk = Palette.ROSE_4,
+
+        // Class A ------------------------------------------------------------
+        surface0 = Color(0xFF04070C),   // differs from the desktop; the token file says why
+        surface1 = Color(0xFF0A1119),   // differs from the desktop; the token file says why
+        surface2 = Color(0xFF0E1822),   // differs from the desktop; the token file says why
+        well = Color(0xFF04070C),   // the face's ground; must stay essentially black (wellIsLegal)
+        textHi = Palette.NEUTRAL_5,   // differs from the desktop; the token file says why
+        textMid = Palette.NEUTRAL_4,   // differs from the desktop; the token file says why
+        textLo = Color(0xFF6E8397),   // differs from the desktop; the token file says why
+        hairline = Color(0xFF172836),   // differs from the desktop; the token file says why
+        hairlineStrong = Color(0xFF24485E),   // differs from the desktop; the token file says why
+        hairlineFocus = Color(0xFF4E7690),   // differs from the desktop; the token file says why
+
+        // Class B ------------------------------------------------------------
+        okInk = Palette.VERDANT_4,   // differs from the desktop; the token file says why
+        warnInk = Palette.AMBER_4,   // differs from the desktop; the token file says why
+        badInk = Palette.ROSE_4,   // differs from the desktop; the token file says why
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
-        cloudInk = Palette.VIOLET_4, // 6.04:1 worst, 5.03:1 in a Pill
+
+        // Class B in spirit: the words that say "this is leaving your machine".
+        cloudInk = Palette.VIOLET_4,   // differs from the desktop; the token file says why
     )
 
-    /**
-     * Light chrome with the reactor in a dark inset well — a dark gauge face in
-     * a light dashboard, which is what real instruments do.
-     *
-     * Deliberately NOT "light mode", and the distinction is honest rather than
-     * pedantic. A fully light theme is not buildable here: every face composites
-     * additively (`globalCompositeOperation 'lighter'`, and the bloom sprite
-     * too), and a light source on a white page is not dim, it is nothing. The
-     * reactor would be a white disc on a white card. Converting to source-over
-     * would mean rewriting twenty faces and would still lose the glow, which is
-     * the product.
-     *
-     * So the well stays dark, and this theme earns its place on the text
-     * screens — the inbox, the approval cards, anything read outdoors.
-     */
     val DAYLIGHT = Chrome(
         id = "daylight",
         label = "Daylight",
         blurb = "Light chrome for reading outdoors. The reactor keeps its dark well.",
         dark = false,
-        surface0 = Color(0xFFEEF1F6),
+
+        // Class A ------------------------------------------------------------
+        surface0 = Color(0xFFEEF1F6),   // differs from the desktop; the token file says why
         surface1 = Color(0xFFFFFFFF),
-        surface2 = Color(0xFFE8EDF4),
-        // Dark, on a light theme, on purpose. See the note above.
-        well = Color(0xFF04070C),
-        textHi = Color(0xFF0D1319),   // 15.88:1 worst
-        textMid = Palette.NEUTRAL_3,  // 6.38:1 worst
-        textLo = Color(0xFF54677C),   // 4.95:1 worst
-        hairline = Color(0xFFC6D0DC),
-        hairlineStrong = Color(0xFF98A6B6),
-        hairlineFocus = Color(0xFF7C8998), // 3.03:1 worst — the tightest anywhere
-        // Step 1 for words: 9.70:1 at worst, easily clearing AA.
-        okInk = Palette.VERDANT_1,
-        warnInk = Palette.AMBER_1,
-        badInk = Palette.ROSE_1,
-        // Step 2 for icons and fills: 4.39:1 at worst, which fails AA for text
-        // and passes the 3:1 that non-text needs — and carries 9.8 ΔE of
-        // ok/bad separation to a deuteranope against step 1's 7.5.
-        okMark = Palette.VERDANT_2,
-        warnMark = Palette.AMBER_2,
-        badMark = Palette.ROSE_2,
-        // Step 2 for the Cloud label. Violet-4, which most dark themes use,
-        // is 2.52:1 here and 2.25:1 inside a Pill. Step 2 is still plainly
-        // violet, where step 1 reads as near-black.
-        cloudInk = Palette.VIOLET_2, // 8.66:1 worst, 6.90:1 in a Pill
+        surface2 = Color(0xFFE8EDF4),   // differs from the desktop; the token file says why
+        well = Color(0xFF04070C),   // the face's ground; must stay essentially black (wellIsLegal)
+        textHi = Color(0xFF0D1319),   // differs from the desktop; the token file says why
+        textMid = Palette.NEUTRAL_3,   // differs from the desktop; the token file says why
+        textLo = Color(0xFF54677C),   // differs from the desktop; the token file says why
+        hairline = Color(0xFFC6D0DC),   // differs from the desktop; the token file says why
+        hairlineStrong = Color(0xFF98A6B6),   // differs from the desktop; the token file says why
+        hairlineFocus = Color(0xFF7C8998),   // differs from the desktop; the token file says why
+
+        // Class B ------------------------------------------------------------
+        okInk = Palette.VERDANT_1,   // differs from the desktop; the token file says why
+        warnInk = Palette.AMBER_1,   // differs from the desktop; the token file says why
+        badInk = Palette.ROSE_1,   // differs from the desktop; the token file says why
+        okMark = Palette.VERDANT_2,   // differs from the desktop; the token file says why
+        warnMark = Palette.AMBER_2,   // differs from the desktop; the token file says why
+        badMark = Palette.ROSE_2,   // differs from the desktop; the token file says why
+
+        // Class B in spirit: the words that say "this is leaving your machine".
+        cloudInk = Palette.VIOLET_2,   // differs from the desktop; the token file says why
     )
 
-    /**
-     * High contrast. Text and hairlines only.
-     *
-     * Two text tiers, not three: a "faint" tier is a contradiction in a
-     * high-contrast theme, so textLo aliases textMid. Surfaces are flat and
-     * depth comes from borders rather than tone.
-     */
     val CONTRAST = Chrome(
         id = "contrast",
         label = "High Contrast",
         blurb = "Maximum legibility. Flat surfaces, strong borders, two text weights.",
         dark = true,
+
+        // Class A ------------------------------------------------------------
         surface0 = Color(0xFF000000),
-        surface1 = Color(0xFF000000),
-        surface2 = Color(0xFF0A0A0A),
-        well = Color(0xFF000000),
-        textHi = Color(0xFFFFFFFF),   // 19.80:1 worst
-        textMid = Color(0xFFD5DDE6),  // 14.44:1 worst
-        textLo = Color(0xFFD5DDE6),   // aliased, deliberately
-        hairline = Color(0xFF6B7A8A),       // 4.50:1 — not decorative here
-        hairlineStrong = Color(0xFF9FB0C0), // 8.90:1
-        hairlineFocus = Color(0xFF9FB0C0),
-        okInk = Palette.VERDANT_4,
-        warnInk = Palette.AMBER_4,
-        badInk = Palette.ROSE_4,
+        surface1 = Color(0xFF000000),   // differs from the desktop; the token file says why
+        surface2 = Color(0xFF0A0A0A),   // differs from the desktop; the token file says why
+        well = Color(0xFF000000),   // the face's ground; must stay essentially black (wellIsLegal)
+        textHi = Color(0xFFFFFFFF),
+        textMid = Color(0xFFD5DDE6),   // differs from the desktop; the token file says why
+        textLo = Color(0xFFD5DDE6),   // differs from the desktop; the token file says why
+        hairline = Color(0xFF6B7A8A),   // differs from the desktop; the token file says why
+        hairlineStrong = Color(0xFF9FB0C0),   // differs from the desktop; the token file says why
+        hairlineFocus = Color(0xFF9FB0C0),   // differs from the desktop; the token file says why
+
+        // Class B ------------------------------------------------------------
+        okInk = Palette.VERDANT_4,   // differs from the desktop; the token file says why
+        warnInk = Palette.AMBER_4,   // differs from the desktop; the token file says why
+        badInk = Palette.ROSE_4,   // differs from the desktop; the token file says why
         okMark = Palette.VERDANT_4,
         warnMark = Palette.AMBER_4,
         badMark = Palette.ROSE_4,
-        cloudInk = Palette.VIOLET_4, // 6.67:1 worst, 5.75:1 in a Pill
+
+        // Class B in spirit: the words that say "this is leaving your machine".
+        cloudInk = Palette.VIOLET_4,   // differs from the desktop; the token file says why
     )
 
     val ALL: List<Chrome> = listOf(REACTOR, DAYLIGHT, CONTRAST)
