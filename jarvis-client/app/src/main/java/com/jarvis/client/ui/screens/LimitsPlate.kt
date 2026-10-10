@@ -4,8 +4,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +25,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Limits
@@ -39,11 +45,21 @@ import kotlinx.serialization.json.JsonPrimitive
  * PC's own limit table (`backend/jarvis_limits.py`, 2026-10-08; [Limits]).
  *
  * ONE row per limit, each with a control that fits its `kind`: the fixed
- * choices as chips, any other number as a step down / value / step up, and a
- * bool as the app's own [Toggle]. Every control carries the owner's words for
- * TalkBack ([Limits.rowWords], [Limits.upWords], [Limits.choiceWords]) - the
- * same deliberate habit the switches on "How Jarvis talks" already have, so a
- * step is never just a "-".
+ * choices as chips, any other number as a step down / value / step up, a bool
+ * as the app's own [Toggle], and a clock time as the app's own [TimePicker]
+ * (Material's clock, 24-hour, started where the value in force is). Every
+ * control carries the owner's words for TalkBack ([Limits.rowWords],
+ * [Limits.upWords], [Limits.choiceWords], [Limits.timeWords]) - the same
+ * deliberate habit the switches on "How Jarvis talks" already have, so a step
+ * is never just a "-" and a clock is never just "Change".
+ *
+ * THE PC'S OWN NOTIFICATIONS ARE ROWS HERE TOO (the owner's decision of
+ * 2026-10-08): which of the PC's own toasts fire, and the quiet hours around
+ * them, so the phone can change them. Their titles all say "(on your PC)" - the
+ * phone's OWN notification settings are a different screen and must never be
+ * mistaken for them. While quiet hours are off the PC says so on every row
+ * (`quiet_on`), and the two clock rows then show their value with a line saying
+ * the hour decides nothing rather than a picker that would change nothing.
  *
  * WHAT IT WILL NOT PRETEND. A number turned DOWN applies at once; a number
  * turned UP - on a row the PC marks `loosen_up` - is a loosening, and the PC
@@ -66,6 +82,8 @@ internal fun LimitsSection(canAct: Boolean) {
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    /** The key of the clock row whose picker is open, if any. */
+    var picking by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(reads) {
         when (val r = JarvisRuntime.limits()) {
@@ -125,6 +143,7 @@ internal fun LimitsSection(canAct: Boolean) {
                         row = r,
                         enabled = canAct && !busy,
                         onChange = { value -> change(r.key, value) },
+                        onPickTime = { picking = r.key },
                     )
                 }
             }
@@ -135,11 +154,31 @@ internal fun LimitsSection(canAct: Boolean) {
             }
         }
     }
+
+    // The picker is drawn OUTSIDE the card, and only for the row whose button
+    // was tapped: opening a clock is not a change, and nothing is sent until
+    // "Use this time" is tapped.
+    val open = rows?.firstOrNull { it.key == picking }
+    if (open != null && open.isTime) {
+        TimeRowDialog(
+            row = open,
+            onDismiss = { picking = null },
+            onChosen = { text ->
+                picking = null
+                change(open.key, Limits.timeJson(text))
+            },
+        )
+    }
 }
 
 /** ONE limit: the PC's title, the value in the PC's words, and its control. */
 @Composable
-private fun LimitRow(row: Limits.Row, enabled: Boolean, onChange: (JsonElement) -> Unit) {
+private fun LimitRow(
+    row: Limits.Row,
+    enabled: Boolean,
+    onChange: (JsonElement) -> Unit,
+    onPickTime: () -> Unit,
+) {
     val chrome = LocalChrome.current
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
         Text(
@@ -194,6 +233,29 @@ private fun LimitRow(row: Limits.Row, enabled: Boolean, onChange: (JsonElement) 
                     Text(range, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                 }
             }
+            // A clock time: the value is already above, so the control is the
+            // button that opens the app's own picker. While quiet hours are off
+            // the PC says the hour decides nothing, and the button is not
+            // offered - a control that changes nothing is worse than none.
+            row.isTime -> Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!row.quietOn) {
+                    Text(
+                        Limits.TIME_QUIET_OFF,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                } else {
+                    Quiet(
+                        Limits.CHANGE_TIME,
+                        modifier = Modifier.semantics { contentDescription = Limits.timeWords(row) },
+                        enabled = enabled,
+                        onClick = onPickTime,
+                    )
+                }
+            }
             // On or off: the app's own switch, with its words for TalkBack.
             else -> Row(
                 Modifier.fillMaxWidth(),
@@ -210,6 +272,58 @@ private fun LimitRow(row: Limits.Row, enabled: Boolean, onChange: (JsonElement) 
                     onCheckedChange = { onChange(JsonPrimitive(it)) },
                     enabled = enabled,
                     modifier = Modifier.semantics { contentDescription = Limits.rowWords(row) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The app's own time picker for one clock-time row: Material's clock, started
+ * where the value in force is, and a 24-hour face because the value the PC holds
+ * and the owner reads is 24-hour ("22:00").
+ *
+ * The dialog hands back the same shape the PC takes, "HH:MM", through
+ * [Limits.validTime] - so a time can never leave this phone in a shape the PC
+ * would refuse, and it is never turned into a number of minutes anywhere.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeRowDialog(
+    row: Limits.Row,
+    onDismiss: () -> Unit,
+    onChosen: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val (hour, minute) = Limits.hourMinute(row.clock.orEmpty())
+    val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
+    Dialog(onDismissRequest = onDismiss) {
+        Plate {
+            Text(row.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Gap(8)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                TimePicker(state = state)
+            }
+            Gap(10)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Quiet("Cancel", onClick = onDismiss)
+                Gap(8)
+                Quiet(
+                    "Use this time",
+                    onClick = {
+                        val text = Limits.validTime("%02d:%02d".format(state.hour, state.minute))
+                        if (text != null) onChosen(text)
+                    },
                 )
             }
         }

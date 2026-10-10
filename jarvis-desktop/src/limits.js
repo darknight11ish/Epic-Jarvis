@@ -39,8 +39,14 @@ export function normaliseLimits(body) {
       .map((r) => ({
         key: String(r.key),
         title: String(r.title || r.key),
-        kind: r.kind === "bool" ? "bool" : "int",
-        value: r.kind === "bool" ? r.value === true : Number(r.value),
+        // THREE kinds reach this card: "bool", a number, and "time" - a clock
+        // time ("22:00"), the quiet hours' two ends (2026-10-08). A time keeps
+        // its STRING: `Number("22:00")` is NaN, and a time of day is never a
+        // number of minutes. Everything else is drawn as a number.
+        kind: r.kind === "bool" ? "bool" : r.kind === "time" ? "time" : "int",
+        value: r.kind === "bool" ? r.value === true
+          : r.kind === "time" ? String(r.value == null ? "" : r.value)
+            : Number(r.value),
         words: String(r.words || ""),
         choices: Array.isArray(r.choices) ? r.choices.map(Number) : [],
         low: Number(r.low ?? 0),
@@ -49,8 +55,30 @@ export function normaliseLimits(body) {
         note: String(r.note || ""),
         loosenUp: r.loosen_up === true,
         pcOnly: r.pc_only === true,
+        // The PC's answer to "do the two quiet-hours times matter", sent on
+        // every row. A row that does not say is drawn as if they do, so an
+        // older PC never has a control hidden from it.
+        quietOn: r.quiet_on !== false,
       })),
   };
+}
+
+/**
+ * A time of day as the PC stores and checks it, "HH:MM" - or null. Pure, so the
+ * rule can be tested without a window.
+ *
+ * The shape is `jarvis_notify_prefs.check_time`'s, one home for one rule: "7:05"
+ * is accepted and normalised to "07:05", while 1320, "25:00", "7:5" and "" are
+ * refused. A bare number of minutes has no such shape, which is the point.
+ */
+export function validTime(text) {
+  const t = String(text == null ? "" : text).trim();
+  const m = /^(\d{1,2}):(\d{2})$/.exec(t);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
 }
 
 /**
@@ -60,7 +88,9 @@ export function normaliseLimits(body) {
  * backend would refuse); without them it is one whole number inside low..high.
  */
 export function stepped(limit, direction) {
-  if (!limit || limit.kind === "bool") return null;
+  // A bool has no steps, and neither has a clock time: an hour is chosen on a
+  // clock, not nudged into 22:01.
+  if (!limit || limit.kind === "bool" || limit.kind === "time") return null;
   const dir = direction < 0 ? -1 : 1;
   if (limit.choices.length) {
     const sorted = [...limit.choices].sort((a, b) => a - b);
@@ -75,7 +105,13 @@ export function stepped(limit, direction) {
 
 /** The JSON value a control sends for `value` on `limit`. */
 export function valueFor(limit, value) {
-  return limit && limit.kind === "bool" ? value === true : Number(value);
+  if (!limit) return value;
+  if (limit.kind === "bool") return value === true;
+  // A clock time goes to the PC as the clock string it is. `Number("22:00")` is
+  // NaN, and a time of day is never a number of minutes - the PC refuses a bare
+  // 1320 in plain words, and this card must never send one.
+  if (limit.kind === "time") return String(value);
+  return Number(value);
 }
 
 /** What a row says about the number it holds now. */
@@ -83,6 +119,7 @@ export function rowWords(limit) {
   if (!limit) return "";
   if (limit.words) return limit.words;
   if (limit.kind === "bool") return limit.value ? "on" : "off";
+  if (limit.kind === "time") return String(limit.value || "");
   return `${limit.value}${limit.unit ? " " + limit.unit : ""}`;
 }
 

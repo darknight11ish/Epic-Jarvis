@@ -1765,3 +1765,49 @@ run_limit = 20
 # to 30.
 [chat]
 tag_suggest_quiet_minutes = 30
+
+# ------------------------------------------------------------------------
+# NOTIFICATIONS - this PC's own toasts, and the quiet hours around them
+# ------------------------------------------------------------------------
+# Which of THIS PC's notifications appear, and when it stays quiet. The owner's
+# decision of 2026-10-08: these are changeable from the phone as well as from
+# the PC's Settings -> Notifications, and the phone says plainly that they are
+# the PC's own - the phone's own notifications are a separate feature
+# (jarvis_phone_notifications.py, /api/notifications/phone).
+#
+# ONE HOME. This table is the one source of truth. `jarvis_notify_prefs.py`
+# reads and writes it, and both apps reach it through the limits table
+# (jarvis_limits.py: one row per value, both marked app="both" so both screens
+# draw them). The desktop app's own localStorage keeps a copy so its switches
+# paint at once, but that copy is a cache refreshed FROM here and never a
+# second authority.
+#
+# The toasts themselves are raised in Rust. The desktop pushes these values to
+# it (jarvis-desktop/src-tauri/src/notifications.rs, set_notification_prefs),
+# which reads them at startup from its own notifications.json and re-reads them
+# whenever the desktop pushes. Nothing here is logged.
+#
+# DEFAULTS, unchanged from what the desktop app already did before these keys
+# existed: the four switches ON, quiet hours OFF, 22:00 to 07:00. A settings
+# file with no [notifications] table at all behaves exactly as that.
+[notifications]
+# Alarms and urgent "tell me when" alerts. They ring until dismissed and break
+# through Windows Focus Assist. Quiet hours never silence this one: an alarm
+# the owner set must still ring at 03:00, which is the point of having set it.
+alarms = true
+# Reminders, timers and to-do items coming due.
+reminders = true
+# The morning briefing is ready to read in the Brain.
+briefing = true
+# A website or support chat has paused at a captcha or sign-in page and is
+# waiting for the owner ("Solve it here").
+handoff = true
+# Quiet hours on or off. Off by default.
+quiet_enabled = false
+# The quiet window's two ends, "HH:MM" on the PC's own clock. It normally wraps
+# midnight. Quiet hours silence only the kinds that can wait - a reminder, the
+# briefing and a hand-off - and NEVER an alarm or a decision waiting for the
+# owner. A window whose two ends are the same time is treated as empty, not as
+# all day.
+quiet_start = "22:00"
+quiet_end = "07:00"

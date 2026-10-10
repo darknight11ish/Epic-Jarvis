@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { normaliseLimits, problemWords, rowWords, stepped, valueFor } from "../src/limits.js";
+import { normaliseLimits, problemWords, rowWords, stepped, validTime, valueFor } from "../src/limits.js";
 import * as K from "./uikit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -47,6 +47,29 @@ const VIEW = {
     { key: "memory_people", title: "Look for people and things", kind: "bool",
       value: false, words: "off", choices: [], low: 0, high: 0, unit: "",
       note: "", loosen_up: true, pc_only: false, app: "phone" },
+  ],
+};
+
+/* A real answer that carries the owner's decision of 2026-10-08: this PC's own
+   notification choices are rows in the same table, so the phone can change them
+   too. Two of them are the new `kind: "time"` - the quiet hours' two ends,
+   carried as the clock STRING the owner reads, never a number of minutes. */
+const TIME_VIEW = {
+  ok: true,
+  available: true,
+  limits: [
+    { key: "notif_quiet_enabled", title: "Be quiet during quiet hours (on your PC)",
+      kind: "bool", value: true, words: "Be quiet during quiet hours (on your PC)",
+      choices: [], low: 0, high: 0, unit: "", note: "Silences the PC's non-urgent notifications.",
+      loosen_up: false, pc_only: false, app: "both", quiet_on: true },
+    { key: "notif_quiet_start", title: "Quiet hours start (on your PC)", kind: "time",
+      value: "22:00", words: "22:00", choices: [], low: 0, high: 0, unit: "",
+      note: "The hour the PC's quiet window begins, on the PC's own clock.",
+      loosen_up: false, pc_only: false, app: "both", quiet_on: true },
+    { key: "notif_quiet_end", title: "Quiet hours end (on your PC)", kind: "time",
+      value: "07:00", words: "07:00", choices: [], low: 0, high: 0, unit: "",
+      note: "The hour the PC's quiet window ends, on the PC's own clock.",
+      loosen_up: false, pc_only: false, app: "both", quiet_on: true },
   ],
 };
 
@@ -96,6 +119,33 @@ await check("what a control sends is the value, never a direction", async () => 
   assert.equal(typeof valueFor(normaliseLimits(VIEW).rows[0], 24), "number");
   assert.equal(rowWords({ ...choice, kind: "bool", value: true, words: "" }), "on");
   assert.equal(rowWords({ ...choice, words: "" }), "24 hours");
+});
+
+await check("a clock time stays a clock string, and is never a number of minutes", async () => {
+  const rows = normaliseLimits(TIME_VIEW).rows;
+  assert.deepEqual(rows.map((r) => r.kind), ["bool", "time", "time"]);
+  const start = rows[1];
+  assert.equal(start.value, "22:00", "the value is the string the PC sent");
+  assert.equal(typeof start.value, "string", "Number(\"22:00\") is NaN - never that");
+  assert.equal(rowWords(start), "22:00");
+  assert.equal(validTime(start.value), "22:00");
+  // The shape rule, one home for one rule (jarvis_notify_prefs.check_time):
+  assert.equal(validTime("7:05"), "07:05", "the PC's own shape normalises, and so does this");
+  for (const junk of [1320, "1320", "25:00", "7:5", "", null, "22:60"]) {
+    assert.equal(validTime(junk), null, `${JSON.stringify(junk)} is not a time of day`);
+  }
+  // A clock has no steps, and what it sends is the string itself.
+  assert.equal(stepped(start, 1), null, "a time is not nudged into 22:01");
+  assert.equal(stepped(start, -1), null);
+  assert.equal(valueFor(start, "23:30"), "23:30");
+  assert.equal(valueFor(start, "23:30") !== 23.5, true, "never a fraction of a day either");
+  // The PC's answer about whether the hours matter is read, and an older PC
+  // that does not send it is read as "they do" rather than hiding a control.
+  assert.equal(start.quietOn, true);
+  assert.equal(normaliseLimits({ limits: [{ key: "t", kind: "time", value: "22:00" }] }).rows[0].quietOn,
+    true, "a row that does not say is drawn, not hidden");
+  assert.equal(normaliseLimits({ limits: [{ key: "t", kind: "time", value: "22:00", quiet_on: false }] })
+    .rows[0].quietOn, false);
 });
 
 await check("a bridge error becomes words, not JSON", async () => {
@@ -206,6 +256,36 @@ await check("Settings: the PC's refusal is shown in its own words", async () => 
   const note = await page.locator("#limits-note").innerText();
   await page.close();
   assert.equal(note, "Turning this up needs your approval on the PC.");
+});
+
+await check("Settings: a clock row draws a clock and sends the time it shows", async () => {
+  const page = await settings({ view: TIME_VIEW });
+  const kinds = await page.locator("#limits-rows li").evaluateAll((els) => els.map((e) => e.dataset.kind));
+  const input = page.locator('#limits-rows li[data-limit="notif_quiet_start"] input[type="time"]');
+  const value = await input.inputValue();
+  const text = await page.locator("#limits").innerText();
+  await input.fill("23:30");
+  await settled(page, () => (window.__limitCalls || []).length > 0);
+  const calls = await page.evaluate(() => window.__limitCalls);
+  await page.close();
+  assert.deepEqual(kinds, ["bool", "time", "time"]);
+  assert.equal(value, "22:00", "the clock starts where the PC says the value is");
+  assert.ok(text.includes("Quiet hours start (on your PC) - 22:00"));
+  // ONE call, and it carries the clock STRING - not 1410, and not 23.5.
+  assert.deepEqual(calls, [{ cmd: "set_limit", args: { key: "notif_quiet_start", value: "23:30" } }]);
+});
+
+await check("Settings: with quiet hours off the clock is not offered, and says why", async () => {
+  const quietOff = JSON.parse(JSON.stringify(TIME_VIEW));
+  quietOff.limits.forEach((r) => { r.quiet_on = false; });
+  const page = await settings({ view: quietOff });
+  const inputs = await page.locator('#limits-rows li[data-limit="notif_quiet_start"] input[type="time"]').count();
+  const text = await page.locator("#limits").innerText();
+  const rows = await page.locator("#limits-rows li").count();
+  await page.close();
+  assert.equal(inputs, 0, "an hour that decides nothing is not offered as a clock");
+  assert.equal(rows, 3, "the row is still drawn, with its value");
+  assert.ok(text.includes("Quiet hours are off, so this hour decides nothing."));
 });
 
 await check("Settings: an older PC says what to do, and the list stays hidden", async () => {
