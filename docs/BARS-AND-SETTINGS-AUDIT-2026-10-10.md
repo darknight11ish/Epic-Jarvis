@@ -135,7 +135,10 @@ face deliberately still has none — see §5.
   and `surfaces.toml`'s `widget-surface` and `capabilities/widget.json` were
   given `open-fix-place`, which **also fixes the widget's dead offline card**
   (§1 finding 4).
-* **The HUD and the floating face deliberately got none** — see §5.
+* **The HUD and the floating face deliberately got none** — see §5. **The HUD
+  half was reversed by the owner on 2026-10-10 (§10.2): the HUD now has the
+  same gear, added by the shell's bootstrap, and `capabilities/hud.json` was
+  granted `open-fix-place` for it. The floating face still has none.**
 
 ### 3.4 Opening apps and panels from the owner's own words (request 5)
 
@@ -148,6 +151,12 @@ exactly: **no card, no route of its own, no model tool, and it never imports
 nothing here can be made to ask.
 
 What each phrase does:
+
+> **Superseded on 2026-10-10 for the "settings" rows.** The owner answered
+> question 1 in §7 by flipping the default: a bare "open settings" is
+> **Jarvis's** own window now, and only "open Windows settings" reaches
+> `ms-settings:`. See **§10.1** for the answer as built, the new wording, and
+> the bug found on the way. The rest of this table is unchanged.
 
 | The owner says | Kind | What happens |
 |---|---|---|
@@ -235,13 +244,16 @@ and fails the same way on unmodified `main`.
   a drag handle. Adding a visible control there would be a new visual language
   on the one surface built to have none. It is hidden by `Alt+Shift+F`, by its
   tray row, or by asking out loud.
-* **No settings gear on the HUD or the floating face.** The HUD is the one
-  surface where the design note is explicit that it holds "no approve, deny,
+* **No settings gear on the HUD or the floating face.** **The HUD half was
+  answered by the owner on 2026-10-10: it gets the gear — see §10.2, which
+  supersedes this bullet for the HUD.** As written here, the HUD was the one
+  surface where the design note was explicit that it holds "no approve, deny,
   memory-write, recording or settings command"
   (`capabilities/hud.json`), and it loads the backend's own vendored page,
-  which is not ours to add chrome to. The floating face is the same argument as
-  above. **Both are offered to the owner as questions in §7 rather than
-  decided here.**
+  which is not ours to add chrome to — hence the gear is added by the shell's
+  injected bootstrap and the capability's own sentence was corrected. The
+  floating face is the same argument as above and **still has no gear**;
+  the owner answered only for the HUD.
 * **The HUD's and the widget's own toggle routes are unchanged.** The HUD's
   tray rows still deliberately `show` rather than toggle
   (`windows.rs:720-724`), because the reason written there is a good one.
@@ -348,3 +360,112 @@ The HUD is the window that holds today "no settings command" on purpose.
 5. The bar's own width with two more icon buttons on it: the row has
    `flex-wrap`, so it should reflow rather than clip, but the pixels have not
    been seen.
+
+---
+
+## 10. The owner's answers to §7 (2026-10-10), and what they changed
+
+Both questions are now answered, and **this section supersedes §3.4's table,
+§3.4's own "how settings is disambiguated" list, §3.5, and §5's second
+bullet**. Where this section and those disagree, this one is what the code
+does.
+
+### 10.1 Q1 — the owner chose **"flip it"**
+
+**A bare "open settings" now opens JARVIS's own Settings window, at the top**
+(`kind: "jarvis"`, `open_place: ""`). It is no longer Windows Settings.
+
+* **"open Windows settings"** — and "open the windows settings app" — is the
+  words that reach **Windows' own Settings** (`ms-settings:`). It is now
+  matched **explicitly**, by `jarvis_open._WINDOWS_SAID`, before the Windows
+  panel list and long before the PC's Start-menu index, so a shortcut that
+  happened to be called "Windows Settings" can never steal the phrase.
+* **"open my settings"**, "open the settings app" and "open the settings
+  screen" land on Jarvis's, the same as the bare phrase.
+* **The answer says which one it opened and how to ask for the other**, on
+  both readings:
+  * bare "open settings" → *"Opening Jarvis settings on this PC."* plus the
+    note *"That is Jarvis's own settings window. Say "open Windows
+    settings" for Windows' own."*
+  * "open Windows settings" → *"Opening Windows Settings on this PC."*, no
+    note needed, because the owner named the one he wanted.
+* **The disambiguation note for words that are both** (security, sound,
+  camera, backup, display, …) is kept and was made **truthful after the
+  flip**. It used to name the other reading as *"open Jarvis settings"*, which
+  is now exactly what a bare "open settings" already does — the one thing the
+  note must never do is send the owner to the phrase he just said. It now
+  names the other reading as the **section jump**: *"That is Windows' own
+  sound page. Say "open Jarvis settings, sound" for the one inside Jarvis."*
+  The panel itself is unchanged: an ambiguous word still opens the **Windows**
+  page by name, exactly as §3.4 said.
+* The `Opened` note is no longer only about `settings`; it is what the answer
+  carries whenever a phrase has two real readings.
+
+**A bug this work found and fixed:** the kind-noun peel in `resolve` was
+written with `re.sub` over a pattern that can match the empty string, so
+"open the display settings app" was handed to the app index as a program
+called "display settings" instead of reaching the Display page. The peel is
+now a real match (`_without_kind_noun`) and runs **at most twice**, so a name
+carrying two of those nouns still lands on its panel. `test_jarvis_open.py`
+holds both cases.
+
+### 10.2 Q2 — the owner chose **"yes, add the same gear"**
+
+**The big HUD window now has a settings gear.** Where and what it calls:
+
+* **Where:** on the HUD's own **stage bar**, immediately before the page's
+  own "Telemetry" button — the bar that already carries the model and state
+  chips. There is no title bar in the page itself (the OS draws the window's),
+  so the stage bar is this window's chrome.
+* **What it calls:** `open_fix_place { place: "settings" }` — **exactly** the
+  command the Jarvis bar's gear and the widget's gear call. **No new Tauri
+  command, no new Rust code.** It draws the **same gear glyph** and carries
+  the **same "Jarvis settings" name for a screen reader**, so all three look
+  and read alike.
+* **Where the code lives:** `src-tauri/src/hud_bootstrap.js`, the shell script
+  injected into the HUD before its own. It is **not** in `jarvis_hud.html`,
+  which is vendored byte-identical from the backend folder and must stay that
+  way (`bar-chrome.mjs` asserts the page has no `#hud-settings`). Adding it
+  here is the same road the "Open the Jarvis bar" button already takes.
+* **The capability change, deliberately named:** **`capabilities/hud.json`**
+  now pulls in the **`open-fix-place`** set (`allow-open-fix-place`), and its
+  own description was corrected — it used to say, in so many words, that this
+  window holds "no … settings command". That set is navigation only: it opens
+  or focuses Settings at a named place, changes no setting, approves nothing,
+  and the app lock still applies to whatever it opens. It is the same grant
+  the widget needed, for the same reason: **a visible control wired to a
+  command its window does not hold fails silently**, which is exactly how the
+  widget's offline card stayed dead. `permissions/surfaces.toml` records the
+  same, beside the set.
+* **The route-line allowlist did NOT need the field added.** The audit's §6
+  warning is about the filter in `commands.rs::route_line_from_header`, which
+  had silently dropped `open_settings` four times. This gear opens Settings by
+  **calling a command**, not by reading a route line, so it never touches that
+  filter. The filter's four `open_app*` names and `open_place`, added by this
+  branch, already carry "open settings" → Jarvis's as well: after the flip the
+  same names ride that line, with `open_app_kind: "jarvis"` and an **empty**
+  `open_place` meaning "the top of the window". No name was added, and none
+  was needed.
+* **Not changed:** the floating face still has no gear and no hide button
+  (§5's first (now merged) bullet) — the owner answered only for the HUD.
+
+### 10.3 What the tests now hold
+
+* `backend/test_jarvis_open.py` — bare "open settings" and "open my settings"
+  are Jarvis's; "open Windows settings", "open windows settings" and "open the
+  windows settings app" are `ms-settings:`; the note names the other door and
+  **never** names the phrase the owner just said; ambiguous words still open
+  the Windows page and name the section jump.
+* `jarvis-desktop/tests/bar-chrome.mjs` — now **18 checks**, five of them new:
+  the HUD's gear exists and is named, calls `open_fix_place`, sits on the stage
+  bar, draws the shared glyph, and the window is really granted the set
+  (`surfaces.toml` **and** `capabilities/hud.json`).
+* `backend/jarvis_open.py`'s shipped twin `jarvis-backend/jarvis_open.py` is
+  byte-identical (`test_base_matches_repo.py`).
+
+### 10.4 Still only the owner's running app can confirm
+
+Adding to §9: that the gear is **findable at a glance** on the HUD's stage bar
+at the window's real size, and that tapping it opens Settings at the top. No
+build, no restart and no window was opened by this work.
+

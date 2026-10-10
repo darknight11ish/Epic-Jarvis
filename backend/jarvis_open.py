@@ -27,19 +27,32 @@ and this file is the same shape for the same reason:
     tier to and nothing here can be made to ask.
 
 WHAT "OPEN SETTINGS" MEANS, AND WHY (the disambiguation, said plainly)
-There are two Settings on this PC and one phrase for both:
-  * "open Jarvis settings"  -> Jarvis's own Settings window. Only the
-    explicit words, or one of the registry's own section names ("open web
-    search", "open voice settings"), name this one. Those section names are
-    matched FIRST, by jarvis_quick.py's own `_settings_open`, so every
-    phrase that already worked still lands where it did.
-  * "open settings", "open Windows settings", "open my settings" ->
-    WINDOWS Settings (`ms-settings:`). This is the plain reading of the
-    owner's own words above, and it is the one Windows itself uses the word
-    "Settings" for.
-  * "open settings" said about a JARVIS section he cannot name -> Jarvis
-    does NOT guess. `needs_choice` below asks instead, with the two
-    readings as the choices.
+There are two Settings on this PC and one phrase for both. The owner settled
+which one the bare phrase means on 2026-10-10, answering question 1 of
+docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md ("Flip it"): Jarvis is his own app,
+so "open settings" in it means ITS settings, and Windows' own screen is named
+in so many words.
+  * "open settings", "open my settings" -> JARVIS's own Settings window, at
+    the TOP (no section). This is the owner's decision, not an accident of
+    wording, and the answer says so.
+  * "open Jarvis settings" and the other explicit Jarvis words, or one of the
+    registry's own section names ("open web search", "open voice settings"),
+    -> the same window. Those section names are matched FIRST, by
+    jarvis_quick.py's own `_settings_open`, so every phrase that already
+    worked still lands where it did.
+  * "open Windows settings" (or "open the windows settings app") ->
+    WINDOWS Settings (`ms-settings:`). After the flip this is the only words
+    that reach Windows' own screen, so it is matched EXPLICITLY, by
+    `_WINDOWS_SAID` below, and never left to the app index - a Start-menu
+    shortcut that happened to be called that must not steal it.
+  * Every word that is BOTH a Windows panel and a Jarvis section (security,
+    sound, camera, backup, ...) still opens the WINDOWS page by name and
+    says, in the same answer, how to ask for the one inside Jarvis ("open
+    Jarvis settings, sound"). That note was kept truthful through the flip:
+    it used to send the owner to "open Jarvis settings" for the bare word,
+    which is now the very thing he said.
+  * Words that name neither -> Jarvis does NOT guess. They are treated as an
+    app name, and the PC resolves that honestly or says it is not there.
 
 WHAT IS NEVER DONE
 No guessing. A name that matches nothing known is not "the nearest app":
@@ -88,9 +101,10 @@ class Opened:
       words, which the desktop resolves against this PC's own Start menu.
     note:
       One extra plain sentence to say after the answer, or "". Used by the
-      one phrase with two real readings ("open settings"), to say which one
-      was chosen and how to ask for the other. Never an error and never a
-      card: it is the same answer either way, said plainly.
+      phrase with two real readings ("open settings" and the panel words that
+      are also Jarvis sections), to say which one was opened and how to ask
+      for the other. Never an error and never a card: it is one answer either
+      way, said plainly.
     """
 
     kind: str
@@ -100,10 +114,18 @@ class Opened:
     note: str = ""
 
 
-#: The two readings of a bare "open settings", and the one Jarvis takes. Both
-#: are one phrase away from the owner, so the answer says which was opened and
-#: how to get the other; nothing is guessed and nothing is hidden.
-_WINDOWS_DEFAULT = ("ms-settings:", "jarvis")
+#: Said after the bare "open settings" now that it means Jarvis's own window
+#: (the owner's decision of 2026-10-10): which one it opened, and the one
+#: phrase that reaches Windows' instead. Both readings stay one sentence away,
+#: so nothing is guessed and nothing is hidden.
+_JARVIS_NOTE = ('That is Jarvis\'s own settings window. Say "open Windows '
+                'settings" for Windows\' own.')
+
+#: The words that mean WINDOWS Settings since the flip - matched as the whole
+#: phrase, before anything else, so the app index can never take them. Written
+#: exactly as `_clean` leaves them (lower case, no leading article, trailing
+#: "app"/"screen"/"window"/"settings" kind-noun peeled).
+_WINDOWS_SAID = frozenset({"windows settings", "windows' settings"})
 
 
 # --------------------------------------------------------------------------
@@ -181,11 +203,12 @@ PANELS = {
     "multitasking": "ms-settings:multitasking",
 }
 
-#: The words that mean JARVIS's own Settings rather than Windows'. Nothing
-#: else names it: "open settings" is Windows Settings, which is what Windows
-#: itself calls that screen and what the owner's own sentence asked for.
-#: A section of Jarvis Settings named by its own name ("open voice
-#: settings") is matched BEFORE this file is ever asked - jarvis_quick.py's
+#: The words that mean JARVIS's own Settings rather than Windows'. Since the
+#: owner's decision of 2026-10-10, the bare "open settings" means Jarvis's too,
+#: and `resolve` treats it as the default - it is not listed here because it is
+#: matched before `PANELS` can claim it, not because it is less than the rest.
+#: A section of Jarvis Settings named by its own name ("open voice settings")
+#: is matched BEFORE this file is ever asked - jarvis_quick.py's
 #: `_settings_open` runs first and hands it to jarvis_settings_registry.py.
 JARVIS_SETTINGS = (
     "jarvis settings",
@@ -251,17 +274,13 @@ BUILT_IN = {
     "microsoft store": "ms-windows-store:",
 }
 
-#: What to do when the owner's words name a Jarvis Settings SECTION - the
-#: registry's own names - but he did not say "Jarvis". `_settings_open` has
-#: already had its turn by the time this file is asked, so reaching here
-#: with one of these means the phrase was ambiguous enough that guessing
-#: would be wrong. Kept short: only the section names that are ALSO ordinary
-#: Windows words.
 #: Words whose Windows panel and Jarvis Settings section share a NAME, so the
 #: answer has to say which one it opened and how to ask for the other. Only
 #: ever consulted for a word that is a panel: the panel is opened, and the
-#: note names the other reading rather than hiding it.
-_AMBIGUOUS_SECTIONS = ("settings", "security", "notifications", "storage",
+#: note names the other reading rather than hiding it. The bare word
+#: "settings" is deliberately absent: after the owner's flip it is Jarvis's
+#: own window and is matched before `PANELS` is consulted at all.
+_AMBIGUOUS_SECTIONS = ("security", "notifications", "storage",
                        "accounts", "display", "language", "keyboard", "mouse",
                        "printer", "devices", "camera", "location", "backup",
                        "updates", "sound", "network", "privacy", "apps")
@@ -292,7 +311,26 @@ _TAIL = re.compile(
 #: it is, never part of its name. Peels ONE trailing noun, in
 #: `resolve` - after the whole phrase has been tried, so "display settings"
 #: stays Display settings instead of becoming an app called "display".
-_KIND_NOUNS = r"(?:\s+(?:app|application|program|window|page|screen|panel|settings))?$"
+#: `[^]*` is spelled out rather than `.` because the leading `\s+` is what
+#: has to consume the space: `re.match` is used (not `re.sub`), so a name
+#: that does NOT end in one of these words leaves the name alone instead of
+#: being emptied by a zero-width match.
+_KIND_NOUNS = re.compile(r"\s+(?:app|application|program|window|page|screen|panel|settings)$")
+
+
+def _without_kind_noun(name: str) -> str:
+    """`name` with one trailing kind-noun taken off, or `name` unchanged.
+
+    `re.sub` cannot be used here: `_KIND_NOUNS` matches the empty string, so
+    on a name that ends in none of those words it took the name apart -
+    "display settings app" was left as "display settings app" and handed to
+    the app index as a program name (caught by this file's own suite). A
+    match that really consumed a noun is the only one that counts.
+    """
+    found = _KIND_NOUNS.search(name)
+    if found is None:
+        return name
+    return name[:found.start()].strip()
 
 #: `JARVIS_SETTINGS` in the case `parse` hands over (the sentence is lowered
 #: before it is split, so this is what the lookup has to compare against).
@@ -374,16 +412,22 @@ def resolve(name: str, is_jarvis: bool = False) -> object:
 
     key = " ".join(name.split())
 
-    # Jarvis's own Settings said any other way ("jarvis preferences").
-    if key in _JARVIS_LOWER:
-        return Opened("jarvis", "", True, key)
+    # Jarvis's own Settings said any other way ("jarvis preferences"), and the
+    # bare "open settings" itself - the owner's decision of 2026-10-10: in
+    # Jarvis's own app that phrase means Jarvis's own window, at the top.
+    if key == "settings" or key in _JARVIS_LOWER:
+        return Opened("jarvis", "", True, key, _JARVIS_NOTE)
 
-    # Windows panels, by their plain names - the whole phrase first.
-    # "settings" alone is the one that means Windows' own screen: that is
-    # what Windows itself calls it and the plain reading of the owner's own
-    # sentence ("open settings"). "open Jarvis settings" is the explicit way
-    # to the other one, and `_other_reading` says so in the same answer
-    # rather than leaving the owner to find it.
+    # WINDOWS' own Settings, named in so many words - the only words that
+    # reach it now. Matched explicitly and before `PANELS`, so a Start-menu
+    # shortcut called "Windows Settings" cannot take the phrase away.
+    if key in _WINDOWS_SAID:
+        return Opened("panel", "ms-settings:", True, key)
+
+    # The rest of the Windows panels, by their plain names - the whole phrase
+    # first. A word that is BOTH a panel and a Jarvis section ("sound",
+    # "security") opens the panel and says, in the same answer, how to ask for
+    # the one inside Jarvis (`_other_reading`).
     panel = PANELS.get(key)
     if panel is not None:
         note = _other_reading(key) if key in _AMBIGUOUS_SECTIONS else ""
@@ -399,15 +443,27 @@ def resolve(name: str, is_jarvis: bool = False) -> object:
     if program is not None:
         return Opened("app", program, True, key)
 
-    # "open the calculator app" / "the settings screen": take the kind-noun
-    # off and try all of the above again, once.
-    bare = re.sub(_KIND_NOUNS, "", key).strip()
-    if bare and bare != key:
-        if bare in _JARVIS_LOWER:
-            return Opened("jarvis", "", True, bare)
+    # "open the settings app" / "the display settings screen": take one
+    # trailing kind-noun off and try all of the above again, in the same
+    # order, so the bare "open settings" keeps meaning Jarvis's window here
+    # too. Repeated at most twice, because a name can carry two of these
+    # nouns ("the display settings app" is the Display page, not a program
+    # called "display settings") - and a word that really is a panel's whole
+    # name is found by the direct lookup above, before any of this runs.
+    bare = ""
+    for _ in range(2):
+        peeled = _without_kind_noun(key)
+        if not peeled or peeled == key:
+            break
+        bare = peeled
+        if bare == "settings" or bare in _JARVIS_LOWER:
+            return Opened("jarvis", "", True, bare, _JARVIS_NOTE)
+        if bare in _WINDOWS_SAID:
+            return Opened("panel", "ms-settings:", True, bare)
         panel = PANELS.get(bare)
         if panel is not None:
-            return Opened("panel", panel, True, bare)
+            note = _other_reading(bare) if bare in _AMBIGUOUS_SECTIONS else ""
+            return Opened("panel", panel, True, bare, note)
         target = SHELL_TARGETS.get(bare)
         if target is not None:
             return Opened("other", target[0], True, bare)
@@ -455,16 +511,16 @@ def _section_for(words: str) -> Optional[str]:
 def _other_reading(key: str) -> str:
     """The sentence that names the OTHER reading of an ambiguous word.
 
-    "open settings" opens Windows Settings; this says so and says how to get
-    Jarvis's. "open security" and friends say the same thing about that
-    word's own two places. No question mark and no button: the request was
-    answered, not refused - the note is so the owner learns the other door
-    rather than having to guess at it.
+    "open sound" opens WINDOWS' sound page; this says so and says how to get
+    the one inside Jarvis - which is the section jump "open Jarvis settings,
+    sound", not the bare "open settings" that used to be meant here before
+    the owner's flip of 2026-10-10. "open security" and every other word with
+    two places says the same thing about its own two. No question mark and no
+    button: the request was answered, not refused - the note is so the owner
+    learns the other door rather than having to guess at it.
     """
-    if key == "settings":
-        return "That is Windows' own Settings. Say \"open Jarvis settings\" for Jarvis's."
-    return (f"That is Windows' own {key} page. Say \"open Jarvis settings, {key}\" "
-            f"for the one inside Jarvis.")
+    return (f'That is Windows\' own {key} page. Say "open Jarvis settings, {key}" '
+            f'for the one inside Jarvis.')
 
 
 def words(opened: Opened) -> str:
@@ -480,7 +536,10 @@ def words(opened: Opened) -> str:
         # ("Opening Web search in Jarvis settings on this PC."), and "" for
         # the whole window - the same shape jarvis_quick._run_settings_open
         # already uses, so a cut-off spoken answer still says where it went.
-        if opened.said and not opened.said.startswith("jarvis"):
+        # The bare word "settings" is the whole window, not a section, so it
+        # is not repeated back at the owner ("Opening settings in Jarvis
+        # settings" would say the same thing twice).
+        if opened.said and opened.said != "settings" and not opened.said.startswith("jarvis"):
             return f"Opening {opened.said} in Jarvis settings on this PC."
         return "Opening Jarvis settings on this PC."
     if opened.kind == "panel":

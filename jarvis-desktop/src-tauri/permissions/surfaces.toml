@@ -233,6 +233,12 @@ permissions = [
 # whichever window it opens. Bug audit 2026-10-05, R5: it was granted only by
 # quickbar-surface, so the Brain's own button was refused and silently did
 # nothing.
+#
+# The HUD pulls this set in as well since 2026-10-10: the owner asked for the
+# settings gear on the big HUD window too (question 2 of
+# docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md), and the gear is the same
+# navigation-only door the bar's and the widget's gears are. See
+# capabilities/hud.json for the argument; it is the widget's, one window over.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "open-fix-place"

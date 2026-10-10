@@ -6,12 +6,15 @@ settings" (jarvis_open.py; the owner's request of 2026-10-10).
 Runs anywhere; no Windows, no Start menu, no program is ever started (this
 module starts nothing at all - see its own docstring). What it proves:
 
-1. The three sentences the owner asked for land where he said: "open Notion"
-   is an app, "open settings" is Windows' own Settings, "open Jarvis settings"
-   is the Settings window inside Jarvis.
+1. The sentences the owner asked for land where he said: "open Notion" is an
+   app, "open settings" is JARVIS's own Settings window at the top (the
+   owner's decision of 2026-10-10, the "flip" answer to question 1 of
+   docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md), and "open Windows settings"
+   is Windows' own screen.
 2. "settings" is disambiguated and said out loud: the answer names which one
-   it opened and how to ask for the other, and Jarvis's own sections still
-   win when the owner names one ("open web search" is not an app).
+   it opened and how to ask for the other, on BOTH readings - and Jarvis's own
+   sections still win when the owner names one ("open web search" is not an
+   app).
 3. "Open ..." never becomes a guess: a name that matches nothing is passed on
    to the PC to resolve and is NOT claimed to exist; a name is never given a
    nearest match; prose ("open a chat", "open my email") is not an app when
@@ -57,15 +60,17 @@ def where(sentence):
 
 
 # --------------------------------------------------------------------------
-#   The three sentences the owner asked for
+#   The sentences the owner asked for, and where they land after the flip
 # --------------------------------------------------------------------------
 
 def t_the_three_sentences_he_asked_for():
     check("'open Notion' is an app, named as he said it",
           where("open Notion")[:2] == ("app", "notion"))
-    check("'open settings' is WINDOWS Settings",
-          where("open settings")[:2] == ("panel", "ms-settings:"))
-    check("'open Jarvis settings' is Jarvis's own Settings window",
+    check("'open settings' is JARVIS's own Settings window after the flip",
+          where("open settings")[:2] == ("jarvis", ""))
+    check("'open my settings' is Jarvis's too - the same default",
+          where("open my settings")[:2] == ("jarvis", ""))
+    check("'open Jarvis settings' is the same window, said explicitly",
           where("open Jarvis settings")[:2] == ("jarvis", ""))
     check("'open jarvis preferences' says the same thing",
           where("open jarvis preferences")[:2] == ("jarvis", ""))
@@ -76,27 +81,39 @@ def t_the_three_sentences_he_asked_for():
 
 
 def t_settings_is_disambiguated_and_said_out_loud():
-    # THE DECISION, said in the answer rather than left for the owner to
-    # discover: Windows Settings is what "open settings" opens, and the note
-    # names the other door. (Careful with the substring: the note quotes the
-    # phrase, so `open Jarvis settings` as one literal is split by the opening
+    # THE OWNER'S DECISION, said in the answer rather than left for him to
+    # discover (2026-10-10, question 1 of the audit: "Flip it"). A bare "open
+    # settings" is Jarvis's own window, and the note names the one phrase that
+    # reaches Windows' own. (Careful with the substring: the note quotes that
+    # phrase, so `Windows settings` as one literal is split by the opening
     # quote mark - check the words, not the quoted sentence.)
     kind, target, note = where("open settings")
-    check("'open settings' opens Windows' own Settings page",
-          (kind, target) == ("panel", "ms-settings:"), (kind, target))
-    check("...and says so", "Windows" in note, note)
-    check("...and names Jarvis's own settings as the other door",
-          "Jarvis settings" in note, note)
-    check("'open windows settings' is Windows' too",
-          where("open windows settings")[:2] == ("panel", "ms-settings:"))
+    check("'open settings' opens JARVIS's own Settings, at the top",
+          (kind, target) == ("jarvis", ""), (kind, target))
+    check("...and says which one it opened", "Jarvis" in note, note)
+    check("...and names Windows' own as the other door, in the words that reach it",
+          "Windows" in note and "settings" in note, note)
+    check("...and does NOT send him to the phrase he just said",
+          "open Jarvis settings" not in note, note)
+    # The only words that reach Windows' own screen now. Both the whole phrase
+    # and the phrase with a trailing kind-noun must land there: that peel is
+    # the step that would otherwise let the app index take them.
+    for said in ("open Windows settings", "open windows settings",
+                 "open the windows settings app"):
+        check(f"{said!r} is Windows' own screen", where(said)[:2] == ("panel", "ms-settings:"),
+              where(said))
     # A Windows panel by name is a panel, not an app called "display".
     check("'open display settings' is the Display page",
           where("open display settings")[:2] == ("panel", "ms-settings:display"))
     check("'open sound' is the Sound page",
           where("open sound")[:2] == ("panel", "ms-settings:sound"))
-    # ...and its note names the other reading, because "sound" has one.
+    # ...and its note names the other reading - the section jump inside Jarvis,
+    # NOT the bare phrase, which is Jarvis's own window already.
+    note = where("open sound")[2]
     check("a word that is also a Jarvis section says so",
-          "Jarvis" in where("open sound")[2], where("open sound")[2])
+          "Jarvis" in note, note)
+    check("...and names the section jump, not the bare phrase",
+          "open Jarvis settings, sound" in note, note)
 
 
 def t_jarvis_sections_still_win_when_named():
@@ -168,13 +185,17 @@ def t_a_sentence_that_is_not_an_open_request_is_not_ours():
 
 
 def t_a_trailing_kind_noun_is_peeled_once():
-    check("'open the settings app' is Settings",
-          where("open the settings app")[:2] == ("panel", "ms-settings:"))
+    check("'open the settings app' is Jarvis's own Settings, like the bare phrase",
+          where("open the settings app")[:2] == ("jarvis", ""))
     check("'open the calculator program' is the calculator",
           where("open the calculator program")[:2] == ("app", "calc.exe"))
     # ...but a name that genuinely ends in one of those words is untouched.
     check("'open display settings' is not peeled into 'display'",
           where("open display settings")[:2] == ("panel", "ms-settings:display"))
+    # The peel must not hand a Windows panel to the app index: a copy of the
+    # page called "display settings" would otherwise be looked up as a program.
+    check("'open the display settings app' is still the Display page",
+          where("open the display settings app")[:2] == ("panel", "ms-settings:display"))
 
 
 # --------------------------------------------------------------------------
@@ -223,13 +244,26 @@ def t_the_route_carries_every_field_the_apps_need():
           r.get("open_app") == "notepad.exe" and r.get("open_app_built") is True)
 
     r = route("open settings")
-    check("a panel: the ms-settings address and the note",
-          r.get("open_app") == "ms-settings:" and r.get("open_app_kind") == "panel")
-    check("...and the note names the other reading",
-          "jarvis settings" in str(r.get("open_app_note", "")).lower(), r.get("open_app_note"))
+    check("after the flip: Jarvis's own Settings, with an EMPTY place that still rides along",
+          r.get("open_app_kind") == "jarvis" and r.get("open_place") == "",
+          r.get("open_app_kind"))
+    check("...and no `open_app`, because the place field carries it",
+          "open_app" not in r, r)
+    check("...and the note says which one and how to get the other",
+          "Windows" in str(r.get("open_app_note", "")) and "settings" in str(
+              r.get("open_app_note", "")).lower(), r.get("open_app_note"))
+    check("...and that note never names the phrase he just said",
+          "open Jarvis settings" not in str(r.get("open_app_note", "")),
+          r.get("open_app_note"))
+
+    # The one phrase that reaches Windows' own screen after the flip: a panel,
+    # with the ms-settings address, exactly as a named Windows panel rides.
+    r = route("open Windows settings")
+    check("'open Windows settings' is still the Windows panel",
+          r.get("open_app") == "ms-settings:" and r.get("open_app_kind") == "panel", r)
 
     r = route("open Jarvis settings")
-    check("Jarvis's own Settings: the kind, and an EMPTY place that still rides along",
+    check("Jarvis's own Settings, said explicitly: the kind, and an EMPTY place",
           r.get("open_app_kind") == "jarvis" and r.get("open_place") == "")
     check("...and no `open_app`, because the place field carries it",
           "open_app" not in r)

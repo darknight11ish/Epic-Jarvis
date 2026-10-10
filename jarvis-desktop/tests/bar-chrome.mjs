@@ -37,6 +37,12 @@ const widgetHtml = read(join(SRC, "widget.html"));
 const widgetJs = read(join(SRC, "widget.js"));
 const surfaces = read(join(TAURI, "permissions", "surfaces.toml"));
 const widgetCap = read(join(TAURI, "capabilities", "widget.json"));
+// The big HUD window's own chrome (the owner's answer to question 2 of
+// docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the gear is added by the shell's
+// injected bootstrap, NOT by the page, which is vendored byte-identical.
+const hudCap = read(join(TAURI, "capabilities", "hud.json"));
+const hudBootstrap = read(join(TAURI, "src", "hud_bootstrap.js"));
+const hudHtml = read(join(SRC, "jarvis_hud.html"));
 const trayRs = read(join(TAURI, "src", "tray.rs"));
 const windowsRs = read(join(TAURI, "src", "windows.rs"));
 
@@ -134,6 +140,55 @@ check("the widget's window is granted the command its own card already used", ()
   );
   assert.match(widgetSet, /"allow-open-fix-place"/, "widget-surface does not grant it");
   assert.match(widgetCap, /"open-fix-place"/, "widget.json does not pull the set in");
+});
+
+/* ── The HUD's gear (the owner's answer to audit question 2, 2026-10-10) ─── */
+
+check("the HUD has a settings gear, added by the shell's bootstrap", () => {
+  // The gear is NOT in jarvis_hud.html: that file is vendored byte-identical
+  // from the backend folder (see the bootstrap's own header), so the shell
+  // adapts the page instead of forking it. This is the same place the "Open
+  // the Jarvis bar" button is added.
+  assert.match(hudBootstrap, /gear\.id = "hud-settings"/,
+    "the bootstrap does not add a #hud-settings gear");
+  assert.match(hudBootstrap, /var GEAR_SAID = "Jarvis settings";/,
+    "the HUD's gear needs the same name the bar's and the widget's carry");
+  assert.match(hudBootstrap, /gear\.setAttribute\("aria-label", GEAR_SAID\)/,
+    "the gear needs a name for a screen reader");
+  assert.doesNotMatch(hudHtml, /id="hud-settings"/,
+    "jarvis_hud.html must stay byte-identical to the backend's copy");
+});
+
+check("the HUD's gear calls the same navigation-only command as the other two", () => {
+  assert.match(hudBootstrap, /invoke\("open_fix_place",\s*\{\s*place:\s*"settings"\s*\}\)/,
+    "the HUD's gear must call open_fix_place with place: settings");
+  assert.doesNotMatch(hudBootstrap, /invoke\("(open_settings|show_settings)"/,
+    "there is no such command; a new name would be refused by the ACL");
+});
+
+check("the HUD's gear sits on the page's own stage bar, beside its controls", () => {
+  assert.match(hudBootstrap, /document\.querySelector\("\.stage-bar"\)/,
+    "the gear must be added to the stage bar the vendored page already draws");
+  assert.match(hudBootstrap, /bar\.insertBefore\(gear, telemetry\)/,
+    "the gear must sit beside the page's own Telemetry control");
+});
+
+check("the HUD's gear draws the bar's and widget's own glyph", () => {
+  const glyph = hudBootstrap.slice(hudBootstrap.indexOf("gear.innerHTML"));
+  assert.match(glyph.slice(0, 900), /M8 5\.6a2\.4 2\.4 0 1 0 0 4\.8/,
+    "all three gears must look alike - same gear path as index.html/widget.html");
+});
+
+check("the HUD's window is granted the command its gear calls", () => {
+  // The same failure this file exists for: a control wired to a command its
+  // window does not hold fails silently at runtime. Both halves are checked -
+  // the set really holds allow-open-fix-place, and hud.json pulls the set in.
+  const hudSet = surfaces.slice(
+    surfaces.indexOf('identifier = "open-fix-place"'),
+    surfaces.indexOf('identifier = "quickbar-surface"'),
+  );
+  assert.match(hudSet, /"allow-open-fix-place"/, "the open-fix-place set lost its permission");
+  assert.match(hudCap, /"open-fix-place"/, "capabilities/hud.json does not pull the set in");
 });
 
 /* ── The toggle: the tray icon no longer only shows ─────────────────────── */
