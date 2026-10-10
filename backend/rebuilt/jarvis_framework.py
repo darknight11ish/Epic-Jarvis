@@ -223,8 +223,30 @@ def load_framework(*_args: Any, **_kwargs: Any) -> dict:
                 f"tomli`). {path} is NOT being read.")
         else:
             try:
-                with open(path, "rb") as fh:
-                    data = _toml.load(fh)
+                # READ AS BYTES AND STRIP A BOM FIRST (2026-10-09). `tomllib`
+                # refuses a UTF-8 byte-order mark: `\ufeff` is not a legal
+                # first character of a TOML document, so `load()` on a BOM'd
+                # file raises TOMLDecodeError. Every Windows program that
+                # offers "UTF-8 with BOM" writes one, and Notepad's "UTF-8"
+                # option did exactly that for years, so a settings file that
+                # had been opened and saved once was suddenly unreadable.
+                #
+                # What made it worth fixing rather than documenting: the
+                # except below turns that into an empty dict, so EVERY setting
+                # silently fell back to its default - the owner edited their
+                # settings and nothing they could see said the file was not
+                # being read at all. `jarvis_limits._rewrite` already strips
+                # the BOM before writing a line back; this is the reading half
+                # of the same care.
+                # `utf-8-sig` decodes a file with a BOM as plain text and one
+                # without it exactly as `utf-8` would, so there is no "did we
+                # strip it" branch to get wrong - and a stray U+FEFF that is
+                # NOT at the start still raises, as it should.
+                data = _toml.loads(path.read_bytes().decode("utf-8-sig"))
+            except UnicodeDecodeError as exc:
+                _warn_once(f"{path} is not valid UTF-8 text ({exc}). "
+                           "Every setting falls back to its default.")
+                data = {}
             except Exception as exc:
                 # Never raise. Fifteen modules call this at import time; an
                 # exception here means the whole backend fails to start over a

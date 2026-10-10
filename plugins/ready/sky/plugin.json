@@ -1,0 +1,8 @@
+{
+  "name": "sky",
+  "summary": "the sun, the moon and the weather behind the animal faces and the robot (which counts as an animal face for every option).",
+  "module": "jarvis_sky",
+  "install": "handler",
+  "replaces_patch": "sky.patch",
+  "stack_order": 96
+}

@@ -585,6 +585,45 @@ says what to do (`docs/INSTALL.md:146-150`).
 
 ---
 
+### Two shortcuts that cannot work, and why (read 2026-10-10)
+
+Both were tried while testing this page against the live system, and both fail for
+structural reasons rather than for want of configuration. They are written down so
+the next person does not spend the same afternoon on them. **Neither is a defect:
+both are the rules the owner chose.**
+
+**1. `adb reverse` cannot carry pairing — and neither can the PC's own mesh
+address.** The phone's half (`POST /api/pair/claim`) is refused unless `mesh_peer()`
+answers `"mesh"` (`backend/jarvis_devices.py:1612`), and `mesh_peer()`
+(`backend/jarvis_devices.py:838`) asks `from_this_pc()` **first**
+(`backend/jarvis_owner_check.py:246`). That rule counts three things as this PC:
+loopback; a connection whose peer address equals the address it arrived at; and any
+of this PC's own addresses, Tailscale and Meshnet included. So a phone reaching
+`127.0.0.1:4719` through `adb reverse` arrives *from loopback* and is judged this
+PC; a request sent to the PC's own `100.x` mesh address arrives *from that same
+address* and is judged this PC too. Both answer:
+
+```
+403 {"reason": "not_mesh",
+     "error": "Pairing is for another device - this PC already has its own key."}
+```
+
+**Only a real second device, with its own mesh address, can claim a pairing
+session.** Testing pairing therefore needs the phone on Tailscale or Meshnet — which
+is what `docs/ANDROID-PAIRED-AUDIT-2026-10-10.md` §1 did, and it worked.
+
+**2. The desktop's Settings window cannot be revealed from outside the app.** It is
+built with `.visible(false)` and shown only by the app's own
+`window_memory::restore()` (`jarvis-desktop/src-tauri/src/windows.rs:462-472`, the
+same pattern as `lib.rs:673-703`, so it does not flash up centred and then jump). A
+driver that calls `ShowWindow`/`MoveWindow` on the window changes nothing: the window
+exists, is enumerated at its size and title, and stays hidden. To press **Pair a
+phone**, use the app's own command palette — the Jarvis bar → `/` → the row
+**Devices** — and the owner's own click. That is also the only way the card can be
+approved, since `pair_device` is PC-only and needs Windows Hello.
+
+---
+
 ## The steps, in order, in plain words
 
 What he clicks, and what he should see after each.

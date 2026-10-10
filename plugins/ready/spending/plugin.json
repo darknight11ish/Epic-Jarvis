@@ -1,0 +1,8 @@
+{
+  "name": "spending",
+  "summary": "\"How much did I spend on food last month?\", added up from a bank export the owner dropped into a folder Jarvis may look in.",
+  "module": "jarvis_spending",
+  "install": "handler",
+  "replaces_patch": "spending.patch",
+  "stack_order": 109
+}

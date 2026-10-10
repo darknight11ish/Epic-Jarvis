@@ -1391,16 +1391,35 @@ def stage_threshold(doc: dict, *, gate: Callable, tier_of: Callable,
     # Which model's bar (2026-09-24): "small" or "strong", as the "someone
     # else" check named it (`model` in its reply); by default the one that
     # decides - the stronger model when it is installed and in the print.
-    name, which = prof.embedder, "small"
-    if hasattr(jarvis_voice, "strong_embedder"):
-        strong = _strong(_embedder())
-        wanted = str(doc.get("model") or "").strip().lower()
-        has_strong = strong is not None and bool(prof.subprints(strong.name))
-        if wanted == "strong" and not has_strong:
-            return 409, {"error": ("the stronger voice-ID model is not installed, or your "
-                                   "voice print has nothing from it yet"), "pending": False}
-        if has_strong and wanted != "small":
-            name, which = strong.name, "strong"
+    #
+    # ASKED OF jarvis_voice, not worked out again here (2026-10-09). This
+    # used to open-code "the stronger model decides when it is installed and
+    # has a sub-print", while `score_clips` (which NAMES the model on the
+    # card the owner answers) fell back to the small model for a print that
+    # has no strong sub-print. The two therefore disagreed in exactly one
+    # case, and the bar then landed in a field the check never reads. Both
+    # now ask `deciding_model`, so the name on the card and the field that
+    # is written cannot come from two different rules.
+    wanted = str(doc.get("model") or "").strip().lower()
+    primary = _embedder()
+    try:
+        dec, which = jarvis_voice.deciding_model(
+            prof, primary, _strong(primary), jarvis_voice.BALANCED)
+    except AttributeError:                   # pragma: no cover - a jarvis_voice
+        # from before 2026-10-09. Not an error to raise for: the same reply is
+        # worked out here exactly as this function used to, so an installed
+        # backend older than this patch still stages a threshold card.
+        strong = _strong(primary)
+        if strong is not None and prof.subprints(strong.name):
+            dec, which = strong, "strong"
+        else:
+            dec, which = prof.embedder or primary, "small"
+    if wanted == "strong" and which != "strong":
+        return 409, {"error": ("the stronger voice-ID model is not installed, or your "
+                               "voice print has nothing from it yet"), "pending": False}
+    if which == "strong" and wanted == "small":
+        dec, which = prof.embedder or primary, "small"
+    name = dec if isinstance(dec, str) else dec.name
     floor_for = getattr(jarvis_voice, "floor_for", None)
     if floor_for is not None:
         # Hole 2 (2026-09-24): no bar below the model's own floor - not by
@@ -1410,7 +1429,13 @@ def stage_threshold(doc: dict, *, gate: Callable, tier_of: Callable,
             return 400, {"error": (f"the lowest this voice check allows is {lowest:.2f} - "
                                    f"below that it would let other people through")}
     new = round(float(raw), 2)
-    if which == "strong":
+    # The old value, read the same way `raw_bar` reads it - the field that
+    # belongs to the model this card is for (`threshold` for the small one,
+    # `thresholds[name]` for any other).
+    bar_of = getattr(jarvis_voice, "raw_bar", None)
+    if bar_of is not None:
+        old = float(bar_of(prof, name, jarvis_voice.BAR_ROLE))
+    elif which == "strong":
         old = float(prof.thresholds.get(name) or floor_for(name, "balanced"))
     else:
         old = float(prof.threshold)

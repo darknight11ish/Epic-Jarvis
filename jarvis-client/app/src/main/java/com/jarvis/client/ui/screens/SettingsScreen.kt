@@ -1,43 +1,59 @@
 package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import com.jarvis.client.JarvisRuntime
-import com.jarvis.client.ui.MenuPlaces
-import com.jarvis.client.ui.parts.ScrollToKeyOnce
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.QuickTiles
 import com.jarvis.client.data.TileAction
+import com.jarvis.client.ui.MenuPlaces
 import com.jarvis.client.ui.SettingsJump
+import com.jarvis.client.ui.SettingsSearch
+import com.jarvis.client.ui.SettingsSearchWords
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
+import com.jarvis.client.ui.theme.LocalRadii
 
 /**
  * "Settings" - the ease-of-use audit's row 16 (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`):
@@ -94,64 +110,71 @@ import com.jarvis.client.ui.theme.LocalChrome
  * scrolls to [SettingsJump.key] like the voice-and-chat jumps always have.
  */
 private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
-    "voice" to 1,
-    "security" to 2,
+    // The search box (2026-10-09) is the first row on the screen: under the
+    // top bar, above the jump list and every section. It is the one row with
+    // no place in the jump list, because it is a control and not a section
+    // (SettingsJump.SEARCH_KEY).
+    "search" to SettingsJump.SEARCH_KEY_INDEX,
+    "voice" to 2,
+    "security" to 3,
     // "Show or hide menus" (docs/JARVIS-API.md section 109) sits right after Security.
-    "menu-visibility" to 3,
-    "appearance-card" to 4,
+    "menu-visibility" to 4,
+    "appearance-card" to 5,
     // "Animal options" lives inside Appearance on the phone (2026-09-28):
     // the Appearance row, whose button opens it.
-    "animal-options" to 4,
-    "floating-avatar" to 5,
-    "manner" to 6,
-    "web-search" to 7,
+    "animal-options" to 5,
+    "floating-avatar" to 6,
+    "manner" to 7,
+    "web-search" to 8,
     // "Prompt coach" (docs/JARVIS-API.md section 119) sits right after Web search.
-    "prompt-coach" to 8,
-    "asks-first" to 9,
-    "reach" to 10,
-    "email-sending" to 11,
-    "folders" to 12,
-    "backup" to 13,
-    "watch-notify" to 14,
-    "phone-notify" to 15,
+    "prompt-coach" to 9,
+    "asks-first" to 10,
+    "reach" to 11,
+    "email-sending" to 12,
+    "folders" to 13,
+    "backup" to 14,
+    "watch-notify" to 15,
+    "phone-notify" to 16,
     // "Notifications from Jarvis" (the owner's decision of 2026-10-09, after
     // docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1): one row pointing at
     // Android's own per-app notification screen, not a second copy of the PC's
     // Notifications card. It sits with the two other notification rows, which
     // moved every index below it down by one on that day.
-    "jarvis-notify" to 16,
-    "screen-look" to 17,
-    "browser-engine" to 18,
+    "jarvis-notify" to 17,
+    "screen-look" to 18,
+    "browser-engine" to 19,
     // How long the captcha hand-off stays on offer (the owner's decision of
     // 2026-10-08). Sits with the browser it belongs to, so the two exposure
-    // rows are together; every index below it moved down by one on that day.
-    "handoff" to 19,
+    // rows are together; every index below it moved down by one on that day,
+    // and by one more when the search box landed above the jump list.
+    "handoff" to 20,
     // What a captcha does about the browser window it is blocking (the owner's
     // decision of 2026-10-09). Sits with the hand-off row above, so the two
     // captcha rows are together; every index below it moved down by one - and
     // by one more for "Notifications from Jarvis" above it.
-    "handoff-front" to 20,
-    "devices" to 21,
-    "quick-tiles" to 22,
+    "handoff-front" to 21,
+    "devices" to 22,
+    "quick-tiles" to 23,
     // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
     // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
     // and it sits immediately above "Limits" on the screen - so Limits' own
-    // number moved down by one when it landed, on top of the two insertions
-    // above it, and both halves of that pair are kept true by
-    // SettingsJumpTest's `the index map matches the screen, item by item`,
-    // which reads this map against the screen's real row order.
-    "screen-rate" to 23,
+    // number moved down by one again when it landed (24 -> 25). Both halves of
+    // that pair are kept true by SettingsJumpTest's `the index map matches the
+    // screen, item by item`, which reads this map against the screen's real row
+    // order - and by backend/test_settings_registry.py, which does the same from
+    // the Python side.
+    "screen-rate" to 24,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 24,
+    "limits" to 25,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
-    // limits row" pins 24). A row added at the end moves nothing.
-    "idle-new" to 25,
+    // limits row" pins 25). A row added at the end moves nothing.
+    "idle-new" to 26,
 )
 
 /**
@@ -326,13 +349,51 @@ fun SettingsScreen(
         var jumpTick by remember { mutableIntStateOf(0) }
         ScrollToKeyOnce(listState, jumpTo, tick = jumpTick) { jumpTo = null }
 
+        // ── Search (2026-10-09) ─────────────────────────────────────────────
+        // The owner's request: "a lot more visually simple, with a search bar
+        // in settings. I still want everything adjustable, just easier to find
+        // and more efficient." See docs/SETTINGS-UX-DESIGN.md and
+        // [com.jarvis.client.ui.SettingsSearch].
+        //
+        // IT IS A VIEW, NOT A CHANGE. Typing hides the sections that do not
+        // match and shows them all again the moment the box is emptied; every
+        // switch, key and value on the screen is exactly where it was. It
+        // writes nothing, calls nothing and raises no approval card.
+        var query by remember { mutableStateOf("") }
+        val searching = SettingsSearch.normalise(query).isNotEmpty()
+        // Worked out once per query, not once per section. The words are a
+        // constant table in SettingsSearch, so this is twenty string checks -
+        // a keystroke, not a frame.
+        val matching: Set<String> = SettingsSearch.matching(query).toSet()
+        val shownCount = SettingsSearch.SECTION_KEYS.count { it in matching }
+        // Which sections this screen draws. Read as a lambda so the sections
+        // that do not match are simply not composed, and so a section added
+        // later is filtered without a second list to keep in step.
+        val drawn: (String) -> Boolean = { key ->
+            !searching || key in matching || key == SettingsJump.SEARCH_KEY
+        }
+
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item(key = "jump-list") {
+            // The box is the FIRST row: the first thing TalkBack and Tab reach,
+            // and it stays on screen while a search is on - without it there
+            // would be no way to clear the box.
+            item(key = SettingsJump.SEARCH_KEY) {
+                SettingsSearchField(
+                    query = query,
+                    onQueryChange = { typed -> query = typed },
+                    shown = shownCount,
+                )
+            }
+
+            // The "Jump to:" list is a map of the WHOLE screen, so while the
+            // screen is filtered it would point at sections that are not
+            // drawn. It comes back the moment the box is empty.
+            if (!searching) item(key = SettingsJump.LIST_KEY) {
                 if (menus.hiddenCount > 0) {
                     HiddenMenusLine(menus.hiddenCount) {
                         jumpTo = "menu-visibility"
@@ -356,7 +417,7 @@ fun SettingsScreen(
                 }
             }
 
-            if (menus.shows("settings.voice")) item(key = "voice") {
+            if (menus.shows("settings.voice")) if (drawn("voice")) if (menus.shows("settings.voice")) item(key = "voice") {
                 MenuFrame(menus, "settings.voice") {
                     Section("Voice") {
                         Plate {
@@ -415,7 +476,7 @@ fun SettingsScreen(
                 }
             }
 
-            item(key = "security") {
+            if (drawn("security")) item(key = "security") {
                 Section("Security") {
                     Plate {
                         Text(securitySummary, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
@@ -430,9 +491,9 @@ fun SettingsScreen(
             }
 
 // "Show or hide menus" (docs/JARVIS-API.md section 109): never hideable itself.
-            item(key = "menu-visibility") { MenuVisibilitySection() }
+            if (drawn("menu-visibility")) item(key = "menu-visibility") { MenuVisibilitySection() }
 
-                        if (menus.shows("settings.appearance-card")) item(key = "appearance") {
+                        if (menus.shows("settings.appearance-card")) if (drawn("appearance")) if (menus.shows("settings.appearance-card")) item(key = "appearance") {
                 MenuFrame(menus, "settings.appearance-card") {
                     Section("Appearance") {
                         Plate {
@@ -458,7 +519,7 @@ fun SettingsScreen(
                 }
             }
 
-            if (menus.shows("settings.floating-avatar")) item(key = "floating-avatar") {
+            if (menus.shows("settings.floating-avatar")) if (drawn("floating-avatar")) if (menus.shows("settings.floating-avatar")) item(key = "floating-avatar") {
                 MenuFrame(menus, "settings.floating-avatar") {
                     FloatingAvatarSection(
                         mode = floatingAvatar,
@@ -472,25 +533,25 @@ fun SettingsScreen(
 
             // The seven sections moved whole from Brain's old "Settings"
             // group - see this file's own doc comment.
-            if (menus.shows("settings.manner")) item(key = "manner") {
+            if (menus.shows("settings.manner")) if (drawn("manner")) if (menus.shows("settings.manner")) item(key = "manner") {
                 MenuFrame(menus, "settings.manner") {
                     MannerSection(canAct = canAct)
                     Gap(16)
                     ThinkingSection(canAct = canAct)
                 }
             }
-            if (menus.shows("settings.web-search")) item(key = "web-search") { MenuFrame(menus, "settings.web-search") { WebSearchSection(canAct = canAct) } }
+            if (menus.shows("settings.web-search")) if (drawn("web-search")) if (menus.shows("settings.web-search")) item(key = "web-search") { MenuFrame(menus, "settings.web-search") { WebSearchSection(canAct = canAct) } }
             // "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, docs/JARVIS-API.md section 119):
             // the master switch for the "Coach this" button, off by default,
             // decided on the PC and shown in the PC's own words here.
-            if (menus.shows("settings.prompt-coach")) item(key = "prompt-coach") { MenuFrame(menus, "settings.prompt-coach") { PromptCoachSection(canAct = canAct) } }
-            item(key = "asks-first") { AsksFirstSection(canAct = canAct) }
-            if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
-            if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }
-            if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection() } }
-            if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection() } }
-            if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
-            if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {
+            if (menus.shows("settings.prompt-coach")) if (drawn("prompt-coach")) if (menus.shows("settings.prompt-coach")) item(key = "prompt-coach") { MenuFrame(menus, "settings.prompt-coach") { PromptCoachSection(canAct = canAct) } }
+            if (drawn("asks-first")) item(key = "asks-first") { AsksFirstSection(canAct = canAct) }
+            if (menus.shows("settings.reach")) if (drawn("reach")) if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
+            if (menus.shows("settings.email-sending")) if (drawn("email-sending")) if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }
+            if (menus.shows("settings.folders")) if (drawn("folders")) if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection() } }
+            if (menus.shows("settings.backup")) if (drawn("backup")) if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection() } }
+            if (menus.shows("settings.watch-notify")) if (drawn("watch-notify")) if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
+            if (menus.shows("settings.phone-notify")) if (drawn("phone-notify")) if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {
                 MenuFrame(menus, "settings.phone-notify") {
                     PhoneNotificationsSection(
                         canAct = canAct,
@@ -510,13 +571,18 @@ fun SettingsScreen(
             // the "Open Android's notification access" button in the row above -
             // which is why "jarvis-notify" is one of MenuVisibilityTest's
             // deliberately-not-menus keys.
-            item(key = "jarvis-notify") {
+            //
+            // Filtered by the search box like every other row (`drawn` above):
+            // being listed in SettingsSearch.ROWS is not the same thing as
+            // being hidden by a search, and this row had the index entry
+            // without the guard (found during the rebase, 2026-10-09).
+            if (drawn("jarvis-notify")) item(key = "jarvis-notify") {
                 NotificationsFromJarvisSection(onOpen = onOpenNotificationSettings)
             }
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's
             // decision of 2026-09-29): a slow picture model on the PC's processor.
-            if (menus.shows("settings.screen-look")) item(key = "screen-look") {
+            if (menus.shows("settings.screen-look")) if (drawn("screen-look")) if (menus.shows("settings.screen-look")) item(key = "screen-look") {
                 MenuFrame(menus, "settings.screen-look") {
                     ScreenPictureSection(canAct = canAct, onOpenLookSwitch = onOpenLookSwitch)
                 }
@@ -524,13 +590,13 @@ fun SettingsScreen(
 
             // The headless browser, Obscura (the owner's decision of 2026-09-29):
             // Jarvis may choose a browser with no window for plain reading.
-            if (menus.shows("settings.browser-engine")) item(key = "browser-engine") { MenuFrame(menus, "settings.browser-engine") { BrowserEngineSection(canAct = canAct) } }
+            if (menus.shows("settings.browser-engine")) if (drawn("browser-engine")) if (menus.shows("settings.browser-engine")) item(key = "browser-engine") { MenuFrame(menus, "settings.browser-engine") { BrowserEngineSection(canAct = canAct) } }
 
             // How long the captcha hand-off stays on offer (the owner's own
             // decision of 2026-10-08: "make this a setting for both options with
             // 1 as the default"). "Stop early" is the default; "Keep offering it"
             // is one approval card on the PC with Windows Hello.
-            if (menus.shows("settings.handoff")) item(key = "handoff") {
+            if (menus.shows("settings.handoff")) if (drawn("handoff")) if (menus.shows("settings.handoff")) item(key = "handoff") {
                 MenuFrame(menus, "settings.handoff") { HandoffModeSection(canAct = canAct) }
             }
 
@@ -539,13 +605,19 @@ fun SettingsScreen(
             // for 2 in the settings of Jarvis"). "Leave it where it is" is the
             // default and touches no window; "Bring it to the front" is one
             // approval card on the PC with Windows Hello.
-            if (menus.shows("settings.handoff-front")) item(key = "handoff-front") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows` on this row rather than inside
+            // it (every other hideable row writes shows-drawn-shows) - the same
+            // shape as the two rows below, where a test pins the whole
+            // `if (menus.shows(...)) item(key = ...)` line. The two guards are
+            // ANDed either way, and the search hides this row like every other.
+            if (drawn("handoff-front")) if (menus.shows("settings.handoff-front")) item(key = "handoff-front") {
                 MenuFrame(menus, "settings.handoff-front") { HandoffFrontSection(canAct = canAct) }
             }
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
             // shown only when the PC reports pairing (section 5.5).
-            if (menus.shows("settings.devices")) item(key = "devices") {
+            if (menus.shows("settings.devices")) if (drawn("devices")) if (menus.shows("settings.devices")) item(key = "devices") {
                 MenuFrame(menus, "settings.devices") {
                     val version by com.jarvis.client.JarvisRuntime.version.collectAsState()
                     if (version?.can("pairing") == true) {
@@ -564,7 +636,7 @@ fun SettingsScreen(
                 }
             }
 
-            if (menus.shows("settings.quick-tiles")) item(key = "quick-tiles") {
+            if (menus.shows("settings.quick-tiles")) if (drawn("quick-tiles")) if (menus.shows("settings.quick-tiles")) item(key = "quick-tiles") {
                 MenuFrame(menus, "settings.quick-tiles") {
                     QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
                 }
@@ -600,7 +672,11 @@ fun SettingsScreen(
             // backend/jarvis_menus.py and generated into MenuCatalog.kt, and
             // MenuVisibilityTest checks both halves - the place in MenuPlaces
             // and this check in a real screen.
-            if (menus.shows("settings.limits")) item(key = "limits") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows`, like the row above: LimitsTest
+            // asserts this exact `if (menus.shows(...)) item(key = ...)` line,
+            // and the search must hide the row all the same (2026-10-09).
+            if (drawn("limits")) if (menus.shows("settings.limits")) item(key = "limits") {
                 MenuFrame(menus, "settings.limits") { LimitsSection(canAct = canAct) }
             }
 
@@ -612,13 +688,105 @@ fun SettingsScreen(
             // every other row (MenuVisibilityTest), and needs no canAct gate.
             // Last of the settings rows, so that adding it moves no other row's
             // position (see SETTINGS_ITEM_INDEX).
-            if (menus.shows("settings.idle-new")) item(key = "idle-new") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows`, like the two rows above:
+            // HistoryContractTest pins this exact `if (menus.shows(...))
+            // item(key = ...)` line, and the search must hide the row all the
+            // same (2026-10-09).
+            if (drawn("idle-new")) if (menus.shows("settings.idle-new")) item(key = "idle-new") {
                 MenuFrame(menus, "settings.idle-new") {
                     IdleNewSection(choice = idleNewChoice, onChange = onIdleNewChoiceChange)
                 }
             }
 
             item(key = "tail") { Gap(24) }
+        }
+    }
+}
+
+/**
+ * The search box at the top of Settings (2026-10-09). The same shape as every
+ * other field in this app - a flat sunken box with a hairline edge and no
+ * Material container - with the Clear action beside it and one line under it
+ * that says what the search found. The field is drawn here rather than with
+ * [com.jarvis.client.ui.parts.TextInput] because the app's own parts file is
+ * already at its import budget; the shape, colours, radii and focus ring are
+ * that field's own (Parts.kt, TextInput).
+ *
+ * The line under the box is the same thing the desktop shows, in the same
+ * words ([com.jarvis.client.ui.SettingsSearchWords]): what to type, how many
+ * settings match, or that nothing does. Nothing matched is said in words
+ * rather than left as a blank screen, because a blank screen reads as "that
+ * setting does not exist".
+ *
+ * That line is a polite live region, so TalkBack hears the count when it
+ * changes - once per answer, because the words change only when the answer
+ * does.
+ */
+@Composable
+private fun SettingsSearchField(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    shown: Int,
+) {
+    val chrome = LocalChrome.current
+    val accent = LocalAccent.current
+    val radii = LocalRadii.current
+    var focused by remember { mutableStateOf(false) }
+    Section(SettingsSearchWords.LABEL) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .clip(radii.controlShape)
+                    .background(chrome.surface2)
+                    .border(
+                        width = if (focused) 2.dp else 1.dp,
+                        color = if (focused) accent else chrome.hairlineFocus,
+                        shape = radii.controlShape,
+                    )
+                    .padding(14.dp, 12.dp),
+            ) {
+                if (query.isEmpty()) {
+                    Text(
+                        SettingsSearchWords.PLACEHOLDER,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = chrome.textLo,
+                    )
+                }
+                BasicTextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = chrome.textHi),
+                    cursorBrush = SolidColor(accent),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focused = it.isFocused },
+                )
+            }
+            if (query.isNotEmpty()) {
+                Quiet(SettingsSearchWords.CLEAR, onClick = { onQueryChange("") })
+            }
+        }
+        Gap(6)
+        Text(
+            SettingsSearchWords.line(query, shown),
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.textMid,
+            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (query.isNotBlank() && shown == 0) {
+            Text(
+                SettingsSearchWords.none(query),
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textHi,
+            )
+            Text(
+                SettingsSearchWords.NONE_BACK,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
     }
 }

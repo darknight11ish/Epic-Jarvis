@@ -111,6 +111,13 @@ jobs:
           done
         shell: bash
       - run: node scripts/markdown-test.mjs
+      # One source of truth for both clients' theme colours: this fails if either
+      # generated file (the desktop's theme.css, the phone's Themes.kt) has been
+      # edited by hand or has fallen behind tokens/themes.tokens.json. It runs
+      # BEFORE the token checks because a stale generated file makes their
+      # results meaningless - they measure what it produced. `../tools`, because
+      # this job's working directory is jarvis-desktop/.
+      - run: node ../tools/tokens/build.mjs --check
       - run: python3 scripts/check-tokens.py
       # EVERY suite in tests/, not a hand-picked few. Most of them open the
       # real pages in a headless Chromium (tests/uikit.mjs), which is why only
@@ -1407,6 +1414,11 @@ jobs:
       # reproduced on the owner's PC, where the tick is about 0.5 ms. All three
       # were fixed with `tempfile.mkdtemp`, which asks the filesystem for a free
       # name. This is what keeps the next one from being found the same way.
+      # It reads *.ps1 too (2026-10-09): five %TEMP% folders in
+      # scripts/apply-patches.ps1 were named from `Get-Date -Format
+      # 'yyyy-MM-dd-HHmmss'`, so two runs started inside one second shared them
+      # and each one's teardown deleted the other's - which is what "a suite
+      # that passes alone fails in a combined run" was, for a day.
       - name: No path is named from a clock and created without exist_ok
         run: python3 ../../tools/check_same_tick_paths.py
       # The tutorials are data, so nothing compiles them and nothing reads them.

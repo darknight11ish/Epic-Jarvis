@@ -1,0 +1,186 @@
+{
+ "cases": {
+  "after_mark_read": {
+   "count": 0,
+   "new": [],
+   "note": "Licences are shown as GitHub reports them. 'none stated' means the repository has no licence file, which is not the same as permissive - it means you have no permission to use it at all.",
+   "topics": [
+    "local llm ui"
+   ],
+   "updated": []
+  },
+  "empty": {
+   "count": 0,
+   "new": [],
+   "note": "Licences are shown as GitHub reports them. 'none stated' means the repository has no licence file, which is not the same as permissive - it means you have no permission to use it at all.",
+   "topics": [],
+   "updated": []
+  },
+  "new_and_updated": {
+   "count": 3,
+   "new": [
+    {
+     "archived": false,
+     "at": 1790003600.0,
+     "description": "A second project on the same topic.",
+     "kind": "new",
+     "licence": "0BSD",
+     "repo": "example/harbour-lights",
+     "stars": 44,
+     "topic": "local llm ui",
+     "url": "https://github.com/example/harbour-lights",
+     "what_changed": [
+      "first seen"
+     ]
+    },
+    {
+     "archived": true,
+     "at": 1790000000.0,
+     "description": "A tray badge with no dependencies, now MIT.",
+     "kind": "new",
+     "licence": "MIT",
+     "repo": "example/quiet-harbour",
+     "stars": 980,
+     "topic": "local llm ui",
+     "url": "https://github.com/example/quiet-harbour",
+     "what_changed": [
+      "first seen"
+     ]
+    }
+   ],
+   "note": "Licences are shown as GitHub reports them. 'none stated' means the repository has no licence file, which is not the same as permissive - it means you have no permission to use it at all.",
+   "topics": [
+    "local llm ui"
+   ],
+   "updated": [
+    {
+     "archived": true,
+     "at": 1790003600.0,
+     "description": "A tray badge with no dependencies, now MIT.",
+     "kind": "updated",
+     "licence": "MIT",
+     "repo": "example/quiet-harbour",
+     "stars": 980,
+     "topic": "local llm ui",
+     "url": "https://github.com/example/quiet-harbour",
+     "what_changed": [
+      "archived",
+      "licence none -> MIT",
+      "description changed",
+      "stars 310 -> 980"
+     ]
+    }
+   ]
+  },
+  "new_only": {
+   "count": 3,
+   "new": [
+    {
+     "archived": false,
+     "at": 1790000000.0,
+     "description": "Numeric badges on the Windows tray icon.",
+     "kind": "new",
+     "licence": "none stated",
+     "repo": "example/tauri-tray-badge",
+     "stars": 96,
+     "topic": "tauri plugins",
+     "url": "https://github.com/example/tauri-tray-badge",
+     "what_changed": [
+      "first seen"
+     ]
+    },
+    {
+     "archived": false,
+     "at": 1790000000.0,
+     "description": "A vector search extension for SQLite.",
+     "kind": "new",
+     "licence": "Apache-2.0",
+     "repo": "example/vec0",
+     "stars": 4102,
+     "topic": "local llm ui",
+     "url": "https://github.com/example/vec0",
+     "what_changed": [
+      "first seen"
+     ]
+    },
+    {
+     "archived": false,
+     "at": 1790000000.0,
+     "description": "Twenty animated status faces for a desktop assistant.",
+     "kind": "new",
+     "licence": "MIT",
+     "repo": "example/reactor-faces",
+     "stars": 1284,
+     "topic": "local llm ui",
+     "url": "https://github.com/example/reactor-faces",
+     "what_changed": [
+      "first seen"
+     ]
+    }
+   ],
+   "note": "Licences are shown as GitHub reports them. 'none stated' means the repository has no licence file, which is not the same as permissive - it means you have no permission to use it at all.",
+   "topics": [
+    "local llm ui",
+    "tauri plugins"
+   ],
+   "updated": []
+  },
+  "updated_only": {
+   "count": 1,
+   "new": [],
+   "note": "Licences are shown as GitHub reports them. 'none stated' means the repository has no licence file, which is not the same as permissive - it means you have no permission to use it at all.",
+   "topics": [
+    "local llm ui"
+   ],
+   "updated": [
+    {
+     "archived": true,
+     "at": 1790003600.0,
+     "description": "A tray badge with no dependencies, now MIT.",
+     "kind": "updated",
+     "licence": "MIT",
+     "repo": "example/quiet-harbour",
+     "stars": 980,
+     "topic": "local llm ui",
+     "url": "https://github.com/example/quiet-harbour",
+     "what_changed": [
+      "archived",
+      "licence none -> MIT",
+      "description changed",
+      "stars 310 -> 980"
+     ]
+    }
+   ]
+  }
+ },
+ "missing": {
+  "body": {
+   "error": "not found"
+  },
+  "status": 404
+ },
+ "peek": {
+  "limit": 50,
+  "mark": false
+ },
+ "row_keys": [
+  "archived",
+  "at",
+  "description",
+  "kind",
+  "licence",
+  "repo",
+  "stars",
+  "topic",
+  "url",
+  "what_changed"
+ ],
+ "top_level_keys": [
+  "available",
+  "count",
+  "new",
+  "note",
+  "topics",
+  "updated"
+ ]
+}

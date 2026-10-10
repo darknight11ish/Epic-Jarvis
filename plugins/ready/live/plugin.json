@@ -1,0 +1,8 @@
+{
+  "name": "live",
+  "summary": "Jarvis Live: a back-and-forth voice conversation the owner starts and stops, with no \"hey Jarvis\" between turns.",
+  "module": "jarvis_live",
+  "install": "handler",
+  "replaces_patch": "live.patch",
+  "stack_order": 94
+}

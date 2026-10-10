@@ -1,0 +1,8 @@
+{
+  "name": "history-import",
+  "summary": "\"Bring in chats from ChatGPT, Claude, Gemini or DeepSeek\".",
+  "module": "jarvis_history_import",
+  "install": "handler",
+  "replaces_patch": "history-import.patch",
+  "stack_order": 90
+}

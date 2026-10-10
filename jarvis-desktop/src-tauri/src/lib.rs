@@ -463,9 +463,26 @@ pub struct RouteState {
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut system = telemetry_system();
+        //: Which wake-up we are on, so the notification choices are re-read
+        //: every `SYNC_EVERY` ticks rather than every three seconds (2026-10-09).
+        let mut tick: u32 = 0;
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
+
+            // A choice made on the PHONE has to reach the toasts without anyone
+            // opening this PC's Settings window (notifications.rs,
+            // `refresh_notification_prefs`). It rides this loop because the loop
+            // already runs whether or not a window is open, and it is the lowest
+            // -risk place to put it: one plain GET, nothing raised, nothing
+            // written, and every failure leaves the choices already in force.
+            // The interval is the loop's own, so this is at most ~30 s late -
+            // and a change made HERE still applies at once, through
+            // `set_notification_prefs`.
+            tick = tick.wrapping_add(1);
+            if tick.is_multiple_of(notifications::SYNC_EVERY) {
+                notifications::refresh_notification_prefs(app.clone()).await;
+            }
 
             // A drag is persisted even while the widget is collapsed or
             // hidden - and the same for the floating face. `flush` writes a
@@ -1155,6 +1172,11 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::get_floating,
             commands::set_floating,
+            // Where the floating face's own page says its picture is drawn,
+            // so clicks can pass through the window everywhere except on the
+            // animal (2026-10-10). The floating window is the only one
+            // granted it - permissions/surfaces.toml's "floating-hit-mask".
+            commands::note_floating_hit_mask,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -1375,6 +1397,11 @@ pub fn run() {
         // the first one drawn rather than a swap after the default.
         let appearance = app.state::<appearance::AppearanceState>().snapshot();
         push_to_hud(app, "appearance", &appearance);
+
+        // And same reason again, for the button beside the box: a HUD that
+        // reloads while the Jarvis bar is already up would otherwise offer to
+        // open a bar that is on screen (`windows.rs` `publish_bar_state`).
+        windows::publish_bar_state(app);
     });
 
     let app = builder

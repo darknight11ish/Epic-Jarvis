@@ -111,7 +111,13 @@ def t_the_patch_is_registered_last():
              # handoff-mode.patch: its two hunks join the "acts only on tier ask"
              # list and the _RISK table at the END of each, so it cannot rewrite
              # the two rows this patch removes either.
-             "handoff-front.patch"}
+             # plugin-loader.patch (2026-10-10, this branch) is appended last
+             # and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED lines
+             # at the end of the install chain. It removes no line and does not
+             # touch jarvis_gate.py at all, so it rewrites nothing this patch
+             # wrote.
+             "handoff-front.patch",
+             "plugin-loader.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

@@ -41,6 +41,14 @@ import {
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import { createMenuManager, WORDS } from "./menu-visibility.js";
+import {
+  buildConstellation,
+  buttonLabel,
+  labelFor,
+  labelledNodes,
+  paintConstellation,
+  shapeFor,
+} from "./galaxy-constellation.js";
 const menuManager = createMenuManager();
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
@@ -619,6 +627,12 @@ const dom = {
   countAdvanced: $("count-advanced"),
 
   canvas: $("graph-canvas"),
+  // The constellation: an SVG picture with one real button per name over it
+  // (galaxy-constellation.js). `canvas` above is kept as the drawing fallback
+  // and because `tests/a11y.mjs` reads its label for the way in that exists.
+  galaxySvg: $("graph-svg"),
+  galaxyOverlay: $("graph-overlay"),
+  galaxyStage: document.querySelector(".galaxy-stage"),
   graphEmpty: $("graph-empty"),
   graphEmptyText: $("graph-empty-text"),
   graphStat: $("graph-stat"),
@@ -11796,11 +11810,36 @@ function renderWatchReport() {
   const body = state.data.watch_report || {};
   const why = unavailable("watch_report");
   if (why) return rows(dom.watchReport, [], null, whyNode("watch_report"));
-  const findings = Array.isArray(body.findings)
-    ? body.findings
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  // `GET /api/watch/report` serves {available, new, updated, count, topics,
+  // note} and splits its rows by `kind`; the module's own consumer reads
+  // `peek["new"] + peek["updated"]`, in that order (jarvis_watch.py:524).
+  // Checked against the owner's running backend on 2026-10-09: `findings` and
+  // `items` are not in the payload at all, and this read only those two - so
+  // `findings` was always [] and the block drew "Nothing new since you last
+  // marked the list read." over a list it had never read. A permanent false
+  // all-clear on the SUCCESS path, with the badge above free to say
+  // "Watches · 3 new" at the same moment - the notification all-clear of #128
+  // on a security-watch list.
+  const servedByBackend = Array.isArray(body.new) || Array.isArray(body.updated);
+  const findings = servedByBackend
+    ? [...(body.new || []), ...(body.updated || [])]
+    : Array.isArray(body.findings)
+      ? body.findings
+      : Array.isArray(body.items)
+        ? body.items
+        : null;
+
+  // A 200 whose body is a shape nobody here knows is NOT a report of nothing
+  // new. The empty sentence is the reassuring one, so it is not borrowed for a
+  // read that did not happen: the block says so instead (2026-10-09). The list
+  // stays readable if a future backend renames these keys, so this is drift
+  // made visible, not drift made fatal.
+  if (findings === null) {
+    dom.watchSeen.disabled = true;
+    return rows(dom.watchReport, [], null,
+      el("p", "empty failed", "Could not read what is new: your PC's Jarvis sent a " +
+        "list this window does not recognise."));
+  }
 
   dom.watchSeen.disabled = findings.length === 0;
 
@@ -11809,13 +11848,19 @@ function renderWatchReport() {
     findings,
     (f) => {
       // "none stated" means no permission, not "probably fine" — so an absent
-      // licence is rendered as a warning, not as a blank.
+      // licence is rendered as a warning, not as a blank. `jarvis_watch.py:492`
+      // sends exactly those two words for a repository with no licence file, and
+      // the filter below used to test only `none|unknown|null`, so an
+      // unlicensed repository was drawn as a settled `none stated` and this
+      // warning never appeared (2026-10-09).
       const licence = String(f.licence || f.license || "").trim();
-      const stated = licence && !/^(none|unknown|null)$/i.test(licence);
+      const stated = licence && !/^(none|none stated|unknown|null)$/i.test(licence);
       return row({
         tag: stated ? licence : "no licence",
         state: stated ? "ok" : "warn",
-        title: String(f.full_name || f.name || "(repository)"),
+        // `repo` is what the route serves for a repository
+        // (jarvis_watch.py:489); it used to be titled "(repository)" always.
+        title: String(f.repo || f.full_name || f.name || "(repository)"),
         meta: [
           String(f.descr || f.description || ""),
           [
@@ -12305,7 +12350,7 @@ function renderGraph() {
     }
   }
 
-  state.graph = { nodes: N, links: L, byId, signature };
+  state.graph = { nodes: N, links: L, byId, signature, layoutToken: `${++layoutCount}:${signature}` };
   selected = null;
   dom.inspector.hidden = true;
   galaxyPanel.clear();
@@ -12585,7 +12630,7 @@ function fitToContent({ ease = 1 } = {}) {
     minY = Math.min(minY, n.y);
     maxY = Math.max(maxY, n.y);
   }
-  const rect = dom.canvas.getBoundingClientRect();
+  const rect = stageRect();
   const pad = 60;
   const sx = (rect.width - pad * 2) / Math.max(1, maxX - minX);
   const sy = (rect.height - pad * 2) / Math.max(1, maxY - minY);
@@ -12598,7 +12643,229 @@ function fitToContent({ ease = 1 } = {}) {
   view.y += (y - view.y) * k;
 }
 
+/* ---- The constellation ---------------------------------------------------
+ *
+ * One real button per name, over an SVG drawing (galaxy-constellation.js). This
+ * is the accessible rendering: Tab moves between dots, Enter picks one, CSS and
+ * forced-colors paint it, and a screen reader lists them. The canvas below
+ * stays as the fallback for a page without the two elements.
+ *
+ * `built` is the tree from the last build. The tree is rebuilt only when the
+ * SET of names changes (or the theme, which moves every colour); a pan, a zoom
+ * and a settle tick only repaint, because rebuilding a hundred buttons per
+ * frame is the layout cost the old comment on the canvas was worried about -
+ * and it is paid once per view now, not sixty times a second.
+ */
+let constellation = null;
+let constellationToken = "";
+let constellationTheme = "";
+
+/** Bumped once per laid-out graph. It is what tells the constellation to
+ *  rebuild - see the rebuild rule in `drawConstellation`. */
+let layoutCount = 0;
+
+/** Where the picture is on screen, so a node's place and a pointer's place are
+ *  measured from the same origin. */
+function stageRect() {
+  return (dom.galaxyStage ?? dom.canvas).getBoundingClientRect();
+}
+
+function constellationReady() {
+  return Boolean(dom.galaxySvg && dom.galaxyOverlay);
+}
+
+/** The panel opens and closes asynchronously (its facts are read over the
+ *  bridge), so a repaint is needed the moment its rectangle changes - otherwise
+ *  a dot that has just landed under it keeps its button, and that button eats
+ *  the panel's own clicks. A `MutationObserver` rather than a call at each site:
+ *  the panel is shown and hidden from several places, and this way a new one
+ *  cannot forget. */
+function watchInspectorBox() {
+  if (!dom.inspector || typeof MutationObserver !== "function") return;
+  new MutationObserver(() => invalidate()).observe(dom.inspector,
+    { attributes: true, attributeFilter: ["hidden"] });
+}
+
+/** Dots that would sit under the inspector panel.
+ *
+ *  The canvas drew underneath that panel and nobody noticed, because pixels
+ *  under an opaque-ish panel are not interactive. A BUTTON is: a dot landing in
+ *  the panel's corner sat on top of "Open in Memory" and took the click, so the
+ *  panel looked broken while nothing errored. `tests/galaxy-panel.mjs` caught it
+ *  (four checks went red). The fix keeps the dots out of the panel's rectangle -
+ *  the picture is still drawn, it just does not offer controls through the
+ *  panel.
+ *
+ *  Only consulted while the panel is OPEN: with no inspector there is nothing to
+ *  avoid, and the ordinary path costs one `hidden` check. */
+let inspectorBox = null;
+function underInspector(n) {
+  if (!inspectorBox) return false;
+  const p = constellationModel.translate(n);
+  return p.x >= inspectorBox.left && p.x <= inspectorBox.right
+    && p.y >= inspectorBox.top && p.y <= inspectorBox.bottom;
+}
+
+function syncInspectorBox() {
+  const el = dom.inspector;
+  // While the panel is open the constellation yields the pointer entirely.
+  //
+  // Clipping just the dots that fall inside the panel was not enough, and the
+  // reason is worth writing down: the panel's surface is 92% opaque, so a dot
+  // near its edge can still sit over one of the panel's own controls, and a
+  // hit test at that point finds the dot. Suppressing the overlay for as long as
+  // the panel is up removes the whole class of problem instead of chasing the
+  // geometry. The picture stays; it just stops offering controls while a panel
+  // is covering it. `tests/galaxy-panel.mjs` holds this.
+  const open = Boolean(el && !el.hidden);
+  dom.galaxyOverlay?.classList.toggle("is-yielding", open);
+  if (!el || el.hidden || !dom.galaxyStage) { inspectorBox = null; return; }
+  const s = dom.galaxyStage.getBoundingClientRect();
+  const i = el.getBoundingClientRect();
+  inspectorBox = { left: i.left - s.left, top: i.top - s.top, right: i.right - s.left, bottom: i.bottom - s.top };
+}
+
+const constellationModel = {
+  get nodes() { return state.graph ? state.graph.nodes : []; },
+  get links() { return state.graph ? state.graph.links : []; },
+  hidden: (n) => !visible(n) || underInspector(n),
+  get focus() { return selected || hovered; },
+  get selected() { return selected; },
+  get near() { return galaxyNear; },
+  get labels() { return constellationLabels; },
+  translate: (n) => ({ x: n.x * view.scale + view.x, y: n.y * view.scale + view.y }),
+  describe: (n) => {
+    const radius = radiusOf(n) * Math.max(0.55, Math.min(1.6, view.scale));
+    const ink = themeInk();
+    const isFocus = n === (selected || hovered);
+    const dim = Boolean(constellationModel.focus && !galaxyNear.has(n.id) && n !== constellationModel.focus);
+    const name = labelFor(n);
+    if (!name) return null;
+    return {
+      x: n.x * view.scale + view.x,
+      y: n.y * view.scale + view.y,
+      colour: colourFor(n.group),
+      shape: shapeFor(radius, styleFor(n.group)[1]),
+      // The words a screen reader hears, and the words the label shows, are
+      // built from the same name so they can never disagree.
+      label: buttonLabel(n, groupWords(n.group, { plural: false }), "facts"),
+      dim,
+      selected: n === selected,
+      near: galaxyNear.has(n.id),
+      labelled: constellationLabels.some((l) => l.node === n),
+      focusable: true,
+    };
+  },
+};
+
+
+/** The focused node and everything joined to it, as ids. Rebuilt per draw, the
+ *  same way the canvas computed it inline. */
+let galaxyNear = new Set();
+let constellationLabels = [];
+
+function refreshConstellationDerived() {
+  const g = state.graph;
+  galaxyNear = new Set();
+  if (!g) { constellationLabels = []; return; }
+  const focus = selected || hovered;
+  if (focus) {
+    galaxyNear.add(focus.id);
+    for (const l of g.links) {
+      if (l.s === focus) galaxyNear.add(l.t.id);
+      if (l.t === focus) galaxyNear.add(l.s.id);
+    }
+  }
+  constellationLabels = labelledNodes(g.nodes, {
+    scale: view.scale,
+    focus,
+    near: galaxyNear,
+    hidden: (n) => !visible(n),
+  });
+}
+
+/** Draws the constellation, and says whether it did. False means "no
+ *  constellation on this page", and the caller falls back to the canvas.
+ *
+ *  THE REBUILD RULE, and it is the subtle part: the tree is rebuilt only when a
+ *  NEW GRAPH has been laid out, never on a pan, a zoom or a settle tick.
+ *
+ *  The first version decided this from a signature of the node ids - but
+ *  `renderGraph` keeps settled positions when the node set is unchanged, so
+ *  that signature was already the same the moment a re-layout started, and
+ *  every animation frame during a DRAG rebuilt a hundred buttons. Rebuilding
+ *  destroys the button under the pointer, so the pointerup and the click that
+ *  should have followed went to a detached element: pressing a dot and releasing
+ *  it selected nothing, with no error anywhere. `tests/galaxy-dots.mjs` caught
+ *  it. So the caller now hands over an explicit token that changes only when a
+ *  new graph is laid out. */
+function drawConstellation() {
+  if (!constellationReady() || !state.graph) return false;
+  syncInspectorBox();
+  refreshConstellationDerived();
+  const token = state.graph.layoutToken ?? "";
+  const theme = dom.root.getAttribute("data-theme") ?? "";
+  if (constellation && token === constellationToken && theme === constellationTheme) {
+    paintConstellation({ svg: dom.galaxySvg, overlay: dom.galaxyOverlay }, constellationModel, constellation);
+    return true;
+  }
+  constellationToken = token;
+  constellationTheme = theme;
+  constellation = buildConstellation(
+    { svg: dom.galaxySvg, overlay: dom.galaxyOverlay },
+    constellationModel,
+    document
+  );
+  wireConstellation();
+  return true;
+}
+
+/** One listener for the whole overlay, added once: a button's own `click` is
+ *  enough for the pointer and the keyboard, and a per-button listener would be
+ *  a hundred listeners rebuilt on every layout change. */
+let constellationWired = false;
+function wireConstellation() {
+  if (constellationWired || !dom.galaxyOverlay) return;
+  constellationWired = true;
+  watchInspectorBox();
+  dom.galaxyOverlay.addEventListener("click", (event) => {
+    const button = event.target.closest?.(".galaxy-node-button");
+    if (!button) return;
+    const node = state.graph?.byId?.get(nodeIdOf(button));
+    if (!node) return;
+    select(node);
+    centreOn(node);
+  });
+  // Hovering a dot lights it and everything joined to it, exactly as the canvas
+  // did - without a pointermove handler doing a hit test per mouse event.
+  dom.galaxyOverlay.addEventListener("pointerover", (event) => {
+    const button = event.target.closest?.(".galaxy-node-button");
+    if (!button) return;
+    const node = state.graph?.byId?.get(nodeIdOf(button));
+    if (node && node !== hovered) { hovered = node; invalidate(); }
+  });
+  dom.galaxyOverlay.addEventListener("pointerout", (event) => {
+    if (!event.target.closest?.(".galaxy-node-button")) return;
+    if (hovered) { hovered = null; invalidate(); }
+  });
+}
+
+/** A button's `data-node` as the id the graph indexes by.
+ *
+ *  These ids come from `galaxy-view.js` as STRINGS - `e:1`, `e:2` - because the
+ *  graph joins an entity id with a prefix so a fact id can never collide with
+ *  it (`buildEntityGraph`). Coercing to Number here (the first version did)
+ *  made every lookup miss, so a click selected nothing and no error was thrown:
+ *  exactly the silent failure a test catches and a reader cannot. */
+function nodeIdOf(button) {
+  return button.getAttribute("data-node");
+}
+
 function draw() {
+  // The constellation is the picture now: an SVG drawing with a real button per
+  // name over it. It needs no canvas at all, which is the point - a dot is a
+  // control, not pixels.
+  if (drawConstellation()) return;
   const c = dom.canvas;
   const ctx = c.getContext("2d");
   if (!ctx) return;
@@ -12726,7 +12993,11 @@ function draw() {
 function nodeAt(clientX, clientY) {
   const g = state.graph;
   if (!g) return null;
-  const rect = dom.canvas.getBoundingClientRect();
+  // The SAME origin the buttons are placed from (`stageRect`), so the picture
+  // and the hit test can never disagree - which is the class of bug that made a
+  // click select nothing back when the canvas and `draw` used two device-pixel
+  // caps.
+  const rect = stageRect();
   const px = clientX - rect.left;
   const py = clientY - rect.top;
   let best = null;
@@ -12871,26 +13142,44 @@ function stepGalaxyFind(delta) {
 }
 
 function centreOn(node) {
-  const rect = dom.canvas.getBoundingClientRect();
+  const rect = stageRect();
   view.x = rect.width / 2 - node.x * view.scale;
   view.y = rect.height / 2 - node.y * view.scale;
   draw();
 }
 
-/* ---- Canvas interaction -------------------------------------------------- */
+/* ---- The stage's interaction ---------------------------------------------
+ *
+ * Pan, zoom and hover live on the STAGE, not on the canvas, because the canvas
+ * is no longer the picture: the constellation's SVG and buttons are, and both
+ * sit inside the stage. A dot's own click is handled once, on the overlay
+ * (`wireConstellation`), so a drag that happens to end on a dot does not select
+ * it - the same rule the canvas had.
+ */
+const stage = dom.galaxyStage ?? dom.canvas;
 
 let dragging = null;
 
-dom.canvas.addEventListener("pointerdown", (e) => {
-  dom.canvas.setPointerCapture(e.pointerId);
-  dragging = { x: e.clientX, y: e.clientY, moved: false };
+stage.addEventListener("pointerdown", (e) => {
+  // NOT captured here. `setPointerCapture` on the stage retargets every later
+  // pointer event to the stage, so a press that began on a dot ends as a
+  // pointerup on the STAGE - and the browser only synthesises a `click` when
+  // press and release share a target. Capturing on pointerdown therefore turned
+  // every pointer click on a dot into a pan that selected nothing, silently.
+  // `tests/galaxy-dots.mjs` caught it. The capture happens below, once a drag
+  // has actually started and the pointer is worth following off the element.
+  dragging = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, captured: false };
 });
 
-dom.canvas.addEventListener("pointermove", (e) => {
+stage.addEventListener("pointermove", (e) => {
   if (dragging) {
     const dx = e.clientX - dragging.x;
     const dy = e.clientY - dragging.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) dragging.moved = true;
+    if (!dragging.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+      dragging.moved = true;
+      try { stage.setPointerCapture?.(dragging.id); dragging.captured = true; } catch { /* the pointer may already be gone */ }
+    }
+    if (!dragging.moved) return; // a press that has not moved is still a click
     view.x += dx;
     view.y += dy;
     dragging.x = e.clientX;
@@ -12901,23 +13190,42 @@ dom.canvas.addEventListener("pointermove", (e) => {
   const hit = nodeAt(e.clientX, e.clientY);
   if (hit !== hovered) {
     hovered = hit;
-    dom.canvas.style.cursor = hit ? "pointer" : "grab";
+    stage.style.cursor = hit ? "pointer" : "grab";
     invalidate();
   }
 });
 
-dom.canvas.addEventListener("pointerup", (e) => {
+stage.addEventListener("pointerup", (e) => {
   const wasDrag = dragging && dragging.moved;
   dragging = null;
   if (wasDrag) return;
+  // This handler owns exactly ONE case: a press on the empty picture, which
+  // clears the selection. Everything else on the stage belongs to something
+  // with its own handler.
+  //
+  // It used to be written as "if the target is a dot button, return". That is
+  // not the same test, and the difference cost four `galaxy-panel.mjs` checks:
+  // a press on one of the PANEL's own buttons also bubbles here, is not a dot
+  // button, falls through to `select(nodeAt(...))` - and `nodeAt` excludes the
+  // dots hidden under the panel, so it returned null and WIPED the panel the
+  // owner had just clicked. The stack trace read
+  // `select(null) <- brain.js pointerup <- the row button's click`, and
+  // `tests/galaxy-dots.mjs` now holds the rule.
+  //
+  // So the test is inverted: act only when the press was on the stage itself,
+  // or on the constellation overlay with no dot under it. A press that started
+  // on the panel or on a dot is never this handler's business.
+  const onOverlay = dom.galaxyOverlay?.contains(e.target);
+  if (!onOverlay && e.target !== stage) return;
+  if (e.target !== stage && e.target.closest?.(".galaxy-node-button")) return;
   select(nodeAt(e.clientX, e.clientY));
 });
 
-dom.canvas.addEventListener(
+stage.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    const rect = dom.canvas.getBoundingClientRect();
+    const rect = stageRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
     const factor = Math.exp(-e.deltaY * 0.0016);
@@ -12932,10 +13240,10 @@ dom.canvas.addEventListener(
   { passive: false }
 );
 
-// The canvas is focusable, so the graph is pannable and zoomable without a
-// mouse. Selecting a node without one goes through the search field, which is
-// also what makes the view usable with a screen reader.
-dom.canvas.addEventListener("keydown", (e) => {
+// The stage is focusable, so the picture is pannable and zoomable without a
+// mouse. Reaching a NAME without one is the buttons' job now - Tab steps
+// between them - and the search field still jumps straight to one by name.
+stage.addEventListener("keydown", (e) => {
   const stepPx = e.shiftKey ? 120 : 40;
   const keys = {
     ArrowLeft: () => (view.x += stepPx),

@@ -148,12 +148,19 @@ permissions = [
 # chat box, which chats as HUD and has no Temporary chat, New conversation,
 # "Used in this answer" or crisis panel (reversed 2026-10-06) - `hud_open_bar`,
 # which sends nothing either.
+#
+# The same button hides the bar again when it is already up (the owner's ask of
+# 2026-10-09: one button that toggles, labelled from what the shell says is on
+# screen). `hide_quickbar` is the Jarvis bar's own hide, so the worst this page
+# can do with it is take the bar off screen - less than `hud_open_bar` already
+# lets it do, and it decides nothing, approves nothing and hides nothing else.
 [[set]]
 identifier = "hud-voice"
-description = "Show the quickbar with push-to-talk ready, or with its box ready to type in. Opens no microphone, sends and records nothing."
+description = "Show the quickbar with push-to-talk ready, or with its box ready to type in, and hide it again. Opens no microphone, sends and records nothing."
 permissions = [
   "allow-summon-push-to-talk",
   "allow-hud-open-bar",
+  "allow-hide-quickbar",
 ]
 
 # The HUD page's requests to Jarvis, made in Rust with the token, so the page
@@ -1501,6 +1508,25 @@ permissions = ["allow-get-appearance"]
 identifier = "sky-read"
 description = "Read whether the sun and moon show behind the face, the rough position and the weather now. Cosmetic and read-only."
 permissions = ["allow-get-sky"]
+
+# THE ONE SET A PAGE WRITES THROUGH, and it is one command with one window
+# holding it (2026-10-10, the integration evaluation). With "click through to
+# what is behind" on, the floating face has to tell Rust where its own picture
+# is drawn before Rust can decide which clicks to let past the window
+# (`windows.rs`'s pointer watcher). The shorter road would have been an event
+# from the page, and that road is closed on purpose: `core:event:allow-emit`
+# is forbidden to every window (apps security audit M1), because the quickbar
+# trusts what it hears and a page that could emit could fake the owner's
+# checked voice or an approval card. So it is a granted command, and the
+# floating window is the only one granted it.
+# What it carries: 1,024 characters of geometry - "1" where the face's own
+# drawing is, "0" where the background is. No words, no picture, nothing about
+# the owner, nothing written down; a grid that is not exactly one clears it,
+# and a window with no grid keeps every click (the animal stays clickable).
+[[set]]
+identifier = "floating-hit-mask"
+description = "Tell Rust where the floating face's own picture is drawn, so clicks pass through everywhere else. Geometry only; cosmetic."
+permissions = ["allow-note-floating-hit-mask"]
 
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.
 [[set]]

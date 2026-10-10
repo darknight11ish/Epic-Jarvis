@@ -209,8 +209,23 @@ SAYS_NO_CARD = "Does it without asking"
 
 #: The notes under a row.
 NOTE_ALWAYS = "Always asks. This cannot be changed from an app."
-NOTE_FILE = ("This can only be changed in your PC's settings file (jarvis-framework.toml), "
-             "not in the app.")
+#: The note under a row that cannot be made stricter with a switch and that no
+#: app screen changes. IT MAY NOT SAY "THE APP CANNOT CHANGE THIS AT ALL"
+#: (corrected 2026-10-09). It used to read "This can only be changed in your
+#: PC's settings file (jarvis-framework.toml), not in the app." - and the page
+#: says that under three rows that ARE changed in an app, each with ONE approval
+#: card: raising one of the limits (`raise_a_limit`), raising the interruption
+#: budget (`raise_attention_budget`, whose own row says so), and LOWERING the
+#: voice check's bar (`lower_the_voice_check_bar`, the one limit whose loosening
+#: goes down). So the sentence named the wrong place for the very changes the
+#: owner makes from a Settings screen. What is true of every row it sits under is
+#: narrower, and is what it now says. What IS true of every row it sits under,
+#: and so the only thing it may claim: there is no "Ask me first" switch here,
+#: and LOOSENING it cannot be done from a switch at all - it is a hand edit of
+#: the settings file. The three rows changed from a Settings card raise their
+#: own ONE approval card to do it, and that card is the card, not this line.
+NOTE_FILE = ("There is no switch for this one: going looser is only possible by hand in your "
+             "PC's settings file (jarvis-framework.toml).")
 NOTE_WIKI = ("Always asks: the wiki is written only on your yes (security audit), so it "
              "cannot be loosened - a looser line would switch \"Add to wiki\" off.")
 #: "Check for tool updates" (2026-09-27, the owner's own request): a card

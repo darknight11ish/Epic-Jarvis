@@ -76,6 +76,45 @@
            opens the Jarvis bar on the card; it decides nothing. -->
       <div class="card-link" id="card-link" hidden></div>
 
+      <!-- ── Search ─────────────────────────────────────────────────────────
+           The owner's request of 2026-10-09: "a lot more visually simple,
+           with a search bar in settings. I still want everything adjustable,
+           just easier to find and more efficient." See
+           docs/SETTINGS-UX-DESIGN.md and settings-search.js.
+
+           IT IS A VIEW, NOT A CHANGE. Typing here hides the cards that do not
+           match and shows them again the moment the box is emptied; every
+           switch, id and word on the page is exactly where it was. It calls
+           nothing (`settings-search.js` has no `invoke(` and no `fetch(`), and
+           it writes nothing down. In the DOM it is the FIRST element, so Tab
+           reaches it before anything else; Ctrl+F and Alt+F jump to it from
+           anywhere and Escape clears it.
+
+           `#settings-search-count` is the live region and is written only
+           when the ANSWER changes - a count re-announced on every keystroke
+           would talk over the owner's typing. -->
+      <section class="settings-search" id="settings-search" aria-labelledby="settings-search-title">
+        <h2 class="settings-search-title" id="settings-search-title">Search settings</h2>
+        <div class="settings-search-row">
+          <input
+            id="settings-search-input"
+            class="settings-search-input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Search settings…"
+            aria-describedby="settings-search-status"
+          />
+          <button class="btn ghost small" id="settings-search-clear" type="button" hidden>Clear</button>
+        </div>
+        <p class="settings-search-hint" id="settings-search-status">Type a word to show only the settings that match.</p>
+        <p class="settings-search-none" id="settings-search-none" hidden>
+          <span id="settings-search-none-words"></span>
+          <span class="settings-search-none-back">Clear the box and everything comes back.</span>
+        </p>
+        <span class="sr-only" id="settings-search-count" role="status" aria-live="polite"></span>
+      </section>
+
       <nav class="settings-jump" id="settings-jump" aria-label="Jump to a section">
         <p class="settings-jump-title">Jump to:</p>
         <div class="settings-jump-group">
@@ -486,6 +525,22 @@
               no text box. Drag it anywhere. Say "open a chat", or press
               Alt+Space, to bring up the real Jarvis bar. Alt+Shift+F shows
               or hides this face (see Shortcuts below to change either key).
+            </span>
+          </span>
+        </label>
+
+        <!-- Click-through (2026-10-10, the integration evaluation): clicks on
+             the floating face go to whatever is behind it, except on the
+             animal itself. Off by default, and it does nothing until the
+             floating face is on. -->
+        <label class="toggle">
+          <input id="floating-click-through" type="checkbox" />
+          <span>
+            <span id="floating-click-through-label">Click through to what is behind</span>
+            <span class="toggle-detail" id="floating-click-through-detail">
+              Clicks on the floating face go to whatever is behind it, except on
+              the animal itself - so it can still be dragged, and the face stops
+              getting in the way of whatever is underneath. Off to start.
             </span>
           </span>
         </label>
@@ -2625,6 +2680,7 @@
 
     <script src="sky.js"></script>
     <script type="module" src="first-run-settings.js"></script>
+    <script type="module" src="settings-search.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>

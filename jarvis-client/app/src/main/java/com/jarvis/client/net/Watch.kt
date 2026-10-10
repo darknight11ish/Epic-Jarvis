@@ -24,10 +24,20 @@ import kotlinx.serialization.json.put
  *   nothing that merely opens a link can clear the list.
  *
  * The module behind them (`jarvis_watch.py`) is on the owner's PC and not in
- * this repository, so every field name here is the desktop's reading of it,
- * not a documented shape (docs/ARCHITECTURE.md section 10: "the exact shape of
- * the routes they serve, is unverified from here"). Anything missing reads as
- * absent, never as a guess.
+ * this repository, so these field names used to be the desktop's reading of it
+ * rather than a documented shape (`docs/ARCHITECTURE.md` section 10: "the exact
+ * shape of the routes they serve, is unverified from here"). **That guessing is
+ * what went wrong, and `GET /api/watch/report` is now verified** (2026-10-09,
+ * against the owner's running backend and the module's own source): the route
+ * serves `{available, new, updated, count, topics, note}`, a row is
+ * `{topic, kind, repo, url, stars, licence, archived, description,
+ * what_changed, at}`, and `jarvis_watch.report()` sends the two words
+ * `"none stated"` - not an empty string - for a repository with no licence file.
+ * `jarvis-desktop/tests/fixtures/watch-report-cases.json` (written by
+ * `tools/gen_watch_report_cases.py`, run against the module) holds that shape,
+ * so it cannot drift back. Anything missing still reads as absent, never as a
+ * guess - and a body with nothing recognisable in it reads as *unreadable*, not
+ * as empty ([Report.Failed]).
  */
 object Watch {
     const val PATH = "/api/watch"
@@ -104,15 +114,58 @@ object Watch {
         )
     }
 
-    /** `GET` [REPORT_PATH]'s answer: `findings`, or `items`, as the desktop accepts either. */
-    fun findings(answer: JsonObject): List<Finding> {
-        val arr = (answer["findings"] as? JsonArray) ?: (answer["items"] as? JsonArray) ?: return emptyList()
+    /**
+     * What the module means by "no licence at all".
+     *
+     * `jarvis_watch.report()` does not send an empty `licence` for an
+     * unlicensed repository - it sends the two words `"none stated"`
+     * (`jarvis_watch.py:492`, `r["licence"] or "none stated"`). The filter here
+     * used to be `^(none|unknown|null)$`, which those two words do not match,
+     * so an unlicensed repository was drawn as a settled, green
+     * `licence: none stated` and the "no licence stated - no permission to use
+     * it" warning never appeared. On a screen whose whole purpose is telling
+     * the owner what they may use, that is the reassuring reading of a fact
+     * that means the opposite (2026-10-09).
+     */
+    private val NO_LICENCE = Regex("^(none|none stated|unknown|null)$", RegexOption.IGNORE_CASE)
+
+    /**
+     * `GET` [REPORT_PATH]'s answer as rows, or **null** when the answer is a
+     * shape this app does not recognise.
+     *
+     * The route serves `{available, new, updated, count, topics, note}` and
+     * splits its rows by `kind` - the module's own consumer reads
+     * `peek["new"] + peek["updated"]`, in that order (`jarvis_watch.py:524`).
+     * Verified against the owner's running backend on 2026-10-09: `findings`
+     * and `items` are not in the payload at all, and this read them anyway, so
+     * every successful report came back as the empty list. That is why the
+     * plate drew "Nothing new since you last marked the list read." over a list
+     * it had never read - a permanent false all-clear on the *success* path,
+     * with the badge above it free to say "Watches · 3 new" at the same moment.
+     * The same class of lie as the notification all-clear fixed in #128.
+     *
+     * `findings`/`items` stay readable as a fallback, so a future change of
+     * shape keeps working, but nothing here answers with an empty list by
+     * accident: a body with none of the four keys returns null, and [reportOf]
+     * turns that into a [Report.Failed], so the screen says it could not read
+     * instead of guessing "nothing new".
+     */
+    fun findings(answer: JsonObject): List<Finding>? {
+        val served = answer["new"] is JsonArray || answer["updated"] is JsonArray
+        val arr: List<JsonElement> = when {
+            served -> (answer["new"] as? JsonArray).orEmpty() + (answer["updated"] as? JsonArray).orEmpty()
+            answer["findings"] is JsonArray -> answer["findings"] as JsonArray
+            answer["items"] is JsonArray -> answer["items"] as JsonArray
+            else -> return null
+        }
         return arr.mapNotNull { el: JsonElement ->
             val o = el as? JsonObject ?: return@mapNotNull null
-            val stated = (o.text("licence") ?: o.text("license"))
-                ?.takeUnless { Regex("^(none|unknown|null)$", RegexOption.IGNORE_CASE).matches(it) }
+            val stated = (o.text("licence") ?: o.text("license"))?.takeUnless { NO_LICENCE.matches(it) }
             Finding(
-                title = o.text("full_name") ?: o.text("name") ?: "(repository)",
+                // `repo` is the served name for a repository (`jarvis_watch.py:489`).
+                // `full_name`/`name` are kept as the fallback; before 2026-10-09
+                // only those two were read, so every row was titled "(repository)".
+                title = o.text("repo") ?: o.text("full_name") ?: o.text("name") ?: "(repository)",
                 description = o.text("descr") ?: o.text("description") ?: "",
                 stars = if (o.containsKey("stars")) o.text("stars") ?: "?" else null,
                 topic = o.text("topic"),
@@ -154,14 +207,26 @@ object Watch {
     }
 
     /**
+     * A route that answered, but with a body this app cannot read. Its own
+     * sentence rather than a blank, because a body no key of ours matches is
+     * exactly the case that used to be drawn as the all-clear (2026-10-09).
+     */
+    const val UNREADABLE = "your PC's Jarvis sent a list this app does not recognise"
+
+    /**
      * One read of [REPORT_PATH], as [Report]. A failure never comes back as a
      * [Report.Read], whatever the error: that is the whole point of the type
      * (N1, 2026-10-09). The words are [failure]'s where they fit (a PC with no
      * `jarvis_watch.py`), the plain sentence both apps use otherwise - the same
      * choice the topics read above makes.
+     *
+     * A success whose body carries neither the served `new`/`updated` nor the
+     * `findings`/`items` fallback is a [Report.Failed] too ([UNREADABLE]):
+     * answering 200 with a payload nobody can read is not a report of nothing
+     * new (2026-10-09).
      */
     fun reportOf(result: ApiResult<JsonObject>): Report = when (result) {
-        is ApiResult.Ok -> Report.Read(findings(result.value))
+        is ApiResult.Ok -> findings(result.value)?.let { Report.Read(it) } ?: Report.Failed(UNREADABLE)
         is ApiResult.Failed -> Report.Failed(failure(result.error) ?: PlainErrors.forApiError(result.error).text)
     }
 
