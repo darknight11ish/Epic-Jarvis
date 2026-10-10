@@ -13099,16 +13099,50 @@ counts and the backup's own date, read from its `manifest.json`, before
 anything is decided), then raises ONE approval card under `restore_backup`
 - added to `jarvis_owner_check.PC_ONLY_ACTIONS`, so it always needs
 Windows Hello and is always refused from any device but this PC, whatever
-`jarvis_gate.py`'s own risk table says. On approval, Jarvis backs up the
-CURRENT state first, automatically, with a fresh one-time recovery code
-(carried in the outcome exactly once, then gone on the next read), so the
-restore itself can be undone - then writes the backup's files back.
+`jarvis_gate.py`'s own risk table says. That refusal comes FIRST, before
+the body is read, in words that say where a restore is done ("Restoring
+has to be done in Jarvis on your PC, so nothing was restored...", both
+restore routes): a caller that can never approve the card is never told to
+wait for it (2026-10-10 - an API caller used to be answered "waiting for
+your approval, with Windows Hello" and the restore was refused a
+millisecond later, with no card and no prompt). On approval, Jarvis backs
+up the CURRENT state first, automatically, with a fresh one-time recovery
+code (carried in the outcome exactly once, then gone on the next read), so
+the restore itself can be undone - then writes the backup's files back.
 Restore only adds and overwrites; it never deletes a file that is not in
 the backup. Since 2026-10-05 it also writes the archive's `source/*.py`
 back into the folder the module runs from, so the CODE comes back with the
 data; the card says plainly that restoring an OLDER backup therefore puts
 back the older program and undoes updates applied since, naming
 `apply-patches.ps1`.
+
+**The restore card must not name a file `jarvis_gate.py` protects.** The
+card is what `jarvis_gate.check()` is handed as its `prompt`, and the gate
+reads the prompt for the names in its own `_PROTECTED` list
+(`jarvis-framework.toml`, `jarvis_gate.py`, `jarvis_hud.py`, ...) before it
+raises anything: a prompt naming one is refused at tier `never`, no card is
+ever shown and no Windows Hello prompt ever comes. Measured on the owner's
+PC, 2026-10-10 16:36:12Z: `gate.refused_protected {"action":
+"restore_backup", "file": "<redacted 13 chars>"}` and then
+`backup.restore.card {"outcome": "refused"}` - "jarvis_hud.py" was in the
+card's own sentence about the program files, so a restore could never be
+approved by anybody. The card now says "the .py files in the folder Jarvis
+runs from", and `backend/test_backup.py` holds the card and the detail
+handed to the gate against the gate's own list, read from
+`jarvis-backend/jarvis_gate.py`. **The same trap is open for any other card
+whose text names a protected file**: the owner's audit log to 2026-10-10
+holds `gate.refused_protected` 21 times for `enable_reading_tool` and 21
+times for `loosen_what_asks_first` (both are in
+`jarvis_owner_check.PC_ONLY_ACTIONS`, and both cards say which line of
+`jarvis-framework.toml` they change). Whether those two should be reworded
+or the gate should stop reading a route's own card for protected names is
+the owner's call, not this module's.
+
+**What the owner reads when a restore is refused** is `last_restore.message`
+(the desktop's Settings, Backups shows it): plain words with the next step
+in them. The technical reason - which tier the gate answered at, and the
+gate's own sentence - stays in `last_restore.why`, which `GET /api/backup`
+returns and neither app shows.
 
 ## `jarvis_gate.py`: a denial proposes no standing rule
 
