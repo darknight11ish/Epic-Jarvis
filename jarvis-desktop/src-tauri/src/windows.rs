@@ -1615,11 +1615,14 @@ fn parse_hit_mask(grid: &str) -> Option<Vec<bool>> {
         .then(|| grid.bytes().map(|b| b == b'1').collect())
 }
 
-// NOT `mod tests`: this file already has one, for `clamp_into` above, and two
-// top-level `mod tests` blocks make every test target fail to compile (E0428).
-// Both modules' tests still run.
+// One test module for the whole file, which is also why it is not called
+// `floating_hit_tests` any more: it holds `clamp_into`'s tests too. A file may
+// have only one `mod tests` - two of them is E0428, `the name is defined
+// multiple times`, and that broke every test target on 2026-10-10 twice in one
+// afternoon: first when two changes each added a module, then again when the two
+// separate fixes for it were merged and kept both copies of these four tests.
 #[cfg(test)]
-mod floating_hit_tests {
+mod tests {
     use super::*;
 
     #[test]
@@ -1744,52 +1747,5 @@ mod floating_hit_tests {
         })
         .expect("serialisable");
         assert!(round.contains("\"clickThrough\":true"), "{round}");
-    }
-
-    // The four below came from a second `mod tests` above `set_widget_always_on_top`,
-    // added by a different change on the same day. Two `mod tests` in one file is
-    // a hard compile error the moment anything builds the test targets, which is
-    // how `cargo clippy --all-targets` found it (2026-10-10). They test
-    // `clamp_into`, which keeps an approval widget on the screen after it grows.
-
-    #[test]
-    fn a_widget_grown_past_the_edge_is_pulled_back() {
-        // 2026-10-10, the owner's screen: a 480x507 physical widget at
-        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
-        assert_eq!(
-            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
-            (1440, 573)
-        );
-    }
-
-    #[test]
-    fn a_widget_already_inside_is_left_exactly_where_it_is() {
-        assert_eq!(
-            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
-            (100, 100)
-        );
-    }
-
-    #[test]
-    fn a_monitor_to_the_left_of_the_primary_is_respected() {
-        // Windows' virtual screen starts at the left-most monitor, so a widget
-        // on a monitor at x=-1920 must not be dragged to 0...
-        assert_eq!(
-            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
-            (-1900, 100)
-        );
-        // ...and one hanging off its left edge comes back to it.
-        assert_eq!(
-            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
-            (-1920, 100)
-        );
-    }
-
-    #[test]
-    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
-        assert_eq!(
-            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
-            (0, 0)
-        );
     }
 }
