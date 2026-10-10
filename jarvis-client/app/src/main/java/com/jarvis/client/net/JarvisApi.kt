@@ -663,13 +663,18 @@ class JarvisApi(
     suspend fun devices(): ApiResult<JsonObject> = probe(Devices.PATH)
 
     /**
-     * `POST /api/devices/remove` or `/api/devices/shared`: the status and the
-     * body come back together ([Devices.removeSaid], [Devices.retireSaid]),
-     * so the PC's reason is shown. A 401 is a refused key.
+     * `POST /api/devices/remove`, `/api/devices/label` or `/api/devices/shared`:
+     * the status and the body come back together ([Devices.removeSaid],
+     * [Devices.labelSaid], [Devices.retireSaid]), so the PC's reason is shown.
+     * A 401 is a refused key.
+     *
+     * The allowed routes are [Devices.POST_PATHS] and nothing else, so a route
+     * that is added to the app cannot be forgotten here - which is exactly what
+     * happened to the label route, and what this check reads (see that list).
      */
     suspend fun devicesPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {
-            if (path != Devices.REMOVE_PATH && path != Devices.SHARED_PATH) {
+            if (path !in Devices.POST_PATHS) {
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a devices route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())

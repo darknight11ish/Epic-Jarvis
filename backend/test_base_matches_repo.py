@@ -36,6 +36,11 @@ WHAT IT CHECKS
      token, no `__pycache__`, no patcher backup folder, no legacy guide, and
      `jarvis-framework.toml` is the repository's template rather than the
      owner's live settings file.
+  6. `tools/check_stale_twins.py` - the fast local check a person or an agent
+     runs before pushing, so drift is named in a second instead of a CI round
+     trip later - names exactly the files this suite names. It is checked the
+     only way that means anything: on a copy of the two folders holding a
+     deliberately drifted twin, where the functions above are the judge.
 
 WHAT IT DOES NOT CHECK, PLAINLY
 
@@ -52,7 +57,10 @@ Needs nothing from the owner's PC; runs anywhere, including CI.
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 
@@ -151,6 +159,168 @@ def t_the_base_copies_are_the_same_text():
           not uncomparable, "no copy on one side: " + ", ".join(sorted(uncomparable)))
 
 
+# ---------------------------------------------------------------------------
+#   tools/check_stale_twins.py - the fast local half of this same rule
+# ---------------------------------------------------------------------------
+#
+# That tool exists because this suite reports in CI's `backend` job, after the
+# `frontend` job has taken its time: on 2026-10-10 three pull requests (#167,
+# #173, #175) each failed a full CI round trip over one or two omitted copies.
+# It reuses this file's own `shipped_pairs()` and `same_text()` rather than
+# restating them, and the checks below are what makes that claim mean
+# something: on a copy of the two folders holding a deliberately drifted twin,
+# THE FUNCTIONS ABOVE ARE THE JUDGE, and the tool must name exactly the files
+# they name. A tool that disagrees with the rule is worse than no tool, so this
+# is not a promise in a comment.
+
+CHECKER = REPO / "tools" / "check_stale_twins.py"
+DIFFER_PREFIX, MISSING_PREFIX = "stale twin: ", "missing twin: "
+
+
+def run_checker(root: Path) -> tuple:
+    """(exit code, everything the fast check printed) for one folder."""
+    done = subprocess.run(
+        [sys.executable, str(CHECKER), "--root", str(root)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=300)
+    return done.returncode, (done.stdout or "") + (done.stderr or "")
+
+
+def named_by_checker(out: str) -> set:
+    """The files the fast check reported, read from the two lines it prints."""
+    found = set()
+    for line in out.splitlines():
+        for prefix in (DIFFER_PREFIX, MISSING_PREFIX):
+            if line.startswith(prefix):
+                found.add(line[len(prefix):].split("  ")[0].strip())
+    return found
+
+
+def rule_finds(backend: Path, base: Path, shipped: tuple) -> tuple:
+    """What THIS suite says about another pair of folders: (differ, missing).
+
+    `shipped_pairs()` reads the module global BACKEND, and reads the file list
+    from `_where.SHIPPED`, so both are swapped for the length of the call. The
+    rule's own code is not copied: that is what makes the comparison an
+    agreement rather than two independent guesses that happen to match today.
+    """
+    global BACKEND, BASE
+    saved = (BACKEND, BASE, _where.SHIPPED)
+    try:
+        BACKEND, BASE = backend, base
+        _where.SHIPPED = shipped
+        differ, missing = set(), set()
+        for leaf, ours in shipped_pairs():
+            theirs = BASE / leaf
+            if not theirs.is_file() or not ours.is_file():
+                missing.add(leaf)
+            elif not same_text(theirs, ours):
+                differ.add(leaf)
+        return differ, missing
+    finally:
+        BACKEND, BASE, _where.SHIPPED = saved
+
+
+def twin_fixture(work: Path) -> tuple:
+    """A copy of the two folders holding just two real shipped modules.
+
+    Built from `_where.SHIPPED` itself, so the names are ones the rule really
+    lists and the fixture cannot rot as that list changes - one top-level
+    module and one `rebuilt/` module, plus `jarvis-framework.toml`, which
+    `shipped_pairs()` adds whether or not SHIPPED names it. The copy's own
+    `_where.py` carries a trimmed SHIPPED, which is how the fast check is told
+    which files this copy is about, and its own `test_base_matches_repo.py` is
+    the rule the fast check loads.
+    """
+    top = next(n for n in _where.SHIPPED if "/" not in n)
+    rebuilt = next(n for n in _where.SHIPPED if n.startswith("rebuilt/"))
+    shipped = (rebuilt, top)
+    copy = work / "copy"
+    (copy / "backend" / "rebuilt").mkdir(parents=True)
+    (copy / "jarvis-backend").mkdir()
+    for name in ("_where.py", "test_base_matches_repo.py"):
+        shutil.copyfile(BACKEND / name, copy / "backend" / name)
+    with (copy / "backend" / "_where.py").open("a", encoding="utf-8",
+                                               newline="\n") as handle:
+        handle.write("\n\n# the agreement test's own list\nSHIPPED = (%r, %r)\n"
+                     % shipped)
+    for name in ("rebuilt/jarvis-framework.toml", rebuilt, top):
+        leaf = name.rsplit("/", 1)[-1]
+        shutil.copyfile(BACKEND / name, copy / "backend" / name)
+        shutil.copyfile(BACKEND / name, copy / "jarvis-backend" / leaf)
+    return copy, shipped, top.rsplit("/", 1)[-1], rebuilt.rsplit("/", 1)[-1]
+
+
+def t_the_stale_twin_check_agrees_with_the_rule():
+    check("tools/check_stale_twins.py, the fast local twin check, is here",
+          CHECKER.is_file(), str(CHECKER))
+    if not CHECKER.is_file():
+        return
+    work = Path(tempfile.mkdtemp(prefix="twin-guard-"))
+    try:
+        copy, shipped, top_leaf, rebuilt_leaf = twin_fixture(work)
+        backend, base = copy / "backend", copy / "jarvis-backend"
+
+        code, out = run_checker(copy)
+        differ, missing = rule_finds(backend, base, shipped)
+        check("the copies agree on a matching pair of folders, so a red run "
+              "below is the drift and not the fixture",
+              code == 0 and not differ and not missing
+              and not named_by_checker(out),
+              f"the tool exited {code}: {out}")
+
+        drifted = base / top_leaf
+        drifted.write_bytes(drifted.read_bytes()
+                            + b"# drifted by the agreement test\n")
+        code, out = run_checker(copy)
+        differ, missing = rule_finds(backend, base, shipped)
+        check(f"a drifted twin is red, and the tool names the same file this "
+              f"suite does ({top_leaf})",
+              code == 1 and differ == {top_leaf}
+              and named_by_checker(out) == differ | missing,
+              f"the tool named {sorted(named_by_checker(out))} and exited "
+              f"{code}; this suite says differ={sorted(differ)}, "
+              f"missing={sorted(missing)}")
+
+        shutil.copyfile(backend / top_leaf, drifted)
+        code, out = run_checker(copy)
+        check("... and green again once that file is copied back",
+              code == 0 and not named_by_checker(out),
+              f"the tool exited {code}: {out}")
+
+        twin = base / rebuilt_leaf
+        twin.write_bytes((backend / "rebuilt" / rebuilt_leaf).read_bytes()
+                         .replace(b"\n", b"\r\n"))
+        code, out = run_checker(copy)
+        check("a twin that differs only in line endings is green, the rule "
+              "_where._same_text() uses (a Windows clone holds CRLF)",
+              code == 0 and not named_by_checker(out),
+              f"the tool exited {code}: {out}")
+        shutil.copyfile(backend / "rebuilt" / rebuilt_leaf, twin)
+
+        (base / top_leaf).unlink()
+        code, out = run_checker(copy)
+        differ, missing = rule_finds(backend, base, shipped)
+        check(f"a twin missing from the base is red too, and named "
+              f"({top_leaf}) - the suite fails for that as well",
+              code == 1 and missing == {top_leaf}
+              and named_by_checker(out) == differ | missing,
+              f"the tool named {sorted(named_by_checker(out))} and exited "
+              f"{code}; this suite says differ={sorted(differ)}, "
+              f"missing={sorted(missing)}")
+        shutil.copyfile(backend / top_leaf, base / top_leaf)
+
+        empty = work / "no-rule-here"
+        empty.mkdir()
+        code, out = run_checker(empty)
+        check("a folder with no rule in it is a failure the tool reports, "
+              "never a quiet pass",
+              code == 1 and "could not be read" in out,
+              f"the tool exited {code}: {out}")
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 def t_the_base_is_complete_on_its_own():
     """`scripts/check-backend.ps1`'s walk, in Python and in the same shape:
     only the project's own `jarvis_*` names count, the name after `from` is
@@ -235,6 +405,7 @@ if __name__ == "__main__":
     for fn in (t_the_base_is_there_and_is_a_backend,
                t_every_shipped_module_is_in_the_base,
                t_the_base_copies_are_the_same_text,
+               t_the_stale_twin_check_agrees_with_the_rule,
                t_the_base_is_complete_on_its_own,
                t_the_files_beside_the_code_are_there,
                t_no_private_or_generated_file_was_swept_in,
