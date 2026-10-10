@@ -3,7 +3,7 @@
 There are **290 markdown documents** here, adding up to about **6.8 MB**. Neither
 number is a guess, and neither is asked to stay still: the documents are written
 to all day, so the count and the size both move. Both were measured on 2026-10-06
-with the two lines below, run from the top of the repository - so run them again
+PROBE-CONFLICTING-LINE
 whenever you want today's numbers rather than this page's:
 
 ```powershell
