@@ -174,9 +174,17 @@ internal fun LimitsSection(canAct: Boolean) {
     }
 }
 
-/** ONE limit: the PC's title, the value in the PC's words, and its control. */
+/**
+ * ONE limit: the PC's title, the value in the PC's words, and its control.
+ *
+ * `internal` rather than private since 2026-10-10: the PC's own notification
+ * rows are drawn by a second card ([PcNotifySection], the desktop's
+ * "Notifications" card on the phone), and the two must not grow separate
+ * copies of the same switch, step and clock. Every control here is the same
+ * one, wired to the same `Limits.Row` and the same write.
+ */
 @Composable
-private fun LimitRow(
+internal fun LimitRow(
     row: Limits.Row,
     enabled: Boolean,
     onChange: (JsonElement) -> Unit,
@@ -289,10 +297,13 @@ private fun LimitRow(
  * The dialog hands back the same shape the PC takes, "HH:MM", through
  * [Limits.validTime] - so a time can never leave this phone in a shape the PC
  * would refuse, and it is never turned into a number of minutes anywhere.
+ *
+ * `internal` beside [LimitRow], for the same reason: the quiet-hours times on
+ * the PC's Notifications card are these two rows, and one picker serves both.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeRowDialog(
+internal fun TimeRowDialog(
     row: Limits.Row,
     onDismiss: () -> Unit,
     onChosen: (String) -> Unit,
