@@ -430,6 +430,7 @@
       if (channel === "event") deliver(payload);
       else if (channel === "link") linkChanged(payload);
       else if (channel === "appearance") appearanceChanged(payload);
+      else if (channel === "bar") barStateChanged(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
@@ -1126,6 +1127,12 @@
    * - it shows a window and sends nothing). The mic button stays: it
    * already opens the bar.
    *
+   * AND IT IS ONE BUTTON THAT TOGGLES (the owner's ask of 2026-10-09, with a
+   * screenshot): its label follows what is on screen - "Open the Jarvis bar"
+   * while the bar is hidden, "Hide the Jarvis bar" while it is shown - and
+   * clicking it again hides the bar. The state reaches this page from the
+   * shell, never from the click: see `barOnScreen` below.
+   *
    * Why the reversal was possible: what was held against the box is now a
    * KNOWN LIMITATION of this window, not a reason to hide it. It is its
    * own conversation, with its own id, and it is filed in History as HUD
@@ -1159,10 +1166,24 @@
    * and fails unless the two agree - value by value, by running this code.
    * ---------------------------------------------------------------- */
   var OPEN_BAR = "Open the Jarvis bar";
-  var OPEN_BAR_SAID = "Chat with Jarvis in the Jarvis bar - it opens now.";
+  var HIDE_BAR = "Hide the Jarvis bar";
 
   /* The localStorage key src/hud-window.js exports as OPEN_BAR_KEY. */
   var OPEN_BAR_KEY = "jarvis.hud.openBar";
+
+  /* Whether the Jarvis bar is on screen. NOT guessed and NOT remembered from
+   * a click: the shell knows (src-tauri/src/windows.rs `publish_bar_state`)
+   * and pushes it on the feed's own "bar" channel, because the bar can also
+   * go away by itself - losing focus, its X, an open-a-chat call from another
+   * window - and a label that only followed this button's own clicks would go
+   * on saying "Hide the Jarvis bar" with nothing on screen to hide.
+   *
+   * A page that has just loaded has heard nothing yet, and a bar summoned
+   * before it loaded is already up, so the shell pushes the state again on
+   * every page load (lib.rs, `on_page_load`), exactly as it does the link and
+   * the appearance document. Until then: hidden, which is how the bar
+   * starts. */
+  var barOnScreen = false;
 
   /* Whether the button shows: ON unless this computer saved it off, and ON
    * when storage cannot be read at all - the reading notifications-prefs.js's
@@ -1178,19 +1199,55 @@
     }
   }
 
+  /* The words the button carries, given what is on screen (the owner's ask of
+   * 2026-10-09: it said "Open the Jarvis bar" whether the bar was open or
+   * not). The same shape as the wording that was already there - an imperative
+   * and the bar's name - and the SAME string is the tooltip and the accessible
+   * name, so a screen reader is never told something the sighted label
+   * contradicts. `title` is set from this, never from a fixed line. */
+  function barLabel(on) {
+    return on ? HIDE_BAR : OPEN_BAR;
+  }
+
+  function paintOpenBarLabel() {
+    var drawn = document.getElementById("hud-open-bar");
+    if (!drawn) return;
+    var words = barLabel(barOnScreen);
+    if (drawn.textContent !== words) drawn.textContent = words;
+    if (drawn.title !== words) drawn.title = words;
+  }
+
+  /* The shell's push: the bar came on screen, or went. Repaints the label and
+   * nothing else - it decides nothing, and it is the only writer of
+   * `barOnScreen`. */
+  function barStateChanged(visible) {
+    barOnScreen = visible === true;
+    paintOpenBarLabel();
+  }
+
   function openBarFromHud() {
     var tauri = window.__TAURI__;
     var invoke = tauri && tauri.core && tauri.core.invoke;
     if (typeof invoke !== "function") return;
+    /* One button, both directions (the owner's ask of 2026-10-09: clicking it
+     * again hides the bar). Which command to send follows the state the shell
+     * pushed, because the button is labelled from that same state - so the
+     * words on it and what a click does can never disagree. The shell answers
+     * a push of its own, which is what flips the label back. */
+    var command = barOnScreen ? "hide_quickbar" : "hud_open_bar";
     Promise.resolve()
       .then(function () {
-        return invoke("hud_open_bar");
+        return invoke(command);
       })
       .catch(function (err) {
         hudMicNote(
-          "Could not open the Jarvis bar: " +
+          "Could not " +
+            (command === "hide_quickbar" ? "hide" : "open") +
+            " the Jarvis bar: " +
             String((err && err.message) || err) +
-            ". Open it with its shortcut (Alt+Space unless you changed it)."
+            (command === "hide_quickbar"
+              ? ". Press Escape in it, or close it with its X."
+              : ". Open it with its shortcut (Alt+Space unless you changed it).")
         );
       });
   }
@@ -1204,13 +1261,15 @@
     open.type = "button";
     open.id = "hud-open-bar";
     open.className = "act primary hud-open-bar";
-    open.textContent = OPEN_BAR;
+    open.textContent = barLabel(barOnScreen);
     // The page's `.act` is a square icon button; this one carries words.
     // hud-link.css could not be used for it: that file has rules for the
     // mark and the link line only, and no width rule for this id.
     open.style.width = "auto";
     open.style.padding = "0 14px";
-    open.title = OPEN_BAR_SAID;
+    // The tooltip and the accessible name are the visible label, so the two
+    // can never contradict each other in a screen reader.
+    open.title = barLabel(barOnScreen);
     open.addEventListener("click", openBarFromHud);
     input.parentNode.insertBefore(open, input);
   }

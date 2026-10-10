@@ -148,12 +148,19 @@ permissions = [
 # chat box, which chats as HUD and has no Temporary chat, New conversation,
 # "Used in this answer" or crisis panel (reversed 2026-10-06) - `hud_open_bar`,
 # which sends nothing either.
+#
+# The same button hides the bar again when it is already up (the owner's ask of
+# 2026-10-09: one button that toggles, labelled from what the shell says is on
+# screen). `hide_quickbar` is the Jarvis bar's own hide, so the worst this page
+# can do with it is take the bar off screen - less than `hud_open_bar` already
+# lets it do, and it decides nothing, approves nothing and hides nothing else.
 [[set]]
 identifier = "hud-voice"
-description = "Show the quickbar with push-to-talk ready, or with its box ready to type in. Opens no microphone, sends and records nothing."
+description = "Show the quickbar with push-to-talk ready, or with its box ready to type in, and hide it again. Opens no microphone, sends and records nothing."
 permissions = [
   "allow-summon-push-to-talk",
   "allow-hud-open-bar",
+  "allow-hide-quickbar",
 ]
 
 # The HUD page's requests to Jarvis, made in Rust with the token, so the page

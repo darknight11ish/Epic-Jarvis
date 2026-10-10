@@ -329,6 +329,9 @@ pub(crate) fn show_quickbar_unlocked(app: &AppHandle) -> Result<(), String> {
         .set_focus()
         .map_err(|e| format!("unable to focus the quickbar: {e}"))?;
 
+    // The HUD's own button is labelled from this.
+    publish_bar_state(app);
+
     Ok(())
 }
 
@@ -356,7 +359,44 @@ pub(crate) fn show_quickbar_quietly(app: &AppHandle) -> Result<(), String> {
         .map_err(|e| format!("unable to show the quickbar: {e}"))?;
     window
         .set_always_on_top(true)
-        .map_err(|e| format!("unable to raise the quickbar: {e}"))
+        .map_err(|e| format!("unable to raise the quickbar: {e}"))?;
+    // The HUD's own button is labelled from this.
+    publish_bar_state(app);
+    Ok(())
+}
+
+/// Whether the Jarvis bar is on screen, as the HUD's own button needs it.
+///
+/// `false` when the window has gone: a bar that does not exist is not showing.
+pub fn is_quickbar_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(QUICKBAR_LABEL)
+        .and_then(|window| window.is_visible().ok())
+        .unwrap_or(false)
+}
+
+/// Tells the HUD whether the Jarvis bar is on screen, on the feed's own "bar"
+/// channel (`hud_bootstrap.js` section 2's `barStateChanged`).
+///
+/// THE OWNER'S ASK (2026-10-09, with a screenshot): the button beside the big
+/// window's chat box said "Open the Jarvis bar" whether the bar was open or
+/// not. Its label follows this, and it is the only thing that does - the bar
+/// can also leave the screen without that button being touched at all (losing
+/// focus, its X, Escape, another window's "open a chat"), and a label that
+/// watched only the button's own clicks would go on offering to hide a bar
+/// that is already gone.
+///
+/// Pushed rather than asked for: everything the HUD may call is granted to it
+/// by hand in `permissions/surfaces.toml` and `capabilities/hud.json`, because
+/// it loads a page vendored from the backend - so a command added for a label
+/// would be new surface that page could reach. A push costs it nothing, and
+/// `push_to_hud` already carries the link and the appearance document there
+/// the same way.
+///
+/// Cosmetic and one boolean: it starts nothing, decides nothing, and carries
+/// no words of the owner's. Called after every quickbar show and hide, and on
+/// every HUD page load.
+pub fn publish_bar_state(app: &AppHandle) {
+    crate::push_to_hud(app, "bar", &is_quickbar_visible(app));
 }
 
 /// Hides the quickbar and drops any pin, so the next summon starts clean.
@@ -370,6 +410,10 @@ pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
     let hidden = window
         .hide()
         .map_err(|e| format!("unable to hide the quickbar: {e}"));
+    // The HUD's own button is labelled from this (windows.rs
+    // `publish_bar_state`): it said "Open the Jarvis bar" whether the bar was
+    // on screen or not.
+    publish_bar_state(app);
     // The bar closed: a look held for follow-ups is thrown away (look.rs).
     crate::look::bar_closed(app);
     hidden
