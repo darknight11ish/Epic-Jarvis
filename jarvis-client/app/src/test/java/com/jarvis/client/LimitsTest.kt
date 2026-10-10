@@ -183,12 +183,17 @@ class LimitsTest {
     @Test
     fun `the write path is held on a stale link and reports the PC's own failure`() {
         val rt = source(RUNTIME)
-        val method = rt.substringAfter("suspend fun setLimit(").take(900)
+        val method = rt.substringAfter("suspend fun setLimit(").take(1100)
         assertTrue("the stale-link blocker is checked first, as setManner does:\n$method",
-            method.contains("actionBlocker()?.let { return it }"))
+            method.contains("actionBlocker()?.let { return com.jarvis.client.net.Limits.Answer(it, changed = false) }"))
         assertTrue("the PC's sentence is read, not invented", method.contains("Limits.answer("))
         assertTrue("a refusal goes into the shared notice too",
             method.contains("_notice.value = answer.sentence"))
+        // Both halves of the answer come back, so the plate can say a save did
+        // not happen (item 9, 2026-10-10) - the sentence alone was drawn the
+        // same way whether it worked or not.
+        assertTrue("the whole answer comes back, not just its words",
+            method.contains(": com.jarvis.client.net.Limits.Answer {"))
     }
 
     // ----------------------------------------------------------- the answer --
@@ -238,6 +243,67 @@ class LimitsTest {
         assertTrue(Limits.classifyPost(200, null) is ApiResult.Failed)
     }
 
+    @Test
+    fun `a save that never happened says so instead of closing as if it worked`() {
+        // THE BUG THIS EXISTS FOR (item 9, found on the owner's phone
+        // 2026-10-10). The PC's own `POST /api/limits/settings` is NOT there on
+        // this install - `jarvis_hud.py`'s dispatcher never reaches
+        // `_desktop_action` for that route, so it answers 404 with the
+        // server's own `{"error": "not found"}` (measured on the owner's PC:
+        // 404, that body; `GET /api/limits` answers 200). That body's `error`
+        // matched the branch below that keeps the PC's own sentence, so the
+        // 404 was read as a SUCCESSFUL answer whose sentence was the literal
+        // text "not found" - `changed` came out true, nothing went into the
+        // shared notice, and choosing a new time closed the picker as if it
+        // had saved.
+        val notFound = JarvisJson.parseToJsonElement("""{"error":"not found"}""") as JsonObject
+        val missingRoute = Limits.classifyPost(404, notFound)
+        assertTrue("a 404 is not an answer about the change: $missingRoute",
+            missingRoute is ApiResult.Failed)
+        val answer = Limits.answer(missingRoute)
+        assertEquals("the owner reads the plain sentence, not the server's",
+            Limits.MISSING, answer.sentence)
+        assertFalse("and nothing is pretended to have changed", answer.changed)
+
+        // The PC's own refusals still arrive in the PC's own words, unchanged:
+        // this fix may not swallow a real sentence.
+        val refused = Limits.answer(Limits.classifyPost(403, JarvisJson.parseToJsonElement(
+            """{"ok":false,"pc_only":true,"error":"That can only be changed on the PC."}""") as JsonObject))
+        assertEquals("That can only be changed on the PC.", refused.sentence)
+        assertFalse(refused.changed)
+    }
+
+    @Test
+    fun `the plate says a failed save on the row it was asked for`() {
+        val plate = source(PLATE)
+        // WHERE, not only WHAT. The answer used to be drawn once for the whole
+        // card, under a dozen rows - off the bottom of the screen for a change
+        // made near the top, and off the top for one made near the bottom (the
+        // quiet-hours clock, measured on the owner's phone 2026-10-10). It is
+        // drawn per row now, under that row's own control.
+        val rowCall = plate.substringAfter("else -> v.forEach").take(600)
+        assertTrue("the answer is passed to the row it belongs to:\n$rowCall",
+            rowCall.contains("said = if (saidFor == r.key) said else null"))
+        // ...and the row draws it after its control, never before it.
+        val rowFn = plate.substringAfter("private fun LimitRow(")
+        val control = rowFn.indexOf("Toggle(")
+        val answer = rowFn.indexOf("said?.let")
+        assertTrue("the answer is drawn under the row's control (control=$control, answer=$answer)",
+            control in 0 until answer)
+        assertTrue("a save that changed nothing is drawn as a warning",
+            plate.contains("if (saidFailed) chrome.warnInk"))
+        assertTrue("the plate knows whether anything was written",
+            plate.contains("saidFailed = !a.changed"))
+        assertTrue("and both halves come from the one write",
+            plate.contains("val a = JarvisRuntime.setLimit(key, value)"))
+        assertTrue("the sentence remembers which row asked for it",
+            plate.contains("saidFor = key"))
+        // Cleared before every change, so an old answer can never stand in for
+        // this one's - on the row itself or on any other.
+        assertTrue(plate.contains("saidFor = null"))
+        assertTrue(plate.contains("saidFailed = false"))
+    }
+
     // -------------------------------------------------------- the screen ----
 
     @Test
@@ -246,7 +312,7 @@ class LimitsTest {
         assertTrue("the plate must draw the filtered list",
             plate.contains("rows = Limits.offered(r.value)"))
         assertTrue("every control goes through the runtime's one write",
-            plate.contains("said = JarvisRuntime.setLimit(key, value)"))
+            plate.contains("val a = JarvisRuntime.setLimit(key, value)"))
         assertTrue("the plate never posts to a route itself", !plate.contains("/api/"))
         for (control in listOf("Limits.choiceWords(", "Limits.downWords(", "Limits.upWords(",
                                "Limits.rowWords(", "contentDescription")) {

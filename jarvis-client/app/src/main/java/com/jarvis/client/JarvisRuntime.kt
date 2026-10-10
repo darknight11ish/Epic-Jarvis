@@ -2489,14 +2489,20 @@ object JarvisRuntime {
      * refusal is never only a line inside one plate. The screen re-reads the
      * row afterwards, because a 2xx can mean "a card is waiting there" and
      * never means "it is on".
+     *
+     * BOTH HALVES OF THE ANSWER COME BACK (2026-10-10), not just the sentence:
+     * the plate has to be able to say that the save did NOT happen, which is
+     * what [com.jarvis.client.net.Limits.Answer.changed] is. This call used to
+     * return the sentence alone, so a failed save was drawn exactly like a
+     * successful one.
      */
-    suspend fun setLimit(key: String, value: JsonElement): String {
-        actionBlocker()?.let { return it }
+    suspend fun setLimit(key: String, value: JsonElement): com.jarvis.client.net.Limits.Answer {
+        actionBlocker()?.let { return com.jarvis.client.net.Limits.Answer(it, changed = false) }
         val answer = com.jarvis.client.net.Limits.answer(
             api.setLimit(com.jarvis.client.net.Limits.body(key, value)),
         )
         if (!answer.changed) _notice.value = answer.sentence
-        return answer.sentence
+        return answer
     }
 
     // ---------------------------------------- the interruption budget ----

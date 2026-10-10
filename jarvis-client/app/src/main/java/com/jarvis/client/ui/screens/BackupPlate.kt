@@ -19,12 +19,27 @@ import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.theme.LocalChrome
 
 /**
- * "Backups" ([Backup], the owner's decision of 2026-09-27) - read-only on
- * the phone, on purpose. Choosing a folder, backing up now, seeing a
- * recovery code and restoring all happen on the PC, in Jarvis Desktop's
- * Settings - Windows' own folder picker, and restoring needs Windows Hello
- * there (docs/ARCHITECTURE.md section 8). This shows only when the last
- * backup was made.
+ * "Backups" ([Backup], the owner's decision of 2026-09-27) - what a phone can
+ * see, and plainly what it cannot.
+ *
+ * It shows one thing the PC tells a phone: when the last backup was made
+ * ([Backup.line]). Making one, choosing the folder, restoring and deleting
+ * older copies all happen on the PC, in Jarvis Desktop's Settings - Windows'
+ * own folder picker, and a restore needs Windows Hello there
+ * (docs/ARCHITECTURE.md section 8).
+ *
+ * THE OWNER ASKED FOR A "BACK UP NOW" BUTTON HERE (2026-10-10) and this screen
+ * says why it is not here instead of drawing one that cannot work: the PC
+ * refuses `/api/backup/now` from anything but itself, so a phone over Tailscale
+ * or NordVPN Meshnet gets 403 every time ([Backup.PC_ONLY] has the words and
+ * the evidence). The recovery code is named too ([Backup.CODE_WARNING]) - it
+ * is shown once, on the PC, and a backup whose code is lost can never be
+ * opened.
+ *
+ * The three lines this plate used to draw for a waiting delete-older card, the
+ * last delete's outcome and the erase limit are GONE rather than left in
+ * place: the PC sends those to this PC only, so on a phone they were branches
+ * that could never run ([Backup]'s own comment).
  */
 @Composable
 internal fun BackupSection() {
@@ -67,26 +82,15 @@ internal fun BackupSection() {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
-                else -> {
-                    Text(Backup.line(v), style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
-                    if (v.pendingDeleteOlder) {
-                        Gap(4)
-                        Text("A card to delete older backups is waiting on your PC.",
-                            style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
-                    } else if (!v.lastDeleteOlder?.message.isNullOrBlank()) {
-                        Gap(4)
-                        Text(v.lastDeleteOlder!!.message!!, style = MaterialTheme.typography.bodySmall,
-                            color = if (v.lastDeleteOlder.outcome == "deleted") chrome.okInk else chrome.textMid)
-                    }
-                    if (!v.eraseLimit.isNullOrBlank()) {
-                        Gap(6)
-                        Text(v.eraseLimit, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-                        Gap(4)
-                        Text("To delete older backup copies now, use Delete older backups in Jarvis Desktop (Settings > Backups).",
-                            style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-                    }
-                }
+                else -> Text(Backup.line(v), style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textHi)
             }
+            // Said whichever way the read went: these two are the PC's own
+            // rules, not the answer to a request that could have failed.
+            Gap(8)
+            Text(Backup.PC_ONLY, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Gap(6)
+            Text(Backup.CODE_WARNING, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
         }
     }
 }

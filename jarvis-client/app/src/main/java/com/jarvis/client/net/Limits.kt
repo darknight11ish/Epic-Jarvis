@@ -305,13 +305,25 @@ object Limits {
 
     /** A POST's status and body, read the way [WebSearch.classifyPost] reads them. */
     fun classifyPost(code: Int, body: JsonObject?): ApiResult<JsonObject> = when {
+        // A 404 IS CHECKED FIRST, AND IT IS NOT AN ANSWER ABOUT THE CHANGE
+        // (fixed 2026-10-10). Every other refusal carries the PC's OWN
+        // sentence in `error` ("That can only be changed on the PC."), and the
+        // branch below keeps it so the owner reads the PC's words. A 404 is
+        // different in kind: it means the ROUTE is not there at all, and its
+        // body carries the SERVER's words - literally "not found"
+        // (`jarvis_hud.py`'s own fallback). Read as an answer, that made a save
+        // that never happened look like one that had: the plate drew "not
+        // found" as if it were the PC's sentence and `changed` came out true,
+        // so nothing was said in the shared notice and the picker closed as if
+        // it had worked. A missing route is exactly what [missing] and
+        // [MISSING] are for, so it is classified as the failure it is.
+        code == 404 -> ApiResult.Failed(ApiError.NotFound)
         // The PC's own sentence IS the answer - a refusal ("That has to be
         // between 1 and 1000."), a card's card-denied line, or a `said`. Shown
         // as it arrived; 400/403/409/503 all carry one.
         body?.text("error") != null || body?.text("said") != null -> ApiResult.Ok(body)
         code in 200..299 && body != null -> ApiResult.Ok(body)
         code == 401 || code == 403 -> ApiResult.Failed(ApiError.BadToken)
-        code == 404 -> ApiResult.Failed(ApiError.NotFound)
         code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
         else -> ApiResult.Failed(ApiError.Server(code, ""))
     }
