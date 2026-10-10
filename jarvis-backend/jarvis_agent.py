@@ -1261,10 +1261,15 @@ class _PlanStepVerdict:
     audit trail (outcome, tier, request_id) is the exact same one every
     other tool call already gets, never a stand-in for it."""
 
-    def __init__(self, allowed: bool, reason: str = "", outcome: str = ""):
+    def __init__(self, allowed: bool, reason: str = "", outcome: str = "",
+                 gate: str = ""):
         self.allowed = allowed
         self.reason = reason
         self.outcome = outcome or ("approved" if allowed else "refused")
+        #: The technical reason, when there is one, for a bug report: which tier
+        #: answered and which setting to change. Never shown to the owner; the
+        #: plan's own words about why a step did not run are `reason`.
+        self.gate = gate
 
 
 def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
@@ -1391,11 +1396,9 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
                           else "writes a note after Jarvis read outside text")
             verdict = _PlanStepVerdict(
                 False, outcome=str(getattr(verdict, "outcome", None) or "unknown"),
-                reason=(f"{step.tool} {why_person}, so it only runs after "
-                        f"the owner approves it on a card - but the approval gate let it "
-                        f"through at tier {vtier!r} without asking anyone. Nothing ran. "
-                        f"To use it, set {action_name} to \"ask\" in "
-                        f"jarvis-framework.toml's [autonomy.tiers]."))
+                reason=NOBODY_ASKED_WORDS.format(name=step.tool, why=why_person,
+                                                 action=action_name),
+                gate=NOBODY_ASKED_WHY.format(tier=vtier, action=action_name))
         cache[key] = (tool, state, checked_args, verdict)
         return cache[key]
 
@@ -2197,6 +2200,42 @@ NEEDS_A_PERSON = {
 #: program someone else wrote, running as the owner. Such a tool carries
 #: `outside_program = True`; its name is not known until the program says.
 OUTSIDE_PROGRAM_WHY = "is a tool from a plug-in program on this PC"
+
+#: WHAT THE OWNER READS WHEN A TOOL THAT MUST ASK WAS LET THROUGH WITHOUT
+#: ASKING ANYBODY (2026-10-10). The gate's verdict came back at a tier that is
+#: not "ask": a looser tier (auto/notify) lets the call run with nobody asked,
+#: and "never" refuses it outright. Either way the tool did not run, and the
+#: old words said it as `"the approval gate let it through at tier 'auto'
+#: without asking anyone ... set X to "ask" in jarvis-framework.toml's
+#: [autonomy.tiers]"` - accurate, and written for a programmer.
+#:
+#: These three sentences are what a person reads. They say what happened
+#: (nothing ran), that the settings file is the thing letting it through, and
+#: the one concrete thing to do. The tier, the gate's own action name and the
+#: setting to change are kept in the same tool result under `gate`, which is
+#: fed to the model with the rest of the JSON (so the model can still explain
+#: it) and which no owner-facing sentence quotes. The `refused: ` prefix the
+#: tool result carries stays: it is how the model reading a tool result knows
+#: the call did not happen, and it is put on in front of these sentences.
+NOBODY_ASKED_WORDS = (
+    "{name} {why}, so it only runs after you say yes on a card - and this time "
+    "nobody was asked, so nothing was run. Your settings file is letting it through without "
+    "asking: open jarvis-framework.toml, put {action} back to \"ask\", then try again from "
+    "Jarvis on the PC.")
+NOBODY_ASKED_NOTE_WORDS = (
+    "{name} writes to your notes, and this turn had read something from outside, so "
+    "it only runs after you say yes on a card - and this time nobody was asked, so nothing "
+    "was written. Your settings file is letting it through without asking: open "
+    "jarvis-framework.toml, put {action} back to \"ask\", then try again from Jarvis on the PC.")
+NOBODY_ASKED_SEARCH_WORDS = (
+    "this search asks you first ({card}), and this time nobody was asked, so nothing "
+    "was sent. Your settings file is letting it through without asking: open "
+    "jarvis-framework.toml, put {action} back to \"ask\", then try again from Jarvis on the PC.")
+#: The technical half of those refusals, for a bug report: the tier the gate
+#: answered at, and the setting and section to change. Kept in the record's
+#: `gate`; never in a sentence a person reads.
+NOBODY_ASKED_WHY = ("the approval gate let it through at tier {tier!r} without asking anyone; "
+                    "set {action} to \"ask\" in jarvis-framework.toml's [autonomy.tiers]")
 
 
 #: LIGHTS_WITHOUT_CARD - the owner's decision of 2026-09-26, after the
@@ -7929,25 +7968,18 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         vaction = getattr(verdict, "action", None) or action_name
         why = NEEDS_A_PERSON.get(name) or OUTSIDE_PROGRAM_WHY
         result = {"ok": False,
-                  "error": (f"refused: {name} {why}, so it "
-                            f"only runs after the owner approves it on a "
-                            f"card - but the approval gate let it through "
-                            f"at tier {vtier!r} without asking anyone. "
-                            f"Nothing was run. To use it, set "
-                            f"{vaction} to \"ask\" in "
-                            f"jarvis-framework.toml's [autonomy.tiers].")}
+                  "error": "refused: " + NOBODY_ASKED_WORDS.format(
+                      name=name, why=why, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
     elif note_why and not _a_person_said_yes(verdict):
         # Allowed, but nobody was asked - after outside text. See NOTE_WRITES.
         say_step("tool_refused", name)
         vtier = getattr(verdict, "tier", None) or "unknown"
         vaction = getattr(verdict, "action", None) or action_name
         result = {"ok": False,
-                  "error": (f"refused: {name} writes to the owner's notes, and outside "
-                            f"text shaped this turn, so it only runs after the owner "
-                            f"approves it on a card - but the approval gate let it "
-                            f"through at tier {vtier!r} without asking anyone. "
-                            f"Nothing was written. To use it, set {vaction} to "
-                            f"\"ask\" in jarvis-framework.toml's [autonomy.tiers].")}
+                  "error": "refused: " + NOBODY_ASKED_NOTE_WORDS.format(
+                      name=name, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
     elif out.gone:
         # Approved - but the app that asked has gone, so nobody would see
         # what it did or the answer that followed. Not run; the owner is told
@@ -8156,11 +8188,11 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
             steps.append(step)
             say_step("tool_refused", name)
             vtier = getattr(verdict, "tier", None) or "unknown"
-            return reply({"ok": False, "error": (
-                f"refused: this search asks the owner first ({lines[0]}) - but the "
-                f"approval gate let it through at tier {vtier!r} without asking anyone. "
-                f"Nothing was sent. To use it, set {WS.ACTION_SEARCH} to \"ask\" in "
-                f"jarvis-framework.toml's [autonomy.tiers].")})
+            return reply({"ok": False,
+                          "error": "refused: " + NOBODY_ASKED_SEARCH_WORDS.format(
+                              card=lines[0], action=WS.ACTION_SEARCH),
+                          "gate": NOBODY_ASKED_WHY.format(tier=vtier,
+                                                          action=WS.ACTION_SEARCH)})
     if out.gone:
         steps.append(step)
         say_step("tool_refused", name)
