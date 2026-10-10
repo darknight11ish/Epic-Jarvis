@@ -68,12 +68,21 @@
   </head>
   <body>
     <div id="drag" data-tauri-drag-region>
+      <!--
+        `&clear=1`: the frame paints nothing behind the face. This window is
+        the one surface that is a transparent hole on the desktop (the Rust
+        side builds it with `.transparent(true)` and no shadow), so the face
+        has to float on the desktop rather than sit on the shell's own
+        background. Only this page passes it: the Widget's round tray and the
+        HUD load the same faces.html without it (`faces.html`'s own note on
+        CLEAR_BG says why the flag, and not a shared rule, is the scoping).
+      -->
       <iframe
         id="face-frame"
         title="Jarvis"
         tabindex="-1"
         aria-hidden="true"
-        src="faces.html?mode=display&feed=parent"
+        src="faces.html?mode=display&feed=parent&clear=1"
       ></iframe>
     </div>
     <!-- The face is decorative and hidden from screen readers; what it
