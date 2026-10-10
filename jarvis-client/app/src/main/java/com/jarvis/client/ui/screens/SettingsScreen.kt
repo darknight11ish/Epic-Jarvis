@@ -649,7 +649,11 @@ fun SettingsScreen(
             // `canAct` gate - nothing here reaches the PC. It is NOT the animal's
             // frame rate, which lives in Appearance; ScreenRate.kt's own doc says
             // why the two must never be merged.
-            if (menus.shows("settings.screen-rate")) item(key = "screen-rate") {
+            //
+            // `drawn` sits OUTSIDE `menus.shows`, like the row below: without it
+            // the search box would hide every other card and leave this one on
+            // screen, which SettingsSearchTest checks row by row (2026-10-09).
+            if (drawn("screen-rate")) if (menus.shows("settings.screen-rate")) item(key = "screen-rate") {
                 MenuFrame(menus, "settings.screen-rate") {
                     ScreenRateSection(
                         chosen = screenRate,
