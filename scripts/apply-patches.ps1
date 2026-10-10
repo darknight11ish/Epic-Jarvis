@@ -1287,6 +1287,30 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # --- drop-in modules (feat/plug-and-play-modules) ------------------------
+    # Last, like every new patch, and its context is tutorials.patch's own
+    # install block - the last one in the file. It adds ONE more block of the
+    # same shape, calling jarvis_plugins.install(), which loads every folder
+    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
+    # own install(). Nothing else about the core changes, and nothing about
+    # the 18 features it can carry changes: each still ships its own module
+    # and each module still wraps the Handler itself.
+    #
+    # This patch is applied ONCE, and it is the only core change the whole
+    # plug-in system needs. After it, adding or removing one of those features
+    # is a folder - scripts\add-plugin.ps1 and remove-plugin.ps1 - and never
+    # another patch. plugins/registry.json says which features those are, and
+    # for every other patch in this list, in plain words, what it does that
+    # stops it being one (a gate entry, a route in the core, an edit to a line
+    # the core already has).
+    #
+    # It cannot be applied on its own: its context is the output of the stack
+    # above it, so it needs that stack, which is what this script rehearses
+    # and enforces. If your tree differs, the dry run stops and nothing at all
+    # is changed - the safe failure this script already has. A tree that
+    # differs on purpose can skip the patch and paste the four lines by hand;
+    # plugins/loader/README.md prints them.
+    'plugin-loader.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1576,6 +1600,8 @@ $SHIPPED = @(
     'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
     'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
     'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
+    # --- Drop-in modules (feat/plug-and-play-modules) ---
+    'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
 )
 
 # The settings file. Installed only where none exists; never overwritten.
