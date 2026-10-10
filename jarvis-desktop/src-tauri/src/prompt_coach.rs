@@ -331,13 +331,18 @@ mod tests {
     fn the_four_settings_ride_on_the_calls_that_already_existed() {
         // 1. The read: every row, name and explanation is the PC's own.
         let view = coach_answer(200, VIEW).unwrap();
-        let rows = view["settings"].as_array().expect("the rows the page draws");
+        let rows = view["settings"]
+            .as_array()
+            .expect("the rows the page draws");
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0]["key"], "speaks_up");
         assert_eq!(rows[0]["name"], "when it speaks up");
         assert_eq!(rows[0]["value"], "any");
         assert_eq!(rows[0]["choices"][1]["value"], "weak");
-        assert_eq!(rows[0]["choices"][1]["name"], "Only when the prompt is weak");
+        assert_eq!(
+            rows[0]["choices"][1]["name"],
+            "Only when the prompt is weak"
+        );
         assert!(rows[0]["choices"][1]["detail"].as_str().unwrap().len() > 10);
         // The AIs Jarvis has notes for, so the card can say what it knows
         // about - and the number behind "may be out of date".
