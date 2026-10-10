@@ -296,8 +296,8 @@ def t_mini_success_and_endings():
     check("mini: the backup folder is named", "Your files from before this run are in:" in out)
     check("mini: the delete-old-backups line is there", "_jarvis-backup-*" in out)
     code2, out2 = run(script, be, "-SkipTests", "-SkipPackages")
-    check("mini: a second run says already applied and exits 0",
-          code2 == 0 and "already applied" in out2, out2[-500:])
+    check("mini: a second run says the record covers these files and exits 0",
+          code2 == 0 and "already on your backend (recorded by the last run)" in out2, out2[-500:])
 
 
 def t_mini_fixendings_success():
@@ -869,16 +869,272 @@ def t_mini_state_json_classifies_every_patch():
           code2 == 1 and "NOTHING HAS BEEN CHANGED" in out2
           and {n: md5(be / n) for n in MINI_TARGETS} == before, out2[-400:])
 
-    # Off is off: without the switch, nothing of this step happens at all. (What
-    # the run does then is every OTHER check in this file's business; the run may
-    # legitimately stop at the "Jarvis is still running" guard when a live
-    # backend is up, and that is not this step's answer either way.)
+    # Off is off: without the switch, step 1 does nothing at all. The two
+    # classification files above were written BY the runs that passed the switch,
+    # so the question is whether they are touched again - not whether they exist.
+    # Step 2's manifest (`_jarvis-state.json`, beside the backend) is a different
+    # file, written by every run that finishes, and the four checks above cover
+    # it; the two never share a name.
     root3 = mini_repo(tmp / "b", patches=["approval-expiry.patch", "brain-reads.patch"])
     be3 = tmp / "b-be"
     build_backend(be3)
-    code3, out3 = run(root3 / "scripts" / "apply-patches.ps1", be3, "-SkipTests", "-SkipPackages")
-    check("WITHOUT -StateJson: no state file is written, and nothing new is printed",
-          not (be3 / "_jarvis-state.json").exists() and "State   :" not in out3, out3[-500:])
+    before3 = (state.stat().st_mtime_ns, state2.stat().st_mtime_ns)
+    code3, out3 = run(root3 / "scripts" / "apply-patches.ps1", be3, "-SkipTests", "-SkipPackages", "-Force")
+    after3 = (state.stat().st_mtime_ns, state2.stat().st_mtime_ns)
+    check("WITHOUT -StateJson: neither classification file is written or touched, "
+          "and nothing of step 1 is printed",
+          before3 == after3 and "State   :" not in out3, out3[-500:])
+    check("... and step 2's record is the only file written there",
+          (be3 / MANIFEST).exists(), out3[-500:])
+
+
+# ------------------------------------------- the record of a finished run
+
+#: docs/UPDATER-REDESIGN.md section 5, build step 2. The acceptance the design
+#: note itself sets: run it twice on a copy - the second run must read the
+#: record and need no rehearsal at all; and a hand-edit in the copy must be
+#: reported as drift, by name. Both are measured below on the two real
+#: one-hunk patches, so the run really does apply them and really does finish.
+MANIFEST = "_jarvis-state.json"
+
+
+def t_mini_manifest_is_written_and_names_the_files():
+    """Step 2, first half: a run that finishes writes what the backend holds.
+
+    FAILS WITHOUT THE CHANGE: no _jarvis-state.json is written at all (the
+    first check fails), and nothing reads one on a later run.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a")
+    be = tmp / "a-be"
+    build_backend(be)
+    script = root / "scripts" / "apply-patches.ps1"
+    # -Force on every run below, here and in the three checks that follow: it
+    # bypasses ONE thing, Assert-JarvisClosed, and that guard is about the
+    # machine the check runs on rather than about the record it is checking -
+    # on the owner's own PC his Jarvis is up, so a run without it refuses at the
+    # guard and the record is never written. Every other mini check in this file
+    # passes -Force for exactly this reason; it changes nothing any of these
+    # checks assert.
+    code, out = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+
+    doc = None
+    if (be / MANIFEST).exists():
+        doc = json.loads((be / MANIFEST).read_text(encoding="utf-8"))
+    check("a run that finishes writes the record beside the backend",
+          doc is not None, out[-700:])
+    if doc is None:
+        return
+    check("the record says which backend it is about, and that this was the "
+          "first one (the baseline the owner chose on 2026-10-09)",
+          str(be) in str(doc.get("backend", "")) and doc.get("run") == "baseline",
+          json.dumps({k: doc.get(k) for k in ("backend", "run")})[:400])
+    check("it lists this run's own patch list, in order",
+          list(doc.get("patchList") or []) == MINI_PATCHES, doc.get("patchList"))
+    files = doc.get("files") or {}
+    check("every .py the run left is in it, with a hash",
+          all(isinstance(v.get("sha256"), str) and len(v["sha256"]) == 64
+              for v in files.values()) and len(files) >= len(MINI_TARGETS),
+          json.dumps(files)[:400])
+    check("the file a patch of the list produced is tied to that patch",
+          all(files.get(t, {}).get("patch") in MINI_PATCHES
+              and files.get(t, {}).get("verified") is True for t in MINI_TARGETS),
+          {t: files.get(t) for t in MINI_TARGETS})
+    check("each patch of the list carries its own text hash and the verdict this "
+          "run reached",
+          sorted(p.get("Patch") for p in doc.get("patches") or []) == sorted(MINI_PATCHES)
+          and all(len(p.get("Sha256") or "") == 64 for p in doc.get("patches") or [])
+          and all(p.get("Verdict") in ("taken-off", "taken-off-older-text",
+                                       "on-but-unstrippable", "not-recognised")
+                  for p in doc.get("patches") or []),
+          json.dumps(doc.get("patches"))[:500])
+    check("nothing is listed as unmatched on a run that applied the whole list",
+          not (doc.get("unmatched") or []), doc.get("unmatched"))
+    check("... and the run says so in its own words",
+          "Record  : wrote what the backend holds" in out, out[-900:])
+
+
+def t_mini_second_run_needs_no_rehearsal():
+    """Step 2, the design note's own acceptance: run it twice on a copy.
+
+    The second run reads the record, finds every file unchanged, and rehearses
+    NOTHING: no strip, no re-apply, no result gate. Where a record is absent,
+    unusable or disagrees with a file, the rehearsal runs exactly as before -
+    which is checked in the two tests after this one, so "no rehearsal" cannot
+    be satisfied by never rehearsing at all.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a")
+    be = tmp / "a-be"
+    build_backend(be)
+    script = root / "scripts" / "apply-patches.ps1"
+    code1, out1 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("CONTROL: the first run applies the list and writes the record",
+          code1 == 0 and (be / MANIFEST).exists(), out1[-500:])
+    before = {t: md5(be / t) for t in MINI_TARGETS}
+    first = md5(be / MANIFEST)
+
+    code2, out2 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("the second run exits 0", code2 == 0, out2[-800:])
+    check("... and says no rehearsal was needed, because the record says what "
+          "these files hold", "No rehearsal was needed" in out2, out2[-800:])
+    check("... and does not rehearse: no strip, no re-apply",
+          "Rehearsing all" not in out2 and "Applying" not in out2, out2[-900:])
+    check("... and re-checks the real files against the record instead",
+          "All 2 patches are already on your backend" in out2, out2[-600:])
+    check("... and changes not one byte of the backend",
+          {t: md5(be / t) for t in MINI_TARGETS} == before, out2[-400:])
+    check("... and the record still describes the same files", md5(be / MANIFEST) != "")
+
+    # A record from a DIFFERENT patch list cannot be used for this one: the run
+    # says so and answers the "what is on?" question its own way. (On a mini
+    # backend with the whole list already on, that answer is the stack check's
+    # "already applied", not a rehearsal - what matters here is that the RECORD
+    # did not answer.)
+    (be / MANIFEST).write_text(json.dumps({
+        "schema": "jarvis-updater-manifest/1", "run": "baseline",
+        "patchList": ["approval-expiry.patch"], "patches": [], "files": {}}),
+        encoding="utf-8")
+    code3, out3 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("a record from a different patch list is refused as a record: it is "
+          "named as unusable, the fast path is not taken, and no file is claimed "
+          "to be recorded",
+          code3 == 0
+          and "is from a different patch list, so it cannot be" in out3
+          and "No rehearsal was needed" not in out3
+          and "recorded by the last run" not in out3, out3[-900:])
+
+    # ... and with no record at all, the scripts own stack check answers - not
+    # the record. (It may legitimately answer "already applied" instead of
+    # rehearsing: a mini backend with the whole list on IS that case, and the
+    # question here is only that the RECORD is not what answered.)
+    (be / MANIFEST).unlink()
+    code4, out4 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("with no record at all the run does not use a record: no 'no rehearsal "
+          "was needed', and nothing claims the record covers these files",
+          code4 == 0 and "No rehearsal was needed" not in out4
+          and "recorded by the last run" not in out4, out4[-900:])
+
+
+def t_mini_a_hand_edit_is_drift_by_name():
+    """Step 2, second half: hand-edit one .py and the next run names it.
+
+    FAILS WITHOUT THE CHANGE: there is no record to compare against, so the
+    next run cannot say the file has changed - it rehearses and reports
+    "already applied", and the edit is invisible (the checks below look for the
+    file's name in the run's own words, which only the record can produce).
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a")
+    be = tmp / "a-be"
+    build_backend(be)
+    script = root / "scripts" / "apply-patches.ps1"
+    run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("CONTROL: the first run wrote the record", (be / MANIFEST).exists())
+
+    # The hand-edit: exactly the shape section 3 of the design note measured on
+    # the owner's own jarvis_hud.py - a comment and a line of behaviour added by
+    # hand, which no patch in the list produces.
+    edited = be / "jarvis_hud.py"
+    edited.write_text(edited.read_text(encoding="utf-8")
+                      + "\n# hand-edited after the run (2026-10-09): the drift check must name this\n"
+                      + "_hand_edit = True\n", encoding="utf-8")
+    record_before = (be / MANIFEST).read_bytes()
+    drifted = {t: md5(be / t) for t in MINI_TARGETS}
+
+    code, out = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("after a hand-edit the next run names the file as changed",
+          "jarvis_hud.py" in out and "have changed since this backend was last recorded" in out,
+          out[-1200:])
+    check("... and the file it did NOT touch is not named as drift",
+          "jarvis_gate.py" not in out.split("have changed since")[1][:400] if
+          "have changed since" in out else False, out[-1200:])
+    check("... and it says plainly that nothing has been changed yet",
+          "Nothing has been changed yet" in out, out[-900:])
+    check("... and the hand-edited bytes are still there, untouched",
+          {t: md5(be / t) for t in MINI_TARGETS} == drifted, out[-500:])
+    check("... and the record is left exactly as it was, so the next run says it "
+          "again instead of forgetting it",
+          (be / MANIFEST).read_bytes() == record_before, out[-500:])
+
+    # The same run again: still named, still not forgotten.
+    code2, out2 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("... and running it once more still names it",
+          "jarvis_hud.py" in out2 and "have changed since" in out2, out2[-900:])
+
+    # Put the file back byte for byte: the record is usable again, so the
+    # rehearsal is not needed and the drift is gone.
+    edited.write_text(edited.read_text(encoding="utf-8")
+                      .replace("\n# hand-edited after the run (2026-10-09): the drift check must name this\n"
+                               "_hand_edit = True\n", ""), encoding="utf-8")
+    code3, out3 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("with the hand-edit put back the record is used again and no drift is "
+          "reported", code3 == 0 and "have changed since" not in out3
+          and "No rehearsal was needed" in out3, out3[-900:])
+
+
+def t_mini_unmatched_files_are_named_not_blessed():
+    """What the first run could not match, it names - the owner's question 2.
+
+    A patch whose work is NOT on the backend reaches 'not-recognised'. The files
+    that patch's own header names are then recorded `verified: false` and listed
+    in the run's words, and the next run says again that the record cannot speak
+    for them. That is the difference between a baseline and a claim: a baseline
+    that called such a file fine is exactly the silence section 8 warns about.
+
+    The impossible patch is the same BLOCKED_PATCH the -StateJson test uses: its
+    one added line is not on the backend and never can be.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a",
+                     patches=["approval-expiry.patch", "brain-reads.patch", "blocked.patch"],
+                     patch_files={"blocked.patch": BLOCKED_PATCH})
+    be = tmp / "a-be"
+    build_backend(be)
+    script = root / "scripts" / "apply-patches.ps1"
+    # The impossible patch stops the run at the gate, so nothing is written -
+    # which is the correct answer for a run that did not finish.
+    code, out = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("CONTROL: a run the gate refuses writes no record at all",
+          code == 1 and not (be / MANIFEST).exists(), out[-600:])
+    check("... and says NOTHING HAS BEEN CHANGED", "NOTHING HAS BEEN CHANGED" in out)
+
+    # Now a list whose patches all really go on, but where one patch's target
+    # file is NOT one any applied patch produces: nothing can tie the file to a
+    # patch, so the record must not call it verified.
+    tmp2 = tmpdir()
+    root2 = mini_repo(tmp2 / "a")
+    be2 = tmp2 / "a-be"
+    build_backend(be2)
+    (be2 / "jarvis_extra.py").write_text("# a file no patch of this list writes\n",
+                                         encoding="utf-8")
+    script2 = root2 / "scripts" / "apply-patches.ps1"
+    code2, out2 = run(script2, be2, "-SkipTests", "-SkipPackages", "-Force")
+    doc = json.loads((be2 / MANIFEST).read_text(encoding="utf-8")) if (be2 / MANIFEST).exists() else {}
+    files = doc.get("files") or {}
+    check("a .py no patch of the list writes is still recorded, by hash",
+          len((files.get("jarvis_extra.py") or {}).get("sha256") or "") == 64,
+          json.dumps(files.get("jarvis_extra.py"))[:400])
+    check("... but it is NOT blessed: no patch name, and verified is false",
+          files.get("jarvis_extra.py", {}).get("patch") == ""
+          and files.get("jarvis_extra.py", {}).get("verified") is False,
+          json.dumps(files.get("jarvis_extra.py"))[:400])
+    check("... while the two files the patches DO produce are tied to one and "
+          "verified",
+          all(files.get(t, {}).get("patch") in MINI_PATCHES
+              and files.get(t, {}).get("verified") is True for t in MINI_TARGETS),
+          {t: files.get(t) for t in MINI_TARGETS})
+    if (be2 / MANIFEST).exists():
+        code3, out3 = run(script2, be2, "-SkipTests", "-SkipPackages", "-Force")
+        # The file is NAMED by the run that reads the record and finds it cannot
+        # speak for it - which is the next run, because the record only exists
+        # after the first one finishes.
+        check("the next run says which file it cannot speak for, by name, instead "
+              "of quietly calling the backend verified",
+              "cannot speak for" in out3 and "jarvis_extra.py" in out3, out3[-900:])
+        check("... and it is not rehearsing for that reason: the record still "
+              "covers the files the patches produce, so the fast path is used",
+              "No rehearsal was needed" in out3, out3[-900:])
 
 
 # ------------------------------------- a patch that is already on the backend
@@ -1281,6 +1537,10 @@ def main():
                t_mini_problems_end_red,
                t_mini_wording_after_a_late_problem, t_mini_partial_install_is_not_proven,
                t_mini_revert_ends_plainly, t_mini_state_json_classifies_every_patch,
+               t_mini_manifest_is_written_and_names_the_files,
+               t_mini_second_run_needs_no_rehearsal,
+               t_mini_a_hand_edit_is_drift_by_name,
+               t_mini_unmatched_files_are_named_not_blessed,
                t_already_on_is_proved_by_the_patchs_own_bytes,
                t_a_shifted_stack_is_still_recognised_as_on,
                t_a_patch_answered_already_on_is_never_reversed_off):
