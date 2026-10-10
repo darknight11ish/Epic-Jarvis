@@ -96,6 +96,7 @@ import {
   amend as amendOnBackend,
   decide as decideOnBackend,
   faceState,
+  faceSignal,
   fetchDigest,
   injectTaskNote,
   markDigestSeen,
@@ -322,6 +323,7 @@ const $ = (id) => document.getElementById(id);
 const dom = {
   root: document.documentElement,
   reactor: $("reactor"),
+  reactorFace: $("reactor-face"),
   shell: $("shell"),
   prompt: $("prompt"),
   route: $("route"),
@@ -3976,6 +3978,83 @@ dom.reactor?.addEventListener("animationend", (event) => {
   if (event.animationName === "reactor-inhale") dom.reactor.classList.remove("inhale");
 });
 
+/* ==========================================================================
+   The miniature in the bar (the owner's request, 2026-10-10)
+   --------------------------------------------------------------------------
+   The mark on the left of the bar used to be a 48-unit SVG - two dashed rings,
+   eight vanes and a glowing core - and it was not decoration: the state rules
+   in style.css coloured it per state. The owner has asked for a miniature of
+   the face they chose instead, so the frame in that slot is the SAME
+   `faces.html?mode=display` the widget, the floating face and the HUD embed.
+   Nothing is drawn twice: the animal, the pose and the state colour all come
+   from the project's one spec, and the face changes when the owner changes it,
+   because it reads the same appearance document the other three do.
+
+   The bar only has to tell it what to show, and it already knows: `faceSignal`
+   is the one function every face surface uses (the widget's, the floating
+   face's and the HUD's all go through it), so this hands over exactly what they
+   are handed - including the hollow ring while Jarvis cannot be reached, the
+   focus session's awake rest and the serious weight of a crisis moment.
+
+   The frame is sent only on a real change: `postMessage` across documents is
+   cheap but this bar repaints on every event. */
+let barFaceSent = "";
+
+function paintBarFace(link) {
+  const frame = dom.reactorFace;
+  if (!frame || !frame.contentWindow) return;
+  const signal = faceSignal(link);
+  const message = {
+    type: "jarvis-hud-face",
+    state: signal.state,
+    offline: signal.offline === true,
+    focus: signal.focus === true,
+    waiting: Number(signal.waiting) || 0,
+    serious: signal.serious === true,
+  };
+  const key = JSON.stringify(message);
+  if (key === barFaceSent) return;
+  barFaceSent = key;
+  // Same origin (it is this window's own page), and the frame checks that
+  // before it listens to anything.
+  frame.contentWindow.postMessage(message, location.origin);
+}
+
+/**
+ * The owner's chosen face, for the frame above - read from
+ * `appearance_snapshot`, which the bar's `jarvis-link` permission set already
+ * allows (`get_appearance` would need a wider grant, and this is the read-only
+ * one for a surface that only has to DRAW the face; appearance.rs says so).
+ * A failure leaves the frame on the spec's default face, which is the same
+ * thing the Face window shows before it has heard the PC.
+ */
+function readBarFaceAppearance() {
+  if (!IS_TAURI) return;
+  TAURI.core
+    .invoke("appearance_snapshot")
+    .then((appearance) => {
+      const frame = dom.reactorFace;
+      if (!frame || !frame.contentWindow || !appearance || typeof appearance !== "object") return;
+      frame.contentWindow.postMessage(
+        { type: "jarvis-hud-face", appearance },
+        location.origin,
+      );
+      // Force the next state message out, so the frame's own face and the
+      // state it is showing cannot be described by two different messages.
+      barFaceSent = "";
+    })
+    .catch(() => { /* an older PC, or nothing saved yet: keep the default face */ });
+}
+
+if (IS_TAURI) {
+  TAURI.event.listen("appearance-changed", () => readBarFaceAppearance());
+}
+dom.reactorFace?.addEventListener("load", () => {
+  // A fresh frame has heard nothing; both of these are deliberately re-sent.
+  barFaceSent = "";
+  readBarFaceAppearance();
+});
+
 async function startPushToTalk() {
   if (micRecording || state.autoListening) return;
   // Barge-in: holding the mic to talk again is as clear a signal as this
@@ -5456,6 +5535,10 @@ startVoice(dom.root);
 onLink((link) => {
   toolWatch.link(link);
   recheckSpeech();
+  // The miniature in the bar wears the same state every other face surface
+  // wears (faceSignal), so the bar, the widget, the floating face and the HUD
+  // cannot disagree about what Jarvis is doing.
+  paintBarFace(link);
   // Lockdown (2026-09-28): said in the bar while it is on, from the link.
   if (dom.lockdownStrip && dom.lockdownStrip.hidden === Boolean(link.lockdown)) {
     dom.lockdownStrip.hidden = !link.lockdown;

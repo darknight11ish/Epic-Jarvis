@@ -42,35 +42,34 @@
            — one of the two ways people navigate a page without reading it —
            was empty, and "Ask Jarvis" existed only as a label on the textarea.
            It is `sr-only` because the window is a 44px bar: the heading is
-           structure, not decoration, and the visible equivalent is the reactor
-           and the input beside it. -->
+           structure, not decoration, and the visible equivalent is Jarvis's
+           face and the input beside it. -->
       <h1 class="sr-only">Jarvis</h1>
       <!-- ── Input row ─────────────────────────────────────────────────── -->
       <div class="bar" id="bar" data-tauri-drag-region>
+        <!-- The miniature of the owner's chosen face (the owner's request,
+             2026-10-10). It was the reactor: a 48-unit SVG of two dashed rings
+             and eight vanes round a glowing core, and it was never decoration -
+             the `html[data-state]` / `html[data-voice]` rules in style.css
+             coloured it per state (ember while listening, an amber ring
+             knocking at an approval, red rings spinning backward at an error, a
+             spin while a reply streams) and it was the bar's one moving thing.
+             The face carries the same meaning, from the project's own single
+             spec: its orb glows in the state's colour and its pose says asleep,
+             waiting on you or something went wrong, exactly as the widget's,
+             the floating face's and the HUD's faces do. It is not a second
+             drawing - it is the same `faces.html?mode=display` those three
+             already embed, at 40 px. `main.js` (paintBarFace) hands it the
+             state, the offline ring and the owner's face; the `inhale` class
+             stays on this element, so "Caught it" still plays on release. -->
         <div class="reactor" id="reactor" aria-hidden="true">
-          <svg viewBox="0 0 48 48" role="presentation" focusable="false">
-            <defs>
-              <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="var(--accent-bright)" stop-opacity="1" />
-                <stop offset="55%" stop-color="var(--accent)" stop-opacity="0.55" />
-                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0" />
-              </radialGradient>
-            </defs>
-            <circle class="reactor-halo" cx="24" cy="24" r="17" fill="url(#core-glow)" />
-            <circle class="reactor-ring reactor-ring-outer" cx="24" cy="24" r="16" />
-            <circle class="reactor-ring reactor-ring-mid" cx="24" cy="24" r="11" />
-            <g class="reactor-vanes">
-              <line x1="24" y1="8" x2="24" y2="14" />
-              <line x1="40" y1="24" x2="34" y2="24" />
-              <line x1="24" y1="40" x2="24" y2="34" />
-              <line x1="8" y1="24" x2="14" y2="24" />
-              <line x1="35.3" y1="12.7" x2="31.1" y2="16.9" />
-              <line x1="35.3" y1="35.3" x2="31.1" y2="31.1" />
-              <line x1="12.7" y1="35.3" x2="16.9" y2="31.1" />
-              <line x1="12.7" y1="12.7" x2="16.9" y2="16.9" />
-            </g>
-            <circle class="reactor-core" cx="24" cy="24" r="5" />
-          </svg>
+          <iframe
+            id="reactor-face"
+            title=""
+            tabindex="-1"
+            aria-hidden="true"
+            src="faces.html?mode=display&feed=parent"
+          ></iframe>
         </div>
 
         <span class="note-chip" id="note-chip" data-target="" hidden>

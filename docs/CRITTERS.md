@@ -409,6 +409,47 @@ Zs overlay pulls each z toward the centre until the whole letter is inside
 0.94 of it - position only; nothing else changes and no other window is
 touched.
 
+**The bar's miniature (the owner's request, 2026-10-10).** The far-left mark on
+the Jarvis bar used to be an abstract symbol, not an animal: an SVG of two
+dashed rings, eight vanes round a glowing core, drawn at 34 px. It was never
+decoration - `style.css` coloured it per state (ember while listening, an amber
+ring knocking at an approval, red rings turning backward at an error, a spin
+while a reply streams) - so the owner asked for the face they chose to take its
+place, and what the symbol *meant* had to survive at 40 px.
+
+- **One renderer, not a second drawing.** The bar embeds the same
+  `faces.html?mode=display&feed=parent` frame the widget, the floating face and
+  the HUD already embed (`#reactor-face`, 40 px in an 80 px bar, `index.html`),
+  driven the same way - `main.js`'s `paintBarFace` posts the state, and it is
+  `faceSignal`'s, the one function all four surfaces use, so the bar cannot
+  disagree with them about what Jarvis is doing or whether it can be reached.
+  There is no picture on disk: a stored image could not follow the owner's
+  choice or the state colour.
+- **The states the symbol showed still read here.** Measured with the real
+  shader, at 40 px and at 34 px, through every pose: the animal's head, ears and
+  eyes and the orb in its lap are legible; listening's ember, thinking's violet,
+  the approval amber and the error ring are all distinguishable, and the hollow
+  "not connected" ring and the Zs are drawn over the face exactly as they are on
+  every other surface (they are the apps' own overlays, not the shader's).
+  The two thin overlays are the weakest at this size - the waiting-on-you clock
+  is a hairline, and the 2.5 px "not connected" ring is heavy *relative to* a
+  40 px picture (it is sized in CSS pixels from the face's own 120 px floor, so
+  at 40 px it covers rather than rims the animal). The pose and the orb's colour
+  carry both states at this size; a later pass could scale those two rings to
+  the frame they are in.
+- **What it costs.** The frame traces at `FacePace.tracePx`'s own floor of 96
+  px a side (it does not go smaller) and draws that down into the 40 px picture,
+  so the graphics work is a 96-px ray march - about a fifty-eighth of the pixels
+  a 232 px HUD face marches - while the bar is on screen. The face does not spin
+  up a second webview: it is the same page the other three surfaces load, and it
+  holds no Tauri command of its own. It reads the owner's face with
+  `appearance_snapshot`, which the quickbar's `jarvis-link` permission set
+  already allows, so `capabilities/quickbar.json` needed no widening and no new
+  command was added. `tests/bar-face.mjs` holds all of this: the slot is the
+  real renderer, the removed shapes are gone from the markup and the stylesheet,
+  every state and the offline ring reach the frame, the owner's face arrives,
+  and "Caught it" and the speech envelope still drive it.
+
 **The pictures above** were redrawn on 2026-09-29 from the current shaders
 and pose code: the red panda's and pygmy owl's still showed a wave at
 "waiting on you" and a raised paw or wing at "error", which the 2026-09-28
