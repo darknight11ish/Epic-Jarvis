@@ -20,13 +20,3 @@ index 340f7f8..8c56c3b 100644
      if route == "/api/digest/seen":
          # Marking the digest read is not approving anything in it. There is
          # deliberately no route that decides an approval in bulk; each one
-@@ -3416,6 +3427,7 @@ class Handler(BaseHTTPRequestHandler):
-         if route in ("/api/models/install", "/api/models/switch",
-                      "/api/models/rollback", "/api/config", "/api/skills/decide",
-                      "/api/appearance",
-                      "/api/undo/revert", "/api/jobs/cancel", "/api/holds/cancel",
-                      "/api/attention/mute", "/api/attention/unmute",
-+                     "/api/limits/settings",
-                      "/api/digest/seen", "/api/watch/add", "/api/watch/remove",
-                      "/api/watch/seen", "/api/voice/wake"):
-             if not _origin_ok(self):
