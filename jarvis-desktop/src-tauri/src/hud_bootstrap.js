@@ -1310,4 +1310,113 @@
   } else {
     hudChatBox();
   }
+
+  /* ---------------------------------------------------------------- *
+   * The HUD's settings gear
+   *
+   * THE OWNER'S DECISION (2026-10-10, question 2 of
+   * docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the big HUD window gets a
+   * settings gear too. The audit had left it off - this window's capability
+   * file was the one that said, in so many words, that it holds "no approve,
+   * deny, memory-write, recording or settings command" - and the owner chose
+   * otherwise, so that sentence has been corrected in
+   * capabilities/hud.json rather than left to contradict the code.
+   *
+   * WHERE IT SITS, AND WHAT IT CALLS. The HUD has no title bar of its own
+   * (it is an ordinary decorated window, so the OS draws one); its own
+   * controls live on the stage bar at the top of the conversation view. The
+   * gear goes there, immediately before the page's own "Telemetry" button,
+   * so it reads as part of the window's chrome rather than of the
+   * conversation. It calls exactly what the Jarvis bar's gear and the
+   * widget's gear call - plain_errors.rs's `open_fix_place {place:
+   * "settings"}`, navigation only, through the app lock like every other way
+   * in - so there is NO new Tauri command and no new Rust code. It carries
+   * the same gear glyph and the same "Jarvis settings" name for a screen
+   * reader, so all three gears look and read alike.
+   *
+   * WHY IT IS ADDED HERE rather than in the page: jarvis_hud.html is
+   * vendored byte-identical from the backend folder, and section 2b below
+   * says why that matters (a new copy from the backend must need no
+   * re-patching). This script is how the shell adapts the page without
+   * forking it, and it adds no buttons on its own - the one control it
+   * already adds is beside the chat box.
+   *
+   * THE ACL CHANGE THIS NEEDED, deliberately: `open-fix-place` (the set that
+   * holds `allow-open-fix-place`) is now granted to this window in
+   * capabilities/hud.json. It was the widget that needed it last, for the
+   * same reason and with the same argument: a visible control wired to a
+   * command the window does not hold fails silently, which is exactly how
+   * the widget's offline card stayed dead. tests/bar-chrome.mjs holds both
+   * halves.
+   * ---------------------------------------------------------------- */
+  var GEAR_SAID = "Jarvis settings";
+
+  function settingsFromHud() {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") return;
+    Promise.resolve()
+      .then(function () {
+        return invoke("open_fix_place", { place: "settings" });
+      })
+      .catch(function (err) {
+        hudMicNote(
+          "Could not open Jarvis settings: " +
+            String((err && err.message) || err) +
+            ". Open them from the Jarvis tray icon."
+        );
+      });
+  }
+  window.__jarvisOpenSettings = settingsFromHud;
+
+  /* Adds the gear, once, onto the stage bar. Silent if the page has no stage
+   * bar (an older or newer copy of the vendored page). */
+  function addSettingsGear() {
+    var bar = document.querySelector(".stage-bar");
+    if (!bar || document.getElementById("hud-settings")) return;
+    var gear = document.createElement("button");
+    gear.type = "button";
+    gear.id = "hud-settings";
+    gear.className = "ghost hud-settings";
+    gear.title = GEAR_SAID;
+    // The page's `.ghost` pads for a word; this one is a square icon button,
+    // so it is sized here. 26px matches the page's own small controls (the
+    // Telemetry toggle beside it), not the 44px composer buttons.
+    gear.style.width = "26px";
+    gear.style.height = "26px";
+    gear.style.padding = "0";
+    gear.style.display = "flex";
+    gear.style.alignItems = "center";
+    gear.style.justifyContent = "center";
+    gear.setAttribute("aria-label", GEAR_SAID);
+    // The SAME gear glyph the Jarvis bar's gear and the widget's gear draw
+    // (index.html #open-settings, widget.html #btn-settings), so the three
+    // are recognisably one control. inline SVG, so neither CSP objects.
+    gear.innerHTML =
+      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />' +
+      '<path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />' +
+      "</svg>";
+    gear.addEventListener("click", settingsFromHud);
+    // Before "Telemetry", which the media query above only shows on a narrow
+    // window - so on a wide one the gear is the last thing on the bar.
+    var telemetry = document.getElementById("rail-toggle");
+    if (telemetry && telemetry.parentNode === bar) bar.insertBefore(gear, telemetry);
+    else bar.appendChild(gear);
+  }
+
+  /* Only with the shell (window.__TAURI__): the page served on its own, in a
+   * plain browser, has no Settings window to open and no `open_fix_place` to
+   * call - there the gear is not added at all, exactly as the "Open the
+   * Jarvis bar" button is not. */
+  function hudSettingsGear() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    addSettingsGear();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hudSettingsGear, { once: true });
+  } else {
+    hudSettingsGear();
+  }
 })();

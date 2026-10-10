@@ -150,6 +150,7 @@ const dom = {
 
   btnToggle: $("btn-toggle-expand"),
   btnPin: $("btn-pin"),
+  btnSettings: $("btn-settings"),
   btnLog: $("btn-quick-log"),
   btnJoplin: $("btn-quick-joplin"),
   btnObs: $("btn-quick-obs"),
@@ -1631,6 +1632,17 @@ async function sendTaskNote() {
 
 dom.btnToggle.addEventListener("click", toggleExpand);
 dom.btnPin.addEventListener("click", () => setPinned(!state.alwaysOnTop));
+
+// The gear on the bar: the same navigation-only door to the Settings window
+// the offline card's fix buttons use (plain_errors.rs `open_fix_place`). The
+// widget was granted `open-fix-place` at the same time this button was added
+// (2026-10-10) - before that, this window's calls to that command were refused
+// at the ACL, so its offline card's buttons did nothing.
+if (dom.btnSettings) {
+  dom.btnSettings.addEventListener("click", () => {
+    invoke("open_fix_place", { place: "settings" });
+  });
+}
 
 dom.btnLog.addEventListener("click", () => invoke("prefill_quickbar", { target: "logseq" }));
 dom.btnJoplin.addEventListener("click", () => invoke("prefill_quickbar", { target: "joplin" }));

@@ -485,9 +485,23 @@ def t_open_is_pure_navigation():
           <= set(M.menu("brain.tab.tutorials").names),
           M.menu("brain.tab.tutorials").names)
     for phrase in ("open the door", "open the pod bay doors", "show me the money",
-                  "go to sleep"):
+                   "go to sleep"):
         i = Q.match(phrase)
-        check(f"{phrase!r} names no section, so it is not ours", i is None, i)
+        # What this suite is about: none of them names a SECTION, so none of
+        # them is a settings jump. Since 2026-10-10 the two "open ..." ones are
+        # claimed by the other feature that owns those words (jarvis_open.py:
+        # "open the pod bay doors" is a program name this PC will not find, and
+        # it is reported plainly rather than guessed at), so what is checked is
+        # that the answer is NOT a settings jump - never that the phrase is
+        # nobody's.
+        check(f"{phrase!r} names no section, so it is not a settings jump",
+              (i is None) or not i.f.get("id"), i)
+    for phrase in ("open the door", "open the pod bay doors"):
+        got = Q.match(phrase)
+        check(f"{phrase!r} is the app opener's, not this module's",
+              got is not None and got.name == "open_app", got)
+    for phrase in ("show me the money", "go to sleep"):
+        check(f"{phrase!r} is still nobody's", Q.match(phrase) is None, Q.match(phrase))
     r = go("open web search", peer=PHONE)
     check("the reply names the place and carries open_settings, nothing else runs",
           r is not None and r.open_settings == "web-search" and "web search" in r.reply.lower())

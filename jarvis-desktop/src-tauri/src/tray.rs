@@ -1515,11 +1515,14 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             }
         }
 
-        ID_TOGGLE_SPOTLIGHT => match windows::toggle_quickbar(app) {
-            Ok(true) => crate::emit_quickbar(app, events::FOCUS_INPUT, ()),
-            Ok(false) => {}
-            Err(err) => eprintln!("[jarvis] tray: quickbar toggle failed: {err}"),
-        },
+        // The menu row and the icon's own left click are the same toggle now,
+        // and `toggle_quickbar` places the caret itself - no second
+        // `emit_quickbar` here (2026-10-10).
+        ID_TOGGLE_SPOTLIGHT => {
+            if let Err(err) = windows::toggle_quickbar(app) {
+                eprintln!("[jarvis] tray: quickbar toggle failed: {err}");
+            }
+        }
 
         ID_TOGGLE_WIDGET => {
             if let Err(err) = windows::toggle_widget(app) {
@@ -1648,8 +1651,18 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-/// Left click on the icon summons the spotlight, matching what users expect
-/// from a launcher that lives in the notification area. Not emitted on Linux.
+/// Left click on the icon SUMMONS the spotlight, and a second left click sends
+/// it away again - matching what users expect from a launcher that lives in
+/// the notification area.
+///
+/// This used to call `windows::show_quickbar` unconditionally, so clicking the
+/// icon while the bar was already up did nothing visible: the owner's own
+/// request of 2026-10-10, "open jarvis bar ... should also hide it if it is
+/// clicked again after it pops up". It now goes through the one toggle every
+/// other route uses (the `Alt+Space` hotkey, "open the Jarvis bar" said out
+/// loud, and the tray menu's own Show/Hide row), so all four agree. The caret
+/// is placed by `toggle_quickbar` itself, which is why there is no
+/// `emit_quickbar` here any more. Not emitted on Linux.
 fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
     if let TrayIconEvent::Click {
         button: MouseButton::Left,
@@ -1658,9 +1671,10 @@ fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
     } = event
     {
         let app = tray.app_handle();
-        match windows::show_quickbar(app) {
-            Ok(()) => crate::emit_quickbar(app, events::FOCUS_INPUT, ()),
-            Err(err) => eprintln!("[jarvis] tray: unable to summon the quickbar: {err}"),
+        // App lock may ask Windows Hello first; `Ok(false)` is "not on screen
+        // yet", which is not a failure and is not reported as one.
+        if let Err(err) = windows::toggle_quickbar(app) {
+            eprintln!("[jarvis] tray: unable to toggle the quickbar: {err}");
         }
     }
 }
