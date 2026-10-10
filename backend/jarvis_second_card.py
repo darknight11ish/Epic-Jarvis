@@ -1860,9 +1860,12 @@ def handle_pin(body, *, gate: Optional[Callable] = None,
         tier = f"unreadable ({type(exc).__name__})"
     if tier != "ask":
         # Checked BEFORE a card is raised: a card that could not end in a
-        # person deciding should not be raised at all.
-        return 503, {"error": (f"{PIN_ACTION} is tier {tier!r} in jarvis-framework.toml, which "
-                              f"is not a person saying yes; it must stay \"ask\"")}
+        # person deciding should not be raised at all. The owner reads
+        # PIN_TIER_WORDS (plain words with the next step); the tier and the
+        # action name stay in `detail`, which no app shows.
+        return 503, {"error": PIN_TIER_WORDS,
+                     "detail": (f"{PIN_ACTION} is tier {tier!r} in jarvis-framework.toml, which "
+                                f"is not a person saying yes; it must stay \"ask\"")}
     text = describe_pin(det, card)
     detail = {"text": text, "what": f"pin everyday chat to the {card['name']}",
               "card": card["name"], "card_id": card["uuid"],
@@ -1921,9 +1924,8 @@ def _decide_pin(card: dict, pid: str, gate: Callable, tier_of: Callable) -> None
         outcome = "approved" if (allowed and vtier == "ask") else "refused"
     rid = getattr(v, "request_id", None)
     if vtier != "ask":
-        return _finish("chat_card", pid, "refused",
-                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
-                       rid)
+        return _finish("chat_card", pid, "refused", NOT_ASKED_WORDS, rid,
+                       gate=_not_asked_why(v, vtier))
     if not (allowed and outcome == "approved"):
         if outcome in ("denied", "timed_out"):
             return _finish("chat_card", pid, outcome, "", rid)
@@ -4248,6 +4250,61 @@ _WITHDRAWN: set = set()
 _LAST_ANY: dict = {}
 
 
+#: What the owner reads when the gate answered WITHOUT asking anybody: its own
+#: verdict came back at a tier that is not "ask" (a looser tier lets the action
+#: through with nobody asked; "never" refuses it before a card exists). The
+#: sentence before it is composed by `_last_words` as "<label> was not turned
+#: on: <this>.", so it is written as the clause after that colon: what
+#: happened, then the one thing the owner can do about it. Plain words only -
+#: no tier, no gate vocabulary (2026-10-10, the sweep the restore fix began).
+NOT_ASKED_WORDS = ("Jarvis only turns it on when you approve a card, and this time nobody was "
+                   "asked, so nothing changed. Ask again from Jarvis on your PC")
+#: The diagnosis, for a bug report, never for the owner: the record's `gate`
+#: key. It keeps the sentence this module used to show word for word ("the gate
+#: answered at tier 'never', which is not a person saying yes") and adds the
+#: gate's own reason when it gave one - so the technical detail is MOVED, not
+#: dropped. No app reads `gate` (the desktop reads `why`/`reason`; see
+#: jarvis-desktop/src/settings.js cardLast/cardEndedWords).
+NOT_ASKED_WHY = ("the gate answered at tier {tier!r}, which is not a person saying yes{more}")
+#: The pin route's own refusal, said before anything is done. `chat_card_pin`
+#: is in jarvis_asks_first.HARD_LIMITS and MUST_ASK - it is a row the owner
+#: cannot loosen from either app - so a tier that is not "ask" means the
+#: settings file was changed by hand, and that is what this asks the owner to
+#: put back. The tier and the action name stay in the response's `detail`, for
+#: a bug report; no app shows that key.
+PIN_TIER_WORDS = ("Pinning everyday chat to a graphics card always needs your OK on a card, and "
+                  "this PC is set to let it through without asking, so nothing was pinned. Open "
+                  "your settings file (jarvis-framework.toml), put its line back to \"ask\", "
+                  "then try again from Jarvis on the PC.")
+#: The same refusal for the three switch routes, in the words the owner reads.
+#: Every action these routes raise a card for is in jarvis_asks_first's
+#: HARD_LIMITS and MUST_ASK - "Always asks. This cannot be changed from an
+#: app." - so a tier that is not "ask" means the settings file was changed by
+#: hand, and putting that line back is the one thing the owner can do. The
+#: tier and the action name stay in the response's `detail`, which no app
+#: shows, for a bug report.
+NOT_ASKING_TIER_WORDS = ("This always needs your OK on a card, and your settings file is set to "
+                         "let it through without asking, so nothing was changed. Open your "
+                         "settings file (jarvis-framework.toml), put its line back to \"ask\", "
+                         "then try again from Jarvis on the PC.")
+
+
+def _tier_detail(action: str, tier: str, what: str) -> str:
+    """The technical half of those refusals: which action, which tier, and why
+    that cannot be allowed. Returned as `detail`; no app reads it."""
+    return (f"{action} is tier {tier!r} in jarvis-framework.toml; {what} needs a person to say "
+            f"yes, so it must be 'ask'")
+
+
+def _not_asked_why(v, vtier: str) -> str:
+    """The diagnosis for a card the gate answered without asking anybody: the
+    tier it answered at, and the gate's own sentence when it gave one. This is
+    what goes in the record's `gate` key - the words the owner used to be
+    shown, kept where a bug report can find them and no app can read them."""
+    reason = str(getattr(v, "reason", "") or "").strip()
+    return NOT_ASKED_WHY.format(tier=vtier, more=f": {reason[:200]}" if reason else "")
+
+
 def _last_words(label: str, outcome: str, reason: str) -> str:
     """How the last card ended, in words the apps can show as they are.
     `outcome` is one of: enabled, denied, timed_out, refused, failed,
@@ -4516,9 +4573,8 @@ def _decide_third(feature: str, pid: str, gate: Callable, tier_of: Callable) -> 
         outcome = "approved" if (allowed and vtier == "ask") else "refused"
     rid = getattr(v, "request_id", None)
     if vtier != "ask":
-        return _finish("third", pid, "refused",
-                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
-                       rid)
+        return _finish("third", pid, "refused", NOT_ASKED_WORDS, rid,
+                       gate=_not_asked_why(v, vtier))
     if not (allowed and outcome == "approved"):
         if outcome in ("denied", "timed_out"):
             return _finish("third", pid, outcome, "", rid)
@@ -4611,9 +4667,9 @@ def _request_change_third(assign: Optional[str], gate: Callable, tier_of: Callab
     except Exception as exc:
         tier = f"unreadable ({type(exc).__name__})"
     if tier != "ask":
-        return 503, {"error": (f"{THIRD_ACTION} is tier {tier!r} in jarvis-framework.toml; "
-                               f"moving a feature to the third card needs a person to say "
-                               f"yes, so it must be 'ask'")}
+        return 503, {"error": NOT_ASKING_TIER_WORDS,
+                     "detail": _tier_detail(THIRD_ACTION, tier,
+                                            "moving a feature to the third card")}
     pid = _uuid.uuid4().hex
     with _PENDING_LOCK:
         p = _PENDING.get("third")
@@ -4677,7 +4733,7 @@ def _settle_suggestion(fp: str, conversation_id, outcome: str) -> None:
 
 
 def _finish(feature: str, pid: str, outcome: str, reason: str = "",
-            request_id=None) -> None:
+            request_id=None, gate: str = "") -> None:
     with _PENDING_LOCK:
         if feature in _PENDING and _PENDING[feature]["id"] == pid:
             del _PENDING[feature]
@@ -4689,8 +4745,13 @@ def _finish(feature: str, pid: str, outcome: str, reason: str = "",
                  else "the third graphics card's assignment" if feature == "third"
                  else f"\"{_BY_ID[feature]['name']}\"" if feature in _BY_ID else feature)
         _LAST_ANY.clear()
+        # `gate` is the diagnosis (which tier answered, and the gate's own
+        # sentence), kept only when there is one: it goes in `_LAST_ANY` so a
+        # bug report can find it on GET /api/second-card, and NO app reads it
+        # - the desktop shows `why` (settings.js cardLast/cardEndedWords).
         _LAST_ANY.update(feature=feature, outcome=outcome,
-                         why=_last_words(label, outcome, reason[:200]), at=int(time.time()))
+                         why=_last_words(label, outcome, reason[:200]), at=int(time.time()),
+                         **({"gate": gate} if gate else {}))
     _audit("second_card.decided", {"feature": feature, "outcome": outcome,
                                    **({"request_id": request_id} if request_id else {})})
     if suggested is not None:
@@ -4726,9 +4787,8 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
         outcome = "approved" if (allowed and vtier == "ask") else "refused"
     rid = getattr(v, "request_id", None)
     if vtier != "ask":
-        return _finish(feature, pid, "refused",
-                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
-                       rid)
+        return _finish(feature, pid, "refused", NOT_ASKED_WORDS, rid,
+                       gate=_not_asked_why(v, vtier))
     if not (allowed and outcome == "approved"):
         if outcome in ("denied", "timed_out"):
             return _finish(feature, pid, outcome, "", rid)
@@ -4858,9 +4918,8 @@ def _decide_combined(pid: str, gate: Callable, tier_of: Callable, why: str = "")
         outcome = "approved" if (allowed and vtier == "ask") else "refused"
     rid = getattr(v, "request_id", None)
     if vtier != "ask":
-        return _finish("combined", pid, "refused",
-                       f"the gate answered at tier {vtier!r}, which is not a person saying yes",
-                       rid)
+        return _finish("combined", pid, "refused", NOT_ASKED_WORDS, rid,
+                       gate=_not_asked_why(v, vtier))
     if not (allowed and outcome == "approved"):
         if outcome in ("denied", "timed_out"):
             return _finish("combined", pid, outcome, "", rid)
@@ -4947,9 +5006,8 @@ def _request_change_combined(enabled: bool, gate: Callable, tier_of: Callable,
     except Exception as exc:
         tier = f"unreadable ({type(exc).__name__})"
     if tier != "ask":
-        return 503, {"error": (f"{COMBINED_ACTION} is tier {tier!r} in jarvis-framework.toml; "
-                               f"turning this on needs a person to say yes, so it must be "
-                               f"'ask'")}
+        return 503, {"error": NOT_ASKING_TIER_WORDS,
+                     "detail": _tier_detail(COMBINED_ACTION, tier, "turning this on")}
     pid = _uuid.uuid4().hex
     with _PENDING_LOCK:
         p = _PENDING.get("combined")
@@ -5254,10 +5312,10 @@ def request_change(feature: str, enabled: bool = False, *, assign: Optional[str]
         tier = f"unreadable ({type(exc).__name__})"
     if tier != "ask":
         # Checked BEFORE a card is raised: a card that could not end in a
-        # person deciding should not be raised at all.
-        return 503, {"error": (f"{action} is tier {tier!r} in jarvis-framework.toml; "
-                               f"turning this on needs a person to say yes, so it must "
-                               f"be 'ask'")}
+        # person deciding should not be raised at all. The owner reads
+        # NOT_ASKING_TIER_WORDS; the action and the tier go in `detail`.
+        return 503, {"error": NOT_ASKING_TIER_WORDS,
+                     "detail": _tier_detail(action, tier, "turning this on")}
     pid = _uuid.uuid4().hex
     with _PENDING_LOCK:
         p = _PENDING.get(feature)

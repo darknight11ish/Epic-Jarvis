@@ -537,6 +537,32 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
                       "without asking anyone" in said and action in said, said)
 
 
+def t_a_tool_let_through_without_asking_says_plain_words():
+    """2026-10-10. A tool that must ask was allowed by the gate at a tier that
+    is not "ask" - so nobody was asked, and it must not run. What the model is
+    handed back (and what it can quote to the owner) is now plain words: what
+    happened, and the one thing to do. The tier, the gate's own action and the
+    setting to change are kept in the SAME tool result, under `gate`.
+
+    The old words were `"... but the approval gate let it through at tier
+    'auto' without asking anyone. Nothing was run. To use it, set
+    run_shell_on_host to "ask" in jarvis-framework.toml's [autonomy.tiers]."` -
+    every check below fails on them: the tier was in the sentence a person
+    reads, and there was no `gate` at all."""
+    not_a_person = _GateVerdict(True, "auto", "run_shell_on_host", "tier is auto", "auto")
+    executed, _gate_calls, said = _one_call_turn("shell_exec", "  ls", lambda *a: not_a_person)
+    check("nobody asked: it did not run", executed == [], repr(executed))
+    told = json.loads(said)
+    error, gate = str(told.get("error", "")), str(told.get("gate", ""))
+    check("the words a person reads name no tier", "tier" not in error, error)
+    check("... and say plainly that nothing ran", "nothing was run" in error, error)
+    check("... and name the file to put right", "jarvis-framework.toml" in error, error)
+    check("... and keep the section name a programmer reads out of them",
+          "[autonomy.tiers]" not in error, error)
+    check("the diagnosis keeps the tier, the action and the setting",
+          "auto" in gate and "run_shell_on_host" in gate and "[autonomy.tiers]" in gate, gate)
+
+
 def _one_call_turn(tname, plan_text, gate):
     """One turn asking for `tname`, whose prepare() returns `plan_text`.
     Returns (executed, gate_calls, what the model was told)."""
@@ -1167,6 +1193,7 @@ if __name__ == "__main__":
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
                t_github_search_resolves_to_an_auto_tier_in_the_shipped_config,
                t_every_outbound_tool_is_refused_unless_a_person_approved,
+               t_a_tool_let_through_without_asking_says_plain_words,
                t_every_outbound_gate_action_is_covered,
                t_a_plan_too_long_for_its_card_is_refused_before_anyone_is_asked,
                t_a_long_note_at_auto_is_not_refused_for_its_length,
