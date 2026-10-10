@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-replay-onboarding"
+description = "Enables the replay_onboarding command without any pre-configured scope."
+commands.allow = ["replay_onboarding"]
+
+[[permission]]
+identifier = "deny-replay-onboarding"
+description = "Denies the replay_onboarding command without any pre-configured scope."
+commands.deny = ["replay_onboarding"]
