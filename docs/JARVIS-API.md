@@ -4814,9 +4814,13 @@ the owner asked for it.
 
 ### 21.4 The event
 
-`schedule`: `{"id", "kind", "state": "fired" | "changed", "late"?: bool,
-"notify"?: false}` - **ids and the kind only, never the words**
-(ARCHITECTURE section 6). `"notify": false` (since 2026-09-25) marks a kind
+`schedule`: `{"id", "kind", "state": "fired" | "changed" | "ready",
+"late"?: bool, "notify"?: false}` - **ids and the kind only, never the
+words** (ARCHITECTURE section 6). `"ready"` is a morning briefing whose own
+words are built and kept: `jarvis_briefing.py` publishes it (its
+`deps.publish("schedule", {"id", "kind", "state": "ready"})`) once the
+briefing exists, so a notification is never ahead of it (section 22).
+`"notify": false` (since 2026-09-25) marks a kind
 that tells nobody - the standby schedule at 01:00 - and then neither app
 shows a toast or a notification; both still read Coming up again.
 `"fired"` is a job going off; `"changed"` is the list changing (added,
@@ -4836,7 +4840,18 @@ apps (30.5). On `"fired"`:
   desktop app restarts: the last event id is written at once on every
   `schedule` event and when the app exits, and a job that could not be read
   is remembered by its event id.
-- **Phone**: the same words as a notification on the approval channel. Its
+- **Phone**: the same words, as a notification on its OWN channel -
+  **`jarvis_schedule`**, "Reminders and timers" (`ScheduleNotifier.SCHEDULE_CHANNEL_ID`,
+  created by `JarvisApp`), never the approval channel (`jarvis_approval`,
+  `ApprovalNotifier.CHANNEL_ID`; the dedicated channel is the owner's decision
+  of 2026-09-30, so silencing reminders does not silence approvals or the other
+  way round). The title is the kind's own word - "Timer done", "Alarm",
+  "Reminder", "To-do" (`Schedule.title`, the same words as the desktop's toast
+  title), and a timer, alarm or reminder carries one action,
+  "Snooze 10 minutes" (`Schedule.SNOOZE`), which is not an approval. An alarm -
+  and an urgent "tell me when" - goes on **`jarvis_alarm`** instead
+  ("Alarms and urgent alerts", `ScheduleNotifier.ALARM_CHANNEL_ID`), where it
+  keeps ringing until it is seen and carries Stop as well. Its
   lock-screen version is always only the kind's words ("Jarvis: a reminder
   is due."); while App lock or "Hide memory lists and chat history" is on,
   the notification itself says only that too. Each job's notification is
@@ -8624,7 +8639,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
-| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
 
 `[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
 every other PC-only-with-Windows-Hello action); `jarvis_card_words.TITLES`
