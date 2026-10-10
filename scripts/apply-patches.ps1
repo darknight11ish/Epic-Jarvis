@@ -1239,6 +1239,24 @@ $PATCHES = @(
     # screen-attach.patch, which must stay last (test_screen_attach.py asserts
     # it), and it touches jarvis_gate.py not at all: it approves nothing.
     'prompt-coach.patch'
+    # More Docker integration, slice 1's missing half (the owner's request of
+    # 2026-10-09; docs/DOCKER-INTEGRATION-DESIGN.md sections 3, 4 and 7a): the
+    # containers on Jarvis's OWN list (today SearXNG, the default web-search
+    # provider) get their two routes. ONE install block in jarvis_hud.py -
+    # `jarvis_docker.install(Handler, ...)` - wiring GET /api/docker/containers
+    # (the list) and POST /api/docker/service (start or stop one) into the
+    # server, which is what makes jarvis_docker.py reachable at all. A start is
+    # ONE approval card (docker_service_start, tier ask) and a stop goes through
+    # the same gate; the module itself refuses a start unless the pinned image is
+    # ALREADY on this PC, so nothing here ever pulls, and it refuses a container
+    # that is not ours, one that publishes beyond loopback and one that is
+    # privileged. Its context is chatbot-limits-hud.patch's own block and
+    # tutorials.patch's first two lines, so it goes BEFORE screen-attach.patch,
+    # which must stay last (test_screen_attach.py asserts it): a block inserted
+    # between tutorials' block and the socket comment would break that patch's
+    # anchor. Needs jarvis_docker.py copied in; without it, or on any error, the
+    # banner says "docker NOT ON" and neither route is there.
+    'docker.patch'
     'screen-attach.patch'
     # The count-only retrieval trace (the owner's decision of 2026-10-08,
     # "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B; JARVIS-API

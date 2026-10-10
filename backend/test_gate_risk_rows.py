@@ -111,7 +111,18 @@ def t_the_patch_is_registered_last():
              # handoff-mode.patch: its two hunks join the "acts only on tier ask"
              # list and the _RISK table at the END of each, so it cannot rewrite
              # the two rows this patch removes either.
-             "handoff-front.patch"}
+             "handoff-front.patch",
+             # docker.patch (2026-10-09) is the route half of the first Docker
+             # integration: ONE install block in jarvis_hud.py, between
+             # chatbot-limits-hud.patch's block and tutorials.patch's, and it
+             # touches jarvis_gate.py not at all - no gate list entry, no risk
+             # row, no _TOOL_ACTIONS line - so it cannot rewrite the stale rows
+             # this patch removes either. Its own two actions,
+             # docker_service_start and docker_service_stop, get their rows from
+             # a later slice of docs/DOCKER-INTEGRATION-DESIGN.md (section 9.2);
+             # until they land both take unknown_action_tier, which is "ask" in
+             # the shipped config, so neither direction fails open.
+             "docker.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
