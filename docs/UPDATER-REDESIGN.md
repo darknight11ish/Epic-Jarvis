@@ -599,21 +599,52 @@ So "skipped" cannot be read off today's prose line; it has to be read off the
 
 ### Still open
 
-2. **For the first run, which has no record of what is on your PC yet, may the
-   tool take a fresh snapshot of your current files as the new starting point?**
-   - **Yes, snapshot first, then tell me what it could not match**
-     (recommended — it is the only way to stop guessing)
-   - **No — work it out from the files as they are** (slower, and some patches
-     will end up marked "unknown" until you decide about them)
+4. **Held over, because it needs question 1's answer first:** should a run that
+   had to skip patches still report success, or must it always end as "not
+   finished" until you have looked at the skipped list?
 
-3. **`jarvis-backend/` is the only complete copy of your program in the
-   repository, and it is one patch behind your PC (it is missing
-   `screen-attach.patch`) and deliberately differs from your `jarvis_gate.py`
-   in four dead lines. Should it be regenerated from your folder?**
-   - **Yes, and make it a check that fails when it drifts** (recommended — it is
-     the step that would let the patches be retired later)
-   - **No — leave it as a snapshot for strangers, and keep the patches as the
-     description of my install**
+   **Still open as of 2026-10-09.** It was not asked again and it was not
+   answered, so step 2 does not answer it: a run that had to skip patches still
+   reports exactly what it reported before, and the record does not change that.
+
+### Answered 2026-10-09
+
+**2. For the first run, which has no record of what is on your PC yet, may the
+tool take a fresh snapshot of your current files as the new starting point? —
+ANSWERED 2026-10-09: yes — snapshot first, then tell me what it could not
+match.** The owner's own words: **"Yes — snapshot first, then tell me what it
+could not match."** He did not choose "work it out from the files as they are".
+
+What that commits the updater to, concretely (and step 2 is built to exactly
+this shape - §10):
+
+- **The snapshot writes down hashes only, and modifies nothing of his.** The
+  first run that finishes records what his files hold at that moment as the
+  baseline: each patch's own text hash, and the hash of each `.py` this run left
+  in place. His files are not copied, rewritten or moved by this step. Step 4 is
+  still the step that backs up and overwrites, and it is not built.
+- **What it could not match is named, in the run's own words.** A file whose
+  content cannot be tied to a patch this run applied - a patch the run could not
+  recognise, a file two patches of the list both write - is recorded as a hash
+  the record **cannot speak for**, and is listed by name when the record is
+  written and again on every later run that reads it. It is never blessed as
+  verified. That distinction is the whole of the answer: the baseline is honest
+  about its own blind spots, so §8's "silence" failure mode - a report that
+  reads clean while something is missing - cannot come from here.
+- **A run that does not finish writes no record at all.** A refused run (and the
+  owner's machine still refuses, §9) leaves the baseline a good run wrote
+  exactly as it was, so a hand-edit recorded by that baseline is not forgotten
+  on the next run.
+
+**3. `jarvis-backend/` is the only complete copy of your program in the
+repository, and it is one patch behind your PC (it is missing
+`screen-attach.patch`) and deliberately differs from your `jarvis_gate.py`
+in four dead lines. Should it be regenerated from your folder? — ANSWERED
+2026-10-09: yes — regenerate `jarvis-backend/` and make it a check that fails
+when it drifts.** That is **build step 3** of §5, and the answer means step 3
+is now unblocked. **Step 2 did not do it**: step 3 is a script that re-takes
+`jarvis-backend/` from a given backend folder plus a check that fails when the
+two differ, and nothing in this pass touched `jarvis-backend/` at all.
 
 ---
 
@@ -755,5 +786,89 @@ that matches no patch's output) and is built in step 4. Nothing about the result
 gate changed, which is deliberate: §8 says do not relax it before step 5, and it
 is still the only thing standing between the owner and a backend carrying a
 doubly-applied patch.
+
+---
+
+## 10. Build step 2, built (2026-10-09)
+
+**Step 2 of §5 is done: a run that finishes writes `_jarvis-state.json` beside
+the backend, and a later run reads it instead of rehearsing.** The switch is
+`-Manifest <path>`, defaulting to `_jarvis-state.json` in the backend folder;
+`-Manifest none` turns the whole step off, exactly as omitting `-StateJson`
+turns step 1 off. Nothing about the default path changed when the switch is off,
+and the result gate is untouched (§8, §9).
+
+### What is in the file
+
+| field | what it is |
+|---|---|
+| `schema` | `jarvis-updater-manifest/1` |
+| `run` | `baseline` (the first run that wrote it - the snapshot the owner chose on 2026-10-09), `checked` (a run that read a usable record first), or `partial` |
+| `patchList` | this run's patch list, in order - what makes a record usable for a run |
+| `patches[]` | one entry per patch of the list: `Patch`, its own text's `Sha256`, and the `Verdict` this run reached (the four §9 words) |
+| `files` | every `.py` beside the backend: `sha256` (over the text with CRLF made LF), `patch` (the one patch of the list whose header names it and which this run applied), `verified` (true only when there is exactly one such patch) |
+| `unmatched[]` | every patch of the list this run could not apply, by name and verdict |
+
+### The rules it follows, and why
+
+- **It is read before the rehearsal, and only used when it covers the whole
+  list.** `patchList` must equal this run's list, in order; every patch of the
+  list must be named by some `files[].patch`; and every recorded hash must equal
+  the file on disk. Any of those failing means the rehearsal runs exactly as
+  before - no strip, re-apply or gate is skipped on a guess.
+- **A file two patches of the list both write is never called verified.** Its
+  hash cannot say which of the two put the text there, so a hand-edit in it
+  would read as a clean record. It is named instead, and the rehearsal runs.
+  Today that is `jarvis_gate.py` and `jarvis_hud.py` (several patches each), so
+  the fast path is exercised only where every file a patch writes is its own.
+- **Drift is named, and the record is left alone.** A recorded file whose hash
+  has moved is printed by name, the run goes on to the rehearsal, and the record
+  is **not** rewritten - so the hand-edit is named again on the next run instead
+  of being blessed as the new baseline. Writing the new baseline instead would
+  have made §4.1's drift signal disappear after one run, which is the silence
+  §8 warns about.
+- **Only a run that finished writes.** The write happens after the patches, the
+  shipped modules and the settings file, and a run that refused or stopped part
+  way never reaches it. The tests below the write cannot change a `.py` file, so
+  the record is still true when they have finished.
+- **The first run's baseline is a snapshot of hashes, not of files.** Nothing of
+  the owner's is copied or modified (that is step 4, still not built), and every
+  file it could not tie to a patch is named in the run's own words and again on
+  the next run that reads the record.
+
+### What it does NOT do
+
+It does not relax the result gate, and it does not back anything up or overwrite
+anything. On the owner's own folder a run still refuses (§9), so **his machine
+still has no `_jarvis-state.json`**: the record is written only after a finish,
+and the first finish is waiting on the patch-anchoring problem `prompt-coach.patch`
+has on his files, which is the same blocker commit `4bf3d19e8` recorded. Step 2
+is therefore finished and proven on copies, and it is **not yet running on his
+PC** - which is also why it cannot be the thing that fixes his update.
+
+### How it was verified
+
+`backend/test_apply_outcomes.py` gained four checks, all of which fail on the
+script without this change:
+
+- `t_mini_manifest_is_written_and_names_the_files` - the record's shape, above.
+- `t_mini_second_run_needs_no_rehearsal` - **run it twice on a copy**: the
+  second run prints "No rehearsal was needed", prints no strip and no re-apply,
+  changes not one byte of the backend, and re-checks the real files and the
+  shipped modules anyway. A record from a different patch list, and no record at
+  all, both fall back to the rehearsal (so "no rehearsal" is not satisfied by
+  never rehearsing).
+- `t_mini_a_hand_edit_is_drift_by_name` - **hand-edit one `.py` in the copy**:
+  the next run names it as changed, leaves the edit's bytes alone, leaves the
+  record alone, and names it again on a third run. Putting the edit back makes
+  the record usable again, with no drift reported.
+- `t_mini_unmatched_files_are_named_not_blessed` - a `.py` no patch of the list
+  writes is recorded by hash with `patch: ""` and `verified: false`, is named in
+  the run's own words, and is named again on the next run. A gate refusal writes
+  no record at all.
+
+`t_mini_success_and_endings`'s second-run expectation changed from "already
+applied" to the record's own wording, because on a backend the record covers the
+second run no longer asks the stack that question.
 
 
