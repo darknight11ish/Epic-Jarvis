@@ -3133,6 +3133,26 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             d.list.devices = d.list.devices.filter((x) => x.id !== args.id);
             return { ok: true, id: args.id, name: row && row.name, was_this_device: false, http: 200 };
           }
+          case "devices_label": {
+            // The owner's own name for a device (docs/MULTI-DEVICE-DESIGN.md,
+            // the first slice): the PC keeps the label beside the key, and
+            // every later list shows `shown`. Changed here the way the real
+            // route changes it, so a page that re-reads the list sees the new
+            // name - and so a page cannot be tested against three fields the
+            // wire does not really carry.
+            const d = window.__devices;
+            if (d.labelFails) throw new Error(d.labelFails);
+            if (args.id === "pc") {
+              throw new Error("This PC has no label - it is always this PC.");
+            }
+            const row = d.list.devices.find((x) => x.id === args.id);
+            if (!row) throw new Error("No such device.");
+            const label = String(args.label == null ? "" : args.label);
+            row.label = label || null;
+            row.shown = label || row.name || row.id;
+            return { ok: true, id: args.id, label: row.label, name: row.name,
+                     shown: row.shown, was_this_device: false, http: 200 };
+          }
           case "devices_shared": {
             const d = window.__devices;
             if (d.sharedFails) throw new Error(d.sharedFails);

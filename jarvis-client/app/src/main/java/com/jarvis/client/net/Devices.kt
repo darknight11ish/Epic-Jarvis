@@ -25,6 +25,7 @@ object Devices {
 
     const val PATH = "/api/devices"
     const val REMOVE_PATH = "/api/devices/remove"
+    const val LABEL_PATH = "/api/devices/label"
     const val SHARED_PATH = "/api/devices/shared"
     const val SHARED_PROMPT_RETIRE =
         "Your phone now signs risky approvals. Retire the old shared key now so unverified devices cannot approve risky actions."
@@ -38,11 +39,30 @@ object Devices {
         val thisDevice: Boolean,
         val removable: Boolean,
         /**
+         * The owner's own name for this device (docs/MULTI-DEVICE-DESIGN.md,
+         * the first slice): what he typed on the PC or on the phone, kept
+         * beside the key. Empty on the wire when there is none - which is how
+         * every device read before this feature arrived reads too, so an older
+         * PC needs nothing from here.
+         */
+        val label: String = "",
+        /**
+         * What to put on screen: the label when there is one, else the name
+         * the device gave itself at pairing ("Pixel 9"). Sent by the PC
+         * (`shown`), so this phone and the PC's Settings page can never word
+         * one device differently; computed here only for a PC too old to send
+         * it, which is exactly `label ?: name`.
+         */
+        val shown: String = "",
+        /**
          * Signed approvals (design §11): "waiting", "true" or "false" -
          * null when the PC's row has no such field (an older PC).
          */
         val approvalKey: String? = null,
-    )
+    ) {
+        /** The name to show, working the same way on an older PC. */
+        val displayName: String get() = shown.ifBlank { label.ifBlank { name } }
+    }
 
     data class Shared(
         val retired: Boolean,
@@ -100,6 +120,8 @@ object Devices {
                 lastSeen = o.long("last_seen"),
                 thisDevice = o.bool("this_device") == true || (you != null && id == you),
                 removable = o.bool("removable") == true && id != "pc",
+                label = o.str("label").orEmpty(),
+                shown = o.str("shown").orEmpty(),
                 approvalKey = approvalKeyOf(o["approval_key"]),
             )
         }
@@ -145,7 +167,7 @@ object Devices {
         if (device.thisDevice) {
             "Remove this phone? This phone will stop reaching Jarvis at once and go back to the pairing screen."
         } else {
-            "Remove ${device.name}? It stops reaching Jarvis at once. To use it again, pair it again with " +
+            "Remove ${device.displayName}? It stops reaching Jarvis at once. To use it again, pair it again with " +
                 "the QR code."
         }
 
@@ -215,6 +237,65 @@ object Devices {
 
     /** Was the removed device this phone itself? */
     fun removedThisPhone(body: JsonObject?): Boolean = body.bool("was_this_device") == true
+
+    // ── Naming a device (docs/MULTI-DEVICE-DESIGN.md, the first slice) ────
+    //
+    // The owner's own name for a device he already paired: kept beside its key
+    // on the PC, shown here and on the PC. No approval card - a label grants
+    // nothing and revokes nothing - and never held on a stale link, exactly
+    // like Remove. A device can never approve another device: that stays the
+    // PC's pairing card, on the PC, with Windows Hello.
+    //
+    // The four sentences are the PC's own (`DEVICES_WORDS` in
+    // backend/jarvis_devices.py), checked word for word by
+    // backend/test_devices.py, so a reworded backend cannot leave this phone
+    // behind.
+
+    /** Plain ASCII "..." on purpose: this sentence is compared word for word
+     *  with the PC's own by backend/test_devices.py, which reads this file as
+     *  UTF-8 while devices.rs is read under the machine's own encoding. */
+    const val LABEL_BUTTON = "Name this device..."
+
+    const val LABEL_PROMPT =
+        "What should Jarvis call this device? Leave it empty to go back to the name it gave itself."
+
+    const val LABEL_BAD =
+        "Use a shorter label, with letters, numbers, spaces and - _ . ' ( ) only. Leave it empty to go back " +
+            "to the name the device gave itself."
+
+    /** One label, quoted: the same rule the PC applies (letters and digits of
+     *  any script, space, and `- _ . ' ( )`, 1-40 characters, or empty). */
+    fun labelProblem(label: String): String? {
+        if (label.isEmpty()) return null
+        if (label.codePointCount(0, label.length) > 40) return LABEL_BAD
+        var i = 0
+        while (i < label.length) {
+            val cp = label.codePointAt(i)
+            val ok = Character.isLetterOrDigit(cp) || (cp < 0x80 && cp.toChar() in LABEL_EXTRA)
+            if (!ok) return LABEL_BAD
+            i += Character.charCount(cp)
+        }
+        return null
+    }
+
+    private val LABEL_EXTRA = setOf(' ', '-', '_', '.', '\'', '(', ')')
+
+    fun labelBody(id: String, label: String): String =
+        JsonObject(mapOf("id" to JsonPrimitive(id), "label" to JsonPrimitive(label))).toString()
+
+    /** "{name} is what this device is called now." */
+    fun labelDone(shown: String): String = "$shown is what this device is called now."
+
+    /** What `POST /api/devices/label` said, in words. `shown` is the name the
+     *  PC says the device has now, or the one this phone already had. */
+    fun labelSaid(code: Int, body: JsonObject?, shown: String): String = when (code) {
+        200 -> labelDone(body.str("shown") ?: shown)
+        404 -> if (body.str("reason") == "no_such_device") "$shown is no longer on the list." else MISSING
+        400 -> if (body.str("reason") == "bad_label") LABEL_BAD
+        else if (body.str("reason") == "not_labelable") "This PC has no label - it is always this PC."
+        else "Not named. Try again."
+        else -> body.str("error")?.let { "Not named. $it" } ?: "Not named. Try again."
+    }
 
     /** What `POST /api/devices/shared {"retired": true}` said, in words. */
     fun retireSaid(code: Int, body: JsonObject?): String = when {

@@ -14891,9 +14891,20 @@ shared key now works on this PC only.") and neither offers a button that
 could not work. An older PC does not send the field, and the apps read an
 absent field as `false`.
 
+Each device row carries three names (2026-10-09, docs/MULTI-DEVICE-DESIGN.md):
+`name` is what the phone sent at pairing ("Pixel 9", part of the pairing sums
+and so never rewritten), `label` is what the owner typed (`null` when he has
+not), and `shown` is the one to put on screen - the label, else `name`, else
+the id, decided by `jarvis_devices.row_shown()` alone so the PC's list and the
+phone's can never word one device differently. Both apps show `shown`; the row
+that lets him change a label shows `name` as well, so leaving the box empty has
+a visible destination. A device row written before this has no `label` key at
+all, which reads as "no label" - never as a broken registry.
+
 | Route | Body | Answers |
 |---|---|---|
-| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. |
+| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. The label goes with the key, and `name` in the answer is the name the owner was looking at (label, else the name the phone sent). |
+| `POST /api/devices/label` | `{"id": "d3f9a1c2e", "label": "Garden phone"}` and nothing else | The owner's own name for a device he already paired (docs/MULTI-DEVICE-DESIGN.md, 2026-10-09): **200** `{"ok": true, "id", "label", "name", "shown", "was_this_device"}`, immediate, **no card** from either app - a label grants nothing and revokes nothing, so it is never held on a stale link either. An empty `label` clears it, and `shown` goes back to the name the phone sent at pairing. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_labelable"}` for `"pc"`, `{"reason": "bad_label"}` when the label is over 40 characters or holds anything but letters and digits of any script, space and `- _ . ' ( )`, `{"reason": "bad_request"}` for anything else. Audit line `devices.labelled` with the id and whether it was cleared - **never the label**; a `devices` event. It can raise, answer and approve no card at all: `pair_device` stays PC only with Windows Hello. |
 | `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
 | `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, **409** `{"first_pair_only": true}` while a device holds a key of its own (removing every device first is the way back), else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
 
