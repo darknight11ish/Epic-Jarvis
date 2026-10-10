@@ -1108,52 +1108,6 @@ fn clamp_into(pos: (i32, i32), win: (u32, u32), area: (i32, i32, u32, u32)) -> (
     (pos.0.clamp(ax, max_x), pos.1.clamp(ay, max_y))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::clamp_into;
-
-    #[test]
-    fn a_widget_grown_past_the_edge_is_pulled_back() {
-        // 2026-10-10, the owner's screen: a 480x507 physical widget at
-        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
-        assert_eq!(
-            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
-            (1440, 573)
-        );
-    }
-
-    #[test]
-    fn a_widget_already_inside_is_left_exactly_where_it_is() {
-        assert_eq!(
-            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
-            (100, 100)
-        );
-    }
-
-    #[test]
-    fn a_monitor_to_the_left_of_the_primary_is_respected() {
-        // Windows' virtual screen starts at the left-most monitor, so a widget
-        // on a monitor at x=-1920 must not be dragged to 0...
-        assert_eq!(
-            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
-            (-1900, 100)
-        );
-        // ...and one hanging off its left edge comes back to it.
-        assert_eq!(
-            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
-            (-1920, 100)
-        );
-    }
-
-    #[test]
-    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
-        assert_eq!(
-            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
-            (0, 0)
-        );
-    }
-}
-
 /// Switches between floating above everything and sitting behind active windows.
 ///
 /// `false` is the "pin to desktop" mode: the widget stops being topmost, so any
@@ -1661,9 +1615,56 @@ fn parse_hit_mask(grid: &str) -> Option<Vec<bool>> {
         .then(|| grid.bytes().map(|b| b == b'1').collect())
 }
 
+// One test module for the whole file, which is also why it is not called
+// `floating_hit_tests` any more: it holds `clamp_into`'s tests too. A file may
+// have only one `mod tests` - two of them is E0428, `the name is defined
+// multiple times`, and that broke every test target on 2026-10-10 twice in one
+// afternoon: first when two changes each added a module, then again when the two
+// separate fixes for it were merged and kept both copies of these four tests.
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_widget_grown_past_the_edge_is_pulled_back() {
+        // 2026-10-10, the owner's screen: a 480x507 physical widget at
+        // x=1509,y=744 on a 1920x1080 monitor. Both edges were over.
+        assert_eq!(
+            clamp_into((1509, 744), (480, 507), (0, 0, 1920, 1080)),
+            (1440, 573)
+        );
+    }
+
+    #[test]
+    fn a_widget_already_inside_is_left_exactly_where_it_is() {
+        assert_eq!(
+            clamp_into((100, 100), (320, 220), (0, 0, 1920, 1080)),
+            (100, 100)
+        );
+    }
+
+    #[test]
+    fn a_monitor_to_the_left_of_the_primary_is_respected() {
+        // Windows' virtual screen starts at the left-most monitor, so a widget
+        // on a monitor at x=-1920 must not be dragged to 0...
+        assert_eq!(
+            clamp_into((-1900, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1900, 100)
+        );
+        // ...and one hanging off its left edge comes back to it.
+        assert_eq!(
+            clamp_into((-2000, 100), (320, 220), (-1920, 0, 1920, 1080)),
+            (-1920, 100)
+        );
+    }
+
+    #[test]
+    fn a_window_bigger_than_the_screen_is_pinned_to_its_origin() {
+        assert_eq!(
+            clamp_into((50, 50), (3000, 2000), (0, 0, 1920, 1080)),
+            (0, 0)
+        );
+    }
 
     /// A grid of `n` cells, all background except the ones named (row, col).
     fn grid_with(drawn: &[(usize, usize)]) -> String {

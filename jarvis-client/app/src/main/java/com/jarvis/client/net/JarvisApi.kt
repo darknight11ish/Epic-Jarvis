@@ -21,7 +21,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** What went wrong, in terms the UI can say out loud rather than a stack trace. */
@@ -3425,7 +3424,15 @@ class JarvisApi(
     }
 }
 
-private fun Throwable.readableMessage(): String = when (this) {
-    is IOException -> message ?: this::class.java.simpleName
-    else -> message ?: this::class.java.simpleName
-}
+/**
+ * A transport failure's own sentence, never the platform's
+ * ([PlainErrors.networkSays]). Every call above hands this to
+ * [ApiError.Unreachable] as its `detail`, so it is what sits behind the
+ * notice's "Details" - and OkHttp's own message, which names the address it
+ * dialled and both ports ("failed to connect to <host>/100.75.21.228 (port
+ * 4719) from /100.124.30.77 (port 42892) after 10000ms"), never reaches a
+ * screen at all. The failure's kind still travels beside it
+ * ([PlainErrors.networkKind], the second argument every call passes), which is
+ * what a bug report actually needs.
+ */
+private fun Throwable.readableMessage(): String = PlainErrors.networkSays(this)

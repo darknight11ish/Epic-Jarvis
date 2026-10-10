@@ -1328,43 +1328,139 @@ def pf_patches(live: Live) -> list:
     return rows
 
 
+#: The record `scripts/apply-patches.ps1` writes beside a backend when a run
+#: finishes (`-Manifest`; default `_jarvis-state.json`). It holds, per file,
+#: the SHA-256 of that file's bytes with CRLF folded to LF - the same fold
+#: `_sha` does below - plus the patch that owns it and whether the run verified
+#: it. Its `schema` is `jarvis-updater-manifest/1`.
+INSTALL_RECORD = "_jarvis-state.json"
+
+
+def _install_record(backend: Path):
+    """(the record, why it could not be used). Exactly one of the two is set.
+
+    `why` is written to be read by the owner, so it says what is wrong in plain
+    words rather than naming an exception class.
+    """
+    path = backend / INSTALL_RECORD
+    if not path.is_file():
+        return None, "there is no record beside the backend yet"
+    try:
+        doc = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None, "the record beside the backend cannot be read"
+    if not isinstance(doc, dict) or not isinstance(doc.get("files"), dict) \
+            or not doc["files"]:
+        return None, "the record beside the backend names no files"
+    return doc, ""
+
+
 @preflight_check("modules", "Is the file Jarvis runs the file you think?")
 def pf_modules(live: Live) -> list:
+    """Compare the installed backend against the record the installer wrote.
+
+    WHY NOT "this repository's copy" (changed 2026-10-10). This check used to
+    compare every shipped module against `HERE / rel` - the copy in whichever
+    checkout the preflight happened to be run from. Two checkouts of one
+    repository, looking at the SAME install, therefore got two different
+    verdicts, and neither could be satisfied while the two disagreed: the
+    reference moved whenever a shipped module was committed anywhere. Measured
+    on 2026-10-10 against one install: 10 FAIL rows from the owner's checkout,
+    7 from a clean `main` tree - and the same install had reported 1 FAIL hours
+    earlier, because the repository had moved, not the install.
+
+    The install is a fact about ONE machine, and `apply-patches.ps1` writes
+    that fact down beside the backend when a run finishes. Asking the record
+    gives the same answer from every checkout, which is the whole point.
+    docs/PREFLIGHT-MODULE-COMPARISON-DECISION.md is the decision behind this.
+    """
+    rows = []
     try:
         from _where import SHIPPED
     except Exception as exc:
         return [(WARN, "could not read the list of shipped modules", type(exc).__name__)]
-    rows = []
-    same = 0
-    newer_than_start = []
+
+    doc, why = _install_record(live.backend)
+    if doc is None:
+        # A WARN and never a FAIL. The record only exists after a run of a
+        # patcher that writes one (built 2026-10-10), so an install that has
+        # not been re-patched since then simply has none - and calling that a
+        # failure is exactly how this check came to be red for everybody.
+        rows.append((WARN, f"the installed files cannot be compared: {why}",
+                     f"{INSTALL_RECORD} is written by apply-patches.ps1 as a run "
+                     "finishes. Run it once and this check compares from then on. "
+                     "Nothing is compared, and nothing is claimed, until then."))
+        return rows
+
+    recorded = doc["files"]
+    written = str(doc.get("written") or "")
     started = (live.version or {}).get("started")
-    for rel in SHIPPED:
-        leaf = rel.rsplit("/", 1)[-1]
-        theirs, ours = live.backend / leaf, HERE / rel
+    same, drifted, absent, unspoken = 0, [], [], []
+    newer_than_start = []
+    for rel in sorted(recorded):
+        entry = recorded[rel] if isinstance(recorded[rel], dict) else {}
+        want = str(entry.get("sha256") or "")
+        theirs = live.backend / rel
         if not theirs.is_file():
-            rows.append((FAIL, f"{leaf} is not in the backend folder",
-                         "The feature it carries is switched off. Run apply-patches.ps1 "
-                         "(it copies every shipped module in), then restart Jarvis."))
+            absent.append(rel)
             continue
-        if not ours.is_file():
+        if not want:
+            unspoken.append(rel)
             continue
-        a, b = _sha(theirs), _sha(ours)
-        if a != b:
-            rows.append((FAIL, f"{leaf} in the backend folder is not this repository's copy "
-                               f"({a[:8]} there, {b[:8]} here)",
-                         "Most likely an older one. Run apply-patches.ps1, then restart "
-                         "Jarvis."))
+        got = _sha(theirs)
+        if got != want:
+            drifted.append((rel, got, want))
             continue
         same += 1
         if isinstance(started, (int, float)) and not isinstance(started, bool):
             try:
                 if theirs.stat().st_mtime > started + 2:
-                    newer_than_start.append(leaf)
+                    newer_than_start.append(rel)
             except OSError:
                 pass
+
+    for rel, got, want in drifted:
+        rows.append((FAIL, f"{rel} has changed since the installer wrote it "
+                           f"({got[:8]} now, {want[:8]} when recorded)",
+                     "Something edited it after apply-patches.ps1 ran, or a run was "
+                     "interrupted. Run apply-patches.ps1, then restart Jarvis."))
+    for rel in absent:
+        rows.append((FAIL, f"{rel} is in the installer's record but not in the backend folder",
+                     "The feature it carries is switched off. Run apply-patches.ps1 "
+                     "(it copies every shipped module in), then restart Jarvis."))
+
+    # The shipped modules the record does not speak for: copied in by a run from
+    # before the record existed, added by hand, or in a record this run could
+    # not reconcile. A missing one is still a real fault - the patcher copies
+    # every shipped module in, and an absent one switches its feature off in
+    # silence, which is the incident this whole check was built for.
+    #
+    # The record holds *.py files only, so a shipped file that is not one
+    # (jarvis_hud.html, which `GET /` serves) is judged by whether it is there
+    # at all and never reported as unrecorded - otherwise every run would warn
+    # about the same file for ever, which is how a warning stops being read.
+    for rel in SHIPPED:
+        leaf = rel.rsplit("/", 1)[-1]
+        if leaf in recorded:
+            continue
+        if not (live.backend / leaf).is_file():
+            rows.append((FAIL, f"{leaf} is not in the backend folder",
+                         "The feature it carries is switched off. Run apply-patches.ps1, "
+                         "then restart Jarvis."))
+        elif rel.endswith(".py"):
+            unspoken.append(leaf)
+    if unspoken:
+        unspoken = sorted(set(unspoken))
+        shown = ", ".join(unspoken[:6]) + (f" and {len(unspoken) - 6} more"
+                                           if len(unspoken) > 6 else "")
+        rows.append((WARN, f"{len(unspoken)} installed file(s) the record does not speak "
+                           f"for: {shown}",
+                     "They were added after the recorded run, or by hand. The next "
+                     "apply-patches.ps1 run records them."))
+
     if same:
-        rows.append((PASS, f"{same} of {len(SHIPPED)} shipped modules are identical to "
-                           f"this repository's copies"))
+        rows.append((PASS, f"{same} of {len(recorded)} files the installer recorded still "
+                           f"match it" + (f" (recorded {written})" if written else "")))
     if newer_than_start:
         shown = ", ".join(newer_than_start[:6]) + (" and more" if len(newer_than_start) > 6
                                                    else "")

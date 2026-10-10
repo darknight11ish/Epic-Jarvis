@@ -1249,6 +1249,24 @@ $PATCHES = @(
     # screen-attach.patch, which must stay last (test_screen_attach.py asserts
     # it), and it touches jarvis_gate.py not at all: it approves nothing.
     'prompt-coach.patch'
+    # More Docker integration, slice 1's missing half (the owner's request of
+    # 2026-10-09; docs/DOCKER-INTEGRATION-DESIGN.md sections 3, 4 and 7a): the
+    # containers on Jarvis's OWN list (today SearXNG, the default web-search
+    # provider) get their two routes. ONE install block in jarvis_hud.py -
+    # `jarvis_docker.install(Handler, ...)` - wiring GET /api/docker/containers
+    # (the list) and POST /api/docker/service (start or stop one) into the
+    # server, which is what makes jarvis_docker.py reachable at all. A start is
+    # ONE approval card (docker_service_start, tier ask) and a stop goes through
+    # the same gate; the module itself refuses a start unless the pinned image is
+    # ALREADY on this PC, so nothing here ever pulls, and it refuses a container
+    # that is not ours, one that publishes beyond loopback and one that is
+    # privileged. Its context is chatbot-limits-hud.patch's own block and
+    # tutorials.patch's first two lines, so it goes BEFORE screen-attach.patch,
+    # which must stay last (test_screen_attach.py asserts it): a block inserted
+    # between tutorials' block and the socket comment would break that patch's
+    # anchor. Needs jarvis_docker.py copied in; without it, or on any error, the
+    # banner says "docker NOT ON" and neither route is there.
+    'docker.patch'
     'screen-attach.patch'
     # The count-only retrieval trace (the owner's decision of 2026-10-08,
     # "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B; JARVIS-API
@@ -1538,6 +1556,7 @@ $SHIPPED = @(
     'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
     'jarvis_handoff_mode.py'     # how long that hand-off stays on offer (the owner's OWN setting of 2026-10-08): "Stop early" by default, or keep offering it for the full 15 minutes - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
     'jarvis_handoff_front.py'    # what a captcha does about its browser window (the owner's OWN setting of 2026-10-09): leave it exactly where it is by default, or bring it to the front - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
+    'jarvis_docker.py'           # the first Docker integration (the owner's request of 2026-10-09, docs/DOCKER-INTEGRATION-DESIGN.md): list the containers on Jarvis's OWN list (today SearXNG, the default search provider) and start or stop one. It cannot create or pull: a start is refused unless the pinned image is ALREADY on this PC, and a container that is not ours (wrong image, a port beyond loopback, or privileged) is never touched. Start is one card; stop is instant. Its routes are installed by docker.patch
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
