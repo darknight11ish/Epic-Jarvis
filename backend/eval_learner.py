@@ -87,6 +87,8 @@ WITH A MODEL (optional: --learner-model NAME, on the PC)
              from the assistant's or a tool's words, and did a correction
              point at the right stored fact. Needs JARVIS_BACKEND pointing
              at the backend folder, because jarvis_extract.py is only there.
+             The file it really loaded is named in the report, so a run that
+             fell back to something else cannot look like a real score.
              NOT RUN in this repository's container: there is no model and
              no jarvis_extract.py here, so this part is untested here.
 
@@ -98,6 +100,7 @@ the loopback address given.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import time
@@ -562,9 +565,51 @@ def _has(text: str, words) -> bool:
     return all((" " + str(w).lower() in low) for w in words)
 
 
-def _propose(M, I, A, case, ask, store) -> dict:
+def real_extract_path() -> Optional[Path]:
+    """Where the real jarvis_extract.py is: JARVIS_BACKEND's copy when that
+    variable names a folder holding one, else beside this file."""
+    backend = os.environ.get("JARVIS_BACKEND")
+    if backend and (Path(backend) / "jarvis_extract.py").is_file():
+        return (Path(backend) / "jarvis_extract.py").resolve()
+    here = HERE / "jarvis_extract.py"
+    return here.resolve() if here.is_file() else None
+
+
+def load_real_extract():
+    """The REAL jarvis_extract.py, read from disk. Raises ImportError if it is
+    not there.
+
+    WHY THIS IS NOT `import jarvis_extract`. Python answers that import from
+    `sys.modules` first, and `World.__init__` has already put a stand-in there
+    (the patch stack's own text, with no file behind it) so that the no-model
+    cases can run without the owner's install. The model cases were then handed
+    that same stand-in, so the real learner never ran: every `--learner-model`
+    measurement read as unmeasured rather than as a number. The stand-in is set
+    aside only for the length of this import, so `jarvis_intake` and the rest
+    keep the one they were given."""
+    path = real_extract_path()
+    if path is None:
+        raise ImportError("no jarvis_extract.py beside eval_learner.py or in "
+                          "JARVIS_BACKEND - set JARVIS_BACKEND to the backend folder")
+    stand_in = sys.modules.pop("jarvis_extract", None)
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("jarvis_extract", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"jarvis_extract.py could not be read from {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["jarvis_extract"] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if stand_in is not None:
+            sys.modules["jarvis_extract"] = stand_in
+        else:
+            sys.modules.pop("jarvis_extract", None)
+
+
+def _propose(M, I, A, case, X, ask, store) -> dict:
     """One conversation through the real learner, scored."""
-    import jarvis_extract as X      # the owner's file: JARVIS_BACKEND must hold it
     for text in case.get("stored", []):
         store.add(text, source="eval")
     import jarvis_intake
@@ -589,12 +634,15 @@ def run_model_part(M, I, A, cases, scratch: Path, model: str, ollama: str) -> di
     if A._remote(model):
         return {"ran": False, "why": f"{model} is a cloud model - refused"}
     try:
-        import jarvis_extract  # noqa: F401
-        if not hasattr(jarvis_extract, "propose"):
-            raise ImportError("no propose()")
+        # load_real_extract, never `import jarvis_extract`: the stand-in the
+        # no-model cases need is in sys.modules under that name, and a plain
+        # import hands the model cases the stand-in too - see its docstring.
+        extract = load_real_extract()
+        if not hasattr(extract, "propose"):
+            raise ImportError("the file has no propose()")
     except Exception as exc:
         return {"ran": False, "why": "jarvis_extract.py could not be loaded "
-                f"({type(exc).__name__}); set JARVIS_BACKEND to the backend folder"}
+                f"({type(exc).__name__}: {exc}); set JARVIS_BACKEND to the backend folder"}
     ask = _ollama(ollama, model)
     rows = []
     for case in [c for c in cases if c["kind"] == "propose"]:
@@ -605,13 +653,14 @@ def run_model_part(M, I, A, cases, scratch: Path, model: str, ollama: str) -> di
         try:
             with closing(st._connect()) as c:
                 _proposals_table(c)
-            r = _propose(M, I, A, case, ask, st)
+            r = _propose(M, I, A, case, extract, ask, st)
         except Exception as exc:
             r = {"ok": False, "got": {"error": f"{type(exc).__name__}: {exc}"[:300]}}
         finally:
             M._store = old
         rows.append({"id": case["id"], "what": case.get("what", ""), **r})
     return {"ran": True, "model": model, "cases": rows,
+            "real_file": str(getattr(extract, "__file__", "") or ""),
             "right": sum(r["ok"] for r in rows), "total": len(rows)}
 
 
@@ -729,7 +778,8 @@ def markdown(res: dict) -> list:
     if mp.get("ran"):
         lines += ["", f"The real learner ({mp['model']}): {mp['right']}/{mp['total']} "
                   "conversations right (every expected fact proposed with its \"not\" kept, "
-                  "nothing from the assistant's or a tool's words, corrections aimed right)."]
+                  "nothing from the assistant's or a tool's words, corrections aimed right). "
+                  f"jarvis_extract.py: {mp.get('real_file') or 'unknown'}."]
         for r in mp["cases"]:
             if not r["ok"]:
                 lines.append(f"- {r['id']} ({r['what']}): {r['got']}")

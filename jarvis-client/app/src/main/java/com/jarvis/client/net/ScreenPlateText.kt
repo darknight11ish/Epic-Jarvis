@@ -20,7 +20,11 @@ object ScreenPlateText {
     /** Added to an "Ending soon" line: only the PC can extend a watch. */
     const val EXTEND_ON_PC = "Extend it on the PC."
 
-    /** Under a switch that is greyed because the link to the PC is stale or unread. */
+    /**
+     * Under a control that is greyed because the link to the PC is down,
+     * stale or unread. The composer shows it too, under a Send greyed for a
+     * link that is down ([com.jarvis.client.LinkWords.composerHeldLine]).
+     */
     const val WAITING_LINK = "Waiting for the connection to your PC."
 
     /** Under "Watch this phone with me" when Jarvis is not the phone's assistant app. */

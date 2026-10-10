@@ -372,6 +372,25 @@ def t_migration_of_an_old_file():
 
 # --------------------------------------------------------------- sealing
 
+def _looks_like_json(raw: bytes) -> bool:
+    """Does this raw value parse as a JSON document?
+
+    The check below used to read a first byte of `{` as "this is JSON, so the
+    registry was never sealed". A sealed value is `nonce + AES-GCM
+    ciphertext`, and the nonce is 12 random bytes, so one seal in 256 starts
+    with `{` by chance - measured 2026-10-10: 8 of 4096 seals. That was a
+    flaky test, not a code failure: a forced `{` nonce seals correctly, opens
+    with the same key, and still failed the old assertion. Parsing is the
+    honest test - ciphertext does not parse as JSON, and a registry written
+    as JSON still does.
+    """
+    try:
+        json.loads(raw)
+    except Exception:
+        return False
+    return True
+
+
 def t_names_are_sealed():
     if _no_crypto():
         return
@@ -391,7 +410,7 @@ def t_names_are_sealed():
         v = c.execute("SELECT v FROM meta WHERE k='tags'").fetchone()[0]
         conv = c.execute("SELECT tag_id FROM conversations").fetchone()[0]
     check("the registry is one sealed blob (nonce + AES-GCM), not JSON", isinstance(v, bytes)
-          and not v.startswith(b"{") and len(v) > 40)
+          and not _looks_like_json(v) and len(v) > 40)
     check("a chat holds only the opaque number", conv == 1)
     other = new_log(key=bytes(reversed(range(32))))
     other.db_path.write_bytes(log.db_path.read_bytes())

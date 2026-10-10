@@ -1069,6 +1069,27 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.screen-rate",
+    "title": "Screen refresh rate",
+    "about": "The rate the screen is asked to run at while Jarvis is on screen.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "screen refresh rate",
+      "refresh rate",
+      "the refresh rate"
+    ]
+  },
+  {
     "id": "settings.menu-visibility",
     "title": "Show or hide menus",
     "about": "The list you are looking at.",
@@ -2644,12 +2665,14 @@ export const ALIASES = {
   "referee suggestions": "settings.second-card.referee",
   "referee suggestions (second card switch)": "settings.second-card.referee",
   "referee switch": "settings.second-card.referee",
+  "refresh rate": "settings.screen-rate",
   "retirement": "brain.work.retirement",
   "retirement what-if": "brain.work.retirement",
   "review decks": "brain.work.decks",
   "right now": "brain.now.right-now",
   "rush latch banner": "brain.trust.rush-latch",
   "saved automatically": "brain.memory.auto",
+  "screen refresh rate": "settings.screen-rate",
   "screen settings": "settings.screen-look",
   "search provider": "settings.web-search",
   "search settings": "settings.web-search",

@@ -459,9 +459,20 @@ GROUPS = (
                       # this page too.
                       "handoff_bring_to_front",
                       "fixed:handoff"]),
+    # Docker (jarvis_docker.py, the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list,
+    # listed and started or stopped on this PC. A start gives Jarvis more, so
+    # its module refuses any tier but "ask" and it is always ONE card; a stop
+    # gives it less and is expected to be instant, but it still goes through
+    # the gate and takes tier "ask" on a fresh install (unknown_action_tier),
+    # so a card can name it too. The page must name both because a card can:
+    # test_card_words.py's "every action a shipped module asks under" put them
+    # in jarvis_card_words.TITLES, and this is the other half of that - the
+    # page promises every action a card can name.
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
+                                "docker_service_start", "docker_service_stop",
                                 "app_merge_change", "pair_device", "unretire_shared_key",
                                 "register_approval_key"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
