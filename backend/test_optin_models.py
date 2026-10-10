@@ -68,30 +68,49 @@ os.environ.pop("JARVIS_OPTIN_MODEL_NAME", None)
 
 from _where import REPO, require_shipped  # noqa: E402
 
-#: The two modules that already exist on a real install are required the usual
-#: way: this suite must test the copy the backend actually runs, never a stale
-#: one sitting beside this file.
-require_shipped("jarvis_models.py")
-
 #: `jarvis_optin_models.py` is BRAND NEW, so it cannot be required the same
-#: way yet. `require_shipped` compares the copy in the backend folder with the
-#: one in this repository and stops the suite when the backend's is missing -
-#: which is exactly right AFTER `apply-patches.ps1` has copied it there, and
-#: exactly wrong before, when there is no deployed copy to compare with and
-#: the suite would refuse to run at all. So the repository's own copy is
-#: required by path here, and the file joins the `require_shipped` list (and
-#: `SHIPPED` in _where.py, which test_shipped_modules.py holds in step with
-#: apply-patches.ps1) in the same change that delivers it.
+#: way as the older modules yet. It is required BY PATH instead - this suite
+#: must run against the repository's own copy before `apply-patches.ps1` has
+#: deployed one, or it would refuse to run at all.
 if not (HERE / "jarvis_optin_models.py").is_file():
     print("FAIL  backend/jarvis_optin_models.py is missing from this repository")
     sys.exit(1)
 
 import jarvis_optin_models as O  # noqa: E402
-import jarvis_models as MM  # noqa: E402
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
+def skip(why):
+    """Not a failure: this environment cannot test it. Counted and printed,
+    the same way the suites that need the owner's own PC do it."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
+
+
+#: `jarvis_models.py` is one of the owner's own files (run_suites.OWNER_FILES):
+#: it lives on a real install and is deliberately NOT shipped, so CI's staged
+#: backend does not have it and `import jarvis_models` raises there. Asking for
+#: it with `require_shipped` was wrong for that reason - it stopped the suite
+#: with "not in <staged backend>", which is a true statement about a file that
+#: is not supposed to be there.
+#:
+#: Two of the tests below are about the everyday model NOT changing, and about
+#: `safe_ref` accepting a real name: both are checks OF `jarvis_models` itself,
+#: so a stand-in would test nothing. They are skipped here with that reason
+#: instead, and they run for real on the owner's PC - where this suite proves
+#: the thing the owner asked for (JARVIS_BACKEND set to the live install).
+_try = None
+try:
+    _try = __import__("jarvis_models")
+except Exception as exc:
+    skip(f"jarvis_models is not in this backend ({type(exc).__name__}), so the two "
+         f"checks that are ABOUT it cannot run here - they run on the owner's PC")
+MM = _try
+
+#: The name and reference helpers the module-level tests need do not depend on
+#: `jarvis_models` at all, so those checks run everywhere.
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" +
@@ -165,7 +184,11 @@ finally:
 check("discovery does not run at all while the switch is off", _walked == [])
 
 # What the everyday lane resolves to, BEFORE either switch is touched.
-_BEFORE = MM.current_model()
+# `MM` is None where jarvis_models is absent (CI's staged backend); the three
+# checks below that compare the everyday model before and after are then
+# skipped with a reason rather than passing on a stand-in, because a stand-in
+# would prove nothing about the real thing.
+_BEFORE = MM.current_model() if MM is not None else None
 
 
 # --------------------------------------------------------------------------
@@ -254,8 +277,12 @@ check("the body Ollama is given points at a PATH on this PC",
 check("...and not at a registry reference",
       not _body["from"].startswith(("hf.co/", "huggingface.co/"))
       and not re.match(r"^[a-z0-9.-]+\.[a-z]{2,}/", _body["from"]), str(_body))
-check("...and the model name is Ollama's own naming rule, not a URL",
-      MM.safe_ref(_body["model"]) == _body["model"], _body["model"])
+if MM is None:
+    skip("the name rule is checked against jarvis_models.safe_ref, which is not in "
+         "this backend - it runs on the owner's PC")
+else:
+    check("...and the model name is Ollama's own naming rule, not a URL",
+          MM.safe_ref(_body["model"]) == _body["model"], _body["model"])
 check("the request is not a pull: no /api/pull anywhere in the module",
       "/api/pull" not in (HERE / "jarvis_optin_models.py").read_text("utf-8"))
 check("the module opens no socket and fetches no URL",
@@ -288,9 +315,14 @@ print("\n-- D. the everyday assistant is untouched --")
 
 check("both opt-ins are ON for this check",
       O._flag("uncensored_choices_offered") and O._flag("fiction_roleplay_on"))
-check("THE EVERYDAY MODEL IS BYTE-FOR-BYTE WHAT IT WAS",
-      MM.current_model() == _BEFORE,
-      f"before={_BEFORE!r} after={MM.current_model()!r}")
+if MM is None:
+    skip("THE EVERYDAY MODEL IS BYTE-FOR-BYTE WHAT IT WAS is checked with "
+         "jarvis_models.current_model, which is not in this backend - it runs on "
+         "the owner's PC")
+else:
+    check("THE EVERYDAY MODEL IS BYTE-FOR-BYTE WHAT IT WAS",
+          MM.current_model() == _BEFORE,
+          f"before={_BEFORE!r} after={MM.current_model()!r}")
 check("opt-in (a) claims no model and no default, in its own words",
       "never the everyday" in O.offered()["never_default"].lower(),
       O.offered()["never_default"])
@@ -341,8 +373,12 @@ check("no silent fallback to the everyday assistant: it refuses rather than answ
 O.enable_fiction_roleplay(True)
 check("with it ON the fiction lane is allowed", O.ensure_fiction_allowed()["ok"] is True)
 check("...and the label says it is on", O.fiction_label()["on"] is True)
-check("...and it still does not switch any model",
-      MM.current_model() == _BEFORE, f"{_BEFORE!r} -> {MM.current_model()!r}")
+if MM is None:
+    skip("'it still does not switch any model' is checked with jarvis_models, "
+         "which is not in this backend - it runs on the owner's PC")
+else:
+    check("...and it still does not switch any model",
+          MM.current_model() == _BEFORE, f"{_BEFORE!r} -> {MM.current_model()!r}")
 
 _S = O.FICTION_SYSTEM
 check("the fiction instructions keep 'take no action outside the story'",
@@ -401,8 +437,14 @@ check("the two different 14B models get two DIFFERENT names",
 check("...and the Coder one says so in its name", "coder" in _names[2], _names[2])
 check("each of the four real files gets its own name",
       len(set(_names)) == 4, str(_names))
-check("every name is one Ollama will accept",
-      all(MM.safe_ref(n) == n for n in _names), str(_names))
+if MM is None:
+    # The shape check just below covers the same rule without jarvis_models, so
+    # this one is only skipped when the module that owns the rule is absent.
+    skip("'every name is one Ollama will accept' is checked with "
+         "jarvis_models.safe_ref, which is not in this backend")
+else:
+    check("every name is one Ollama will accept",
+          all(MM.safe_ref(n) == n for n in _names), str(_names))
 check("no name carries a bracket, a space or a colon",
       all(re.fullmatch(r"[a-z0-9._-]+", n) for n in _names), str(_names))
 check("the same weights in two quants get ONE name",
@@ -459,7 +501,11 @@ check("...and refuses in plain words when the drive is too full",
 #   Summary
 # --------------------------------------------------------------------------
 
-print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
+if SKIPPED:
+    print("Skipped (not failures):")
+    for s in SKIPPED:
+        print("  - " + s)
 if FAILED:
     print("FAILED:")
     for f in FAILED:
