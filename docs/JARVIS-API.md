@@ -8670,7 +8670,8 @@ listing need no card; restoring is held on a stale link, like setting the
 folder.
 
 Phone: read-only (`net/Backup.kt`, `ui/screens/BackupPlate.kt`, in
-Settings): "Last backup: 3 days ago." or "No backup has been made yet." -
+Settings): "Last backup: 3 days ago." or, when the PC's memory holds none,
+"Your PC's Jarvis has not made one since it last started." -
 nothing else the PC's answer carries (the folder's path, a waiting card, a
 one-time recovery code) is shown. Choosing a folder, backing up and
 restoring are the PC's alone: the folder picker is Windows', the recovery
@@ -8678,6 +8679,20 @@ code is typed on the PC, and restoring needs Windows Hello there.
 `tools/check_parity.py`: `/api/backup` is `ported` (both read it, at
 different depths); every other backup route is `deliberate`
 (`docs/ARCHITECTURE.md` section 8).
+
+**No "Back up now" on the phone (settled 2026-10-10).** The owner asked for
+one; the phone cannot have one that works. `POST /api/backup/now` is refused
+for every caller that is not this PC (`jarvis_backup.request_backup_now` ->
+`jarvis_owner_check.from_this_pc`, 403 `pc_only`), and a phone reaching the
+PC by its Tailscale or NordVPN Meshnet name is not this PC - measured on the
+owner's own install that morning, where the phone's own saved address
+(`shared_prefs/jarvis_client.xml`, `host`) is a `.nord` name. So the phone
+draws the PC's rule in words instead of a control that could only fail
+(`Backup.PC_ONLY`), and says the recovery-code warning
+(`Backup.CODE_WARNING`) before the owner walks to the PC. The three keys a
+non-PC caller never receives (`pending_delete_older_card`, `last_delete_older`,
+`erase_limit`) are no longer parsed or drawn there at all: a branch that can
+never run reads as a live one.
 
 ### 45.6 Known gaps, said plainly
 
@@ -12955,9 +12970,22 @@ no code copied.
 |---|---|---|---|
 | Focus session | `POST /api/focus/start` for 25 minutes (§31), like the Focus session plate's Start | yes | unlock the phone first |
 | 10-min timer | `POST /api/schedule/add {"kind": "timer", "seconds": 600}` (§21.2) - a plain timer, no card | yes | unlock the phone first |
-| Brief me | opens Jarvis on Brain's briefing (the same intent as the "Brief me" app-icon shortcut, §52); shows nothing itself | - | App lock asks, as for any opening |
+| Open briefing | opens Jarvis on Brain's briefing (the same intent as the "Brief me now" app-icon shortcut, §52); shows nothing itself | - | App lock asks, as for any opening |
 | Stop everything | `POST /api/stop_all` (§28), after stopping the phone's own speech | **never** (it only stops things) | runs straight away |
 | Play/pause PC | `GET /api/media` to see whether something is playing ("Playing: ..." -> pause, else play), then ONE `POST /api/media/control` (§74.2) | yes | unlock the phone first |
+
+**The tile's label says what its tap does (2026-10-10).** The briefing slot
+used to DRAW the shared word "Brief me" while only opening the app, so the
+owner tapped a tile that promised a briefing and waited for one that was
+never coming. Starting one from the tile instead is not the fix - a briefing
+names new senders and a tile draws on a locked screen - so the tile draws
+`QuickTiles.OPEN_BRIEFING` ("Open briefing") and the Settings chooser says
+the same. The shared word itself stays exactly as the PC has it
+(`jarvis_widgets.ACTIONS`, `tileLabel`): the home-screen widget's buttons on
+both apps draw it, and `contract/widget-cases.json` holds the two byte for
+byte, so changing it means the PC's own module, both golden files and
+`jarvis-desktop/src/widget-board.js`. `QuickTiles.tileLabel(action, slot)` is
+what each tile draws.
 
 The timer tile is the first time the phone adds a timer through
 `/api/schedule/add` (§21.2 said both apps add only to-do items and
@@ -12979,12 +13007,18 @@ toast and the app's notice; with App lock on, or the phone locked, the
 focus session's and Stop everything's own sentences are replaced by fixed
 words ("Stop everything sent. Open Jarvis to see what stopped."), since the
 PC's sentence can say what was stopped. The existing link tile
-(`LinkTileService`, Mute) is unchanged; none of the five is Mute.
+(`LinkTileService`, Mute) is unchanged apart from its LABEL: it draws "Mute
+Jarvis" (`QuickTiles.LINK_TILE_LABEL`, `res/values/strings.xml`'s
+`link_tile_label`, which the manifest gives the same service so Android's
+tile editor and the shade agree). It used to draw "Jarvis" - the app's own
+name - so a tile with Jarvis's name on it silently muted Jarvis (found in the
+sweep of 2026-10-10). None of the five is Mute.
 
 **Why these App lock rules.** A Quick Settings tile works from the lock
 screen. Stop everything only makes Jarvis do less, so it always works, as
 the PC's hotkey does - the tile is the one way to reach it on the phone
-without passing App lock (Home's button stays behind it, §28). "Brief me" shows private words, so it only opens the
+without passing App lock (Home's button stays behind it, §28). "Open
+briefing" shows private words, so it only opens the
 app, which App lock guards. The other three change something small on the
 PC and show nothing private, so with App lock on they ask for the phone's
 own unlock first (Android's `unlockAndRun`), not Jarvis's fingerprint.
@@ -18573,6 +18607,19 @@ be raised at all is `503`.
 | `403` `{"ok": false, "pc_only": true, "error": "That can only be changed on the PC."}` | a `pc_only` row, from anything but this PC |
 | `409` `{"ok": false, "error": "You said no, so nothing was changed."}` | the card was denied (`"timed_out"` and `"That was not approved, so nothing was changed."` are its siblings) |
 | `503` `{"ok": false, "error": "Your PC's Jarvis cannot ask you about that yet, so nothing was changed."}` | the gate action's tier is not `"ask"` |
+
+**A save that did not happen says so on the phone, under its own row
+(2026-10-10).** `Limits.classifyPost` reads a `404` FIRST, before the branch
+that keeps the PC's own sentence in `error`: a `404` means the ROUTE is not
+there at all, and its body carries the server's words ("not found"), not the
+PC's answer about the change. Read as an answer, that made a save that never
+happened look like one that had (`changed` came out `true`, so nothing reached
+the shared notice, and the time picker closed as if it had worked). A `404` is
+now `ApiResult.Failed(NotFound)`, which is exactly what `Limits.MISSING` is
+for. `LimitsPlate` draws that sentence (or the PC's refusal) UNDER the row the
+change was asked for, in the warning colour, because the list is longer than
+one screen: a sentence drawn once for the whole card is off the screen for some
+row whatever place it is given.
 
 ### 123.4 The interruption budget: `POST /api/attention/settings`
 
