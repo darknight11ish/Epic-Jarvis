@@ -11796,11 +11796,36 @@ function renderWatchReport() {
   const body = state.data.watch_report || {};
   const why = unavailable("watch_report");
   if (why) return rows(dom.watchReport, [], null, whyNode("watch_report"));
-  const findings = Array.isArray(body.findings)
-    ? body.findings
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  // `GET /api/watch/report` serves {available, new, updated, count, topics,
+  // note} and splits its rows by `kind`; the module's own consumer reads
+  // `peek["new"] + peek["updated"]`, in that order (jarvis_watch.py:524).
+  // Checked against the owner's running backend on 2026-10-09: `findings` and
+  // `items` are not in the payload at all, and this read only those two - so
+  // `findings` was always [] and the block drew "Nothing new since you last
+  // marked the list read." over a list it had never read. A permanent false
+  // all-clear on the SUCCESS path, with the badge above free to say
+  // "Watches · 3 new" at the same moment - the notification all-clear of #128
+  // on a security-watch list.
+  const servedByBackend = Array.isArray(body.new) || Array.isArray(body.updated);
+  const findings = servedByBackend
+    ? [...(body.new || []), ...(body.updated || [])]
+    : Array.isArray(body.findings)
+      ? body.findings
+      : Array.isArray(body.items)
+        ? body.items
+        : null;
+
+  // A 200 whose body is a shape nobody here knows is NOT a report of nothing
+  // new. The empty sentence is the reassuring one, so it is not borrowed for a
+  // read that did not happen: the block says so instead (2026-10-09). The list
+  // stays readable if a future backend renames these keys, so this is drift
+  // made visible, not drift made fatal.
+  if (findings === null) {
+    dom.watchSeen.disabled = true;
+    return rows(dom.watchReport, [], null,
+      el("p", "empty failed", "Could not read what is new: your PC's Jarvis sent a " +
+        "list this window does not recognise."));
+  }
 
   dom.watchSeen.disabled = findings.length === 0;
 
@@ -11809,13 +11834,19 @@ function renderWatchReport() {
     findings,
     (f) => {
       // "none stated" means no permission, not "probably fine" — so an absent
-      // licence is rendered as a warning, not as a blank.
+      // licence is rendered as a warning, not as a blank. `jarvis_watch.py:492`
+      // sends exactly those two words for a repository with no licence file, and
+      // the filter below used to test only `none|unknown|null`, so an
+      // unlicensed repository was drawn as a settled `none stated` and this
+      // warning never appeared (2026-10-09).
       const licence = String(f.licence || f.license || "").trim();
-      const stated = licence && !/^(none|unknown|null)$/i.test(licence);
+      const stated = licence && !/^(none|none stated|unknown|null)$/i.test(licence);
       return row({
         tag: stated ? licence : "no licence",
         state: stated ? "ok" : "warn",
-        title: String(f.full_name || f.name || "(repository)"),
+        // `repo` is what the route serves for a repository
+        // (jarvis_watch.py:489); it used to be titled "(repository)" always.
+        title: String(f.repo || f.full_name || f.name || "(repository)"),
         meta: [
           String(f.descr || f.description || ""),
           [
