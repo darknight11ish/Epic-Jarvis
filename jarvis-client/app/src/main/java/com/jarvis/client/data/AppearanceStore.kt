@@ -117,6 +117,31 @@ class AppearanceStore(context: Context) {
         _faceTuning.value = clamped
     }
 
+    private val _screenRate = MutableStateFlow(ScreenRate.decode(prefs.getString(ScreenRate.PREFS_KEY, null)))
+
+    /**
+     * The **screen's** refresh rate the owner picked, or null to follow the
+     * phone. Per device - it is a fact about this panel - and never in
+     * [toSyncDocument].
+     *
+     * **Not the face's frame rate.** [faceTuning]'s `frameRate` is how often
+     * the animal is drawn; this is what the panel is asked to run at. They are
+     * kept in two fields on purpose: see [ScreenRate]'s own doc, which says why
+     * merging them would be wrong.
+     */
+    val screenRate: StateFlow<Float?> = _screenRate.asStateFlow()
+
+    /**
+     * Saves the pick. A null, non-finite or non-positive value means "follow
+     * the phone" and is stored as [ScreenRate.FOLLOW_PHONE] - the way back to
+     * whatever the phone was using.
+     */
+    fun setScreenRate(hz: Float?) {
+        val clean = if (hz != null && hz.isFinite() && hz > 0f) hz else null
+        prefs.edit { putString(ScreenRate.PREFS_KEY, ScreenRate.encode(clean)) }
+        _screenRate.value = clean
+    }
+
     private val _animal = MutableStateFlow(
         com.jarvis.client.net.AnimalOptions.decode(prefs.getString(KEY_ANIMAL, null)),
     )

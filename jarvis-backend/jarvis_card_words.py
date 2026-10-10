@@ -197,6 +197,16 @@ TITLES = {
     # the owner's decision of 2026-10-09): bringing that one stuck window to
     # the front instead of leaving it exactly where it is.
     "handoff_bring_to_front": "bring the stuck browser window to the front",
+    # --- Docker (jarvis_docker.py, the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list,
+    # and start/stop for one. The words are the module's own: `card_text()` asks
+    # "Start <name> on this PC?" / "Stop <name> on this PC?", and `WORDS["detail"]`
+    # says "the containers it uses on this PC". A start gives Jarvis more, so it
+    # is tier "ask" and always raises ONE card; a stop gives it less and is
+    # expected to be instant, but it still goes through the gate and takes tier
+    # "ask" on a fresh install (unknown_action_tier), so it needs a phrase too.
+    "docker_service_start": "start one of the containers it uses on this PC",
+    "docker_service_stop": "stop one of the containers it uses on this PC",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
     # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)
