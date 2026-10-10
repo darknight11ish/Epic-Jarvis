@@ -616,8 +616,10 @@ recalled somewhere this patch does not see) counts as sensitive. **Missing
 while `injected_facts` is above 0** - a PC from before this - means "all of
 them may be sensitive". The apps use it to keep such an answer on screen
 when the question came by voice (§16, "What the apps must do about private
-answers"). Said plainly: the header is built in the owner's `jarvis_hud.py`,
-which is not in this repository; the patch sets this field beside the
+answers"). Said plainly: the header is built in `jarvis_hud.py`, which this
+repository holds only as its published base
+(`jarvis-backend/jarvis_hud.py`) - not as the copy running on the owner's PC;
+the patch sets this field beside the
 `turn_id` line `feedback.patch` added, and was checked only against the
 patch-stack stand-in (`backend/test_auto_learn.py`).
 
@@ -913,7 +915,9 @@ the PC, no app change needed:
 
 Said plainly: the gate's own rush latch (`[content_risk]`, rushing language
 raises the tier for ten minutes) lives in `jarvis_content_risk.py` on the
-owner's PC, which this repository does not have. A planted-instruction hit
+owner's PC; this repository holds that module only as its published base
+(`jarvis-backend/jarvis_content_risk.py`), not as the copy running there. A
+planted-instruction hit
 here does **not** set it - it is recorded on the turn (`outside_flags` in
 `run_local_turn`'s summary, codes only) and shown on the card.
 
@@ -1156,7 +1160,9 @@ JSON against `VoiceModels.kt` and the desktop's `voice.rs`.
 `is_owner`/`available` (desktop, `voice.rs` `HeardRaw`) and `ok`/`owner`
 (phone, `Heard`), plus `mode`, `seconds` and `engine`. This assumes the
 route sends `jarvis_speech.Heard.as_dict()` unchanged, as `voice.rs` also
-assumes; the route's reply line is not in this repository.
+assumes; the route's reply line lives in `jarvis_hud.py`, which this
+repository holds only as its published base
+(`jarvis-backend/jarvis_hud.py`), not as the copy on the owner's PC.
 
 **A client must not do speech-to-text.** That is a standing rule in
 `CLAUDE.md`, and it is why `utterance` posts a complete recorded clip rather
@@ -4864,15 +4870,38 @@ What it understands:
 
 | | Examples |
 |---|---|
-| Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" |
+| Timers | "set a timer for 10 minutes", "10 minute timer", "timer for 1h30", "set a pasta timer for 12 minutes", "cancel the timer", "cancel the pasta timer", "pause / resume the timer", "add 5 minutes to the timer", "5 more minutes" (only while a timer runs), "take 2 minutes off the timer", "how long is left" (only while a timer **or** a focus session is running) |
 | Alarms | "set an alarm for 7" (the next 7 o'clock), "alarm at 7:30am", "wake me up at 6", "set an alarm for tomorrow at 6" (an alarm on another day: the morning), "cancel my 7am alarm", "what alarms do I have" |
-| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (a card), "remind me to stretch every 2 hours" (a card) |
+| Reminders | "remind me to call Mum at 6", "remind me in 20 minutes to check the oven", "remind me tomorrow to call the bank" (no time: 09:00, and the reply says so), "remind me on Friday at 5pm to pay rent", "remind me every weekday at 7 to take my pills" (**no card** - a plain repeat), "remind me to stretch every 2 hours" (**no card** - a plain repeat) |
 | To-do list | "add milk to my to-do list", "what's on my to-do list", "mark milk as done", "tick off milk", "remove milk from my to-do list" |
 | Named lists (21.9) | "add milk to the shopping list", "add milk, eggs and bread to the shopping list", "what's on my shopping list", "cross milk off the shopping list", "remove eggs from the shopping list", "what lists do I have", "clear the shopping list" (changes nothing: it points to the app) |
 | Snooze (21.9) | "snooze", "snooze 5 minutes", "snooze the alarm", "remind me again in 10 minutes" |
 | "Cancel that" (21.9) | "cancel that", "never mind", "undo", "delete that reminder", "no, cancel that alarm" |
-| Morning briefing | "brief me now", "brief me every weekday at 7", "stop my briefing" - section 22.5 |
+| Morning briefing | "brief me now", "brief me every weekday at 7" (**a card**), "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
+
+**"How long is left" is only ours while something is left to measure.** With
+no timer running, the **bare** sentence ("how long is left", "how much time is
+left") inside a focus session is answered by the focus path (§31.3); with
+neither a timer nor a focus session running, the bare sentence is
+**deliberately the model's** - the fast path hands it on rather than guessing
+which clock the owner meant. The explicit form ("how long is left on the
+timer") with no timer running is answered here instead, in words: "No timer is
+running." The same care shows in "cancel all timers" and "clear my to-do list"
+below: ambiguity is refused in words, never resolved by picking one.
+
+**Which repeats raise a card, and which do not (owner, 2026-09-26).** A plain
+repeating **alarm** or **reminder** is set up **at once, with no card** - only
+the owner's own words can set one, and deleting it is instant - and the answer
+gives its next three times. This is the scheduler's own flag, not a rule this
+sentence re-states: only `alarm` and `reminder` are registered
+`plain_repeat=True` (`jarvis_schedule.py`'s `register_kind` calls), so
+`add_repeat` puts them straight into state `active`, while every other kind
+goes to state `waiting` and its one card appears. **A repeating briefing**
+(§22.5) and **"tell me when"** (§30) are the two that still card - the
+briefing is registered without `plain_repeat` (`jarvis_briefing.py`), and its
+own answer says so in words. So "(a card)" belongs on those, never on the
+reminder examples above.
 
 **"12" (owner, 2026-09-30: "read it as midnight and always say the time
 back").** "12 at night", "12 in the evening" and "tonight at 12" are
@@ -4949,8 +4978,10 @@ the times stay, so a timer still counts down.
   the phone's screen code is compiled by CI only.
 - **The initiative engine and the digest are not hooked in.** The engine's
   30-minute heartbeat and in-memory findings could not host timers
-  (`jarvis_schedule.py`'s header says why); the digest lives in the owner's
-  `jarvis_arbiter.py`, which this repository does not hold. The scheduler is
+  (`jarvis_schedule.py`'s header says why); the digest lives in
+  `jarvis_arbiter.py`, which this repository **does** hold
+  (`backend/jarvis_arbiter.py`, and its `jarvis-backend/` twin - the routes
+  are §123.4). The scheduler is
   the one clock; briefings, sleep mode and the overnight tidy are to plug in
   as new kinds (`register_kind`), not as schedulers of their own. Sleep mode
   now has, as the standby schedule (21.8), and so has the morning briefing
@@ -5003,9 +5034,14 @@ new patch: `jarvis_schedule.py` and `jarvis_quick.py` only, and both apps.
 Nothing here needs a card: a snooze is a one-off, and the owner's rule is no
 card for a one-off.
 
-**Snooze.** A timer, alarm or reminder that WENT OFF (in the last day) can be
-snoozed: `POST /api/schedule/act {"id", "do": "snooze", "seconds"?}` (10
-minutes when not said; 1 minute to 24 hours). It makes a **new one-off copy**
+**Snooze.** A timer, alarm or reminder that WENT OFF can be snoozed:
+`POST /api/schedule/act {"id", "do": "snooze", "seconds"?}` (10
+minutes when not said; 1 minute to 24 hours). **The route reaches back a day**
+- a job that has gone off is kept for `FIRED_KEEP` (24 hours) so an app that
+was out of reach can still act on it - while **the "Just went off" list and
+the spoken phrase reach back one hour** (`WENT_OFF_SHOWN`, 3600, and
+`jarvis_quick.py`'s own words are "Nothing went off in the last hour, so there
+is nothing to snooze."). It makes a **new one-off copy**
 of the job (same kind, same words, `"snoozed": true`, `source` `"snooze"`),
 due after the snooze. A repeating job's own rule and next time are not
 touched, so only that one occurrence moves. Snoozing the same one again
@@ -5918,7 +5954,9 @@ to the model, as does pasted text.
 
 ### 24.5 Known gaps, said plainly
 
-- The gate on the owner's PC (`jarvis_gate.py`) is not in this repository.
+- The gate on the owner's PC (`jarvis_gate.py`) is in this repository only as
+  its published base (`jarvis-backend/jarvis_gate.py`), not as the copy
+  running there.
   When it cannot be asked, the tool's action comes from the names
   `backend/README.md` lists; the tiers themselves are always read from the
   owner's `jarvis-framework.toml`.
@@ -6629,7 +6667,8 @@ private). The phone does not say timers aloud (ARCHITECTURE section 8).
   reminder, an alarm, a morning briefing or a standby schedule; setting it
   up sends nothing anywhere, ..."), which does not name "tell me when".
 - The GitHub watchlist (Brain -> Watch) is NOT merged into this: it lives
-  in the owner's own backend files, which this repository does not hold.
+  in `jarvis_watch.py`, which this repository holds only as its published
+  base (`jarvis-backend/jarvis_watch.py`), not as the copy on the owner's PC.
   Since 2026-09-28 "tell me when" has its own GitHub source (§70) - CI and
   pull requests on a repository the owner names, read-only, with the key
   GitHub research already uses - which is a different thing from the
@@ -8046,7 +8085,7 @@ one flat list, in fewer places. `backend/jarvis_sayable.py` (shipped whole),
 
 ### 41.1 The list, and how it was picked
 
-Seven sentences, each checked against `jarvis_quick.py`'s own grammar by
+Ten sentences, each checked against `jarvis_quick.py`'s own grammar by
 `backend/test_sayable.py` (it calls the real `match()` on every one, byte for
 byte as it is served, and fails if any comes back `None`):
 
@@ -8059,15 +8098,26 @@ byte as it is served, and fails if any comes back `None`):
 | "Remind me to call Mom at 6pm." | `reminder_set` |
 | "Add milk to the shopping list." | `todo_add` (a named list) |
 | "Brief me now." | `briefing_now` (`jarvis_briefing.py`) |
+| "Label this chat Work." | `chat_tag` (`jarvis_chat_log.py`, §99 - added 2026-09-30) |
+| "Open my topics." | `topic_mode` (`jarvis_topics.py`, added 2026-09-30) |
+| "Stop using my Money topic." | `topic_mode` (`jarvis_topics.py`, added 2026-09-30) |
 
 Chosen to show the spread the audit's own examples named (timers, "what did
-I miss?", "tell me when ...", focus) plus three more real ones - not every
-sentence `jarvis_quick.py` can answer, most of which need state a first-time
-reader does not have yet (a timer already running, a list already started,
-a focus session already on). "Tell me when an email from Alex arrives."
+I miss?", "tell me when ...", focus) plus three more real ones - a plain
+reminder, a named list and the briefing - and then, 2026-09-30, the chat tag
+and the two topic controls. Not every sentence `jarvis_quick.py` can answer,
+most of which need state a first-time reader does not have yet (a timer
+already running, a list already started, a focus session already on). "Tell
+me when an email from Alex arrives."
 still raises its own one approval card (§30) the moment it is sent - that is
 `tellme_email`'s own design, unchanged, and is still "no model": the card
-comes from the scheduler, never from the AI.
+comes from the scheduler, never from the AI. The two topic sentences only
+bite on the owner's own data: "Stop using my Money topic." needs a topic
+literally named *Money* (or the word "topic" in the sentence), and "Open my
+topics." opens Brain → Topics. Filing a chat, and turning a topic off, are
+the owner's own organisation - **no card**; turning one back *on* for a
+private topic still raises its one card (`jarvis_quick.py`'s own
+`_run_topic_mode`).
 
 ### 41.2 The route
 
@@ -8084,9 +8134,9 @@ and passes the origin check.
 {"available": true,
  "title": "Things you can say",
  "detail": "Real sentences Jarvis already answers without the AI model. Tap one to put it in the box - it does not send.",
- "sentences": [<the 7, in order>],
+ "sentences": [<the 10, in order>],
  "footer": "More: right-click the Jarvis icon by the clock.",
- "walkthrough_examples": [<3 of the 7, for a walkthrough screen 2>],
+ "walkthrough_examples": [<3 of the 10, for a walkthrough screen 2>],
  "help_title": "What can I say?",
  "help_body": <the Help/FAQ paragraph, naming every sentence>,
  "written_by": "code"}
@@ -8117,13 +8167,13 @@ shared text goes to the model as before.
 ### 41.4 In the apps
 
 - **Desktop**: the Jarvis bar's empty-state primer (`index.html` `#primer`)
-  shows the 7 sentences as tappable buttons, each filling `#prompt` and never
+  shows the 10 sentences as tappable buttons, each filling `#prompt` and never
   sending, plus the footer line - in place of the old 10 rows of hotkey
   chips and the zoom hint (the note-app prefixes, `#log`/`#joplin`/`#obs`,
   stay: they are not keyboard shortcuts, and this is still their only in-app
   explanation). The rebindable hotkeys the primer used to mirror live now,
   unduplicated, in Settings -> Shortcuts, which is where the footer line
-  points. 3 of the 7 (`WALKTHROUGH_EXAMPLES`) are on the walkthrough's screen
+  points. 3 of the 10 (`WALKTHROUGH_EXAMPLES`) are on the walkthrough's screen
   2 (`onboarding.html`), next to its Alt+Space mention - never screen 1 or 3.
   Settings -> FAQ has a "What can I say?" entry with the Help paragraph.
 - **Phone**: `Sayable.kt` carries the same words, held to the same fixture,
@@ -8153,9 +8203,11 @@ The owner's decision (`CLAUDE.md`, 2026-09-27, the answers to
 (title, Approved / Denied / Timed out, when, which device)." The ease-of-use
 audit's own row for this (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`, "Then"
 table, row 11) asked to check `jarvis_gate.py` first for the shape of its
-`history` rows. **That could not be done**: `jarvis_gate.py` is not in this
-repository (`backend/` holds only patches against it, and its `history()`
-function is not one any patch here touches) - CLAUDE.md's own "do not claim
+`history` rows. **That could not be done from `backend/`'s patches**:
+`jarvis_gate.py` reaches this repository only as its published base
+(`jarvis-backend/jarvis_gate.py`, whose `history()` is there), and the copy
+running on the owner's PC is a different file - so no patch here touches that
+function - CLAUDE.md's own "do not claim
 more than the evidence supports" rule applies directly, so this section says
 exactly what is confirmed against this repository's tests and what is
 assumed, rather than presenting a guessed schema as read.
@@ -8236,7 +8288,9 @@ guess wrong:
   id,action,tier,detail,prompt,created,raised FROM approvals`).
 
 **No backend change was made** to try to add or guess at the exact shape of
-`history()` - `jarvis_gate.py` is not in this repository, so any patch
+`history()` - the copy of `jarvis_gate.py` running on the owner's PC is not the
+one this repository holds as its published base
+(`jarvis-backend/jarvis_gate.py`), so any patch
 against its unseen source would be lines invented rather than read, and
 could not be trusted to apply on the owner's PC (every other patch in
 `backend/` matches real context lines from the file it patches; this would
@@ -9960,7 +10014,8 @@ at - "turn off my calendar" and "turn on the special mode" are not real
 settings and go to the model, same as "ask, don't guess"
 (`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
 
-Twelve settings are covered (web search on/off joined 2026-09-30, 23.6) - the ones that already sit behind a single
+Thirteen settings are covered (web search on/off joined 2026-09-30, 23.6; the
+interruption budget joined 2026-10-08, 123.4) - the ones that already sit behind a single
 proven `handle_*`/`request_*` entry point this file can call exactly as
 the REST route does, never a copy of its logic:
 
@@ -9978,6 +10033,7 @@ the REST route does, never a copy of its logic:
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
 | Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
 | Animal options (2026-09-28) | "keep the animal still", "stop the animal's nodding", "turn on the sun and moon", "turn off the weather", "use Open-Meteo for the weather", "make the animal sharper" | `jarvis_animal.set_switch()`, `jarvis_sky.handle_post()`; sharpness and frame rate go back in X-Jarvis-Route for the asking device - §93.3 |
+| How much Jarvis may interrupt you (2026-10-08) | "speak up 5 times a day", "let jarvis speak up 2 times a day", "speak up less", "speak up more", "the brief at 8pm", "the digest arrives at 7 in the morning" | `jarvis_arbiter.change()` - the same function the route calls; the raise gets the same ONE card - §123.4 |
 
 Every one of these keeps its EXISTING gate exactly:
 
@@ -10114,7 +10170,8 @@ help happens through ordinary chat (`/api/chat`, already shipped, already
 safe), which the owner then pastes into `POST /api/goals`'s `plan` -
 deliberately not a call this module makes itself, since the real way this
 backend talks to a local model takes its network calls from `jarvis_hud.py`
-(not in this repository, `docs/ARCHITECTURE.md` §9), and guessing at that
+(held here only as the published base `jarvis-backend/jarvis_hud.py`;
+`docs/ARCHITECTURE.md` §9 says where the real one lives), and guessing at that
 integration rather than verifying it would be exactly the mistake
 CLAUDE.md's "do not claim more than the evidence supports" section exists
 to prevent.
@@ -17851,7 +17908,8 @@ become a new way for private words to reach a lock screen. The readable feed
 
 The first call also runs `boot_once()`: startup recovery and the
 interrupted-run reconciliation happen there, so they do not depend on finding
-a startup hook in a file this repository does not hold.
+a startup hook in `jarvis_hud.py` (held here only as the published base
+`jarvis-backend/jarvis_hud.py`, not as the copy on the owner's PC).
 
 `POST /api/tasks/act` with `{"id": ..., "act": "pause" | "resume" | "cancel" |
 "retry"}` and `POST /api/tasks/input` with `{"id": ..., "answer": ...}` steer
@@ -18484,7 +18542,13 @@ The limits are not a module each: they are **rows in one table**
 (`jarvis_limits.LIMITS`), because a new patch costs this repository real work and
 the next limit is a line in that table. Each row says where its value lives,
 whether a bigger number is the direction that asks, which app may change it, and
-the owner's own words for it. Seven of them:
+the owner's own words for it. Eight of them (`jarvis_limits.LIMITS` holds these
+eight written by hand, and `_notify_rows()` appends **seven more** notification
+rows - `notif_alarms`, `notif_reminders`, `notif_briefing`, `notif_handoff` and
+the three Quiet-hours rows - so the table a client receives is fifteen rows
+long. Only the eight are listed here; the seven are built from
+`_NOTIFY_ROWS` and are not copied into this document, for the same
+no-second-copy reason as the numbers below):
 
 | `key` | what it is | the loosening | app |
 |---|---|---|---|
@@ -18598,6 +18662,30 @@ card under the action `raise_attention_budget` (tier `ask`, Windows Hello on the
 and writes nothing until it is approved; lowering it applies at once. The answer
 carries `loosening` and `approved` so a client can tell which happened, and `said` is
 always the PC's own sentence (`"Jarvis will not speak up on its own today."` at 0).
+
+**Both numbers are reachable by asking**, with no route involved at all
+(`jarvis_quick.py`'s `_BUDGET_PER_DAY`, `_BUDGET_STEP` and `_BRIEF_AT` - English
+only, whole sentences, digits only; a sentence that does not match exactly falls
+through to the model rather than picking a number, the same rule every setting
+sentence in §58.2 follows):
+
+| Sentence | What it becomes |
+|---|---|
+| "speak up 5 times a day", "let jarvis speak up 2 times a day" | `{"spoken_per_day": 5}` / `2` |
+| "speak up less", "speak up less often" | one step DOWN from the number in force now |
+| "speak up more", "speak up more often" | one step UP - so this is the form that raises the one card |
+| "the brief at 8pm", "the brief at 20" | `{"digest_hour": 20}` |
+| "the digest arrives at 7 in the morning" | `{"digest_hour": 7}` |
+
+`jarvis_quick.py`'s `_run_settings_budget` calls `jarvis_arbiter.change()` - the
+same function this route calls, never a copy of its rule - so asking and tapping
+cannot drift apart, and a raise asked aloud gets the same ONE card. The step form
+is read against the budget **in force right now**, then clamped to the allowed
+range (`jarvis_arbiter.SPOKEN_PER_DAY_MIN`/`_MAX`), so "speak up less" at 0 stays
+at 0 and says so. The hour is read the way the owner speaks it: "8" alone is 8,
+"8pm" is 20, "7 in the morning" is 7, and **"12am" is midnight and "12pm" is
+noon** - the two the arithmetic gets wrong if they are not written down
+(`jarvis_quick._brief_hour`).
 
 Both routes are reached by tapping on either app's own screen (the PC's
 Settings → "Limits and frequency" and its Brain Attention card; the phone's
