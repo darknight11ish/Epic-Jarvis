@@ -536,6 +536,15 @@ PHONE_ONLY = {
     "/api/devices/approval-key": ("phone-only", "The phone turns on signed approvals (docs/PAIRING-DESIGN.md 11.2, docs/JARVIS-API.md section 91): it sends its Keystore public key, and ONE register_approval_key card is approved on the PC with Windows Hello. The desktop is the PC - it holds the shared key and approves risky cards with Windows Hello itself - so it has no signing key to register and only READS the result (`approval_key` in the device list). ARCHITECTURE section 8."),
     "/api/approve/challenge": ("phone-only", "The phone asks for a one-use challenge before signing a risky approval with its fingerprint or PIN (docs/PAIRING-DESIGN.md 11.3, docs/JARVIS-API.md section 91). The desktop's own risky approvals are checked by Windows Hello on the PC, not by a signature, so it never calls this. ARCHITECTURE section 8."),
     "/api/notifications/phone": ("phone-only", "Reading phone notifications (the owner's decision, CLAUDE.md 2026-09-26; built 2026-09-28; docs/JARVIS-API.md §61). A Windows desktop has no equivalent to \"which app posted a notification\" - NotificationListenerService is Android-only. The setting still lives on the PC, like every other approval-card switch, but only the phone ever reads or acts on it (docs/ARCHITECTURE.md §8)."),
+    # "Approval cards read short" (the owner's request of 2026-10-09; docs/JARVIS-API.md
+    # section 126): the "Start short" / "Always show everything" choice for every
+    # approval card, kept in card-prefs.json on the PC so BOTH apps read the one
+    # value. "desktop-todo", never "phone-only": the desktop SHOULD have it too,
+    # and its own card is simply not built yet - this branch was asked not to edit
+    # jarvis-desktop/, and docs/DESKTOP-APPROVAL-CARD-PREF.md says exactly what it
+    # needs. Move this to CLASSIFICATION as "ported" the moment the desktop's own
+    # card calls the route.
+    "/api/card-prefs": ("desktop-todo", "\"Approval cards read short\" (the owner's request of 2026-10-09; docs/JARVIS-API.md section 126; backend/jarvis_card_summary.py, card-prefs.patch): the \"Start short\" / \"Always show everything\" choice for each approval card, kept in card-prefs.json so both apps read one value. The PHONE has it today (net/CardSummary.kt, ui/screens/ApprovalCardsPlate.kt, Settings under Appearance); the desktop's own card is NOT built yet, which is why this is desktop-todo rather than phone-only. docs/DESKTOP-APPROVAL-CARD-PREF.md names what it needs (src/main.js's refreshApproval, a settings.html card, and the `mode` field it reads); until then the desktop changes the setting by asking, and jarvis_settings_registry.SECTIONS keeps its settings.approval-cards row app=\"phone\" so \"open approval cards\" never names a place the desktop does not have."),
 }
 PHONE_STATUSES = {"phone-only", "desktop-todo"}
 
