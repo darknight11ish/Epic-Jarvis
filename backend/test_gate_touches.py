@@ -76,11 +76,35 @@ os.environ["JARVIS_NTFY_SERVER"] = ""
 
 # The published copy of the gate, first on the path; backend/rebuilt/ second,
 # for the library modules the shipped tier table is read by.
+#
+# NEITHER THE PATH NOR ANY BYTECODE OUTLIVES THESE TWO IMPORTS (2026-10-11).
+# Both used to. `jarvis-backend/` stayed first on `sys.path` for the rest of
+# the process, and importing the gate from there wrote
+# `jarvis-backend/__pycache__/*.pyc` into the checkout. The second one is a
+# real defect, not tidiness: `backend/test_base_matches_repo.py` forbids
+# bytecode in the base by name ("it embeds absolute paths, and git ignores
+# it"), so it reported 19 passed, 1 failed - but only when this suite had run
+# first in the same workspace. CI stayed green by accident: `run_suites.py`
+# walks the suites alphabetically, so `test_base_matches_repo` runs before
+# `test_gate_touches`, and CI's Windows list carries the base and not this
+# one. The owner, running one suite at a time, saw a red that reads exactly
+# like a regression in `jarvis-backend/`. A suite whose result depends on the
+# order the suites are run in is a trap, so bytecode writing is off for these
+# two imports and `sys.path` is put back as it was straight afterwards. Done
+# this way rather than by deleting the folder afterwards: a test that cleans
+# up after itself by removing a directory in the repository is one bug away
+# from removing something else.
+_SAVED_PATH = list(sys.path)
+_SAVED_DONT_WRITE_BYTECODE = sys.dont_write_bytecode
+sys.dont_write_bytecode = True
 sys.path.insert(0, str(BASE))
 sys.path.insert(0, str(HERE / "rebuilt"))
 
 import jarvis_framework as fw          # noqa: E402
 import jarvis_gate as G                # noqa: E402
+
+sys.path[:] = _SAVED_PATH
+sys.dont_write_bytecode = _SAVED_DONT_WRITE_BYTECODE
 
 FAILED, PASSED = [], []
 SKIPPED = []
