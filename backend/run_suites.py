@@ -172,11 +172,16 @@ REAP_AFTER = 3600.0
 #: has to be long: a suite is killed at 900 s and this is far beyond any sweep,
 #: so nothing can still be writing into a folder this old.
 REAP_AFTER_UNMARKED = 86400.0
-#: What is even a candidate: a folder under the system temp folder whose name
-#: this runner or a suite built. Deliberately a SHAPE and not a list of suite
-#: names - suites are added and removed constantly, and a fixed list would stop
-#: protecting the day after it was written.
-REAPABLE = re.compile(r"^jarvis-[A-Za-z0-9][A-Za-z0-9._-]*$")
+#: What is even a candidate: a folder under the system temp folder whose NAME
+#: is the shape this runner or a suite builds - `jarvis-<something>-<random>`,
+#: where the random tail is the one `tempfile.mkdtemp` appends. Deliberately a
+#: SHAPE and not a list of suite names: suites are added and removed constantly,
+#: and a fixed list would stop protecting them the day after it was written.
+#: The tail is 6+ characters of the alphabet mkdtemp uses and carries no dot, so
+#: a data file that merely starts with `jarvis-` (jarvis-framework.toml) and a
+#: folder with no random tail at all are both left alone - the rule only ever
+#: claims the throwaway folders, never a name a person chose.
+REAPABLE = re.compile(r"^jarvis-[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{6,}$")
 #: This process's own wall-clock start, written into every marker so a reader
 #: can tell one run's folder from the next run's.
 _STARTED = time.time()
