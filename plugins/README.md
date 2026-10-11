@@ -10,7 +10,7 @@ you drop in and take out.
 
 - **22 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **116 core patches**, which still go on through
+- **117 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -163,6 +163,7 @@ stack's order and cannot be moved into a folder.
 | `handoff-front.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `uncensored-optins.patch` | also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card |
 | `gate-touches.patch` | edits lines the core already has; it cannot be applied out of order |
+| `big-coder.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one
