@@ -346,6 +346,22 @@ data class Notice(
     val title: String = "",
     val body: String = "",
     /**
+     * The SHORT summary a card shows first (the owner's request of 2026-10-09;
+     * backend `jarvis_card_words.summary_for`, put on the row by
+     * `approval-notice.patch`). Empty on an older desktop, which then draws as
+     * it always did - see [com.jarvis.client.net.CardSummary.shown].
+     *
+     * Safe to show for the same reason [title] is: the PC builds it from the
+     * action's name and its own table, never from `detail`, `prompt` or
+     * `raised`, so it cannot carry text somebody else wrote.
+     */
+    val summary: String = "",
+    /**
+     * The WHOLE card, word for word as `body` always was - what the "Explain
+     * more" control opens.
+     */
+    val full: String = "",
+    /**
      * `heavy` | `normal`. Heavy is earned by any of three things on the
      * desktop side: the action cannot be undone, it leaves that machine, or
      * outside text pushed the tier up.

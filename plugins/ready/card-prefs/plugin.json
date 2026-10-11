@@ -1,0 +1,8 @@
+{
+  "name": "card-prefs",
+  "summary": "how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.",
+  "module": "jarvis_card_summary",
+  "install": "handler",
+  "replaces_patch": "card-prefs.patch",
+  "stack_order": 136
+}
