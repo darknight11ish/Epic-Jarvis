@@ -359,15 +359,7 @@ pub async fn choose_pictures_folder(app: AppHandle) -> Result<serde_json::Value,
     let Some(path) = crate::folders::pick(crate::folders::picker::What::Folder).await? else {
         return Ok(serde_json::json!({ "cancelled": true }));
     };
-    brain_pictures_settings(
-        app,
-        "folder".to_string(),
-        None,
-        None,
-        None,
-        Some(path),
-    )
-    .await
+    brain_pictures_settings(app, "folder".to_string(), None, None, None, Some(path)).await
 }
 
 #[cfg(test)]
@@ -398,7 +390,10 @@ mod tests {
         ] {
             assert!(!valid_id(bad), "{bad:?}");
         }
-        assert!(valid_id(&format!("2026-10-11-140509-{}", "a".repeat(MAX_ID - 20))));
+        assert!(valid_id(&format!(
+            "2026-10-11-140509-{}",
+            "a".repeat(MAX_ID - 20)
+        )));
     }
 
     #[test]
@@ -473,12 +468,15 @@ mod tests {
         assert!(pictures_answer(200, r#"{"ok": true, "pictures": null}"#, "pictures").is_err());
         let old = pictures_answer(404, "Not Found", "pictures").unwrap();
         assert_eq!(old["available"], false);
-        assert_eq!(pictures_answer(501, "", "pictures").unwrap()["available"], false);
+        assert_eq!(
+            pictures_answer(501, "", "pictures").unwrap()["available"],
+            false
+        );
         assert!(pictures_answer(500, "boom", "pictures").is_err());
         // The bytes.
         let bytes = serde_json::json!({ "ok": true, "png": "AAAA" }).to_string();
         assert_eq!(file_answer(200, &bytes).unwrap()["png"], "AAAA");
-        assert!(file_answer(200, r#"{"ok": true, "png": ""}"#, ).is_ok());
+        assert!(file_answer(200, r#"{"ok": true, "png": ""}"#,).is_ok());
         assert!(file_answer(200, r#"{"ok": true, "png": 7}"#).is_err());
     }
 
@@ -500,7 +498,10 @@ mod tests {
             "error": "Making pictures is switched off."
         })
         .to_string();
-        assert_eq!(pictures_answer(503, &off, "pictures").unwrap_err(), "Making pictures is switched off.");
+        assert_eq!(
+            pictures_answer(503, &off, "pictures").unwrap_err(),
+            "Making pictures is switched off."
+        );
     }
 
     #[test]
@@ -538,7 +539,13 @@ mod tests {
             assert!(out.get(gone).is_none(), "{gone} survived");
         }
         let text = out.to_string().to_lowercase();
-        for secret in ["red panda", "library", "sister", "wedding", "pictures\\jarvis"] {
+        for secret in [
+            "red panda",
+            "library",
+            "sister",
+            "wedding",
+            "pictures\\jarvis",
+        ] {
             assert!(!text.contains(secret), "{secret} survived");
         }
         // An older PC's answer, and one already hidden, pass through.

@@ -54,6 +54,12 @@ class PicturesTest {
             is Int -> put(k, v)
             is Long -> put(k, v)
             is Boolean -> put(k, v)
+            // A nested array or object (a buildJsonObject { } fixture, or
+            // arr(...)). This branch was missing, and the helper DROPPED the
+            // value instead of failing: "pictures" to arr() produced a body
+            // with no "pictures" key at all, so `readReply` answered MISSING
+            // and the test that built it was checking the wrong thing.
+            is kotlinx.serialization.json.JsonElement -> put(k, v)
         }
     }
 
@@ -190,16 +196,27 @@ class PicturesTest {
     @Test
     fun thePhoneHasNoWayToChangeTheSwitchTheProgramOrTheFolder() {
         // The phone's own source, read from the classpath path the test task
-        // runs in. It may READ the switch and the folder - the gallery says so
-        // - but the settings route and its action names must be nowhere, so
-        // there is nothing it could send to change any of them.
+        // runs in. It READS the switch, the program and the folder - the
+        // gallery says which is on and where the pictures are - but it must
+        // never PUT any of them into a request body, and the settings route
+        // must be nowhere in the file. So the check is on what it SENDS: every
+        // `put("...")` key in this file, which is the whole of what any body
+        // it builds can carry.
+        //
+        // The earlier version of this check asserted the strings "enabled",
+        // "runtime" and "folder" appeared NOWHERE in the file, which is not
+        // the rule and cannot hold: `body["enabled"]`, `body["folder"]` and
+        // `one["plain"]` are how it reads them back. It failed on every run.
         val source = java.io.File("src/main/java/com/jarvis/client/net/Pictures.kt")
         if (!source.isFile) return  // run from somewhere else: the checks below still hold
         val text = source.readText()
         assertFalse(text.contains("pictures/settings"))
-        listOf("\"enabled\"", "\"runtime\"", "\"folder\"").forEach {
-            assertFalse("the phone must not send $it", text.contains(it))
+        val sent = Regex("put\\(\"([\\w_]+)\"").findAll(text).map { it.groupValues[1] }.toSet()
+        listOf("enabled", "runtime", "address", "folder", "seed", "model", "steps",
+               "width", "height", "settings").forEach {
+            assertFalse("the phone must not send $it", sent.contains(it))
         }
+        assertEquals("the body carries the prompt and nothing else", setOf("prompt"), sent)
         assertTrue(text.contains("const val PATH = \"/api/pictures\""))
         assertTrue(text.contains("const val FILE_PATH = \"/api/pictures/file\""))
     }

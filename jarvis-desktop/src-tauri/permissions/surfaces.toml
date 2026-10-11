@@ -1069,13 +1069,32 @@ permissions = [
 # bytes are not even fetched then. Freshness: reading a picture is idempotent,
 # so `brain_pictures_file` is in `brain-read`'s sibling set rather than
 # `brain-act`.
+#
+# TWO SETS, because the two windows hold different halves of this on purpose:
+# the Brain asks for a picture and re-reads the gallery, and Settings is the
+# only place the switch, the drawing program and the folder change. Reading the
+# state (`allow-brain-pictures`) is needed by both - the settings card draws
+# its own state line from the same read - which is the same shape
+# `allow-get-hotkeys` already has by living in two sets below.
 [[set]]
 identifier = "brain-pictures"
-description = "Draw one picture from the owner's own words and keep it on this PC, read the gallery and one picture's bytes, and change the switch, the drawing program or the folder - no approval card (nothing leaves the PC), every change held on a stale link, the prompts and the picture hidden with the private lists."
+description = "Draw one picture from the owner's own words and keep it on this PC, and read the gallery and one picture's bytes. No approval card (nothing leaves the PC); drawing one is held on a stale link, and the prompts and the picture are hidden with the private lists."
 permissions = [
   "allow-brain-pictures",
   "allow-brain-pictures-file",
   "allow-brain-pictures-make",
+]
+
+# The three controls, and ONLY the three controls: which is on, what draws, and
+# where the pictures are kept. The backend refuses all three from anywhere but
+# this PC, so this is the only window that can call them at all. No approval
+# card either - it opens no way out of the PC and loosens no rule - and each
+# change is held on a stale link, because each one writes.
+[[set]]
+identifier = "pictures-settings"
+description = "Change the switch, the drawing program or the folder pictures are kept in - the PC's own three controls, no approval card, each change held on a stale link."
+permissions = [
+  "allow-brain-pictures",
   "allow-brain-pictures-settings",
   "allow-choose-pictures-folder",
 ]

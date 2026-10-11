@@ -1263,6 +1263,29 @@ SETTINGS_ROWS: tuple = (
         "more-options",
         "desktop",
         indent=10),
+    # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 124). The one switch that belongs to the Pictures card
+    # and, with the record button above it, the one row on the page whose
+    # subject is a whole feature rather than a behaviour. It is linked to its
+    # BoolSetting (`pictures`), so "turn on making pictures" and this row are
+    # the same switch through the same function.
+    #
+    # The words are NOT a fallback: `set_pictures` answers in its own sentence
+    # and the paragraph above the row carries the PC's own state line, but the
+    # row's own label is this page's, always.
+    SettingRow(
+        "pc-switch",
+        "pictures",
+        "",
+        "pc-switch-label",
+        "",
+        'Making pictures',
+        "",
+        28,
+        "pictures",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
     # ------------------------------------------------------------------
     #   The phone's own two rows. There is no desktop toggle for
     #   either, so they are never spliced into settings.html; the

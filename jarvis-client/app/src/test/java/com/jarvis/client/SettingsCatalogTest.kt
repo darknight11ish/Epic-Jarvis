@@ -75,22 +75,24 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun `there are 27 desktop toggles and 2 phone rows`() {
+    fun `there are 28 desktop toggles and 2 phone rows`() {
         // The number this work was briefed with was 19, which is the count of
         // rows spelled exactly `<label class="toggle">` - it misses the seven
         // that also carry a label id. Pinned here so it cannot quietly move.
-        assertEquals(27, rows.count { it.s("owner") == "desktop" })
+        // "Making pictures" (2026-10-11, JARVIS-API section 124) is one more
+        // bare one: 20 to 21 bare, 27 to 28 desktop.
+        assertEquals(28, rows.count { it.s("owner") == "desktop" })
         assertEquals(2, rows.count { it.s("owner") == "phone" })
-        assertEquals(29, rows.size)
-        assertEquals(29, doc["counts"]!!.jsonObject.i("all"))
-        assertEquals(27, doc["counts"]!!.jsonObject.i("desktop"))
+        assertEquals(30, rows.size)
+        assertEquals(30, doc["counts"]!!.jsonObject.i("all"))
+        assertEquals(28, doc["counts"]!!.jsonObject.i("desktop"))
         assertEquals(2, doc["counts"]!!.jsonObject.i("phone"))
     }
 
     @Test
-    fun `every order is unique and the desktop rows run 1 to 27`() {
+    fun `every order is unique and the desktop rows run 1 to 28`() {
         val desktop = rows.filter { it.s("owner") == "desktop" }.map { it.i("order") }
-        assertEquals((1..27).toList(), desktop)
+        assertEquals((1..28).toList(), desktop)
         assertEquals(rows.size, SettingsCatalog.ROWS.map { it.id }.toSet().size)
     }
 
@@ -172,7 +174,10 @@ class SettingsCatalogTest {
     fun `exactly one row is not a setting at all`() {
         val notSettings = SettingsCatalog.ROWS.filter { !it.settingRow }.map { it.id }
         assertEquals(listOf("spd-accept"), notSettings)
-        assertEquals(28, SettingsCatalog.SETTING_ROWS.size)
+        // 29 since "Making pictures" joined the page (2026-10-11): 30 rows, one
+        // of which is the spending accept-all control and not a setting. The
+        // row and the fixture moved first and this number was left behind.
+        assertEquals(29, SettingsCatalog.SETTING_ROWS.size)
         // ...and it is hidden, because it is the spending screen's accept-all
         // control rather than a preference.
         assertTrue(rows.first { it.s("id") == "spd-accept" }.b("hidden"))
