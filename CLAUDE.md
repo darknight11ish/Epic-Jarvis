@@ -2026,6 +2026,35 @@ seen, close) and nothing more. The button is not a settings TOGGLE row, so
 catalogue needed regenerating. The stale "shown once, never again" comments in
 `commands.rs`, `windows.rs` and `onboarding.html` said otherwise and were
 corrected with it.
+Decided 2026-10-10, after a Reject click was found shipping a rule in the
+owner's name: **a Reject click may be written down, but only as Jarvis's
+guess, marked as a guess.** The owner's words: a rejection may become *"a
+suggestion, marked as a guess"*, which he **Keeps or Discards** - never
+something Jarvis puts in his mouth. What was happening before: when the owner
+pressed Reject, `jarvis_gate.py` built the sentence *"Remember this: I do not
+want Jarvis to `<action>` without asking me first. I just said no when it
+asked."* and handed it to the learner as if it were the owner's own turn. It
+was not. A Reject click carries none of his words - the HUD's Reject sends only
+`{id, by}`, and the gate NULLs the card's own `prompt` and `detail` when it is
+decided - so the sentence was Jarvis's invention, and "I just said no when it
+asked" invented a reason for a click that carries none. Facts here are learned
+from the owner's own words only (2026-09-24), so **that unlabelled behaviour is
+fixed**: the proposal now says in its own words that it is Jarvis's guess, that
+it is not a record of the owner's words, and that no reason was given nor made
+up to fill the gap - and it names the action, so the guess is worth reading.
+The same marking reaches the review card itself (`guessed`, plus the words in
+the reason line both apps already show), so it is visible where the owner
+actually decides, not only inside the backend. **Everything good about the old
+behaviour is kept, and must stay kept:** a timeout still proposes nothing ("the
+absence of an answer"), it still only ever *proposes* through
+`jarvis_extract.propose()` - the one review queue, never a second door into
+memory - the one-card list (`_NO_RULE_FROM_DENIAL`) still excludes a denial
+that answers a single card, and a failed proposal still never turns a completed
+denial into an error. Keeping the guess is what makes it apply: nothing is
+applied until the owner says so. Written down as entry **003** of
+`docs/RULE-FLEXIBILITY.md`, with the relaxation's own line on the "What asks
+first" page (`fixed:playbook_rejection`, "Writes a guessed rule for you to Keep
+or Discard").
 
 ## Every new feature gets its own audit, without being asked
 
