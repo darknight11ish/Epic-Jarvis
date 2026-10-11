@@ -303,7 +303,8 @@ function makeNode(tag) {
 
 function fakeDom({ stored = null, refuseWrites = false } = {}) {
   const ids = ["first-run", "fr-body-plain", "fr-body-full", "fr-state", "fr-status",
-    "fr-rows", "fr-done", "fr-again", "fr-again-line", "faq", "asks-first", "connection"];
+    "fr-rows", "fr-done", "fr-again", "fr-again-line", "fr-intro", "fr-intro-status",
+    "faq", "asks-first", "connection"];
   const byId = new Map();
   for (const id of ids) {
     const el = makeNode("div");
@@ -625,6 +626,90 @@ await check("the model row says where the model is chosen, and does not pretend"
     "the model row does not say plainly why there is no model list here");
   // ...and the one model-shaped setting Settings does have is offered.
   assert.match(code, /get_second_card/, "the card no longer reads which card runs chat");
+});
+
+/* ── "Show the intro again": the walkthrough, replayed on demand ────────────
+ *
+ * The owner's request of 2026-10-10. The walkthrough was interactive and
+ * skippable but NOT redoable: one Escape and it was gone for good. These
+ * checks press the control for real, against the same small hand-made DOM the
+ * settings checks above use, so "the button works" means the command really
+ * went over the bridge - not that the words are in the file.
+ *
+ * The second half matters more than the first: this is replay ON DEMAND, so it
+ * must not change when the walkthrough appears BY ITSELF. Pressing the button
+ * may not touch the marker, the store, or the card's own `jarvis.setup.seen`.
+ */
+
+await check("pressing Show the intro again asks Rust for the replay, and nothing else", async () => {
+  // The finished state: this is exactly when the owner wants the intro back,
+  // and the checklist rows are hidden in it - so the button must not be.
+  const stub = fakeDom({ stored: "1" });
+  const calls = [];
+  globalThis.__TAURI__ = {
+    core: {
+      invoke: async (command, args) => {
+        calls.push([command, args]);
+        return {};
+      },
+    },
+  };
+  let unload = () => {};
+  try {
+    unload = await loadModule(stub);
+    const intro = stub.els.get("fr-intro");
+    assert.ok(intro, "the card has no #fr-intro control");
+    assert.equal(intro.hidden, false, "the replay control is hidden once set-up is done");
+    assert.ok(intro.listeners.click && intro.listeners.click.length,
+      "nothing listens for a press of Show the intro again");
+
+    calls.length = 0;
+    for (const fn of intro.listeners.click) await fn();
+    assert.deepEqual(calls, [["replay_onboarding", {}]],
+      `pressing the button asked Rust for ${JSON.stringify(calls)}`);
+
+    // The owner is told it worked, and told what it did NOT change.
+    const words = stub.els.get("fr-intro-status").textContent;
+    assert.match(words, /open in its own window/, "the page does not say the intro opened");
+    assert.match(words, /will not open again by itself/,
+      "the page does not say that replaying leaves the once-only show alone");
+    // A replay is not a setting: it may not rewrite this card's own marker.
+    assert.equal(stub.localStorage._value(), "1",
+      "replaying the intro rewrote the Set up Jarvis marker");
+    assert.equal(intro.disabled, false, "the button stayed disabled after a successful press");
+  } finally {
+    unload();
+    delete globalThis.__TAURI__;
+  }
+});
+
+await check("a replay that could not open says so, and never claims it opened", async () => {
+  const stub = fakeDom({ stored: null });
+  globalThis.__TAURI__ = {
+    core: {
+      invoke: async (command) => {
+        if (command === "replay_onboarding") {
+          throw new Error("unable to open the walkthrough: the window could not be built");
+        }
+        return {};
+      },
+    },
+  };
+  let unload = () => {};
+  try {
+    unload = await loadModule(stub);
+    const intro = stub.els.get("fr-intro");
+    for (const fn of intro.listeners.click) await fn();
+    const words = stub.els.get("fr-intro-status").textContent;
+    assert.match(words, /could not be built/, `the real reason is not shown: "${words}"`);
+    assert.match(words, /was not opened/, "the page does not say the intro was not opened");
+    assert.ok(!/open in its own window/.test(words),
+      "a failed replay still claims the intro opened");
+    assert.equal(intro.disabled, false, "the button stayed disabled after a failure");
+  } finally {
+    unload();
+    delete globalThis.__TAURI__;
+  }
 });
 
 if (fails.length) {

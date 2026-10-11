@@ -31,6 +31,24 @@ sys.path.insert(0, str(HERE))
 from _where import BACKEND, REPO, missing, explain
 SRC = BACKEND / "jarvis_hud.py"
 
+# THE ONE FILE ONLY THE OWNER'S PC HAS. jarvis_hud.py is the entry point
+# scripts/apply-patches.ps1 edits IN PLACE rather than copying, so a clone does
+# not hold it and run_suites.py skips this whole suite by name for that reason.
+# EVERY check below either executes _no_speech/_SAY_FALLBACK lifted out of that
+# file or reads its /api/voice routes off the tree - the routes themselves are
+# the owner's own lines, which no stand-in holds honestly, so this is a skip and
+# not a stand-in. Run directly in a clone there is nothing here that can be
+# tested. That is one skip with the reason printed - not the "0 passed, 4
+# failed" this used to be, which reads as a broken patch rather than as the one
+# file this machine was never given.
+if not SRC.is_file():
+    print(f"skip  every check here reads the /api/voice routes and their "
+          f"_no_speech calls out of jarvis_hud.py, which is not in {BACKEND} - "
+          f"the patcher edits that file in place, so a clone does not hold it. "
+          f"{explain()}")
+    print("\n0 passed, 1 skipped, 0 failed")
+    sys.exit(0)
+
 FAILED, PASSED = [], []
 
 

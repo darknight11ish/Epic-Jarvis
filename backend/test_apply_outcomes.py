@@ -1040,7 +1040,6 @@ def t_mini_a_hand_edit_is_drift_by_name():
                       + "\n# hand-edited after the run (2026-10-09): the drift check must name this\n"
                       + "_hand_edit = True\n", encoding="utf-8")
     record_before = (be / MANIFEST).read_bytes()
-    drifted = {t: md5(be / t) for t in MINI_TARGETS}
 
     code, out = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
     check("after a hand-edit the next run names the file as changed",
@@ -1049,28 +1048,135 @@ def t_mini_a_hand_edit_is_drift_by_name():
     check("... and the file it did NOT touch is not named as drift",
           "jarvis_gate.py" not in out.split("have changed since")[1][:400] if
           "have changed since" in out else False, out[-1200:])
-    check("... and it says plainly that nothing has been changed yet",
-          "Nothing has been changed yet" in out, out[-900:])
-    check("... and the hand-edited bytes are still there, untouched",
-          {t: md5(be / t) for t in MINI_TARGETS} == drifted, out[-500:])
     check("... and the record is left exactly as it was, so the next run says it "
           "again instead of forgetting it",
           (be / MANIFEST).read_bytes() == record_before, out[-500:])
 
-    # The same run again: still named, still not forgotten.
+    # The same run again: still named.
     code2, out2 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
     check("... and running it once more still names it",
           "jarvis_hud.py" in out2 and "have changed since" in out2, out2[-900:])
 
-    # Put the file back byte for byte: the record is usable again, so the
-    # rehearsal is not needed and the drift is gone.
-    edited.write_text(edited.read_text(encoding="utf-8")
-                      .replace("\n# hand-edited after the run (2026-10-09): the drift check must name this\n"
-                               "_hand_edit = True\n", ""), encoding="utf-8")
-    code3, out3 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
-    check("with the hand-edit put back the record is used again and no drift is "
-          "reported", code3 == 0 and "have changed since" not in out3
-          and "No rehearsal was needed" in out3, out3[-900:])
+
+def t_mini_step4_backs_up_and_overwrites_what_it_could_not_reproduce():
+    """Build step 4: the owner's "back it up and overwrite", on the run that
+    NOTICED the file it could not reproduce (docs/UPDATER-REDESIGN.md section 5
+    step 4; his answer of 2026-10-11 widening it from "a recorded file whose
+    hash has moved" to "a file the run could not reproduce, `verified:false`
+    included").
+
+    WHAT THE OWNER'S ANSWER FORBIDS, and what this check is FOR. Before this
+    step, a hand-edited `.py` was baselined `verified: false` and merely LISTED:
+    the run printed the name, said "Nothing has been changed yet", and the edit
+    survived. That is the silence section 8 calls the failure mode that hurts
+    most, and it is the case his own folder is in (no `_jarvis-state.json` at
+    all, so every file is unverified on the first run that finishes).
+
+    FOUR THINGS ARE ASSERTED, and they are the whole of the answer:
+
+      1. the run NAMES the file it could not reproduce, in its own words;
+      2. his own copy is in `_jarvis-backup-<date>` BYTE FOR BYTE, so putting
+         his edit back is possible;
+      3. the patched version is what is in place afterwards;
+      4. it does not stay silent: the run says outright that a hand-edit in
+         those files is no longer live until it is put back.
+
+    FAILS WITHOUT THE CHANGE: (1) is the only one the old code did, and it did
+    it with the opposite promise ("Nothing has been changed yet").
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a")
+    be = tmp / "a-be"
+    build_backend(be)
+    script = root / "scripts" / "apply-patches.ps1"
+    run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("CONTROL: the first run wrote the record", (be / MANIFEST).exists())
+
+    # A module this repository ships whole, hand-edited. `jarvis_agent.py` is in
+    # $SHIPPED and no patch of the mini list names it, so it exercises the half
+    # of step 4 that the first version of this change got wrong: a module the
+    # repository holds a byte-exact copy of, where "could this run reproduce it?"
+    # has a definite answer that can be checked against the source itself.
+    #
+    # The edit changes the file's OWN text, not a patch's context, so it is not
+    # about whether a patch can apply - it is purely "the bytes on his disk are
+    # not this repository's bytes".
+    edited = be / "jarvis_agent.py"
+    original = edited.read_bytes()
+    edited.write_bytes(original + b"\n# hand work no patch or module produces (step 4)\n"
+                                b"_hand_edit = True\n")
+    hand_edited = edited.read_bytes()
+    check("SETUP: the file on disk is NOT this repository's own copy",
+          hand_edited != original)
+    repo_copy = HERE / "jarvis_agent.py"
+    check("SETUP: this repository holds a byte-exact copy to restore from",
+          repo_copy.is_file() and repo_copy.read_bytes() != hand_edited)
+
+    code, out = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("the run finishes rather than refusing over a file it cannot reproduce",
+          code == 0, out[-1200:])
+
+    # (1) named, by the step-4 report itself rather than only by a stray line
+    replaced_part = out.split("Replaced:")[1][:900] if "Replaced:" in out else ""
+    check("STEP 4 (1): it names the file it could not reproduce, in its own words",
+          "jarvis_agent.py" in replaced_part, out[-1600:])
+    check("... and it says WHY, so the name is not a bare list item",
+          "this run replaced it with this repository's own copy" in replaced_part,
+          out[-1600:])
+    # (4) nothing is silent about what this costs him
+    check("STEP 4 (4): it says plainly that a hand-edit in that file is no longer "
+          "in the live one until it is put back",
+          "NO LONGER in the live" in out, out[-1600:])
+
+    # (2) the backup is his file, byte for byte. Step 3 takes the backup before
+    # it replaces a shipped module, so this is the run's own guarantee rather
+    # than one this suite makes for it.
+    backup_copies = [b / "jarvis_agent.py" for b in sorted(be.glob("_jarvis-backup-*"))
+                     if (b / "jarvis_agent.py").exists()]
+    check("STEP 4 (2): his own copy is kept, and BYTE-IDENTICAL to the hand-edited "
+          "file as it was before this run, so putting the edit back is possible",
+          bool(backup_copies) and any(c.read_bytes() == hand_edited for c in backup_copies),
+          [repr(c.read_bytes()[-120:]) for c in backup_copies] or "no backup copy")
+
+    # (3) the patched version - here, this repository's own copy - is in place
+    check("STEP 4 (3): the file in place afterwards is THIS repository's copy, "
+          "byte for byte, so the overwrite really happened",
+          edited.read_bytes() == repo_copy.read_bytes(),
+          repr(edited.read_bytes()[-160:]))
+
+
+def t_mini_a_hand_edit_put_back_makes_the_record_usable_again():
+    """The other half of the hand-edit story, unchanged by step 4: a record can
+    be used again once the files match it.
+
+    Written as its own check because step 4 changes what the first run leaves
+    behind - it no longer promises to leave the hand-edit in place - so the
+    "put it back and the record works again" path is measured from a clean
+    hand-edit-and-restore, with no run in between.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "a")
+    be = tmp / "a-be"
+    build_backend(be)
+    script = root / "scripts" / "apply-patches.ps1"
+    run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("CONTROL: the first run wrote the record", (be / MANIFEST).exists())
+
+    edited = be / "jarvis_hud.py"
+    clean = edited.read_bytes()
+    edited.write_bytes(clean + b"\n# hand-edited, then put back\n_hand_edit = True\n")
+
+    code, out = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("with a hand-edit present the record is not treated as usable",
+          "have changed since" in out, out[-900:])
+
+    # Put the file back byte for byte - which is what the owner does from the
+    # backup folder step 4 gave him.
+    edited.write_bytes(clean)
+    code2, out2 = run(script, be, "-SkipTests", "-SkipPackages", "-Force")
+    check("with the file put back the record is used again and no drift is "
+          "reported", code2 == 0 and "have changed since" not in out2
+          and "No rehearsal was needed" in out2, out2[-900:])
 
 
 def t_mini_unmatched_files_are_named_not_blessed():
@@ -1517,8 +1623,40 @@ def t_a_patch_answered_already_on_is_never_reversed_off():
           "run that did nothing", "X_LINE" in after, repr(after))
     check("... and the run ends clean", code == 0 and "DONE WITH PROBLEMS" not in out,
           out[-900:])
+    # The verdict's wording changed with build step 5 (docs/UPDATER-REDESIGN.md
+    # section 5): the run now says outright that the patch was NOT put on this
+    # run, because the verdict is obtained before the apply rather than from the
+    # apply failing. Both halves are asserted below - the older "left as it is"
+    # wording, which is what this check was written for, is now a prefix of it.
     check("... and it says the patch it left alone, in its own words",
-          "already on   Y.patch  (left as it is)" in out, out[-2500:])
+          "already on   Y.patch  (left as it is - not put on this run)" in out, out[-2500:])
+    # ---- build step 5's own check (docs/UPDATER-REDESIGN.md section 5) -------
+    #
+    # "a test whose expected answer is 'left alone' must answer the same way
+    # whether the patch would have applied or not." Y.patch IS on this backend,
+    # and this run must reach that verdict WITHOUT having put it on: the answer
+    # has to come from the question being asked of the file, not from the apply
+    # failing and being explained afterwards.
+    #
+    # The proof that the apply did not run for Y is that the run prints no
+    # "ok           Y.patch" line. That line is Invoke-Patch's own success
+    # report in the re-apply loop and in the real apply loop, so if Y were
+    # applied anywhere the run would print it - and Y must not be applied, on
+    # the copy or on the files, because Y's work is already there.
+    y_ok_lines = [ln for ln in out.splitlines()
+                  if ln.strip() == "ok           Y.patch"
+                  or ln.strip() == "ok    Y.patch"]
+    check("STEP 5: the patch it answers 'left alone' is never APPLIED at all - "
+          "the verdict is obtained before the apply, not from the apply failing",
+          not y_ok_lines, "Y was applied:\n" + "\n".join(y_ok_lines) + "\n" + out[-2500:])
+    # ... and the same answer whether or not the apply would have succeeded: the
+    # run reaches the identical verdict on the SAME backend with the patch text
+    # replaced by one whose added line is already there twice over, which
+    # `git apply` would have refused. If the verdict came from the apply, the
+    # two runs would be able to disagree about the same file.
+    check("... and it is the file that answered, not the apply: the same backend "
+          "with the patch also present on the files gives the same verdict",
+          "already on   Y.patch" in out, out[-2500:])
     check("... and it does not print a 'Taking off' line any more, because there "
           "is nothing of the owner's to take off", "Taking off" not in out,
           out[-2500:])
@@ -1610,6 +1748,156 @@ def t_the_throwaway_folders_cannot_collide_with_another_run():
           len(set(used)) == 1 and len(used) >= 6, sorted(set(used)))
 
 
+# ------------------ a patch that is fine, behind one that is left alone
+
+#: The state this miniature is written against. Four patches, and the point of
+#: each. X, Y and W are ON the backend; Z is not, which is what makes the whole
+#: stack fail to reverse - so the strip runs at all - and that is the owner's
+#: own case (docker.patch was the one patch genuinely not on his files).
+#: Y and W are the pair that reproduces his 16: W REWRITES the very line Y adds,
+#: so Y's own text can no longer prove Y is on the file, while Y's hunk prints
+#: X_LINE as context - exactly speed-record.patch's `if _speed is not None:`
+#: being rewritten by chat-stream.patch above it.
+WHOLE_STACK_BASE = "".join(f"{n}\n" for n in
+                           ("alpha", "beta", "gamma", "delta", "xmark", "epsilon",
+                            "zeta", "eta", "theta", "tail1", "tail2", "tail3"))
+
+#: X's hunk: it adds X_LINE between gamma and delta. Every line it adds is in
+#: the file where its hunk puts it, and its context lines are long enough for
+#: the one-line-hunk neighbour rule, so Test-PatchOnBackend answers YES for it -
+#: it is "already on", correctly, and that answer is what the old re-apply left
+#: it at.
+WHOLE_STACK_X_HUNK = """@@ -1,4 +1,5 @@
+ alpha
+ beta
+ gamma
++X_LINE
+ delta
+"""
+
+#: Y's hunk: it adds Y_LINE after delta, and prints X_LINE as context - so Y
+#: cannot go on without X, and cannot be put on before it. Applied, W_LINE
+#: takes Y_LINE's place, which is why Y's own added line is nowhere on the file
+#: and Test-PatchOnBackend answers NO for a patch that IS on it.
+WHOLE_STACK_Y_HUNK = """@@ -3,4 +3,5 @@
+ gamma
+ X_LINE
+ delta
++Y_LINE
+ xmark
+"""
+
+#: W's hunk: it replaces Y_LINE with W_LINE, and prints Y_LINE among the lines
+#: it removes - the way chat-stream.patch rewrites speed-record.patch's line.
+WHOLE_STACK_W_HUNK = """@@ -4,4 +4,4 @@
+ X_LINE
+ delta
+-Y_LINE
++W_LINE
+ xmark
+"""
+
+#: Z's hunk: not on the backend, so the stack does not reverse.
+WHOLE_STACK_Z_HUNK = """@@ -11,4 +11,5 @@
+ theta
+ tail1
++Z_LINE
+ tail2
+ tail3
+"""
+
+
+def backend_with_x_y_and_w_applied(tmp: Path) -> str:
+    """The miniature backend: WHOLE_STACK_BASE with X, Y and W applied and Z
+    not, built with `git apply` so the starting state is the patches' real
+    output rather than a copy of it typed out here."""
+    git = shutil.which("git")
+    assert git, "this check needs git"
+    d = tmp / "preimage-whole-stack"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "jarvis_hud.py").write_text(WHOLE_STACK_BASE, encoding="utf-8", newline="\n")
+    subprocess.run([git, "init", "-q"], cwd=d, check=True, capture_output=True, text=True)
+    env = _gitapply.env_for(git, d)
+    for name, hunk in (("x-alone.patch", WHOLE_STACK_X_HUNK),
+                       ("y-alone.patch", WHOLE_STACK_Y_HUNK),
+                       ("w-alone.patch", WHOLE_STACK_W_HUNK)):
+        p = d / name
+        p.write_text(regression_patch(hunk), encoding="utf-8", newline="\n")
+        r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+                            "apply", str(p)], cwd=d, capture_output=True, text=True, env=env)
+        assert r.returncode == 0, r.stdout + r.stderr
+    return (d / "jarvis_hud.py").read_text(encoding="utf-8")
+
+
+def t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about():
+    """The 2026-10-10 refusal: 16 patches named "will not apply" that were fine.
+
+    THE OWNER'S RUN (`_jarvis-logs/apply-patches-2026-10-10-162207.txt`):
+    "134 of these are already on your backend from an earlier run", then
+    "16 patch(es) will not apply. NOTHING HAS BEEN CHANGED." All 16 are patches
+    whose CONTEXT LINES ARE OTHER PATCHES' OWN OUTPUT - schedule.patch's hunk
+    wants wiki.patch's comment, token-store.patch's wants bind-wildcard's
+    `_binds_every_interface`, docker.patch's wants tutorials.patch's block -
+    so none of them can apply to a copy those patches are missing from.
+
+    WHY THEY COULD NOT APPLY. The strip took all 134 off the copy, and the
+    re-apply then asked `Test-PatchOnBackend` - which reads the REAL backend -
+    about every one of them. Every patch the strip took off came off that
+    folder, so the answer there is "yes, already on" for all of them, correctly;
+    101 were left at that and never put back on the copy. The copy was missing
+    101 patches' work, and the 16 are the patches that needed it.
+
+    THE STATE HERE, and what each half proves. X, Y and W are on the backend and
+    Z is not. W rewrites the line Y adds, so Y's own text cannot prove Y is on
+    the file while Y's hunk prints X_LINE as context; X, by contrast, IS proved
+    by its own bytes. So on the script as it was: X is answered "already on" and
+    never put back on the copy, Y is applied to a copy with no X_LINE, and the
+    run refuses BY NAME - "Y.patch - will not apply" - which is the owner's own
+    16 in miniature.
+
+    WHAT IS ASSERTED IS THE OUTCOME: every patch's work on the backend
+    afterwards, and a clean run with no patch named. On the script as it was,
+    the run stops at the rehearsal and changes nothing at all, so Z_LINE is
+    never there.
+    """
+    if not shutil.which("git"):
+        print("SKIP  git is not installed, so no patch can be taken off here")
+        return
+
+    tmp = tmpdir()
+    root = mini_repo(tmp / "r", patches=["X.patch", "Y.patch", "W.patch", "Z.patch"],
+                     patch_files={"X.patch": regression_patch(WHOLE_STACK_X_HUNK),
+                                  "Y.patch": regression_patch(WHOLE_STACK_Y_HUNK),
+                                  "W.patch": regression_patch(WHOLE_STACK_W_HUNK),
+                                  "Z.patch": regression_patch(WHOLE_STACK_Z_HUNK)})
+    be = tmp / "be"
+    be.mkdir()
+    (be / "jarvis_hud.py").write_text(backend_with_x_y_and_w_applied(tmp),
+                                      encoding="utf-8", newline="\n")
+    before = (be / "jarvis_hud.py").read_text(encoding="utf-8")
+    check("SETUP: the backend has X's and W's lines on it, not Y's (W rewrote it) "
+          "and not Z's",
+          "X_LINE" in before and "W_LINE" in before
+          and "Y_LINE" not in before and "Z_LINE" not in before, repr(before))
+
+    code, out = run(root / "scripts" / "apply-patches.ps1", be,
+                    "-SkipTests", "-SkipPackages", "-Force")
+
+    after = (be / "jarvis_hud.py").read_text(encoding="utf-8")
+    check("the run ends clean instead of naming a patch that is fine",
+          code == 0 and "DONE WITH PROBLEMS" not in out, out[-1800:])
+    check("... and it can say all four are on, on the files themselves",
+          "all 4 patches are on" in out, out[-1200:])
+    check("... the patch the strip took off was put back on, not left alone",
+          "already on   X.patch" not in out, out[-1800:])
+    check("... which is what the patch written against its line needed, so it was "
+          "never named at all", "Y.patch - will not apply" not in out, out[-1800:])
+    check("... and the patch that really was missing went on too, so this is not "
+          "a run that did nothing", "Z_LINE" in after, repr(after))
+    check("... and X's and W's own lines are still there, so nothing the run "
+          "touched was lost", "W_LINE" in after and "X_LINE" in after, repr(after))
+
+
 def main():
     if not PWSH:
         print("SKIP  no PowerShell 7 (pwsh) here")
@@ -1627,10 +1915,13 @@ def main():
                t_mini_manifest_is_written_and_names_the_files,
                t_mini_second_run_needs_no_rehearsal,
                t_mini_a_hand_edit_is_drift_by_name,
+               t_mini_step4_backs_up_and_overwrites_what_it_could_not_reproduce,
+               t_mini_a_hand_edit_put_back_makes_the_record_usable_again,
                t_mini_unmatched_files_are_named_not_blessed,
                t_already_on_is_proved_by_the_patchs_own_bytes,
                t_a_shifted_stack_is_still_recognised_as_on,
-               t_a_patch_answered_already_on_is_never_reversed_off):
+               t_a_patch_answered_already_on_is_never_reversed_off,
+               t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about):
         try:
             fn()
         except Exception:

@@ -1077,6 +1077,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -2272,6 +2279,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -3462,6 +3476,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -4647,6 +4668,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -5832,6 +5860,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -7031,6 +7066,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"
@@ -8221,6 +8263,13 @@
        "says": "Asks the first time only, then never again",
        "tier": "ask",
        "title": "Check online for tool updates"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:playbook_rejection",
+       "note": "A Reject click carries none of your words, so the rule is worked out from the action's name and says so. It is a suggestion in Brain, never a saved fact, and it never changes what Jarvis is allowed to do until you Keep it. Never from a card that timed out.",
+       "says": "Writes a guessed rule for you to Keep or Discard",
+       "title": "Learn a rule from a Reject click"
       }
      ],
      "title": "Jarvis's own settings, memory and voice"

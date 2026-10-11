@@ -155,6 +155,10 @@ NOT_SHIPPED = {
     "fake_mcp_server.py": "test fixture: a badly behaved plug-in program, for test_mcp.py",
     "_fake_obscura.py": "test fixture: a stand-in for `obscura --stealth mcp`, run as a real "
                         "child process by test_obscura.py and test_browser_engine.py",
+    "run_phrase_tests.py": "the phrase checklist runner (2026-10-10): reads the owner's "
+                           "checklist document from .dsh-scratch/ and puts every phrase "
+                           "through the real grammar. A reading tool, run from this "
+                           "repository - it is imported by nothing the backend runs",
 }
 
 

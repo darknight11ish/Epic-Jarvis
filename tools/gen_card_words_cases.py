@@ -31,7 +31,22 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
+# WHICH BACKEND THIS MEASURES, and why it is not simply ROOT/"backend".
+#
+# `backend/test_card_short_words.py` runs this file, and from inside
+# `backend/run_suites.py` that happens with JARVIS_BACKEND set to the folder the
+# suites are really exercising (a temporary copy of every shipped module, so the
+# shipped LAYOUT is tested rather than this repository's). Hard-coding
+# ROOT/"backend" made the two disagree: the suite imported one
+# `jarvis_card_words` and this file built its rows with another, so `--check`
+# reported the fixture stale while running the same tool by hand said it was
+# current. `_where` is the one answer both use - and it is also what makes this
+# tool work on the owner's PC, where the backend lives outside this repository
+# entirely (docs/ARCHITECTURE.md section 9). The same fix, for the same reason,
+# as tools/gen_risky_approval_cases.py.
+sys.path.insert(0, str(ROOT / "backend"))
+from _where import BACKEND  # noqa: E402
+
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 

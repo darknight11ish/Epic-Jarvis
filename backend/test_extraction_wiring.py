@@ -61,12 +61,38 @@ _MEM._store = _MEM.MemoryStore(
     path=Path(tempfile.mkdtemp(prefix="jarvis-wiring-")) / "memory.db",
     embedder=_ScratchEmbedder())
 
-FAILED, PASSED = [], []
+FAILED, PASSED, SKIPPED = [], [], []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this run cannot make, printed as `skip` and counted on its own -
+    never as a pass. `run_suites.py` counts these lines, and the summary below
+    prints the number, so a skip can never be read as a check that ran."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
+
+
+def no_hud(what):
+    """True when this check cannot run, with a printed skip saying why.
+
+    jarvis_hud.py is the entry point scripts/apply-patches.ps1 edits IN PLACE
+    rather than copying, so a clone does not hold it and run_suites.py skips
+    this whole suite by name for that reason. Ten checks below lift the real
+    `_Learner` out of it; the two that drive jarvis_events do not need it at
+    all, and they run either way. This used to be one FileNotFoundError per
+    check ("13 passed, 10 failed"), which reads as a broken patch rather than
+    as the one file this machine was never given."""
+    if HUD.is_file():
+        return False
+    skip(f"{what} lifts the real _Learner out of jarvis_hud.py, which is not in "
+         f"{BACKEND} - the patcher edits that file in place, so a clone does not "
+         f"hold it. {explain()}")
+    return True
 
 
 def _learner_ns():
@@ -155,6 +181,8 @@ CONVO = [
 
 
 def t_it_reads_only_what_you_typed():
+    if no_hud("the transcript a pass is handed"):
+        return
     ns = _learner_ns()
     fake = FakeExtract().install()
     L = ns["_Learner"]()
@@ -178,6 +206,8 @@ def t_it_reads_only_what_you_typed():
 
 
 def t_it_waits_for_you_to_stop_talking():
+    if no_hud("the idle window"):
+        return
     ns = _learner_ns()
     fake = FakeExtract().install()
     L = ns["_Learner"]()
@@ -196,6 +226,8 @@ def t_it_waits_for_you_to_stop_talking():
 
 
 def t_nothing_new_said_is_not_a_pass():
+    if no_hud("the unchanged-transcript rule"):
+        return
     ns = _learner_ns()
     fake = FakeExtract().install()
     L = ns["_Learner"]()
@@ -211,6 +243,8 @@ def t_nothing_new_said_is_not_a_pass():
 
 
 def t_a_dead_model_does_not_kill_the_thread():
+    if no_hud("the dead-model rule"):
+        return
     ns = _learner_ns()
     fake = FakeExtract(raises=True).install()
     L = ns["_Learner"]()
@@ -240,6 +274,8 @@ def t_a_dead_model_does_not_kill_the_thread():
 
 
 def t_nothing_to_learn_from():
+    if no_hud("the empty-transcript rule"):
+        return
     ns = _learner_ns()
     fake = FakeExtract().install()
     L = ns["_Learner"]()
@@ -252,6 +288,8 @@ def t_nothing_to_learn_from():
 
 
 def t_it_can_be_switched_off():
+    if no_hud("the JARVIS_EXTRACT=0 floor"):
+        return
     ns = _learner_ns()
     ns["EXTRACT_ENABLED"] = False
     fake = FakeExtract().install()
@@ -269,6 +307,8 @@ def t_it_refuses_a_non_loopback_ollama():
     ship everything typed here to it - automatically, 45s after every
     conversation, with nobody in the loop.
     """
+    if no_hud("the loopback-only rule"):
+        return
     ns = _learner_ns()
     for url in ("https://ollama.attacker.example", "http://192.168.1.50:11434",
                 "http://ollama.internal:11434", "", "not a url at all"):
@@ -291,6 +331,8 @@ def t_it_refuses_a_non_loopback_ollama():
 
 
 def t_it_asks_for_the_chat_lanes_model():
+    if no_hud("the model the learner asks for"):
+        return
     ns = _learner_ns()
     import os as _os
     _os.environ["JARVIS_LOCAL_MODEL"] = "qwen3:8b-from-env"
@@ -309,6 +351,8 @@ def t_it_asks_for_the_chat_lanes_model():
 def t_a_model_that_never_answers_is_not_silent():
     """An empty list means BOTH "nothing durable was said" and "the model
     never answered", and only one of those is fine."""
+    if no_hud("the unanswered-model rule"):
+        return
     ns = _learner_ns()
     fake = FakeExtract(answers=False).install()
     L = ns["_Learner"]()
@@ -401,6 +445,8 @@ def t_the_approval_event_is_a_doorbell_too():
 
 def t_the_call_site():
     """CONTROL on the wiring itself."""
+    if no_hud("the turn's call site"):
+        return
     src = HUD.read_text(encoding="utf-8")
     check("the turn hands its transcript over", "LEARNER.offer(" in src,
           "propose() is back to having zero call sites")
@@ -439,7 +485,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)
