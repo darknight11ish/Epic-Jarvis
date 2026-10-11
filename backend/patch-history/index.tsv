@@ -90,6 +90,7 @@ ollama-direct.patch	ollama-direct/d03bc52.patch	d03bc52361f9379928d7667a7d664340
 ollama-direct.patch	ollama-direct/0fbadf7.patch	0fbadf7f0a3918c9862eae9a563c2def3697378e	2026-09-18T00:10:00Z	backend: ollama-direct.patch - local chat was calling a program that never ran
 picture-card.patch	picture-card/c16c2b1.patch	c16c2b14736b3d5c4938807688eb8d5b98a96650	2026-10-10T22:03:36-07:00	Give the picture-maker a card, and the chat a choice of three ways
 pictures.patch	pictures/c94e180.patch	c94e180b71f69eddea088b7ecff56eaaa6385cc8	2026-10-10T22:01:24-07:00	Ask for a picture, and keep it (JARVIS-API section 124)
+plugin-loader.patch	plugin-loader/f2077b5.patch	f2077b51f724257747ab8d8b2f0aa1e9f345549a	2026-10-11T05:50:49-07:00	finish the uncensored opt-ins: off by default, on is one card, and a way in (#253)
 plugin-loader.patch	plugin-loader/d258b98.patch	d258b980ae95e1c19b121095cce7f5301a9823ae	2026-10-10T02:43:26-07:00	a feature whose only wiring was one start-up call is now a folder
 projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2026-09-28T01:04:31Z	Projects, build steps 1 and 2: projects, life benchmarks and their numbers (backend only)
 prompt-coach.patch	prompt-coach/f56e6ab.patch	f56e6abc597daa98e826022584f6fe9b2c3fcba9	2026-10-08T20:47:48-07:00	the two things CI caught that this machine could not
