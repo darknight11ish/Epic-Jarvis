@@ -32,21 +32,24 @@ WHAT IT CHECKS
   4. each row's `indent` is the page's real indentation - the number the
      generator needs to put the row back where it found it;
   5. the count is stated out loud, so a number that moves is noticed rather
-     than absorbed. It is **27** (26 until "Click through to what is behind"
-     was added on 2026-10-10), and it has been mis-reported as 19: a bare
-     `<label class="toggle">` string match misses the rows that also
-     carry a label id;
+     than absorbed. It is **28** (27 until "Making pictures" was added on
+     2026-10-11, 26 before "Click through to what is behind" on 2026-10-10),
+     and it has been mis-reported as 19: a bare `<label class="toggle">`
+     string match misses the rows that also carry a label id;
   6. every row's `setting` names a real BoolSetting, or is None. None is the
-     normal case (21 of the 27): those rows have no spoken "adjust", and
+     normal case (21 of the 28): those rows have no spoken "adjust", and
      putting them in BOOL_SETTINGS would make the phrase match and the
      dispatch then fail - `jarvis_quick.py:2788` matches on that table and
-     `:3703` dispatches on the same key.
+     `:3703` dispatches on the same key. Seven desktop rows ARE the same
+     switch as a spoken setting ("Making pictures" joined them on
+     2026-10-11: "turn on making pictures" and the row are one switch
+     through one function, `set_pictures`).
 
 WHAT IT DOES NOT CHECK
 
   It does not read the two apps' words: `settings-catalogue.mjs` and
   `SettingsCatalogTest.kt` do that. It does not prove the switches work - that
-  needs the app running. And it does not check the eleven rows whose visible
+  needs the app running. And it does not check the ten rows whose visible
   words the PC sends at read time: for those the table holds a FALLBACK, and
   what the owner reads is decided on the PC.
 
@@ -69,7 +72,12 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: The number of `<label class="toggle">` rows the page has. Stated rather
 #: than computed so that a row quietly disappearing is a failure here rather
 #: than a smaller number that every other check happily agrees with.
-EXPECTED_ROWS = 27
+#:
+#: 28 since "Making pictures" (the owner's decision of 2026-09-27; the
+#: Pictures card, JARVIS-API section 129) joined the page on 2026-10-11. The
+#: row and its fixture were added first and this number was left behind, which
+#: is exactly what this constant is here to catch.
+EXPECTED_ROWS = 28
 
 #: The rows that are not settings switches, with the reason. These are in
 #: SETTINGS_ROWS (so the page and the table still agree) but carry
@@ -146,11 +154,11 @@ def t_the_count_is_what_it_is():
           f"re-count and update EXPECTED_ROWS and SETTINGS_ROWS together")
     bare = len(re.findall(r'^[ \t]*<label class="toggle">[ \t]*$',
                           SETTINGS_HTML.read_text(encoding="utf-8"), re.M))
-    check("20 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
-          bare == 20 and len(page) - bare == 7,
+    check("21 of them are bare `<label class=\"toggle\">`, 7 carry a label id",
+          bare == 21 and len(page) - bare == 7,
           f"bare={bare}, with-id={len(page) - bare} - this is the trap that "
           f"produced the wrong '19'")
-    check("all 27 desktop rows are described",
+    check("all 28 desktop rows are described",
           len(R.DESKTOP_ROWS) == EXPECTED_ROWS, str(len(R.DESKTOP_ROWS)))
     check("the two phone rows are described too",
           len(R.SETTINGS_ROWS) == EXPECTED_ROWS + 2, str(len(R.SETTINGS_ROWS)))
@@ -199,8 +207,8 @@ def t_setting_links_are_real():
            if r.setting and r.setting not in keys]
     check("every row's `setting` names a real BoolSetting", not bad, "; ".join(bad))
     linked = sorted(r.dom_id for r in R.DESKTOP_ROWS if r.setting)
-    check("six desktop rows are the same switch as a spoken setting",
-          len(linked) == 6, f"{linked} - if this grew, the row was given a setter")
+    check("seven desktop rows are the same switch as a spoken setting",
+          len(linked) == 7, f"{linked} - if this grew, the row was given a setter")
     # The spoken settings with no desktop toggle. Three have no switch row at
     # all on this page (two are on the Brain's Memory tab, one is a row inside
     # "What asks first"), and two are the phone's own. `big_coder` joined them
@@ -248,13 +256,27 @@ def t_fallback_rows_are_the_known_ten():
           not R.setting_row("cv-better-switch").fallback)
 
 
-def t_bool_settings_did_not_grow():
-    """The spoken table is not this work's business: the rows were added
-    beside it, not inside it. Eleven before, twelve now - the 30B coder's
-    opt-in (big_coder, 2026-10-11) joined it, which is a name GAINED, and the
-    check above says which desktop rows stayed unlinked."""
-    check("BOOL_SETTINGS now holds twelve spoken settings",
-          len(R.BOOL_SETTINGS) == 12, str(len(R.BOOL_SETTINGS)))
+def t_bool_settings_is_the_measured_thirteen():
+    """The spoken table, pinned.
+
+    Thirteen since 2026-10-11, when TWO names joined it on the same day from
+    two different branches, and both are GAINS this check must keep:
+
+      * "Making pictures" (`pictures`) - the row on the Pictures card and the
+        spoken "turn on making pictures" are one switch through one function,
+        `set_pictures`, so the two tables overlap by seven rows rather than six.
+      * the 30B coder's opt-in (`big_coder`) - the row the big-coder mode
+        turns on, which the spoken table answers for too.
+
+    Neither is a row added "beside" the spoken table: each is a switch the
+    owner can say out loud, which is what this table is. The growth is argued
+    where each lives - the BoolSetting's own comment and the setter's docstring
+    say why neither direction raises a card - and `jarvis_quick.py` matches the
+    phrase and dispatches on the same key, so both phrases really work. Any
+    further growth has to be argued the same way.
+    """
+    check("BOOL_SETTINGS holds its thirteen spoken settings",
+          len(R.BOOL_SETTINGS) == 13, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:
@@ -262,7 +284,7 @@ def main() -> int:
                t_the_count_is_what_it_is, t_row_order_matches_the_page,
                t_indent_matches_the_page, t_label_ids_match_the_page,
                t_setting_links_are_real, t_not_switches_are_the_known_one,
-               t_fallback_rows_are_the_known_ten, t_bool_settings_did_not_grow):
+               t_fallback_rows_are_the_known_ten, t_bool_settings_is_the_measured_thirteen):
         fn()
     print()
     if FAILED:

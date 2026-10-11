@@ -604,6 +604,20 @@
     ]
   },
   {
+    "id": "pictures",
+    "group": "Screen and pictures",
+    "title": "Ask for a picture, and keep it",
+    "what": "You type what the picture should show, and Jarvis draws it on your PC and keeps it, with a note beside it saying what made it. Both apps show the ones you kept, and the phone can save one to itself.",
+    "where": "PC: Brain, Projects, Pictures. Phone: Brain, Pictures.",
+    "asks": "No card. A picture is a new file in a folder on your PC, drawn by a program on your PC, from your own words - the same as a timer or a note.",
+    "limit": "Nothing is ever sent anywhere: there is no share, no upload and no email. The feature starts switched off (Settings, Pictures, \"Making pictures\") because it shares the second graphics card with the everyday model, and it needs ComfyUI or stable-diffusion.cpp installed on the PC first. The pictures and their prompts hide while \"Hide memory lists and chat history\" is on.",
+    "surface": "both",
+    "covers": [
+      "brain.projects.pictures",
+      "settings.pictures"
+    ]
+  },
+  {
     "id": "decks",
     "group": "Notes and files",
     "title": "My study decks",

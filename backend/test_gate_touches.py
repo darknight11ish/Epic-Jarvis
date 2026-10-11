@@ -582,7 +582,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # jarvis_gate.py not at all (two hunks, both in jarvis_hud.py, each
              # ADDING one route block on lines no other patch writes), so it
              # rewrites nothing this patch wrote.
-             "big-coder.patch"}
+             "big-coder.patch",
+             # pictures.patch (2026-10-11, "ask for a picture") is the same
+             # shape a third time: it sits immediately BEFORE
+             # plugin-loader.patch, and it touches jarvis_gate.py not at all
+             # (ONE hunk, in jarvis_hud.py, ADDING one install block at the end
+             # of the chain), so it rewrites nothing this patch wrote.
+             "pictures.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

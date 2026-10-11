@@ -945,6 +945,17 @@ pub fn run() {
             brain::progress::brain_progress_activity,
             brain::progress::brain_progress_balance,
             brain::progress::brain_progress_balance_save,
+            // "Ask for a picture, and keep it" (JARVIS-API section 129). A
+            // picture is a new file in a folder on this PC, drawn by a program
+            // on this PC, from words the owner typed, so drawing one raises NO
+            // approval card - the same shape as a timer or a note. Changing
+            // where they are kept, or which program draws them, is refused by
+            // the backend unless the request came from this PC.
+            brain::pictures::brain_pictures,
+            brain::pictures::brain_pictures_file,
+            brain::pictures::brain_pictures_make,
+            brain::pictures::brain_pictures_settings,
+            brain::pictures::choose_pictures_folder,
             brain::quiz::brain_quiz_start,
             brain::quiz::brain_quiz_get,
             brain::quiz::brain_quiz_answer,
