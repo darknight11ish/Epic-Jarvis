@@ -99,8 +99,9 @@ safer direction, and that changed what this design asks for (item 7).
    loosened - **the phone-agent switch has gone entirely** (§18). The earlier
    revision asked for a floor change, a switch, and a code change to
    `HARD_LIMITS` / `MUST_ASK`; **none of those three is needed now.** One switch
-   remains (the delete toggle) and it turns out to relax **no** rule, which is a
-   new owner question rather than a loosening.
+   remains (the delete toggle) and it turns out to relax **no** rule - which he
+   settled the same day: **keep it**, recorded as a preference rather than a
+   loosening (§16, §18).
 
 ## What already exists and is reused (nothing here is a second version of anything)
 
@@ -339,10 +340,12 @@ that file is needed and none was made; the record of what was considered is
   they are still local `adb` commands, and the stop is a **check the runner
   performs**, not a property of the taps. So with the project's 12-second grace,
   "stops dead" is delivered as **"stops before its next step, once the link has
-  been stale for up to 12 seconds"** - up to 12 seconds of taps can still go out
-  after the link actually drops. Keeping the project's own number is recommended
-  (a shorter one would stop sessions on ordinary jitter), but the window is real
-  and the card must not claim otherwise.
+  been stale for up to 12 seconds"** - **up to 12 seconds of taps can still go
+  out after the link actually drops.** **DECIDED by the owner (2026-10-11): keep
+  the project's own 12 seconds, unchanged, for this path as for the others.** He
+  was offered a tighter window just for phone sessions and declined it. **He
+  accepted that cost knowingly, and this sentence is not to be softened:** the
+  number, the window and the consequence stay written down as he agreed them.
 
 What the runner checks before each step, all at that one point:
 
@@ -910,8 +913,20 @@ the earlier revision. One of them no longer exists:
 The toggle is a preference about **one named class of step**, never a session
 permission: switching it on does not make a session "allowed to delete" - it
 lets a **recognised** deletion-shaped step be part of an approved batch at all.
-**Whether it should exist at all is an open owner question** (§18, question 8);
-it is not quietly kept.
+
+**DECIDED by the owner (2026-10-11): keep the toggle, exactly as designed.** He
+was offered the stricter alternative - drop the toggle, so that every deletion
+always asks - and **chose to keep it**. The rule of this feature, in his words'
+terms:
+
+- **Toggle off (the default): a deletion always gets its own card.**
+- **Toggle on: a *recoverable* deletion may happen inside the run.**
+- **Permanent deletions and anything that closes or erases an account always get
+  their own card, whatever the toggle says** - Empty trash, Clear history, Clear
+  data, Uninstall, Delete for everyone, Erase, Forget this device, and account
+  deletion refused outright (the verdict table above).
+- It is recorded **as a preference, not a rule entry**: it relaxes no repository
+  rule, so its "What asks first" row must not imply that one exists (§18).
 
 ### What counts as "delete": a positive list
 
@@ -1136,7 +1151,7 @@ Therefore:
   decision (`CLAUDE.md`, 2026-09-27) is honoured in spirit by gate 5 rather than
   by a gate on the machinery (§ "The six build gates", below).
 
-### The delete toggle was never a rule relaxation - it is the one open question
+### The delete toggle was never a rule relaxation - and the owner has now settled it
 
 §16 presented the delete toggle as a loosening (one card plus the fingerprint to
 turn it on). That framing is wrong in an important way: **it relaxes no rule in
@@ -1146,20 +1161,21 @@ invents, because today a delete tap inside an approved array already rides the
 same card. Turning the toggle on therefore relaxes **this design's extra
 caution**, not a project rule, so it **cannot have an entry in
 `docs/RULE-FLEXIBILITY.md`** (there is nothing there to relax) and needs no
-floor change. The two honest ways forward, for the owner:
+floor change.
 
-1. **Keep it as a design preference (recommended, and what he asked for):** off
-   by default, its own card plus the screen lock or Windows Hello to turn on
-   (the safe *form*, even though the reason is not a rule entry), and off
-   immediate with no card. Its "What asks first" row must **not** imply a rule
-   entry exists.
-2. **Or drop the toggle** and always give a deletion-shaped step its own card:
-   simplest, no setting, nothing to explain. The cost is that a batch containing
+**The two ways forward were put to him (2026-10-11), and he chose the first:**
+
+1. **CHOSEN - keep it as a design preference:** off by default, its own card plus
+   the screen lock or Windows Hello to turn on (the safe *form*, even though the
+   reason is not a rule entry), and off immediate with no card. Its "What asks
+   first" row must **not** imply a rule entry exists.
+2. **Declined - dropping the toggle** so that every deletion always asks:
+   simplest, no setting, nothing to explain, at the cost that a batch containing
    a harmless deletion cannot be approved in one go.
 
-**This is a new owner question**, and it is in the closing list. The switch is
-not quietly kept: with no rule behind it, it is a preference about how much
-extra caution this design adds, and it is labelled that way wherever it appears.
+So the switch is kept **knowingly**, as a preference about how much extra
+caution this design adds - not as a loosening, and not quietly: nothing in this
+document or in the "What asks first" page claims a rule entry for it.
 
 ### The steps may still come only from the owner's own words
 
@@ -1247,11 +1263,15 @@ not discovered later.
 6. **The delete toggle's limits are accepted as written** (§16): it is a strong
    guard, not an airtight one; off is the default; and the card that turns it
    on carries the sentence that says an action that cannot be undone may happen
-   inside a session without the owner seeing it first. **Open owner question
-   below**, because it turns out to be a preference rather than a loosening
-   (§18).
+   inside a session without the owner seeing it first. **The owner has kept the
+   toggle itself** (closed question, below), as a preference rather than a
+   loosening (§18).
 
 ## Open questions only the owner can answer
+
+**Two were closed by him on 2026-10-11** and are recorded at the end so the open
+list stays short: the delete toggle (**kept**) and the offline window (**12
+seconds, kept**).
 
 1. **Who names the steps?** May Jarvis read the phone's screen to *suggest* a
    sequence (option B in §1), or do the steps always come from the owner's own
@@ -1270,12 +1290,19 @@ not discovered later.
 7. **The driving model's card** (§15): may a second, specialist grounding model
    take the 12 GB card with the chat stepping aside (option B, recommended), or
    must it share whatever is already resident?
-8. **NEW - the delete toggle itself** (§18): keep it as a preference of this
-   design (recommended, and what he asked for - off by default, its own card
-   plus the screen lock or Windows Hello to turn on), or **drop it** and always
-   give a deletion-shaped step its own card? Either way it relaxes no rule, so
-   no entry appears in `docs/RULE-FLEXIBILITY.md`.
-9. **The staleness window** (§6): the project's own 12-second grace means up to
-   12 seconds of taps can still go out after the link really drops. Keep the
-   project's number (recommended - a shorter one stops sessions on ordinary
-   jitter), or pick a tighter one for phone sessions?
+
+### Closed by the owner (2026-10-11)
+
+8. **The delete toggle - KEEP IT.** Off by default; with it off a deletion
+   always gets its own card; with it on, recoverable deletions may happen inside
+   the run; **permanent deletions and anything that closes or erases an account
+   always get their own card, whatever the toggle says.** Recorded as a
+   **preference, not a rule entry** - it relaxes no repository rule, and its
+   "What asks first" row must not imply one exists. He was offered the stricter
+   alternative (drop the toggle; every deletion always asks) and **chose to keep
+   it** (§16, §18).
+9. **The offline window - KEEP 12 SECONDS.** The project's own
+   `OFFLINE_GRACE_MS`, unchanged, for this path as for the others. He was offered
+   a tighter session-only window and **chose the project's number**, with the
+   cost he accepted stated plainly and kept: **up to 12 seconds of taps can
+   still go out after the link really drops** (§6).
