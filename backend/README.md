@@ -180,7 +180,7 @@ on a throwaway copy instead.
 | `tag-suggest.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Suggest tags overnight"** (the owner's decision of 2026-09-30; `docs/JARVIS-API.md` section 104, `docs/OVERNIGHT-TAGS-DESIGN.md`; up to 3 cards a night). TWO gate hunks: `chat_tags_suggest_on` and `chat_tag_suggest` join the "acts only on tier ask" set and get their `_RISK` lines (right after `referee.patch`'s own, so it goes after it); ONE `jarvis_hud.py` block right after `referee.patch`'s that keeps the quiet hourly `tag_suggest` look on the one scheduler in step with the switch. It adds no tool; the routes `GET`/`POST /api/history/tags/suggest` and `POST /api/history/mark` are named in `chat-history.patch` and answered by `jarvis_chat_log.py`. Needs `jarvis_tag_suggest.py` (and the rebuilt `jarvis-framework.toml`'s two `ask` lines). Off by default; turning it on is one card; each suggested tag is one more card and is filed only on a tap. The local model reads only the owner's own first six messages of an untagged, ordinary chat that never read outside text (ARCHITECTURE section 5). Tests: `test_tag_suggest.py`, `test_chat_marks.py` (the "New section here" divider, JARVIS-API section 106, is in `jarvis_chat_log.py` and `chat-history.patch`). |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `readpage.patch` | `jarvis_gate.py` | **"Read one web page out loud"** (the owner's request of 2026-10-05: "does jarvis have the ability for me to post a webpage into jarvis and it can read the content out loud?"; `docs/JARVIS-API.md` section 115). THREE hunks in `jarvis_gate.py` only - no route and no `jarvis_hud.py` block at all, because the door is a MODEL TOOL (`read_web_page`), not a route: `read_web_page` joins the "acts only on tier ask" set, gets its `_RISK` line (`"no", "outbound"` - the PC contacts that one website and the request cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and its `_TOOL_ACTIONS` line (the third hunk, added 2026-10-06 - without it `action_for_tool()` fell through to `unclassified_tool`, so the card the owner was shown was never the one this tool raises; found on the owner's own PC, see below). Its context is `quiz-cloud.patch`'s own added lines and `inbox-tidy.patch`'s own `_TOOL_ACTIONS` line, so it goes after both - last, like every new patch. Needs `jarvis_readpage.py` and `jarvis_agent.py` copied in (both are in `apply-patches.ps1`'s shipped list); without them the tool is simply not offered to the model and the gate row is never used. The tool is **off until `"read_web_page"` is added to `[tools].enabled`** in `jarvis-framework.toml`, like every tool but `web_search`. Tests: `backend/test_readpage.py`. See "Read one web page out loud", at the very end. |
-| `gate-touches.patch` | `jarvis_gate.py` | **The gate read the card, not the action** (2026-10-10). `jarvis_gate.check()`'s one rule above the tier table - nothing may edit the policy or the gate itself - searched the whole PROMPT it was handed for its own `_PROTECTED` file names, BEFORE the tier branches. For a card raised by a route the prompt IS the card's text, so a card that merely DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier `never` before any card existed: no card, no Windows Hello, nobody asked, for anybody, ever. The owner's own log holds **45** of them (2026-10-03 .. 2026-10-10) - `enable_reading_tool` 21, `loosen_what_asks_first` 21, `restore_backup` 3 - and the redaction lengths name the files exactly (21 characters is jarvis-framework.toml, 13 is jarvis_hud.py). The rule now reads what the action **TOUCHES**: the parameters it was handed (`detail`, minus the keys that hold the card's own text) and the model's own tool call (the JSON object inside the prompt). Card prose is not a target. TWO hunks, `jarvis_gate.py` only, appended last: `_JSON_OBJECT_RE`/`_PROSE_KEYS`/`_target_blobs()`/`_touches_protected()`'s docstring, and the comment above `check()`'s call. No tier, stamp, Windows Hello or refusal-wording change - the refusal sentence and the "never" tier are identical. Its own suite is `backend/test_gate_touches.py`, which raises the three REAL cards through the real gate; see "The gate reads what an action touches" below. |
+| `gate-touches.patch` | `jarvis_gate.py` | **The gate read the card, not the action** (2026-10-10). `jarvis_gate.check()`'s one rule above the tier table - nothing may edit the policy or the gate itself - searched the whole PROMPT it was handed for its own `_PROTECTED` file names, BEFORE the tier branches. For a card raised by a route the prompt IS the card's text, so a card that merely DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier `never` before any card existed: no card, no Windows Hello, nobody asked, for anybody, ever. The owner's own log holds **45** of them (2026-10-03 .. 2026-10-10) - `enable_reading_tool` 21, `loosen_what_asks_first` 21, `restore_backup` 3 - and the redaction lengths name the files exactly (21 characters is jarvis-framework.toml, 13 is jarvis_hud.py). The rule now reads what the action **TOUCHES**: the parameters it was handed (`detail`, minus the keys that hold the card's own text) and the model's own tool call (the JSON object inside the prompt). Card prose is not a target. **A cut tool call is still read** (2026-10-11): `jarvis_agent._gate_prompt` slices the model's arguments to 1500 characters for its audit-log line, and a JSON object cut in half does not parse, so a protected target longer than that line went unread and the action was offered as an ordinary card instead of being refused; `_TOOL_CALL_PROMPTS` now matches the project's tool-call prompt shapes end to end and reads their raw argument text. TWO hunks, `jarvis_gate.py` only, appended last: `_JSON_OBJECT_RE`/`_PROSE_KEYS`/`_target_blobs()`/`_touches_protected()`'s docstring, and the comment above `check()`'s call. No tier, stamp, Windows Hello or refusal-wording change - the refusal sentence and the "never" tier are identical. Its own suite is `backend/test_gate_touches.py`, which raises the three REAL cards through the real gate; see "The gate reads what an action touches" below. |
 
 ## The gate reads what an action touches, not the words on its card
 
@@ -230,6 +230,19 @@ the action's TARGET:
   (`Allow execution of tool '<name>' with args {json}?`) and `jarvis_agent`'s
   own `_gate_prompt` (`tool <name> {json}`, and the plan-step form
   `plan step <tool> {json}`). A prompt with no parseable JSON is prose.
+- **a tool call CUT SHORT** (2026-10-11). `jarvis_agent._gate_prompt` writes
+  `tool <name> {json.dumps(args)[:1500]}` - its audit-log line has a
+  1500-character budget - so the JSON in the prompt can be an object cut in
+  half, which does not parse. A cut object used to be dropped whole, and with
+  it the arguments this rule exists to read. `_TOOL_CALL_PROMPTS` now matches
+  the three tool-call prompt shapes from their first character to their last,
+  and the raw argument text is searched as it stands. Measured: arguments
+  3453 characters long with `pathlib.Path('jarvis_gate.py').write_text('')`
+  well inside the first 1500 gave `_target_blobs` only
+  `['{}', 'run_shell_on_host']`, and `run_shell_on_host` came back as an
+  ordinary "ask" card a person could approve. The match is anchored at BOTH
+  ends, so a card is still never read this way: a card is a paragraph, not one
+  of these lines.
 - **the action name**, because the two terminal actions `jarvis_agent` makes
   for itself are built from the tool name (`unclassified_tool:file_write`).
 
@@ -248,6 +261,8 @@ path: a path or command in `detail`, an argument in the prompt
 auto-tier action (the rule still runs above the tier branches). Tiers,
 `Verdict.outcome`, the approval stamp, Windows Hello, `notice_for` and the
 refusal wording are untouched, and no new protected list or reason was added.
+Reading a cut tool call can only ever ADD text to the search: it never removes
+a blob, so nothing that was refused before can become allowed.
 
 **What it does not do.** It does not make a route card that legitimately
 writes `jarvis-framework.toml` - `loosen_what_asks_first`,
@@ -257,12 +272,17 @@ name in `detail` in the first place. It also does not read `jarvis_hud.py`,
 name in some THIRD place, this rule will not see it, and that caller needs a
 line in `_target_blobs`, not a wider scan.
 
-**Tests that fail without it** (`backend/test_gate_touches.py`, 69 checks):
+**Tests that fail without it** (`backend/test_gate_touches.py`, 80 checks):
 
 - a card whose text names a protected file is raisable, and a row reaches the
   queue with that text on it - the case that has bitten three times;
 - an action whose target is a protected file is refused at `never` with the
   same plain reason, on all seven shapes above, and no row reaches the queue;
+- a tool call cut to the audit-log line's 1500 characters is still read as a
+  tool call, so a protected target cannot be hidden by making the arguments
+  longer than that line - and the cut is NOT an excuse to read a card's words
+  again (the counter-test uses a card that names three protected files, carries
+  an unclosed brace and quotes a half-written tool call of its own);
 - the three REAL cards (`restore_backup`, `enable_reading_tool`,
   `loosen_what_asks_first`) are raised end to end through the REAL gate with
   the SHIPPED tier table, on a scratch approvals database and a scratch audit
