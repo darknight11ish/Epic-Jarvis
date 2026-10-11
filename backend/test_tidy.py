@@ -43,6 +43,7 @@ No pytest, no network, no model.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import sys
@@ -186,7 +187,7 @@ def switch(on: bool):
 
 
 def t_true_until_parser():
-    now = time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))
+    now = WHEN
     cases = {
         "Owner is on holiday in Lisbon until 12 October 2026": "2026-10-12",
         "Owner is staying with Priya until 12 October": "2026-10-12",
@@ -245,7 +246,7 @@ def t_true_until_is_a_label_never_a_hide():
 
 def t_recall_label():
     st = store()
-    now = time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))
+    now = WHEN
     fid = at(now - DAY, lambda: st.add("Owner is on holiday in Lisbon until 12 October 2026",
                                        source="t"))
     hits = PA.recall(st, "where is my holiday in Lisbon", k=5, now=now)
@@ -351,7 +352,7 @@ def seed_until(st, now, n):
 
 def t_nights_that_do_nothing():
     st = store()
-    now = time.mktime((2026, 9, 28, 3, 30, 0, 0, 0, -1))
+    now = NIGHT
     seed_until(st, now, 2)
     switch(False)
     backoff()
@@ -360,15 +361,14 @@ def t_nights_that_do_nothing():
     switch(True)
     bo = backoff()
     bo.note_conversation()
-    # After the tidy hour on today's date, whatever the real clock says: with the real
-    # time these two checks failed whenever the suite ran before 02:00 (CI, 2026-09-30).
-    lt = time.localtime()
-    after_hour = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
-    out = T.run_night(now=after_hour, store=st, ask=lambda p: "{}")
+    # After the tidy hour on the pinned day, NOT `time.localtime()`: with the real
+    # time these two checks failed whenever the suite ran before 02:00 (CI,
+    # 2026-09-30), and a real "today at noon" is a different moment in every zone.
+    out = T.run_night(now=WHEN, store=st, ask=lambda p: "{}")
     check("the owner is chatting: held back, nothing raised", out["why"] == "conversation"
           and not cards(st), out)
     backoff("standby")
-    out = T.run_night(now=after_hour, store=st, ask=lambda p: "{}")
+    out = T.run_night(now=WHEN, store=st, ask=lambda p: "{}")
     check("Standby: held back, nothing raised", out["why"] == "quiet" and not cards(st), out)
     switch(False)
 
@@ -387,7 +387,19 @@ def t_nights_that_do_nothing():
 #: different country, so the moment is pinned - 2026-09-28 12:00 local, the
 #: same day the other checks in this file already name - instead of the
 #: assertions being loosened.
-WHEN = time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))
+#:
+#: Built with `calendar.timegm`, not `time.mktime`: mktime reads the tuple as
+#: LOCAL time and its trailing -1 lets the C library pick DST, so the "pinned"
+#: moment still moved with the machine - by up to a day - and only the calendar
+#: tuple was pinned, not the instant. Every date in this file is worked out FROM
+#: `now` (`seed_until`, the "in <month>" question, `true_until`), so a `now` that
+#: moves moves the dates with it. timegm reads the tuple as UTC and takes no DST
+#: flag, so WHEN is one moment on every machine and in every time zone.
+WHEN = float(calendar.timegm((2026, 9, 28, 12, 0, 0)))
+
+#: 03:30 on the same pinned day, for `t_nights_that_do_nothing`: the real clock
+#: is no better there than anywhere else, and it is the same instant everywhere.
+NIGHT = float(calendar.timegm((2026, 9, 28, 3, 30, 0)))
 
 
 def noon_today() -> float:
