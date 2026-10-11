@@ -12,6 +12,17 @@ already written in `CLAUDE.md` for the plan card generally (owner,
 2026-09-27): *"The plan card is allowed later, only after the multi-step
 safety tests pass; risky steps still get their own card."*
 
+**Then he settled the one thing that would have needed the floor changed.** He
+was offered a `docs/RULE-FLEXIBILITY.md` floor entry (a session that keeps
+tapping while the event stream is stale) and chose the safer route instead
+(2026-10-11): ***"Approve, but make it stop when the link drops."*** So the
+session **stops dead when the phone's link to the PC drops**, `CLAUDE.md` rule 4
+stands **exactly as written**, that file is **untouched**, and **no entry is
+needed** (§6, §17, §18). The record of what was considered is
+`docs/PHONE-PLAN-RULE-DRAFT.md`. **And keeping the floor removed the switch as
+well**: nothing is loosened, so the feature rides the card that already exists
+(§18).
+
 Written by the studio's designer against `origin/main` `b2beb60a`
 (2026-10-11), corrected the same day against an adversarial review and a
 model-research pass. **Anything marked unverified has not been tried on the
@@ -37,17 +48,20 @@ never a session: it has a fixed list of steps, a fixed
 end, and it stops dead - it never guesses - the moment the phone is not where
 the plan expected it. A marker on the phone shows which step of how many is
 running, one control stops it, and every step it took is written down locally
-afterwards. **Two switches decide whether any of this happens, and both start
-off:** the phone agent itself, and - separately, so a session can run without
-it - "Let Jarvis delete things" (§16), which covers only deletions the owner
-can still undo and never lets an account be deleted.
+afterwards. **One switch decides how much of it happens** - he asked for "Let
+Jarvis delete things" (§16), off by default, which covers only deletions he can
+still undo and never lets an account be deleted. The session itself needs **no
+switch at all**, because nothing is loosened (§18): it rides the card
+`control_phone` already has.
 
 ## Corrections to the first draft (2026-10-11, after an adversarial review)
 
 The first draft rested on a premise that is **false**, and it presented several
 exclusions as walls with nothing behind them. Corrected in place below; the
 record is kept here rather than quietly rewritten, and nothing in this list is
-defended.
+defended. **One later correction is different in kind and is recorded at the
+end of this list:** the owner settled the staleness question himself, in the
+safer direction, and that changed what this design asks for (item 7).
 
 1. **"One card per command" was wrong.** `control_phone` takes a `requests`
    array (`backend/jarvis_agent.py:1545-1561`): one call, N commands, ONE card
@@ -68,14 +82,25 @@ defended.
    `:4295-4296`).
 3. **The exclusions are not walls.** §17 states one by one which have real
    enforcement and which do not - and only two do.
-4. **"Acting stops when the event stream is stale" is not delivered mid-run.**
-   Corrected in §6: the answer here is a refusal to start plus a per-step adb
-   check; it does not stop taps on a dropped stream.
+4. **"Acting stops when the event stream is stale" was not delivered mid-run** -
+   the honest position at the time, corrected in §6. **Then the owner settled it
+   in the safer direction** (item 7 below): the design now *delivers* it, by
+   stopping the session dead when the link drops.
 5. **Stop lands between taps, and only reaches a session that has a task id.**
    Said exactly in §7 and §14.
 6. **The delete guard misses two shapes by construction** - a long-press menu
    that shows "Delete" only after the press, and a swipe with no node to read
    (§16).
+7. **The owner kept the floor (2026-10-11), and that simplified the design.**
+   Offered a `docs/RULE-FLEXIBILITY.md` floor entry, he chose *"Approve, but make
+   it stop when the link drops."* So: the floor item stands exactly as written,
+   `docs/RULE-FLEXIBILITY.md` is **untouched** and **no entry is needed**, the
+   session **stops dead when the link drops** (§6, §17), and - because nothing is
+   loosened - **the phone-agent switch has gone entirely** (§18). The earlier
+   revision asked for a floor change, a switch, and a code change to
+   `HARD_LIMITS` / `MUST_ASK`; **none of those three is needed now.** One switch
+   remains (the delete toggle) and it turns out to relax **no** rule, which is a
+   new owner question rather than a loosening.
 
 ## What already exists and is reused (nothing here is a second version of anything)
 
@@ -265,7 +290,7 @@ Such a step is not "banned" - it gets its own card, and the plan stops before
 it if the owner would rather do it by hand. That is the honest shape: the
 plan is for the sequence around it, not for the decision itself.
 
-## 6. Staleness (rule 4): what is delivered, and what is not
+## 6. Staleness (rule 4): the floor, kept and delivered
 
 Rule 4 says the app **blocks acting when the event stream is stale**, and the
 project draws the line precisely: *"never held on a stale event stream or by a
@@ -275,39 +300,71 @@ both apps (`docs/ARCHITECTURE.md:1874-1875`), and the staleness decision is
 made on the PC side of the app, not in a page
 (`docs/ARCHITECTURE.md:1863-1865`).
 
-**This design does NOT deliver that floor item mid-run, and the first draft's
-wording implied it did. Corrected, plainly:**
+**The owner kept the floor, and this design now delivers it (2026-10-11).** His
+answer to the floor question was *"Approve, but make it stop when the link
+drops"* - add the guarantee, keep the rule. So a session **stops dead when the
+phone's link to the PC drops**, and the floor item *"never auto-approve
+anything, and acting stays blocked while the event stream is stale"*
+(`docs/RULE-FLEXIBILITY.md:45-46`) is left **exactly as written**. No entry in
+that file is needed and none was made; the record of what was considered is
+`docs/PHONE-PLAN-RULE-DRAFT.md`. Precisely what that means:
 
-- **Refused to start: yes.** A plan does not begin while the link is stale (the
-  same 12-second grace). This is the only place the stream's state can stop
-  anything.
-- **Blocked mid-run: no.** Once the first tap has gone, a dropped stream does
-  **not** stop the taps. They are local `adb` commands, not events. What
-  happens instead: the live line goes quiet, and the result says the report was
-  incomplete - the same honesty the runner already applies to a late Stop
-  (`backend/jarvis_android_control.py:414-428`).
-- **Therefore a card must not promise it.** Any card that said "acting stops
-  when the stream is stale" would claim a block the runner does not deliver,
-  which is the anti-pattern this project names; the card's own words are §17's.
+- **What "the link" is.** The phone's own live connection to the PC's API over
+  the mesh - the link whose loss is what makes the apps hold their writes
+  (`docs/ARCHITECTURE.md:1689`: "the apps hold every write on a stale link
+  (rule 4)") and paints the hollow, not-connected icon
+  (`docs/ARCHITECTURE.md:1893`). Its staleness is judged **on the PC**, not in a
+  page (`docs/ARCHITECTURE.md:1863-1865`), and the grace is the project's own
+  **12 seconds** - `OFFLINE_GRACE_MS` in `jarvis-link.js`'s `faceSignal`
+  (`docs/ARCHITECTURE.md:1874-1881`).
+- **Where the check happens.** At the **same per-step point that already
+  re-checks the device serial**, before every command
+  (`backend/jarvis_android_control.py:381-385`). One place, one order: the link,
+  the device, the app in front, then the tap.
+- **What "stops dead" means mid-step.** The step in flight **finishes** - a tap
+  already dispatched cannot be recalled (§9) - and the loop **stops before the
+  next step**, returning `ok: False` with its reason and the `done` /
+  `not_run` lists (`backend/jarvis_android_control.py:340-353`, `:373-380`). The
+  report says the link went stale, in those words.
+- **A link that drops and comes back: the session is OVER. It does not resume.**
+  Reasons, in order: the plan was approved against a screen a dropped link
+  invalidates (the phone may have been unlocked, moved, or picked up by hand);
+  while the link is down the phone's badge **and its Stop** are both gone, so a
+  resumed run would be acting with no marker and no cancel (§13, §14); and
+  re-planning is a fresh card the owner can actually decide - the same reason §2
+  stops rather than guesses.
+- **The honest limit, and it is the one that matters.** This makes the
+  **staleness half of rule 4 true for a session**: acting no longer continues
+  while the stream is stale. It does **not** make the taps depend on the stream -
+  they are still local `adb` commands, and the stop is a **check the runner
+  performs**, not a property of the taps. So with the project's 12-second grace,
+  "stops dead" is delivered as **"stops before its next step, once the link has
+  been stale for up to 12 seconds"** - up to 12 seconds of taps can still go out
+  after the link actually drops. Keeping the project's own number is recommended
+  (a shorter one would stop sessions on ordinary jitter), but the window is real
+  and the card must not claim otherwise.
 
-What the design *does* check, per step, has nothing to do with the stream:
+What the runner checks before each step, all at that one point:
 
-1. **The phone connection.** Before **every** command, `run()` checks the
+1. **The link** (above). Stale, and the session stops dead.
+2. **The phone connection.** Before **every** command, `run()` checks the
    device is still in `adb devices`'s own list and stops otherwise, *"rather
    than sending a tap intended for one phone toward whatever is connected
    now"* (`backend/jarvis_android_control.py:313-321`, `:381-385`). This design
    adds no second mechanism and removes none. Which address that device is
    reached at - the mesh one, never a home-Wi-Fi one - is §12.
-2. **The same serial.** Recorded on the card as part of the plan
+3. **The same serial.** Recorded on the card as part of the plan
    (`Plan.device`, `:99-106`), and compared every step by that same check.
 
 **The phone never decides any of this.** No rule, no refusal and no approval
 is made on the phone: the phone is the thing being acted on, and its only job
 is to be the same phone (see "What this is NOT").
 
-**Because of this, the floor has to change for the feature to exist at all** -
-`docs/RULE-FLEXIBILITY.md:45-46` is the item, and the drafted entry that says so
-is `docs/PHONE-PLAN-RULE-DRAFT.md` (§17).
+**Because the session now stops dead when the link drops, the floor is KEPT and
+nothing needs changing.** `docs/RULE-FLEXIBILITY.md` is untouched, `CLAUDE.md`
+rule 4 stands as written, and no entry, switch or code change to the never-loosen
+sets is needed. The record of what was considered, and why it turned out not to
+be needed, is `docs/PHONE-PLAN-RULE-DRAFT.md`.
 
 ## 7. Stop everything must halt a running plan mid-sequence
 
@@ -341,7 +398,11 @@ holds open.
 **Recommendation: keep the existing 8 - do not introduce a second number.**
 `backend/jarvis_plan.py:84` already says `MAX_STEPS = 8`, *"keep plans short"*,
 and `propose()` refuses a longer one with a plain sentence
-(`:211-213`). Re-using that cap means one promise to the owner, not two.
+(`:211-213`). Re-using that cap means one promise to the owner, not two. **What
+is being capped is the array itself:** `control_phone`'s own card has **no** cap
+today (§18), so this 8 is a **new** limit this design imposes on a session -
+taken from the project's existing number rather than invented, which is the
+point.
 
 Why 8 is the right size here, with this feature's own numbers: eight taps are
 about eight seconds of `input` commands, plus up to ~2.33 s of verification per
@@ -379,9 +440,12 @@ worse than a sentence that says it never does.
 
 ## 10. What the card literally shows
 
-One card, drawn by the machinery that already draws plan cards
-(`backend/jarvis_plan.py:262-287`) and filled with the existing phone card
-text (`backend/jarvis_android_control.py:195-216`), so the two cannot drift:
+One card: the **existing** phone card, drawn by `describe()`
+(`backend/jarvis_android_control.py:195-216`). Since the feature rides
+`control_phone`'s own card rather than a plan (§18), **that** is the drawer - it
+takes one idea from the plan machinery's card (`backend/jarvis_plan.py:262-287`):
+a marked step says so on its own line. The two cannot drift, because the literal
+`adb` line comes from the same place:
 
 ```
 Jarvis would like to do this, in 4 step(s): open the calculator and add 1 + 2
@@ -813,34 +877,41 @@ the shape of the plan rather than the quality of the model:
 The owner asked for this directly (2026-10-11): *"have the delete function be a
 toggle in settings for this that is disabled by default."*
 
-### Two independent switches, both off
+### One switch, off by default - and it is not a rule relaxation
 
-1. **The phone agent itself.** Off by default, and the plan card cannot run
-   until `tools/tool_eval` clears its bar
-   (`backend/jarvis_plan.py:453-492`); the tier stays "ask"
-   (`backend/rebuilt/jarvis-framework.toml:250`). `run_plan` is already in
-   `HARD_LIMITS` - *"Never loosened from an app, whatever else changes"*
-   (`backend/jarvis_asks_first.py:400-419`) - so this one is a gate, not a
-   loosening.
-2. **"Let Jarvis delete things".** New, its own row in the "What asks first"
-   page (`backend/jarvis_asks_first.py:210-211`), **off by default**, and it
-   does nothing unless switch 1 is also on. Copying the switch that already
-   has exactly this shape - "Lights, plugs and fans without a card": *"Asks
-   first unless you turn on the switch below (off by default)"* (`:1642`),
-   `set_lights()` (`:1712`), `lights_on()` (`:1730`).
-   - **On is a loosening**: one card, action `loosen_what_asks_first`
-     (`:353`), decided through `_decide()` (`:1123-1153`), which requires the
-     loosening action itself to be tier "ask" (`:1134`) - and on the PC that
-     comes with Windows Hello (`jarvis_owner_check.PC_ONLY_ACTIONS`, named at
-     `:89`, `:351-353`); on the phone, the screen lock.
-   - **Off is immediate, no card.** The project's rule for every switch.
-   - It is **not folded into switch 1**, which is the whole point: a session
-     runs without it.
+**Corrected after the owner kept the floor (§18).** There were two switches in
+the earlier revision. One of them no longer exists:
 
-The toggle is a permission for **one named class of step**, never for a
-session. That distinction is the design: switching it on does not make a
-session "allowed to delete" - it lets a **recognised** deletion-shaped step be
-part of a plan at all.
+1. ~~**The phone agent itself.**~~ **Gone.** It was only ever there to carry a
+   floor change in `docs/RULE-FLEXIBILITY.md`, and the owner kept the floor
+   instead. Nothing is loosened by this feature: `control_phone` is already tier
+   "ask" (`backend/rebuilt/jarvis-framework.toml:248`) and its card already
+   carries a whole list of commands (`backend/jarvis_agent.py:1545-1561`), so
+   the feature **rides the card that already exists** and needs no gate action,
+   no "What asks first" row and no change to `HARD_LIMITS` / `MUST_ASK` (§18).
+2. **"Let Jarvis delete things".** His own request (2026-10-11), and the only
+   switch left: its own row in the "What asks first" page
+   (`backend/jarvis_asks_first.py:210-211`), **off by default**, with the shape
+   the project already uses for "Lights, plugs and fans without a card":
+   *"Asks first unless you turn on the switch below (off by default)"* (`:1642`),
+   `set_lights()` (`:1712`), `lights_on()` (`:1730`) - off immediate, no card.
+   - **Turning it on is NOT a loosening of any rule this repository holds.** It
+     relaxes a restriction **this design adds**: with the toggle off, a
+     deletion-shaped step keeps its own card; with it on, such a step may ride
+     the approved batch. Today, a delete tap inside an approved array already
+     rides the same card, so nothing in the project's rulebooks changes - which
+     is why **there is no entry for it in `docs/RULE-FLEXIBILITY.md`** and no
+     floor change is involved (§18).
+   - Because it still *reduces* asking, it keeps the safe **form** of a
+     loosening even though it is not one: off by default, one card plus the
+     screen lock (phone) or Windows Hello (PC) to turn on, immediate to turn
+     off. Its "What asks first" row must not imply a rule entry exists.
+
+The toggle is a preference about **one named class of step**, never a session
+permission: switching it on does not make a session "allowed to delete" - it
+lets a **recognised** deletion-shaped step be part of an approved batch at all.
+**Whether it should exist at all is an open owner question** (§18, question 8);
+it is not quietly kept.
 
 ### What counts as "delete": a positive list
 
@@ -974,6 +1045,7 @@ exclusions into two lists, and the second one goes on the card itself.
 | **A visible marker while it runs** | The badge (§13) and the PC's content-free live line (`backend/jarvis_android_control.py:390-397`, `:323-325`) |
 | **Never touches hidden memory lists or app lock** | Not on this path: the agent has no route to either, and its log is the job list's own (§13) |
 | **Everything local** | `adb` to the owner's own phone over the mesh (§12), and a local model (§15). Nothing leaves the machine |
+| **If the phone's link to the PC drops, the session stops dead** | A per-step check at the same point that re-checks the device serial (`backend/jarvis_android_control.py:381-385`), against the PC's own link-staleness signal (judged on the PC, `docs/ARCHITECTURE.md:1863-1865`; the apps' 12-second grace is `OFFLINE_GRACE_MS`, `docs/ARCHITECTURE.md:1874-1881`). The step in flight finishes, the loop stops before the next one, and the report says the link went stale. **A link that comes back does not resume the session.** The floor's own half of rule 4, delivered rather than excused (§6); the window is the project's 12 seconds and is stated, not hidden |
 
 ### NOT PROMISED - guesses, whose failures this project already documents
 
@@ -1016,31 +1088,111 @@ are not.
 Not "allow phone sessions". That sentence is the whole disclosure, and §16's
 delete switch carries its own one as well.
 
-### The floor change this needs - drafted, NOT applied
+### The floor is KEPT - nothing to change, and no entry needed
 
-A feature that needs a floor item in `docs/RULE-FLEXIBILITY.md` is, by that
-file's own words, *"a finding to report - **not a reason to edit this list**"*
-(`docs/RULE-FLEXIBILITY.md:53-54`). This feature needs exactly that: the floor
-item *"Never auto-approve anything, and acting stays blocked while the event
-stream is stale"* (`:45-46`) is not delivered mid-run by this design (§6, §17),
-so the floor itself has to change - and that is the owner's call, not an
-agent's (`:22-23`).
+The owner was offered the floor change and **declined it**: *"Approve, but make
+it stop when the link drops."* So:
 
-**DRAFT RULE ENTRY 004 - awaiting the owner's word-for-word approval. NOT
-APPLIED.** The exact proposed text, in `docs/RULE-FLEXIBILITY.md`'s own entry
-shape, is in **`docs/PHONE-PLAN-RULE-DRAFT.md`**. `docs/RULE-FLEXIBILITY.md` has
-**not** been edited and no code has changed. Precisely what that means: both
-`control_phone` and `run_plan` sit in `HARD_LIMITS`
-(`backend/jarvis_asks_first.py:402-431`, at `:405` and `:419`) - *"Never
-loosened from an app, whatever else changes"* (`:398-401`) - **and both are in
-`MUST_ASK` too** (`:436-456`, `control_phone` at `:437`, `run_plan` at `:446`).
-Those sets govern the **switch**, not the gate: the loosening path refuses
-(`:1174`) and the page says *"Always asks. This cannot be changed from an app."*
-(`:799`, `:82`), so **no switch for this can exist today** - while the gate
-itself would not refuse a `control_phone` call, it would **ask** (tier `ask`,
-`backend/rebuilt/jarvis-framework.toml:248`). The rule change alone therefore
-enables nothing: the owner would have to ask for this floor entry **and** a
-separate code change that takes those names out of those sets.
+- The floor item (`docs/RULE-FLEXIBILITY.md:45-46`) stands **exactly as
+  written**, `docs/RULE-FLEXIBILITY.md` is untouched, and **no entry 004 is
+  needed** - not deferred, *not needed*;
+- this design **delivers** the floor's second half rather than asking to be
+  excused from it: the session stops dead when the link drops (§6, and the
+  promise in the table above);
+- the record of what was considered, and why it was not needed, is
+  `docs/PHONE-PLAN-RULE-DRAFT.md`, now headed *"considered and NOT needed"*,
+  stating that nothing in it is pending.
+
+The code facts that made a switch impossible (`HARD_LIMITS` and `MUST_ASK`
+naming `control_phone` and `run_plan`) mattered **only because a switch was
+contemplated**. With nothing loosened, no code change to those sets is needed
+either - §18.
+
+## 18. What this no longer needs, and the one question left
+
+### No new switch is needed - and that is not a loophole
+
+`control_phone` is **already** tier `ask`
+(`backend/rebuilt/jarvis-framework.toml:248`) and its card **already** carries a
+whole list of literal commands in one call
+(`backend/jarvis_agent.py:1545-1561`). A card listing every tap up front
+**already exists**; it is the array card. Nothing in this design loosens
+anything - every addition it makes is **stricter** than today's behaviour
+(per-step verification, the link stop, the exclusion lists, a hard time limit,
+the local record, the badge and Stop).
+
+Therefore:
+
+- **The phone-agent switch collapses into nothing.** It existed only to carry
+  the floor change. With the floor kept there is no gate action, no "What asks
+  first" row, and **no code change to `HARD_LIMITS` / `MUST_ASK`** - the code
+  change the previous revision was about. The feature **rides the card that
+  already exists.**
+- **No loosening card and no Windows Hello step** are needed for the session
+  itself. What the owner still decides is exactly what he decides today: he
+  reads the card and says yes or no.
+- **What changes is code, not permission**: the per-step checks and the link
+  stop are new work inside the runner, and the owner's multi-step-safety
+  decision (`CLAUDE.md`, 2026-09-27) is honoured in spirit by gate 5 rather than
+  by a gate on the machinery (§ "The six build gates", below).
+
+### The delete toggle was never a rule relaxation - it is the one open question
+
+§16 presented the delete toggle as a loosening (one card plus the fingerprint to
+turn it on). That framing is wrong in an important way: **it relaxes no rule in
+this repository.** With the toggle **off**, the design's own added caution is
+"a deletion-shaped step keeps its own card" - a restriction *this document*
+invents, because today a delete tap inside an approved array already rides the
+same card. Turning the toggle on therefore relaxes **this design's extra
+caution**, not a project rule, so it **cannot have an entry in
+`docs/RULE-FLEXIBILITY.md`** (there is nothing there to relax) and needs no
+floor change. The two honest ways forward, for the owner:
+
+1. **Keep it as a design preference (recommended, and what he asked for):** off
+   by default, its own card plus the screen lock or Windows Hello to turn on
+   (the safe *form*, even though the reason is not a rule entry), and off
+   immediate with no card. Its "What asks first" row must **not** imply a rule
+   entry exists.
+2. **Or drop the toggle** and always give a deletion-shaped step its own card:
+   simplest, no setting, nothing to explain. The cost is that a batch containing
+   a harmless deletion cannot be approved in one go.
+
+**This is a new owner question**, and it is in the closing list. The switch is
+not quietly kept: with no rule behind it, it is a preference about how much
+extra caution this design adds, and it is labelled that way wherever it appears.
+
+### The steps may still come only from the owner's own words
+
+The owner's choice changed **nothing** about where a step may come from. That is
+governed by the plan-taint refusal (`backend/jarvis_plan.py:191-203`, and the
+plan route's own check at `backend/jarvis_agent.py:1489-1490`), and
+`control_phone` **counts as a reading tool** because it is not in
+`_NOT_READING` (`backend/jarvis_agent.py:3984`, `:4295-4296`). So
+**screen-proposed steps remain refused exactly where they were**, and this design
+does not touch that rule: v1 takes the steps from the owner's own words (§1), and
+asking Jarvis to read the phone's screen and *propose* them is a separate
+decision he has not made.
+
+**One honest subtlety, stated rather than assumed:** that refusal is enforced on
+the **plan** route. v1 here never reads the screen to propose, so the question
+does not arise - but if the owner ever wants the screen to *propose* steps
+through `control_phone`'s array instead of a plan, whether the taint rule covers
+that path has to be settled in code first, not assumed. Flagged here so it is
+not discovered later.
+
+### The six build gates, after the owner's choice
+
+- **Gate 1 falls away** - the plan card's own `tools/tool_eval` bar. It existed
+  only because this design rode `jarvis_plan`, and it no longer does. What does
+  **not** fall away is the reason the owner set it: measure the multi-step
+  behaviour before trusting it, which is what gate 5 does for grounding.
+- **Gate 2 changes shape**: "the tiers stay ask" is now trivially true rather
+  than a prerequisite, because nothing is loosened.
+- **Gates 3 and 4 stand**: the three unverified facts measured on his phone, and
+  the first test run by him, watching.
+- **Gate 5 stands**: the driving model's grounding measured (§15).
+- **Gate 6 stands**: the delete toggle's limits accepted as written (§16) - and it
+  now carries the open question above.
 
 ## What this is NOT
 
@@ -1073,16 +1225,17 @@ separate code change that takes those names out of those sets.
 
 ## What has to be true before any of it is built
 
-1. **The plan card's own gate must be open.** The plan machinery refuses to
-   run until a real `tools/tool_eval/ollama_tool_eval.py` run on this model
-   clears the bar - 90% of the multi-step suite and **zero** planted
-   instructions carried into a tool call
-   (`backend/jarvis_plan.py:87-95`, `:453-492`);
-   `backend/rebuilt/jarvis-framework.toml:246,250` keeps `run_plan` at "ask"
-   until then. The phone plan rides that same switch - it does not get its own
-   bypass.
-2. **The tiers stay "ask"**: `control_phone` (`jarvis-framework.toml:248`) and
-   `run_plan` (`:250`). This design never loosens either.
+**Five stand. One fell away when the owner kept the floor (§18).**
+
+1. ~~The plan card's own gate~~ - **fallen away.** It existed only because this
+   design rode `jarvis_plan`, and it no longer does: the feature rides
+   `control_phone`'s existing card (§18). **The reason the owner set that gate
+   does not fall away** - measure the multi-step behaviour before trusting it -
+   and that is what item 5 below does for grounding.
+2. **The tiers stay "ask"**: `control_phone` (`jarvis-framework.toml:248`) and,
+   if anything still uses it, `run_plan` (`:250`). Now trivially true rather than
+   a prerequisite: nothing is loosened, no gate action is added, and
+   `HARD_LIMITS` / `MUST_ASK` are not touched.
 3. **The three unverified facts in §3 and §11** are measured on the owner's
    phone first.
 4. **The first test (§11) is run by the owner, on his phone, watching.**
@@ -1090,17 +1243,20 @@ separate code change that takes those names out of those sets.
    `tools/tool_eval`, clearing the >= 90% bar with **zero** taps on a password
    field, a permission dialog, a "Never look at" app or the Jarvis app, on the
    model that will actually drive this. Until then, nothing here runs. The
-   model-research task's findings (§15's placeholder) are what names it.
+   model research has landed (§15) and names a driver and a grounder.
 6. **The delete toggle's limits are accepted as written** (§16): it is a strong
    guard, not an airtight one; off is the default; and the card that turns it
    on carries the sentence that says an action that cannot be undone may happen
-   inside a session without the owner seeing it first.
+   inside a session without the owner seeing it first. **Open owner question
+   below**, because it turns out to be a preference rather than a loosening
+   (§18).
 
 ## Open questions only the owner can answer
 
 1. **Who names the steps?** May Jarvis read the phone's screen to *suggest* a
-   sequence (option B in §1), or does the plan always come from the owner's own
-   words? Reading it to *check* each step is in this design either way.
+   sequence (option B in §1), or do the steps always come from the owner's own
+   words? **Unchanged by his floor decision**: the taint rule that refuses
+   screen-proposed plans is untouched (§18).
 2. **Sending inside a plan**: is it enough that a send is the last step and
    always gets its own card, or should a plan refuse to contain a send at all?
 3. **The cap**: keep the existing 8 steps, or a smaller number for the phone?
@@ -1114,3 +1270,12 @@ separate code change that takes those names out of those sets.
 7. **The driving model's card** (§15): may a second, specialist grounding model
    take the 12 GB card with the chat stepping aside (option B, recommended), or
    must it share whatever is already resident?
+8. **NEW - the delete toggle itself** (§18): keep it as a preference of this
+   design (recommended, and what he asked for - off by default, its own card
+   plus the screen lock or Windows Hello to turn on), or **drop it** and always
+   give a deletion-shaped step its own card? Either way it relaxes no rule, so
+   no entry appears in `docs/RULE-FLEXIBILITY.md`.
+9. **The staleness window** (§6): the project's own 12-second grace means up to
+   12 seconds of taps can still go out after the link really drops. Keep the
+   project's number (recommended - a shorter one stops sessions on ordinary
+   jitter), or pick a tighter one for phone sessions?
