@@ -1329,6 +1329,21 @@ $PATCHES = @(
     # differs on purpose can skip the patch and paste the four lines by hand;
     # plugins/loader/README.md prints them.
     'plugin-loader.patch'
+    # --- approval cards read short (the owner's request of 2026-10-09) -------
+    # "for approval cards, there should be a more simple summary, with an
+    # explain more button that expands the approval card total word length and
+    # explains the details more. and approval card preferences such as this
+    # should be changeable in the settings"
+    #
+    # ONE more install block of the same shape as animal.patch's, calling
+    # jarvis_card_summary.install() - GET/POST /api/card-prefs, the "Start
+    # short" or "Always show everything" choice, kept in card-prefs.json beside
+    # appearance.json and animal.json so both apps read the one setting.
+    # Nothing else in the core changes: the words the summary is built from are
+    # jarvis_card_words.py's (shipped whole, no patch), the two extra keys on a
+    # card's notice are approval-notice.patch's, and both are already in the
+    # stack above. Cosmetic, so it is at once with no card, either way.
+    'card-prefs.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1414,6 +1429,7 @@ $SHIPPED = @(
     'jarvis_owner_check.py'      # owner-check.patch: Windows Hello for risky approvals from this PC, and the approval stamp
     'jarvis_manner.py'           # manner.patch: warm and brief, or plain - the wording of answers only
     'jarvis_card_words.py'       # approval-notice.patch: every approval card's plain title, and what Jarvis says aloud about a card
+    'jarvis_card_summary.py'     # card-prefs.patch (the owner's request of 2026-10-09): the "Start short" / "Always show everything" choice for approval cards - GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the one setting. Cosmetic, so no card either way. The summary's words are jarvis_card_words.py's; this owns the preference and the "what one card shows" rule both apps follow
     # --- the tools jarvis_agent.py offers the model ---
     # Each is imported inside a try, so a missing one never stops anything:
     # the tool just answers "unavailable". Copying one in does not switch it

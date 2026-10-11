@@ -50,6 +50,11 @@ object OpenPlace {
         // "Animal options" is a card of its own on the desktop; on the phone it
         // is inside Appearance, so the same row is where it opens.
         "animal-options" to Where.Go(Screen.SETTINGS, "appearance-card"),
+        // "Approval cards" (the owner's request of 2026-10-09): its own row on
+        // Settings, right under Appearance, and the setting itself is the PC's
+        // (GET/POST /api/card-prefs) - so "open approval cards" lands on the
+        // row that changes it.
+        "approval-cards" to Where.Go(Screen.SETTINGS, "approval-cards"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,

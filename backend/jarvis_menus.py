@@ -143,6 +143,20 @@ MENUS: tuple = (
     _m("settings.animal-options", "Animal options",
        "Every animal-face option in one place.", (DESKTOP,),
        names=("animal options", "animal settings")),
+    # "Approval cards" (the owner's request of 2026-10-09: "a more simple
+    # summary, with an explain more button ... and approval card preferences
+    # such as this should be changeable in the settings"). PHONE only for now,
+    # because that is where the row is built today: the desktop's own card in
+    # settings.html is the other conversation's surface (jarvis-desktop/ and
+    # src-tauri/ are not this branch's to edit) and is written up for them in
+    # docs/DESKTOP-APPROVAL-CARD-PREF.md. The setting itself is the PC's
+    # (GET/POST /api/card-prefs), so the desktop only needs the switch; when it
+    # lands, this row becomes BOTH with one word changed here.
+    _m("settings.approval-cards", "Approval cards",
+       "How much of a card is shown at first: a short summary, or everything.",
+       (PHONE,),
+       names=("approval cards", "the approval cards", "explain more",
+              "the explain more button", "how much of a card is shown")),
     _m("settings.voice", "Voice", "Talk, read aloud, hands-free and sounds.",
        names=("voice", "voice settings")),
     _m("settings.manner", "How Jarvis talks", "Warm and brief, or plain.",

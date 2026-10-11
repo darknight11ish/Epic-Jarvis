@@ -2755,6 +2755,25 @@ def _budget_intent(s: str) -> Optional[Intent]:
     return None
 
 
+#: How much of an approval card is shown at first, by asking (the owner's
+#: request of 2026-10-09: "approval card preferences such as this should be
+#: changeable in the settings"). Whole sentences only, like everything else
+#: here, and the words are `jarvis_card_summary.spoken`'s own list - never
+#: typed twice, and never guessed at.
+#:
+#:   "always show me the whole approval card" / "show the whole card"
+#:   "start short" / "show the summary first"
+def _card_mode_intent(s: str) -> Optional[Intent]:
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return None
+    mode = R.find_card_mode(s)
+    if mode is None:
+        return None
+    return Intent("settings_card_mode", {"mode": mode})
+
+
 def _settings_adjust(s: str) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
@@ -2765,6 +2784,12 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     budget = _budget_intent(s)
     if budget is not None:
         return budget
+    # How much of an approval card is shown (the owner's request of
+    # 2026-10-09). Before the on/off block below, which would otherwise read
+    # "show the whole card" as a setting named "the whole card" and refuse it.
+    cards = _card_mode_intent(s)
+    if cards is not None:
+        return cards
     m = _TOOL_ON.fullmatch(s) or _TOOL_OFF.fullmatch(s)
     if m:
         tool = R.find_tool_target(m.group(1))
@@ -3740,6 +3765,20 @@ def _run_settings_asks_first(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_asks_first")
 
 
+def _run_settings_card_mode(f: dict, peer, local) -> Result:
+    """"How much of an approval card is shown", by asking (the owner's request
+    of 2026-10-09).
+
+    The rule lives in jarvis_settings_registry.set_card_mode, which calls
+    jarvis_card_summary.set_mode - the ONE function POST /api/card-prefs calls,
+    so asking and using the screen cannot drift apart. Cosmetic, so it is at
+    once with no approval card, either way (CLAUDE.md: "cosmetic options change
+    at once"), and neither direction waits on a fresh link."""
+    import jarvis_settings_registry as R
+    out = R.set_card_mode(f["mode"], peer=peer, local=local)
+    return Result(out.said, "settings_card_mode")
+
+
 def _run_animal(n: str, f: dict, peer, local) -> Result:
     """Animal options by asking - the same functions the switches call, so
     the same rules: the shared switches and the sun and moon at once, the
@@ -3812,6 +3851,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_bool(f, peer, local)
     if n == "settings_budget":
         return _run_settings_budget(f, peer, local)
+    if n == "settings_card_mode":
+        return _run_settings_card_mode(f, peer, local)
     if n == "settings_asks_first":
         return _run_settings_asks_first(f, peer, local)
     if n == "settings_tool":

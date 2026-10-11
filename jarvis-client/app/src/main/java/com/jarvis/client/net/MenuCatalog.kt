@@ -44,6 +44,7 @@ object MenuCatalog {
         Menu("settings.devices", "Devices", "Every paired device with its own key.", true, true, "settings", "", "card", null, null, false, true, "Removing a lost phone must stay reachable."),
         Menu("settings.appearance-card", "Appearance", "Theme, faces and how it all looks.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.animal-options", "Animal options", "Every animal-face option in one place.", true, false, "settings", "", "card", null, null, true, true, ""),
+        Menu("settings.approval-cards", "Approval cards", "How much of a card is shown at first: a short summary, or everything.", false, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.voice", "Voice", "Talk, read aloud, hands-free and sounds.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.manner", "How Jarvis talks", "Warm and brief, or plain.", true, true, "settings", "", "card", null, null, true, true, ""),
         Menu("settings.idle-new", "A new conversation starts after", "How long a chat can sit idle before the next message starts a new one.", true, true, "settings", "", "card", null, null, true, true, ""),

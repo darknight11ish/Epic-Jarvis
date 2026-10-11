@@ -188,6 +188,12 @@ SHIPPED = (
     "jarvis_owner_check.py",
     "jarvis_manner.py",
     "jarvis_card_words.py",
+    # The approval card's short summary and the "Start short" / "Always show
+    # everything" choice (the owner's request of 2026-10-09, card-prefs.patch):
+    # GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the
+    # one setting, and the "what one card shows" rule they both follow.
+    # Cosmetic, so no card either way.
+    "jarvis_card_summary.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",

@@ -128,7 +128,14 @@ def t_the_patch_is_registered_last():
              # at the end of the install chain. It removes no line and does not
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # card-prefs.patch (2026-10-10, "cards read short") is appended
+             # last and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED
+             # lines at the end of the install chain. It removes no line and
+             # does not touch jarvis_gate.py at all - no gate list entry, no
+             # risk row, no _TOOL_ACTIONS line - so it rewrites nothing the
+             # two stale rows this patch removes ever sat near.
+             "card-prefs.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

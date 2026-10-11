@@ -684,7 +684,13 @@ def t_the_patch_and_the_lists():
              # at the end of the install chain. It removes no line and does not
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # card-prefs.patch (2026-10-10, "cards read short") is appended
+             # last and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED
+             # lines at the end of the install chain. It removes no line and
+             # does not touch jarvis_gate.py at all, so it rewrites nothing
+             # referee.patch's hunks anchor on.
+             "card-prefs.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

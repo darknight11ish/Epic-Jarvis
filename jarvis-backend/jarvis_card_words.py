@@ -1,8 +1,20 @@
-"""The words on an approval card, in one place: its title, its label, its
-button order, and what Jarvis SAYS about a card during a spoken question.
+"""The words on an approval card, in one place: its title, its short summary,
+its label, its button order, and what Jarvis SAYS about a card during a spoken
+question.
 
     import jarvis_card_words as W
     W.title_for("switch_model")   # "Jarvis wants to switch to a different AI model"
+    W.summary_for("switch_model") # "Jarvis wants to switch to a different AI model."
+
+THE SHORT SUMMARY AND "EXPLAIN MORE" (the owner, 2026-10-09): "for approval
+cards, there should be a more simple summary, with an explain more button that
+expands the approval card total word length and explains the details more. and
+approval card preferences such as this should be changeable in the settings."
+So every action has a SHORT row here (`SUMMARY`, read by `summary_for`), the
+card shows that until the owner opens it, and the whole card - the exact line
+or value being changed, why it matters, what saying no does - is what the
+control reveals. Both apps word it from this one place. The preference itself
+lives in `jarvis_card_summary.py`, not here: this module stays pure words.
 
 WHY A TABLE. The notice's title (approval-notice.patch, `notice_for`) used
 to be the gate's action name with its underscores taken out: "Jarvis wants
@@ -225,6 +237,158 @@ TITLES = {
     "unclassified_tool": "use a tool it has no plain name for",
 }
 
+#: The SHORT words on a card, keyed on the same action names as TITLES - what
+#: the owner asked for on 2026-10-09: "for approval cards, there should be a
+#: more simple summary, with an explain more button that expands the approval
+#: card total word length and explains the details more."
+#:
+#: So a card shows THIS as its summary, with an "Explain more" control that
+#: reveals the whole card (the notice's `full`: the exact line or value being
+#: changed, "Nothing else in it changes", the Windows Hello line where it
+#: applies, and "If you say no: nothing changes"). `summary_for` below is this
+#: table's one reader; `approval-notice.patch` puts its words in the row both
+#: apps read, and `jarvis_card_summary.py` adds the reason from the risk table,
+#: so the phone and the desktop cannot word the same summary two ways.
+#:
+#: WHY IT IS NOT JUST THE TITLE. The title - "Jarvis wants to send an email" -
+#: is already shown above the summary, and on a long card the title plus the
+#: card's whole body is the wall of text the owner is complaining about. A row
+#: here is the one thing being agreed to, said in a breath: the same fact as
+#: the title's phrase, cut to what a person needs to recognise the action.
+#: Never a code name, never a full stop, never a paragraph.
+#:
+#: EVERY action in TITLES has a row here: `backend/test_card_short_words.py`
+#: fails when one does not, which is what keeps an action added tomorrow from
+#: reaching the owner's card without short words of its own.
+SUMMARY = {
+    # --- email and calendar
+    "send_email": "send the email shown",
+    "draft_email": "save an email draft",
+    "tidy_inbox": "tidy your inbox",
+    "email_read": "read your email",
+    "read_calendar": "read your calendar",
+    "calendar_read": "read your calendar",
+    "edit_calendar_event": "change a calendar event",
+    "delete_calendar_event": "delete a calendar event",
+    # --- files, commands, the computer and the phone
+    "read_files_readonly": "read files on this PC",
+    "delete_file": "delete a file",
+    "run_shell_on_host": "run a command on this PC",
+    "control_computer": "use your mouse and keyboard",
+    "control_phone": "tap and type on your phone",
+    "run_plan": "run the safe steps of a plan",
+    "control_browser": "work a web page in a browser",
+    "spend_money": "pay for something with your money",
+    "post_to_external_service": "post to an outside service",
+    "open_public_tunnel": "open this PC to the internet",
+    # --- the web
+    "web_research": "search GitHub",
+    "research_authenticated": "search GitHub signed in as you",
+    "search_the_web": "look something up online",
+    "chatbot_session": "talk to an AI chatbot for you",
+    "raise_api_limit": "raise a chatbot's monthly limit",
+    "lower_api_limit": "lower a chatbot's monthly limit",
+    "raise_attention_budget": "interrupt you more often",
+    "raise_a_limit": "do more, for longer, or more often",
+    "lower_the_voice_check_bar": "lower the bar for your voice check",
+    "support_chat": "chat with a company's support for you",
+    "support_offer": "accept a support offer in your name",
+    "youtube_captions_read": "read a YouTube video's captions",
+    "quiz_cloud_grade": "send a quiz to a cloud service",
+    "stop_asking_before_every_web_search": "stop asking before each web search",
+    "web_search_enable": "turn web search back on",
+    # --- notes
+    "read_joplin_note": "read a Joplin note",
+    "create_joplin_note": "add a Joplin note",
+    "edit_joplin_note": "change a Joplin note",
+    "delete_joplin_note": "delete a Joplin note",
+    "read_logseq_page": "read a Logseq page",
+    "append_logseq_journal": "add to today's Logseq journal",
+    "create_logseq_page": "make a Logseq page",
+    "edit_logseq_page": "change a Logseq page",
+    "delete_logseq_page": "delete a Logseq page",
+    "append_obsidian_daily": "add to today's Obsidian note",
+    "write_notes_after_outside_text": "write to your notes after outside text",
+    "notes_search": "search your notes",
+    "wiki_update": "write pages in the Jarvis Wiki",
+    # --- the smart home
+    "home_read": "check your smart home",
+    "home_control": "change something in your home",
+    # --- news feeds and "tell me when this page changes"
+    "news_read": "read a news feed you added",
+    "page_read": "fetch a page you're watching",
+    "read_web_page": "read a web page out loud",
+    # --- GitHub watches in "tell me when"
+    "github_read": "check GitHub for a \"tell me when\"",
+    # --- models and graphics cards
+    "browse_model_catalog": "look up AI models online",
+    "download_model": "download an AI model",
+    "switch_model": "switch to a different AI model",
+    "rollback_model": "go back to the model you had before",
+    "models_create": "make a tuned copy of a model",
+    "second_card_enable": "start using the second graphics card",
+    "second_card_browser_enable": "turn on browser control",
+    "second_card_combined_enable": "run one model across both graphics cards",
+    "second_card_third_assign": "move a second-card feature to a third card",
+    "chat_card_pin": "pin everyday chat to one graphics card",
+    "screen_picture_enable": "let it read pictures of your screen",
+    "obscura_enable": "read web pages with a windowless browser",
+    "browser_form_submit": "send a form you were shown",
+    "big_model_enable": "start the big model for background jobs",
+    # --- its own settings and code
+    "change_own_config": "change one of its settings",
+    "loosen_what_asks_first": "stop asking first for one thing",
+    "enable_reading_tool": "offer a reading tool to the model",
+    "check_tool_updates": "check online for tool updates",
+    "modify_own_code": "change its own code",
+    "power_manage": "change its power mode",
+    "schedule_repeat": "set up something that repeats",
+    # --- memory, learning and chat history
+    "learning_enable": "turn on learning",
+    "learning_auto_enable": "turn on automatic learning",
+    "learning_sensitive_enable": "learn sensitive topics automatically",
+    "history_enable": "keep your chat history",
+    "memory_manage": "change what it remembers",
+    "topic_loosen": "turn a private topic back on",
+    "referee_tick": "tick a finished goal step",
+    "chat_tags_suggest_on": "read old chats at night to suggest tags",
+    "chat_tag_suggest": "file one chat under a suggested tag",
+    "memory_forget_range": "forget the days you chose",
+    "user_profile_manage": "change your profile",
+    # --- voices
+    "custom_voice": "keep or use a voice you made",
+    "better_voice_enable": "turn on the better custom voice",
+    # --- notifications
+    "watch_notifications_enable": "show notifications on your watch too",
+    "phone_notifications_read": "read notifications from apps you choose",
+    # --- the captcha hand-off
+    "handoff_keep_offering": "keep the phone's live view for 15 minutes",
+    "handoff_bring_to_front": "bring the stuck browser window to the front",
+    # --- Docker (jarvis_docker.py): Jarvis's OWN containers, never the owner's
+    "docker_service_start": "start one of its containers",
+    "docker_service_stop": "stop one of its containers",
+    # --- backups
+    "restore_backup": "restore from a backup",
+    # --- devices
+    "pair_device": "connect a new device",
+    "unretire_shared_key": "let the old shared key work again",
+    "register_approval_key": "let a phone approve with its fingerprint",
+    # --- the app builder
+    "app_merge_change": "add its change to one of your apps",
+    # --- helpers and anything else a tool asks for
+    "agent_spawn": "start a helper task",
+    "agent_kill": "stop a helper task",
+    "execute_pending_actions": "run actions it has lined up",
+    "unclassified_tool": "use a tool it has no plain name for",
+}
+
+#: The most words a summary may be. Long enough for the honest ones above
+#: ("keep the phone's live view on offer for 15 minutes"), short enough that
+#: the summary is a glance and the full card waits behind the control. A row
+#: over this is a paragraph the owner did not ask for - and a test, not a
+#: reviewer's memory, is what says so.
+SUMMARY_MAX_WORDS = 9
+
 #: The start of every title with a phrase.
 LEAD = "Jarvis wants to "
 
@@ -304,6 +468,77 @@ def title_for(action) -> str:
             return LEAD + PLUGIN_USE.format(name=name)
     name = _name(action)
     return FALLBACK.format(name=name) if name else NO_ACTION
+
+
+def _first_sentence(text: str) -> str:
+    """`text` up to and including its first full stop, question mark or
+    exclamation mark - or all of it when it has none.
+
+    THE RULE THIS KEEPS: a summary is never cut mid-word. A card's text is
+    full of things that cannot survive a truncation - a command, a recipient,
+    a file path - so where there is no written short phrase the sentence is
+    taken whole, and the rest stays behind the "Explain more" control.
+    """
+    flat = " ".join(str(text or "").split())
+    for i, ch in enumerate(flat):
+        if ch in ".!?":
+            return flat[:i + 1].strip()
+    return flat.strip()
+
+
+def _short_enough(words: str) -> bool:
+    """Whether `words` may stand as a card's summary: a glance, not a
+    paragraph. The word count is the rule; the title's own phrases for a few
+    long actions ("tidy your inbox (archive, star, mark read or trash)") are
+    longer than this on purpose, and fall through to the card's first sentence
+    instead."""
+    return len(str(words or "").split()) <= SUMMARY_MAX_WORDS
+
+
+def summary_for(action, full: str = "") -> str:
+    """The SHORT words on a card for the gate action `action` - the summary the
+    owner reads before deciding whether to open the whole card.
+
+    Reads the action NAME and this module's own tables. `full` is read only as
+    a fallback, so this stays as safe to compute for a lock-screen notice as
+    `title_for` is.
+
+    In order, the three things it will answer with (the owner's rule, task
+    "cards read short", 2026-10-09):
+
+      1. SUMMARY[action] - the written short phrase ("Jarvis wants to send the
+         email shown."), the same fact as the title's, cut to a glance.
+      2. The first WHOLE sentence of the card's own full text, when the action
+         has no row AND the title's phrase is too long to be a summary - a
+         plugin program's card, or an action added on the owner's PC that this
+         repository has never seen. Whole: never cut mid-word.
+      3. The title itself, when there is nothing else - and `title_for` already
+         guarantees that is readable words rather than the raw action id.
+
+    The "why this matters" - the risk table's own reason, and the raised
+    warning, and "nothing has happened yet" - is the whole card, not the
+    summary: it is what the "Explain more" control opens.
+
+    NEVER empty, NEVER a truncated word, and never the raw action id: the
+    owner's own words were "a card he cannot read at a glance is the problem".
+    `backend/test_card_short_words.py` pins all three, and fails when an action
+    the gate knows has no row above.
+    """
+    action = str(action or "").strip()
+    phrase = SUMMARY.get(action)
+    if not phrase:
+        # The plugin programs (jarvis_mcp.py): one action per program and per
+        # tool, so no fixed row. The program's own name is on the title.
+        if action.startswith(PLUGIN_START_PREFIX):
+            phrase = "start a plug-in program on this PC"
+        elif action.startswith(PLUGIN_USE_PREFIX):
+            phrase = "use one of its plug-in programs"
+        phrase = phrase or str(TITLES.get(action) or "")
+    if phrase and _short_enough(phrase):
+        return LEAD + phrase + "."
+    # No short words of its own: the card's own first sentence, whole.
+    line = _first_sentence(full) or title_for(action)
+    return line if line.endswith((".", "!", "?")) else line + "."
 
 
 def voice_lines(words) -> list:

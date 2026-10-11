@@ -484,6 +484,73 @@ object JarvisRuntime {
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
     /**
+     * How much of an approval card is shown at first (the owner's request of
+     * 2026-10-09; [com.jarvis.client.net.CardSummary], backend
+     * `jarvis_card_summary.py`).
+     *
+     * THE SETTING IS THE PC'S, kept in card-prefs.json beside appearance.json,
+     * and read over `GET /api/card-prefs` - read again on every refresh of the
+     * approval queue, so a change made on the PC (or by asking Jarvis) is
+     * picked up here without a restart, and a click that arrives from the PC's
+     * own event stream is honoured too.
+     *
+     * The default until a read answers is "start short": nothing is guessed
+     * about the owner's choice, and a PC with no such route draws cards as it
+     * always did.
+     */
+    private val _cardMode = MutableStateFlow(com.jarvis.client.net.CardSummary.DEFAULT)
+    val cardMode: StateFlow<String> = _cardMode.asStateFlow()
+
+    /** The control's own words, as the PC last sent them. */
+    private val _cardMoreLabel = MutableStateFlow(com.jarvis.client.net.CardSummary.MORE_LABEL)
+    val cardMoreLabel: StateFlow<String> = _cardMoreLabel.asStateFlow()
+
+    /** True when the PC says a real choice is saved, rather than the default in use. */
+    private val _cardModeStored = MutableStateFlow(false)
+    val cardModeStored: StateFlow<Boolean> = _cardModeStored.asStateFlow()
+
+    /**
+     * Reads the PC's card setting. A failure leaves the last value alone and is
+     * never fatal: this only decides which words a card draws, so a PC that
+     * cannot answer must not stop a card from being decided.
+     */
+    suspend fun refreshCardPrefs() {
+        when (val r = api.cardPrefs()) {
+            is ApiResult.Ok -> {
+                val view = com.jarvis.client.net.CardSummary.parse(r.value) ?: return
+                _cardMode.value = view.mode
+                _cardMoreLabel.value = view.moreLabel
+                _cardModeStored.value = view.stored
+            }
+            is ApiResult.Failed -> Log.w(TAG, "could not read the card setting: ${r.error}")
+        }
+    }
+
+    /**
+     * `GET /api/card-prefs` for the Settings row, which draws the two choices
+     * itself (ui/screens/ApprovalCardsPlate.kt). A read; 404 is an older PC.
+     */
+    suspend fun cardPrefsRead(): ApiResult<JsonObject> = api.cardPrefs()
+
+    /**
+     * Choose how much of a card is shown at first. COSMETIC, so it is at once
+     * in both directions with no approval card and no `actionBlocker` - it
+     * approves nothing, starts nothing and reaches nothing, which is the same
+     * rule the animal options and "How Jarvis talks" follow.
+     *
+     * @return the sentence to show, which is the PC's own ([CardSummary.said]).
+     */
+    suspend fun setCardMode(mode: String): String {
+        val body = com.jarvis.client.net.CardSummary.modeBody(mode)
+            ?: return "That is not one of the two choices."
+        val said = com.jarvis.client.net.CardSummary.said(api.cardPrefsPost(body))
+        // Read back rather than assume: the lines on the screen then say what
+        // the PC really holds, and a refusal changes nothing here.
+        refreshCardPrefs()
+        return said
+    }
+
+    /**
      * The ids whose approve or deny is in flight right now.
      *
      * Two taps on Approve about 100ms apart both got past [decisionBlocker] and
@@ -3199,6 +3266,13 @@ object JarvisRuntime {
                     }
                 }
                 _absent.value = _absent.value - "approvals"
+                // The PC's own card setting (the owner's request of
+                // 2026-10-09): read again only while a card is actually
+                // waiting, so an idle phone makes no extra request for a
+                // preference nothing is drawn with - and a change made on the
+                // PC lands with the next refresh of the queue, without a
+                // restart.
+                if (items.isNotEmpty()) refreshCardPrefs()
                 // What is on screen is now what the desktop holds. This is the
                 // only thing that earns the gate the right to open.
                 refreshedSinceOpen = true

@@ -2441,6 +2441,38 @@ class JarvisApi(
     suspend fun animal(): ApiResult<JsonObject> = probe(AnimalOptions.PATH)
 
     /**
+     * `GET /api/card-prefs` - how much of an approval card is shown at first
+     * ("Start short" with an "Explain more" control, or "Always show
+     * everything"), with the PC's own words ([CardSummary.parse]). The setting
+     * is the PC's, kept in card-prefs.json beside appearance.json, so this
+     * phone and the desktop read one value. A read; 404 is an older PC, which
+     * draws cards exactly as it always did.
+     */
+    suspend fun cardPrefs(): ApiResult<JsonObject> = probe(CardSummary.PATH)
+
+    /**
+     * `POST /api/card-prefs` with the one change made by [CardSummary.modeBody].
+     * Cosmetic, so no approval card either way - the same route and the same
+     * function the desktop's own switch calls.
+     */
+    suspend fun cardPrefsPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(CardSummary.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `POST /api/animal` with ONE change made by [AnimalOptions.body]. No card
      * either way - these only change how the animal moves.
      */

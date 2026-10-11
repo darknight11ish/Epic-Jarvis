@@ -20,6 +20,12 @@ object MenuPlaces {
         "security" to "settings.security",
         "menu-visibility" to "settings.menu-visibility",
         "appearance" to "settings.appearance-card",
+        // "Approval cards" (the owner's request of 2026-10-09): SettingsScreen
+        // draws it behind `menus.shows("settings.approval-cards")` with a
+        // MenuFrame of its own, so it needs a PLACE here - and its row would
+        // otherwise be an undecided item key. MenuVisibilityTest checks both
+        // halves, which is how the pair is kept in step.
+        "approval-cards" to "settings.approval-cards",
         "floating-avatar" to "settings.floating-avatar",
         "manner" to "settings.manner",
         // "A new conversation starts after" (the audit of 2026-10-08): a

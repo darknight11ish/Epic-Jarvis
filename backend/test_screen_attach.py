@@ -487,7 +487,12 @@ def t_hygiene():
     # is the same shape, after that one.
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # card-prefs.patch (2026-10-10, "cards read short"): ONE added block
+             # in jarvis_hud.py, at the end of the install chain - nowhere near
+             # the POST /api/screen route this patch's wrapper takes over - so
+             # the request body is still read once, and still by this wrapper.
+             "card-prefs.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

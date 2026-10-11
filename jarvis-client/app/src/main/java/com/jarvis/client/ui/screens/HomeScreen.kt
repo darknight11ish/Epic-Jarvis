@@ -554,6 +554,19 @@ data class HomeState(
     /** Security's "Swipe to approve or deny" (on by default). */
     val swipeDecides: Boolean = true,
     /**
+     * The PC's own approval-card setting (net/CardSummary): "start short" (the
+     * default) draws each card's short summary with an "Explain more" control,
+     * "always show everything" draws the whole card. Cosmetic, read from the
+     * PC ([com.jarvis.client.JarvisRuntime.refreshCardPrefs]) so this phone and
+     * the desktop cannot disagree about it.
+     *
+     * Read inside HomeScreen from the runtime's own flow, which is why it has a
+     * default here: a screen built without it draws cards as they always were.
+     */
+    val cardMode: String = com.jarvis.client.net.CardSummary.DEFAULT,
+    /** The control's own words, as the PC last sent them. */
+    val cardMoreLabel: String = com.jarvis.client.net.CardSummary.MORE_LABEL,
+    /**
      * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way
      * out of the PC asks first, or has stopped. Home says so at the top -
      * the desktop bar's strip, in the phone's place.
@@ -1228,6 +1241,14 @@ private fun ConversationList(
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
+    // The PC's own card setting (net/CardSummary, the owner's request of
+    // 2026-10-09): read here from the runtime's flow, the same way this file
+    // already reads the live status and the pending queue - so a change made on
+    // the PC, or by asking Jarvis, redraws the cards without a restart. It is
+    // read once for the whole list, not once per card, and it only ever decides
+    // which words a card draws.
+    val cardMode by com.jarvis.client.JarvisRuntime.cardMode.collectAsState()
+    val cardMoreLabel by com.jarvis.client.JarvisRuntime.cardMoreLabel.collectAsState()
     LazyColumn(
         state = listState,
         modifier = modifier,
@@ -1340,6 +1361,12 @@ private fun ConversationList(
                     // 4 - nothing is ever approved without a deliberate
                     // decision - is untouched by it.
                     focused = item.id == state.focusApproval,
+                    // The PC's own card setting (net/CardSummary): start short
+                    // with an "Explain more" control, or always show
+                    // everything. Read from the PC so both apps agree, and
+                    // cosmetic only - it changes which words are drawn.
+                    cardMode = cardMode,
+                    moreLabel = cardMoreLabel,
                     onApprove = { onReset ->
                         val handler = actions.onApproveWithReset
                         if (handler != null) handler(item, onReset) else actions.onApprove(item)

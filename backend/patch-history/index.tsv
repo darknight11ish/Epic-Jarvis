@@ -5,6 +5,7 @@ appearance.patch	appearance/cc4d9e6.patch	cc4d9e6f38fd1f373b134cda8044549eb979a2
 appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30Z	I invented a NameError, then reported it twice as a finding
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27Z	The backend route, written against the real jarvis_hud.py
 approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50Z	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
+approval-notice.patch	approval-notice/647f117.patch	647f117105e85fdaacdfce9d4e1e077b97009e6b	2026-09-25T23:33:32Z	Approval cards: one plain card on every screen, "Open the card", voice says a card is waiting
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34Z	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
 apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54Z	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42Z	Gate notice for schedule_repeat: say that each run reads the owner's own servers

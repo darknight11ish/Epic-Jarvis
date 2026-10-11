@@ -175,6 +175,28 @@ SECTIONS: tuple = (
     # for "open the faq" to name. The questions BOTH apps answer were never
     # this card - the backend serves those at GET /api/faq, exactly as before.
     Section("appearance-card", ("appearance", "the theme", "how jarvis looks", "the face")),
+    # "Approval cards" (the owner's request of 2026-10-09): how much of an
+    # approval card is shown at first - "Start short" with an "Explain more"
+    # control, or "Always show everything".
+    #
+    # PHONE ONLY, and that is not an oversight. The section's app must match
+    # where the row really is, or "open approval cards" names a place the app
+    # does not have: this repository's own jarvis-desktop/ and src-tauri/ are
+    # the other conversation's surface. So the phone's Settings row
+    # (SettingsScreen.kt, item(key = "approval-cards")) is what this names
+    # today, and the setting itself is the PC's (GET/POST /api/card-prefs,
+    # card-prefs.patch) so the desktop's own switch reads the same value.
+    # `backend/test_settings_registry.py` is what caught the first version of
+    # this row claiming "both": it refused to let a section say the desktop has
+    # a settings.html card (id="approval-cards") which is not on that page.
+    # WHEN THE DESKTOP'S CARD LANDS (docs/DESKTOP-APPROVAL-CARD-PREF.md says
+    # which file, which control and which field), this becomes
+    # `app="both"` - one word - and the row in jarvis_menus.py becomes
+    # (DESKTOP, PHONE) with it.
+    Section("approval-cards", ("approval cards", "the approval cards",
+                               "how much of a card is shown", "explain more",
+                               "the explain more button", "cards read short",
+                               "the short summary"), app="phone"),
     # "Animal options" (2026-09-28): every animal-face option in one place.
     # Desktop: its own card in settings.html. Phone: inside Appearance, so
     # the phone's Settings scrolls to its Appearance row (SettingsScreen.kt
@@ -1348,6 +1370,45 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   Approval cards read short (the owner's request of 2026-10-09): "a more
+#   simple summary, with an explain more button ... and approval card
+#   preferences such as this should be changeable in the settings".
+#
+#   A CHOICE of two, not an on/off, so it is NOT a BoolSetting: "Start short"
+#   (the default) or "Always show everything". Both are cosmetic and both are
+#   at once, with no card - this changes which words a card draws and nothing
+#   else: it approves nothing, starts nothing and reaches nothing. So there is
+#   no direction that asks, and the PC-only rule for loosenings does not apply.
+#
+#   THE SAME FUNCTION THE APP'S OWN SWITCH CALLS (jarvis_card_summary.set_mode),
+#   through the one route, so a spoken change and a tap cannot take two
+#   different paths. words -> mode is jarvis_card_summary.spoken, which never
+#   guesses: an unrecognised phrase answers None and the caller says so.
+# --------------------------------------------------------------------------
+
+
+def find_card_mode(words: str) -> Optional[str]:
+    """The display mode `words` names exactly (jarvis_card_summary's own list -
+    never typed twice here), or None."""
+    try:
+        import jarvis_card_summary as CS
+    except Exception:
+        return None
+    return CS.spoken(words)
+
+
+def set_card_mode(mode: str, *, peer=None, local=None) -> Outcome:
+    """At once, from either app or by asking - cosmetic, so no card either way.
+    The same jarvis_card_summary.set_mode POST /api/card-prefs calls."""
+    try:
+        import jarvis_card_summary as CS
+    except Exception:
+        return _missing("the approval card setting")
+    code, out = CS.set_mode(mode)
+    return _say(code, out)
 
 
 # --------------------------------------------------------------------------

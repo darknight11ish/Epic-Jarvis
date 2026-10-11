@@ -419,6 +419,1220 @@
       "title": "Jarvis wants to fetch the caption text of a YouTube video for a quiz"
     }
   ],
+  "summaries": [
+    {
+      "action": "agent_kill",
+      "notice": {
+        "title": "Jarvis wants to stop a helper task",
+        "summary": "Jarvis wants to stop a helper task.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "agent_spawn",
+      "notice": {
+        "title": "Jarvis wants to start a helper task",
+        "summary": "Jarvis wants to start a helper task.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "app_merge_change",
+      "notice": {
+        "title": "Jarvis wants to add its change to one of your apps",
+        "summary": "Jarvis wants to add its change to one of your apps.",
+        "full": "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet. nothing has happened yet.",
+        "body": "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "append_logseq_journal",
+      "notice": {
+        "title": "Jarvis wants to add to today's Logseq journal",
+        "summary": "Jarvis wants to add to today's Logseq journal.",
+        "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+        "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "append_obsidian_daily",
+      "notice": {
+        "title": "Jarvis wants to add to today's Obsidian daily note",
+        "summary": "Jarvis wants to add to today's Obsidian note.",
+        "full": "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed. nothing has happened yet.",
+        "body": "adds one entry to the end of today's Obsidian daily note on this PC; nothing already there is changed. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "better_voice_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on the better custom voice",
+        "summary": "Jarvis wants to turn on the better custom voice.",
+        "full": "lets Jarvis start F5-TTS on the second graphics card on this PC when it speaks in a custom voice, reachable by no network; it stops after idle minutes, in standby, and when the switch is turned off. nothing has happened yet.",
+        "body": "lets Jarvis start F5-TTS on the second graphics card on this PC when it speaks in a custom voice, reachable by no network; it stops after idle minutes, in standby, and when the switch is turned off. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "big_model_enable",
+      "notice": {
+        "title": "Jarvis wants to start the big model for background jobs",
+        "summary": "Jarvis wants to start the big model for background jobs.",
+        "full": "lets Jarvis start colibri on this PC for background jobs, reachable from this PC only (127.0.0.1); it keeps running while any big-model job switch is on, and stops when the last one, or the main switch, is turned off. nothing has happened yet.",
+        "body": "lets Jarvis start colibri on this PC for background jobs, reachable from this PC only (127.0.0.1); it keeps running while any big-model job switch is on, and stops when the last one, or the main switch, is turned off. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "browse_model_catalog",
+      "notice": {
+        "title": "Jarvis wants to look up AI models online",
+        "summary": "Jarvis wants to look up AI models online.",
+        "full": "a fixed public query; downloads nothing. nothing has happened yet.",
+        "body": "a fixed public query; downloads nothing. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "browser_form_submit",
+      "notice": {
+        "title": "Jarvis wants to send a form you were shown on a website",
+        "summary": "Jarvis wants to send a form you were shown.",
+        "full": "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved. nothing has happened yet.",
+        "body": "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "calendar_read",
+      "notice": {
+        "title": "Jarvis wants to read your calendar",
+        "summary": "Jarvis wants to read your calendar.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "change_own_config",
+      "notice": {
+        "title": "Jarvis wants to change one of its settings",
+        "summary": "Jarvis wants to change one of its settings.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "chat_card_pin",
+      "notice": {
+        "title": "Jarvis wants to pin everyday chat to one graphics card",
+        "summary": "Jarvis wants to pin everyday chat to one graphics card.",
+        "full": "changes which graphics card your everyday Ollama uses, by setting CUDA_VISIBLE_DEVICES and OLLAMA_VULKAN for your own Windows user; nothing leaves this PC and no file is written. nothing has happened yet.",
+        "body": "changes which graphics card your everyday Ollama uses, by setting CUDA_VISIBLE_DEVICES and OLLAMA_VULKAN for your own Windows user; nothing leaves this PC and no file is written. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "chat_tag_suggest",
+      "notice": {
+        "title": "Jarvis wants to file one chat under a tag it suggests",
+        "summary": "Jarvis wants to file one chat under a suggested tag.",
+        "full": "files one chat under a tag you already made, exactly as if you had filed it yourself; you can move or remove the tag at once, and nothing else about the chat changes. nothing has happened yet.",
+        "body": "files one chat under a tag you already made, exactly as if you had filed it yourself; you can move or remove the tag at once, and nothing else about the chat changes. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "chat_tags_suggest_on",
+      "notice": {
+        "title": "Jarvis wants to let it read a few of your old chats at night to suggest tags",
+        "summary": "Jarvis wants to read old chats at night to suggest tags.",
+        "full": "lets Jarvis's model on this PC read the first few messages you wrote in a few old chats each night to suggest a tag; it never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records, it can only pick a tag you already made, nothing is filed without your Approve, and turning it off is instant. nothing has happened yet.",
+        "body": "lets Jarvis's model on this PC read the first few messages you wrote in a few old chats each night to suggest a tag; it never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records, it can only pick a tag you already made, nothing is filed without your Approve, and turning it off is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "chatbot_session",
+      "notice": {
+        "title": "Jarvis wants to hold a conversation with an AI chatbot for you",
+        "summary": "Jarvis wants to talk to an AI chatbot for you.",
+        "full": "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back. nothing has happened yet.",
+        "body": "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "check_tool_updates",
+      "notice": {
+        "title": "Jarvis wants to check online for tool updates",
+        "summary": "Jarvis wants to check online for tool updates.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "control_browser",
+      "notice": {
+        "title": "Jarvis wants to work a web page for you in a browser",
+        "summary": "Jarvis wants to work a web page in a browser.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "control_computer",
+      "notice": {
+        "title": "Jarvis wants to use the mouse and keyboard on this PC",
+        "summary": "Jarvis wants to use your mouse and keyboard.",
+        "full": "driving the desktop can click send. nothing has happened yet.",
+        "body": "driving the desktop can click send. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "control_phone",
+      "notice": {
+        "title": "Jarvis wants to tap and type on your phone",
+        "summary": "Jarvis wants to tap and type on your phone.",
+        "full": "tapping the phone can send a message or complete a purchase. nothing has happened yet.",
+        "body": "tapping the phone can send a message or complete a purchase. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "create_joplin_note",
+      "notice": {
+        "title": "Jarvis wants to add a note in Joplin",
+        "summary": "Jarvis wants to add a Joplin note.",
+        "full": "creates one new note in Joplin on this PC; no existing note is changed. nothing has happened yet.",
+        "body": "creates one new note in Joplin on this PC; no existing note is changed. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "create_logseq_page",
+      "notice": {
+        "title": "Jarvis wants to make a new page in Logseq",
+        "summary": "Jarvis wants to make a Logseq page.",
+        "full": "delete it and it is gone. nothing has happened yet.",
+        "body": "delete it and it is gone. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "custom_voice",
+      "notice": {
+        "title": "Jarvis wants to keep or use a custom voice",
+        "summary": "Jarvis wants to keep or use a voice you made.",
+        "full": "keeps a voice recording on this PC, or makes Jarvis speak in a voice kept there; nothing is sent anywhere, and switching back to the built-in voice or deleting the voice is immediate. nothing has happened yet.",
+        "body": "keeps a voice recording on this PC, or makes Jarvis speak in a voice kept there; nothing is sent anywhere, and switching back to the built-in voice or deleting the voice is immediate. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_calendar_event",
+      "notice": {
+        "title": "Jarvis wants to delete an event from your calendar",
+        "summary": "Jarvis wants to delete a calendar event.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_file",
+      "notice": {
+        "title": "Jarvis wants to delete a file",
+        "summary": "Jarvis wants to delete a file.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_joplin_note",
+      "notice": {
+        "title": "Jarvis wants to delete a note in Joplin",
+        "summary": "Jarvis wants to delete a Joplin note.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "delete_logseq_page",
+      "notice": {
+        "title": "Jarvis wants to delete a page in Logseq",
+        "summary": "Jarvis wants to delete a Logseq page.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "docker_service_start",
+      "notice": {
+        "title": "Jarvis wants to start one of the containers it uses on this PC",
+        "summary": "Jarvis wants to start one of its containers.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "docker_service_stop",
+      "notice": {
+        "title": "Jarvis wants to stop one of the containers it uses on this PC",
+        "summary": "Jarvis wants to stop one of its containers.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "download_model",
+      "notice": {
+        "title": "Jarvis wants to download an AI model",
+        "summary": "Jarvis wants to download an AI model.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "draft_email",
+      "notice": {
+        "title": "Jarvis wants to write an email draft",
+        "summary": "Jarvis wants to save an email draft.",
+        "full": "saves the draft shown on the card to your own Drafts folder; nothing is sent, and you can change or delete the draft yourself afterward. nothing has happened yet.",
+        "body": "saves the draft shown on the card to your own Drafts folder; nothing is sent, and you can change or delete the draft yourself afterward. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "edit_calendar_event",
+      "notice": {
+        "title": "Jarvis wants to change an event in your calendar",
+        "summary": "Jarvis wants to change a calendar event.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "edit_joplin_note",
+      "notice": {
+        "title": "Jarvis wants to change a note in Joplin",
+        "summary": "Jarvis wants to change a Joplin note.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "edit_logseq_page",
+      "notice": {
+        "title": "Jarvis wants to change a page in Logseq",
+        "summary": "Jarvis wants to change a Logseq page.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "email_read",
+      "notice": {
+        "title": "Jarvis wants to read your email",
+        "summary": "Jarvis wants to read your email.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "enable_reading_tool",
+      "notice": {
+        "title": "Jarvis wants to offer a reading tool to the AI model",
+        "summary": "Jarvis wants to offer a reading tool to the model.",
+        "full": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
+        "body": "offers one reading tool - your calendar, email, notes or home status - to the AI model at all, by changing one line of your settings file on this PC ([tools].enabled); this is separate from whether it asks you first, and turning it back off is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "execute_pending_actions",
+      "notice": {
+        "title": "Jarvis wants to run actions it has lined up",
+        "summary": "Jarvis wants to run actions it has lined up.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "github_read",
+      "notice": {
+        "title": "Jarvis wants to check GitHub for a \"tell me when\"",
+        "summary": "Jarvis wants to check GitHub for a \"tell me when\".",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "handoff_bring_to_front",
+      "notice": {
+        "title": "Jarvis wants to bring the stuck browser window to the front",
+        "summary": "Jarvis wants to bring the stuck browser window to the front.",
+        "full": "raises and activates the one browser window Jarvis is stuck on a captcha or sign-in page in, so it takes your screen and your keyboard away from whatever you are doing the moment it happens - the window may be showing your own account details; Jarvis still never solves the captcha for you, and going back to leaving the window exactly where it is (the default) is instant. nothing has happened yet.",
+        "body": "raises and activates the one browser window Jarvis is stuck on a captcha or sign-in page in, so it takes your screen and your keyboard away from whatever you are doing the moment it happens - the window may be showing your own account details; Jarvis still never solves the captcha for you, and going back to leaving the window exactly where it is (the default) is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "handoff_keep_offering",
+      "notice": {
+        "title": "Jarvis wants to keep the phone's live view on offer for 15 minutes",
+        "summary": "Jarvis wants to keep the phone's live view for 15 minutes.",
+        "full": "keeps the captcha hand-off - a live picture of ONE of your browser windows, shown only to your own phone over your private network - on offer for the full 15 minutes instead of ending it after about a minute with nobody looking, so a window that may show your own account details stays available fifteen times longer; the picture is still never saved, your taps and typing still go to that one window only, and going back to stopping early is instant. nothing has happened yet.",
+        "body": "keeps the captcha hand-off - a live picture of ONE of your browser windows, shown only to your own phone over your private network - on offer for the full 15 minutes instead of ending it after about a minute with nobody looking, so a window that may show your own account details stays available fifteen times longer; the picture is still never saved, your taps and typing still go to that one window only, and going back to stopping early is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "history_enable",
+      "notice": {
+        "title": "Jarvis wants to keep your chat history",
+        "summary": "Jarvis wants to keep your chat history.",
+        "full": "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted. nothing has happened yet.",
+        "body": "keeps your chats with Jarvis, including what you say by voice, encrypted on this PC; nothing is sent anywhere, turning it off is immediate, and each kept conversation can be deleted. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "home_control",
+      "notice": {
+        "title": "Jarvis wants to change something in your home",
+        "summary": "Jarvis wants to change something in your home.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "home_read",
+      "notice": {
+        "title": "Jarvis wants to check your smart home",
+        "summary": "Jarvis wants to check your smart home.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "learning_auto_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on automatic learning",
+        "summary": "Jarvis wants to turn on automatic learning.",
+        "full": "lets Jarvis save facts about you and your projects from what you type or say to it, without asking about each one; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate. nothing has happened yet.",
+        "body": "lets Jarvis save facts about you and your projects from what you type or say to it, without asking about each one; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "learning_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on learning",
+        "summary": "Jarvis wants to turn on learning.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "learning_sensitive_enable",
+      "notice": {
+        "title": "Jarvis wants to also learn sensitive topics automatically",
+        "summary": "Jarvis wants to learn sensitive topics automatically.",
+        "full": "lets Jarvis also save facts about health, money and other people's private details without asking first; passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait for your yes; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate. nothing has happened yet.",
+        "body": "lets Jarvis also save facts about health, money and other people's private details without asking first; passwords, PINs, account and ID numbers, birthdays, phone numbers and email addresses still wait for your yes; nothing is sent anywhere, every saved fact is listed with Forget, and turning it off is immediate. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "loosen_what_asks_first",
+      "notice": {
+        "title": "Jarvis wants to loosen what asks first",
+        "summary": "Jarvis wants to stop asking first for one thing.",
+        "full": "lets one action from a short list - reading your own calendar, email, notes or home status, or adding to your notes - go ahead without asking you first, by changing one line of your settings file on this PC; making it ask again is instant. nothing has happened yet.",
+        "body": "lets one action from a short list - reading your own calendar, email, notes or home status, or adding to your notes - go ahead without asking you first, by changing one line of your settings file on this PC; making it ask again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "lower_api_limit",
+      "notice": {
+        "title": "Jarvis wants to lower a chatbot's monthly spending limit",
+        "summary": "Jarvis wants to lower a chatbot's monthly limit.",
+        "full": "lowers or removes a chatbot service's monthly money limit, so Jarvis can spend LESS of your money than before; nothing is sent anywhere and it can be raised again with a card. nothing has happened yet.",
+        "body": "lowers or removes a chatbot service's monthly money limit, so Jarvis can spend LESS of your money than before; nothing is sent anywhere and it can be raised again with a card. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "lower_the_voice_check_bar",
+      "notice": {
+        "title": "Jarvis wants to lower the bar for your voice check",
+        "summary": "Jarvis wants to lower the bar for your voice check.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "memory_forget_range",
+      "notice": {
+        "title": "Jarvis wants to forget what it learned and delete chats from the days you chose",
+        "summary": "Jarvis wants to forget the days you chose.",
+        "full": "forgets the facts and deletes the chats listed on the card, on this PC; nothing is sent anywhere; for 10 minutes one tap on Undo puts them all back, and after that the chats are gone for good and the facts stay forgotten. nothing has happened yet.",
+        "body": "forgets the facts and deletes the chats listed on the card, on this PC; nothing is sent anywhere; for 10 minutes one tap on Undo puts them all back, and after that the chats are gone for good and the facts stay forgotten. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "memory_manage",
+      "notice": {
+        "title": "Jarvis wants to change what it remembers",
+        "summary": "Jarvis wants to change what it remembers.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "models_create",
+      "notice": {
+        "title": "Jarvis wants to make a tuned copy of an AI model",
+        "summary": "Jarvis wants to make a tuned copy of a model.",
+        "full": "makes a tuned copy of a model you already downloaded, with Ollama on this PC; nothing is downloaded or sent anywhere, and jarvis-primary is not changed. nothing has happened yet.",
+        "body": "makes a tuned copy of a model you already downloaded, with Ollama on this PC; nothing is downloaded or sent anywhere, and jarvis-primary is not changed. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "modify_own_code",
+      "notice": {
+        "title": "Jarvis wants to change its own code",
+        "summary": "Jarvis wants to change its own code.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "news_read",
+      "notice": {
+        "title": "Jarvis wants to read a news feed you added",
+        "summary": "Jarvis wants to read a news feed you added.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "notes_search",
+      "notice": {
+        "title": "Jarvis wants to search your notes",
+        "summary": "Jarvis wants to search your notes.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "obscura_enable",
+      "notice": {
+        "title": "Jarvis wants to read web pages with a browser that has no window (Obscura)",
+        "summary": "Jarvis wants to read web pages with a windowless browser.",
+        "full": "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant. nothing has happened yet.",
+        "body": "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "open_public_tunnel",
+      "notice": {
+        "title": "Jarvis wants to open this PC to the internet",
+        "summary": "Jarvis wants to open this PC to the internet.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "page_read",
+      "notice": {
+        "title": "Jarvis wants to fetch a web page you're watching",
+        "summary": "Jarvis wants to fetch a page you're watching.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "pair_device",
+      "notice": {
+        "title": "Jarvis wants to connect a new device",
+        "summary": "Jarvis wants to connect a new device.",
+        "full": "gives the phone named on the card its own key to talk to Jarvis, after you check it shows the same four words; you can remove it any time in Settings, Devices, and that cuts it off at once. nothing has happened yet.",
+        "body": "gives the phone named on the card its own key to talk to Jarvis, after you check it shows the same four words; you can remove it any time in Settings, Devices, and that cuts it off at once. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "phone_notifications_read",
+      "notice": {
+        "title": "Jarvis wants to start reading notifications from apps you choose on your phone",
+        "summary": "Jarvis wants to read notifications from apps you choose.",
+        "full": "lets your phone start reading notifications from apps you choose (none, until you add one); banking apps are blocked on the phone; a notification only reaches Jarvis when you attach it to a chat yourself; turning it off again is instant. nothing has happened yet.",
+        "body": "lets your phone start reading notifications from apps you choose (none, until you add one); banking apps are blocked on the phone; a notification only reaches Jarvis when you attach it to a chat yourself; turning it off again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "post_to_external_service",
+      "notice": {
+        "title": "Jarvis wants to post to an outside service",
+        "summary": "Jarvis wants to post to an outside service.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "power_manage",
+      "notice": {
+        "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)",
+        "summary": "Jarvis wants to change its power mode.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "quiz_cloud_grade",
+      "notice": {
+        "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better",
+        "summary": "Jarvis wants to send a quiz to a cloud service.",
+        "full": "sends the questions, your answers and the passages of one quiz, word for word as the card shows them, to the cloud AI service named on the card to be marked; it bends the rule that your study words stay on this PC for that one quiz only, it costs a little on your account, and it cannot be taken back. nothing has happened yet.",
+        "body": "sends the questions, your answers and the passages of one quiz, word for word as the card shows them, to the cloud AI service named on the card to be marked; it bends the rule that your study words stay on this PC for that one quiz only, it costs a little on your account, and it cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "raise_a_limit",
+      "notice": {
+        "title": "Jarvis wants to let Jarvis do more, for longer, or more often",
+        "summary": "Jarvis wants to do more, for longer, or more often.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "raise_api_limit",
+      "notice": {
+        "title": "Jarvis wants to raise a chatbot's monthly spending limit",
+        "summary": "Jarvis wants to raise a chatbot's monthly limit.",
+        "full": "lets Jarvis spend more of your money a month on the chatbot service named on the card; the limit is what stops that service being used once it is reached, so raising it spends more, and the change cannot be taken back. nothing has happened yet.",
+        "body": "lets Jarvis spend more of your money a month on the chatbot service named on the card; the limit is what stops that service being used once it is reached, so raising it spends more, and the change cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "raise_attention_budget",
+      "notice": {
+        "title": "Jarvis wants to let Jarvis interrupt you more often",
+        "summary": "Jarvis wants to interrupt you more often.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "read_calendar",
+      "notice": {
+        "title": "Jarvis wants to read your calendar",
+        "summary": "Jarvis wants to read your calendar.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "read_files_readonly",
+      "notice": {
+        "title": "Jarvis wants to read files on this PC",
+        "summary": "Jarvis wants to read files on this PC.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "read_joplin_note",
+      "notice": {
+        "title": "Jarvis wants to read a note in Joplin",
+        "summary": "Jarvis wants to read a Joplin note.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "read_logseq_page",
+      "notice": {
+        "title": "Jarvis wants to read a page in Logseq",
+        "summary": "Jarvis wants to read a Logseq page.",
+        "full": "opens the page; the graph is unchanged. nothing has happened yet.",
+        "body": "opens the page; the graph is unchanged. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "read_web_page",
+      "notice": {
+        "title": "Jarvis wants to read a web page out loud",
+        "summary": "Jarvis wants to read a web page out loud.",
+        "full": "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on. nothing has happened yet.",
+        "body": "makes this PC fetch the one web page named on the card, so it can read its words out loud to you; that website will see this PC's address and the request cannot be taken back, only that one page is fetched (never a link on it), and its words are outside text - never learned, never acted on. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "referee_tick",
+      "notice": {
+        "title": "Jarvis wants to tick a goal step whose number reached its target",
+        "summary": "Jarvis wants to tick a finished goal step.",
+        "full": "ticks one step of one of your goals whose number reached its target, exactly as if you had ticked it yourself; you can untick it at once, and it never runs a test or ticks anything on its own. nothing has happened yet.",
+        "body": "ticks one step of one of your goals whose number reached its target, exactly as if you had ticked it yourself; you can untick it at once, and it never runs a test or ticks anything on its own. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "register_approval_key",
+      "notice": {
+        "title": "Jarvis wants to let a phone approve risky actions with its fingerprint or PIN",
+        "summary": "Jarvis wants to let a phone approve with its fingerprint.",
+        "full": "lets the phone named on the card approve risky actions with its own fingerprint or PIN, checked here on this PC; you can remove the device any time in Settings, Devices, and that drops the key again. nothing has happened yet.",
+        "body": "lets the phone named on the card approve risky actions with its own fingerprint or PIN, checked here on this PC; you can remove the device any time in Settings, Devices, and that drops the key again. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "research_authenticated",
+      "notice": {
+        "title": "Jarvis wants to search GitHub signed in as you",
+        "summary": "Jarvis wants to search GitHub signed in as you.",
+        "full": "identifies you to GitHub via your token; nothing is written. nothing has happened yet.",
+        "body": "identifies you to GitHub via your token; nothing is written. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "restore_backup",
+      "notice": {
+        "title": "Jarvis wants to restore from a backup, replacing what it knows now",
+        "summary": "Jarvis wants to restore from a backup.",
+        "full": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
+        "body": "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "rollback_model",
+      "notice": {
+        "title": "Jarvis wants to go back to the AI model you had before",
+        "summary": "Jarvis wants to go back to the model you had before.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "run_plan",
+      "notice": {
+        "title": "Jarvis wants to run the safe steps of an approved plan",
+        "summary": "Jarvis wants to run the safe steps of a plan.",
+        "full": "runs every step of an approved plan the model did not flag as risky, at once; a risky or result-filled step always asks again on its own separate card first. nothing has happened yet.",
+        "body": "runs every step of an approved plan the model did not flag as risky, at once; a risky or result-filled step always asks again on its own separate card first. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "run_shell_on_host",
+      "notice": {
+        "title": "Jarvis wants to run a command on this PC",
+        "summary": "Jarvis wants to run a command on this PC.",
+        "full": "a shell can do anything, including reach the network. nothing has happened yet.",
+        "body": "a shell can do anything, including reach the network. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "schedule_repeat",
+      "notice": {
+        "title": "Jarvis wants to set up something that repeats",
+        "summary": "Jarvis wants to set up something that repeats.",
+        "full": "sets up a morning briefing, which reads your calendar and email if they are set up, or a \"tell me when\", which looks at your own mail server or Home Assistant, or at one web page you named, each time; the card says exactly what each run reads, what it finds goes only to your own apps, and deleting it is immediate. nothing has happened yet.",
+        "body": "sets up a morning briefing, which reads your calendar and email if they are set up, or a \"tell me when\", which looks at your own mail server or Home Assistant, or at one web page you named, each time; the card says exactly what each run reads, what it finds goes only to your own apps, and deleting it is immediate. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "screen_picture_enable",
+      "notice": {
+        "title": "Jarvis wants to let it read pictures of your screen (slow, uses your main chip)",
+        "summary": "Jarvis wants to let it read pictures of your screen.",
+        "full": "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor - or, when you have turned on Pictures on an extra graphics card and it is running, that card's picture model is used instead - and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant. nothing has happened yet.",
+        "body": "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor - or, when you have turned on Pictures on an extra graphics card and it is running, that card's picture model is used instead - and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "search_the_web",
+      "notice": {
+        "title": "Jarvis wants to search the web",
+        "summary": "Jarvis wants to look something up online.",
+        "full": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+        "body": "sends the search words shown on the card to the web search you chose; what comes back is read as outside text, and nothing else of yours is sent. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "second_card_browser_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on browser control, which works real web pages",
+        "summary": "Jarvis wants to turn on browser control.",
+        "full": "lets Jarvis offer its browser tool, which works real web pages on the internet; each plan of steps there is its own card; turning the switch off takes the tool away. nothing has happened yet.",
+        "body": "lets Jarvis offer its browser tool, which works real web pages on the internet; each plan of steps there is its own card; turning the switch off takes the tool away. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "second_card_combined_enable",
+      "notice": {
+        "title": "Jarvis wants to run one bigger model across both graphics cards",
+        "summary": "Jarvis wants to run one model across both graphics cards.",
+        "full": "starts a third copy of Ollama on this PC that only this PC can reach (127.0.0.1), able to see both graphics cards at once; it stops when the switch is turned off. nothing has happened yet.",
+        "body": "starts a third copy of Ollama on this PC that only this PC can reach (127.0.0.1), able to see both graphics cards at once; it stops when the switch is turned off. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "second_card_enable",
+      "notice": {
+        "title": "Jarvis wants to start using the second graphics card",
+        "summary": "Jarvis wants to start using the second graphics card.",
+        "full": "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off. nothing has happened yet.",
+        "body": "starts a second copy of Ollama on this PC that only this PC can reach (127.0.0.1); it keeps running while any second-card switch that uses it is on, and stops when the last one is turned off. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "second_card_third_assign",
+      "notice": {
+        "title": "Jarvis wants to move a second-card feature onto a third graphics card",
+        "summary": "Jarvis wants to move a second-card feature to a third card.",
+        "full": "starts a fourth copy of Ollama on this PC that only this PC can reach (127.0.0.1), pinned to a third graphics card; it runs alongside the second card's own copy, and stops when the assignment is changed or the feature is turned off. nothing has happened yet.",
+        "body": "starts a fourth copy of Ollama on this PC that only this PC can reach (127.0.0.1), pinned to a third graphics card; it runs alongside the second card's own copy, and stops when the assignment is changed or the feature is turned off. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "send_email",
+      "notice": {
+        "title": "Jarvis wants to send an email",
+        "summary": "Jarvis wants to send the email shown.",
+        "full": "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back. nothing has happened yet.",
+        "body": "sends the email shown on the card from your own account, to exactly the people it lists; once sent it cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "spend_money",
+      "notice": {
+        "title": "Jarvis wants to spend money",
+        "summary": "Jarvis wants to pay for something with your money.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "stop_asking_before_every_web_search",
+      "notice": {
+        "title": "Jarvis wants to stop asking before every web search",
+        "summary": "Jarvis wants to stop asking before each web search.",
+        "full": "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change. nothing has happened yet.",
+        "body": "stops asking before every web search - a search straight from your own question runs without a card again, and a search after Jarvis has read email, files, notes or other outside text, one whose words repeat a saved fact, and one after a sensitive saved fact was used still ask; nothing is sent by this change. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "support_chat",
+      "notice": {
+        "title": "Jarvis wants to chat with a company's customer support for you",
+        "summary": "Jarvis wants to chat with a company's support for you.",
+        "full": "chats with a company's customer support for you, in your name, on your own account there, in a browser window you can see - giving only the details listed on the card; every offer gets its own card, identity checks and \"are you a bot?\" are handed to you, and what is sent cannot be taken back. nothing has happened yet.",
+        "body": "chats with a company's customer support for you, in your name, on your own account there, in a browser window you can see - giving only the details listed on the card; every offer gets its own card, identity checks and \"are you a bot?\" are handed to you, and what is sent cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "support_offer",
+      "notice": {
+        "title": "Jarvis wants to accept an offer from customer support in your name",
+        "summary": "Jarvis wants to accept a support offer in your name.",
+        "full": "accepts the offer shown on the card, in your name, by sending exactly the reply shown; what you agree to binds you, like any message you send yourself, and cannot be taken back. nothing has happened yet.",
+        "body": "accepts the offer shown on the card, in your name, by sending exactly the reply shown; what you agree to binds you, like any message you send yourself, and cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "switch_model",
+      "notice": {
+        "title": "Jarvis wants to switch to a different AI model",
+        "summary": "Jarvis wants to switch to a different AI model.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "tidy_inbox",
+      "notice": {
+        "title": "Jarvis wants to tidy your inbox (archive, star, mark read or trash)",
+        "summary": "Jarvis wants to tidy your inbox.",
+        "full": "archives, stars, marks as read or moves to Trash exactly the emails listed on the card, in your own mailbox on your mail provider's server; nothing is deleted for good, and for 10 minutes one tap on Undo puts every one back. nothing has happened yet.",
+        "body": "archives, stars, marks as read or moves to Trash exactly the emails listed on the card, in your own mailbox on your mail provider's server; nothing is deleted for good, and for 10 minutes one tap on Undo puts every one back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "topic_loosen",
+      "notice": {
+        "title": "Jarvis wants to turn a private topic back on, or let it learn or be used again",
+        "summary": "Jarvis wants to turn a private topic back on.",
+        "full": "lets Jarvis learn about or use a private topic again (health, money, or one you marked private), or move its facts to a more open topic; the facts stay on this PC, sensitive ones are still kept on screen and never read aloud, and new sensitive ones still wait for your yes; switching a topic off again is instant. nothing has happened yet.",
+        "body": "lets Jarvis learn about or use a private topic again (health, money, or one you marked private), or move its facts to a more open topic; the facts stay on this PC, sensitive ones are still kept on screen and never read aloud, and new sensitive ones still wait for your yes; switching a topic off again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "unclassified_tool",
+      "notice": {
+        "title": "Jarvis wants to use a tool it has no plain name for",
+        "summary": "Jarvis wants to use a tool it has no plain name for.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "unretire_shared_key",
+      "notice": {
+        "title": "Jarvis wants to let the old shared key work from other devices again",
+        "summary": "Jarvis wants to let the old shared key work again.",
+        "full": "lets any device that still has the old shared key reach Jarvis again, not only this PC; you can retire it again any time, and that is instant. nothing has happened yet.",
+        "body": "lets any device that still has the old shared key reach Jarvis again, not only this PC; you can retire it again any time, and that is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "user_profile_manage",
+      "notice": {
+        "title": "Jarvis wants to change your profile",
+        "summary": "Jarvis wants to change your profile.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "watch_notifications_enable",
+      "notice": {
+        "title": "Jarvis wants to let your notifications show on a smartwatch too",
+        "summary": "Jarvis wants to show notifications on your watch too.",
+        "full": "lets your phone's own notification bridging copy Jarvis's notifications to a paired smartwatch too, instead of keeping them on the phone only; nothing about this reaches this PC, and turning it off again is instant. nothing has happened yet.",
+        "body": "lets your phone's own notification bridging copy Jarvis's notifications to a paired smartwatch too, instead of keeping them on the phone only; nothing about this reaches this PC, and turning it off again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "web_research",
+      "notice": {
+        "title": "Jarvis wants to search GitHub",
+        "summary": "Jarvis wants to search GitHub.",
+        "full": "not classified, so treated as the worst case. nothing has happened yet.",
+        "body": "not classified, so treated as the worst case. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "web_search_enable",
+      "notice": {
+        "title": "Jarvis wants to turn web search back on",
+        "summary": "Jarvis wants to turn web search back on.",
+        "full": "lets Jarvis search the web again, with the search you chose; the change itself sends nothing, every search keeps the rules it already had, and you can turn web search off again at any time, at once. nothing has happened yet.",
+        "body": "lets Jarvis search the web again, with the search you chose; the change itself sends nothing, every search keeps the rules it already had, and you can turn web search off again at any time, at once. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "wiki_update",
+      "notice": {
+        "title": "Jarvis wants to write pages in the Jarvis Wiki",
+        "summary": "Jarvis wants to write pages in the Jarvis Wiki.",
+        "full": "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions, and index.md and log.md are added to, with no copy kept. nothing has happened yet.",
+        "body": "writes pages in the Jarvis Wiki folder of your vault on this PC; the earlier copy of any page it changes is kept in .versions, and index.md and log.md are added to, with no copy kept. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "write_notes_after_outside_text",
+      "notice": {
+        "title": "Jarvis wants to write to your notes after reading outside text",
+        "summary": "Jarvis wants to write to your notes after outside text.",
+        "full": "adds one entry to your notes on this PC (today's Logseq journal, today's Obsidian daily note, or a new Joplin note); nothing already there is changed; asked because Jarvis read outside text in this conversation, or your message was not typed. nothing has happened yet.",
+        "body": "adds one entry to your notes on this PC (today's Logseq journal, today's Obsidian daily note, or a new Joplin note); nothing already there is changed; asked because Jarvis read outside text in this conversation, or your message was not typed. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "youtube_captions_read",
+      "notice": {
+        "title": "Jarvis wants to fetch the caption text of a YouTube video for a quiz",
+        "summary": "Jarvis wants to read a YouTube video's captions.",
+        "full": "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back. nothing has happened yet.",
+        "body": "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    }
+  ],
   "fallback": [
     {
       "action": "frobnicate_widget",
@@ -536,5 +1750,28 @@
       ],
       "says": []
     }
-  ]
+  ],
+  "card_prefs": {
+    "more_label": "Explain more",
+    "less_label": "Show less",
+    "default": "start_short",
+    "modes": [
+      "start_short",
+      "always_full"
+    ],
+    "choices": [
+      {
+        "id": "start_short",
+        "label": "Start short (default)",
+        "detail": "A card shows one line saying what Jarvis wants to do, and an \"Explain more\" button opens the whole card: exactly what changes, why it matters, and what happens if you say no. Nothing is hidden from you - it is one tap away.",
+        "default": true
+      },
+      {
+        "id": "always_full",
+        "label": "Always show everything",
+        "detail": "Every card is drawn open, with its whole text, as cards were before. No \"Explain more\" button is needed because there is nothing folded away.",
+        "default": false
+      }
+    ]
+  }
 }
