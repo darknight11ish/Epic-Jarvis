@@ -643,6 +643,15 @@ data class HomeActions(
     val onOpenChecks: () -> Unit,
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
+    /**
+     * The Galaxy, from Home (the owner's request of 2026-10-11: "the galaxy on
+     * the android app should be a direct button thr main screen if the app").
+     * It opens the Brain's own "people-and-things" plate - the phone's Galaxy,
+     * `EntitiesPlate.kt` - and nothing new: the plate carries the "Hide memory
+     * lists and chat history" guard itself, so the button never shows a name
+     * and never bypasses it.
+     */
+    val onOpenGalaxy: () -> Unit,
     val onOpenAppearance: () -> Unit,
     /**
      * Settings itself (2026-10-08): its own button in the row, beside
@@ -2129,6 +2138,29 @@ private fun FaceBlock(
                     Gap(2)
                 } else {
                     Gap(6)
+                }
+                // The Galaxy, one tap from Home (the owner's request of
+                // 2026-10-11). ALWAYS drawn, not only while the face-tap is on:
+                // the owner may turn "tap the face opens the Brain" off without
+                // meaning to shut this door, and a door that disappears when a
+                // setting changes is the confusing part. It reuses the Brain's
+                // own "people-and-things" plate, so the "Hide memory lists and
+                // chat history" guard inside that plate is what decides whether
+                // names are shown: tapping while the lists are hidden opens the
+                // plate and the plate prompts ("Hidden. Tap Show and confirm it
+                // is you.") - this button adds no way around it.
+                if (showCaption) {
+                    Gap(2)
+                    Text(
+                        "The Galaxy →",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = wellChrome.textLo,
+                        modifier = Modifier
+                            .clip(LocalRadii.current.insetShape)
+                            .pressable(onClick = actions.onOpenGalaxy)
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                    Gap(2)
                 }
             }
         }

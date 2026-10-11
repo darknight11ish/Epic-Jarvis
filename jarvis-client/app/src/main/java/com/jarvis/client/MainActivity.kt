@@ -3396,6 +3396,19 @@ class MainActivity : FragmentActivity() {
                                 onOpenChecks = { nav.go(Screen.CHECKS) },
                                 onOpenInbox = { nav.go(Screen.INBOX) },
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
+                                // The Galaxy, one tap from Home (the owner's
+                                // request of 2026-10-11). It opens the Brain's
+                                // own "people-and-things" plate - the phone's
+                                // Galaxy - exactly the way "open the galaxy"
+                                // does, so the plate's own "Hide memory lists
+                                // and chat history" guard decides what is
+                                // shown. Nothing new is read and no route is
+                                // added.
+                                onOpenGalaxy = {
+                                    pendingSection = "people-and-things"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
                                 // Settings from Home's own row (2026-10-08).
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },
