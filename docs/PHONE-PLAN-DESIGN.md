@@ -2,9 +2,10 @@
 
 **Status: designed, nothing built. No patch, no module, no route.**
 The owner asked whether Jarvis could control his Android phone "similar to how
-Gemini on the Pixel 11 can take agentic control" (2026-10-11). He was told the
-ability already exists as the `control_phone` action and is deliberately one
-card per tap; he then chose: **design the multi-step version - a short
+Gemini on the Pixel 11 can take agentic control" (2026-10-11). **He was told
+the ability already exists as the `control_phone` action and is "one card per
+tap" - that was wrong, and this draft repeated it (see the corrections below).**
+He then chose: **design the multi-step version - a short
 multi-step action as one plan card listing every tap up front, written down
 for him to approve before anything is built.** That decision is the same one
 already written in `CLAUDE.md` for the plan card generally (owner,
@@ -12,21 +13,27 @@ already written in `CLAUDE.md` for the plan card generally (owner,
 safety tests pass; risky steps still get their own card."*
 
 Written by the studio's designer against `origin/main` `b2beb60a`
-(2026-10-11). **Anything marked unverified has not been tried on the owner's
-phone or on any phone by this design.** The phone is in use by another
+(2026-10-11), corrected the same day against an adversarial review and a
+model-research pass. **Anything marked unverified has not been tried on the
+owner's phone or on any phone by this design.** The phone is in use by another
 conversation while this is written: nothing here was run against it, and no
 `adb` command was issued while writing.
 
-**In one paragraph.** Today Jarvis can tap his phone, one literal `adb`
-command at a time, each one behind its own approval card. This design keeps
-every one of those properties and changes only how many cards a short,
-already-decided sequence needs: Jarvis works out the literal commands first,
-shows **all of them, in order, on one card**, and runs exactly those, checking
-before every step that the phone is still the same one and still the app it
-was planned against. Nothing new becomes possible - the same commands, decided
-once. A step that sends something, touches a lock or a permission, or would
-type into a secret field does **not** ride along inside the plan: it keeps its
-own card. And a plan is never a session: it has a fixed list of steps, a fixed
+**In one paragraph.** Jarvis can already tap his phone: `control_phone` takes a
+**`requests` array** (`backend/jarvis_agent.py:1545-1561`, the schema at
+`:1552`), so one call can carry twenty commands under **one** card
+(`backend/jarvis_android_control.py:195-216`, `:306-333`) - **there is no cap
+on how many ride a card, and there never was.** This design therefore does not
+replace twenty cards with one; a card can already cover twenty. What it adds is
+**verification between the commands and a local record of them**: Jarvis works
+out the literal commands first, shows all of them in order on one card, and
+runs them while checking before every step that the phone is still the same one
+and still the app it was planned against. Said honestly, what the owner asked
+for - an agent that keeps acting while it looks - is **the card removed for ten
+minutes**, and this design does **not** grant that (§1, §17). A step that sends
+something, touches a lock or a permission, or would type into a secret field
+does **not** ride along inside the plan: it keeps its own card. And a plan is
+never a session: it has a fixed list of steps, a fixed
 end, and it stops dead - it never guesses - the moment the phone is not where
 the plan expected it. A marker on the phone shows which step of how many is
 running, one control stops it, and every step it took is written down locally
@@ -34,6 +41,41 @@ afterwards. **Two switches decide whether any of this happens, and both start
 off:** the phone agent itself, and - separately, so a session can run without
 it - "Let Jarvis delete things" (§16), which covers only deletions the owner
 can still undo and never lets an account be deleted.
+
+## Corrections to the first draft (2026-10-11, after an adversarial review)
+
+The first draft rested on a premise that is **false**, and it presented several
+exclusions as walls with nothing behind them. Corrected in place below; the
+record is kept here rather than quietly rewritten, and nothing in this list is
+defended.
+
+1. **"One card per command" was wrong.** `control_phone` takes a `requests`
+   array (`backend/jarvis_agent.py:1545-1561`): one call, N commands, ONE card
+   describing and running the whole array
+   (`backend/jarvis_android_control.py:195-216`, `:306-333`). `MAX_STEPS = 8`
+   belongs to `jarvis_plan` (`backend/jarvis_plan.py:84`), not to this tool, so
+   nothing caps a phone card's length. **Said honestly: the request is not "one
+   card instead of twenty" - a card can already cover twenty. The request is
+   that the card be removed for ten minutes.** This design does not grant that;
+   what it adds is verification and a record (§2, §13).
+2. **A look-then-act session cannot be built on the plan machinery**, so the
+   reuse this draft claimed fails on exactly the half that matters (§1):
+   `jarvis_plan.propose()` refuses a plan from a tainted turn
+   (`backend/jarvis_plan.py:191-194`, `:202-203`), and the plan path refuses
+   when `watch.tainted or watch.read or watch.provenance or watch.app_context`
+   is set (`backend/jarvis_agent.py:1489-1490`). `control_phone` sets `read`,
+   because it is not in `_NOT_READING` (`backend/jarvis_agent.py:3984`,
+   `:4295-4296`).
+3. **The exclusions are not walls.** §17 states one by one which have real
+   enforcement and which do not - and only two do.
+4. **"Acting stops when the event stream is stale" is not delivered mid-run.**
+   Corrected in §6: the answer here is a refusal to start plus a per-step adb
+   check; it does not stop taps on a dropped stream.
+5. **Stop lands between taps, and only reaches a session that has a task id.**
+   Said exactly in §7 and §14.
+6. **The delete guard misses two shapes by construction** - a long-press menu
+   that shows "Delete" only after the press, and a swipe with no node to read
+   (§16).
 
 ## What already exists and is reused (nothing here is a second version of anything)
 
@@ -45,7 +87,7 @@ can still undo and never lets an account be deleted.
 | The weight line | `backend/jarvis_android_control.py:188-192` (`CARD_WEIGHT_LINE`) | The one line that says the whole plan is heavy, and that an unmarked step is not a promise. |
 | The safe-text rule | `backend/jarvis_android_control.py:65-77` | Why `hello; reboot` cannot become two remote commands. |
 | Never tapping inside Jarvis's own app | `backend/jarvis_android_control.py:236-286` | An existing per-step guard, already "stop, do not guess". |
-| The plan-card machinery | `backend/jarvis_plan.py` - `:84` (`MAX_STEPS`), `:111-139` (the shapes), `:197-245` (`propose()`), `:262-287` (`describe()`), `:294-380` (`run()`) | The in-between case this was built for. Reused as-is, including its 8-step cap and its "a marked step still gets its own card" rule. |
+| The plan-card machinery | `backend/jarvis_plan.py` - `:84` (`MAX_STEPS`), `:111-139` (the shapes), `:197-245` (`propose()`), `:262-287` (`describe()`), `:294-380` (`run()`) | The in-between case this was built for. Reused as-is **only when the turn has not read anything** - its 8-step cap and its "a marked step still gets its own card" rule. **It cannot carry a look-then-act session** (§1): a tainted turn is refused outright (`:191-194`, `:202-203`) |
 | Checkpoints and stop | `backend/jarvis_task_control.py:78-88`, `:91-124` (the checkpoint **consumes** the signal) | How a plan is stopped between steps. |
 | Stop everything | `backend/jarvis_stop_all.py:108` (`register`), `:188-210` (`_stop_tasks`), `:221-256` (`stop_all`); `docs/JARVIS-API.md:6341-6343` | The hotkey and the phone's Stop already stop "a running multi-step task (computer, browser or phone control)" before its next step. |
 | The gate | `jarvis-backend/jarvis_gate.py:300` (`control_phone`: reversible "no", reach "outbound"), `:624-639` (`risk_for`), `:780` (the `_plan`/`_run` pair's tiers); `backend/rebuilt/jarvis-framework.toml:248` (`control_phone = "ask"`), `:250` (`run_plan = "ask"`), `:246` | The tiers stay exactly as they are. |
@@ -90,6 +132,22 @@ which is what §2 exists for.
 reading the phone's screen to VERIFY is fine; reading it to PROPOSE is not, in
 this version.** Verification does not shape what will happen - it can only
 stop it (§2).
+
+**And the correction the review forced on this section (2026-10-11): a
+look-then-act session cannot be built on the plan machinery at all.** The
+reuse this document claims is real only for the no-look case. `jarvis_plan`
+refuses a plan from a tainted turn (`backend/jarvis_plan.py:191-194`,
+`:202-203`), and the plan path refuses when
+`watch.tainted or watch.read or watch.provenance or watch.app_context` is set
+(`backend/jarvis_agent.py:1489-1490`). **`control_phone` sets `read`**, because
+it is not in `_NOT_READING` (`backend/jarvis_agent.py:3984`, `:4295-4296`). So
+the moment a session looks at the screen - even for a screenshot - a
+`jarvis_plan`-based session is refused by the code as it stands. There are only
+two ways forward, and both are owner decisions: **the session is new
+machinery** (its own plan/verify loop, built and reviewed on its own terms), or
+**it cannot look-then-act** - it runs the owner's words with per-step
+verification, which is what this design is. The first draft claimed the second
+while implying it had the first; it does not.
 
 ## 2. What if the screen changed between planning and running?
 
@@ -207,7 +265,7 @@ Such a step is not "banned" - it gets its own card, and the plan stops before
 it if the owner would rather do it by hand. That is the honest shape: the
 plan is for the sequence around it, not for the decision itself.
 
-## 6. Staleness (rule 4)
+## 6. Staleness (rule 4): what is delivered, and what is not
 
 Rule 4 says the app **blocks acting when the event stream is stale**, and the
 project draws the line precisely: *"never held on a stale event stream or by a
@@ -217,30 +275,39 @@ both apps (`docs/ARCHITECTURE.md:1874-1875`), and the staleness decision is
 made on the PC side of the app, not in a page
 (`docs/ARCHITECTURE.md:1863-1865`).
 
-For a phone plan, "stale" means three separate things, and each has its own
-answer:
+**This design does NOT deliver that floor item mid-run, and the first draft's
+wording implied it did. Corrected, plainly:**
 
-1. **The PC's own event stream.** A plan is a long-running action the owner
-   should be able to watch. **Recommended: the run refuses to START while the
-   link is stale** (the same 12-second rule, `docs/ARCHITECTURE.md:1874-1875`),
-   and does not begin work it cannot report. Mid-plan, a dropped stream does
-   **not** stop the taps (the taps are local `adb`, not the stream) but the
-   live line goes quiet, and the result says the report was incomplete - the
-   same honesty the runner already applies to a late Stop
-   (`backend/jarvis_android_control.py:414-428`).
-2. **The phone connection.** Already answered, per step: before **every**
-   command, `run()` checks the device is still in `adb devices`'s own list and
-   stops otherwise, *"rather than sending a tap intended for one phone toward
-   whatever is connected now"* (`backend/jarvis_android_control.py:313-321`,
-   `:381-385`). This design adds no second mechanism and removes none. Which
-   address that device is reached at - the mesh one, never a home-Wi-Fi one - is
-   §12.
-3. **The same serial.** Recorded on the card as part of the plan
+- **Refused to start: yes.** A plan does not begin while the link is stale (the
+  same 12-second grace). This is the only place the stream's state can stop
+  anything.
+- **Blocked mid-run: no.** Once the first tap has gone, a dropped stream does
+  **not** stop the taps. They are local `adb` commands, not events. What
+  happens instead: the live line goes quiet, and the result says the report was
+  incomplete - the same honesty the runner already applies to a late Stop
+  (`backend/jarvis_android_control.py:414-428`).
+- **Therefore a card must not promise it.** Any card that said "acting stops
+  when the stream is stale" would claim a block the runner does not deliver,
+  which is the anti-pattern this project names; the card's own words are §17's.
+
+What the design *does* check, per step, has nothing to do with the stream:
+
+1. **The phone connection.** Before **every** command, `run()` checks the
+   device is still in `adb devices`'s own list and stops otherwise, *"rather
+   than sending a tap intended for one phone toward whatever is connected
+   now"* (`backend/jarvis_android_control.py:313-321`, `:381-385`). This design
+   adds no second mechanism and removes none. Which address that device is
+   reached at - the mesh one, never a home-Wi-Fi one - is §12.
+2. **The same serial.** Recorded on the card as part of the plan
    (`Plan.device`, `:99-106`), and compared every step by that same check.
 
 **The phone never decides any of this.** No rule, no refusal and no approval
 is made on the phone: the phone is the thing being acted on, and its only job
 is to be the same phone (see "What this is NOT").
+
+**Because of this, the floor has to change for the feature to exist at all** -
+`docs/RULE-FLEXIBILITY.md:45-46` is the item, and the drafted entry that says so
+is `docs/PHONE-PLAN-RULE-DRAFT.md` (§17).
 
 ## 7. Stop everything must halt a running plan mid-sequence
 
@@ -531,7 +598,11 @@ Stop is the phone's own.** Reasons, in order:
    it is *"never held on a stale event stream or by a waiting card"* and works
    *"while App lock is on"* (`docs/JARVIS-API.md:6337`). The owner is at the PC
    when a plan starts - the PC decides everything here (§6) - and it needs no
-   new permission on the phone.
+   new permission on the phone. **It reaches the plan only if the plan
+   registered as a task with an id**: `checkpoint(None)` is `None`
+   (`backend/jarvis_task_control.py:121-122`), so an unregistered run cannot be
+   reached by the hotkey or by the phone's Stop. "The plan is a task" is a
+   requirement, not a detail (§7).
 2. **The badge is the same Stop where his eyes already are** while he watches
    the phone. It is the marker from §13 and the cancel in one control, which is
    the PC's own Watch pattern reused (`docs/SCREEN-DESIGN.md:106-110`), and it
@@ -646,28 +717,73 @@ model is pinned by the card's **UUID, never a number**, because
 the measurement refuses to run while a model it did not expect is resident
 (`:70-71`).
 
-### > PLACEHOLDER: the model-research task's findings go here
+### The research, landed (2026-10-11): size is not the bottleneck, grounding is
 
-> **Nothing about which model drives this is decided in this document.** A
-> separate research task is surveying open-source phone-agent projects and
-> GUI-grounding models, and its findings belong in this section rather than in
-> a guess. What this design needs from it, in the order it needs it:
->
-> 1. **Candidate local models** that can ground a screen element - name,
->    licence, download size, VRAM at a workable context, and whether they run
->    on Turing (compute 7.5) at all.
-> 2. **Accessibility tree or pixels?** Whether each candidate grounds better
->    from a `uiautomator`-style node tree (which §2 already reads, at 2.33 s a
->    look) or from a screenshot (which would put a private picture in front of
->    a model, and needs `clean_picture`'s discipline first).
-> 3. **Any measured grounding accuracy** from those projects, so the >= 90%
->    bar above is set against evidence rather than optimism.
-> 4. **A verdict on the everyday lane model**: can it ground at all, and if so
->    how much worse than a specialist (which is the whole difference between
->    options A and B above).
->
-> Until this section is filled in with measured numbers, the feature's own
-> gate stays closed (§ "What has to be true before any of it is built").
+Licences below were read from each project's own LICENSE file or its API
+metadata, not from a badge.
+
+**The driver: `AutoGLM-Phone-9B`.** Purpose-built for driving Android over
+**plain adb**; **MIT**; and converted by the **llama.cpp team itself**
+(`ggml-org/AutoGLM-Phone-9B-GGUF`): Q4_K_M **5.74 GB** + mmproj-Q8_0
+**0.91 GB** = **6.65 GB**, architecture `glm4` (registered in llama.cpp). It
+supports **remote adb** (`--device-id <mesh-ip>:5555`), which is exactly this
+project's transport (§12). **Put it on the 12 GB card.**
+
+**Grounding is the hard part, and general models are bad at it.** ScreenSpot-Pro
+figures: purpose-built **Holo2-4B 57.2%** and Holo1.5-7B 57.9%; general
+**Qwen3-VL-4B-Thinking 41.4%**, **Qwen3-VL-8B 38.5%**, Qwen2.5-VL-7B 29.0%.
+So **the everyday lane model must not be assumed capable of grounding**, and
+the answer to a weak grounder is not a bigger general model. **Recommended
+split: the existing 8B/9B stays the planner, and a 2-4B grounding specialist
+sits on the same card** - **Holo2-4B** (Apache-2.0, Q4_K_M + mmproj
+**2.95 GB**) or **GUI-Owl-1.5-2B** (MIT, **1.44 GB**).
+
+**Pull the prompt format, not the code.** **Open-AutoGLM is Apache-2.0**, and
+its action vocabulary - `Tap`, `Type`, `Swipe`, `Back`, `Home`, `Long Press`,
+`Double Tap`, `Launch`, `Take_over` - maps almost 1:1 onto
+`jarvis_android_control`'s own actions, while its `confirmation_callback` and
+`takeover_callback` hooks map onto approval cards. **OmniParser's
+`icon_detect_v3` is MIT** and gives the screenshot-to-numbered-boxes layer; the
+older YOLOv8 `icon_detect` is **AGPL-3.0 and must never be used here**.
+
+**Licence traps, named so nobody pulls them later:** `droidrun/mobilerun` is
+MIT but its Android app `mobilerun-portal` is **AGPL-3.0**, and the MIT half is
+useless without it - **INSPIRE ONLY**; **AutoDroid is GPL-3.0**;
+**ADBKeyBoard is GPL-2.0**; **Holo1.5-3B and Qwen2.5-VL-3B are Research
+licences** (Holo1.5-7B is Apache-2.0 instead).
+
+**Two traps that would break a standing rule.** Ollama's `qwen3-vl:235b-cloud`
+is a **CLOUD** tag: it sends screenshots off this machine and breaks rule 1 -
+only the local `2b/4b/8b` tags may be used here. And `mobilerun` ships
+**telemetry on by default** (`posthog`, `arize-phoenix`, `--tracing`).
+
+**One measured detail that pushes toward pixels.** This project's own captured
+dump has **49 nodes and not one `content-desc`** (`docs/phone-checks-2026-10-09/dump-checks.xml`),
+so a text-only node tree can be thin on this phone - which is an argument for
+the screenshot-and-numbered-boxes layer (OmniParser's MIT `icon_detect_v3`)
+rather than a tree-only grounder, on the terms §2 already sets for reading the
+screen.
+
+### Both cards, "so it could be bigger" - the owner's question, answered
+
+Mechanically yes: the existing both-cards mode already does exactly that -
+`big-coder.patch`, measured **49/49 layers, zero spill at 28,672 tokens** - at
+the cost of **Jarvis going offline while it is loaded**. **But bigger is not
+what fixes this.** Grounding, not size, is the bottleneck, and the figures above
+show a purpose-built 4B beating a general 8B at it by roughly half again. The
+honest use of both cards is a **big planner plus a small grounder**, measured -
+not one giant model.
+
+### What is still owed before any model drives this
+
+The grounding suite itself, run on this PC through the project's own gate
+(`tools/tool_eval/ollama_tool_eval.py` → `jarvis_plan.enabled()`), against the
+bars in the table above: >= 90% right element first try, **zero** dangerous
+taps, **zero** invented targets where the target is absent, and the cost per
+grounded step reported. Until that exists, the feature's gate stays closed
+(§ "What has to be true before any of it is built"), and the honest reading of
+the numbers above is that grounding is the thing to measure - the model names
+are a starting point, not a result.
 
 ### A wrong tap is a real tap, so the plan is what limits the blast radius
 
@@ -803,7 +919,10 @@ three layers of evidence exist, and none of them is complete.**
 **So, said exactly: the toggle is a strong guard, not an airtight one.** It
 reliably refuses the deletion-shaped steps it can *recognise* - a declared
 purpose, a recognised word next to the tap or on the dialog. It cannot promise
-that every deletion-shaped action is recognised. **Residual risk, plainly:**
+that every deletion-shaped action is recognised. **Two shapes are missed by
+construction, and the design does not paper over either: a long-press menu that
+reveals "Delete" only after the press, and a swipe-to-delete that has no node to
+read at all** (layer 2 above). **Residual risk, plainly:**
 with the toggle **on**, an unrecognised permanent delete could run inside an
 approved plan without its own card. With the toggle **off**, the same
 recognition miss produces the opposite outcome - a harmless step is refused -
@@ -836,6 +955,73 @@ where the word did not appear).
   for as long as it keeps the copy. This design cannot restore anything.
 - An unrecognised delete is treated as permanent (§ above).
 - The full picture of what the owner can and cannot see afterwards is §13.
+
+## 17. What is promised, and what is not (the owner's decision, 2026-10-11)
+
+The owner's words, after being shown what the code cannot hold: **"Still change
+the floor, with only enforceable promises."** That splits this document's
+exclusions into two lists, and the second one goes on the card itself.
+
+### PROMISED - each one named with the mechanism that holds it
+
+| Promise | The mechanism that holds it |
+|---|---|
+| **Never taps inside the Jarvis app itself** | Real code, checked before every input step: `backend/jarvis_android_control.py:236-286` (any package under `com.jarvis.`, and "could not tell" also stops) |
+| **The app in front stays the same package** | The same per-step check, compared against the package the plan recorded when it was built (§2) |
+| **A step only runs after its target is found again on the current screen** | The per-step dump and comparison in §2; when it does not match, the plan **stops** rather than tapping stale coordinates |
+| **Stop lands between taps, and both the phone's Stop and the PC's hotkey reach it** | `jarvis_task_control.checkpoint()` consumes the signal (`backend/jarvis_task_control.py:91-124`), read first at the top of each step (`backend/jarvis_android_control.py:355-380`). **Only if the plan runs as a task with an id** - `checkpoint(None)` returns `None` (`:121-122`), so a plan without a task id cannot be stopped by either |
+| **A hard time and step limit, not "about"** | Steps capped at 8, the project's own number (`backend/jarvis_plan.py:84`, and again at `backend/jarvis_tasks.py:100`); the time limit is a fixed number, chosen before anything is built |
+| **A visible marker while it runs** | The badge (§13) and the PC's content-free live line (`backend/jarvis_android_control.py:390-397`, `:323-325`) |
+| **Never touches hidden memory lists or app lock** | Not on this path: the agent has no route to either, and its log is the job list's own (§13) |
+| **Everything local** | `adb` to the owner's own phone over the mesh (§12), and a local model (§15). Nothing leaves the machine |
+
+### NOT PROMISED - guesses, whose failures this project already documents
+
+Stated as limitations rather than protections. The owner is accepting these
+**with his eyes open**, so this list is deliberately explicit.
+
+| Not promised | The mechanism that fails |
+|---|---|
+| **A password box is never typed into** | Recognised only from the dump's `password` attribute - which **has never once appeared set** in this project's own capture: 49 nodes, every one `password="false"` (`docs/phone-checks-2026-10-09/dump-checks.xml`) |
+| **A 2FA / one-time-code box is never typed into** | **Not enforceable.** An OTP box is an ordinary numeric field, nothing marks it, there is no accessibility service, and `_SAFE_TEXT` permits digits (`backend/jarvis_android_control.py:76`) - so `input text 123456` is a command this module will happily build |
+| **A bank app is never opened** | A **documented heuristic, not a promise** (`jarvis-client/app/src/main/java/com/jarvis/client/data/ScreenNever.kt:9-17`), whose false negative is **asserted by its own test** (`jarvis-client/app/src/test/java/com/jarvis/client/NotificationAllowListTest.kt:55-61`). And the heuristic lives **on the phone** and needs the app's store category, which the PC runner driving `adb` does not have |
+| **A spending or sending button is never pressed** | **Wishful.** The only reader of a button's meaning is the model's own self-report, and this module already records it failing exactly there: *"a plan whose Send click the model left unflagged read 'weight: normal' while the notice and the risk line said the opposite"* (`backend/jarvis_android_control.py:180-192`) |
+| **A step stays inside one app** | Only in the weak sense: the check is **package-only**, so a browser is one package and every website is inside it, and a spend-or-send sheet drawn **inside** an allowed app passes by construction. That is the whole attack, and it needs no attacker |
+| **"Delete" is recognised** | Misses two shapes **by construction**: a long-press menu that shows "Delete" only *after* the press, and a swipe-to-delete that has no node to read at all (§16) |
+
+**Only two of the design's exclusions were ever enforceable**: never tapping
+inside the Jarvis app (`backend/jarvis_android_control.py:236-286`) and the
+step and time caps. Everything else in the list above is a guess with a
+documented failure mode, which is why it is on the card.
+
+### The card's own words (given to the owner for approval)
+
+> **Jarvis recognises a password box, a bank, and a spending or sending button
+> only by guesses its own code documents as unreliable. With this on, a tap
+> Jarvis has misread can send a message, spend money, or delete something, and
+> stopping it lands between taps.**
+
+Not "allow phone sessions". That sentence is the whole disclosure, and §16's
+delete switch carries its own one as well.
+
+### The floor change this needs - drafted, NOT applied
+
+A feature that needs a floor item in `docs/RULE-FLEXIBILITY.md` is, by that
+file's own words, *"a finding to report - **not a reason to edit this list**"*
+(`docs/RULE-FLEXIBILITY.md:53-54`). This feature needs exactly that: the floor
+item *"Never auto-approve anything, and acting stays blocked while the event
+stream is stale"* (`:45-46`) is not delivered mid-run by this design (§6, §17),
+so the floor itself has to change - and that is the owner's call, not an
+agent's (`:22-23`).
+
+**DRAFT RULE ENTRY 004 - awaiting the owner's word-for-word approval. NOT
+APPLIED.** The exact proposed text, in `docs/RULE-FLEXIBILITY.md`'s own entry
+shape, is in **`docs/PHONE-PLAN-RULE-DRAFT.md`**. `docs/RULE-FLEXIBILITY.md` has
+**not** been edited, no code has changed, and there is no switch to flip: both
+`control_phone` and `run_plan` sit in `HARD_LIMITS`
+(`backend/jarvis_asks_first.py:402-431`, at `:405` and `:419`) - *"Never
+loosened from an app, whatever else changes"* (`:398-401`) - and `run_plan` is
+in `MUST_ASK` too (`:436-456`, at `:446`).
 
 ## What this is NOT
 
