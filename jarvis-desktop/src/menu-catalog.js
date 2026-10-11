@@ -288,6 +288,29 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.approval-cards",
+    "title": "Approval cards",
+    "about": "How much of a card is shown at first: a short summary, or everything.",
+    "apps": [
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "approval cards",
+      "the approval cards",
+      "explain more",
+      "the explain more button",
+      "how much of a card is shown"
+    ]
+  },
+  {
     "id": "settings.voice",
     "title": "Voice",
     "about": "Talk, read aloud, hands-free and sounds.",
@@ -2651,6 +2674,7 @@ export const ALIASES = {
   "appearance": "settings.appearance-card",
   "appearance button": "entry.appearance",
   "appearance button on home": "entry.appearance",
+  "approval cards": "settings.approval-cards",
   "approvals": "safety.approvals",
   "as of a date": "brain.memory.as-of",
   "asks first": "settings.asks-first",
@@ -2706,6 +2730,8 @@ export const ALIASES = {
   "drawing pictures": "settings.pictures",
   "email sending": "settings.email-sending",
   "everyday chat runs on": "settings.second-card.chat-card",
+  "explain more": "settings.approval-cards",
+  "explain more button": "settings.approval-cards",
   "faces": "settings.appearance-card",
   "faq": "brain.tab.tutorials",
   "finance": "group.finance",
@@ -2744,6 +2770,7 @@ export const ALIASES = {
   "hotkeys": "settings.shortcuts",
   "how jarvis talks": "settings.manner",
   "how long the hand-off stays on offer": "settings.handoff",
+  "how much of a card is shown": "settings.approval-cards",
   "how often jarvis does things": "settings.limits",
   "hud window": "settings.hud-window",
   "idle timeout": "settings.idle-new",

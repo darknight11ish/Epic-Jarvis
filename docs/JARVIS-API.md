@@ -19022,7 +19022,7 @@ until a client calls it.
 
 ---
 
-## 125. The big coding model: both cards, with Jarvis paused
+## 126. The big coding model: both cards, with Jarvis paused
 
 `qwen3-coder-30b-a3b-ud-q3-k-xl` (UD-Q3_K_XL, 13,806,312,608 B, Apache 2.0) is
 the one model on this PC that needs **both** graphics cards. It is the best
@@ -19039,7 +19039,7 @@ not re-litigate: **OFF by default, never resident beside the two live lanes,
 the pause announced before it starts, and both lanes put back exactly as they
 were - proved from `/api/ps`.**
 
-### 125.1 The three routes
+### 126.1 The three routes
 
 | Route | Method | Body | What it does |
 |---|---|---|---|
@@ -19058,7 +19058,7 @@ the big coding model", a `BoolSetting` in `jarvis_settings_registry.py`). The
 page row needs its own Rust command and JavaScript, like every other switch on
 that page.
 
-### 125.2 The order, which is the contract
+### 126.2 The order, which is the contract
 
 1. The switch must be on, no multi-step task may be running, and the gate must
    allow it. Otherwise **nothing is touched at all**.
@@ -19087,9 +19087,9 @@ that page.
 
 Nothing here downloads anything, and nothing leaves this PC.
 
-### 125.3 What is not built
+### 126.3 What is not built
 
-- The desktop Settings row and any phone control (section 125.1).
+- The desktop Settings row and any phone control (section 126.1).
 - `tools/check_parity.py` does not yet classify these routes: they are the
   backend half, called by no client, and a follow-up lists them there.
 - No real load was run while this was written: the owner's two lanes are live
@@ -19100,6 +19100,100 @@ Nothing here downloads anything, and nothing leaves this PC.
   spill, and the model was present in the Ollama store on `D:` - **but the
   server on port 11434 did not know the model** (`POST /api/show` answered
   404), so the mode's own both-cards server is what will see it.
+
+---
+
+## 127. Approval cards read short: the summary, "Explain more", and the setting (added 2026-10-10)
+
+The owner, 2026-10-09, in their own words: *"for approval cards, there should be
+a more simple summary, with an explain more button that expands the approval
+card total word length and explains the details more. and approval card
+preferences such as this should be changeable in the settings"*.
+
+Built by `backend/card-prefs.patch` (one route), the shipped
+`backend/jarvis_card_summary.py` (the preference and the "what one card shows"
+rule), the shipped `backend/jarvis_card_words.py` (`SUMMARY`, the short words -
+the same one source the title already comes from), `backend/approval-notice.patch`
+(the two new fields on every pending row), `backend/test_card_short_words.py`,
+and the phone's `net/CardSummary.kt` + `ui/screens/ApprovalCardsPlate.kt` +
+`CardSummaryTest.kt`. **This section exists because the route and the two fields
+were not written down anywhere else.**
+
+### 127.1 One line first, the whole card one tap away
+
+Every pending row already carried `notice` (`approval-notice.patch`, §3). It now
+carries **two more fields**, and they are the whole feature:
+
+| field | what it is |
+|---|---|
+| `notice.summary` | the SHORT line a card shows first: "Jarvis wants to send the email shown." |
+| `notice.full` | the WHOLE card, word for word as `body` always was - what "Explain more" opens |
+
+`notice.body` is **unchanged and still equals `notice.full`**, so a client that
+has never heard of the control draws exactly what it drew before. Neither field
+ever carries `detail`, `prompt` or the contents of `raised`: both are built from
+the action NAME, `jarvis_card_words.py`'s own tables and the risk table, which is
+what keeps a notice safe to put on a lock screen.
+
+**A summary is never blank and never the raw action id.** In order,
+`jarvis_card_words.summary_for`: the written short phrase for that action; else
+the card's own FIRST WHOLE SENTENCE ("never cut mid-word"); else the readable
+title `title_for` already guarantees. `backend/test_card_short_words.py` pins all
+three, and fails by name when an action the gate knows has no short row.
+
+### 127.2 The preference, in one file both apps read
+
+    GET  /api/card-prefs     the setting, its two choices and the words to show
+    POST /api/card-prefs     {"mode": "start_short" | "always_full"}
+
+Kept in `<config dir>/card-prefs.json`, **beside `appearance.json` and
+`animal.json`** - so the phone and the desktop read one value and cannot
+disagree. `start_short` is the default, and it is the default for a missing
+file, a damaged one, an unknown mode or a value of the wrong type; none of those
+is ever read as a choice. `mode` is the field a client draws from:
+
+| `mode` | what a card does |
+|---|---|
+| `start_short` | the short summary, with an "Explain more" control |
+| `always_full` | drawn open, whole text, **no control** - nothing is folded away |
+
+`available` is the read flag (a client checks it before believing `mode`),
+`stored` says whether a real choice is saved or the default is merely in force,
+`choices` carries both ids with their labels and the default marked, and
+`more_label` / `less_label` are the control's own words - the PC's, so the two
+apps cannot word the same button differently.
+
+**Both directions are cosmetic and both are immediate: no approval card, either
+way, from either app or by asking.** This changes which words a card draws and
+nothing else - it approves nothing, starts nothing and reaches nothing - which is
+the same rule the animal options and "How Jarvis talks" follow. An unknown mode
+is refused with `400` rather than quietly saved as something else.
+
+**By asking:** "always show me the whole approval card", "show me the whole
+card", "the short summary", "start short" - `jarvis_card_summary.spoken`'s own
+list, read by `jarvis_settings_registry.find_card_mode` and applied through
+`set_card_mode`, which calls the one function the route calls. A sentence it does
+not recognise is `None` and falls through to the model rather than picking a card
+style on the owner's behalf. "Show everything" on its own deliberately stays
+`jarvis_menus.ALL_MENUS_PHRASES` (the older "show me every menu"), which
+`jarvis_quick.match` checks first.
+
+### 127.3 Where the control is, in each app
+
+- **Phone** (`jarvis-client`): the card's own text (`ApprovalCard.kt`), folded by
+  default, with "Explain more" / "Show less" under the summary. The setting is
+  Settings → **"Approval cards"**, right under Appearance
+  (`ApprovalCardsPlate.kt`, `item(key = "approval-cards")`). Opening one card
+  touches no other: the open/closed state is keyed on the card's own id.
+- **Desktop** (`jarvis-desktop/` + `src-tauri/`): **not built on this branch** -
+  those folders belong to another conversation, and the owner's brief for this
+  work says not to edit them. What it needs is written up in
+  `docs/DESKTOP-APPROVAL-CARD-PREF.md`: the file (`src/main.js`,
+  `refreshApproval`), the control, and the field it reads (`mode`). Until its
+  card in `settings.html` lands, the backend's
+  `jarvis_settings_registry.SECTIONS` entry for `approval-cards` stays
+  `app="phone"`, so "open approval cards" never names a place the desktop does
+  not have; the desktop can still change the setting by asking.
 
 ---
 
