@@ -3,6 +3,7 @@ package com.jarvis.client.data
 import android.content.Context
 import android.media.audiofx.AcousticEchoCanceler
 import androidx.core.content.edit
+import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.voice.LiveRules
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -188,6 +189,33 @@ class ClientSettings(context: Context) {
     fun setFloatingAvatar(mode: FloatingAvatarMode) {
         prefs.edit { putString(KEY_FLOATING_AVATAR, mode.wire) }
         _floatingAvatar.value = mode
+    }
+
+    private val _idleNewChoice = MutableStateFlow(
+        runCatching { prefs.getString(ChatHistory.IDLE_NEW_KEY, null) }
+            .fold({ ChatHistory.idleNewChoice(it) }, { ChatHistory.IDLE_NEW_DEFAULT }),
+    )
+
+    /**
+     * "A new conversation starts after ..." (the audit of 2026-10-08): how long
+     * a conversation can sit idle before the next question starts a new one -
+     * one of [ChatHistory.IDLE_NEW_CHOICES]'s five ids ([ChatHistory.IDLE_NEW_DEFAULT]
+     * - 30 minutes - unless the owner chose another). On this phone only, like
+     * every setting here: the PC keeps its own choice of the same five, and
+     * nothing about it is sent anywhere.
+     *
+     * A value that is missing, empty, unknown to this build, or unreadable
+     * (a preference file that cannot be opened) reads as 30 minutes, never as
+     * "never" ([ChatHistory.idleNewChoice]). Turning it into the threshold
+     * [com.jarvis.client.net.ChatSession] compares against is
+     * [ChatHistory.idleNewMsFor]'s job, which falls back the same way.
+     */
+    val idleNewChoice: StateFlow<String> = _idleNewChoice.asStateFlow()
+
+    fun setIdleNewChoice(id: String) {
+        val choice = ChatHistory.idleNewChoice(id)
+        prefs.edit { putString(ChatHistory.IDLE_NEW_KEY, choice) }
+        _idleNewChoice.value = choice
     }
 
     /**

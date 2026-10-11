@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import ast
 import base64
+import gc
 import io
 import json
 import os
@@ -286,6 +287,14 @@ def t_code():
                            default=0)
         check(f"{name}(): the paused-there check (_mine) comes before the window is touched",
               "_mine" in order and first_mine < first_window, order)
+    check("no file is ever opened, written, moved or deleted by the module - the picture "
+          "has nowhere to go",
+          not [w for w in ("open(", "write_text", "write_bytes", "writefile", "tempfile",
+                           "NamedTemporaryFile", "mkstemp", "os.replace", "os.remove",
+                           "shutil.copy", "Path(") if w in _code_only(SRC)],
+          [w for w in ("open(", "write_text", "write_bytes", "writefile", "tempfile",
+                       "NamedTemporaryFile", "mkstemp", "os.replace", "os.remove",
+                       "shutil.copy", "Path(") if w in _code_only(SRC)])
     check("only the three owner pages can start one", HO.OWNER_CODES == ("captcha", "login",
                                                                           "unusual"))
     check("keys: no function keys, no shortcuts",
@@ -303,6 +312,25 @@ def t_code():
     check("shipped", "jarvis_handoff.py" in SHIPPED)
     ps1 = (HERE.parent / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("apply-patches.ps1 ships it", "'jarvis_handoff.py'" in ps1)
+    # The owner's setting of 2026-10-08 ("make this a setting for both options
+    # with 1 as the default") is its own module, shipped the same way, and IT
+    # is where the two numbers now come from - so the no-file promise above
+    # still holds for the picture path, and this is the one file that may read
+    # and write a file (ONE word, never a picture - its own suite checks that).
+    check("the setting module is shipped", "jarvis_handoff_mode.py" in SHIPPED)
+    check("apply-patches.ps1 ships the setting module", "'jarvis_handoff_mode.py'" in ps1)
+    # THE OWNER'S DECISION OF 2026-10-08 is the source of both numbers now, so
+    # this module must READ it and must not carry a timeout constant of its own
+    # ("make this a setting for both options with 1 as the default").
+    code = _code_only(SRC)
+    check("the idle time and the ceiling are read from the setting, not constants here",
+          "idle_seconds" in code and "ceiling_seconds" in code
+          and "jarvis_handoff_mode" in code
+          and "= IDLE_S" not in SRC and "= MOST_S" not in SRC)
+    check("START_AFTER/CEILING FALLBACKS exist for an older PC without the setting",
+          "STOP_AFTER_FALLBACK_S" in code and "CEILING_FALLBACK_S" in code)
+    check("the PC's own 'stuck' line is the module's, not an app's",
+          "STUCK" in SRC and "def stuck_line(" in SRC)
 
 
 # ==========================================================================
@@ -433,19 +461,20 @@ def t_ends():
     s = session(code="unusual")
     hid = HO.start("chatbot", s.id)[1]["handoff"]
     HO.frame(hid)
-    CLOCK.t += HO.IDLE_S + 1
+    CLOCK.t += HO.idle_seconds() + 1
     code, out = HO.send_input(hid, {"type": "key", "key": "Enter"})
-    check("nobody looking for IDLE_S: it ends ('idle')", code == 410 and out["ended"] == "idle")
+    check("nobody looking for the owner's idle time: it ends ('idle')",
+          code == 410 and out["ended"] == "idle")
 
     fresh()
     s = session(code="captcha")
     hid = HO.start("chatbot", s.id)[1]["handoff"]
-    for _ in range(int(HO.MOST_S // 30) + 2):
+    for _ in range(int(HO.ceiling_seconds() // 30) + 2):
         CLOCK.t += 30
         code, out = HO.frame(hid)
         if code != 200:
             break
-    check("however it goes, it ends after MOST_S ('time')", code == 410
+    check("however it goes, it ends after the 15-minute ceiling ('time')", code == 410
           and out["ended"] == "time", (code, out))
 
     fresh()
@@ -496,6 +525,186 @@ def t_support_chat():
     check("... its picture", HO.frame(hid)[0] == 200)
     c.state = "running"
     check("... and a Resume ends it", HO.frame(hid)[1].get("ended") == "resumed")
+
+
+# ==========================================================================
+#   The promises: nothing on disk, nothing in a log, gated like every route
+# ==========================================================================
+
+def _trap_writes():
+    """Every way this code could put something on the disk, trapped.
+
+    Returns (recorded, restore): while `recorded` is empty nothing was
+    written. Patching the TYPES, not just this module, is on purpose - a save
+    added anywhere on the path is caught, not only one written in
+    jarvis_handoff.py. Each trampoline holds its original, so `restore()`
+    always has the real function to put back.
+    """
+    recorded: list = []
+    saved: list = []
+
+    def trap(owner, name, label):
+        fn = getattr(owner, name, None)
+        if fn is None:
+            return
+
+        def catch(*a, **k):
+            recorded.append(label)
+            return fn(*a, **k)
+        # Only a setattr that worked is remembered, so `restore()` never puts
+        # a `write` back on a type whose own `write` was never replaced. (A
+        # `TypeError` from `setattr` on `_io.FileIO` bit this test once: the
+        # entry was written before the setattr that failed.)
+        try:
+            setattr(owner, name, catch)
+        except (TypeError, AttributeError):
+            return
+        saved.append((owner, name, fn))
+
+    for owner, names in ((Path, ("write_text", "write_bytes", "touch", "mkdir", "unlink")),
+                         (os, ("remove", "unlink", "rename", "replace", "mkdir", "makedirs")),
+                         (shutil, ("copy", "copyfile", "copy2", "move")),
+                         (tempfile, ("NamedTemporaryFile", "mkstemp", "mkdtemp"))):
+        for n in names:
+            trap(owner, n, f"{getattr(owner, '__name__', owner)}.{n}")
+    # `open` is what a bare `open(path, "wb")` in the module actually calls, at
+    # call time, through the builtins - so trapping Path.write_bytes alone
+    # misses a save written that way. (A probe that added exactly that line to
+    # frame() passed 104/104 before this was here: the trap was not armed for
+    # it.) Trapped on the module object AND in builtins, so the check holds
+    # whichever way the code says it.
+    import builtins
+    # READ-ONLY opens are allowed through, said plainly: the promise is that no
+    # PICTURE is ever written to disk, and the hand-off now reads ONE setting
+    # file (handoff-mode.json, jarvis_handoff_mode.py: how long the offer
+    # stays open - the owner's decision of 2026-10-08) on the path. `open(p)`
+    # with the default mode is a read; only a write/append/exclusive/create
+    # mode counts, and `Path.write_text`/`write_bytes`, `os.replace`, `shutil`
+    # and `tempfile` below are all still trapped outright, so a save written
+    # any other way is still caught. The probe that proved the trap works (a
+    # save added to frame()) uses a write mode, so it still fails this check.
+    _WRITEY = ("w", "a", "x", "+")
+
+    def trap_open(owner, name, label):
+        real = getattr(owner, name, None)
+        if real is None:
+            return
+
+        def catch(file, mode="r", *a, **k):
+            if any(c in str(mode) for c in _WRITEY):
+                recorded.append(label)
+            return real(file, mode, *a, **k)
+        try:
+            setattr(owner, name, catch)
+        except (TypeError, AttributeError):
+            return
+        saved.append((owner, name, real))
+
+    trap_open(builtins, "open", "open()")
+    trap_open(io, "open", "io.open()")
+    for cls in (io.TextIOWrapper, io.BufferedWriter, io.FileIO):
+        try:
+            trap(cls, "write", "a file was written")
+        except (TypeError, AttributeError):
+            # An immutable C type: `open` above already covers it.
+            pass
+
+    def restore():
+        gc.disable()
+        try:
+            for owner, name, fn in reversed(saved):
+                setattr(owner, name, fn)
+        finally:
+            gc.enable()
+    return recorded, restore
+
+
+def t_nothing_on_disk_and_nothing_in_a_log():
+    fresh()
+    s = session(code="captcha")
+    hid = HO.start("chatbot", s.id)[1]["handoff"]
+    TOKEN = "s3cr3t-pairing-token-9f2c"
+    files, restore = _trap_writes()
+    try:
+        code, out = HO.frame(hid)
+        check("frame(): a picture, with the write trap armed", code == 200 and out.get("jpeg"),
+              code)
+        code, out2 = HO.send_input(hid, {"type": "key", "key": "Tab"})
+        check("input(): passed on, with the write trap armed", code == 200, out2)
+    finally:
+        restore()
+    check("nothing was written, moved or deleted anywhere while a picture was taken and "
+          "input was passed on (no temp file, no cache, no log file)", not files, files)
+
+    typed = json.dumps(AUDIT)
+    picture = out.get("jpeg", "") if isinstance(out, dict) else ""
+    check("the picture's own bytes are in no audit line", not picture or picture not in typed)
+    check("the hand-off token is in no audit line", TOKEN not in typed)
+    check("nothing typed is in an audit line", "hunter" not in typed)
+    check("the audit says only what the input WAS (kind and key name)",
+          any(d and d.get("event") == "input" and d.get("type") == "key" for _, d in AUDIT),
+          AUDIT)
+
+
+def t_routes_are_gated():
+    """The hand-off routes are answered by the chatbot routes' installer, so
+    they sit behind the server's own origin and token checks like every other
+    route - asked for with neither, they are refused before any hand-off
+    exists (and no page is touched)."""
+    fresh()
+
+    class FakeHandler:
+        def __init__(self, path="", body=None, origin=True, token=True):
+            self.path, self._body, self.origin, self.token = path, body, origin, token
+            self.sent = None
+
+        def do_GET(self):
+            raise AssertionError("the original GET reached: a refused route was answered")
+
+        def do_POST(self):
+            raise AssertionError("the original POST reached: a refused route was answered")
+
+        def _send(self, code, out):
+            self.sent = (code, out)
+
+    R.install(FakeHandler, origin_ok=lambda h: h.origin, token_ok=lambda h: h.token,
+              read_body=lambda h: h._body)
+    check("the hand-off routes ride the chatbot routes' own install()",
+          R.HANDOFF_FRAME_ROUTE in R.GET_ROUTES and all(
+              x in R.POST_ROUTES for x in R.HANDOFF_POST_ROUTES))
+
+    h = FakeHandler(f"{R.HANDOFF_FRAME_ROUTE}?h=ho_nothing", token=False)
+    h.do_GET()
+    check("no token: the picture route is refused with 401", h.sent and h.sent[0] == 401, h.sent)
+    h = FakeHandler(f"{R.HANDOFF_FRAME_ROUTE}?h=ho_nothing", origin=False)
+    h.do_GET()
+    check("a foreign origin: the picture route is refused with 403",
+          h.sent and h.sent[0] == 403, h.sent)
+    for route in (R.HANDOFF_INPUT_ROUTE, R.HANDOFF_END_ROUTE, R.HANDOFF_START_ROUTE):
+        h = FakeHandler(route, b"{}", token=False)
+        h.do_POST()
+        check(f"{route}: no token, 401", h.sent and h.sent[0] == 401, h.sent)
+        h = FakeHandler(route, b"{}", origin=False)
+        h.do_POST()
+        check(f"{route}: a foreign origin, 403", h.sent and h.sent[0] == 403, h.sent)
+
+    # ... and through a real hand-off: the gate lets the owner through and the
+    # route's own rules still refuse a body that names no input.
+    s = session(code="captcha")
+    hid = HO.start("chatbot", s.id)[1]["handoff"]
+    h = FakeHandler(f"{R.HANDOFF_FRAME_ROUTE}?h={hid}")
+    h.do_GET()
+    check("a good origin and token: the picture route answers, with the picture",
+          h.sent and h.sent[0] == 200 and bool(h.sent[1].get("jpeg")), h.sent)
+    h = FakeHandler(R.HANDOFF_INPUT_ROUTE, json.dumps({"h": hid}).encode())
+    h.do_POST()
+    check("... and the input route is reached, refusing a body with no type",
+          h.sent and h.sent[0] == 400, h.sent)
+    h = FakeHandler(R.HANDOFF_INPUT_ROUTE, json.dumps({"h": hid, "type": "key",
+                                                       "key": "Tab"}).encode())
+    h.do_POST()
+    check("... and the owner's own key reaches it: 200", h.sent and h.sent[0] == 200, h.sent)
+    check("... the audit recorded it", any(d and d.get("event") == "input" for _, d in AUDIT))
 
 
 def t_routes():
@@ -666,7 +875,8 @@ def main():
     a = None
     try:
         for fn in (t_code, t_nothing_offered_unless_paused_at_an_owner_page, t_a_whole_hand_off,
-                   t_ends, t_support_chat, t_routes, t_words, t_event):
+                   t_ends, t_support_chat, t_nothing_on_disk_and_nothing_in_a_log,
+                   t_routes_are_gated, t_routes, t_words, t_event):
             print(f"--- {fn.__name__} ---")
             try:
                 fn()

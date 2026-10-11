@@ -188,13 +188,23 @@ LONGEST_NAME = 60
 # That is the difference between a recorded line and a silenced one - the
 # recorded one cannot be forgotten, and it cannot spread.
 #
-# WHAT IS RECORDED HERE, AND WHY IT IS NOT FIXED. `backend/jarvis_tutorials.py`
-# is the file these lines live in, and an open pull request (#53) owns it. This
-# check may not edit it, so the lines that are wrong today are recorded instead:
-# each entry names what the tutorial says, what the app really has, and where
-# the fix belongs. The entries go stale the moment the wording changes - which
-# is deliberate, because the person rewriting these lines is the person who
-# should delete the entry.
+# WHAT WAS RECORDED HERE, AND WHY IT IS EMPTY NOW (2026-10-09). Ten lines used
+# to sit below, every one of them suppressed with the same reason: the wording
+# is owned by open pull request #53, so it cannot be corrected here. PR #53 was
+# MERGED on 2026-10-06 - the reason was already false when this audit read it,
+# and ten tutorial steps went on sending the owner to pages, cards and switches
+# that do not exist in either app: "Phone on the PC", "Pair a device",
+# "Privacy", "Your voice print", "Sensitive topics", "API keys and services"
+# and "Your second graphics card".
+#
+# All ten are corrected in `backend/jarvis_tutorials.py` and its published
+# copy, each to the fix its own entry named. The table is empty and the check
+# enforces every one of them again.
+#
+# A `reason` is for a case that cannot be fixed YET, and it must be re-read
+# whenever that reason could have expired. "An open pull request owns the file"
+# expires the moment the pull request merges, so an entry saying that needs a
+# date and a look-up, not a shrug.
 #
 # The key is (kind, id, step, piece): `kind` is "tutorial" or "faq", `id` is the
 # tutorial's own id (or "faq"), `step` is the 1-based step inside it (or the
@@ -205,87 +215,9 @@ LONGEST_NAME = 60
 _KnownDrift = namedtuple("_KnownDrift", "reason fix")
 
 KNOWN_DRIFT = {
-    # --- "Your voice print" is not a heading; the heading is "Your voice" ----
-    ("tutorial", "talking", 3, "Your voice print"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `talking` tutorial, step 3 - the "
-            "desktop's Settings, Voice section is headed \"Your voice\" "
-            "(settings.html), and the trained print is the row under it; say "
-            "\"Your voice\" or name that row"),
-    # --- there is no "Sensitive topics" section in Memory --------------------
-    ("tutorial", "memory", 2, "Sensitive topics"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `memory` tutorial, step 2 - the "
-            "switch is really called \"Also remember sensitive topics "
-            "automatically\" (settings.html, AutoLearnPlate.kt); name that "
-            "switch, or drop the third step of the breadcrumb"),
-    # --- "Brain -> Privacy" is not a place; there is no Privacy section ------
-    ("tutorial", "records", 1, "Privacy"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `records` tutorial, step 1 - "
-            "chat history is kept by a switch on the History screen "
-            "(brain.tab.history, HistoryScreen.kt); no page in either app is "
-            "called Privacy"),
-    # --- "Brain -> Phone": there is no Phone card ----------------------------
-    ("tutorial", "phone-pairing", 1, "Phone on the PC"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `phone-pairing` tutorial, step 1 "
-            "- pairing lives in the Settings cards \"Connection\" and "
-            "\"Devices\" (settings.connection, settings.devices); no card "
-            "called Phone exists in either app, so \"Phone on the PC\" sends "
-            "the owner looking for one"),
-    ("tutorial", "phone-pairing", 2, "Phone"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `phone-pairing` tutorial, step 2 "
-            "- the same missing card; the QR code and the short code are on "
-            "the Settings \"Devices\" card"),
-    ("tutorial", "phone-pairing", 3, "Phone"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `phone-pairing` tutorial, step 3 "
-            "- one key per device is the Settings \"Devices\" card "
-            "(\"Paired devices\" in settings.html)"),
-    # --- "Pair a device" is not a control anywhere --------------------------
-    ("tutorial", "phone-pairing", 2, "Pair a device"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: the `phone-pairing` tutorial, step 2 "
-            "- no button, card or heading in either app carries this name; the "
-            "short typed code is entered on the phone's pairing screen "
-            "(ui/screens/PairByCode.kt) and approved on the PC"),
-    # --- FAQ lines, same convention, same screen ----------------------------
-    ("faq", "faq", 2, "Phone"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: FAQ question 2 - the same missing "
-            "card; the server address is the Settings \"Connection\" card"),
-    ("faq", "faq", 3, "API keys and services"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: FAQ question 3 - keys are kept in the "
-            "Settings card \"Accounts\" (settings.account-secrets); there is no "
-            "\"API keys and services\" page"),
-    ("faq", "faq", 17, "Your second graphics card"):
-        _KnownDrift(
-            "the wording is owned by open pull request #53, so it cannot be "
-            "corrected here",
-            "backend/jarvis_tutorials.py: FAQ question 17 - the card is called "
-            "\"Second graphics card\" (settings.second-card, settings.html); "
-            "the extra \"Your\" makes it a name the owner cannot find"),
+    # Empty on purpose - see the note above. The shape stays for the next real
+    # case: a key of (kind, id, step, piece) and a _KnownDrift(reason, fix)
+    # naming why it cannot be fixed yet and where the fix belongs.
 }
 
 

@@ -45,7 +45,7 @@ import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./not
 import { ApprovalTarget, GONE_DETAIL, GONE_LINE } from "./approval-target.js";
 import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
-import { isHeavy } from "./heavy-approve.js";
+import { needsFullCard } from "./heavy-approve.js";
 import { faceWords } from "./face-words.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { relayFaceMoments } from "./face-moments.js";
@@ -75,6 +75,9 @@ import {
   paint as paintBoardBlocks,
   viewOf as boardViewOf,
 } from "./widget-board.js";
+// The approval clock's own second-level ticker (2026-10-08 cohesion audit,
+// finding 2: this file's `setInterval(..., 1000)` and main.js's).
+import { clockTimer, IDLE_MS } from "./clock-timer.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -147,6 +150,7 @@ const dom = {
 
   btnToggle: $("btn-toggle-expand"),
   btnPin: $("btn-pin"),
+  btnSettings: $("btn-settings"),
   btnLog: $("btn-quick-log"),
   btnJoplin: $("btn-quick-joplin"),
   btnObs: $("btn-quick-obs"),
@@ -743,7 +747,14 @@ function applyExpanded(expanded) {
   state.expanded = expanded;
   dom.root.dataset.state = expanded ? "expanded" : "collapsed";
   dom.tray.hidden = !expanded;
-  dom.btnToggle.title = expanded ? "Collapse (E)" : "Expand (E)";
+  const action = expanded ? "Collapse" : "Expand";
+  dom.btnToggle.title = `${action} (E)`;
+  // The button's accessible NAME has to follow the state too, not just its
+  // tooltip: the widget boots expanded, so the static "Expand widget" in
+  // widget.html told a screen reader the opposite of what the click does
+  // (click audit, 2026-10-08). The visible-to-a-reader span IS the name.
+  const name = dom.btnToggle.querySelector(".sr-only");
+  if (name) name.textContent = `${action} widget`;
   applyFaceVisibility();
   syncBoardTimer();
   if (expanded) loadBoard();
@@ -913,7 +924,7 @@ function applyLane(lane) {
 /** Paints the connection dot from a health report. */
 function applyHealth(report) {
   if (!report || !Array.isArray(report.services)) return;
-  // An optional service (LiteLLM, the cloud lane's proxy) counts only when it
+  // An optional service (the cloud escalation lane) counts only when it
   // answers - not running is normal with no cloud model set up. Same rule as
   // commands.rs summarise_health.
   const counted = report.services.filter((s) => s.online || !s.optional);
@@ -979,13 +990,21 @@ const LOCKED_APPROVE = "Approve in the Jarvis bar";
 /** Feasibility I110, "Slower Approve on risky cards": this widget clamps its
  * detail to two lines on purpose ("the full diff belongs in the spotlight,
  * this is a decision surface, not a reading one" - widget.css, `.appr-detail`).
- * A `notice.weight: "heavy"` card cannot honestly satisfy "the whole card's
- * text has been in view" on a surface that never shows the whole text, so -
- * like `locked` and `email` above - its Approve opens the Jarvis bar
- * instead, where the full card and the actual delay-and-scroll gate live
+ * A card whose reach or reversibility matters cannot honestly satisfy "the
+ * whole card's text has been in view" on a surface that never shows the whole
+ * text, so - like `locked` and `email` above - its Approve opens the Jarvis
+ * bar instead, where the full card and the actual delay-and-scroll gate live
  * (main.js, heavy-approve.js). The detail text itself is UNCHANGED here
- * (unlike `locked`, this is not about hiding anything) - only the button. */
-const HEAVY_APPROVE_TITLE =
+ * (unlike `locked`, this is not about hiding anything) - only the button.
+ *
+ * `needsFullCard` (heavy-approve.js) decides which cards those are: anything
+ * that leaves this PC, anything that cannot simply be undone, and anything the
+ * backend did not classify at all (docs/DEEP-AUDITS-2026-10-05.md finding D1).
+ * `isHeavy` alone missed the unclassified card - it keys on `notice.weight`,
+ * which reads as `"normal"` when there is no notice, so a 320x44 strip could
+ * approve a card nobody had read. The widget's own Approve label for this is
+ * the locked one, because it is the same sentence: approve it in the bar. */
+const SPOTLIGHT_APPROVE_TITLE =
   "This cannot be undone, leaves this PC, or was pushed up by outside text - " +
   "read it in full and approve it in the Jarvis bar.";
 
@@ -1062,22 +1081,23 @@ function openApproval(approval) {
   // (the owner's decision of 2026-09-25). Rust refuses an email's Approve
   // from this window too (commands.rs, `waiting_email`).
   const email = isEmailCard(approval);
-  // Feasibility I110: see HEAVY_APPROVE_TITLE's own comment above for why
-  // this redirects rather than trying to gate on scroll in a 2-line-clamped
-  // view. `locked` and `email` already redirect for their own reasons, and
-  // take priority when more than one applies (App lock hides the words
-  // heavy would otherwise still show).
-  const heavy = !locked && !email && isHeavy(approval);
+  // Feasibility I110 + DEEP-AUDITS finding D1: see SPOTLIGHT_APPROVE_TITLE's
+  // own comment above for why a card whose reach or reversibility matters
+  // redirects rather than trying to gate on scroll in a 2-line-clamped view.
+  // `locked` and `email` already redirect for their own reasons, and take
+  // priority when more than one applies (App lock hides the words a full card
+  // would otherwise still show).
+  const needsFull = !locked && !email && needsFullCard(approval);
   // The PC's own words for it (card-words.js), never the code name.
   dom.apprAction.textContent = locked ? lockedTitle(approval) : cardTitle(approval);
   // textContent, never innerHTML: this string comes from a model.
   dom.apprDetail.textContent = locked ? LOCKED_DETAIL
     : email ? emailDetail(approval) : approvalDetail(approval);
-  dom.btnApprYes.textContent = locked || heavy ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
+  dom.btnApprYes.textContent = locked || needsFull ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
   dom.btnApprYes.title = locked
     ? "App lock is on: opens the Jarvis bar, which asks Windows Hello, to approve there"
     : email ? "Opens the Jarvis bar on this email, to read all of it and approve there"
-    : heavy ? HEAVY_APPROVE_TITLE : "";
+    : needsFull ? SPOTLIGHT_APPROVE_TITLE : "";
   // A note changes the plan, so it waits for the unlocked Jarvis bar too.
   const noteRow = dom.apprNoteInput.closest(".appr-note-row");
   if (noteRow) noteRow.hidden = locked;
@@ -1218,11 +1238,14 @@ function syncApprovalButtons() {
     || (state.approval && state.decided === state.approval.id);
   dom.apprNoteInput.disabled = noteBlocked;
   dom.btnApprNoteSend.disabled = noteBlocked;
+  // A card opened, closed or was replaced: the risk line is about to change,
+  // so wake its clock now instead of waiting out a slow beat.
+  nudgeApprovalClock();
 }
 
 /**
  * The risk line, plus how long the card has left or why Approve is off for a
- * request that was cut off. Re-painted every second, and only this line.
+ * request that was cut off. Re-painted by the ticker below, and only this line.
  */
 function paintApprovalClock() {
   const approval = state.approval;
@@ -1236,9 +1259,40 @@ function paintApprovalClock() {
   const text = parts.join(" · ");
   if (dom.apprRisk.textContent !== text) dom.apprRisk.textContent = text;
 }
-setInterval(() => {
+
+/**
+ * What the shown line is worth waiting for, in ms (2026-10-08 cohesion audit,
+ * finding 2).
+ *
+ * This used to be a flat `setInterval(..., 1000)`: 3,600 wake-ups an hour for
+ * a widget that is usually showing a face with no card at all, whether or not
+ * its window was on screen. Measured at 61 runs a simulated minute by
+ * `tests/timers.mjs`.
+ *
+ * The widget's line only has the "M:SS left to decide" clock (no heavy-approve
+ * countdown here - the widget cannot approve a heavy card at all, see
+ * `decide`), so the wait is a second exactly while that clock is on screen and
+ * a minute when it is not. `clock-timer.js` adds the align step.
+ */
+function clockWaitMs() {
+  if (!state.approval || dom.apprCard.hidden) return IDLE_MS;
+  return state.approval.expiresAt ? 1000 : IDLE_MS;
+}
+
+const approvalClock = clockTimer(() => {
   if (state.approval && !dom.apprCard.hidden) paintApprovalClock();
-}, 1000);
+}, { delay: clockWaitMs, name: "widget" });
+approvalClock.wake();
+
+/**
+ * The card opened, closed or was replaced: the risk line is about to change,
+ * so the clock re-arms now rather than on its next wake - which may be the
+ * idle minute away (2026-10-08 cohesion audit, finding 2). Called from
+ * `syncApprovalButtons`, the one place this window repaints a card from.
+ */
+function nudgeApprovalClock() {
+  approvalClock.wake();
+}
 
 async function decide(approved, optionId = null) {
   if (state.deciding) return;
@@ -1264,9 +1318,12 @@ async function decide(approved, optionId = null) {
   const approval = target.card;
   // App lock on: this window approves nothing (see `applyAppLock`). Nor,
   // lock or not, an email: all of it is read in the Jarvis bar first. Nor a
-  // heavy card (feasibility I110): the whole card cannot honestly be said
-  // to have been "in view" on a surface that clamps it to two lines.
-  if (approved && (state.appLock || isEmailCard(approval) || isHeavy(approval))) {
+  // card whose reach or reversibility matters, or that the backend never
+  // classified (heavy-approve.js `needsFullCard`, DEEP-AUDITS finding D1):
+  // the whole card cannot honestly be said to have been "in view" on a surface
+  // that clamps it to two lines. The card on screen says the same thing - its
+  // label is LOCKED_APPROVE and its title SPOTLIGHT_APPROVE_TITLE.
+  if (approved && (state.appLock || isEmailCard(approval) || needsFullCard(approval))) {
     await approveInBar();
     return;
   }
@@ -1576,6 +1633,17 @@ async function sendTaskNote() {
 dom.btnToggle.addEventListener("click", toggleExpand);
 dom.btnPin.addEventListener("click", () => setPinned(!state.alwaysOnTop));
 
+// The gear on the bar: the same navigation-only door to the Settings window
+// the offline card's fix buttons use (plain_errors.rs `open_fix_place`). The
+// widget was granted `open-fix-place` at the same time this button was added
+// (2026-10-10) - before that, this window's calls to that command were refused
+// at the ACL, so its offline card's buttons did nothing.
+if (dom.btnSettings) {
+  dom.btnSettings.addEventListener("click", () => {
+    invoke("open_fix_place", { place: "settings" });
+  });
+}
+
 dom.btnLog.addEventListener("click", () => invoke("prefill_quickbar", { target: "logseq" }));
 dom.btnJoplin.addEventListener("click", () => invoke("prefill_quickbar", { target: "joplin" }));
 dom.btnObs.addEventListener("click", () => invoke("prefill_quickbar", { target: "obsidian" }));
@@ -1814,7 +1882,7 @@ startLink();
   // command of its own (capability sky-read).
   startSkyFeed({ onEvent });
 
-  // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
+  // Ollama and the cloud lane's own state are not on the bus, so their dots need
   // one probe. Once, at boot — there is no timer here any more.
   const report = await invoke("check_server_health");
   if (report) applyHealth(report);

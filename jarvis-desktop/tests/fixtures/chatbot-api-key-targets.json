@@ -1,0 +1,49 @@
+{
+  "about": "The six chatbot API services and the Windows Credential Manager name each key is kept under. Generated from jarvis_chatbot_api.PRESETS; do not edit by hand - run tools/gen_chatbot_key_targets.py instead.",
+  "source": "jarvis_chatbot_api.KEY_TARGETS",
+  "rule": "Jarvis Backend/{company} API key",
+  "targets": [
+    {
+      "id": "deepseek_api",
+      "short": "deepseek",
+      "company": "DeepSeek",
+      "target": "Jarvis Backend/DeepSeek API key",
+      "key_where": "https://platform.deepseek.com/api_keys"
+    },
+    {
+      "id": "groq_api",
+      "short": "groq",
+      "company": "Groq",
+      "target": "Jarvis Backend/Groq API key",
+      "key_where": "https://console.groq.com/keys"
+    },
+    {
+      "id": "mistral_api",
+      "short": "mistral",
+      "company": "Mistral AI",
+      "target": "Jarvis Backend/Mistral AI API key",
+      "key_where": "https://console.mistral.ai/api-keys"
+    },
+    {
+      "id": "openai_api",
+      "short": "openai",
+      "company": "OpenAI",
+      "target": "Jarvis Backend/OpenAI API key",
+      "key_where": "https://platform.openai.com/api-keys"
+    },
+    {
+      "id": "openrouter_api",
+      "short": "openrouter",
+      "company": "OpenRouter",
+      "target": "Jarvis Backend/OpenRouter API key",
+      "key_where": "https://openrouter.ai/keys"
+    },
+    {
+      "id": "xai_api",
+      "short": "xai",
+      "company": "xAI",
+      "target": "Jarvis Backend/xAI API key",
+      "key_where": "https://console.x.ai"
+    }
+  ]
+}

@@ -33,6 +33,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.PhoneNotifications
 import com.jarvis.client.net.ScreenPlateText
+import com.jarvis.client.net.SettingsCatalog
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -104,9 +105,14 @@ internal fun PhoneNotificationsSwitch(canAct: Boolean, refresh: Int) {
         )
         return
     }
+    // The words come from the generated catalogue (net/SettingsCatalog.kt,
+    // tools/gen_settings_cases.py) because this row's words are the PHONE's
+    // own - no PC route sends them. The literals are the fallback, so a
+    // missing catalogue row can never leave the switch blank.
+    val row = SettingsCatalog.row("phone-notify")
     SwitchRow(
-        title = "Let your phone read notifications",
-        detail = "Off by default. Jarvis never sees a phone notification unless you turn " +
+        title = row?.label ?: "Let your phone read notifications",
+        detail = row?.detail ?: "Off by default. Jarvis never sees a phone notification unless you turn " +
             "this on AND add at least one app below.",
         checked = enabled == true || cardWaiting,
         enabled = !busy && when {
@@ -375,11 +381,22 @@ private fun CapturedRow() {
     }
 }
 
+/**
+ * "Alerts and reminders on this phone": what the phone's own alerts are, the
+ * one button that opens Android's own screen for them, and nothing else.
+ *
+ * "SEND TEST" MOVED OUT OF HERE (2026-10-10). It was a second copy of the
+ * Test button the desktop's Notifications card has, and the parity audit
+ * (GAP 1-6) asked for that card on the phone; the button now lives there, in
+ * [PcNotifySection], under the desktop's own words ("Send test notification"),
+ * with the same honest post-and-report it always had. Duplicating it here would
+ * have left Settings with two buttons that do the same thing. The line it
+ * writes when nothing was posted still names THIS button, which is above it.
+ */
 @Composable
 private fun NotificationPreferencesRow() {
     val chrome = LocalChrome.current
     val context = LocalContext.current
-    var testSent by remember { mutableStateOf(false) }
 
     Gap(16)
     Text(
@@ -391,46 +408,22 @@ private fun NotificationPreferencesRow() {
     Text(
         "Timers, scheduled reminders, and morning briefings go off while connected to your PC's Jarvis. " +
             "Alarms and urgent alerts ring through Do Not Disturb when alarms are allowed on your phone. " +
-            "If an alert arrives more than 10 minutes late, it appears as a silent \"Missed\" notice.",
+            "If an alert arrives more than 10 minutes late, it appears as a silent \"Missed\" notice. " +
+            "All of it needs Android's notification permission for Jarvis: switched off, none of these " +
+            "appear, and neither does an approval waiting for your answer.",
         style = MaterialTheme.typography.bodySmall,
         color = chrome.textMid,
     )
     Gap(10)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Secondary(
-            "Android notification settings",
-            modifier = Modifier.weight(1f),
-            onClick = {
-                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                runCatching { context.startActivity(intent) }
-            },
-        )
-        Secondary(
-            "Send test",
-            modifier = Modifier.weight(1f),
-            onClick = {
-                com.jarvis.client.service.ScheduleNotifier.post(
-                    context,
-                    jobId = "test-job",
-                    kind = "reminder",
-                    title = "Jarvis test notification",
-                    text = "This is a test notification from Jarvis. Reminders and channels are working.",
-                    lockScreen = "Jarvis: test notification",
-                )
-                testSent = true
-            },
-        )
-    }
-    if (testSent) {
-        Gap(4)
-        Text(
-            "Test notification sent.",
-            style = MaterialTheme.typography.labelSmall,
-            color = chrome.okInk,
-            modifier = Modifier.liveStatus(),
-        )
-    }
+    Secondary(
+        "Android notification settings",
+        modifier = Modifier.fillMaxWidth(),
+        onClick = {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            runCatching { context.startActivity(intent) }
+        },
+    )
 }
 
 /**

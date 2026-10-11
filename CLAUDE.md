@@ -715,6 +715,14 @@ testers, scouts and integration scouts; `.claude/agents/`):
   minutes**; 7. talk-to-type on the PC, **held Right Ctrl** by default
   (changeable in Settings); 8. QR pairing with per-device keys; 9. the
   sneaky-instruction detector test.
+  **Corrected 2026-10-08, after a feature review measured it:** talk-to-type
+  ships on **Alt+Shift+T**, not Right Ctrl, and `docs/JARVIS-API.md` section 72
+  says the same. A bare Ctrl key cannot be a global hotkey in this build - the
+  hotkey library wants a real key plus a modifier, and the parser refuses an
+  accelerator with no modifier at all - so "held Right Ctrl" was never
+  buildable as written. The owner chose on 2026-10-08 to keep Alt+Shift+T and
+  have this note corrected, rather than add low-level keyboard-hook code for
+  one key. It stays rebindable in Settings.
   **Jarvis Live extras, all yes:** a phone Quick Settings tile (start/end);
   a headset button (press = stop talking, long press = mic off, never
   approves); a 10-minute "Live ended - Resume" notification; a PC hotkey to
@@ -1891,6 +1899,162 @@ deliberate rather than an oversight:
   the process) only if that does not go, attach to a backend already
   listening instead of spawning a second one, and keep it a setting, default
   off.
+
+Decided 2026-10-08, after the owner asked for a prompt-writing helper and
+offered four open-source projects to build it from: **the Prompt Coach comes
+first, and none of the four is used.** `backend/jarvis_prompt_coach.py` reads
+ONE prompt the owner is about to send, and the last few turns (the owner's
+answer), and returns a short critique with a rewritten version. It runs on the
+model already on the PC and **adds no dependency at all** - because
+`promptimal` requires an OpenAI API key and has no local-model support (Ollama
+is item 1 of its own roadmap), so using it would have sent the owner's own typed
+words to OpenAI, which is rule 1. `textgrad` is a pre-alpha research framework,
+`prompt-optimizer` is AGPL-3.0 rather than the MIT claimed, and `promptfoo` is
+a fine Node CLI for a different job (regression-testing Jarvis's own system
+prompts offline, noted for later). The full comparison is
+`docs/PROMPT-COACH-DESIGN.md`.
+
+- **A button, not an interceptor.** The owner was offered a mode that checks
+  every message and chose the button, with the switch as the master switch: off
+  means no button and nothing read. An 8B model is a mediocre prompt critic, so
+  it must not be in the path of every message, and a critique is a full model
+  call.
+- **Turning it on raises no card, and neither does turning it off.** Written
+  down as a decision so nobody "fixes" it later: the coach reads words the chat
+  is about to send to the same model on the same PC anyway, takes no action, and
+  opens no way out of the PC. The reasoning is in the setter's docstring.
+- **The score is never a gate.** A 1 out of 10 is still sendable, "this is
+  clear, send it" is a correct answer, and the module's own prompt says that
+  inventing a complaint is a failure.
+- **It never sends anything by itself and never changes the owner's words.**
+  Both apps offer Send mine and Send the suggestion, and nothing leaves without
+  one of those presses.
+- **It never leaves the PC and keeps nothing.** The address is checked with
+  `jarvis_auto_learn.check_local_model()` before the request is built, and no
+  prompt, critique or score is written to history, memory or a log.
+- **Unmeasured, and said so.** Nobody has run it against a real model, so the
+  quality of its advice and how long it takes are both unknown; the app's own
+  line under the switch says the advice is sometimes wrong.
+- **One thing found on the way, for later:** neither app renders its settings
+  from `jarvis_settings_registry.py` - every switch is hand-written in three
+  places (the backend's words, a desktop copy, a phone copy) and nothing tests
+  that the copies agree. The repo's cure for that exists and is used elsewhere
+  (`gen_menu_cases.py` generates both apps' menu catalogues from one source,
+  with a `--check` in CI). The owner chose to build the Coach the house way and
+  queue "one source for the settings screens" as its own task rather than
+  block the feature on it.
+
+Decided 2026-10-08, after the comparison against CopilotKit's OpenMuse
+(`docs/COMPETITORS-OPENMUSE-2026-10-08.md`): **the job list comes first, and a
+turn hands work to it.** Work that outlives one chat turn is built
+(`backend/jarvis_tasks.py`, `tasks.patch`, JARVIS-API section 118): a job is a
+named list of steps, one step runs per tick, each step still raises its own
+approval card, and the list remembers where it got to through a restart. A
+chat turn delegates to a job with `jarvis_tasks.from_plan` after the plan card
+is approved, and the gate is reached only through `gate_ask`, so nothing
+bypasses it. Five protections came with it: a lease so a crashed job is picked
+up again and never run twice at once, a checkpoint after every step,
+`outcome_unknown` for a send interrupted by a restart (never `failed`, which
+invites a retry), an idempotency key so the same request makes one action, and
+a card whose decision must carry the hash of the words that were shown. Both
+apps show the list on Brain -> Work. Nothing new leaves the PC.
+- **The comparison also produced a correction, and the correction is the point.**
+  The report first listed OpenMuse's IP-pinned egress check as a gap to copy;
+  `backend/jarvis_local_http.py` had already done it since the 2026-09-27
+  security audit, and checks every resolved answer rather than the first. That
+  was the third time this project has "gone looking for" something it already
+  had (`docs/PEERS.md` recorded the first two). The two real things it did
+  earn were closed the same day: the ranges that are never a destination, and
+  NAT64, where `127.0.0.1` is spelled `64:ff9b::7f00:1`.
+
+Decided 2026-10-10, the owner's two answers after the integration evaluation
+(`docs/INTEGRATION-EVAL-2026-10-10.md`, PR #207, which read eight outside
+projects and found one idea worth taking): **the floating face passes clicks
+through to whatever is behind it, as a setting that is off by default** -
+every click goes to the window underneath except on the animal itself, so the
+face stops getting in the way over a full-screen app while the animal can
+still be dragged (and stroked, wherever stroking reaches it). It is one
+cosmetic switch in the desktop's Appearance card, under "Floating face",
+declared in the one settings table like every other row; it applies at once
+and asks for no approval card, because it changes only how Jarvis's own face
+is shown. The hit test is measured off the face's own drawn picture rather
+than guessed from the shader's camera (every one of the five faces reaches
+the edge of its square in some pose, so no circle round the middle would do),
+and every doubt - no measurement yet, a pointer that cannot be read - leaves
+the animal clickable. **And the faces stay as they are: no Live2D and no VRM
+importer** - Open-LLM-VTuber and amica both draw Jarvis a different way
+entirely, which would *replace* the ray-marched shader faces the desktop and
+the phone share (`docs/CRITTERS.md`) rather than extend them, and buy a
+second renderer, a second face picker and an SDK licence for it. The one idea
+worth borrowing was borrowed as an idea: no code, no dependency, no licence
+exposure.
+
+Decided 2026-10-10: **the desktop intro still appears once by itself, and the
+owner can replay it on demand** - the walkthrough is no longer a one-shot. The
+owner asked directly whether it was "interactive (and skippable) and redoable
+if accidentally skipped": the first two were true and the third was not.
+`jarvis-desktop/src/onboarding.html` is five plain screens with Back/Next and
+Escape to leave, and `commands.rs`'s versioned marker carries the rule "shown
+once, never again" - `lib.rs` opened the window only while the marker was
+missing, and no command and no control anywhere could open it again, so one
+accidental Escape and it was gone for good.
+
+What changed, in the owner's terms: one button, **"Show the intro again"**, in
+Settings' "Set up Jarvis" card (`settings.html`'s `#first-run`), beside that
+card's own "Set up again" and OUTSIDE its checklist rows - those rows fold away
+once set-up is done, which is exactly the state the owner is in when he wants
+the intro back. It calls one new command, `replay_onboarding`, which reuses
+`windows::show_onboarding` (the same fixed-size, non-resizable window, same
+label, same narrow capability) and **reads and writes no marker at all**.
+
+What deliberately did NOT change: when the intro appears by itself. `lib.rs`
+still opens it unprompted only while `commands::onboarding_seen` is false, and
+`finish_onboarding` is still the only writer of the versioned marker. Clearing
+the marker from the replay path would have made the intro open by itself on the
+next start, which is not what was asked for. This is replay on demand, never
+"show it every launch" - and it is not the first-run checklist
+(`src/first-run-settings.js`, the owner's option 8A of 2026-10-06), which
+gathers settings and is a different thing.
+
+The new command's whole ACL path, because a command missing any one piece
+silently does nothing: `build.rs`, `lib.rs`'s `generate_handler!`,
+`permissions/autogenerated/replay_onboarding.toml`, `surfaces.toml`'s new
+`onboarding-replay` set, and `capabilities/settings.json` - and that set is NOT
+given to the walkthrough's own window, which keeps `onboarding-surface` (mark
+seen, close) and nothing more. The button is not a settings TOGGLE row, so
+`backend/jarvis_settings_registry.py` (PR #163) is untouched and no generated
+catalogue needed regenerating. The stale "shown once, never again" comments in
+`commands.rs`, `windows.rs` and `onboarding.html` said otherwise and were
+corrected with it.
+Decided 2026-10-10, after a Reject click was found shipping a rule in the
+owner's name: **a Reject click may be written down, but only as Jarvis's
+guess, marked as a guess.** The owner's words: a rejection may become *"a
+suggestion, marked as a guess"*, which he **Keeps or Discards** - never
+something Jarvis puts in his mouth. What was happening before: when the owner
+pressed Reject, `jarvis_gate.py` built the sentence *"Remember this: I do not
+want Jarvis to `<action>` without asking me first. I just said no when it
+asked."* and handed it to the learner as if it were the owner's own turn. It
+was not. A Reject click carries none of his words - the HUD's Reject sends only
+`{id, by}`, and the gate NULLs the card's own `prompt` and `detail` when it is
+decided - so the sentence was Jarvis's invention, and "I just said no when it
+asked" invented a reason for a click that carries none. Facts here are learned
+from the owner's own words only (2026-09-24), so **that unlabelled behaviour is
+fixed**: the proposal now says in its own words that it is Jarvis's guess, that
+it is not a record of the owner's words, and that no reason was given nor made
+up to fill the gap - and it names the action, so the guess is worth reading.
+The same marking reaches the review card itself (`guessed`, plus the words in
+the reason line both apps already show), so it is visible where the owner
+actually decides, not only inside the backend. **Everything good about the old
+behaviour is kept, and must stay kept:** a timeout still proposes nothing ("the
+absence of an answer"), it still only ever *proposes* through
+`jarvis_extract.propose()` - the one review queue, never a second door into
+memory - the one-card list (`_NO_RULE_FROM_DENIAL`) still excludes a denial
+that answers a single card, and a failed proposal still never turns a completed
+denial into an error. Keeping the guess is what makes it apply: nothing is
+applied until the owner says so. Written down as entry **003** of
+`docs/RULE-FLEXIBILITY.md`, with the relaxation's own line on the "What asks
+first" page (`fixed:playbook_rejection`, "Writes a guessed rule for you to Keep
+or Discard").
 
 ## Every new feature gets its own audit, without being asked
 

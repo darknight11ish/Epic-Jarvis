@@ -1,8 +1,10 @@
 package com.jarvis.client
 
 import com.jarvis.client.net.Handoff
+import com.jarvis.client.net.HandoffMode
 import com.jarvis.client.net.JarvisJson
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -139,5 +141,112 @@ class HandoffTest {
         val (cx, cy) = requireNotNull(Handoff.fractions(0f, 150f, 400f, 600f, 400, 300))
         assertEquals(0f, cx, 0.001f)
         assertEquals(0f, cy, 0.001f)
+    }
+
+    // ---- how long it stays on offer (the owner's setting, 2026-10-08) ------
+
+    @Test
+    fun `the setting's two values, the default, and every word are the PC's`() {
+        assertEquals(
+            doc["modes"]!!.jsonArray.map { it.jsonPrimitive.content },
+            HandoffMode.MODES,
+        )
+        assertEquals(doc["mode_default"]!!.jsonPrimitive.content, HandoffMode.DEFAULT)
+        assertEquals("the default is the quick cut-off", "stop_early", HandoffMode.DEFAULT)
+        assertEquals(doc["mode_patient"]!!.jsonPrimitive.content, HandoffMode.KEEP_OFFERING)
+        val w = obj("mode_words")
+        assertEquals(w.keys, HandoffMode.WORDS.keys)
+        for ((key, words) in HandoffMode.WORDS) assertEquals(key, w[key]!!.jsonPrimitive.content, words)
+        // The labels and the lines the screen draws come from the same table, not a second copy.
+        for (id in HandoffMode.MODES) {
+            assertEquals(HandoffMode.WORDS[id], HandoffMode.LABELS[id])
+            assertEquals(HandoffMode.WORDS["${id}_detail"], HandoffMode.HELP[id])
+        }
+    }
+
+    @Test
+    fun `the setting's own route is not one of the hand-off's picture or input routes`() {
+        val r = obj("routes")
+        assertEquals(r["mode"]!!.jsonPrimitive.content, HandoffMode.PATH)
+        assertEquals("/api/chatbot/handoff_mode", HandoffMode.PATH)
+        assertTrue(
+            "the setting is a sibling, never under /handoff/",
+            !HandoffMode.PATH.startsWith("/api/chatbot/handoff" + "/"),
+        )
+        assertTrue("a tap or a picture is never sent to the setting",
+            HandoffMode.PATH !in Handoff.WRITE_PATHS)
+    }
+
+    @Test
+    fun `the setting's answers read as the PC's own lines`() {
+        // The real GET, from `view()`: "Stop early" is chosen, a minute and the
+        // 15-minute ceiling are the PC's own numbers, no card is waiting.
+        val body = obj("mode_route_get")["body"]!!.jsonObject
+        val v = HandoffMode.view(body)
+        assertTrue(v.available)
+        assertEquals("stop_early", v.mode)
+        assertEquals(false, v.patient)
+        assertEquals(false, v.waiting)
+        assertEquals(60.0, v.idleSeconds, 0.001)
+        assertEquals(900.0, v.ceilingSeconds, 0.001)
+        assertEquals(HandoffMode.WORDS["stop_early_detail"], v.line)
+        // A card waiting says so, and nothing has changed yet.
+        val waiting = HandoffMode.view(
+            JarvisJson.parseToJsonElement(
+                "{\"mode\":\"stop_early\",\"waiting\":true,\"why\":\"\"}",
+            ).jsonObject,
+        )
+        assertTrue(waiting.waiting)
+        assertEquals(HandoffMode.WAITING_LINE, waiting.line)
+        assertEquals("stop_early", waiting.mode)
+        // A damaged file reads as the safe default, in the PC's own words.
+        val damaged = HandoffMode.view(
+            JarvisJson.parseToJsonElement(
+                "{\"mode\":\"stop_early\",\"why\":${JsonPrimitive(HandoffMode.DAMAGED)}}",
+            ).jsonObject,
+        )
+        assertEquals(HandoffMode.DAMAGED, damaged.line)
+        // Anything not the PC's exact shape is "could not read it", never a guess.
+        assertTrue(!HandoffMode.view(null).available)
+        assertTrue(!HandoffMode.view(JarvisJson.parseToJsonElement("{\"mode\":\"forever\"}").jsonObject).available)
+        assertEquals(HandoffMode.UNREAD, HandoffMode.view(null).line)
+        assertEquals(HandoffMode.DEFAULT, HandoffMode.view(null).mode)
+    }
+
+    @Test
+    fun `the body carries one of the two names and nothing else`() {
+        assertEquals("{\"mode\":\"stop_early\"}", HandoffMode.body(HandoffMode.STOP_EARLY))
+        assertEquals("{\"mode\":\"keep_offering\"}", HandoffMode.body(HandoffMode.KEEP_OFFERING))
+        for (bad in listOf("", "on", "off", "patient", "stop", "STOP_EARLY")) {
+            assertNull(bad, HandoffMode.body(bad))
+        }
+    }
+
+    @Test
+    fun `under the default the screen shows the PC's line naming the stuck window`() {
+        // The PC's own two fixed sentences (`stuck_words`), and the same
+        // substitution the desktop does.
+        val s = obj("stuck_words")
+        assertEquals(s.keys, Handoff.STUCK.keys)
+        for ((key, words) in Handoff.STUCK) assertEquals(key, s[key]!!.jsonPrimitive.content, words)
+        val (title, text) = Handoff.stuckLine("Gemini", "captcha")
+        assertEquals("Gemini is waiting on this PC", title)
+        assertTrue(text, text.contains("stuck on"))
+        assertTrue(text, text.contains(Handoff.reasonWords("captcha")))
+        assertTrue(text, text.contains("browser window on this PC"))
+        // The real answer after a minute with nobody looking: the page is still
+        // waiting AND the PC says which window it is stuck on.
+        val offer = obj("mode_idle_offer")
+        val stuck = requireNotNull(Handoff.stuck(offer))
+        assertEquals(Handoff.stuckLine("Gemini", "captcha"), stuck)
+        assertEquals("idle", (offer["ended"] as JsonObject)["ho_0000000000000004"]!!.jsonPrimitive.content)
+        // Nothing stuck: no line (the offer in front of the owner, or an end
+        // that was not "Stop early").
+        assertNull(Handoff.stuck(obj("offer_captcha")))
+        assertNull(Handoff.stuck(null))
+        assertNull(Handoff.stuck(JarvisJson.parseToJsonElement("{\"stuck\":\"Gemini\"}").jsonObject))
+        // `patient` rides on the status answer, and an older PC simply sends none.
+        assertEquals(false, Handoff.patient(obj("mode_default_offer")))
+        assertEquals(false, Handoff.patient(null))
     }
 }

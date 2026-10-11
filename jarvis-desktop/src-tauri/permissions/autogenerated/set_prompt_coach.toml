@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-prompt-coach"
+description = "Enables the set_prompt_coach command without any pre-configured scope."
+commands.allow = ["set_prompt_coach"]
+
+[[permission]]
+identifier = "deny-set-prompt-coach"
+description = "Denies the set_prompt_coach command without any pre-configured scope."
+commands.deny = ["set_prompt_coach"]

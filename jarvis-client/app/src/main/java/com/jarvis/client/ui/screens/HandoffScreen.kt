@@ -84,6 +84,7 @@ fun HandoffScreen(
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val offer by JarvisRuntime.handoffOffer.collectAsState()
+    val stuck by JarvisRuntime.handoffStuck.collectAsState()
     val stale by JarvisRuntime.stale.collectAsState()
     var hid by remember { mutableStateOf(JarvisRuntime.handoffActive) }
     var picture by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -185,6 +186,19 @@ fun HandoffScreen(
                         color = chrome.textHi,
                         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
+                    // "Stop early" (the owner's setting of 2026-10-08): the PC's
+                    // own line naming the window it is stuck on, so the owner
+                    // knows exactly where to solve it on the PC. Always the PC's
+                    // own two sentences, never one this screen made up.
+                    stuck?.let { (title, text) ->
+                        Gap(8)
+                        Text(
+                            title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = chrome.textHi,
+                        )
+                        Text(text, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                    }
                     Gap(8)
                     Secondary("Back", onClick = onBack)
                 }

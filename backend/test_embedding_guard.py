@@ -22,8 +22,13 @@ sys.path.insert(0, str(HERE))
 # in the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, missing, explain, require_rebuilt
 
+# The ten modules this repository ships WHOLE (`backend/rebuilt/`) are put on
+# sys.path by _where.py. Without that they are nowhere in a clone, and this
+# import died as `ModuleNotFoundError: No module named 'jarvis_memory'` before
+# one check could run - which is what the guard below says in one line.
+require_rebuilt("jarvis_memory")
 import jarvis_memory as M
 
 FAILED, PASSED = [], []

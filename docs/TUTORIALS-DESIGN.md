@@ -317,3 +317,216 @@ Still open, and cheap to change later:
 * The FAQ answers above are written from how the app behaves today; anything
   that reads wrong is worth correcting before it is shipped as the app's own
   words.
+
+
+---
+
+# Interactive tutorials — design
+
+Status: **DESIGN + FIRST SLICE** (2026-10-10). Sections 1-4 below are the
+design; section 5 is what this change actually built, and what it did not.
+
+**This part of the note reverses one decision in the part above it.** The
+shipped design chose *"Step cards that explain and show... Not live
+click-along walkthroughs"* (line 41). That is what was built, and it is what
+the owner is now asking to move past: his words are *"make sure that there are
+effective, interactive tutorials... specific to each platform"*. The step card
+stays - it is the right frame - but a step gains the ability to point at the
+real control it is talking about. Nothing above is deleted; the record of what
+was decided and why still stands.
+
+This note adds to, and does not replace, `docs/ARCHITECTURE.md` §5 (the rules)
+and the tutorials API page in `docs/JARVIS-API.md` §114. The catalogue itself
+lives in `backend/jarvis_tutorials.py`.
+
+The owner's request, in his words: *"make sure that there are effective,
+interactive tutorials that are interactive on both the android app and desktop
+program, and that they are specific to each platform."*
+
+## 1. What exists today, and why it is not what he asked for
+
+There is already a lot, and it is already platform-split. What it is not is
+interactive.
+
+| Piece | Where | What it is |
+|---|---|---|
+| 23 tutorials | `backend/jarvis_tutorials.py` | Data: `{id, version, section, title, why, minutes, steps[]}`, each step `{title, body, where}` |
+| Sections | same file, `SECTIONS = ("pc", "phone", "both")` | 11 `pc`, 6 `phone`, 6 `both` |
+| Desktop screen | `jarvis-desktop/src/tutorials.js` | Brain panel: Next / Back / Skip / Leave it here |
+| Phone screen | `jarvis-client/.../ui/screens/TutorialsPlate.kt` | The same card, the same buttons |
+| Delivery | `backend/tutorials.patch` (19 lines) + `jarvis_tutorials.py` via `_where.SHIPPED` | The patch only wires the module into `jarvis_hud.py` |
+| Tests | `backend/test_tutorials.py` (13 cases), `jarvis-desktop/tests/tutorials.mjs`, `TutorialsTest.kt` (12), `tools/check_tutorial_places.py` | All of them check the *data* |
+
+So: **platform-specific already; interactive not at all.** Every step is a
+paragraph of prose plus a `where` line naming a screen. The note above says so
+in as many words at its line 41 — *"Not live click-along walkthroughs"*. The
+three suites named above prove the catalogue is well-formed, the progress
+round-trips and the labels match word for word; until this change, not one of
+them proved a tutorial ever met a real control.
+
+## 2. What "interactive" means here
+
+A tutorial step is **interactive** when all four are true:
+
+1. It names **one real control in the running app** — not a screen, not a
+   picture of a screen.
+2. It says what to do in **one line**, in the second person.
+3. The app notices when the owner has done it.
+4. It moves on by itself, or says plainly why it cannot.
+
+Anything short of that is a book with buttons, which is what ships today.
+
+Two things it must never do, because they are this project's rules and not
+style choices:
+
+* **It never acts on Jarvis's behalf.** Pointing at a control is not pressing
+  it. If a step could perform the action itself, it could approve, send or
+  spend — rule 4 and the gate exist to stop exactly that. A tutorial that
+  presses a button is a tutorial that can approve, and there will not be one.
+* **It never invents a control.** If the owner has already done the thing, or
+  the control is not on screen, the step says so and the owner can move on.
+  A Next button that only works after a scavenger hunt is worse than prose.
+
+**How a step declares this.** The catalogue grows one optional field on a step,
+`point`, holding one target per app — because the whole of this request is that
+the two apps teach different things:
+
+```python
+{"title": "Open the palette",
+ "body": "Press Ctrl+K, then type a few letters of what you want.",
+ "where": "Anywhere on the PC",
+ "point": {"desktop": "palette", "phone": None}},   # PC-only step
+```
+
+* `desktop` names a control in the **declared registry** in `tutorials.js`.
+  A registry, not a raw CSS selector, so the catalogue cannot name a `div` that
+  happens to exist and the check has something real to look in.
+* `phone` names a control in the **declared registry** in `Tutorials.kt`.
+* A step with `"phone": None` is **a step the phone never shows**. That is the
+  mechanism that stops a phone user being told to press a hotkey.
+
+The registry is the point. It is the one place that says "these are the
+controls a tutorial may point at, and here is how each app finds them", and it
+is the thing a test can be wrong about.
+
+## 3. What each platform teaches
+
+This is the heart of the request, and the two lists share almost nothing.
+
+**Desktop** — controls the phone does not have and never will:
+
+| Teaches | The real control |
+|---|---|
+| The prompt field and the palette | `#prompt`, `#palette` |
+| The approval card, and that the PC decides it | `#approval`, `#approval-approve` |
+| The talk button and "Hey Jarvis" | `#mic`, `#voice-auto` |
+| The HUD window and its talk button | `#talk` in `jarvis_hud.html` |
+| The faces | the Faces window |
+| Hotkeys: stop everything, talk-to-type, Live | Settings → Hotkeys |
+| Settings and the second card's switches | `settings.html` |
+
+**Phone** — controls the PC does not have:
+
+| Teaches | The real control |
+|---|---|
+| Pairing: the QR, then the short typed code | the pairing screen |
+| The talk button, tap-to-talk and stopping at a pause | Home |
+| Approval cards, decided by tapping or swiping | the card on Home |
+| Notifications, and urgent ones that keep ringing | Android's own shade |
+| Live: the Quick Settings tile, the headset button | the tile |
+| Which features are PC-only — and why | this is a *step*, not a control |
+
+**The failure to design against, in one line each:**
+
+* A phone step saying "press Ctrl+K" — there is no keyboard.
+* A desktop step saying "tap the card" — there is no touchscreen.
+* A phone step sending the owner to `Brain → What asks first` to *change*
+  something — the phone cannot loosen a rule; that is a PC job
+  (`docs/ARCHITECTURE.md` §5).
+* A shared step pretending to be interactive on both — it can be interactive
+  on neither.
+
+## 4. What it costs
+
+* **Content** — the expensive part, and it is writing, not code. Re-pointing
+  the 23 existing tutorials at controls is roughly 60-80 steps reviewed one at
+  a time, each needing a real control name in both registries. The `where`
+  lines already exist and most of them name the right screen, so this is
+  editing, not authoring from scratch.
+* **Desktop observation** — cheap and contained. `tutorials.js` is an ES module
+  in the **same document** as every control it points at: the Brain panel, the
+  Jarvis bar (`index.html`) and the HUD (`jarvis_hud.html`) are separate
+  windows with no iframes, so `document.querySelector` reaches the real thing.
+  Pointing is `scrollIntoView` plus one CSS class; noticing is a listener on
+  the named control. No Rust, no new Tauri command, no ACL work.
+* **Desktop screenshots** — the pictures the older note deferred. **Largely
+  unnecessary now.** A step that highlights the live control does not need a
+  picture of last month's version of it, and a stale picture is the thing that
+  makes a tutorial lie. Pictures stay for the things that are not on screen —
+  the tray menu, Android's notification shade.
+* **Phone observation** — **the real work.** `TutorialsPlate.kt` is inside the
+  Compose tree, so "watch the real control" means the tutorial holds a
+  `Modifier`/semantics key, or the screen observes `JarvisRuntime` state.
+  That is a genuine change to the phone's UI, it cannot be driven from here
+  (the attached phone belongs to another agent), and it is where the first
+  slice deliberately stops.
+* **A wrong registry is a silent lie** — the failure mode to test against. A
+  `point` naming a control that no longer exists must fail the suite, not the
+  owner. That is one new check per app, and both are cheap.
+
+**Reused, not rebuilt:** the catalogue, the three routes, the progress records,
+quit/resume, the version-bump re-offer, the label-parity test, the
+`where`-line checker, and the Brain panel and plate that already draw a step
+card. Nothing about interactivity needs a new screen on either app.
+
+## 5. The first slice, and its honest size
+
+What was built:
+
+1. `point` on a step, parsed and validated by the backend module, and passed to
+   both apps by `one()`.
+2. A **declared registry of real controls** on each app —
+   `CONTROL_POINTS` in `jarvis-desktop/src/tutorials.js`, and the same idea in
+   `jarvis-client/.../net/Tutorials.kt`.
+3. `Show me` on a step that has a `point`: the desktop highlights the real
+   control and scrolls it into view. **Pointing only** — it never presses
+   anything.
+4. Tests that fail if a `point` names a control the app does not declare, if a
+   step is `desktop`-pointed but reaches the phone, or if a PC-only step is
+   shown on the phone.
+5. The intro and the two platform tutorials re-pointed as the worked example.
+
+What was **not** built, and why:
+
+* **Watching for the owner to press the control, and advancing by itself.**
+  This is the part that makes it truly interactive and it is the part that
+  needs a decision: whether a tutorial may listen to every control it points
+  at, and what happens when the owner does something else first. See §6.
+* **The phone's pointing.** Cannot be driven or verified from here, and the
+  attached phone is another agent's. The phone declares its registry and is
+  checked against it; drawing the highlight is the next piece.
+
+## 6. The questions only the owner can answer
+
+1. **How long should one tutorial be?** Today each is 4-8 steps and about two
+   minutes. Interactive steps take longer than reading steps, because the owner
+   has to actually do the thing. Recommended: **keep 4-6 steps, and add a
+   "just read it" option** for when he only wants the tour.
+2. **When does it run?** Today the intro is *offered once* from the Brain list
+   and nothing else ever pops up. Recommended: **keep that** — offer the
+   platform tutorial once on first launch, never a modal, never twice.
+3. **Can it be replayed?** Yes today, through "Show this one again", and that
+   should not change.
+4. **May a tutorial act on Jarvis's behalf, or only point?** Recommended:
+   **only point, always**, for the reason in §2 — a tutorial that can press a
+   button can approve. This is the one answer that changes the design rather
+   than the content, so it is worth being explicit about.
+
+## 7. What would make this fail
+
+* A registry that drifts from the markup — fixed by the check in §5, which is
+  the whole reason `point` names a registry entry and not a selector.
+* Interactive steps that are interactive on one platform and prose on the
+  other, which is the drift the owner is complaining about in the first place.
+* A tutorial that highlights a control while the owner is mid-task. Pointing
+  must be something the owner asks for, never something that happens to him.

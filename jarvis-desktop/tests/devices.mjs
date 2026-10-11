@@ -5,8 +5,12 @@
  * What must hold:
  * - a PC whose backend has no pairing says so, and the old "Show the token
  *   for my phone" stays where it always was;
- * - the device list: This PC with no Remove, each phone with Remove, which
- *   asks the design's "are you sure?" first and removes ONE device;
+ * - the device list: This PC with no Remove, each phone with Name and
+ *   Remove, Remove asking the design's "are you sure?" first and removing
+ *   ONE device; naming a device (docs/MULTI-DEVICE-DESIGN.md, the first
+ *   slice) asking with a box that starts at the name it has now, sending
+ *   nothing on Cancel and nothing unchanged, and clearing it by leaving the
+ *   box empty;
  * - the old shared key's row in its three states, the warning naming the
  *   address that still uses it, Retire at once, Bring it back as a card;
  *   the old reveal moves under that row, renamed, and hides once retired;
@@ -14,8 +18,9 @@
  *   code, the countdown, the PC's own sentence for each state, the four
  *   words as given; the code leaves the page when the session ends;
  *   Cancel; the address remembered or found;
- * - rule 4: Pair a phone and Bring it back wait for a live link; Remove and
- *   Retire only take access away and never wait;
+ * - rule 4: Pair a phone and Bring it back wait for a live link; Remove,
+ *   Retire and naming a device only take access away (or change nothing at
+ *   all) and never wait;
  * - CONTROL (the Rust): settings window only; the window hidden from
  *   screen capture before the code is handed over; the QR text never
  *   handed over at all.
@@ -56,9 +61,10 @@ function list({ shared = {}, pairing = {}, extra = [] } = {}) {
   return {
     you: "pc",
     devices: [
-      { id: "pc", name: "This PC", kind: "pc", removable: false },
-      { id: "d3f9a1c2e", name: "Pixel 9", kind: "phone", created: 1790000000,
-        last_seen: NOW - 120, this_device: false, removable: true, approval_key: false },
+      { id: "pc", name: "This PC", shown: "This PC", label: null, kind: "pc", removable: false },
+      { id: "d3f9a1c2e", name: "Pixel 9", shown: "Pixel 9", label: null, kind: "phone",
+        created: 1790000000, last_seen: NOW - 120, this_device: false, removable: true,
+        approval_key: false },
       ...extra,
     ],
     shared: { retired: false, retired_at: null, last_other_seen: null,
@@ -173,7 +179,7 @@ await check("the list: This PC cannot be removed, a phone can, with its dates", 
   const page = await open({ devices: { list: list() } });
   await page.waitForTimeout(400);
   const rows = await page.locator("#dv-list li").allInnerTexts();
-  const removes = await page.locator("#dv-list li button").count();
+  const removes = await page.locator("#dv-list li button.dv-remove").count();
   const html = await page.content();
   await page.close();
   assert.equal(rows.length, 2);
@@ -240,11 +246,11 @@ await check("Remove asks the design's question first; No changes nothing, Yes re
   await page.waitForTimeout(400);
   const asked = [];
   page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
-  await page.locator("#dv-list li button").click();
+  await page.locator("#dv-list li button.dv-remove").click();
   await page.waitForTimeout(250);
   const none = await calls(page, "devices_remove");
   page.once("dialog", (d) => { asked.push(d.message()); d.accept(); });
-  await page.locator("#dv-list li button").click();
+  await page.locator("#dv-list li button.dv-remove").click();
   await page.waitForTimeout(400);
   const sent = await calls(page, "devices_remove");
   const rows = await page.locator("#dv-list li").count();
@@ -255,6 +261,93 @@ await check("Remove asks the design's question first; No changes nothing, Yes re
   assert.deepEqual(sent, [{ id: "d3f9a1c2e" }], "exactly one id, never a list");
   assert.equal(rows, 1);
   assert.equal(said, "Pixel 9 was removed.");
+});
+
+await check("naming a device: the box starts at what it is called now, and one label goes to the PC", async () => {
+  const page = await open({ devices: { list: list() } });
+  await page.waitForTimeout(400);
+  // This page's call log is per-page in the stub, but the earlier Remove test
+  // may have left entries behind; count only what THIS check does.
+  await page.evaluate(() => { window.__calls.length = 0; });
+  const button = await page.locator("#dv-list li button.dv-label").innerText();
+  const words = await import("../src/devices-words.js");
+  const prompts = [];
+  // Cancel sends nothing at all.
+  page.once("dialog", (d) => { prompts.push([d.type(), d.message(), d.defaultValue()]); d.dismiss(); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(250);
+  const cancelled = await calls(page, "devices_label");
+  // A label the owner typed.
+  page.once("dialog", (d) => { prompts.push([d.type(), d.message(), d.defaultValue()]); d.accept("Garden phone"); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page, "devices_label");
+  const said = await page.locator("#dv-status").innerText();
+  // Typing the same thing again sends nothing either.
+  page.once("dialog", (d) => { d.accept("Garden phone"); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(250);
+  const again = await calls(page, "devices_label");
+  const html = await page.content();
+  await page.close();
+  assert.equal(button, words.LABEL_BUTTON);
+  assert.equal(prompts[0][0], "prompt", "naming must ask with a box, not a confirm");
+  assert.equal(prompts[0][1], words.LABEL_PROMPT);
+  assert.equal(prompts[0][2], "", "a device with no label starts empty");
+  assert.deepEqual(cancelled, [], "Cancel still sent a label");
+  assert.deepEqual(sent, [{ id: "d3f9a1c2e", label: "Garden phone" }],
+    "one id and one label, never a whole list");
+  assert.equal(said, words.labelDone("Garden phone"));
+  assert.equal(again.length, 1, "an unchanged label was sent again");
+  assert.ok(!/jdk1\.|token_sha256/.test(html), "no key on the page");
+});
+
+await check("naming a device: the box opens at the label it already has, and clearing it goes back", async () => {
+  const extra = [{ id: "d3f9a1c2e", name: "Pixel 9", shown: "Garden phone", label: "Garden phone",
+                   kind: "phone", created: 1790000000, last_seen: NOW - 120,
+                   this_device: false, removable: true, approval_key: false }];
+  const page = await open({ devices: { list: { ...list(), devices: [
+    { id: "pc", name: "This PC", shown: "This PC", label: null, kind: "pc", removable: false },
+    ...extra,
+  ] } } });
+  await page.waitForTimeout(400);
+  const rows = await page.locator("#dv-list li").allInnerTexts();
+  const title = await page.locator("#dv-list li button.dv-label").getAttribute("title");
+  const source = await page.locator("#dv-list li").nth(1).getAttribute("data-dv-source");
+  const starts = [];
+  page.once("dialog", (d) => { starts.push(d.defaultValue()); d.accept(""); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page, "devices_label");
+  await page.close();
+  assert.match(rows[1], /Garden phone/, "the list shows the owner's own name");
+  assert.match(rows[1], /Pixel 9/, "and the name the phone gave itself is still there to go back to");
+  assert.equal(source, "Pixel 9");
+  assert.equal(title, "Currently called Garden phone");
+  assert.deepEqual(starts, ["Garden phone"], "the box must start at the name it has now");
+  assert.deepEqual(sent, [{ id: "d3f9a1c2e", label: "" }],
+    "clearing must send an empty label, which is how the PC goes back");
+});
+
+await check("naming a device: a refusal is the PC's own sentence, and no page error", async () => {
+  const page = await open({ devices: { list: list() } });
+  await page.waitForTimeout(400);
+  // The Rust command refuses this before it ever reaches the PC; the page only
+  // ever shows what it is handed.
+  await page.evaluate(() => {
+    const real = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = (name, args) => (name === "devices_label"
+      ? Promise.reject(new Error("Use a shorter label, with letters, numbers, spaces and - _ . ' ( ) only. Leave it empty to go back to the name the device gave itself."))
+      : real(name, args));
+  });
+  page.once("dialog", (d) => d.accept("A".repeat(80)));
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#dv-status").innerText();
+  const errors = page.__errors;
+  await page.close();
+  assert.match(said, /Use a shorter label/);
+  assert.deepEqual(errors || [], [], "a refusal is words, never a page error");
 });
 
 await check("the old key: used elsewhere lately - named, Retire asks, then it is retired", async () => {
@@ -320,12 +413,14 @@ await check("rule 4: on a stale link Pair and Bring it back wait; Remove and Ret
   const pair = await page.locator("#dv-pair").isEnabled();
   const why = await page.locator("#dv-pair-why").innerText();
   const back = await page.locator("#dv-bring-back").isEnabled();
-  const remove = await page.locator("#dv-list li button").isEnabled();
+  const remove = await page.locator("#dv-list li button.dv-remove").isEnabled();
+  const label = await page.locator("#dv-list li button.dv-label").isEnabled();
   await page.close();
   assert.ok(!pair, "Pair a phone offered on a stale link");
   assert.match(why, /catching up/);
   assert.ok(!back, "Bring it back offered on a stale link");
   assert.ok(remove, "Remove held on a stale link - it only takes access away");
+  assert.ok(label, "Naming a device held on a stale link - it grants and revokes nothing");
   const page2 = await open({ link: { stale: true }, devices: { list: list() } });
   await page2.waitForTimeout(400);
   const retire = await page2.locator("#dv-retire").isEnabled();
@@ -475,6 +570,60 @@ await check("a devices event from the other app re-reads the list", async () => 
   assert.equal(after, before + 1);
 });
 
+await check("CONTROL: the 2-second pairing poll is gone - the event and an ageing wait carry the page", async () => {
+  // The 2026-10-08 cohesion audit, finding 1: `POLL_MS = 2000` in a flat
+  // `setInterval` for the whole life of a pairing, against the 15-20 s the
+  // rest of the app polls at. The LIST is not polled either way - the check
+  // above proves the event is what re-reads it - so what is pinned here is the
+  // cadence decision itself, in `devices-pair-poll.js`.
+  const { POLL_MS_COOL, POLL_MS_HOT, HOT_WINDOW_MS, pairWaitMs } =
+    await import("../src/devices-pair-poll.js");
+  assert.equal(POLL_MS_HOT, 2000, "the QR moment keeps the old fast read");
+  assert.equal(POLL_MS_COOL, 15000, "after it, the cadence brain.js polls its own panels at");
+  assert.equal(HOT_WINDOW_MS, 60000);
+  const t0 = 1_700_000_000_000;
+  assert.equal(pairWaitMs(t0, t0 + 1000), 2000, "the first minute stays fast");
+  assert.equal(pairWaitMs(t0, t0 + 60000), 15000, "and then it backs off");
+  assert.equal(pairWaitMs(t0, t0 + 600000), 15000, "for the rest of the code's life");
+  assert.equal(pairWaitMs(0, t0), 2000, "a session we just learned about is not made to wait");
+
+  const src = read("src/devices.js");
+  assert.ok(!/setInterval\(poll, POLL_MS\)/.test(src), "the flat 2 s poll is back");
+  assert.ok(!/\bPOLL_MS\b\s*=\s*2000/.test(src), "the old POLL_MS constant is back");
+  assert.match(src, /pairWaitMs\(codeShownAt/, "the wait must come from the session's age");
+  assert.match(src, /onEvent\(\(frame\) => \{[\s\S]{0,80}loadList\(\)/,
+    "the devices event must still re-read the list");
+});
+
+await check("the pairing poll really does read 30 times in the first minute, then 4", async () => {
+  // Measured, not assumed: two minutes of stepped time with a code on screen.
+  // Before this change it was 30 and 30 (tests/timers.mjs reports the same
+  // numbers for the two source sets).
+  const page = await open({ devices: {
+    list: list(), address: { address: "jarvis-pc.tail1234.ts.net", source: "tailscale" },
+    start: START,
+    sessions: [{ state: "waiting_for_phone", expires_in: 2900, tries_left: 3, device_name: null,
+                 words: null, wrong_tries_from: [], message: "Waiting for your phone..." }],
+  } });
+  await page.clock.install();
+  await page.waitForTimeout(400);
+  await page.locator("#dv-pair").click();
+  await page.waitForTimeout(300);
+  const reads = () => calls(page, "pair_session").then((c) => c.length);
+  await page.clock.pauseAt(new Date(await page.evaluate(() => Date.now() + 500)));
+  const first0 = await reads();
+  for (let i = 0; i < 60; i++) { await page.clock.runFor(1000); await page.waitForTimeout(1); }
+  const first1 = await reads();
+  for (let i = 0; i < 60; i++) { await page.clock.runFor(1000); await page.waitForTimeout(1); }
+  const second1 = await reads();
+  await page.close();
+  const first = first1 - first0;
+  const second = second1 - first1;
+  assert.ok(first >= 25 && first <= 32, `the first minute read ${first} times`);
+  assert.ok(second <= 6, `the second minute read ${second} times`);
+  assert.ok(second < first / 3, `the cadence did not back off: ${first} then ${second}`);
+});
+
 await check("a reloaded window with a pairing open shows its state, never its code", async () => {
   const page = await open({ devices: {
     list: list(), openAtLoad: true,
@@ -516,15 +665,54 @@ await check("CONTROL: the Devices commands are in the settings window's set only
 });
 
 await check("CONTROL: the window is hidden from capture BEFORE the code is handed over", async () => {
+  // The guard is toggled - on as the code is handed over, off when the session
+  // ends or Cancel is pressed (PAIRING-DESIGN 7.1, "put back when the panel
+  // closes"). It must NOT go through Tauri's `set_content_protected`: on Windows
+  // that reaches `SetWindowDisplayAffinity`, which tao applies by RECREATING the
+  // window, and that is what closed Settings the moment pairing succeeded (the
+  // owner's report, 2026-10-07). devices.rs calls the Win32 function directly,
+  // which sets an attribute on the window this app already owns and rebuilds
+  // nothing.
   const start = fnBody(RUST, "pair_start");
   const guard = start.indexOf("guard_capture(&app, true)");
   const answer = start.indexOf('"code": started.code');
   assert.ok(guard > 0 && answer > guard, "guard_capture(true) must come before the answer");
-  assert.ok(!/"qr"\s*:/.test(start), "the QR text must never be in the answer");
-  assert.match(start, /if stale\(&app\)/, "starting a pairing is held on a stale link");
   assert.match(fnBody(RUST, "pair_cancel"), /guard_capture\(&app, false\)/);
   assert.match(fnBody(RUST, "pair_session"), /guard_capture\(&app, false\)/);
-  assert.match(RUST, /set_content_protected\(on\)/);
+  // The guard itself: it must defer to the lock's own rule and go through the
+  // ONE shared Win32 helper. Since 2026-10-11 that call lives in
+  // `lock::set_affinity`, because the same attribute keeps every window out of
+  // a capture while App lock is on (the owner's decision;
+  // `tests/lock-capture.mjs` holds that half). `devices.rs` must NOT keep a
+  // second copy - two copies are two things to keep in step, and this one's
+  // "off" would clear a block the lock still wanted. The guard's own body is
+  // taken by plain search, because `fnBody` above only finds `pub async fn`.
+  assert.match(read("src-tauri/src/lock.rs"), /SetWindowDisplayAffinity/);
+  const gAt = RUST.indexOf("fn guard_capture(");
+  assert.ok(gAt >= 0, "guard_capture must still exist");
+  const guardBody = RUST.slice(gAt, gAt + 400);
+  assert.match(guardBody, /crate::lock::capture_blocked/,
+    "the guard must defer to the lock's own rule");
+  assert.match(guardBody, /crate::lock::set_affinity/,
+    "the guard no longer goes through the one Win32 call");
+  // The call's own bracket, so the comment above - which NAMES the function to
+  // explain where it went - is not mistaken for a second copy of it.
+  assert.ok(!/SetWindowDisplayAffinity\s*\(/.test(RUST),
+    "a second copy of the Win32 capture call came back to devices.rs");
+  // ...and never the call that rebuilt - and so closed - the window. The
+  // pattern needs the call's own bracket, so the comments above that explain
+  // why this call is not used do not satisfy the check.
+  assert.ok(!/set_content_protected\s*\(/.test(RUST), "the recreating call must not come back");
+  // And the window is not built with a permanent guard either: the owner chose
+  // the toggle, on condition it cannot close the window.
+  const WINDOWS = read("src-tauri/src/windows.rs");
+  assert.ok(!/\.content_protected\s*\(/.test(WINDOWS),
+    "the settings window must not carry a permanent capture guard");
+  assert.ok(!/"qr"\s*:/.test(start), "the QR text must never be in the answer");
+  assert.match(start, /if stale\(&app\)/, "starting a pairing is held on a stale link");
+  // Still true, and now the only mechanism: the answer carries the drawn
+  // picture, never the text the QR was drawn from.
+  assert.match(start, /"qr_svg": picture/);
 });
 
 await check("CONTROL: only a loosening waits for a live link", async () => {

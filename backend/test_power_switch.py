@@ -20,10 +20,13 @@ repository (backend/rebuilt/) unless the backend has its own. Pinned:
    standby meanwhile. The answer comes when the mode has changed, not
    after every card is freed.
 """
+import json
 import sys
 import tempfile
+import threading
 import traceback
 import types
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -104,6 +107,73 @@ class FakeOllama:
 
 # No test here may reach a real Ollama: the default is an empty fake.
 S.everyday_ollama = lambda: FakeOllama()
+
+
+class FakeLane:
+    """A tiny stand-in for the lane's own Ollama over real HTTP.
+
+    The class fake above answers ps()/load()/unload(); only a real socket can
+    show what a load would put ON THE WIRE, and that is the thing the 2026-10-10
+    incident was: a `POST /api/generate` that named no `options.num_ctx` loaded
+    a model that was not already loaded at Ollama's own default - 2,048 on the
+    owner's PC - instead of the lane's `OLLAMA_CONTEXT_LENGTH` (196,608 on the
+    everyday lane), silently shrinking the conversation window 96x.
+
+    `loaded` is what GET /api/ps reports: {model name: context_length or None}.
+    `modelfile` is the `parameters` text POST /api/show answers with. Every
+    recorded POST is kept in `posts` as (path, parsed body).
+    """
+
+    def __init__(self, loaded=None, modelfile=""):
+        self.loaded = dict(loaded or {})
+        self.modelfile = modelfile
+        self.posts: list = []
+        self.lock = threading.Lock()
+        lane = self
+
+        class H(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _json(self, obj):
+                data = json.dumps(obj).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                if self.path == "/api/ps":
+                    return self._json({"models": [
+                        {"name": n, "model": n, "context_length": c}
+                        for n, c in lane.loaded.items()]})
+                self.send_error(404)
+
+            def do_POST(self):
+                raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+                body = json.loads(raw or b"{}")
+                with lane.lock:
+                    lane.posts.append((self.path, body))
+                if self.path == "/api/generate" and "keep_alive" not in body:
+                    # A real load puts the model in /api/ps, at the context the
+                    # request named - which is the whole point of this fake.
+                    lane.loaded[body.get("model")] = (body.get("options") or {}).get("num_ctx")
+                return self._json({"done": True, "response": "",
+                                   "parameters": lane.modelfile})
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        self.server.daemon_threads = True
+        self.url = f"http://127.0.0.1:{self.server.server_address[1]}"
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def bodies(self, path="/api/generate"):
+        with self.lock:
+            return [b for p, b in self.posts if p == path]
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
 
 
 def check(name, cond, detail=""):
@@ -487,6 +557,92 @@ def t_why_is_the_callers_own():
     check("a tap in an app is still 'the owner, from ...'",
           P.status()["why"] == "the owner, from phone", P.status())
     reset()
+
+
+def t_a_preload_names_the_lane_s_own_context():
+    """The preload must carry `options.num_ctx`. Revert that and this fails:
+    `{"model": name}` alone is the request that reloaded the owner's everyday
+    lane at 2,048."""
+    lane = FakeLane(loaded={"jarvis-primary:latest": 196608})
+    try:
+        got = S.EverydayOllama(lane.url).load("jarvis-primary")
+        body = lane.bodies()
+        check("a preload names the context the model is loaded at now (196608)",
+              got == 196608 and len(body) == 1
+              and (body[0].get("options") or {}).get("num_ctx") == 196608, (got, body))
+        check("... so the request is never a bare {\"model\": name}",
+              bool(body) and "options" in body[0], body)
+        check("keep_alive is still left to Ollama's own setting",
+              bool(body) and "keep_alive" not in body[0], body)
+        check("nothing else is added - no prompt, no stream, no keep_alive",
+              bool(body) and set(body[0]) == {"model", "options"}, body)
+        check("... and the model name is unchanged", body and body[0]["model"] == "jarvis-primary", body)
+    finally:
+        lane.close()
+
+
+def t_a_preload_after_standby_keeps_the_size_it_had():
+    """The 00:51:30 load in the lane's own llama log: standby had unloaded the
+    model at 00:45:52, so /api/ps was empty when the preload on waking went
+    out - and it reloaded the model at `-c 2048`. What the lane was last SEEN
+    at is what keeps the size."""
+    lane = FakeLane(loaded={"qwen3.5:9b": 196608})
+    try:
+        o = S.EverydayOllama(lane.url)
+        check("the lane is seen with its model loaded", o.ps() == ["qwen3.5:9b"], o.ps())
+        lane.loaded.clear()                                   # standby unloaded it
+        got = o.load("qwen3.5:9b")
+        body = lane.bodies()
+        check("the preload after standby keeps the context the lane had (196608), "
+              "not Ollama's own 2,048 default",
+              got == 196608 and (body[-1].get("options") or {}).get("num_ctx") == 196608,
+              (got, body))
+        check("and it is found by the bare name too (qwen3.5:9b / :latest are one model)",
+              S.last_seen_context(lane.url, "qwen3.5:9b") == 196608
+              and S.last_seen_context(lane.url, "qwen3.5:9b:latest") == 196608,
+              S.last_seen_context(lane.url, "qwen3.5:9b:latest"))
+    finally:
+        lane.close()
+
+
+def t_a_lane_never_seen_loaded_uses_the_models_own_num_ctx():
+    lane = FakeLane(loaded={}, modelfile="num_ctx                        16384\ntemperature 0.6")
+    try:
+        got = S.EverydayOllama(lane.url).load("jarvis-primary")
+        check("with nothing loaded, the model's own Modelfile num_ctx is named",
+              got == 16384
+              and (lane.bodies()[-1].get("options") or {}).get("num_ctx") == 16384,
+              (got, lane.bodies()))
+    finally:
+        lane.close()
+
+
+def t_no_context_known_means_no_preload_at_all():
+    """A tag with no Modelfile num_ctx, on a lane this process has never seen
+    loaded: sending the preload anyway IS the bug. Nothing goes out, and the
+    first real question loads the model at the lane's own setting instead."""
+    reset()
+    lane = FakeLane(loaded={}, modelfile="stop                           <|endoftext|>")
+    try:
+        o = S.EverydayOllama(lane.url)
+        raised = False
+        try:
+            o.load("qwen3.5:9b")
+        except S.NoKnownContext:
+            raised = True
+        check("nothing can say which context the lane is set to: the preload is refused",
+              raised, "load() sent something")
+        check("... and NOTHING went to /api/generate (no context-blind load)",
+              lane.bodies() == [], lane.bodies())
+        st = S.warm_up(P, o, "qwen3.5:9b")
+        check("the wake-up says the preload was skipped, and why",
+              st["state"] == "skipped" and "no one could say which context" in st["why"], st)
+        check("... and it still sends nothing", lane.bodies() == [], lane.bodies())
+        check("... and it is not reported as a failure",
+              st["state"] != "failed" and "load it instead" not in st["why"], st)
+    finally:
+        lane.close()
+        reset()
 
 
 def t_the_patch():

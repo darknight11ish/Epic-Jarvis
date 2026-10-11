@@ -170,8 +170,106 @@ export function userMessage(content, provenance) {
    ========================================================================== */
 
 /** A new conversation starts after this long with nothing said. The old one
- *  stays in History, and "Continue this chat" brings it back. */
+ *  stays in History, and "Continue this chat" brings it back. This is the
+ *  DEFAULT and stays the default: it is what a missing or unreadable stored
+ *  choice reads as ([storedIdleNewMs]), never "never". */
 export const IDLE_NEW_MS = 30 * 60 * 1000;
+
+/* --------------------------------------------------------------------------
+   "A new conversation after ..." (the owner's setting): the ONE timing the
+   audit of 2026-10-08 found the owner could not change anywhere. It was this
+   constant and nothing else, in each client - so the choice lives in each
+   app's own settings, and nothing about it reaches the PC (no route, no
+   card). The owner's decision of 2026-09-28 is unchanged: 30 quiet minutes
+   is the default, the old conversation stays in History, and Continue brings
+   it back. "never" changes only WHEN a conversation ends - it does not stop
+   the owner's own "New conversation" from ending one.
+   -------------------------------------------------------------------------- */
+
+/** The row's own words, on both apps (settings.html's card, the phone's
+ *  Settings row): what the choice does, and what "Never" means. */
+export const IDLE_NEW_TITLE = "A new conversation starts after";
+export const IDLE_NEW_DETAIL =
+  "The next message starts a new conversation after this long with nothing said. " +
+  "The old one stays in History, and Continue brings it back.";
+/** What a choice of "Never" means, said plainly - it is the Never row's own
+ *  line too, so the sentence has one source. */
+export const IDLE_NEW_NEVER = "A conversation then only ends when you start a new one.";
+export const IDLE_NEW_TAIL = "Saved on this app. Your phone keeps its own choice of the same five.";
+
+/** The five choices, in the order the row offers them. `ms` is what
+ *  `idleExpired` compares against; "never" is `Infinity`, so no amount of
+ *  quiet ever starts a new conversation. The phone offers the same five
+ *  (ChatHistory.kt's IDLE_NEW_CHOICES), with the same ids and numbers. */
+export const IDLE_NEW_CHOICES = Object.freeze([
+  Object.freeze({
+    id: "30m", ms: IDLE_NEW_MS, label: "30 minutes (default)", wait: "30 quiet minutes",
+    why: "What Jarvis has always done. The same words in both apps.",
+  }),
+  Object.freeze({
+    id: "10m", ms: 10 * 60 * 1000, label: "10 minutes", wait: "10 quiet minutes",
+    why: "A fresh conversation sooner, after a short break.",
+  }),
+  Object.freeze({
+    id: "1h", ms: 60 * 60 * 1000, label: "1 hour", wait: "1 quiet hour",
+    why: "Carry on through an hour of quiet before a new conversation starts.",
+  }),
+  Object.freeze({
+    id: "4h", ms: 4 * 60 * 60 * 1000, label: "4 hours", wait: "4 quiet hours",
+    why: "Most of a working day between messages still counts as one chat.",
+  }),
+  Object.freeze({
+    id: "never", ms: Infinity, label: "Never", wait: "no quiet at all",
+    why: IDLE_NEW_NEVER,
+  }),
+]);
+
+/** The choice a missing or unreadable stored value reads as. */
+export const IDLE_NEW_DEFAULT = "30m";
+
+/** Where this PC keeps the choice. Per device: the phone keeps its own. */
+export const IDLE_NEW_KEY = "jarvis.chat.idleNew";
+
+/** `id` when it really is one of the five, else the default - so a value from
+ *  a newer build, an empty string or `null` can never select "never". */
+export function idleNewChoice(id) {
+  return IDLE_NEW_CHOICES.some((c) => c.id === id) ? id : IDLE_NEW_DEFAULT;
+}
+
+/** The threshold for a choice: `IDLE_NEW_MS` for anything that is not one of
+ *  the five. Never "never" by accident. */
+export function idleNewMsFor(id) {
+  const found = IDLE_NEW_CHOICES.find((c) => c.id === id);
+  return found ? found.ms : IDLE_NEW_MS;
+}
+
+/** The choice saved on this PC, or the default. A storage that cannot be read
+ *  (or holds something this build does not know) reads as 30 minutes. */
+export function storedIdleNewChoice(storage = globalThis.localStorage) {
+  try {
+    return idleNewChoice(storage.getItem(IDLE_NEW_KEY));
+  } catch {
+    return IDLE_NEW_DEFAULT;
+  }
+}
+
+/** The threshold the Jarvis bar compares against - the stored choice, or the
+ *  30-minute default. */
+export function storedIdleNewMs(storage = globalThis.localStorage) {
+  return idleNewMsFor(storedIdleNewChoice(storage));
+}
+
+/** Saves `id` (anything unknown becomes the default) and answers with what was
+ *  really saved. A storage that cannot be written leaves the default standing. */
+export function saveIdleNewChoice(id, storage = globalThis.localStorage) {
+  const choice = idleNewChoice(id);
+  try {
+    storage.setItem(IDLE_NEW_KEY, choice);
+  } catch {
+    /* no storage: this visit keeps the choice in memory, the default stands next time */
+  }
+  return choice;
+}
 
 /** Said, quietly, when it happens. */
 export const IDLE_NEW_LINE =
@@ -182,6 +280,17 @@ export const IDLE_NEW_LINE_TEMPORARY = "It's been a while, so this is a new conv
 /** The button beside the line above: the chat that just ended, back. */
 export const CARRY_ON_LAST = "Carry on the last chat";
 export const CARRY_ON_LAST_TITLE = "Carry on the conversation that ended after 30 quiet minutes.";
+/** The tooltip above, in whatever wait the owner chose: the same sentence for
+ *  the 30-minute default, and one that says the real wait for the others.
+ *  "Never" ends a chat only when the owner starts a new one, so it says that
+ *  instead of naming a wait. */
+export function carryOnLastTitle(thresholdMs = IDLE_NEW_MS) {
+  if (thresholdMs === IDLE_NEW_MS) return CARRY_ON_LAST_TITLE;
+  const c = IDLE_NEW_CHOICES.find((x) => x.ms === thresholdMs);
+  if (!c) return CARRY_ON_LAST_TITLE;
+  if (!Number.isFinite(c.ms)) return "Carry on the last conversation. It ends only when you start a new one.";
+  return `Carry on the conversation that ended after ${c.wait}.`;
+}
 
 /* The Jarvis bar's words for the chat it is in - the phone's Home says the
    same (tools/gen_history_cases.py). */
@@ -327,10 +436,17 @@ export function takeChatsGone(storage = globalThis.localStorage, freshMs = 60_00
 }
 
 /** Whether the next question starts a new conversation: there is one going,
- *  and nothing was said in it for IDLE_NEW_MS. */
-export function idleExpired(lastAtMs, nowMs, hasConversation) {
+ *  and nothing was said in it for `thresholdMs` - the owner's own choice from
+ *  Settings ("A new conversation after ..."), or `IDLE_NEW_MS` (30 minutes)
+ *  when nothing is passed. `Infinity` ("never") is a real threshold and never
+ *  expires; anything that is not a number at all falls back to the default.
+ *  A `lastAtMs` that is not a real time still never expires. */
+export function idleExpired(lastAtMs, nowMs, hasConversation, thresholdMs = IDLE_NEW_MS) {
+  const limit = typeof thresholdMs === "number" && !Number.isNaN(thresholdMs) && thresholdMs >= 0
+    ? thresholdMs
+    : IDLE_NEW_MS;
   return Boolean(hasConversation) && Number.isFinite(lastAtMs) && lastAtMs > 0
-    && nowMs - lastAtMs >= IDLE_NEW_MS;
+    && nowMs - lastAtMs >= limit;
 }
 
 const SIDE_TALK_SHOWN = "(not for Jarvis)";

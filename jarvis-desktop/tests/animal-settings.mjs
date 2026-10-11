@@ -107,6 +107,7 @@ if (!K) {
         stillInAppearance: !!document.querySelector("#appearance-card #face-still, #appearance-card [data-animal]"),
         jump: !!document.querySelector('#settings-jump a[href="#animal-options"]'),
         summary: document.querySelector("#face-tuning > summary").textContent,
+        tuningOpen: document.getElementById("face-tuning").open,
         shared: document.getElementById("animal-shared-note").textContent,
         serious: document.getElementById("animal-serious-note").textContent,
         sharpLabel: document.getElementById("face-quality-label").textContent,
@@ -126,6 +127,12 @@ if (!K) {
     assert.ok(!inside.stillInAppearance, "Still is still in Appearance as well");
     assert.ok(inside.jump, "the jump list does not name the section");
     assert.match(inside.summary, /on this computer/);
+    // The current value is readable with the fold CLOSED (2026-10-08): the
+    // summary carries it, and a computer that has never been set shows the
+    // default (FACE_TUNING_DEFAULT: Auto adjust on) before anything is opened.
+    assert.equal(inside.tuningOpen, false,
+      "the fold starts open, so the summary was not proved readable while closed");
+    assert.match(inside.summary, /Now: Auto adjust is choosing\./);
     assert.equal(inside.sharpLabel, "Sharpness");
     assert.equal(inside.shared, FIX.view.shared_note);
     assert.equal(inside.serious, FIX.view.serious_note);
@@ -201,7 +208,14 @@ if (!K) {
     await settings.waitForFunction(() =>
       document.querySelector('#face-quality button[data-value="max"]').getAttribute("aria-pressed") === "true",
     null, { timeout: 5000 });
+    // ...and the fold's own summary line follows it, still closed (2026-10-08).
+    const nowLine = await settings.evaluate(() => ({
+      text: document.querySelector("#face-tuning > summary").textContent,
+      open: document.getElementById("face-tuning").open,
+    }));
     await settings.close();
+    assert.equal(nowLine.open, false, "the fold was opened to read the value");
+    assert.match(nowLine.text, /Now: Maximum, frame rate Auto\./);
 
     const odd = await K.open(browser, base, "index.html", {
       chatReplies: [[route({ lane: "x", where: "local", face_tuning: "rm -rf" }), "x"]],

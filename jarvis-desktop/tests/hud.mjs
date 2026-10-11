@@ -32,6 +32,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, normalize } from "node:path";
 import * as K from "./uikit.mjs";
+import { OPEN_BAR_KEY } from "../src/hud-window.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
@@ -152,6 +153,11 @@ async function openHud(browser, status, pageOptions = {}) {
             return null;
           }
           case "hud_chat_cancel": return null;
+          // The same command the bar's own Escape uses (commands.rs
+          // `hide_quickbar`): the HUD's button hides the bar when it is up
+          // (the owner's ask of 2026-10-09). Granted in surfaces.toml's
+          // `hud-voice` set; this stand-in refuses anything not granted.
+          case "hide_quickbar": return null;
           case "mark_answer": {
             const r = await origFetch(backend + "/api/feedback/mark", { method: "POST",
               headers: { ...shellHeaders, "Content-Type": "application/json" },
@@ -196,7 +202,16 @@ async function openHud(browser, status, pageOptions = {}) {
     if (url.origin === BACKEND) {
       if (req.method() === "OPTIONS") return route.fulfill({ status: 204, headers: cors });
       if ((await req.allHeaders())["x-jarvis-token"] !== "test-token") direct.push(`${req.method()} ${url.pathname}`);
-      if (url.pathname === "/api/status") return route.fulfill({ status: 200, headers: cors, json: status });
+      // `statusFails` is read at request time, not captured, so a check can
+      // start the window with Jarvis unreachable and then bring it up (the
+      // demo-mode check below). `abort` is what makes the page's read THROW,
+      // which is the only way it reaches its own "demo · not connected"
+      // fallback: a 503 with a body is taken as a status object instead.
+      if (url.pathname === "/api/status") {
+        return status.statusFails
+          ? route.abort("failed")
+          : route.fulfill({ status: 200, headers: cors, json: status });
+      }
       if (url.pathname === "/api/chat") {
         chats.push(JSON.parse(req.postData() || "{}"));
         // A case from chat-stream-cases.json: the body AND Content-Type the
@@ -287,8 +302,9 @@ await check("the HUD's main script runs under Tauri's header CSP", async () => {
 // 2026-09-28 "the PC has one chat box"): with the shell, the box and Send are
 // shown and usable - its turns are its own conversation, filed in History as
 // HUD - and the button beside them still opens the Jarvis bar, which sends
-// nothing itself.
-await check("with the shell, the HUD's own chat box is usable, and the button still opens the Jarvis bar", async () => {
+// nothing itself. Its label follows what is on screen (the owner's ask of
+// 2026-10-09), and clicking it again hides the bar.
+await check("with the shell, the HUD's own chat box is usable, and the button opens and hides the bar", async () => {
   const { page, problems, chats } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   const composed = await page.evaluate(() => ({
     inputHidden: document.getElementById("input").hidden,
@@ -296,6 +312,7 @@ await check("with the shell, the HUD's own chat box is usable, and the button st
     inputTabIndex: document.getElementById("input").tabIndex,
     sendTabIndex: document.getElementById("send").tabIndex,
     button: document.getElementById("hud-open-bar")?.textContent || "",
+    title: document.getElementById("hud-open-bar")?.title || "",
   }));
   // Shown, not merely present: Playwright's own visibility test, which is
   // false for display:none, visibility:hidden and a zero box.
@@ -312,23 +329,52 @@ await check("with the shell, the HUD's own chat box is usable, and the button st
     value: document.getElementById("input").value,
     said: [...document.querySelectorAll("#log > *")].map((el) => el.querySelector(".body")?.textContent),
   }));
+  // The page's own polling and reads are interleaved with these, so only the
+  // bar's own two commands are compared.
+  const barCalls = (list) => list.filter((c) => c === "hud_open_bar" || c === "hide_quickbar");
   // The button beside it opens the Jarvis bar, and still sends nothing.
   await page.click("#hud-open-bar");
   await page.waitForTimeout(200);
   const invoked = await page.evaluate(() => window.__invokes.map((c) => c[0]));
+  // The shell says the bar is up, exactly as windows.rs pushes it after a
+  // show: the label must follow, and the tooltip with it.
+  await page.evaluate(() => window.__jarvisFeed("bar", true));
+  const whileOpen = await page.evaluate(() => ({
+    label: document.getElementById("hud-open-bar").textContent,
+    title: document.getElementById("hud-open-bar").title,
+  }));
+  // Clicking the same button again hides the bar, and the shell saying it has
+  // gone puts the label back.
+  await page.click("#hud-open-bar");
+  await page.waitForTimeout(200);
+  const afterHide = await page.evaluate(() => window.__invokes.map((c) => c[0]));
+  await page.evaluate(() => window.__jarvisFeed("bar", false));
+  const afterClose = await page.evaluate(() => ({
+    label: document.getElementById("hud-open-bar").textContent,
+    title: document.getElementById("hud-open-bar").title,
+  }));
   await page.close();
 
+  // THE OWNER'S ASK FIRST (2026-10-09, with a screenshot): the label follows
+  // the bar, in both directions, and never contradicts itself.
+  assert.deepEqual(whileOpen, { label: "Hide the Jarvis bar", title: "Hide the Jarvis bar" },
+    "the label did not follow the bar being open");
+  assert.deepEqual(afterClose, { label: "Open the Jarvis bar", title: "Open the Jarvis bar" },
+    "the label did not come back when the bar closed");
+  // And it is ONE button that toggles: the second click is a hide.
+  assert.deepEqual(barCalls(invoked), ["hud_open_bar"], JSON.stringify(barCalls(invoked)));
+  assert.deepEqual(barCalls(afterHide), ["hud_open_bar", "hide_quickbar"], JSON.stringify(barCalls(afterHide)));
   assert.equal(composed.inputHidden, false, "the HUD's own box is hidden again");
   assert.equal(composed.sendHidden, false, "the HUD's Send is hidden again");
   assert.equal(composed.inputTabIndex, 0, "the box is out of the tab order");
   assert.equal(composed.sendTabIndex, 0, "Send is out of the tab order");
   assert.deepEqual(visible, { input: true, send: true, button: true }, "a control is not shown");
   assert.equal(composed.button, "Open the Jarvis bar");
+  assert.equal(composed.title, composed.button, "the tooltip and the label disagree");
   assert.ok(chats.length >= 1, "typing in the HUD's own box never reached /api/chat");
   assert.equal(chats.at(-1).messages.at(-1).content, "typed in the HUD");
   assert.equal(afterTyping.value, "", "the box was not cleared after sending");
   assert.ok(afterTyping.said.includes("typed in the HUD"), JSON.stringify(afterTyping.said));
-  assert.ok(invoked.includes("hud_open_bar"), JSON.stringify(invoked));
   assert.deepEqual(problems, []);
 });
 
@@ -340,6 +386,63 @@ await check("in a plain browser (no shell) the HUD keeps its own box", async () 
   }));
   await page.close();
   assert.deepEqual(shown, { input: false, button: false });
+});
+
+// The button has a switch of its own (the owner's request of 2026-10-06,
+// "The big HUD window" in Settings, src/hud-window.js): ON by default, and
+// OFF takes the button out of this window without touching the box, its Send
+// or the mic. tests/hud-window.mjs runs the injected bootstrap itself in a
+// hand-made DOM, because Playwright is not installed everywhere; this is the
+// same setting driven through the REAL page, where it is available.
+await check("the button's own setting: on by default, and off takes only the button away", async () => {
+  const { page, problems, chats } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const stored = () => page.evaluate((key) => {
+    try { return localStorage.getItem(key); } catch (e) { return "unreadable"; }
+  }, OPEN_BAR_KEY);
+  const state = () => page.evaluate(() => ({
+    button: Boolean(document.getElementById("hud-open-bar")),
+    inputHidden: document.getElementById("input").hidden,
+    sendHidden: document.getElementById("send").hidden,
+    inputTabIndex: document.getElementById("input").tabIndex,
+    mic: Boolean(document.getElementById("mic")),
+  }));
+  const atStart = await state();
+  const nothingStored = await stored();
+  // A change made while the window is open is obeyed at once, through the
+  // `storage` event this computer's windows share.
+  await page.evaluate((key) => localStorage.setItem(key, "false"), OPEN_BAR_KEY);
+  await page.evaluate((key) => window.dispatchEvent(new StorageEvent("storage", { key })), OPEN_BAR_KEY);
+  await page.waitForTimeout(150);
+  const live = await state();
+  // ...and it is obeyed on a fresh load of the page, not only live.
+  await page.reload();
+  await page.waitForTimeout(900);
+  const reloaded = await state();
+  // The box still works with the button gone: its own chat, not the bar's.
+  await page.fill("#input", "typed with the button off");
+  await page.click("#send");
+  await page.waitForTimeout(800);
+  const sent = chats.at(-1)?.messages?.at(-1)?.content;
+  // Back on again, the button comes back rather than needing a relaunch.
+  await page.evaluate((key) => localStorage.setItem(key, "true"), OPEN_BAR_KEY);
+  await page.reload();
+  await page.waitForTimeout(900);
+  const back = await state();
+  await page.close();
+
+  assert.equal(nothingStored, null, "a fresh install must have stored nothing at all");
+  assert.equal(atStart.button, true, "the button is not there by default");
+  assert.equal(live.button, false, "the button stayed after the setting was turned off");
+  assert.equal(reloaded.button, false, "a reload drew the button again");
+  assert.equal(sent, "typed with the button off", "the box stopped working with the button hidden");
+  assert.equal(back.button, true, "the button did not come back when the setting was turned on");
+  for (const [name, s] of [["live", live], ["reloaded", reloaded], ["back", back]]) {
+    assert.equal(s.inputHidden, false, `the box was hidden (${name})`);
+    assert.equal(s.sendHidden, false, `Send was hidden (${name})`);
+    assert.equal(s.inputTabIndex, 0, `the box left the tab order (${name})`);
+    assert.equal(s.mic, true, `the mic button went with the button (${name})`);
+  }
+  assert.deepEqual(problems, []);
 });
 
 await check("with Ollama up and no OpenJarvis, Send reaches /api/chat and shows the reply", async () => {
@@ -659,6 +762,72 @@ await check("the HUD says what the link is doing, live, under the brand", async 
   assert.deepEqual(problems, []);
 });
 
+/** #brand-sub as text, read without throwing while the window reloads itself. */
+function brandOf(page) {
+  return page
+    .evaluate(() => (document.getElementById("brand-sub") || {}).textContent || "")
+    .catch(() => "");
+}
+
+await check("a window that booted while Jarvis was unreachable stops claiming it is not connected", async () => {
+  // Reported from the owner's running app on 2026-10-09: the main window read
+  // "DEMO · NOT CONNECTED" while the shell held a live, established stream to
+  // the backend. boot() reads /api/status ONCE and never again, so one failed
+  // read at load is that window's verdict for the rest of the session -
+  // however healthy the link becomes. The same read is what S.online is left
+  // at, and S.online is the page's whole idea of "am I talking to Jarvis": it
+  // answers Send with sampleReply() and shows the face asleep.
+  const backend = { jarvis: false, ollama: true, proxy: false, statusFails: true };
+  const { page, problems, chats } = await openHud(browser, backend);
+  // Forced by route.abort: hud_get rejects, so boot()'s catch leaves
+  // status = null and the page writes its own fallback, once.
+  assert.equal((await brandOf(page)).trim(), "demo · not connected",
+    "the window never reached its no-server state, so this check proves nothing");
+  const sent = chats.length;
+
+  // Jarvis comes up. The stream's hello is the live, checked signal - Rust
+  // sets `connected` from that frame and pushes the link to this window on
+  // every change - and /api/status answers again. Both, as the real shell
+  // reports them.
+  backend.statusFails = false;
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+
+  await K.until(page, "the window to stop saying it is not connected", async () =>
+    (await brandOf(page)).trim() === "online · local first", { ms: 8000 });
+
+  // And not only the words: the window is really out of its sample mode, so
+  // what the owner types from here reaches Jarvis.
+  await send(page, "are you there?");
+  assert.equal(chats.length, sent + 1, "the window still answered with its own sample reply");
+  await page.close();
+  assert.deepEqual(problems, []);
+});
+
+await check("a window in its no-server state waits for the owner's words, then puts itself right", async () => {
+  const backend = { jarvis: false, ollama: true, proxy: false, statusFails: true };
+  const { page } = await openHud(browser, backend);
+  assert.equal((await brandOf(page)).trim(), "demo · not connected");
+
+  // The owner is typing a question into that window. Putting itself right
+  // must not cost them the words - a reload here would empty the box.
+  await page.locator("#input").fill("what time is it");
+  backend.statusFails = false;
+  await page.evaluate(() => window.__jarvisFeed("link", { connected: true, stale: false }));
+  await page.waitForTimeout(1500);
+  assert.match(await brandOf(page), /demo · not connected/,
+    "the window reloaded over words the owner was still typing");
+  assert.equal(await page.locator("#input").inputValue(), "what time is it");
+
+  // The box is empty again (they sent it or cleared it). The page's own 30 s
+  // beat is where a verdict left standing is found again when the link never
+  // changes - this drives the very call its `setInterval` makes.
+  await page.locator("#input").fill("");
+  await page.evaluate(() => window.apprPoll());
+  await K.until(page, "the window to put itself right once the box was empty", async () =>
+    (await brandOf(page)).trim() === "online · local first", { ms: 8000 });
+  await page.close();
+});
+
 await check("a HUD approval card is shown but never answered in the HUD, stale or not (audit M2)", async () => {
   // Approvals are answered in the Jarvis bar or the widget, through
   // decide_approval, with Windows Hello and the stale check. The page's own
@@ -891,7 +1060,14 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
   assert.deepEqual(cap.permissions,
     ["core:app:default", "core:event:allow-listen", "core:event:allow-unlisten",
       "core:path:default", "core:webview:default", "core:window:default",
-      "core:webview:allow-set-webview-zoom", "hud-voice", "hud-link"]);
+      "core:webview:allow-set-webview-zoom", "hud-voice", "hud-link",
+      // The settings gear the OWNER ASKED FOR on this window (2026-10-10,
+      // question 2 of docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the same
+      // navigation-only `open_fix_place` the bar's gear and the widget's gear
+      // hold. It opens or focuses the Settings window at a named place, changes
+      // no setting and approves nothing, so the sentence this test is really
+      // about - no record, no approve, no deny - is unchanged.
+      "open-fix-place"]);
   assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   const surfaces = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
@@ -911,9 +1087,11 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
   const toml = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
   const set = toml.slice(toml.indexOf('identifier = "hud-voice"'));
   const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);
-  // The mic's command, and (the chat audit, 2026-09-28) the chat box's: both
-  // only show the Jarvis bar.
-  assert.deepEqual(perms.match(/allow-[a-z-]+/g), ["allow-summon-push-to-talk", "allow-hud-open-bar"]);
+  // The mic's command, the chat box's, and (the owner's ask of 2026-10-09,
+  // one button that toggles) the hide that goes with it: all three only move
+  // the Jarvis bar.
+  assert.deepEqual(perms.match(/allow-[a-z-]+/g),
+    ["allow-summon-push-to-talk", "allow-hud-open-bar", "allow-hide-quickbar"]);
   const rust = readFileSync(join(HERE, "..", "src-tauri", "src", "voice.rs"), "utf8");
   for (const name of ["summon_push_to_talk", "hud_open_bar"]) {
     const body = rust.slice(rust.indexOf(`pub fn ${name}`));
@@ -921,6 +1099,16 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
     assert.doesNotMatch(fn, /start_voice_capture|open_input_stream|cpal|start_automatic_listening|stream_chat|post\(/,
       `${name} must not open the microphone or send anything`);
   }
+  // The hide the HUD gained: the same shallow command the bar's own Escape
+  // uses, and nothing beside it. The page can take the bar off screen - it
+  // cannot reach the microphone, the network, a decision or another window.
+  const commands = readFileSync(join(HERE, "..", "src-tauri", "src", "commands.rs"), "utf8");
+  const hide = commands.slice(commands.indexOf("pub fn hide_quickbar"));
+  const hideFn = hide.slice(0, hide.indexOf("\n}\n") + 3);
+  assert.match(hideFn, /windows::hide_quickbar\(&app\)/, "hide_quickbar is no longer the bar's own hide");
+  assert.doesNotMatch(hideFn,
+    /start_voice_capture|open_input_stream|cpal|stream_chat|post\(|approve|decide|reqwest|command\(/,
+    "hide_quickbar must only hide the bar");
 });
 
 await check("a HUD reply is read aloud only with a voice on this computer", async () => {

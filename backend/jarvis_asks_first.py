@@ -37,6 +37,31 @@ answer to the ease-of-use audit, docs/OWNER-QUESTIONS-2026-09-27.md; CLAUDE.md)
     only be added to [tools].enabled by hand (jarvis_reach.py's rows for
     them say so plainly).
 
+THE TWO CARDS HERE MUST NOT NAME A FILE THE GATE PROTECTS (fixed 2026-10-10)
+The loosening card (LOOSEN_ACTION, `loosen_card()`) and the reading-tool card
+(ENABLE_TOOL_ACTION, `tool_enable_card()`) are both handed to
+`jarvis_gate.check()` AS THE PROMPT. The gate's first rule, before it ever
+looks at the tier table, searches that prompt and the `detail` beside it for
+the names in its own `_PROTECTED` list (jarvis-framework.toml, jarvis_gate.py,
+jarvis_hud.py and six more); a prompt that names one is refused at tier
+"never", so NO CARD IS EVER RAISED - for anybody, on any device, with no
+Windows Hello prompt and nothing the owner could do about it.
+
+Both cards used to say "one line of your settings file on this PC
+(jarvis-framework.toml)". The owner's own audit log holds 21 pairs of
+`gate.refused_protected` lines naming a 21-character file for each of the two
+actions (2026-10-03 to 2026-10-10), each followed by that card's own
+`{"outcome": "refused"}`. So loosening anything from the app, and offering a
+reading tool to the model, had never once worked - which is the whole point of
+this module. They now say "one line of your settings file on this PC", which
+means the same thing and is plainer; the exact `<action> = "<tier>"` line, or
+the exact tool name added to [tools].enabled, is still shown, so the decision
+the owner is making is unchanged. backend/test_asks_first.py holds both cards
+(and the detail beside them) against the gate's own `_PROTECTED` list, read
+out of `jarvis-backend/jarvis_gate.py` with `ast` - never imported, never a
+hardcoded copy that could drift. `jarvis_backup.restore_card()` had the same
+bug with jarvis_hud.py and was fixed first.
+
 WHAT THE PAGE READS
 The same things the gate reads: each action's tier in [autonomy.tiers] of
 jarvis-framework.toml (jarvis_framework.action_tier - a missing line is
@@ -68,12 +93,28 @@ approve it. Only "approved" from a person writes the line (the stamp and
 the gate's outcome - never `allowed` alone).
 
 THE SHORT SAFE LIST, AND WHAT IS LEFT OFF IT
-SWITCHABLE = reading your own calendar, email, notes and home status, and
-the three note writes (Obsidian daily note, Logseq journal, a new Joplin
-note). Each acts only on the owner's own things on this PC. After outside
-text a note still waits for a yes (write_notes_after_outside_text, which is
-not on the list), and a read still marks the chat as having read outside
-text.
+SWITCHABLE = reading your own calendar, email, notes, home status and files,
+the four note writes (Obsidian daily note, Logseq journal, a new Joplin note,
+a new Logseq page), and the power mode. Each acts only on the owner's own
+things on this PC - the power mode is Jarvis's own state, changed on this PC
+and undone by one tap in either app. After outside text a note still waits
+for a yes (write_notes_after_outside_text, which is not on the list, and see
+NOTE_ROW for the one note write that rule does not name), and a read still
+marks the chat as having read outside text.
+The list grew on 2026-10-08, after an audit found seven rows running without
+asking and switchable nowhere. Five of the seven are on it now (the file
+reads, the two page reads, the Logseq page write and the power mode). The
+other two are NOT here, said plainly:
+  * browse_model_catalog is a way out of this PC (docs/ARCHITECTURE.md
+    section 4; LOCKDOWN_ACTIONS), and nothing that leaves the PC may be
+    loosened from an app - the only ways out on this list are the owner's own
+    account reads, which test_lockdown.py pins. Its row keeps NOTE_FILE, "only
+    your settings file changes this one", which is where it belongs.
+  * rollback_model is the UNDO for a model switch and never waits on purpose:
+    a revert that waits for permission arrives too late to be a revert
+    (rebuilt/jarvis-framework.toml), and jarvis_tripwire.py's "keep the
+    previous model" rolls back with no approval at all. A switch here would
+    let the owner break the recovery from a model that broke on the swap.
 The wiki was on the owner's list, and is NOT here, said plainly: since the
 security audit (L1) jarvis_wiki.py writes the wiki only on a person's yes
 whatever wiki_update's tier says, so a looser line would switch "Add to
@@ -193,8 +234,23 @@ SAYS_NO_CARD = "Does it without asking"
 
 #: The notes under a row.
 NOTE_ALWAYS = "Always asks. This cannot be changed from an app."
-NOTE_FILE = ("This can only be changed in your PC's settings file (jarvis-framework.toml), "
-             "not in the app.")
+#: The note under a row that cannot be made stricter with a switch and that no
+#: app screen changes. IT MAY NOT SAY "THE APP CANNOT CHANGE THIS AT ALL"
+#: (corrected 2026-10-09). It used to read "This can only be changed in your
+#: PC's settings file (jarvis-framework.toml), not in the app." - and the page
+#: says that under three rows that ARE changed in an app, each with ONE approval
+#: card: raising one of the limits (`raise_a_limit`), raising the interruption
+#: budget (`raise_attention_budget`, whose own row says so), and LOWERING the
+#: voice check's bar (`lower_the_voice_check_bar`, the one limit whose loosening
+#: goes down). So the sentence named the wrong place for the very changes the
+#: owner makes from a Settings screen. What is true of every row it sits under is
+#: narrower, and is what it now says. What IS true of every row it sits under,
+#: and so the only thing it may claim: there is no "Ask me first" switch here,
+#: and LOOSENING it cannot be done from a switch at all - it is a hand edit of
+#: the settings file. The three rows changed from a Settings card raise their
+#: own ONE approval card to do it, and that card is the card, not this line.
+NOTE_FILE = ("There is no switch for this one: going looser is only possible by hand in your "
+             "PC's settings file (jarvis-framework.toml).")
 NOTE_WIKI = ("Always asks: the wiki is written only on your yes (security audit), so it "
              "cannot be loosened - a looser line would switch \"Add to wiki\" off.")
 #: "Check for tool updates" (2026-09-27, the owner's own request): a card
@@ -216,6 +272,30 @@ NOTE_SUPPORT_OFFER = ("Always asks, one card per offer, showing the exact reply 
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
+#: One line for a row the list grew by on 2026-10-08, used for the row AND for
+#: the loosening card's last line (the same string twice, exactly as the three
+#: note writes already do with NOTE_NOTE). NOTE_READ and NOTE_NOTE above were
+#: written for the reads and the note writes that were on the list first, and
+#: say the wrong thing on a file read, a Logseq page or the power mode.
+NOTE_ROW = {
+    "read_files_readonly": ("Reading happens on this PC and writes nothing back. A chat that "
+                            "read a file counts as having read outside text, so a later web "
+                            "search or note in it still asks."),
+    "read_joplin_note": ("Reading happens on this PC and changes nothing in the vault. A chat "
+                         "that read a note counts as having read outside text, so a later web "
+                         "search or note in it still asks."),
+    "read_logseq_page": ("Reading happens on this PC and changes nothing in the graph. A chat "
+                         "that read a page counts as having read outside text, so a later web "
+                         "search or note in it still asks."),
+    "create_logseq_page": ("It only adds a page, and deleting it undoes it. It is a note "
+                           "write like the Obsidian daily note, the Logseq journal and a "
+                           "new Joplin note, so a chat that has read outside text waits for "
+                           "a card before it writes. Turning \"Ask me first\" on is what "
+                           "makes it ask every time."),
+    "power_manage": ("Nothing leaves this PC, and Quiet or Standby only make Jarvis do less. "
+                     "With \"Ask me first\" on, every change - the standby schedule's at its "
+                     "start, and waking - waits for a card."),
+}
 
 #: The web search row (the owner's decisions of 2026-09-25 and 2026-09-26;
 #: jarvis_agent.py WEB_SEARCH_* are the reasons a search asks). It does not
@@ -253,6 +333,18 @@ LOOSE = {
     "append_obsidian_daily": "auto",
     "append_logseq_journal": "auto",
     "create_joplin_note": "notify",
+    # The five rows the audit of 2026-10-08 found running without asking and
+    # switchable nowhere (the header says which two of the seven are left out,
+    # and why). The same test as the seven above: each acts only on the
+    # owner's own things on this PC, or on Jarvis's own power mode, and each
+    # ships "auto" in rebuilt/jarvis-framework.toml - so "Ask me first" is the
+    # only thing a switch here can change today, and loosening writes back
+    # exactly what this repository ships.
+    "read_files_readonly": "auto",   # file_read, my_files, PDFs and Word files
+    "read_joplin_note": "auto",
+    "read_logseq_page": "auto",
+    "create_logseq_page": "auto",
+    "power_manage": "auto",
 }
 SWITCHABLE = tuple(LOOSE)
 
@@ -330,6 +422,12 @@ HARD_LIMITS = frozenset({
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
+    # The owner's uncensored opt-ins (jarvis_optin_models.py, the owner's OWN
+    # decision of 2026-10-10, Decision 5): both modules refuse any tier but
+    # "ask", so turning either one on is always ONE card and this page has to
+    # name them. Neither leaves this PC; the module refuses outright if the
+    # model store is not on this PC.
+    "uncensored_models_enable", "fiction_roleplay_enable",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -351,6 +449,10 @@ MUST_ASK = frozenset({
     "register_approval_key", "app_merge_change",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
+    # The owner's uncensored opt-ins (2026-10-10, Decision 5): each module's
+    # request() refuses a tier other than "ask" outright (503, no card), the
+    # same shape phone_notifications_read already has.
+    "uncensored_models_enable", "fiction_roleplay_enable",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -379,14 +481,46 @@ GROUPS = (
                       "open_public_tunnel",
                       "news_read", "page_read", "read_web_page", "github_read", "chatbot_session",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
+                      # The hand-off's own setting (jarvis_handoff_mode.py, the owner's
+                      # decision of 2026-10-08): keeping the live picture of one of the
+                      # owner's own browser windows on offer for 15 minutes instead of
+                      # about a minute is a loosening, so a card can name it on this page.
+                      "handoff_keep_offering",
+                      # What a captcha does about its browser window
+                      # (jarvis_handoff_front.py, the owner's decision of
+                      # 2026-10-09): raising that one window takes the owner's
+                      # screen and their keyboard away from what they were
+                      # doing, which is a loosening, so a card can name it on
+                      # this page too.
+                      "handoff_bring_to_front",
                       "fixed:handoff"]),
+    # Docker (jarvis_docker.py, the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list,
+    # listed and started or stopped on this PC. A start gives Jarvis more, so
+    # its module refuses any tier but "ask" and it is always ONE card; a stop
+    # gives it less and is expected to be instant, but it still goes through
+    # the gate and takes tier "ask" on a fresh install (unknown_action_tier),
+    # so a card can name it too. The page must name both because a card can:
+    # test_card_words.py's "every action a shipped module asks under" put them
+    # in jarvis_card_words.TITLES, and this is the other half of that - the
+    # page promises every action a card can name.
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
+                                "docker_service_start", "docker_service_stop",
                                 "app_merge_change", "pair_device", "unretire_shared_key",
                                 "register_approval_key"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
+                                      # The owner's uncensored opt-ins (2026-10-10,
+                                      # Decision 5; jarvis_optin_models.py, JARVIS-API
+                                      # section 125). Both sit here with the other model
+                                      # choices: one offers the abliterated models already
+                                      # on this PC, the other sets one model aside for
+                                      # fiction and role-play. Both are OFF by default,
+                                      # turning either on is ONE card, and neither ever
+                                      # changes the everyday assistant.
+                                      "uncensored_models_enable", "fiction_roleplay_enable",
                                       "second_card_enable", "second_card_browser_enable",
                                       "second_card_combined_enable", "second_card_third_assign",
                                       "chat_card_pin",
@@ -401,8 +535,49 @@ GROUPS = (
         "memory_manage", "memory_forget_range", "user_profile_manage", "custom_voice",
         "better_voice_enable", "watch_notifications_enable", "phone_notifications_read",
         "topic_loosen", "chat_tags_suggest_on", "chat_tag_suggest",
+        # The chatbot API money limits (chatbot-limits.patch, 2026-10-06): both
+        # act on a Settings card, which is why they sit in this group rather
+        # than beside spend_money. The page must name them because a card can:
+        # raising a limit is a loosening, so it raises ONE card plus Windows
+        # Hello on the PC; lowering one only ever spends less, so it asks
+        # nothing. Their tiers come from the gate, not from here.
+        "raise_api_limit", "lower_api_limit",
+        # The interruption budget (attention-settings.patch, 2026-10-08): ONE
+        # action, for the raise only - turning the budget DOWN asks nothing and
+        # needs no card, so it has no action of its own. The raise is a
+        # loosening (Jarvis speaks up more often), so it raises ONE card; the
+        # page must name it because a card can. It sits in this group, not
+        # beside `power_manage`, because what it changes is a Jarvis setting on
+        # a Settings card - and its tier comes from the gate, not from here.
+        "raise_attention_budget",
+        # The limits and frequencies (limits-settings.patch, 2026-10-08): ONE
+        # action for every one of them, again for the RAISE only - turning a
+        # number down asks nothing. The card names the limit and both numbers,
+        # so one page row covers the undo window, jobs at once, what counts as
+        # news from a watched project, study questions a day, the
+        # new-conversation window and whether a model looks for people and
+        # things in what the owner saves. Its tier comes from the gate.
+        "raise_a_limit",
+        # The voice check's bar (jarvis_limits.py, the owner's decision of
+        # 2026-10-08): the ONE limit whose loosening goes DOWN, because a lower
+        # bar means more clips count as the owner's voice. So it is the one limit
+        # whose card needs a name of its own - `raise_a_limit` says the opposite
+        # of what the owner is agreeing to - and the page must name it because a
+        # card can. Making the bar stricter asks nothing and has no action of its
+        # own, exactly as raising any other row's number does not.
+        "lower_the_voice_check_bar",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
-        "check_tool_updates"]),
+        "check_tool_updates",
+        # Learning from a Reject click (the owner's decision of 2026-10-10;
+        # jarvis_gate.py's _propose_constraint_from_denial). It raises no card
+        # of its own - a "no" is the decision - so this is a fixed row, and the
+        # page must name it because rule 3 of docs/RULE-FLEXIBILITY.md asks for
+        # every relaxation to be findable in one place. Entry 003 there is the
+        # written record: a rejection carries none of the owner's words, so the
+        # rule is Jarvis's guess, marked as one, for the owner to Keep or
+        # Discard. It sits in this group because what it changes is what Jarvis
+        # may learn, beside the other learning settings.
+        "fixed:playbook_rejection"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 
@@ -473,6 +648,19 @@ FIXED = {
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "
                          "else's program. Only tools that read are offered for now."),
+    # A Reject click (the owner's decision of 2026-10-10; entry 003 of
+    # docs/RULE-FLEXIBILITY.md, and rule 3 of that file asks for this row).
+    # The card is the proposal itself in Brain's Memory tab, where the owner
+    # Keeps or Discards it - so nothing is "done without asking": nothing is
+    # applied at all until the owner says so, and the row's own words say which
+    # of the two it is.
+    "fixed:playbook_rejection": ("Learn a rule from a Reject click",
+                                 "Writes a guessed rule for you to Keep or Discard",
+                                 "A Reject click carries none of your words, so the rule is "
+                                 "worked out from the action's name and says so. It is a "
+                                 "suggestion in Brain, never a saved fact, and it never "
+                                 "changes what Jarvis is allowed to do until you Keep it. "
+                                 "Never from a card that timed out."),
 }
 
 #: The plug-in start row's words: the owner's open question 9 is answered in
@@ -630,7 +818,8 @@ def _row(action: str, *, here: bool) -> dict:
         if tier != "never":
             row["switch"] = {"asks": tier == "ask", "loose": LOOSE[action],
                              "can_loosen": bool(here) and not lockdown_on()}
-        row["note"] = NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE
+        row["note"] = NOTE_ROW.get(action) or (
+            NOTE_READ if action.endswith(("_read", "_search")) else NOTE_NOTE)
         if tier == "ask" and not here and not row.get("lockdown"):
             row["note"] += " " + PHONE_LOOSEN
         for old, new in OLDER_NAMES.items():
@@ -821,9 +1010,10 @@ LOOSEN_LAST_WORDS = {
 
 PC_ONLY = ("Letting Jarvis do this without asking can only be done on the PC (Settings, "
            "What asks first), with an approval card and Windows Hello.")
-NOT_ON_LIST = ("Only reading your calendar, email, notes and home status, and adding to "
-               "your notes, can be changed from an app. Everything else changes only in "
-               "your settings file (jarvis-framework.toml), and some things always ask.")
+NOT_ON_LIST = ("Only reading your calendar, email, notes, home status and files, adding to "
+               "your notes, and the power mode, can be changed from an app. Everything else "
+               "changes only in your settings file (jarvis-framework.toml), and some things "
+               "always ask.")
 NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so nothing can be "
                   "loosened from the app - run apply-patches.ps1 on the PC.")
 TOOLS_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, so no tool can "
@@ -832,19 +1022,43 @@ TOOLS_NO_OWNER_CHECK = ("Your PC's Jarvis cannot ask Windows Hello itself yet, s
 
 
 def loosen_card(action: str) -> str:
+    # IT MUST NOT NAME A FILE THE GATE PROTECTS. This text is handed to
+    # jarvis_gate.check() as the card's `prompt`, and the gate reads that
+    # prompt (and the `detail` beside it) for the names in its own
+    # `_PROTECTED` list - jarvis-framework.toml, jarvis_gate.py,
+    # jarvis_hud.py and six more - BEFORE it looks at the tier table. A
+    # prompt that names one is refused at tier "never", so no card is ever
+    # raised, no Windows Hello is ever asked for, and nothing can approve it:
+    # not the PC app, not the phone, not anybody (2026-10-10, the same bug
+    # `jarvis_backup.restore_card()` had; that one was fixed first).
+    #
+    # Measured on the owner's PC, this line's old wording - "one line of your
+    # settings file on this PC (jarvis-framework.toml)" - produced 21 pairs of
+    # audit lines, `gate.refused_protected` for `loosen_what_asks_first`
+    # naming a "<redacted 21 chars>" file (twenty-one characters is
+    # "jarvis-framework.toml"), each followed by
+    # `asks_first.loosen.card {"outcome": "refused"}`. So loosening anything
+    # from the app has never once been possible.
+    #
+    # "your settings file on this PC" says the same thing without the name -
+    # the line below still shows the owner the exact `<action> = "<tier>"`
+    # they are agreeing to, so nothing about what they are deciding changed.
+    # backend/test_asks_first.py keeps it that way by holding this text
+    # against the gate's own list, read with `ast`.
     phrase = _title(action)
     phrase = phrase[:1].lower() + phrase[1:]
     loose = LOOSE[action]
     after = " and tell you afterwards" if loose == "notify" else ""
-    extra = NOTE_NOTE if action in ("append_obsidian_daily", "append_logseq_journal",
-                                    "create_joplin_note") else (
-        "A chat where it reads something still counts as having read outside text, so a "
-        "later web search or note in that chat still asks.")
+    extra = NOTE_ROW.get(action) or (
+        NOTE_NOTE if action in ("append_obsidian_daily", "append_logseq_journal",
+                                "create_joplin_note") else (
+            "A chat where it reads something still counts as having read outside text, so a "
+            "later web search or note in that chat still asks."))
     return "\n".join([
         f"Let Jarvis {phrase} without asking you first?",
         "",
         f"From now on Jarvis will {phrase} without an approval card{after}. This changes "
-        f"one line of your settings file on this PC (jarvis-framework.toml): "
+        f"one line of your settings file on this PC: "
         f"{action} = \"{loose}\". Nothing else in it changes.",
         "",
         extra,
@@ -1065,6 +1279,17 @@ def tools_enabled_set() -> set:
 
 
 def tool_enable_card(tool: str) -> str:
+    # THE SAME RULE AS loosen_card() ABOVE, AND THE SAME BUG (2026-10-10).
+    # The card this builds is the `prompt` jarvis_gate.check() is handed, and
+    # the gate reads it for its own `_PROTECTED` names before the tier table:
+    # the old wording named jarvis-framework.toml, so `enable_reading_tool`
+    # was refused at tier "never" and no card was ever shown. The owner's
+    # audit log holds 21 of them, each paired with
+    # `asks_first.tools.card {"outcome": "refused"}`.
+    #
+    # Offering a reading tool to the model was therefore impossible from the
+    # app - the one thing this whole section exists to do. "your settings file
+    # on this PC" says the same thing plainer, and the exact line still shows.
     real = real_tool(tool)
     phrase = _title(tool)
     phrase = phrase[:1].lower() + phrase[1:]
@@ -1072,7 +1297,7 @@ def tool_enable_card(tool: str) -> str:
         f"Offer \"{phrase}\" to the AI model?",
         "",
         f"From now on the AI model may use this tool when it decides to - it can {phrase}. "
-        f"This changes one line of your settings file on this PC (jarvis-framework.toml): "
+        f"This changes one line of your settings file on this PC: "
         f"\"{real}\" is added to [tools].enabled. Nothing else in it changes.",
         "",
         "This is separate from whether it asks you first: that is set above, in \"Ask me "

@@ -122,8 +122,28 @@ QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell
 #: phone approve risky cards with its own fingerprint or PIN
 #: (register_approval_key, docs/PAIRING-DESIGN.md section 11): a stolen key
 #: used elsewhere must not be able to register a signing key of its own.
+#:
+#: And RAISING a chatbot service's monthly money limit (jarvis_chatbot_limits.py;
+#: the owner's approval of 2026-10-06, docs/ACCOUNT-KEYS-DESIGN.md decisions 1
+#: and 3): raising it lets Jarvis spend more of the owner's money on that
+#: service's account, so it is a loosening - it stays on this PC and always
+#: asks Windows Hello. The LOWERING has its own action name,
+#: "lower_api_limit", and is deliberately NOT on this list: it only ever
+#: spends less, so it needs no card and no check. Two names rather than one
+#: direction-blind name is the whole point - this list is read by ACTION, so
+#: one name covering both directions would ask Hello for a lowering too.
+#: And KEEPING the captcha hand-off on offer for the full 15 minutes instead of
+#: stopping early (jarvis_handoff_mode.py; the owner's decision of 2026-10-08,
+#: "make this a setting for both options with 1 as the default"): a live picture
+#: of one of the owner's own browser windows - which may hold their account
+#: details - stays on offer fifteen times longer, so choosing it is a loosening
+#: that stays on this PC and always asks Windows Hello. Going back to "Stop
+#: early" is the other direction and needs neither: it applies at once, from
+#: either app (the OFF path in jarvis_handoff_mode.request never reaches here).
 PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
-                             "pair_device", "unretire_shared_key", "register_approval_key"})
+                             "pair_device", "unretire_shared_key", "register_approval_key",
+                             "raise_api_limit", "handoff_keep_offering",
+                             "handoff_bring_to_front"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 

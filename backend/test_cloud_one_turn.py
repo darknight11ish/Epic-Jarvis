@@ -92,7 +92,7 @@ def t_the_patch_context():
           ok is True, out)
     if ok:
         check("and it lands inside _open, above the request",
-              out.index("said[-1:]") < out.index("_completions_url(lane),"))
+              out.index("said[-1:]") < out.index("_completions_url(lane, body),"))
 
 
 def t_a_cloud_lane_gets_the_newest_question_only():

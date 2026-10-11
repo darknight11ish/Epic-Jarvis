@@ -24,12 +24,16 @@ import com.jarvis.client.R
  * ([com.jarvis.client.JarvisRuntime.onScheduleEvent]). Nothing here sets an
  * alarm on the phone, and no exact-alarm permission is asked for.
  *
- * On the existing approval channel (the one that makes a sound), with the
- * same lock-screen rule an approval has: the locked screen shows only what
- * KIND of thing is due ("Jarvis: a reminder is due."), never its words; the
- * words need the phone unlocked. While App lock or "Hide memory lists and
- * chat history" is on, the notification itself says only the kind, too -
- * the caller decides that ([com.jarvis.client.net.Schedule.notification]).
+ * On its own channel, [SCHEDULE_CHANNEL_ID] ("Reminders and timers" - the
+ * owner's decision of 2026-09-30), NOT the approval channel
+ * ([ApprovalNotifier.CHANNEL_ID], `jarvis_approval`): an alarm or an urgent
+ * "tell me when" goes on `jarvis_alarm` instead. It is a channel that makes a
+ * sound, with the same lock-screen rule an approval has: the locked screen
+ * shows only what KIND of thing is due ("Jarvis: a reminder is due."), never
+ * its words; the words need the phone unlocked. While App lock or "Hide
+ * memory lists and chat history" is on, the notification itself says only the
+ * kind, too - the caller decides that
+ * ([com.jarvis.client.net.Schedule.notification]).
  *
  * SNOOZE (2026-09-25): a timer, alarm or reminder carries one action,
  * "Snooze 10 minutes" ([com.jarvis.client.net.Schedule.SNOOZE]) - never
@@ -90,6 +94,17 @@ object ScheduleNotifier {
      * Shows one job that went off. [title] and [text] come from
      * [com.jarvis.client.net.Schedule.notification]; [lockScreen] is the
      * kind's lock-screen words, the only thing a locked phone shows.
+     *
+     * @return whether the notification was actually handed to Android. False
+     *   means it was not shown at all: POST_NOTIFICATIONS is not granted, or
+     *   Android refused to post it. Nothing that shows a job going off reads
+     *   this - the one caller that does is the "Send test" button on Settings
+     *   -> Phone notifications, which used to set its own success flag
+     *   whatever happened (Android audit 2026-10-08). It said "Test
+     *   notification sent." in exactly the state where every approval
+     *   notification is dropped too ([ApprovalNotifier] counts those as
+     *   silenced), so the one control meant to check the phone's alerts
+     *   reported success in the state they never work in.
      */
     fun post(
         context: Context,
@@ -124,14 +139,13 @@ object ScheduleNotifier {
          * stays until seen, as an alarm does.
          */
         timeoutMs: Long? = null,
-    ) {
+    ): Boolean {
         if (!allowed(context)) {
             Log.w(TAG, "POST_NOTIFICATIONS is not granted, so a $kind that went off is not shown")
-            return
+            return false
         }
         if (ring && !quiet) {
-            postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs)
-            return
+            return postRinging(context, key, jobId, kind, title, text, lockScreen, openBriefing, timeoutMs)
         }
         val n = NotificationCompat.Builder(context, SCHEDULE_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
@@ -161,8 +175,9 @@ object ScheduleNotifier {
                 }
             }
             .build()
-        runCatching { NotificationManagerCompat.from(context).notify(key, NOTIFICATION_ID, n) }
+        return runCatching { NotificationManagerCompat.from(context).notify(key, NOTIFICATION_ID, n) }
             .onFailure { Log.w(TAG, "could not post a $kind that went off", it) }
+            .isSuccess
     }
 
     /**
@@ -177,6 +192,8 @@ object ScheduleNotifier {
      * ALARM sound (`USAGE_ALARM`) and the notification is `CATEGORY_ALARM`,
      * and Android lets alarms through Do Not Disturb by default (Settings ->
      * Do Not Disturb -> Alarms), so it rings unless the owner turned that off.
+     *
+     * @return [post]'s own answer: false when Android refused to post it.
      */
     private fun postRinging(
         context: Context,
@@ -188,7 +205,7 @@ object ScheduleNotifier {
         lockScreen: String,
         openBriefing: Boolean,
         timeoutMs: Long? = null,
-    ) {
+    ): Boolean {
         val n = NotificationCompat.Builder(context, ALARM_CHANNEL_ID)
             // Stays on this phone unless the owner turned on "Show
             // notifications on a compatible watch" (Brain, off by default) -
@@ -219,8 +236,9 @@ object ScheduleNotifier {
             }
             .build()
         n.flags = n.flags or Notification.FLAG_INSISTENT
-        runCatching { NotificationManagerCompat.from(context).notify(key, NOTIFICATION_ID, n) }
+        return runCatching { NotificationManagerCompat.from(context).notify(key, NOTIFICATION_ID, n) }
             .onFailure { Log.w(TAG, "could not post a ringing $kind", it) }
+            .isSuccess
     }
 
     /** Stop: to [EventService], which cancels this one notification - nothing else. */

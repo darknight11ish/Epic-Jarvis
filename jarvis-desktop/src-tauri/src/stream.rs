@@ -1368,6 +1368,38 @@ pub(crate) fn approval_id(item: &serde_json::Value) -> Option<String> {
     }
 }
 
+/// The gate's own cut on a card's `detail`: `json.dumps(detail)[:4000]` in
+/// `jarvis_gate`. A string exactly this long that no longer parses was cut
+/// off before it reached the card, so what is on screen is not the whole of
+/// what would run. Kept beside `jarvis-link.js`'s `GATE_DETAIL_LIMIT`, which
+/// must be the same number.
+pub(crate) const GATE_DETAIL_LIMIT: usize = 4000;
+
+/// Whether a card's request was cut off at the gate, so approving it would
+/// approve something nobody has seen in full.
+///
+/// `jarvis-link.js` computes this as `cutOff` for the pages, and the two
+/// shipped pages disable their Approve button with it. That is a courtesy,
+/// not a gate: `answer_approval` is the one command that sends a decision,
+/// and any window holding the `approvals` capability reaches it. So the same
+/// question is answered here, off the same row, and the command refuses on
+/// it - the way rule 4's staleness check was moved into the command after the
+/// same lesson (see the comment above it in `commands.rs`).
+///
+/// An absent `detail`, an object `detail`, and a short unparsed string are
+/// all NOT cut off. A long unparsed string is. Those are the same three cases
+/// `normaliseApproval` distinguishes, so the two sides cannot disagree about
+/// a card.
+pub(crate) fn detail_was_cut_off(item: &serde_json::Value) -> bool {
+    match &item["detail"] {
+        serde_json::Value::String(raw) => {
+            raw.len() >= GATE_DETAIL_LIMIT
+                && serde_json::from_str::<serde_json::Value>(raw).is_err()
+        }
+        _ => false,
+    }
+}
+
 /// Longest `expires_in` read as a real countdown. The shipped gate waits 180
 /// seconds; anything over a day is a wrong unit or a bug, and showing no
 /// countdown beats showing a wrong one.
@@ -1573,6 +1605,39 @@ mod tests {
         assert!(!odd.iter().any(|i| i.to_string().contains("Roof")));
     }
     use super::*;
+
+    /// A card whose `detail` the gate cut at 4000 characters must be refused
+    /// by `answer_approval`, not merely by a disabled button - see the
+    /// comment on `detail_was_cut_off`. These are the same three cases
+    /// `normaliseApproval` in `jarvis-link.js` distinguishes, so the two sides
+    /// cannot disagree about a card.
+    #[test]
+    fn a_cut_off_detail_is_recognised_and_a_whole_one_is_not() {
+        // Unparsed AND exactly as long as the gate's cut: the request was cut.
+        let cut = "x".repeat(GATE_DETAIL_LIMIT);
+        assert!(detail_was_cut_off(&serde_json::json!({ "detail": cut })));
+        // Longer is cut too (the gate's slice is the only producer, but a
+        // future one that appends must not slip through).
+        let longer = "x".repeat(GATE_DETAIL_LIMIT + 1);
+        assert!(detail_was_cut_off(&serde_json::json!({ "detail": longer })));
+
+        // A SHORT string that does not parse is an older card's own shape, not
+        // a truncation - approving it must stay available.
+        assert!(!detail_was_cut_off(
+            &serde_json::json!({ "detail": "Chat: \"Roof\" (cut off" })
+        ));
+        // A long string that still PARSES was never cut.
+        let parses = format!("{{\"text\":\"{}\"}}", "y".repeat(GATE_DETAIL_LIMIT));
+        assert!(parses.len() >= GATE_DETAIL_LIMIT);
+        assert!(!detail_was_cut_off(
+            &serde_json::json!({ "detail": parses })
+        ));
+        // The object shape, and no detail at all.
+        assert!(!detail_was_cut_off(
+            &serde_json::json!({ "detail": { "text": "hi" } })
+        ));
+        assert!(!detail_was_cut_off(&serde_json::json!({ "id": "p1" })));
+    }
 
     /// The toast's title is the one every window shows: the notice's, else
     /// the PC's own fallback - held to the shared card-words file.

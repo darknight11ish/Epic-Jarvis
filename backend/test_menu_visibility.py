@@ -110,8 +110,13 @@ def t_catalogue_shape():
             if owner != m.id and M.title_of(owner).lower() != m.title.lower():
                 clashes.append(k)
     check("no spoken name means two things", not clashes, clashes)
-    check("groups with no member are exactly the ones the design says are empty",
-          [g.id for g in M.GROUPS if not M.members(g.id)] == ["home"],
+    # "home" was the one empty group until 2026-10-08: the cohesion audit of
+    # that day removed it, because a group with no member in either app was a
+    # stored id and two spoken names ("home", "smart home") that could only
+    # ever answer "There is no Home menu yet.". No group is empty now, and
+    # anything that pinned the old one is checked just below and in t_quick_intent.
+    check("no group is left with no member at all",
+          [g.id for g in M.GROUPS if not M.members(g.id)] == [],
           [g.id for g in M.GROUPS if not M.members(g.id)])
     check("finance has members today (spending, retirement)",
           set(M.members("finance")) == {"settings.spending", "brain.work.retirement"})
@@ -234,7 +239,12 @@ def t_state_machine():
     st = S()
     check("a phone cannot hide a desktop-only menu", M.hide(st, "brain.tab.galaxy", "phone") == "unknown")
     check("a phone cannot hide a group with no phone member",
-          M.hide(st, "group.home", "phone") == "unknown")
+          M.hide(st, "group.nope", "phone") == "unknown")
+    # "group.home" is the id an app that stored it before 2026-10-08 still
+    # holds. It is gone from the catalogue now, so it is unknown like any other
+    # removed id - never "an empty group", which is what it used to be.
+    check("the removed home group is unknown, not an empty group",
+          M.group("home") is None and M.hide(st, "group.home", "phone") == "unknown")
     # Folding.
     check("fold a card", M.collapse(st, "brain.work.goals") == "ok" and M.is_collapsed(st, "brain.work.goals"))
     check("a tab cannot be folded", M.collapse(st, "brain.tab.work") == "cannot")
@@ -338,8 +348,12 @@ def t_quick_intent():
     check("an unknown name is not guessed", res is not None and res.menu_visibility is None
           and res.reply == "I don't know a menu called that.")
     got, res = _route("hide the home menu")
-    check("an empty group says so", res is not None and res.menu_visibility is None
-          and res.reply == "There is no Home menu yet.")
+    # The empty "home" group was removed 2026-10-08 (see t_catalogue_shape), so
+    # this is now an unknown name like any other - not guessed at, and no
+    # "There is no Home menu yet." that promises a group which cannot exist.
+    check("the removed home group is not guessed at", res is not None
+          and res.menu_visibility is None
+          and res.reply == "I don't know a menu called that.")
     got, _ = _route("show me the dinner menu")
     check("'show me the dinner menu' is not ours (falls through to the model)", got is None)
     got, _ = _route("what is on the lunch menu")

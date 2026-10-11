@@ -141,6 +141,7 @@ const dom = {
   backendDetail: $("backend-detail"),
   findPython: $("find-python"),
   findPythonStatus: $("find-python-status"),
+  appearanceStatus: $("appearance-status"),
 
   autostart: $("autostart"),
   autostartNote: $("autostart-note"),
@@ -162,8 +163,6 @@ const dom = {
   updateProgressFill: $("update-progress-fill"),
   updateIntroOff: $("update-intro-off"),
   updateIntroOn: $("update-intro-on"),
-  faqUpdateOff: $("faq-update-off"),
-  faqUpdateOn: $("faq-update-on"),
   updateNotes: $("update-notes"),
   updateNotesBody: $("update-notes-body"),
 
@@ -189,6 +188,20 @@ function report(target, text, tone) {
   else delete target.dataset.tone;
 }
 
+/** An error in words, never a bridge error, JSON or a literal `null`.
+ *
+ * The same filter the other cards use (`account-secrets-settings.js`,
+ * `animal-settings.js`, ...). Without it a raw `error.message` put
+ * "Cannot read properties of null (reading 'found')" on screen from More
+ * options in the click audit of 2026-10-08, which tells the owner nothing. */
+function problemWords(error) {
+  const said = String((error && error.message) || error || "").trim();
+  if (!said || /[{}<>]|::|not allowed|undefined|null/i.test(said) || said.length > 400) {
+    return "Try again in a moment, or restart Jarvis Desktop.";
+  }
+  return said;
+}
+
 /** Runs an action, reporting whatever it says or throws in the same place. */
 let busy = false;
 
@@ -203,7 +216,7 @@ async function act(button, target, work) {
     const outcome = await work();
     report(target, outcome || "Saved.", "ok");
   } catch (error) {
-    report(target, String((error && error.message) || error), "bad");
+    report(target, problemWords(error), "bad");
   } finally {
     busy = false;
     lock.forEach((b) => (b.disabled = false));
@@ -442,11 +455,14 @@ dom.stopBackend.addEventListener("click", () =>
 dom.findPython.addEventListener("click", () =>
   act(dom.findPython, dom.findPythonStatus, async () => {
     const result = await invoke("find_python");
-    if (result.found) {
+    // Guarded: an answer with no shape at all used to throw inside `act`, and
+    // the raw "Cannot read properties of null (reading 'found')" went on
+    // screen (click audit, 2026-10-08).
+    if (result && result.found) {
       dom.program.value = result.path;
       return `Found Python ${result.version}, from ${result.source}. Check it, then press Save.`;
     }
-    return result.hint || "Couldn't find a working Python on this PC.";
+    return (result && result.hint) || "Couldn't find a working Python on this PC.";
   })
 );
 
@@ -551,12 +567,24 @@ async function readThemePrefs() {
 
 async function pickTheme(id) {
   // Paint at once when it will show, so the control feels connected; the
-  // fan-out from set_theme corrects it either way.
+  // fan-out from set_theme corrects it either way. If the save is REFUSED the
+  // paint has to come back off: `applyTheme` writes `data-theme` and the
+  // anti-flash cache, so leaving it would show a theme the PC never took -
+  // every other window on the old one, the tick on the new one, and nothing
+  // said (settings-audit, 2026-10-08).
+  const before = document.documentElement.getAttribute("data-theme");
   if (!themePrefs || !themePrefs.follow_system) applyTheme(id);
   try {
     const shown = await invoke("set_theme", { theme: id });
     if (typeof shown === "string") applyTheme(shown);
+    if (dom.appearanceStatus) report(dom.appearanceStatus, "");
   } catch (error) {
+    if (before) applyTheme(before);
+    if (dom.appearanceStatus) {
+      report(dom.appearanceStatus,
+        `Could not change the theme, so it is still ${before || "the one you had"}. `
+        + problemWords(error), "bad");
+    }
     console.error("[settings] could not save the theme:", error);
   }
   await readThemePrefs();
@@ -574,6 +602,13 @@ if (followSystem) {
       }
     } catch (error) {
       followSystem.checked = !followSystem.checked;
+      // The box goes back on its own - say so as well, or the owner watches a
+      // switch snap back with no words at all (settings-audit, 2026-10-08).
+      if (dom.appearanceStatus) {
+        report(dom.appearanceStatus,
+          `Could not save "Match Windows", so the theme is unchanged. ${problemWords(error)}`,
+          "bad");
+      }
       console.error("[settings] could not save Match Windows:", error);
     }
     paintThemeRows(document.documentElement.getAttribute("data-theme"));
@@ -665,6 +700,21 @@ function paintFaceTuning() {
       ? "Auto adjust is choosing. Picking one turns Auto adjust off."
       : "High matches the reactor kit. Lower is easiest on the graphics chip.";
   }
+  // The closed fold reads its own value (2026-10-08): the summary line above
+  // the controls, so sharpness and frame rate can be read without opening it.
+  // Auto adjust is written as itself: while it is on, these two are what it
+  // starts from, not what is being drawn.
+  const now = $("face-tuning-now");
+  if (now) {
+    const rate = FRAME_RATES.find((f) => f.id === faceTuning.frameRate) || FRAME_RATES[0];
+    const quality = QUALITIES.find((q) => q.id === faceTuning.quality) || QUALITIES[0];
+    const fps = rate.id === "auto" || rate.id === "max"
+      ? `frame rate ${rate.label}`
+      : `${rate.label} fps`;
+    now.textContent = faceTuning.autoAdjust
+      ? "Now: Auto adjust is choosing."
+      : `Now: ${quality.label}, ${fps}.`;
+  }
 }
 
 // The level notes and the frame-rate note, written once: they never change.
@@ -735,31 +785,71 @@ document.addEventListener("visibilitychange", () => {
 
 /* Floating face: a small, always-on-top window with just Jarvis's face -
    no chat box, voice only (2026-09-27). Off by default; read and written
-   through get_floating/set_floating (windows::FloatingState, Rust side). */
+   through get_floating/set_floating (windows::FloatingState, Rust side).
+
+   Two boxes on the same command: this one, and "Click through to what is
+   behind" below it (2026-10-10, the integration evaluation). `set_floating`
+   sets what it is told and leaves the other half alone, so the page keeps
+   what it last read and hands BOTH halves back on every click - otherwise
+   changing one box would quietly reset the other. */
 const floatingEnabled = $("floating-enabled");
+const floatingClickThrough = $("floating-click-through");
+
+/** Both of the floating face's switches, as this page last read them. */
+let floatingPrefs = { enabled: false, clickThrough: false };
 
 async function paintFloating() {
-  if (!floatingEnabled || !IS_TAURI) return;
+  if (!IS_TAURI) return;
   try {
     const prefs = await invoke("get_floating");
-    floatingEnabled.checked = Boolean(prefs && prefs.enabled);
+    floatingPrefs = {
+      enabled: Boolean(prefs && prefs.enabled),
+      clickThrough: Boolean(prefs && prefs.clickThrough),
+    };
+    if (floatingEnabled) floatingEnabled.checked = floatingPrefs.enabled;
+    if (floatingClickThrough) floatingClickThrough.checked = floatingPrefs.clickThrough;
   } catch (error) {
     console.error("[settings] could not read the floating face setting:", error);
   }
 }
 paintFloating();
 
-if (floatingEnabled) {
-  floatingEnabled.addEventListener("change", async () => {
-    const want = floatingEnabled.checked;
-    try {
-      await invoke("set_floating", { enabled: want });
-    } catch (error) {
-      // The checkbox is the only record of intent here - put it back so it
-      // never claims a state the window is not actually in.
-      floatingEnabled.checked = !want;
-      console.error("[settings] could not change the floating face:", error);
+/** One of those two boxes was clicked. `key` says which half of
+ *  `floatingPrefs` it changes; the other half goes back as it was. Both
+ *  apply at once and neither asks for an approval card - they change how
+ *  Jarvis's own face is shown, not anything Jarvis does. */
+async function setFloating(key, box, what) {
+  const want = box.checked;
+  const next = { ...floatingPrefs, [key]: want };
+  try {
+    await invoke("set_floating", {
+      enabled: next.enabled,
+      clickThrough: next.clickThrough,
+    });
+    floatingPrefs = next;
+  } catch (error) {
+    // The checkbox is the only record of intent here - put it back so it
+    // never claims a state the window is not actually in - and say so, or the
+    // switch just snaps back with no words (settings-audit, 2026-10-08).
+    box.checked = !want;
+    if (dom.appearanceStatus) {
+      report(dom.appearanceStatus,
+        `Could not ${what}. ${problemWords(error)}`,
+        "bad");
     }
+    console.error("[settings] could not change the floating face:", error);
+  }
+}
+
+if (floatingEnabled) {
+  floatingEnabled.addEventListener("change", () => {
+    setFloating("enabled", floatingEnabled, `show or hide the floating face`);
+  });
+}
+if (floatingClickThrough) {
+  floatingClickThrough.addEventListener("change", () => {
+    setFloating("clickThrough", floatingClickThrough,
+      "change whether clicks pass through the floating face");
   });
 }
 
@@ -769,7 +859,8 @@ if (floatingEnabled) {
 // sending the wrong state (bug audit 2026-09-27, desktop-rust finding #5).
 if (IS_TAURI) {
   TAURI.event.listen("floating-changed", (event) => {
-    if (floatingEnabled) floatingEnabled.checked = Boolean(event.payload);
+    floatingPrefs.enabled = Boolean(event.payload);
+    if (floatingEnabled) floatingEnabled.checked = floatingPrefs.enabled;
   });
 }
 
@@ -781,6 +872,13 @@ $("open-faces").addEventListener("click", async () => {
     report($("faces-status"), String((error && error.message) || error), "bad");
   }
 });
+
+// "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the owner's request
+// of 2026-10-08) used to be opened from a button in this window, in the "Help
+// and FAQ" card. Both moved to the Brain's "Tutorials and the FAQ" on
+// 2026-10-08: the card was the second way in to help, and the owner chose to
+// fold it. `open_features` is now called by tutorials.js - the same three
+// lines, in the window that draws the button.
 
 /**
  * "Show me where" (plain-errors.js), and, since 2026-09-27, "open <a
@@ -1403,8 +1501,6 @@ function paintUpdate(status) {
   const setUp = Boolean(status.supported);
   if (dom.updateIntroOff) dom.updateIntroOff.hidden = setUp;
   if (dom.updateIntroOn) dom.updateIntroOn.hidden = !setUp;
-  if (dom.faqUpdateOff) dom.faqUpdateOff.hidden = setUp;
-  if (dom.faqUpdateOn) dom.faqUpdateOn.hidden = !setUp;
 
   const notes = String(status.notes || "").trim();
   dom.updateNotes.hidden = !notes;

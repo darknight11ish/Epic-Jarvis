@@ -11,7 +11,7 @@
  * exactly what a real element would offer, nothing DOM-specific about it.
  */
 import assert from "node:assert/strict";
-import { HeavyGate, isHeavy, MIN_DELAY_MS } from "../src/heavy-approve.js";
+import { HeavyGate, isHeavy, needsFullCard, MIN_DELAY_MS } from "../src/heavy-approve.js";
 
 const fails = [];
 
@@ -153,6 +153,58 @@ async function main() {
 
   await check("the exported default delay is a real number of milliseconds, at least a second", () => {
     assert.ok(Number.isFinite(MIN_DELAY_MS) && MIN_DELAY_MS >= 1000, MIN_DELAY_MS);
+  });
+
+  /* ── needsFullCard: what the widget refuses to decide on two lines ─────── */
+
+  await check("needsFullCard: only a card that stays local AND can be undone is decided in the widget", () => {
+    assert.equal(needsFullCard({ risk: { reach: "local", reversible: "yes" } }), false);
+  });
+
+  await check("needsFullCard: something that leaves this PC needs the whole card", () => {
+    assert.equal(needsFullCard({ risk: { reach: "outbound", reversible: "yes" } }), true);
+    // An unknown reach is not "local": the only safe reading of a word this
+    // app does not know is that the action may leave.
+    assert.equal(needsFullCard({ risk: { reach: "somewhere", reversible: "yes" } }), true);
+  });
+
+  await check("needsFullCard: something that cannot simply be undone needs the whole card", () => {
+    assert.equal(needsFullCard({ risk: { reach: "local", reversible: "no" } }), true);
+    // "hard" is not "yes": the card's own line says it is hard to undo.
+    assert.equal(needsFullCard({ risk: { reach: "local", reversible: "hard" } }), true);
+  });
+
+  await check("needsFullCard: a card the backend never classified needs the whole card (finding D1)", () => {
+    // The bug: isHeavy() reads notice.weight, so no notice read as "normal"
+    // and a 320x44 strip could approve it. Unclassified is not "safe".
+    assert.equal(needsFullCard({ notice: null }), true);
+    assert.equal(needsFullCard({ risk: null }), true);
+    assert.equal(needsFullCard({ risk: {} }), true);
+    assert.equal(needsFullCard({}), true);
+    assert.equal(needsFullCard(null), true);
+    // And the specific shape the audit named: no notice AND an outbound risk.
+    assert.equal(needsFullCard({ notice: undefined, risk: { reach: "outbound", reversible: "no" } }), true);
+    // The unclassified card is exactly the one isHeavy() calls normal - that
+    // difference is the whole finding, so hold both readings together here.
+    assert.equal(isHeavy({ notice: undefined, risk: { reach: "outbound", reversible: "no" } }), false);
+  });
+
+  await check("needsFullCard: a malformed risk is refused, never read as local-and-reversible", () => {
+    assert.equal(needsFullCard({ risk: "local" }), true);
+    assert.equal(needsFullCard({ risk: [] }), true);
+    assert.equal(needsFullCard({ risk: { reach: "local" } }), true); // reversible missing
+    assert.equal(needsFullCard({ risk: { reversible: "yes" } }), true); // reach missing
+  });
+
+  await check("CONTROL: a labelled heavy card is still heavy, and a labelled normal local card is not", () => {
+    // The new gate must not have replaced the old one: `isHeavy` keeps its
+    // meaning for the Jarvis bar's own delay-and-scroll gate.
+    const heavyLocal = { notice: { weight: "heavy" }, risk: { reach: "local", reversible: "yes" } };
+    assert.equal(isHeavy(heavyLocal), true);
+    assert.equal(needsFullCard(heavyLocal), false, "needsFullCard answers the reach question only");
+    const normalOutbound = { notice: { weight: "normal" }, risk: { reach: "outbound", reversible: "no" } };
+    assert.equal(isHeavy(normalOutbound), false);
+    assert.equal(needsFullCard(normalOutbound), true);
   });
 
   console.log(`\n${fails.length === 0 ? "ok" : "FAIL"}  ${fails.length} failing`);

@@ -68,8 +68,21 @@ internal fun EmailSendingSection() {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (err != null) chrome.warnInk else chrome.textLo,
                 )
-                else -> Text(v.said, style = MaterialTheme.typography.bodySmall,
-                    color = if (v.ready) chrome.okInk else chrome.textMid)
+                else -> {
+                    Text(v.said, style = MaterialTheme.typography.bodySmall,
+                        color = if (v.ready) chrome.okInk else chrome.textMid)
+                    // Where the account is set up (2026-10-08): the line above
+                    // says "set up on the PC" and never says which screen. One
+                    // plain sentence, the same voice as Backups' own line - no
+                    // control, the PC does the changing.
+                    Gap(6)
+                    Text(
+                        "The address and server it sends from are set on your PC, in Settings → " +
+                            "Sending email.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
+                }
             }
         }
     }

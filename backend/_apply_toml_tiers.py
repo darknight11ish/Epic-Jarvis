@@ -219,16 +219,26 @@ def main(argv) -> int:
         out = b"\xef\xbb\xbf" + out
     backup = live_path.with_name(
         "%s.backup-%s" % (live_path.name, time.strftime("%Y-%m-%d-%H%M%S")))
-    try:
-        live_path.write_bytes(out)
-    except OSError as exc:                               # noqa: BLE001
-        print("Could not write %s (%s). Nothing was changed." % (live_path, exc))
-        return 2
+    # The copy is written FIRST, and the live file only after it is safely on
+    # disk - which is what the docstring above promises ("before it writes").
+    # It used to be the other way round: the live file was overwritten, then
+    # the copy attempted. A failure between the two (no space, a locked file,
+    # power loss) therefore left the approval-tier table changed with no undo
+    # copy, and the very next line still printed "Your copy from before the
+    # change: <path>" for a file that did not exist.
     try:
         backup.write_bytes(raw)
         kept = str(backup)
     except OSError as exc:                               # noqa: BLE001
-        kept = "(could not be kept: %s)" % exc
+        print("Could not write the backup %s (%s). "
+              "Nothing was changed." % (backup, exc))
+        return 2
+    try:
+        live_path.write_bytes(out)
+    except OSError as exc:                               # noqa: BLE001
+        print("Could not write %s (%s). Nothing was changed - the copy from "
+              "before the change is %s." % (live_path, exc, kept))
+        return 2
     print("Checked first: the result parses, every added tier reads back, every other")
     print("tier and every other section is unchanged.")
     print("")

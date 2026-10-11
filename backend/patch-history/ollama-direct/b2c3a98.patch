@@ -1,0 +1,80 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1142,9 +1142,19 @@
+ 
+ 
+ def _auth_headers(extra: dict | None = None) -> dict:
++    # The one place a request's Authorization header is built. A cloud lane
++    # carries its own service's key instead of Jarvis's pairing token: the
++    # resolved lane is read back from jarvis_chatbot_api, never a name in this
++    # file - never logged, never on disk (rule 3). A local lane stores nothing,
++    # so this behaves as it did before.
+     headers = dict(extra or {})
+-    if JARVIS_API_KEY:
+-        headers["Authorization"] = f"Bearer {JARVIS_API_KEY}"
++    try:
++        import jarvis_chatbot_api as _api
++        bearer = _api.last_lane_state().get("key") or JARVIS_API_KEY
++    except Exception:
++        bearer = JARVIS_API_KEY
++    if bearer:
++        headers["Authorization"] = f"Bearer {bearer}"
+     return headers
+ 
+ 
+@@ -2690,6 +2700,28 @@
+             "jarvis" if jarvis_side_memory else ("hud" if injected else "none")
+         )
+ 
++        def _completions_url(lane: str) -> str:
++            # The local lane talks to Ollama directly, which has spoken this
++            # exact OpenAI-compatible shape for a long time - no separate
++            # agent process required.
++            #
++            # A non-local lane goes to the service behind it: which service,
++            # which model, which key and why it cannot be used are
++            # `lane_state()`'s answer in jarvis_chatbot_api.py, not this file's.
++            # A lane this PC cannot pay for comes back with no address, so the
++            # request goes to the LOCAL endpoint and nothing is spent. The local
++            # lane is passed as the empty name, which clears this thread's
++            # answer - a hop back down cannot leave a cloud key behind (rule 3).
++            try:
++                import jarvis_chatbot_api as _api
++                _state = _api.lane_state(lane if lane != local_model else "")
++            except Exception:
++                _state = {}
++            if _state.get("url"):
++                body["model"] = _state["model"]
++                return _state["url"]
++            return f"{OLLAMA_URL}/v1/chat/completions"
++
+         # A rate-limited lane should step down, not surface a 429 to the user.
+         # jarvis_router.degrade() has always described that chain; nothing
+         # ever called it, so the documented behaviour did not exist. Try the
+@@ -2699,7 +2731,7 @@
+             body = dict(payload); body["model"] = lane
+             return urllib.request.urlopen(
+                 urllib.request.Request(
+-                    f"{JARVIS_URL}/v1/chat/completions",
++                    _completions_url(lane),
+                     data=json.dumps(body).encode("utf-8"),
+                     headers=_auth_headers({"Content-Type": "application/json"}),
+                     method="POST",
+@@ -2838,9 +2870,15 @@
+             return
+         except Exception as exc:
+             try:
++                unreachable_msg = (
++                    f"Ollama is not answering on {OLLAMA_URL}. "
++                    f"Start it with `ollama serve`. ({exc})"
++                    if lane == local_model else
++                    f"Jarvis is not answering on {JARVIS_URL}. "
++                    f"Start it with `uv run jarvis serve`. ({exc})"
++                )
+                 self._send(503, {
+-                    "error": f"Jarvis is not answering on {JARVIS_URL}. "
+-                             f"Start it with `uv run jarvis serve`. ({exc})",
++                    "error": unreachable_msg,
+                     "route": route_header,
+                 })
+             except (BrokenPipeError, ConnectionResetError, TimeoutError, socket.timeout):

@@ -38,3 +38,10 @@ jarvis_speech.py
 # noise that changes on every run and conflicts on every merge. The exception
 # is for the SOURCES that exist nowhere else, not for build output.
 rebuilt/__pycache__/
+
+# Scratch for test_jarvis_plugins.py: a throwaway backend folder holding a
+# jarvis_plugins\ directory and the stand-in modules it loads, made and removed
+# by the suite. Under this directory rather than the system temp directory
+# because the sandbox these suites run in allows writes inside the checkout and
+# refuses them elsewhere. Nothing here is ever part of the repository.
+_plugin_test_tmp/

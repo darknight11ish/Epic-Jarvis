@@ -1,0 +1,37 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2713,4 +2713,34 @@
+             body = dict(payload); body["model"] = lane
++            if lane != local_model:
++                # cloud-one-turn.patch. A lane that is not the local model gets
++                # the NEWEST user turn and nothing else - not the earlier ones.
++                #
++                # The clients now send the conversation so far with every
++                # question (the phone's ChatSession, the quickbar's
++                # chat-history.js; the HUD page always did), so a follow-up is
++                # understood. The cloud cut above keeps EVERY `role == "user"`
++                # turn. If the `query` jarvis_router.choose() judges is only
++                # the newest question (not checked from the repository, which
++                # does not hold this file), an earlier one - "my salary is
++                # ...", kept local by the private backstop when it was asked -
++                # would ride along, word for word, on a later question that
++                # looked harmless and complex enough to escalate. The router's
++                # own promise is "cloud turns get your raw question and nothing
++                # else"; this makes the request match it, whichever it is.
++                #
++                # Here, in _open, because every hop of the degrade loop comes
++                # through this one function with the lane it is ABOUT to call,
++                # whatever `messages` was rebuilt to on the way - the same
++                # reason degrade-filter re-derives its cut per hop. `lane !=
++                # local_model` is the same test _completions_url uses to decide
++                # the request leaves for JARVIS_URL rather than Ollama.
++                #
++                # The cost: a cloud answer to a follow-up does not see the
++                # conversation. Local answers do, and local is where anything
++                # private stays in any case.
++                said = [m for m in (body.get("messages") or [])
++                        if isinstance(m, dict) and m.get("role") == "user"]
++                body["messages"] = said[-1:]
+             return urllib.request.urlopen(
+                 urllib.request.Request(
+                     _completions_url(lane),

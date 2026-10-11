@@ -133,6 +133,7 @@ import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Rule
+import com.jarvis.client.ui.parts.SettingsIcon
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.VoiceButton
 import com.jarvis.client.ui.parts.VoiceStrip
@@ -140,6 +141,7 @@ import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
 import com.jarvis.client.ui.parts.pressable
+import com.jarvis.client.ui.parts.scrollToKey
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
@@ -558,6 +560,19 @@ data class HomeState(
      * [com.jarvis.client.JarvisRuntime.lockdown].
      */
     val lockdown: Boolean = false,
+    /**
+     * The prompt coach's switch as the PC last had it
+     * ([com.jarvis.client.net.PromptCoach], ui/screens/PromptCoachBar.kt): the
+     * words of the "Coach this" button and of its two send buttons, so the
+     * chat bar and the PC can never disagree about them.
+     *
+     * Null is "not read yet", which draws nothing at all - the same as off.
+     * The only reading that draws a line without a button is a PC whose answer
+     * says it has no prompt coach ([com.jarvis.client.net.PromptCoach.missing]),
+     * which is carried as a [com.jarvis.client.net.PromptCoach.View] with
+     * `routeKnown` false.
+     */
+    val promptCoach: com.jarvis.client.net.PromptCoach.View? = null,
 )
 
 /**
@@ -613,6 +628,13 @@ data class HomeActions(
     val onOpenInbox: () -> Unit,
     val onOpenBrain: () -> Unit,
     val onOpenAppearance: () -> Unit,
+    /**
+     * Settings itself (2026-10-08): its own button in the row, beside
+     * Appearance - it used to be three taps and a scroll away. Always shown,
+     * like Help: "Settings and Help themselves always stay reachable"
+     * (MenuCatalog's `entry.settings`, which is not hideable).
+     */
+    val onOpenSettings: () -> Unit,
     val onOpenFaq: () -> Unit,
     val blockerFor: (PendingItem) -> String?,
     val onVoiceBegin: () -> Unit,
@@ -642,6 +664,12 @@ data class HomeActions(
     val onFaceFractionCommitted: (Float) -> Unit = {},
     /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
     val onOpenLive: () -> Unit = {},
+    /**
+     * "Find anything" (ui/screens/FindScreen.kt): the typed search over every
+     * place in the app, opened from the Find button on the status line. It
+     * searches and navigates; nothing here changes a setting.
+     */
+    val onOpenFind: () -> Unit = {},
     /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
@@ -752,6 +780,13 @@ data class HomeActions(
      */
     val onLoadSources: suspend (String?) -> com.jarvis.client.net.ChatSources.Read =
         { com.jarvis.client.net.ChatSources.Read.Missing },
+    /**
+     * "3 recalled · 2 near" (the owner's decision of 2026-10-08, "Just the
+     * number"): how many things the PC's own search reached for, counts
+     * only, never the words ([com.jarvis.client.JarvisRuntime.retrieveCount]).
+     */
+    val onLoadRetrieveCount: suspend (String?) -> com.jarvis.client.net.RetrieveCount.Read =
+        { com.jarvis.client.net.RetrieveCount.Read.Missing },
     /** The spending table under an answer ([com.jarvis.client.JarvisRuntime.spendingTable]). A read. */
     val onLoadSpendingTable: suspend (String?) -> com.jarvis.client.net.Spending.Read =
         { com.jarvis.client.net.Spending.Read.Gone(com.jarvis.client.net.Spending.TABLE_GONE) },
@@ -998,37 +1033,25 @@ fun HomeScreen(
         // Where "Open the approval →" actually lands. The id used to be set and
         // then dropped unread, so the tap navigated home and left the reader to
         // find the right card themselves.
-        val focusIndex = state.focusApproval?.let { id ->
-            state.pending.indexOfFirst { it.id == id }.takeIf { it >= 0 }
-        }
-        LaunchedEffect(state.focusApproval, focusIndex) {
-            val index = focusIndex ?: return@LaunchedEffect
+        //
+        // Scrolled to by the card's own KEY, never by counting rows (second
+        // Android audit, N3, 2026-10-09). The cards below are keyed by their
+        // own id (`items(state.pending, key = { it.id })`), and the old sum of
+        // ten conditional items - kept in step by hand, by a comment asking the
+        // next person to remember - silently named a different row the moment
+        // anything was added above them. This one place sends the owner to
+        // decide something, so it is the worst place for that class of bug.
+        // From the top: a notification can open Home with the thread scrolled
+        // anywhere, and the walk only ever moves down.
+        val focusCard = state.focusApproval?.takeIf { id -> state.pending.any { it.id == id } }
+        LaunchedEffect(state.focusApproval, focusCard) {
+            val id = focusCard ?: return@LaunchedEffect
             // Room first. At the owner's 75% the list was about 130dp tall,
             // so scrolling to the top of a card left its Approve and Deny
             // below the bottom edge. This only moves the layout; the card is
             // still decided by the owner, by hand.
             if (state.makeRoomForApprovals && fold == Fold.NONE) fold = Fold.APPROVALS
-            // Counted, not guessed. The face has its own pane now and is no
-            // longer item 0 here; the notice and the approvals-off plate are
-            // conditional; the "waiting on you" label sits immediately above
-            // the cards and exists whenever any card does - which a found
-            // index guarantees. Adding an item to this list above the cards
-            // means adding it here too.
-            val busy = (state.activity != Activity.IDLE && state.activity != Activity.ERROR) ||
-                state.streaming || state.voicePhase == VoiceSession.Phase.SPEAKING
-            val leading =
-                (if (busy) 1 else 0) +
-                (if (state.lockdown) 1 else 0) +
-                (if (state.watchSign != null) 1 else 0) +
-                (if (state.phoneWatchSign != null || state.phoneWatchOffered) 1 else 0) +
-                (if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) 1 else 0) +
-                1 +
-                1 +
-                (if (state.inboxTidy != null) 1 else 0) +
-                (if (state.notice != null) 1 else 0) +
-                (if (state.approvalsOff) 1 else 0) +
-                1
-            listState.animateScrollToItem(leading + index)
+            scrollToKey(listState, id, fromTop = true)
         }
 
         // Keep a streaming reply in view. The reply is the last item, below
@@ -1392,6 +1415,15 @@ private fun ConversationList(
                     hidden = state.memoryHidden,
                     load = actions.onLoadSources,
                 ),
+                // "3 recalled · 2 near" (the owner's decision of 2026-10-08):
+                // counts only, and asked for only while the memory lists are
+                // not hidden - the PC blanks this route itself in that state,
+                // so this is the same rule rather than a second one.
+                retrieve = RetrieveAnswer(
+                    question = state.lastUserText,
+                    hidden = state.memoryHidden,
+                    load = actions.onLoadRetrieveCount,
+                ),
                 spending = SpendingAnswer(
                     tableId = state.answerTableId,
                     hidden = state.memoryHidden,
@@ -1568,6 +1600,17 @@ private fun StatusLine(
             }
         }
 
+        // "Find anything" (ui/screens/FindScreen.kt; the parity audit of
+        // 2026-10-10, gap 8): the typed search over every place in the app.
+        // Here rather than in the navigation row below, for a reason that
+        // shows on a narrow phone: that row weights six destinations equally,
+        // and a seventh would ellipsize "Appearance" on most screens. This
+        // line is always on screen - even when the owner has the navigation
+        // row set to "Hidden until swiped" - so the way in is a control the
+        // owner can see, never a gesture. Word for word the label the
+        // desktop's own bar puts on its palette button.
+        Quiet(com.jarvis.client.ui.FindWords.BUTTON, color = chrome.textMid, onClick = actions.onOpenFind)
+
         // Shown only while there is something to retry: offline, and also
         // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
         // but has gone quiet - often a half-dead socket after the phone slept
@@ -1625,15 +1668,17 @@ private fun NavToggle(shown: Boolean, onToggle: (Boolean) -> Unit) {
     }
 }
 
-/** Mind, Inbox, Appearance and Help - the part of the old bar that may hide. */
+/** Mind, Inbox, Live, Appearance, Settings and Help - the part of the old bar
+ *  that may hide (Settings arrived 2026-10-08; see its own NavItem below). */
 @Composable
 private fun NavRow(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
     val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
     // from navigation by a rule, Brain gets a real button, "Look"
-    // becomes "Appearance". Four destinations, evenly weighted so the
-    // row balances regardless of phone width.
+    // becomes "Appearance". Every destination is weighted the same, so the
+    // row balances regardless of phone width - five when Appearance is
+    // hidden, six otherwise.
     Column(Modifier.fillMaxWidth().background(chrome.surface1)) {
         Rule()
         Row(Modifier.fillMaxWidth()) {
@@ -1666,6 +1711,16 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                     modifier = Modifier.weight(1f),
                 )
             }
+            // Settings, in the same shape as its neighbours (2026-10-08): one
+            // tap from Home instead of three and a scroll. Always shown -
+            // Settings is never hideable, and its own row is where the owner
+            // reaches everything the phone can change.
+            NavItem(
+                icon = { SettingsIcon(chrome.textMid) },
+                label = "Settings",
+                onClick = actions.onOpenSettings,
+                modifier = Modifier.weight(1f),
+            )
             NavItem(
                 icon = { HelpIcon(chrome.textMid) },
                 label = "Help",
@@ -2656,6 +2711,10 @@ private fun Reply(
     // gave no turn_id at all - the same "nothing to show" the line below
     // already treats an empty `used.ids` as.
     sources: SourcesAnswer? = null,
+    // "3 recalled · 2 near" (the owner's decision of 2026-10-08, "Just the
+    // number"): counts only, never the words. Null when the caller gave no
+    // question to count for.
+    retrieve: RetrieveAnswer? = null,
     // The spending table under this answer (docs/JARVIS-API.md section 100):
     // drawn as sent, memory only, never copied, shared or read aloud.
     spending: SpendingAnswer? = null,
@@ -2842,6 +2901,34 @@ private fun Reply(
                         modifier = Modifier.liveStatus(),
                     )
                 }
+                // "3 recalled · 2 near" (the owner's decision of 2026-10-08,
+                // "Just the number"; docs/RETRIEVE-PORT-BRIEF.md option B):
+                // how many things the PC's own search reached for, and how
+                // many were near misses. The words the desktop's trace prints
+                // - a saved fact, a document, a Logseq page - are never sent:
+                // the phone asks with `count=1` and the PC answers with two
+                // numbers (jarvis_hud.py `_retrieve_counts`). Asked for only
+                // while the memory lists are not hidden, because the PC blanks
+                // this route itself under "Windows Hello for memory lists"
+                // (`lock/rules.rs` `redact_hud_read`) - the same rule, not a
+                // second one - so nothing is sent at all in that state.
+                if (retrieve != null && retrieve.question != null && !retrieve.hidden) {
+                    var retRead by remember(retrieve.question) {
+                        mutableStateOf<com.jarvis.client.net.RetrieveCount.Read?>(null)
+                    }
+                    LaunchedEffect(retrieve.question) { retRead = retrieve.load(retrieve.question) }
+                    val shown = retRead as? com.jarvis.client.net.RetrieveCount.Read.Shown
+                    val line = shown?.let { com.jarvis.client.net.RetrieveCount.line(it.count) }
+                    if (line != null) {
+                        Gap(4)
+                        Text(
+                            line,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                            modifier = Modifier.liveStatus(),
+                        )
+                    }
+                }
                 // "Where this came from" (feasibility I42/I132): fetched
                 // once, quietly, as soon as this answer's turn_id is known
                 // - there is no cheap count the way "Used 2 memories" has
@@ -3022,6 +3109,20 @@ internal data class SourcesAnswer(
     val turnId: String?,
     val hidden: Boolean,
     val load: suspend (String?) -> com.jarvis.client.net.ChatSources.Read,
+)
+
+/** What "3 recalled · 2 near" under the answer needs (the owner's decision of
+ *  2026-10-08, "Just the number"; docs/RETRIEVE-PORT-BRIEF.md option B) - see
+ *  [com.jarvis.client.net.RetrieveCount]. `question` is the owner's own last
+ *  question, which is what the PC's search is run against; null means there is
+ *  no answer to count for. `hidden` is the SAME "Hide memory lists and chat
+ *  history" flag [SourcesAnswer.hidden] reads: the PC itself blanks this route
+ *  while that is on, so nothing is asked for and nothing is shown. */
+@Immutable
+internal data class RetrieveAnswer(
+    val question: String?,
+    val hidden: Boolean,
+    val load: suspend (String?) -> com.jarvis.client.net.RetrieveCount.Read,
 )
 
 /**
@@ -3225,6 +3326,29 @@ private fun Composer(
     // A `#log` / `#obs` / `#joplin` line is filed, not asked - said while it
     // is typed, as the desktop's chip beside its prompt does.
     NoteCapture.chip(text, state.noteTargets)?.let { VoiceStrip(it, tone = chrome.textMid) }
+    // "Coach this" (docs/PROMPT-COACH-DESIGN.md, docs/JARVIS-API.md section
+    // 119): above the box it coaches, so the advice panel opens between the
+    // button and the words it is about. Off - the default - it draws nothing
+    // at all, and a PC with no coach route says so instead of offering a
+    // button that would 404.
+    PromptCoachBar(
+        draft = draft,
+        view = state.promptCoach,
+        thread = state.thread,
+        link = state.link,
+        shared = state.sharedLine != null,
+        streaming = state.streaming,
+        // "Send mine": exactly the words in the box, down the chat's own path.
+        // Nothing is sent unless one of these two is pressed.
+        sendMine = { actions.onSend() },
+        // "Send the suggestion": into the box first, then sent - so the owner
+        // sees the words that went, and the box is empty afterwards exactly as
+        // after an ordinary Send.
+        sendSuggestion = { suggestion ->
+            actions.onDraftChange(suggestion)
+            actions.onSend()
+        },
+    )
     Row(
         Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Bottom,
@@ -3329,6 +3453,22 @@ private fun Composer(
                 onCancel = actions.onVoiceCancel,
             )
         }
+    }
+    // Why Send is greyed, while the link is down (feature sweep on the
+    // owner's phone, 2026-10-10). It said nothing at all before: the owner
+    // typed a message, pressed Send and nothing happened, with no sentence
+    // anywhere naming the link as the reason. The runtime's own blocker cannot
+    // cover this one - a disabled button never reaches it. It is the line
+    // every other plate already shows under a control it has greyed for the
+    // link (this screen's own PhoneWatchStartPlate, just above), and only
+    // while the link is down: an empty box on a live link is not a fault.
+    com.jarvis.client.LinkWords.composerHeldLine(state.link)?.let { waiting ->
+        Text(
+            waiting,
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+            modifier = Modifier.padding(top = 6.dp).liveStatus(),
+        )
     }
     }
 }

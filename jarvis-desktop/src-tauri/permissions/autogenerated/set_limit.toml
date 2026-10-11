@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-limit"
+description = "Enables the set_limit command without any pre-configured scope."
+commands.allow = ["set_limit"]
+
+[[permission]]
+identifier = "deny-set-limit"
+description = "Denies the set_limit command without any pre-configured scope."
+commands.deny = ["set_limit"]

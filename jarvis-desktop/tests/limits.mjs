@@ -1,0 +1,388 @@
+/**
+ * "Limits and frequency" on the desktop (2026-10-08; src/limits.js,
+ * src/limits-settings.js, src-tauri/src/limits.rs, backend/jarvis_limits.py,
+ * limits-read.patch + limits-settings.patch).
+ *
+ * What must hold:
+ * - the page keeps the PC's own words and drops the rows the table marks for
+ *   the PHONE (a row says who owns it, so the two screens cannot drift);
+ * - a choice row offers the PC's own choices and sends the value picked - and
+ *   never a "raise"/"lower" label, because which way a change goes is the
+ *   backend's decision, not this page's;
+ * - a step row moves one step and stops at the PC's own low and high;
+ * - a refusal from the PC is shown in the PC's words, and nothing is drawn as
+ *   changed before the PC answers;
+ * - CONTROL: the two commands sit with the Settings window only, the read is a
+ *   GET and the write is a POST to the settings route.
+ */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { normaliseLimits, problemWords, rowWords, stepped, validTime, valueFor } from "../src/limits.js";
+import * as K from "./uikit.mjs";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
+
+const fails = [];
+const check = async (name, fn) => {
+  try { await fn(); console.log(`ok    ${name}`); }
+  catch (e) { fails.push(name); console.log(`FAIL  ${name}\n      ${e.message}`); }
+};
+
+/* A real answer, in the shape the PC's own view() writes. */
+const VIEW = {
+  ok: true,
+  available: true,
+  limits: [
+    { key: "undo_window", title: "How long you can undo", kind: "int", value: 24,
+      words: "keep undo for a day", choices: [1, 24, 168], low: 1, high: 720,
+      unit: "hours", note: "A longer window keeps older copies of your files on this PC.",
+      loosen_up: true, pc_only: false, app: "both" },
+    { key: "jobs_per_tick", title: "Jobs at once", kind: "int", value: 4,
+      words: "4 at once", choices: [], low: 1, high: 16, unit: "jobs",
+      note: "Only this PC may change this one.", loosen_up: true, pc_only: true,
+      app: "desktop" },
+    { key: "memory_people", title: "Look for people and things", kind: "bool",
+      value: false, words: "off", choices: [], low: 0, high: 0, unit: "",
+      note: "", loosen_up: true, pc_only: false, app: "phone" },
+  ],
+};
+
+/* A real answer that carries the owner's decision of 2026-10-08: this PC's own
+   notification choices are rows in the same table, so the phone can change them
+   too. Two of them are the new `kind: "time"` - the quiet hours' two ends,
+   carried as the clock STRING the owner reads, never a number of minutes. */
+const TIME_VIEW = {
+  ok: true,
+  available: true,
+  limits: [
+    { key: "notif_quiet_enabled", title: "Be quiet during quiet hours (on your PC)",
+      kind: "bool", value: true, words: "Be quiet during quiet hours (on your PC)",
+      choices: [], low: 0, high: 0, unit: "", note: "Silences the PC's non-urgent notifications.",
+      loosen_up: false, pc_only: false, app: "both", quiet_on: true },
+    { key: "notif_quiet_start", title: "Quiet hours start (on your PC)", kind: "time",
+      value: "22:00", words: "22:00", choices: [], low: 0, high: 0, unit: "",
+      note: "The hour the PC's quiet window begins, on the PC's own clock.",
+      loosen_up: false, pc_only: false, app: "both", quiet_on: true },
+    { key: "notif_quiet_end", title: "Quiet hours end (on your PC)", kind: "time",
+      value: "07:00", words: "07:00", choices: [], low: 0, high: 0, unit: "",
+      note: "The hour the PC's quiet window ends, on the PC's own clock.",
+      loosen_up: false, pc_only: false, app: "both", quiet_on: true },
+  ],
+};
+
+/* ── The reading half ─────────────────────────────────────────────────── */
+
+await check("the PC's words survive, and the phone's row is left out", async () => {
+  const v = normaliseLimits(VIEW);
+  assert.equal(v.available, true);
+  assert.deepEqual(v.rows.map((r) => r.key), ["undo_window", "jobs_per_tick"]);
+  assert.equal(v.rows[0].words, "keep undo for a day");
+  assert.deepEqual(v.rows[0].choices, [1, 24, 168]);
+  assert.equal(v.rows[1].pcOnly, true, "a PC-only row is offered here - this page IS the PC");
+  // A row with no `app` is one both may change: the PC keeps it.
+  assert.deepEqual(normaliseLimits({ limits: [{ key: "k", kind: "int", value: 1 }] }).rows.map((r) => r.key), ["k"]);
+});
+
+await check("an older PC, and nonsense, are both read safely", async () => {
+  const old = normaliseLimits({ available: false, why: "run apply-patches.ps1" });
+  assert.equal(old.available, false);
+  assert.equal(old.why, "run apply-patches.ps1");
+  assert.deepEqual(old.rows, []);
+  assert.equal(normaliseLimits(null).rows.length, 0);
+  assert.equal(normaliseLimits({ limits: "nope" }).rows.length, 0);
+  // A row with no key is not a control.
+  assert.equal(normaliseLimits({ limits: [{ kind: "int", value: 3 }] }).rows.length, 0);
+});
+
+await check("a step moves one step and stops at the PC's own ends", async () => {
+  const [choice, stepper] = normaliseLimits(VIEW).rows;
+  assert.equal(stepped(choice, 1), 168, "a choice row steps to the next choice, not to 25");
+  assert.equal(stepped(choice, -1), 1);
+  const top = { ...choice, value: 168 };
+  assert.equal(stepped(top, 1), null, "nowhere above the last choice");
+  assert.equal(stepped(stepper, 1), 5);
+  assert.equal(stepped({ ...stepper, value: 16 }, 1), null, "the PC's high");
+  assert.equal(stepped({ ...stepper, value: 1 }, -1), null, "the PC's low");
+  // A value between two choices steps to the next one the PC offers.
+  assert.equal(stepped({ ...choice, value: 7 }, 1), 24);
+  assert.equal(stepped({ ...choice, value: 7 }, -1), 1);
+  assert.equal(stepped({ ...choice, kind: "bool" }, 1), null, "a bool has no step");
+});
+
+await check("what a control sends is the value, never a direction", async () => {
+  const [choice, , bool] = VIEW.limits;
+  assert.equal(valueFor(normaliseLimits(VIEW).rows[0], 168), 168);
+  assert.equal(valueFor({ ...choice, kind: "bool" }, true), true);
+  assert.equal(typeof valueFor(normaliseLimits(VIEW).rows[0], 24), "number");
+  assert.equal(rowWords({ ...choice, kind: "bool", value: true, words: "" }), "on");
+  assert.equal(rowWords({ ...choice, words: "" }), "24 hours");
+});
+
+await check("a clock time stays a clock string, and is never a number of minutes", async () => {
+  const rows = normaliseLimits(TIME_VIEW).rows;
+  assert.deepEqual(rows.map((r) => r.kind), ["bool", "time", "time"]);
+  const start = rows[1];
+  assert.equal(start.value, "22:00", "the value is the string the PC sent");
+  assert.equal(typeof start.value, "string", "Number(\"22:00\") is NaN - never that");
+  assert.equal(rowWords(start), "22:00");
+  assert.equal(validTime(start.value), "22:00");
+  // The shape rule, one home for one rule (jarvis_notify_prefs.check_time):
+  assert.equal(validTime("7:05"), "07:05", "the PC's own shape normalises, and so does this");
+  for (const junk of [1320, "1320", "25:00", "7:5", "", null, "22:60"]) {
+    assert.equal(validTime(junk), null, `${JSON.stringify(junk)} is not a time of day`);
+  }
+  // A clock has no steps, and what it sends is the string itself.
+  assert.equal(stepped(start, 1), null, "a time is not nudged into 22:01");
+  assert.equal(stepped(start, -1), null);
+  assert.equal(valueFor(start, "23:30"), "23:30");
+  assert.equal(valueFor(start, "23:30") !== 23.5, true, "never a fraction of a day either");
+  // The PC's answer about whether the hours matter is read, and an older PC
+  // that does not send it is read as "they do" rather than hiding a control.
+  assert.equal(start.quietOn, true);
+  assert.equal(normaliseLimits({ limits: [{ key: "t", kind: "time", value: "22:00" }] }).rows[0].quietOn,
+    true, "a row that does not say is drawn, not hidden");
+  assert.equal(normaliseLimits({ limits: [{ key: "t", kind: "time", value: "22:00", quiet_on: false }] })
+    .rows[0].quietOn, false);
+});
+
+await check("a bridge error becomes words, not JSON", async () => {
+  assert.equal(problemWords(new Error("bad or missing X-Jarvis-Token")), "bad or missing X-Jarvis-Token");
+  for (const junk of [new Error("{ \"error\": 500 }"), new Error(""), new Error("x".repeat(500)),
+                      new Error("not allowed by ACL"), null]) {
+    assert.match(problemWords(junk), /Try again in a moment|restart Jarvis Desktop/);
+  }
+});
+
+/* ── Settings ─────────────────────────────────────────────────────────── */
+
+const { base, close } = await K.serve();
+const browser = await K.launch();
+
+function limitsBridge(data = {}) {
+  const core = window.__TAURI__.core;
+  const invoke = core.invoke;
+  window.__limitCalls = [];
+  window.__limitView = data.view === "old" ? "old" : JSON.parse(JSON.stringify(data.view));
+  window.__limitRefuse = data.refuse === true;
+  core.invoke = async (cmd, args) => {
+    if (cmd === "get_limits") {
+      // An older PC answers "no such route" - which reach.rs/limits.rs turn
+      // into the plain sentence below, with available:false.
+      if (window.__limitView === "old") {
+        return { available: false, why: "Your PC's Jarvis does not have this setting yet - run apply-patches.ps1 on the PC." };
+      }
+      return JSON.parse(JSON.stringify(window.__limitView));
+    }
+    if (cmd === "set_limit") {
+      window.__limitCalls.push({ cmd, args: JSON.parse(JSON.stringify(args)) });
+      if (window.__limitRefuse) throw new Error("Turning this up needs your approval on the PC.");
+      return { ok: true, said: "Done - " + args.key + " is now " + JSON.stringify(args.value) + "." };
+    }
+    return invoke(cmd, args);
+  };
+}
+
+async function settings(data = {}) {
+  const page = await K.open(browser, base, "settings.html", {}, { width: 900, height: 2000 });
+  await page.addInitScript(limitsBridge, data);
+  await page.reload();
+  // Wait for the card to have ANSWERED rather than for a fixed time: it paints
+  // from an invoke, and on a loaded machine 700 ms was occasionally not enough,
+  // which made this suite flaky (seen once, 2026-10-08). Either the rows are
+  // drawn or the state line says why there are none - and "old" is the latter.
+  await page
+    .waitForFunction(
+      () => {
+        const rows = document.querySelectorAll("#limits-rows li").length;
+        const state = (document.getElementById("limits-state") || {}).textContent || "";
+        return rows > 0 || state.trim().length > 0;
+      },
+      null,
+      { timeout: 15000 },
+    )
+    .catch(() => {});
+  return page;
+}
+
+await check("Settings: one row per limit, in the PC's words", async () => {
+  const page = await settings({ view: VIEW });
+  const text = await page.locator("#limits").innerText();
+  const keys = await page.locator("#limits-rows li").evaluateAll((els) => els.map((e) => e.dataset.limit));
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(keys, ["undo_window", "jobs_per_tick"]);
+  assert.ok(text.includes("How long you can undo - keep undo for a day"));
+  assert.ok(text.includes("A longer window keeps older copies of your files on this PC."));
+  assert.ok(text.includes("Some of these take effect at once"), "the one plain line about asks");
+  assert.deepEqual(errors, []);
+});
+
+await check("Settings: the line above the rows promises no direction", async () => {
+  // THE BUG THIS EXISTS FOR (found 2026-10-09). This card used to say, once,
+  // above every row: "Turning a number down changes at once. Turning one up
+  // asks you first, on this PC." That is FALSE for the one row whose loosening
+  // goes the other way - the voice check's bar, where LOWERING it is what lets
+  // more clips count as the owner's voice, so going down is the direction that
+  // raises an approval card. The card therefore told the owner the opposite of
+  // what the row under it does.
+  //
+  // Which direction asks is the ROW's business (`loosen_up` can only describe an
+  // UP loosening, and such a row says so in its own `note`), so the general line
+  // may not claim one. This walks the real voice-bar row through the card and
+  // checks both halves: the row keeps its own sentence, and nothing on the card
+  // says a smaller number always applies at once.
+  const voiceBar = {
+    key: "voice_bar", title: "How sure Jarvis must be that it is your voice",
+    kind: "int", value: 35, words: "35 %", choices: [25, 35, 50, 65], low: 5, high: 100,
+    unit: "%",
+    note: "Lower means more clips count as your voice. Going lower asks you on the PC first.",
+    // The PC marks this row `false`: its loosening is DOWN, and it says so in
+    // its own note instead.
+    loosen_up: false, pc_only: false, app: "both",
+  };
+  const page = await settings({ view: { ok: true, available: true, limits: [voiceBar] } });
+  const body = await page.locator("#limits-body").innerText();
+  await page.close();
+  assert.ok(
+    body.includes("Going lower asks you on the PC first."),
+    "the row's own sentence - the one that names the direction - was not drawn",
+  );
+  // The pattern is narrow on purpose: "down" immediately governing one of these
+  // verbs, or a short "down ... at once". It catches both sentences this test
+  // exists to keep out - "Turning a number down changes at once" (this file's
+  // old line) and "Turning something down applies at once" (the phone's, which
+  // was corrected in the same pass).
+  const claimsDownIsInstant = (text) =>
+    /\bdown\s+(?:changes|applies|takes effect|is applied|goes through)\b/i.test(text) ||
+    /\bdown\s+(?:\w+\s+){0,3}at once\b/i.test(text);
+  assert.ok(
+    !claimsDownIsInstant(body),
+    `the card claims a direction again:\n${body}`,
+  );
+  // ...and the same promise in the page's own source, in case a later edit
+  // writes it back where the rendered text would still pass. Comment lines are
+  // dropped first: this fix's own note QUOTES the sentence it removed, and a
+  // check that cannot tell a quotation from a promise would have to be deleted
+  // the next time somebody explains the bug.
+  const pageSource = read("src/limits-settings.js")
+    .split("\n")
+    .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
+    .join("\n");
+  assert.ok(
+    !claimsDownIsInstant(pageSource),
+    "src/limits-settings.js tells the owner that a smaller number always applies at once",
+  );
+});
+
+/** Waits until `fn` is true in the page. If it never is, the assertion below says why. */
+async function settled(page, fn, timeout = 10000) {
+  await page.waitForFunction(fn, null, { timeout }).catch(() => {});
+}
+
+await check("Settings: a choice sends that choice, and a bool sends the other way", async () => {
+  const page = await settings({ view: VIEW });
+  await page.locator('#limits-rows li[data-limit="undo_window"] button', { hasText: "168" }).click();
+  await settled(page, () => (window.__limitCalls || []).length > 0);
+  const calls = await page.evaluate(() => window.__limitCalls);
+  assert.deepEqual(calls, [{ cmd: "set_limit", args: { key: "undo_window", value: 168 } }]);
+  await page.close();
+
+  const on = await settings({ view: { limits: [{ key: "memory_people", title: "Look for people",
+    kind: "bool", value: false, words: "off", choices: [], low: 0, high: 0, unit: "", note: "",
+    loosen_up: true, pc_only: false, app: "both" }] } });
+  await on.locator('#limits-rows li[data-limit="memory_people"] button').click();
+  await settled(on, () => (window.__limitCalls || []).length > 0);
+  const boolCalls = await on.evaluate(() => window.__limitCalls);
+  await on.close();
+  assert.deepEqual(boolCalls, [{ cmd: "set_limit", args: { key: "memory_people", value: true } }]);
+});
+
+await check("Settings: the PC's refusal is shown in its own words", async () => {
+  const page = await settings({ view: VIEW, refuse: true });
+  await page.locator('#limits-rows li[data-limit="undo_window"] button', { hasText: "168" }).click();
+  // The note says "Saving…" first and the PC's sentence last, and the re-read
+  // after an answer must not wipe it - so wait for a note that is neither empty
+  // nor still saving.
+  await settled(page, () => {
+    const said = ((document.getElementById("limits-note") || {}).textContent || "").trim();
+    return said.length > 0 && said !== "Saving…";
+  });
+  const note = await page.locator("#limits-note").innerText();
+  await page.close();
+  assert.equal(note, "Turning this up needs your approval on the PC.");
+});
+
+await check("Settings: a clock row draws a clock and sends the time it shows", async () => {
+  const page = await settings({ view: TIME_VIEW });
+  const kinds = await page.locator("#limits-rows li").evaluateAll((els) => els.map((e) => e.dataset.kind));
+  const input = page.locator('#limits-rows li[data-limit="notif_quiet_start"] input[type="time"]');
+  const value = await input.inputValue();
+  const text = await page.locator("#limits").innerText();
+  await input.fill("23:30");
+  await settled(page, () => (window.__limitCalls || []).length > 0);
+  const calls = await page.evaluate(() => window.__limitCalls);
+  await page.close();
+  assert.deepEqual(kinds, ["bool", "time", "time"]);
+  assert.equal(value, "22:00", "the clock starts where the PC says the value is");
+  assert.ok(text.includes("Quiet hours start (on your PC) - 22:00"));
+  // ONE call, and it carries the clock STRING - not 1410, and not 23.5.
+  assert.deepEqual(calls, [{ cmd: "set_limit", args: { key: "notif_quiet_start", value: "23:30" } }]);
+});
+
+await check("Settings: with quiet hours off the clock is not offered, and says why", async () => {
+  const quietOff = JSON.parse(JSON.stringify(TIME_VIEW));
+  quietOff.limits.forEach((r) => { r.quiet_on = false; });
+  const page = await settings({ view: quietOff });
+  const inputs = await page.locator('#limits-rows li[data-limit="notif_quiet_start"] input[type="time"]').count();
+  const text = await page.locator("#limits").innerText();
+  const rows = await page.locator("#limits-rows li").count();
+  await page.close();
+  assert.equal(inputs, 0, "an hour that decides nothing is not offered as a clock");
+  assert.equal(rows, 3, "the row is still drawn, with its value");
+  assert.ok(text.includes("Quiet hours are off, so this hour decides nothing."));
+});
+
+await check("Settings: an older PC says what to do, and the list stays hidden", async () => {
+  const page = await settings({ view: "old" });
+  const state = await page.locator("#limits-state").innerText();
+  const hidden = await page.locator("#limits-body").isHidden();
+  await page.close();
+  assert.match(state, /apply-patches\.ps1/);
+  assert.equal(hidden, true);
+});
+
+await browser.close();
+close();
+
+/* ── CONTROL ───────────────────────────────────────────────────────────── */
+
+await check("CONTROL: both commands sit with Settings only, read GET / write POST", async () => {
+  const toml = read("src-tauri/permissions/surfaces.toml");
+  const sets = toml.split("[[set]]");
+  const settingsSet = sets.find((s) => s.includes('identifier = "settings-surface"'));
+  for (const perm of ['"allow-get-limits"', '"allow-set-limit"']) {
+    assert.ok(settingsSet.includes(perm), perm);
+    assert.equal(sets.filter((s) => s.includes(perm)).length, 1, `${perm} is granted once`);
+  }
+  const build = read("src-tauri/build.rs");
+  assert.ok(build.includes('"get_limits"') && build.includes('"set_limit"'));
+  const rs = read("src-tauri/src/limits.rs");
+  assert.match(rs, /\.get\(format!\("\{base\}\{LIMITS_PATH\}"\)\)/);
+  assert.match(rs, /\.post\(format!\("\{base\}\{LIMITS_SET_PATH\}"\)\)/);
+  // The page never sends a direction: the ONE call it makes carries a key and
+  // a value, and the value comes from the control's own reading of the row.
+  const js = read("src/limits-settings.js");
+  assert.match(js, /invoke\("set_limit", \{ key: limit\.key, value: valueFor\(limit, value\) \}\)/);
+  const sends = js.match(/invoke\("set_limit"[^\n]*/g) || [];
+  assert.equal(sends.length, 1, "one call, in one place");
+  assert.doesNotMatch(sends[0], /loosen|raise|lower|direction|dir\b/i);
+});
+
+if (fails.length) {
+  console.log(`\n${fails.length} failed: ${fails.join(", ")}`);
+  process.exit(1);
+}
+console.log("\nLimits and frequency: the PC's words, one value at a time, asks before more");

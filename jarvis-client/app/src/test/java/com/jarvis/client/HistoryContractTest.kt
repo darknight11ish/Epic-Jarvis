@@ -528,6 +528,148 @@ class HistoryContractTest {
         }
     }
 
+    @Test
+    fun `the five waits are the same five, with the same numbers, on the desktop`() {
+        // One list, two apps: the desktop's chat-history.js and this ChatHistory
+        // must offer the same five ids, in the same order, with the same number
+        // of milliseconds behind each - so neither app can quietly drift from
+        // the other. Both suites still pin their own values; this is the half
+        // that catches a change made on only one side.
+        val js = repoFile("jarvis-desktop/src/chat-history.js").readText()
+        val block = js.substringAfter("export const IDLE_NEW_CHOICES").substringBefore("\n]);")
+        val rows = Regex("id: \"([\\w-]+)\", ms: ([^,]+),").findAll(block)
+            .map { it.groupValues[1] to it.groupValues[2].trim() }.toList()
+        assertEquals("the desktop's five were not parsed - did its own shape change?", 5, rows.size)
+        assertEquals(ChatHistory.IDLE_NEW_CHOICES.map { it.id }, rows.map { it.first })
+        fun jsMs(text: String): Long = when (text) {
+            "IDLE_NEW_MS" -> ChatHistory.IDLE_NEW_MS
+            "Infinity" -> ChatHistory.IDLE_NEW_NEVER_MS
+            else -> {
+                assertTrue("the desktop's number for a wait is not a product of numbers: $text",
+                    Regex("^\\d+( \\* \\d+)+$").matches(text))
+                Regex("\\d+").findAll(text).map { it.value.toLong() }.fold(1L) { a, b -> a * b }
+            }
+        }
+        for ((id, text) in rows) assertEquals(id, ChatHistory.idleNewMsFor(id), jsMs(text))
+        // The same default, and the same "never", named the same way.
+        assertTrue(js.contains("export const IDLE_NEW_DEFAULT = \"${ChatHistory.IDLE_NEW_DEFAULT}\""))
+        assertEquals(ChatHistory.IDLE_NEW_MS, 30L * 60 * 1000)
+    }
+
+    @Test
+    fun `the wait the owner chose is each choice's own threshold`() {
+        // The five the Settings row offers, in its own order - the desktop's
+        // five, with the same ids and the same numbers (chat-history.js).
+        assertEquals(
+            listOf("30m", "10m", "1h", "4h", "never"),
+            ChatHistory.IDLE_NEW_CHOICES.map { it.id },
+        )
+        assertEquals("the default is still 30 minutes", "30m", ChatHistory.IDLE_NEW_DEFAULT)
+        assertEquals(30L * 60 * 1000, ChatHistory.IDLE_NEW_MS)
+        val want = mapOf(
+            "30m" to ChatHistory.IDLE_NEW_MS,
+            "10m" to 10L * 60 * 1000,
+            "1h" to 60L * 60 * 1000,
+            "4h" to 4L * 60 * 60 * 1000,
+            "never" to ChatHistory.IDLE_NEW_NEVER_MS,
+        )
+        for ((id, ms) in want) assertEquals(id, ms, ChatHistory.idleNewMsFor(id))
+        // Each choice really IS its own threshold: the chat starts afresh at it,
+        // and not one millisecond sooner. A test that skipped this half would
+        // still pass if the setting were ignored.
+        val t0 = 1_800_000_000_000L
+        for (c in ChatHistory.IDLE_NEW_CHOICES) {
+            // Each of the four TIMED choices really IS its own threshold: the
+            // chat starts afresh at it, and not one millisecond sooner. A test
+            // that skipped this half would still pass if the setting were
+            // ignored - this is the half that would not. ("never" has no length
+            // to be early or late by; it is checked below, where no amount of
+            // quiet may ever fire it.)
+            val limit = ChatHistory.idleNewMsFor(c.id)
+            if (c.id == "never") continue
+            assertFalse("${c.id} started a new conversation early",
+                ChatHistory.idleExpired(t0, t0 + limit - 1, hasConversation = true, thresholdMs = limit))
+            assertTrue("${c.id} did not start a new conversation when it should",
+                ChatHistory.idleExpired(t0, t0 + limit, hasConversation = true, thresholdMs = limit))
+        }
+        // Four waits, four different lengths - and "never", which is no length at all.
+        assertEquals(5, ChatHistory.IDLE_NEW_CHOICES.map { it.ms }.toSet().size)
+        for (years in listOf(1L, 10L, 100L)) {
+            val later = t0 + years * 365 * 24 * 3_600_000L
+            assertFalse("\"never\" started a new conversation after $years year(s) of quiet",
+                ChatHistory.idleExpired(t0, later, hasConversation = true,
+                    thresholdMs = ChatHistory.idleNewMsFor("never")))
+        }
+        // "Never" says plainly what it means - and it is the Never row's own line.
+        assertTrue(ChatHistory.IDLE_NEW_NEVER.contains("only ends when you start a new one"))
+        assertEquals(ChatHistory.IDLE_NEW_NEVER,
+            ChatHistory.IDLE_NEW_CHOICES.first { it.id == "never" }.why)
+        // What the row does, in plain words, on both apps.
+        assertTrue(ChatHistory.IDLE_NEW_DETAIL.contains("starts a new conversation after this long with nothing said"))
+        assertTrue(ChatHistory.IDLE_NEW_DETAIL.contains("stays in History"))
+        assertTrue(ChatHistory.IDLE_NEW_DETAIL.contains("Continue brings it back"))
+    }
+
+    @Test
+    fun `an unset, garbled or unreadable stored wait is 30 minutes, never never`() {
+        assertEquals("30m", ChatHistory.idleNewChoice(null))
+        assertEquals("30m", ChatHistory.idleNewChoice(""))
+        assertEquals(ChatHistory.IDLE_NEW_MS, ChatHistory.idleNewMsFor(null))
+        assertEquals(ChatHistory.IDLE_NEW_MS, ChatHistory.idleNewMsFor(""))
+        for (junk in listOf(" ", "0", "never ", "NEVER", "Never", "45m", "24h", "{}",
+            "[object Object]", "30m,never", "30 minutes")) {
+            assertEquals("$junk must not pick a wait", "30m", ChatHistory.idleNewChoice(junk))
+            assertEquals("$junk must be 30 minutes", ChatHistory.IDLE_NEW_MS,
+                ChatHistory.idleNewMsFor(junk))
+        }
+        // A stored id this build does not know can never select the one choice
+        // that must never be reached by accident.
+        assertFalse(ChatHistory.idleNewMsFor("banana") == ChatHistory.IDLE_NEW_NEVER_MS)
+        // Each of the five is read back exactly as it was stored.
+        for (c in ChatHistory.IDLE_NEW_CHOICES) assertEquals(c.id, ChatHistory.idleNewChoice(c.id))
+    }
+
+    @Test
+    fun `the phone's wiring reads the stored wait, not the bare constant`() {
+        val main = "jarvis-client/app/src/main/java/com/jarvis/client"
+        val session = repoFile("$main/net/ChatSession.kt").readText()
+        // ChatSession really asks for the owner's wait, at both places the
+        // decision is made - the send and the "your next question starts a new
+        // conversation" line on Home.
+        val send = session.substring(session.indexOf("suspend fun send("))
+        assertTrue(send.contains("ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(),"))
+        assertTrue(send.contains("idleWaitMs())"))
+        assertTrue(session.substring(session.indexOf("fun idleNow()")).contains("idleWaitMs()"))
+        assertTrue(session.contains("private val idleWaitMs: () -> Long = { ChatHistory.IDLE_NEW_MS }"))
+        // The runtime hands it the phone's own stored choice, turned into a
+        // threshold by the same fallback the tests above hold.
+        val runtime = repoFile("$main/JarvisRuntime.kt").readText()
+        assertTrue(runtime.contains(
+            "idleWaitMs = { com.jarvis.client.net.ChatHistory.idleNewMsFor(" +
+                "clientSettings.idleNewChoice.value) }",
+        ))
+        // The store that keeps it is the same one the phone's other settings
+        // use, keyed by ChatHistory's own key, and its read falls back to the
+        // default rather than to "never".
+        val settings = repoFile("$main/data/ClientSettings.kt").readText()
+        assertTrue(settings.contains("prefs.getString(ChatHistory.IDLE_NEW_KEY, null)"))
+        assertTrue(settings.contains("ChatHistory.idleNewChoice(it)"))
+        assertTrue(settings.contains("ChatHistory.IDLE_NEW_DEFAULT"))
+        assertTrue(settings.contains("fun setIdleNewChoice(id: String)"))
+        // ...and the row that changes it is drawn behind its own menu, with a
+        // place in MenuPlaces (MenuVisibilityTest fails on either half).
+        val screen = repoFile("$main/ui/screens/SettingsScreen.kt").readText()
+        assertTrue(screen.contains("if (menus.shows(\"settings.idle-new\")) item(key = \"idle-new\")"))
+        assertTrue(screen.contains("MenuFrame(menus, \"settings.idle-new\")"))
+        assertTrue(screen.contains("IdleNewSection(choice = idleNewChoice, onChange = onIdleNewChoiceChange)"))
+        val places = repoFile("$main/ui/MenuPlaces.kt").readText()
+        assertTrue(places.contains("\"idle-new\" to \"settings.idle-new\""))
+        assertTrue(repoFile("$main/ui/SettingsJump.kt").readText().contains("Entry(\"A new conversation starts after\", \"idle-new\")"))
+        // The row's own five come from one source, so a screen cannot offer its own list.
+        val plate = repoFile("$main/ui/screens/IdleNewPlate.kt").readText()
+        assertTrue(plate.contains("ChatHistory.IDLE_NEW_CHOICES.forEach"))
+    }
+
     /** A file of this repository, found from wherever the tests run. */
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile

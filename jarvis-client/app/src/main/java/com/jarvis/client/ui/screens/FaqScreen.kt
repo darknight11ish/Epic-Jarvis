@@ -106,8 +106,18 @@ private val FAQS = listOf(
     ),
     Faq(
         "How do I teach Jarvis my voice? Where is the talk button?",
-        "Open Platform checks and tap Train my voice on the Your voice card. " +
-            "Read the twelve short sentences, send them, then approve the card that " +
+        // This used to say "tap Train my voice on the Your voice card"
+        // unconditionally, and on an unpaired phone that card shows the button
+        // nowhere (MainActivity passes onTrainVoice only once paired, by
+        // design - the clips go to the desktop). Help is the screen someone
+        // reads when something is wrong, so it names the condition first
+        // (device tour, 2026-10-09).
+        "Pair this phone with your desktop first: the recordings go to the " +
+            "desktop, so Train my voice appears on the Your voice card only once " +
+            "there is one to send them to - before that the card says Unknown. " +
+            "Once paired, open Platform checks and tap Train my voice on the " +
+            "Your voice card. Read the twelve short " +
+            "sentences, send them, then approve the card that " +
             "appears on your desktop or here - Jarvis learns your voice only " +
             "when you approve it, and the recordings are deleted either way. " +
             "The talk button on Home appears once your voice is trained and " +
@@ -117,7 +127,10 @@ private val FAQS = listOf(
     Faq(
         // Words held to Sayable.kt by SayableContractTest, so this can never
         // drift from what "what can you do?" answers, or from the desktop's
-        // own FAQ entry (settings.html, "What can I say?").
+        // own "What can I say?" entry - which moved on 2026-10-08 out of
+        // settings.html and into the desktop's half of the Brain's "Tutorials
+        // and the FAQ" (jarvis-desktop/src/desktop-help.js, which imports
+        // Sayable.HELP_BODY itself rather than retyping it).
         Sayable.HELP_TITLE,
         Sayable.HELP_BODY,
     ),
@@ -275,7 +288,8 @@ private val FAQS = listOf(
     ),
     Faq(
         // The one answer the "run apply-patches.ps1" messages point to
-        // (ease-of-use audit 2026-09-27, #8e). The desktop's FAQ says the same.
+        // (ease-of-use audit 2026-09-27, #8e). The desktop's own FAQ says the
+        // same - in the Brain's "Tutorials and the FAQ" since 2026-10-08.
         "How do I update Jarvis?",
         "Three parts, in this order. Jarvis on your PC: stop it, then in " +
             "PowerShell, in your copy of the Jarvis files, get the newest files " +
@@ -303,7 +317,7 @@ fun FaqScreen(
 ) {
     val chrome = LocalChrome.current
     val listState = rememberLazyListState()
-    ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
+    ScrollToKeyOnce(listState, initialSection, onDone = onSectionConsumed)
     Column(modifier.fillMaxSize().background(chrome.surface0)) {
         // Titled with the word on the button that opened it. Home's nav says
         // "Help", and a beginner who taps "Help" and lands on "Frequently

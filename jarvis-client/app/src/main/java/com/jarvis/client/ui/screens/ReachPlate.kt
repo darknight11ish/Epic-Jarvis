@@ -98,6 +98,18 @@ internal fun ReachSection() {
                     Gap(8)
                     Text(v.everythingElse, style = MaterialTheme.typography.labelSmall,
                         color = chrome.textLo)
+                    // Where each of them is changed (2026-10-08): the card
+                    // lists what is on and what the model is offered, and
+                    // never said which screen sets any of it. One plain
+                    // sentence, the same voice as Backups' own line - no
+                    // control here, the PC does the changing.
+                    Gap(8)
+                    Text(
+                        "Every switch here is set on your PC: the ways out in Settings → " +
+                            "What Jarvis can reach, and the tools in Settings → What asks first.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
                 }
             }
         }

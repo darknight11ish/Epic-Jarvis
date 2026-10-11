@@ -105,10 +105,14 @@ def state_cases() -> list:
         _run_case("a never-hideable menu is refused", "desktop", e,
                   [("hide", "settings.security"), ("hide", "brain.tab.watch"),
                    ("hide", "settings.menu-visibility"), ("hide", "brain.work.coming-up")]),
+        # "group.home" is the empty group that was removed on 2026-10-08 (the
+        # cohesion audit). The input stays on purpose, in both places: an app
+        # that stored it before that date must still get a plain refusal, and
+        # sanitize must still drop it silently.
         _run_case("an unknown id, and an id the other app has, are refused", "desktop", e,
                   [("hide", "settings.no-such-menu"), ("hide", "brain.memory.people-things"),
                    ("hide", "group.home")]),
-        _run_case("a group with no member here is refused", "desktop", e,
+        _run_case("a group id that is gone is refused like any other", "desktop", e,
                   [("hide", "group.home")]),
         _run_case("folding and opening", "phone", e,
                   [("collapse", "brain.work.goals"), ("collapse", "brain.work.quiz"),
@@ -303,6 +307,11 @@ def _kt(text: str) -> str:
     return '"' + "".join(out) + '"'
 
 
+def _kt_list(items) -> str:
+    """A Kotlin `listOf("a", "b")`, empty list included."""
+    return "listOf(" + ", ".join(_kt(i) for i in items) + ")"
+
+
 def kotlin_source() -> str:
     lines = [
         "package com.jarvis.client.net",
@@ -331,6 +340,8 @@ def kotlin_source() -> str:
         "        val hide: Boolean,",
         "        val collapse: Boolean,",
         "        val why: String,",
+        "        /** The names Jarvis already answers to, so typing one finds it. */",
+        "        val names: List<String>,",
         "    )",
         "",
         "    data class Group(val id: String, val title: String, val about: String)",
@@ -350,7 +361,7 @@ def kotlin_source() -> str:
             f"        Menu({_kt(m.id)}, {_kt(m.title)}, {_kt(m.about)}, "
             f"{str(DESKTOP_APP in m.apps).lower()}, {str(PHONE_APP in m.apps).lower()}, "
             f"{_kt(m.area)}, {_kt(m.view)}, {_kt(m.kind)}, {grp}, {par}, "
-            f"{str(m.hide).lower()}, {str(m.collapse).lower()}, {_kt(m.why)}),")
+            f"{str(m.hide).lower()}, {str(m.collapse).lower()}, {_kt(m.why)}, {_kt_list(m.names)}),")
     lines += [")".rjust(5), "", "    /** The fixed never-hideable list (design section 5); a test fails if one is hideable. */",
               "    val NEVER_HIDE: List<String> = listOf("]
     for i, _ in M.NEVER_HIDE:

@@ -67,7 +67,96 @@ def _patch_names() -> list:
 def t_the_patch_is_registered_last():
     names = _patch_names()
     check("the patch file is in $PATCHES", "gate-risk-rows.patch" in names)
-    check("it is LAST, like every new patch here", names and names[-1] == "gate-risk-rows.patch",
+    # "Last" means last but for the patches written after it - the same rule
+    # test_referee.py and test_devices.py use. Every new patch is appended, so
+    # the next one pushes this one up the list, and that is not a defect in
+    # either of them.
+    # screen-attach.patch (2026-10-07) comes after it: one hunk in jarvis_hud.py's
+    # tutorials install block, touching jarvis_gate.py not at all, so it cannot
+    # rewrite the rows this patch fixes.
+    # prompt-coach.patch (2026-10-08) also comes after it: two hunks in
+    # jarvis_hud.py and jarvis_gate.py not at all, so it cannot rewrite the
+    # stale rows this patch removes.
+    # tasks.patch (2026-10-08) comes after it too: two hunks in jarvis_hud.py -
+    # one GET route, one POST block - and jarvis_gate.py not at all, so it
+    # cannot rewrite the stale rows this patch removes either.
+    # retrieve-count.patch (2026-10-08) comes after it too: two hunks in
+    # jarvis_hud.py - `_retrieve_counts()` beside retrieve() and the handler's
+    # own `count=1` branch - and jarvis_gate.py not at all, so it cannot
+    # rewrite the stale rows this patch removes either.
+    later = {"screen-attach.patch", "prompt-coach.patch",
+             "tasks.patch", "retrieve-count.patch",
+             # attention-settings.patch (2026-10-08) comes after it as well: ONE
+             # route in jarvis_hud.py (POST /api/attention/settings), anchored on
+             # the attention routes already there, and jarvis_gate.py not at all -
+             # so it cannot rewrite the stale rows this patch removes. It goes
+             # before screen-attach.patch, the patch every new one is written
+             # before.
+             "attention-settings.patch",
+             # handoff-mode.patch (2026-10-08) also comes after it: its two hunks
+             # join the "acts only on tier ask" list and the _RISK table at the
+             # END of each, so it cannot rewrite the two rows this patch removes
+             # either.
+             "handoff-mode.patch",
+             # limits-settings.patch (2026-10-08) comes after it too: ONE route in
+             # jarvis_hud.py (POST /api/limits/settings) right after the budget's
+             # own, and jarvis_gate.py not at all - so it cannot rewrite the stale
+             # rows either.
+             "limits-settings.patch",
+             # limits-read.patch (2026-10-08) comes after it as well: GET
+             # /api/limits joins the HUD's read-only route set and jarvis_gate.py
+             # is not touched at all - so it cannot rewrite the stale rows either.
+             "limits-read.patch",
+             # handoff-front.patch (2026-10-09) is the same shape as
+             # handoff-mode.patch: its two hunks join the "acts only on tier ask"
+             # list and the _RISK table at the END of each, so it cannot rewrite
+             # the two rows this patch removes either.
+             "handoff-front.patch",
+             # docker.patch (2026-10-09) is the route half of the first Docker
+             # integration: ONE install block in jarvis_hud.py, between
+             # chatbot-limits-hud.patch's block and tutorials.patch's, and it
+             # touches jarvis_gate.py not at all - no gate list entry, no risk
+             # row, no _TOOL_ACTIONS line - so it cannot rewrite the stale rows
+             # this patch removes either. Its own two actions,
+             # docker_service_start and docker_service_stop, get their rows from
+             # a later slice of docs/DOCKER-INTEGRATION-DESIGN.md (section 9.2);
+             # until they land both take unknown_action_tier, which is "ask" in
+             # the shipped config, so neither direction fails open.
+             "docker.patch",
+             # plugin-loader.patch (2026-10-10, this branch) is appended last
+             # and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED lines
+             # at the end of the install chain. It removes no line and does not
+             # touch jarvis_gate.py at all, so it rewrites nothing this patch
+             # wrote.
+             "plugin-loader.patch",
+             # gate-touches.patch (2026-10-10) is the one name here that DOES
+             # touch jarvis_gate.py: two hunks, its own PROTECTED block (what an
+             # action TOUCHES, rather than the words printed on its card) and
+             # the comment above `check()`'s protected-file call. Neither goes
+             # near `_RISK`: its own suite, test_gate_touches.py, checks that no
+             # line it adds or removes mentions `_PROTECTED` or the refusal
+             # sentence - so it cannot rewrite the two stale rows this patch
+             # removes.
+             "gate-touches.patch",
+             # picture-card.patch (2026-10-11) goes immediately before
+             # plugin-loader.patch and has exactly ONE hunk, in jarvis_hud.py: an
+             # install block on the OWNER's own lines just before the main socket
+             # is built. It removes no line and touches jarvis_gate.py not at all -
+             # no gate list entry, no risk row, no _TOOL_ACTIONS line - so it
+             # cannot rewrite the stale rows this patch removes. (It was
+             # re-anchored there on 2026-10-11: its trailing context used to be
+             # topics.patch's own banner, and topics.patch runs after it. See
+             # _stack.py's RATCHET note.)
+             # uncensored-optins.patch (2026-10-11) is appended in front of
+             # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+             # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+             # install block at the end of jarvis_hud.py's chain. It removes no line,
+             # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+             # it cannot rewrite a line this patch wrote.
+             "uncensored-optins.patch",
+             "picture-card.patch"}
+    check("it is LAST, like every new patch here, bar the ones written after it",
+          [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
     check("and every name in the list has a file",
           all((HERE / n).is_file() for n in names),

@@ -1,0 +1,61 @@
+# SearXNG - the search program Jarvis's DEFAULT web-search provider talks to, on
+# this PC only. Added 2026-10-09: the repository had no compose file and no
+# SearXNG settings anywhere, so the default provider had never been able to run.
+#
+# Bring it up from this folder, in PowerShell:
+#
+#     docker compose up -d
+#
+# The full runbook - what to run in order, how to check it answers, the one
+# setting Jarvis needs, and what Jarvis prints when this is down - is
+# backend/README.md, "Web search", step 3a, which is where the code's own error
+# messages send the owner (backend/jarvis_search.py:1001-1002).
+#
+# WHY THE PORTS LINE SAYS 127.0.0.1, AND WHY IT MUST KEEP SAYING IT.
+# Jarvis calls http://127.0.0.1:8888. That is DEFAULT_SEARXNG_URL
+# (backend/jarvis_search.py:122), the address its "what leaves this PC" card
+# names (:656-659) and the address its "not running" message prints
+# (:999-1003). Publishing on 127.0.0.1 means only this PC can reach SearXNG -
+# not the home network, not the internet - which is what the owner's rule 1
+# needs. Dropping the "127.0.0.1:" prefix (plain "8888:8080") would answer the
+# whole network. Never do that.
+
+name: searxng
+
+services:
+  searxng:
+    # Pinned by dated tag on purpose, never ":latest" (2026-10-09). SearXNG
+    # publishes no releases at all - only a tag per build - so this tag IS the
+    # pin, and docs/audit-2026-10-07/F-upstream-drift.md (section F4) writes
+    # down why an unpinned image under the default search provider is the wrong
+    # thing to ship. To move to a newer build: change the tag, then
+    # `docker compose pull` and `docker compose up -d`.
+    image: docker.io/searxng/searxng:2026.10.9-f4822b3fc
+    # The name backend/README.md uses and the name Jarvis's own message shows.
+    container_name: searxng
+    restart: unless-stopped
+    environment:
+      # Says out loud which address this instance answers on, so the links
+      # SearXNG builds for itself point at this PC's own loopback and nowhere
+      # else. Loopback, exactly like the published port below.
+      SEARXNG_BASE_URL: "http://127.0.0.1:8888/"
+    ports:
+      # This PC's 8888 (the address Jarvis calls) -> the port the image itself
+      # listens on, 8080 (container/dist.dockerfile at this tag: GRANIAN_PORT=
+      # "8080", EXPOSE 8080).
+      - "127.0.0.1:8888:8080"
+    volumes:
+      # SearXNG's own settings.yml is written here on the first start, and this
+      # is the file the owner edits later. Outside the repository on purpose: it
+      # holds the random secret key the entrypoint generates for it, so it must
+      # never be a file a `git add -A` could reach.
+      - ${USERPROFILE}\searxng:/etc/searxng
+      # The settings template this repository ships, mounted over the image's
+      # own copy of it. The image's entrypoint copies that template to
+      # settings.yml when settings.yml does not exist yet, and gives it a random
+      # secret key while it does (container/entrypoint.sh, setup(), at this
+      # tag). Mounting ours there is what makes this setup ONE command: JSON
+      # output - the one thing Jarvis needs and SearXNG ships switched off - is
+      # already in the file the container writes, instead of the owner having to
+      # find that file, edit it and restart the container afterwards.
+      - ./settings.template.yml:/usr/local/searxng/settings.template.yml:ro

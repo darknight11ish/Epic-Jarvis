@@ -8,13 +8,21 @@
 //!   ONE look at the window in front. It is taken BEFORE the Jarvis bar
 //!   comes up - once the bar is in front, Jarvis's own window is what would
 //!   be seen, and that is a pause - by asking this PC (`POST /api/screen
-//!   {"do":"look"}`), which checks for a password box, the Never look at
-//!   list and capture protection, takes the picture in memory, reads its
-//!   words and throws the picture away. This app never sees the picture or
-//!   the words: it gets a note ("Looked at: Chrome window - words only") or
-//!   the plain reason there was no look. Then the bar opens, and a question
-//!   asked within two minutes is marked `screen: "look"` (main.js), so the PC
-//!   adds the words to THAT question as outside text.
+//!   {"do":"look","want":"picture"}`), which checks for a password box, the
+//!   Never look at list and capture protection, takes the picture in memory,
+//!   reads its words and throws the picture away. Since the owner's decision
+//!   of 2026-10-07 it ALSO hands back the CLEANED picture - the one
+//!   `jarvis_picture.clean` painted every key, password and Never-look window
+//!   out of - and that lands in the question box as an attachment with a
+//!   thumbnail, before the owner types their question (main.js's
+//!   `attachCapture`; `.dsh-scratch/SCREEN-ATTACH-DESIGN.md`). A picture the
+//!   PC could not verify is not handed back at all, and `capture-failed`
+//!   carries the plain reason (`capture_why` below). This app still never
+//!   TAKES a picture: it receives the cleaner's own PNG, keeps it in the page,
+//!   and neither decodes it, reads it, saves it nor logs it.
+//!   Then the bar opens, and a question asked within two minutes is marked
+//!   `screen: "look"` (main.js), so the PC adds the words to THAT question as
+//!   outside text.
 //! * **Watch with me** (the bar's button, the tray's row, a hotkey that is
 //!   off until the owner picks a key, or "watch with me" said or typed): a
 //!   session with a sign on screen the whole time (`watch-badge.html`, an
@@ -22,7 +30,8 @@
 //!   start - the owner's own act - but held on a stale link (rule 4) and
 //!   while App lock would ask. While it is on, a fresh look is taken when the
 //!   owner STARTS a question: the bar opened by its hotkey, or "Hey Jarvis"
-//!   heard. It is used by that one question.
+//!   heard. It is used by that one question. It asks for no picture: "Watch
+//!   with me" answers questions about the screen, it does not attach one.
 //! * **Stop** (the badge, the bar, the tray, "stop watching", Stop
 //!   everything): never held, never a card.
 //! * The session's state comes to every window as `screen-status`, from the
@@ -34,11 +43,14 @@
 //! when it is pointed at another machine's Jarvis (`voice::is_loopback_base`),
 //! so a look can never be a look at a screen the owner is not sitting at.
 //!
-//! NOTHING HERE READS THE SCREEN.
+//! NOTHING HERE READS THE SCREEN. The one picture that crosses is the PC's
+//! cleaner's own output, and only when the PC says it is a PNG and it decodes
+//! inside a size cap (`capture_payload`); anything else is refused.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use tauri::{AppHandle, Manager, PhysicalPosition};
 
 use crate::commands;
@@ -62,7 +74,26 @@ const READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// A look answers in a fraction of a second (the words are read after); this
 /// only stops a stuck PC from holding the bar back for long.
 const LOOK_TIMEOUT: Duration = Duration::from_secs(4);
+/// A look that also asks for the picture. The PC cannot answer that one in a
+/// fraction of a second: it reads the screen's words AND paints the secrets out
+/// of the picture before answering (`jarvis_screen_attach.look_with_picture`),
+/// and Windows' text reader alone can take a second or two on a busy screen.
+/// The PC's own wait for its reader is 35 s (`jarvis_screen.READ_WAIT_S`); this
+/// is the app's shorter patience, so a hung PC still gives the bar back.
+/// NOT MEASURED on the owner's PC - see CHANGELOG.md.
+const ATTACH_TIMEOUT: Duration = Duration::from_secs(20);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The most bytes of cleaned picture this app will take from the PC. The PC
+/// already caps its own capture (the cap its own text reader sets; a PNG past
+/// it is written half size, and past that it hands nothing on), so this is the
+/// second lock: a wrong or damaged answer must not put a hundred megabytes
+/// through IPC.
+const MAX_ATTACH_BYTES: usize = 8 * 1024 * 1024;
+/// The signature every PNG starts with. The PC's own cleaner writes PNGs
+/// (`jarvis_picture.encode_png`), so a payload that is not one is not its
+/// output and is refused.
+const PNG_SIG: &[u8] = b"\x89PNG\r\n\x1a\n";
 
 /// The verbs `screen_watch` takes. "look" and "ask" are this file's own
 /// (the hotkey, a question starting); the bar never sends them.
@@ -93,6 +124,10 @@ pub(crate) const NOT_THIS_PC: &str = "Jarvis only looks at the screen of the PC 
 /// The Jarvis bar's line when a look could not be taken and the PC gave no
 /// reason of its own.
 const NO_LOOK: &str = "Jarvis could not look at your screen just now.";
+/// The plain words when a look WAS taken but nothing could be attached and the
+/// PC gave no reason of its own.
+const NO_PICTURE: &str = "Jarvis looked at your screen, but could not attach a picture of it. \
+     Your question can still be asked without one.";
 
 /// How often this app tells the PC "I am still here" while a session is on
 /// (the heartbeat). The PC ends a session after about 45 seconds of silence,
@@ -162,6 +197,90 @@ pub fn on_here() -> bool {
 /// of only the window in front.
 pub(crate) fn look_body(whole: bool) -> serde_json::Value {
     serde_json::json!({ "do": "look", "whole": whole })
+}
+
+/// The one field that asks the PC to hand back the look's CLEANED picture as
+/// well (the owner's decision of 2026-10-07;
+/// `.dsh-scratch/SCREEN-ATTACH-DESIGN.md`; `backend/jarvis_screen_attach.py`).
+/// It rides on the LOOK, on jarvis_screen.py's own route: a second route would
+/// be a second thing to keep in step with the session rules.
+pub(crate) const WANT_PICTURE: &str = "picture";
+
+/// The body of a look that also asks for the picture - the one the Look at
+/// this key sends, so the owner's one action both looks and attaches.
+/// "Watch with me" sends `look_body` instead: it answers questions about the
+/// screen, it does not attach one.
+pub(crate) fn attach_body(whole: bool) -> serde_json::Value {
+    let mut body = look_body(whole);
+    body["want"] = serde_json::json!(WANT_PICTURE);
+    body
+}
+
+/// The `screen-captured` payload (commands.rs `CapturePayload`'s shape, which
+/// main.js's `attachCapture` reads) taken from the PC's answer to an
+/// `attach_body` look, or None when there is no usable picture - then
+/// [`capture_why`] says why.
+///
+/// WHAT IS ACCEPTED, AND WHY SO LITTLE. Only a picture the PC itself says is
+/// `image/png` - the cleaner's own output (`jarvis_picture.encode_png`) - which
+/// really decodes as base64, starts with a PNG's signature, and is inside
+/// `MAX_ATTACH_BYTES`. A JPEG, some other `image/*`, or a body that is not the
+/// PC's cleaned PNG is refused: this app must never be the place a raw screen
+/// picture arrives, and `look-rules.mjs` holds it to that. The decoded length
+/// is what the thumbnail shows, so what the owner reads is what is really
+/// there. Nothing here is written to a file, a log or an event payload other
+/// than the one the page draws.
+pub(crate) fn capture_payload(
+    out: &serde_json::Value,
+    elapsed_ms: u64,
+) -> Option<serde_json::Value> {
+    let pic = out.get("picture")?;
+    if pic.get("mime").and_then(|v| v.as_str()) != Some("image/png") {
+        return None;
+    }
+    let data = pic.get("data").and_then(|v| v.as_str()).unwrap_or("");
+    if data.is_empty() {
+        return None;
+    }
+    let raw = BASE64.decode(data).ok()?;
+    if raw.len() < PNG_SIG.len() || raw.len() > MAX_ATTACH_BYTES || !raw.starts_with(PNG_SIG) {
+        return None;
+    }
+    let width = pic.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
+    let height = pic.get("height").and_then(|v| v.as_u64()).unwrap_or(0);
+    if width == 0 || height == 0 {
+        return None;
+    }
+    Some(serde_json::json!({
+        "dataUri": format!("data:image/png;base64,{data}"),
+        "width": width,
+        "height": height,
+        "bytes": raw.len(),
+        "elapsedMs": elapsed_ms,
+    }))
+}
+
+/// Why there is no picture to attach, in plain words: the PC's own reason when
+/// it gave one (`picture_why` for a picture it would not verify; `said` for a
+/// look it refused at a password box), this app's own `PICTURE_MISSING`
+/// sentence when the look worked and the PC said nothing about a picture at all
+/// (a backend whose `jarvis_screen_attach.py` is not installed), and
+/// `NO_PICTURE` otherwise. Never a word from the screen.
+pub(crate) fn capture_why(out: &serde_json::Value) -> String {
+    for key in ["picture_why", "said"] {
+        if let Some(text) = out
+            .get(key)
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+        {
+            return text.to_string();
+        }
+    }
+    if out.get("ok").and_then(|v| v.as_bool()) == Some(true) {
+        return PICTURE_MISSING.to_string();
+    }
+    NO_PICTURE.to_string()
 }
 
 /// The body of one `screen_watch` verb, or why it is not one.
@@ -501,7 +620,8 @@ async fn look_then_bar(app: &AppHandle) {
         commands::notify(app, "Jarvis", why);
         return;
     }
-    let out = match post(app, "/api/screen", look_body(false), LOOK_TIMEOUT).await {
+    let started = std::time::Instant::now();
+    let out = match post(app, "/api/screen", attach_body(false), ATTACH_TIMEOUT).await {
         Ok(out) => out,
         Err(why) => {
             commands::notify_guarded(app, "Jarvis", &why, None);
@@ -522,6 +642,19 @@ async fn look_then_bar(app: &AppHandle) {
         serde_json::json!({ "ok": ok, "note": if ok { line.clone() } else { String::new() },
                             "said": if ok { String::new() } else { line } }),
     );
+    // The CLEANED picture, when the PC could make one: it becomes the
+    // attachment on the question box, with its thumbnail, before the owner
+    // types anything (main.js's `attachCapture`). The PC has already painted
+    // every password, key and Never-look window SOLID BLACK, and a picture it
+    // could not verify is not handed back at all - so a refusal here is a plain
+    // sentence in the strip, never a picture. Nothing is decoded, read, saved
+    // or logged on this side: `capture_payload` checks it and the page draws
+    // it. Sent AFTER `screen-look`: a successful look's own handler clears the
+    // strip's notice, and that must not wipe this refusal with it.
+    match capture_payload(&out, started.elapsed().as_millis() as u64) {
+        Some(capture) => crate::emit_quickbar(app, crate::events::SCREEN_CAPTURED, capture),
+        None => crate::emit_quickbar(app, crate::events::CAPTURE_FAILED, capture_why(&out)),
+    }
     crate::emit_quickbar(app, crate::events::FOCUS_INPUT, ());
 }
 
@@ -733,6 +866,93 @@ mod tests {
     fn a_look_body_says_only_what_to_look_at() {
         assert_eq!(look_body(false), json!({ "do": "look", "whole": false }));
         assert_eq!(look_body(true), json!({ "do": "look", "whole": true }));
+        // The key's own look asks for the picture too, and nothing else.
+        assert_eq!(
+            attach_body(false),
+            json!({ "do": "look", "whole": false, "want": "picture" })
+        );
+        assert_eq!(
+            attach_body(true),
+            json!({ "do": "look", "whole": true, "want": "picture" })
+        );
+        assert_eq!(WANT_PICTURE, "picture");
+    }
+
+    /// A 1x1 PNG this repository's cleaner could have written (`clean` returns
+    /// the original bytes when nothing had to be painted, so any real PNG will
+    /// do here). Made up, decoded nowhere.
+    const PNG_1PX: &[u8] = &[
+        0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, b'I', b'H', b'D',
+        b'R', 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00,
+    ];
+
+    fn picture_answer(data: &str, mime: &str) -> serde_json::Value {
+        json!({ "ok": true, "note": "Looked at: Chrome window \u{b7} words only",
+                "picture": { "data": data, "mime": mime, "width": 1920, "height": 1080,
+                             "bytes": 4096 } })
+    }
+
+    #[test]
+    fn only_the_pcs_own_cleaned_png_becomes_an_attachment() {
+        let data = BASE64.encode(PNG_1PX);
+        let got = capture_payload(&picture_answer(&data, "image/png"), 37).expect("a PNG is taken");
+        assert_eq!(got["dataUri"], format!("data:image/png;base64,{data}"));
+        assert_eq!(got["width"], 1920);
+        assert_eq!(got["height"], 1080);
+        // The size shown is the REAL decoded length, not the PC's own claim.
+        assert_eq!(got["bytes"], PNG_1PX.len());
+        assert_eq!(got["elapsedMs"], 37);
+
+        // Anything that is not the cleaner's PNG is refused, however well shaped.
+        for (data, mime) in [
+            (BASE64.encode(b"not a png at all"), "image/png"),
+            (BASE64.encode(b"\xff\xd8\xff\xe0jpegish"), "image/png"),
+            (BASE64.encode(PNG_1PX), "image/jpeg"),
+            (BASE64.encode(PNG_1PX), ""),
+            ("!!!not base64!!!".to_string(), "image/png"),
+            (String::new(), "image/png"),
+        ] {
+            assert!(
+                capture_payload(&picture_answer(&data, mime), 1).is_none(),
+                "{mime} {data:.16}"
+            );
+        }
+        // No picture at all, and a picture with no size: nothing to attach.
+        assert!(capture_payload(&json!({ "ok": true }), 1).is_none());
+        let mut no_size = picture_answer(&BASE64.encode(PNG_1PX), "image/png");
+        no_size["picture"]["width"] = json!(0);
+        assert!(capture_payload(&no_size, 1).is_none());
+        // The size cap: one byte past it is refused rather than sent on.
+        let mut big = vec![0u8; MAX_ATTACH_BYTES + 1];
+        big[..PNG_SIG.len()].copy_from_slice(PNG_SIG);
+        let over = picture_answer(&BASE64.encode(&big), "image/png");
+        assert!(capture_payload(&over, 1).is_none());
+        // No payload ever carries a path, a file name or a log line.
+        let text = capture_payload(&picture_answer(&BASE64.encode(PNG_1PX), "image/png"), 1)
+            .unwrap()
+            .to_string();
+        assert!(!text.contains("http") && !text.contains(".png\""), "{text}");
+    }
+
+    #[test]
+    fn a_refused_picture_says_why_in_the_pcs_own_words() {
+        assert_eq!(
+            capture_why(&json!({ "ok": true, "picture_why": "The picture could not be checked." })),
+            "The picture could not be checked."
+        );
+        // A look refused at a password box: the PC's own sentence, which is
+        // also what `screen-look` shows.
+        assert_eq!(
+            capture_why(&json!({ "ok": false, "said": "There's a password box in front." })),
+            "There's a password box in front."
+        );
+        // A look that worked and said nothing about a picture: the PC's Jarvis
+        // does not know the field yet.
+        assert_eq!(capture_why(&json!({ "ok": true })), PICTURE_MISSING);
+        assert_eq!(capture_why(&json!({})), NO_PICTURE);
+        // Never a `part` (the screen's words), even if a wrong PC sent one.
+        let leaked = capture_why(&json!({ "ok": false, "part": "Snorvelquist balance owed" }));
+        assert!(!leaked.contains("Snorvelquist"), "{leaked}");
     }
 
     #[test]
@@ -869,6 +1089,7 @@ mod tests {
             APP_LOCK_HELD,
             NOT_THIS_PC,
             NO_LOOK,
+            NO_PICTURE,
         ] {
             assert!(!words.contains("::") && !words.contains('{'), "{words}");
         }

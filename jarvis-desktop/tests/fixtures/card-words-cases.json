@@ -119,6 +119,14 @@
       "title": "Jarvis wants to delete a page in Logseq"
     },
     {
+      "action": "docker_service_start",
+      "title": "Jarvis wants to start one of the containers it uses on this PC"
+    },
+    {
+      "action": "docker_service_stop",
+      "title": "Jarvis wants to stop one of the containers it uses on this PC"
+    },
+    {
       "action": "download_model",
       "title": "Jarvis wants to download an AI model"
     },
@@ -151,8 +159,20 @@
       "title": "Jarvis wants to run actions it has lined up"
     },
     {
+      "action": "fiction_roleplay_enable",
+      "title": "Jarvis wants to turn on a separate lane for fiction and role-play"
+    },
+    {
       "action": "github_read",
       "title": "Jarvis wants to check GitHub for a \"tell me when\""
+    },
+    {
+      "action": "handoff_bring_to_front",
+      "title": "Jarvis wants to bring the stuck browser window to the front"
+    },
+    {
+      "action": "handoff_keep_offering",
+      "title": "Jarvis wants to keep the phone's live view on offer for 15 minutes"
     },
     {
       "action": "history_enable",
@@ -181,6 +201,14 @@
     {
       "action": "loosen_what_asks_first",
       "title": "Jarvis wants to loosen what asks first"
+    },
+    {
+      "action": "lower_api_limit",
+      "title": "Jarvis wants to lower a chatbot's monthly spending limit"
+    },
+    {
+      "action": "lower_the_voice_check_bar",
+      "title": "Jarvis wants to lower the bar for your voice check"
     },
     {
       "action": "memory_forget_range",
@@ -237,6 +265,18 @@
     {
       "action": "quiz_cloud_grade",
       "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better"
+    },
+    {
+      "action": "raise_a_limit",
+      "title": "Jarvis wants to let Jarvis do more, for longer, or more often"
+    },
+    {
+      "action": "raise_api_limit",
+      "title": "Jarvis wants to raise a chatbot's monthly spending limit"
+    },
+    {
+      "action": "raise_attention_budget",
+      "title": "Jarvis wants to let Jarvis interrupt you more often"
     },
     {
       "action": "read_calendar",
@@ -345,6 +385,10 @@
     {
       "action": "topic_loosen",
       "title": "Jarvis wants to turn a private topic back on, or let it learn or be used again"
+    },
+    {
+      "action": "uncensored_models_enable",
+      "title": "Jarvis wants to offer the uncensored AI models already on this PC"
     },
     {
       "action": "unclassified_tool",

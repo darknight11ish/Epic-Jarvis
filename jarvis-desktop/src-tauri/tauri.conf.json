@@ -64,7 +64,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'",
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline'; font-src 'self' data:; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:4719 http://localhost:4719; frame-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'",
       "freezePrototype": true,
       "assetProtocol": {
         "enable": false,
@@ -115,7 +115,7 @@
       "endpoints": [
         "https://github.com/darknight11ish/Epic-Jarvis/releases/download/desktop-latest/latest.json"
       ],
-      "pubkey": "",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMwRTM3MDZERTdGQUI0Q0UKUldUT3RQcm5iWERqTUsxQmVreWlJWDRiYWlBR3ZXRXB3ZndRMXljR001ZUw5VDRUM0FCS2thZ2QK",
       "windows": {
         "installMode": "passive"
       }

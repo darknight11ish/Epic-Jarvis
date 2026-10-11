@@ -119,7 +119,7 @@ class Env:
 
 def ctx(enabled=(), tiers=None, **kw):
     tiers = tiers or {}
-    base = dict(enabled=set(enabled), tier=lambda a: tiers.get(a, "auto"),
+    base = dict(tier=lambda a: tiers.get(a, "auto"),
                 env=lambda n: str(os.environ.get(n, "") or "").strip(),
                 lanes=[], providers=[],
                 search={"provider": "searxng", "searxng_url": "http://127.0.0.1:8888",
@@ -127,6 +127,11 @@ def ctx(enabled=(), tiers=None, **kw):
                 key_saved=lambda p: None, second_card={"master": False, "features": {}},
                 big_model={"master": False}, gate_action=lambda lookup: None,
                 youtube={"ready": None})
+    # `ctx(None)`: leave `enabled` to Ctx's own default - the real
+    # `jarvis_reach._tools_enabled()`, reading the two settings files. Every
+    # other call passes a set, which is what the row checks want.
+    if enabled is not None:
+        base["enabled"] = set(enabled)
     base.update(kw)
     return R.Ctx(**base)
 
@@ -408,6 +413,88 @@ def t_tools_are_the_tool_loops_own_list():
           [n for n in AG.TOOLS if n not in R.TOOL_NAMES])
 
 
+def t_the_tool_list_reads_the_same_fallback_the_turn_does():
+    """A settings file with no `[tools]` section must not read as "no tools".
+
+    `jarvis_agent.enabled_tools_for_turn()` falls back to the inherited
+    `config.toml` list when `jarvis-framework.toml` names nothing, and the turn
+    is offered those tools. This page read only the settings file until
+    2026-10-08, so on a PC in exactly that state - the owner's PC - it said
+    "None: the AI model is offered no tools, so it can only write answers"
+    while a turn really offered web search, the calculator and memory search.
+    The preflight read the same list and skipped its web-search check with
+    "web search is not switched on" for the same wrong reason. This is the
+    check that keeps the two readings equal."""
+    cfg_dir = Path(os.environ["OPENJARVIS_CONFIG_DIR"])
+    toml = cfg_dir / "config.toml"
+    # The settings file the framework will really read: jarvis_framework prefers
+    # JARVIS_FRAMEWORK_TOML when it is set - and run_suites.py sets it - so a
+    # test that wrote only the config folder's copy would measure the runner's
+    # template instead of its own.
+    fw_toml = Path(os.environ.get("JARVIS_FRAMEWORK_TOML") or (cfg_dir / "jarvis-framework.toml"))
+    had = toml.read_text(encoding="utf-8") if toml.exists() else None
+    had_fw = fw_toml.read_text(encoding="utf-8") if fw_toml.exists() else None
+    saved_fw = R._fw
+    import jarvis_framework as FW
+
+    class NoToolsSection:
+        """`jarvis-framework.toml` with no `[tools]` section - what the owner's
+        PC had, because the switch that writes it had never been used."""
+
+        def load_framework(self):
+            return {}
+
+    try:
+        # A settings file with no `[tools]` section, found where the modules
+        # would find the owner's: in the config folder. Without this the suite's
+        # own environment would answer from the repository's shipped template.
+        fw_toml.write_text('[meta]\nversion = "1.0"\n', encoding="utf-8")
+        FW.reload_framework()
+        R._fw = lambda: NoToolsSection()
+
+        # (a) Neither file names a tool. Nothing offered, and the page says so:
+        # this empty answer is correct, and it is not the bug.
+        if toml.exists():
+            toml.unlink()
+        got = [t["id"] for t in R.view(ctx(None))["tools"]]
+        check("neither file names a tool: the page lists none", got == [], got)
+
+        # (b) The settings file still names nothing, and the inherited
+        # config.toml does - the state the owner's PC was in.
+        names = ["web_search", "calculator", "not_a_tool"]
+        toml.write_text('[tools]\nenabled = ["web_search", "calculator", "not_a_tool"]\n',
+                        encoding="utf-8")
+        want = AG.offered_tools(AG.enabled_tools_for_turn({"tools": {"enabled": names}}))
+        got = [t["id"] for t in R.view(ctx(None))["tools"]]
+        check("the settings file names nothing: the inherited list is read, as the turn reads it",
+              got == want, (got, want))
+        check("...and the answer is not empty, which is what the page used to say",
+              got == ["calculator", "web_search"], got)
+
+        # (c) A settings file that names tools still wins, and names nothing
+        # else: the fallback is a fallback.
+        class Names:
+            def load_framework(self):
+                return {"tools": {"enabled": ["email_check"]}}
+
+        R._fw = lambda: Names()
+        got = [t["id"] for t in R.view(ctx(None))["tools"]]
+        check("the settings file's own list wins when it names one", got == ["email_check"], got)
+    finally:
+        R._fw = saved_fw
+        if had is None:
+            if toml.exists():
+                toml.unlink()
+        else:
+            toml.write_text(had, encoding="utf-8")
+        if had_fw is None:
+            if fw_toml.exists():
+                fw_toml.unlink()
+        else:
+            fw_toml.write_text(had_fw, encoding="utf-8")
+        FW.reload_framework()
+
+
 class NoSockets:
     def __enter__(self):
         self.tried = []
@@ -479,27 +566,66 @@ def t_never_raises():
         R.KINDS = saved
 
 
-def t_cloud_lanes_are_the_servers_own():
-    fake = types.ModuleType("jarvis_hud")
-    fake._lane_names = lambda: ["jarvis-escalate", "jarvis-bulk"]
-    sys.modules["jarvis_hud"] = fake
+def t_cloud_lanes_are_the_modules_own():
+    """The cloud escalation lane's real state, from the module that owns it.
+
+    This used to read `litellm-proxy.yaml` - the config of a proxy that is not
+    installed - and to trust the server's own `_lane_names()`. Since
+    2026-10-06 (docs/ACCOUNT-KEYS-DESIGN.md section 5 and part C) a lane is a
+    service and a model in jarvis_chatbot_api, so that is what the row asks.
+    """
+    import jarvis_chatbot_api as A
+
+    saved = R._cloud_lane_status
     try:
+        R._cloud_lane_status = lambda: {
+            "available": True,
+            "lanes": [{"lane": "jarvis-escalate", "pid": "deepseek_api",
+                       "model": "deepseek-flash", "host": "api.deepseek.com",
+                       "company": "DeepSeek", "ready": True, "why": "", "money": None},
+                      {"lane": "jarvis-critic", "pid": "deepseek_api",
+                       "model": "deepseek-v4-pro", "host": "api.deepseek.com",
+                       "company": "DeepSeek", "ready": True, "why": "", "money": None}],
+            "ready": ["jarvis-escalate", "jarvis-critic"]}
         r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("a ready cloud lane names the service it really reaches, and the model",
+              r["on"] and r["where"] == "api.deepseek.com"
+              and "jarvis-escalate" in r["line"] and "deepseek-flash" in r["line"]
+              and "jarvis-critic" in r["line"] and "deepseek-v4-pro" in r["line"], r)
+        check("... and says a lane whose limit is reached is not offered at all",
+              "is not offered at all" in r["line"], r["line"])
+        check("... and never names the proxy file it used to read",
+              "litellm" not in json.dumps(r).lower(), r)
+
+        R._cloud_lane_status = lambda: {
+            "available": True,
+            "lanes": [{"lane": "jarvis-escalate", "pid": "deepseek_api",
+                       "model": "deepseek-flash", "host": "api.deepseek.com",
+                       "company": "DeepSeek", "ready": False,
+                       "why": A.no_limit_words(A.PRESETS["deepseek_api"]), "money": None}],
+            "ready": []}
+        r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("no lane can be used: not set up, in the module's own words, once",
+              r["state"] == "not_set_up" and "No monthly money limit is set for DeepSeek"
+              in r["line"] and r["line"].count("No monthly money limit") == 1, r)
+
+        R._cloud_lane_status = lambda: {"available": True, "lanes": [], "ready": []}
+        r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("no lane at all: every answer is written on this PC",
+              r["state"] == "not_set_up"
+              and "every answer is written on this PC" in r["line"], r)
+
+        R._cloud_lane_status = lambda: {"available": False, "lanes": [], "ready": []}
+        r = row(R.view(ctx(lanes=None)), "cloud_model")
+        check("the module is not on this PC: the same plain 'not set up' line",
+              r["state"] == "not_set_up", r)
     finally:
-        sys.modules.pop("jarvis_hud", None)
-    check("inside the server: _lane_names(), the chat route's own list",
-          r["on"] and "jarvis-escalate, jarvis-bulk" in r["line"], r)
-    (_TMP / "config" / "litellm-proxy.yaml").write_text(
-        "model_list:\n  - model_name: jarvis-critic\n    litellm_params:\n"
-        "      model: openrouter/some-model\n      api_key: os.environ/OPENROUTER_API_KEY\n",
-        encoding="utf-8")
-    try:
-        r = row(R.view(ctx(lanes=None, providers=None)), "cloud_model")
-    finally:
-        (_TMP / "config" / "litellm-proxy.yaml").unlink()
-    check("outside it: the same file, read for names and providers only",
-          r["on"] and "jarvis-critic" in r["line"] and r["where"] == "openrouter"
-          and "OPENROUTER_API_KEY" not in json.dumps(r), r)
+        R._cloud_lane_status = saved
+    # A caller that hands in its own lanes still gets exactly what it passed -
+    # the seam most of this suite and the contract generator use.
+    r = row(R.view(ctx(lanes=["jarvis-escalate"], providers=["deepseek"])), "cloud_model")
+    check("a caller's own lanes are still used as given",
+          r["on"] and "jarvis-escalate" in r["line"] and r["where"] == "deepseek", r)
 
 
 class _Sched:
@@ -771,8 +897,10 @@ if __name__ == "__main__":
                t_chatbot_api_row, t_no_secret_anywhere,
                t_phone_push_needs_an_owner_chosen_destination,
                t_asks_follows_the_rules,
-               t_tools_are_the_tool_loops_own_list, t_it_only_reads, t_sending_email_is_one_entry,
-               t_never_raises, t_cloud_lanes_are_the_servers_own, t_the_quick_answer,
+               t_tools_are_the_tool_loops_own_list,
+               t_the_tool_list_reads_the_same_fallback_the_turn_does,
+               t_it_only_reads, t_sending_email_is_one_entry,
+               t_never_raises, t_cloud_lanes_are_the_modules_own, t_the_quick_answer,
                t_the_patch, t_account_secrets_from_credential_manager_show_too,
                t_both_apps_say_the_same_words, t_both_apps_read_the_current_contract):
         print(f"\n--- {fn.__name__} ---")

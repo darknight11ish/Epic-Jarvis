@@ -23,6 +23,7 @@ import {
   TITLE,
   WALKTHROUGH_EXAMPLES,
 } from "../src/sayable.js";
+import { DESKTOP_FAQ } from "../src/desktop-help.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = join(HERE, "..", "src");
@@ -127,18 +128,20 @@ check("onboarding.html puts exactly the 3 walkthrough examples on screen 2", () 
   }
 });
 
-/* ── Help: both apps ──────────────────────────────────────────────────────── */
+/* ── Help: one place, both apps ───────────────────────────────────────────── */
 
-check("settings.html's FAQ has a \"What can I say?\" answer naming every sentence", () => {
-  const html = page("settings.html");
-  const i = html.indexOf("What can I say?");
-  assert.ok(i >= 0, "no \"What can I say?\" FAQ entry");
-  const raw = html.slice(html.lastIndexOf("<details", i), html.indexOf("</details>", i) + 11);
-  // Line-wrapped source, not rendered HTML: a sentence split across two
-  // source lines still reads as one to a browser, so it must here too.
-  const entry = raw.replace(/\s+/g, " ");
-  for (const s of SENTENCES) assert.ok(entry.includes(s), `FAQ entry is missing ${s}`);
-  assert.match(entry, /what can you do\?/i, "the FAQ never says how to see the list again");
+check("the Help place's \"What can I say?\" answer names every sentence", () => {
+  // This answer was the Settings FAQ's until 2026-10-08, when the owner folded
+  // Help into one place: the Brain's "Tutorials and the FAQ". It moved there
+  // WITHOUT being retyped - desktop-help.js imports HELP_BODY from sayable.js,
+  // the same constant the Jarvis bar's own primer draws - so what is checked is
+  // that the moved entry still carries the shared words and every sentence.
+  const entry = DESKTOP_FAQ.find((q) => q.id === "what-can-i-say");
+  assert.ok(entry, "the Help place has no \"What can I say?\" entry any more");
+  assert.equal(entry.q, HELP_TITLE, "the moved question is not the shared title");
+  assert.equal(entry.a, HELP_BODY, "the moved answer is not the shared body, word for word");
+  for (const s of SENTENCES) assert.ok(entry.a.includes(s), `FAQ entry is missing ${s}`);
+  assert.match(entry.a, /what can you do\?/i, "the FAQ never says how to see the list again");
 });
 
 if (fails.length) {

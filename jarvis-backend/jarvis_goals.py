@@ -112,6 +112,8 @@ import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
+import jarvis_sqlite
+
 try:
     import jarvis_framework as fw
 except Exception:  # pragma: no cover - shipped beside it on the PC
@@ -493,7 +495,12 @@ class Goals:
 
     def _db(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        c = sqlite3.connect(self.path, timeout=30)
+        # jarvis_sqlite.connect, not sqlite3.connect: the connection is CLOSED
+        # when its `with` block ends, not left to the collector - a leaked
+        # handle is what made goals.db undeletable on the Windows runner
+        # (2026-10-08, the same bug jarvis_schedule.py fixed the day before).
+        # One shared copy of the class now, in jarvis_sqlite.py.
+        c = jarvis_sqlite.connect(self.path, timeout=30)
         c.row_factory = sqlite3.Row
         return c
 

@@ -72,11 +72,11 @@ module does not decide its own tier, `jarvis_gate.py` does, same as always.
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
 `JARVIS_CALDAV_URL`, `JARVIS_CALDAV_USER`, `JARVIS_CALDAV_PASSWORD` are read
-fresh from the environment on every call, exactly like
-`jarvis_research.TOKEN_ENV`. This module never writes them to disk and never
-puts the password in a `Plan`, a `Query`, or `describe()`'s output -
-`describe()` says only THAT the request is authenticated, never with what,
-matching `jarvis_research.describe()`'s own auth line.
+fresh on every call, exactly like `jarvis_research.TOKEN_ENV`. This module
+never writes them to disk and never puts the password in a `Plan`, a `Query`,
+or `describe()`'s output - `describe()` says only THAT the request is
+authenticated, never with what, matching `jarvis_research.describe()`'s own
+auth line.
 
 The private link is a little more careful still (ease-of-use audit row 15):
 `_feed_url()` reads `ICS_URL_ENV` if the owner set it, else Windows
@@ -84,6 +84,13 @@ Credential Manager under `ICS_URL_TARGET` - entered on the PC only, in the
 desktop's Settings ("Accounts") - else "". An installation that already has
 the environment variable set keeps using it unchanged; Credential Manager is
 only ever the fallback, never a second source that could disagree with it.
+
+The CalDAV ADDRESS is the second shape, not a secret (accounts.patch,
+2026-10-06): `_base_url()` reads `JARVIS_CALDAV_URL` FIRST, and only when the
+owner has not set one does it read the address typed into the same Settings
+card, kept on this PC in `accounts.json` beside `web-search.json`
+(`jarvis_accounts.py`). Nobody's CalDAV password is in that file - only the
+address is.
 
 WHY THE ICS PARSER IS DELIBERATELY MINIMAL
 A real RFC 5545 calendar can nest VALARM, VTIMEZONE, RRULE recurrence, and
@@ -204,8 +211,36 @@ def _feed_url() -> str:
     return jarvis_token_store.resolve_secret(ICS_URL_ENV, ICS_URL_TARGET)
 
 
+def _base_url() -> str:
+    """The CalDAV address, in the order that is the whole point:
+
+      1. `JARVIS_CALDAV_URL`, if the owner set it - read FIRST and returned
+         unchanged, so an installation that already relies on it behaves
+         exactly as it did before there was a Settings box;
+      2. otherwise the address saved on this PC in `accounts.json`
+         (`jarvis_accounts.py`, `value()`), written by the desktop's
+         Settings -> Accounts card (accounts.patch, 2026-10-06);
+      3. otherwise "" - no CalDAV calendar is set up.
+
+    An ADDRESS is not a secret, so it is a plain JSON file. The private iCal
+    link, which IS one, stays in `_feed_url()` above (Credential Manager,
+    ease-of-use audit row 15), and it still WINS over this when both are set -
+    that ordering is unchanged. The environment variable is checked here as
+    well as inside `jarvis_accounts.value()` on purpose: if that module is not
+    on this PC at all, step 1 must still work, and nothing that works today
+    may stop."""
+    from_env = os.environ.get(URL_ENV, "").strip()
+    if from_env:
+        return from_env
+    try:
+        import jarvis_accounts
+        return jarvis_accounts.value("caldav_url")
+    except Exception:
+        return ""
+
+
 def _configured() -> bool:
-    return bool(os.environ.get(URL_ENV, "").strip()) or bool(_feed_url())
+    return bool(_base_url()) or bool(_feed_url())
 
 
 def authenticated() -> bool:
@@ -218,7 +253,7 @@ def source() -> str:
     when both are set), "caldav", or "" for none. Reads no value out."""
     if _feed_url():
         return "ics"
-    if os.environ.get(URL_ENV, "").strip():
+    if _base_url():
         return "caldav"
     return ""
 
@@ -316,13 +351,14 @@ def plan(days_ahead: int = 7, *, now: Optional[datetime] = None,
     if feed:
         return _plan_feed(feed, days_ahead, start_s, end_s)
 
-    url = os.environ.get(URL_ENV, "").strip()
+    url = _base_url()
     if not url:
         return Plan(
             days_ahead=days_ahead, start=start_s, end=end_s, query=None,
             if_refused=_REFUSED, authenticated=authenticated(),
-            reason_empty=(f"{URL_ENV} is not set (nor {ICS_URL_ENV}) - there is no "
-                          "calendar to read"))
+            reason_empty=(f"{URL_ENV} is not set (nor {ICS_URL_ENV}), and no CalDAV "
+                          "address is saved in Settings, Accounts on this PC - there is "
+                          "no calendar to read"))
     # Security audit L7: no password over plain http:// off the owner's own networks.
     insecure = jarvis_local_http.plain_http_problem(url, URL_ENV, "the calendar password")
     if insecure:
@@ -398,7 +434,7 @@ def _plan_feed(feed: str, days_ahead: int, start_s: str, end_s: str) -> Plan:
                     if_refused=_REFUSED, authenticated=False, reason_empty=problem,
                     source="ics", named=named)
     note = ""
-    if os.environ.get(URL_ENV, "").strip():
+    if _base_url():
         note = (f"{URL_ENV} is set too. It is not read while the private link is set; "
                 "clear one of the two to choose.")
     query = Query(

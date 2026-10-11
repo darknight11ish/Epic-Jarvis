@@ -446,6 +446,102 @@ pub fn account_secret_saved(name: &str) -> Result<Option<bool>, StoreError> {
     Ok(Some(imp::read(target)?.is_some()))
 }
 
+/// The six chatbot API services whose keys the owner may save in Settings
+/// (`docs/ACCOUNT-KEYS-DESIGN.md` steps 1-2; `settings.html` "Chatbot API
+/// keys"; `account_secrets.rs`; backend `jarvis_chatbot_api.py`).
+///
+/// (the service's short name - what the Python side's own command line calls
+/// it, `py -3 jarvis_chatbot_api.py key <short>` - and the company whose name
+/// the Credential Manager target is built from).
+///
+/// THE ONE OWNER OF THESE NAMES IS THE PYTHON SIDE. `jarvis_chatbot_api.py`
+/// builds each entry as
+///     f"Jarvis Backend/{PRESETS[pid].company} API key"
+/// so a second, hard-coded copy here can drift from it, and the failure is
+/// silent: the page says "Saved" under a name the backend never reads. The
+/// test below (`the_six_chatbot_targets_are_the_python_sides_own`) pins this
+/// table against a fixture generated FROM the Python side
+/// (`backend/tests/fixtures/chatbot-api-key-targets.json`, made by
+/// `tools/gen_chatbot_key_targets.py`), so the two cannot disagree quietly.
+///
+/// There is no environment variable in this table, deliberately: unlike the
+/// four account secrets, `jarvis_chatbot_api.py` has never read one
+/// (its own docstring: "No environment variable, no file, no new store").
+pub const CHATBOT_API_KEY_TARGETS: [(&str, &str); 6] = [
+    ("openai", "OpenAI"),
+    ("deepseek", "DeepSeek"),
+    ("mistral", "Mistral AI"),
+    ("xai", "xAI"),
+    ("openrouter", "OpenRouter"),
+    ("groq", "Groq"),
+];
+
+/// The Credential Manager name for `service`'s chatbot API key, or `None` for
+/// a name that is not one of the six.
+pub fn chatbot_api_key_target(service: &str) -> Option<String> {
+    CHATBOT_API_KEY_TARGETS
+        .iter()
+        .find(|(short, _)| *short == service)
+        .map(|(_, company)| format!("Jarvis Backend/{company} API key"))
+}
+
+/// Whether `service` is one of the six services this app can save a key for.
+pub fn chatbot_api_service(service: &str) -> Option<&'static str> {
+    CHATBOT_API_KEY_TARGETS
+        .iter()
+        .find(|(short, _)| *short == service)
+        .map(|(short, _)| *short)
+}
+
+/// Whether `value` can be a chatbot API key, or why not - the backend's own
+/// rule (`jarvis_chatbot_api.key_problem`: 8 to 300 plain characters with no
+/// spaces), so a key this page accepts is one the backend will go on to use.
+/// The reason never quotes the value.
+pub fn chatbot_api_key_problem(value: &str) -> Option<&'static str> {
+    let k = value.trim();
+    if k.is_empty() {
+        return Some("That is empty.");
+    }
+    if k.len() < 8 || k.len() > 300 || !k.bytes().all(|b| (0x21..=0x7e).contains(&b)) {
+        return Some(
+            "The key must be 8 to 300 plain characters with no spaces - check that the \
+             whole key was copied, and nothing else.",
+        );
+    }
+    None
+}
+
+/// Saves one chatbot API key, then reads it back to be sure it landed - the
+/// same check `write_search_key` and `write_account_secret` make.
+pub fn write_chatbot_api_key(service: &str, key: &str) -> Result<(), StoreError> {
+    let target = chatbot_api_key_target(service)
+        .ok_or_else(|| StoreError::Failed("not one of the six chatbot services".into()))?;
+    let key = key.trim();
+    imp::write(&target, key)?;
+    match imp::read(&target)? {
+        Some(back) if back == key => Ok(()),
+        _ => Err(StoreError::Failed(
+            "the key read back from Credential Manager did not match".into(),
+        )),
+    }
+}
+
+/// Removes one chatbot API key. Not an error when there was none.
+pub fn delete_chatbot_api_key(service: &str) -> Result<(), StoreError> {
+    let target = chatbot_api_key_target(service)
+        .ok_or_else(|| StoreError::Failed("not one of the six chatbot services".into()))?;
+    imp::delete(&target)
+}
+
+/// Whether Credential Manager holds a key for `service` - never the key
+/// itself. `Ok(None)` when `service` is not one of the six.
+pub fn chatbot_api_key_saved(service: &str) -> Result<Option<bool>, StoreError> {
+    let Some(target) = chatbot_api_key_target(service) else {
+        return Ok(None);
+    };
+    Ok(Some(imp::read(&target)?.is_some()))
+}
+
 /// The token the backend made for itself, if Credential Manager holds one.
 ///
 /// Asked every time, not cached: on a first run the backend makes it moments
@@ -608,5 +704,86 @@ mod tests {
         let secret = "s3cret-value-nobody-should-see";
         let why = account_secret_problem("home_token", &format!("bad\ttab{secret}")).unwrap();
         assert!(!why.contains(secret), "the reason quoted the value: {why}");
+    }
+
+    /// THE LOAD-BEARING TEST of the six chatbot API keys
+    /// (`docs/ACCOUNT-KEYS-DESIGN.md` step 2, decision 1).
+    ///
+    /// `chatbot_key_targets` comes from a fixture generated FROM the Python
+    /// side - from `jarvis_chatbot_api.KEY_TARGETS`, which is itself built
+    /// from `PRESETS[pid].company` - so this test fails the moment the two
+    /// tables disagree about a service OR about a name. Without it the
+    /// failure is silent: the page says "Saved" under a name the backend
+    /// never reads.
+    ///
+    /// Also checked here: the fixture really is the Python side's own
+    /// (its `source` line names the module and the expression), so the test
+    /// cannot be satisfied by editing the fixture alone.
+    #[test]
+    fn the_six_chatbot_targets_are_the_python_sides_own() {
+        use super::{chatbot_api_key_problem, chatbot_api_key_target, CHATBOT_API_KEY_TARGETS};
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../tests/fixtures/chatbot-api-key-targets.json"
+        ))
+        .expect("the chatbot key-targets fixture is JSON");
+        assert_eq!(
+            fixture["source"], "jarvis_chatbot_api.KEY_TARGETS",
+            "the fixture must be the Python side's own generation"
+        );
+        let rows = fixture["targets"]
+            .as_array()
+            .expect("the fixture carries a targets array");
+        assert_eq!(
+            rows.len(),
+            CHATBOT_API_KEY_TARGETS.len(),
+            "the two tables hold a different number of services"
+        );
+        // Looked up by name, not by position: the fixture is sorted for a
+        // readable diff, and the order of the Rust table is not a contract.
+        for row in rows {
+            let short = row["short"].as_str().expect("a short name");
+            let company = row["company"].as_str().expect("a company name");
+            let target = row["target"].as_str().expect("a target");
+            assert_eq!(
+                CHATBOT_API_KEY_TARGETS
+                    .iter()
+                    .find(|(s, _)| *s == short)
+                    .map(|(_, c)| *c),
+                Some(company),
+                "the company name for {short} drifted"
+            );
+            assert_eq!(
+                target,
+                format!("Jarvis Backend/{company} API key"),
+                "the Python side builds {short}'s target differently"
+            );
+            assert_eq!(
+                chatbot_api_key_target(short).as_deref(),
+                Some(target),
+                "{short}"
+            );
+        }
+        assert_eq!(chatbot_api_key_target("not_one_of_them"), None);
+        assert!(super::chatbot_api_service("openai").is_some());
+        assert_eq!(super::chatbot_api_service("searxng"), None);
+
+        // The backend's own key rule, so this page cannot accept a key the
+        // backend goes on to refuse.
+        assert!(chatbot_api_problem_is_ok(&"k".repeat(8)));
+        assert!(chatbot_api_problem_is_ok(&"k".repeat(300)));
+        assert!(chatbot_api_key_problem("").is_some());
+        assert!(chatbot_api_key_problem("   ").is_some());
+        assert!(chatbot_api_key_problem("short").is_some());
+        assert!(chatbot_api_key_problem(&"k".repeat(301)).is_some());
+        assert!(chatbot_api_key_problem("has a space in it").is_some());
+        let key = "sk-live-value-nobody-should-see";
+        let why = chatbot_api_key_problem("sk-live value\n").unwrap();
+        assert!(!why.contains(key), "the reason quoted the key: {why}");
+    }
+
+    /// The trivial half of the rule above, as its own name so a failure says
+    /// which end broke.
+    fn chatbot_api_problem_is_ok(key: &str) -> bool {
+        super::chatbot_api_key_problem(key).is_none()
     }
 }

@@ -83,6 +83,7 @@ DYNAMIC_BELOW = {
     ("progress-panel.js", "command"): "the panel's invoke(command, args); every caller passes a literal.",
     ("projects-panel.js", "command"): "the panel's invoke(command, args); every caller passes a literal.",
     ("account-secrets-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
+    ("chatbot-api-keys-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal (get_chatbot_api_keys, save_chatbot_api_key, forget_chatbot_api_key).",
     ("briefing-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("folders-settings.js", "command"): "a settings panel's invoke(command, args); every caller passes a literal.",
     ("first-run-settings.js", "command"): "the first-run card's invoke(command, args); every caller passes a literal.",

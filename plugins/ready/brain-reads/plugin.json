@@ -1,0 +1,8 @@
+{
+  "name": "brain-reads",
+  "summary": "the Brain's read-only routes (the Brain upgrades, and a chat's facts).",
+  "module": "jarvis_brain_reads",
+  "install": "handler",
+  "replaces_patch": "brain-reads.patch",
+  "stack_order": 87
+}

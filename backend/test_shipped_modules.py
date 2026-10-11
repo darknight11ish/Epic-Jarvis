@@ -132,6 +132,8 @@ NOT_SHIPPED = {
     "_where.py": "test plumbing",
     "_skeleton.py": "a template for new suites",
     "_stack.py": "test plumbing: the whole patch stack's stand-in for an owner's file",
+    "_gitapply.py": "test plumbing: `git apply` from a scratch folder inside a work tree, used "
+                    "by _stack.py and _skeleton.py (2026-10-08)",
     "_fake_imap.py": "test plumbing: an in-memory IMAP server for the inbox-tidy suite and "
                      "tools/gen_inbox_tidy_cases.py",
     "_config_diff.py": "run by apply-patches.ps1 from this repository",
@@ -141,7 +143,8 @@ NOT_SHIPPED = {
     "run_suites.py": "CI's test runner",
     "selftest.py": "run from this repository against the backend",
     "eval_memory.py": "the memory self-test, run from this repository on a scratch store",
-    "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py",
+    "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py - and on "
+                       "its own since 2026-10-08, which is what the docs always said",
     "eval_tidy.py": "the memory self-test's \"where did I put\" and overnight-tidy half, "
                     "run by eval_memory.py",
     "eval_topics.py": "the memory self-test's topic-controls half (leaks, parity, sorting), "
@@ -152,6 +155,10 @@ NOT_SHIPPED = {
     "fake_mcp_server.py": "test fixture: a badly behaved plug-in program, for test_mcp.py",
     "_fake_obscura.py": "test fixture: a stand-in for `obscura --stealth mcp`, run as a real "
                         "child process by test_obscura.py and test_browser_engine.py",
+    "run_phrase_tests.py": "the phrase checklist runner (2026-10-10): reads the owner's "
+                           "checklist document from .dsh-scratch/ and puts every phrase "
+                           "through the real grammar. A reading tool, run from this "
+                           "repository - it is imported by nothing the backend runs",
 }
 
 
@@ -300,7 +307,20 @@ def t_every_import_is_accounted_for():
         } | {
             p.name for p in lib_dir.iterdir() if (p / "__init__.py").is_file()
         } | {"tomllib", "zoneinfo", "winreg", "msvcrt", "winsound", "_winapi"}
-    sources = {p: imports_of_source((HERE / p).read_text(encoding="utf-8")) for p in SHIPPED}
+    # A shipped entry is usually a Python module, but not always: `SHIPPED` also
+    # carries resources a shipped module reads from its own folder (for example
+    # jarvis_hud.html, which jarvis_hud.py serves at `GET /`). Parsing one as
+    # Python raised, so the check now treats anything it cannot parse as having
+    # no imports rather than blowing up - the point of this check is what a
+    # module imports, and a resource imports nothing.
+    sources = {}
+    for p in SHIPPED:
+        try:
+            sources[p] = imports_of_source((HERE / p).read_text(encoding="utf-8"))
+        except (SyntaxError, ValueError):
+            sources[p] = set()
+        except UnicodeDecodeError:
+            sources[p] = set()
     patches = sorted(HERE.glob("*.patch")) + sorted((HERE / "rebuilt-patches").glob("*.patch"))
     for pp in patches:
         sources[str(pp.relative_to(HERE))] = imports_of_patch(pp)
@@ -359,9 +379,14 @@ def t_the_exemptions_are_real():
     for pip in sorted(set(THIRD_PARTY.values())):
         check(f"{pip} is named in requirements.txt", pip.lower() in requirement_names())
     # And the other way: nothing in requirements.txt that nothing imports.
+    # A shipped entry may be a resource rather than a module (see
+    # t_every_import_is_accounted_for): it parses as nothing rather than raising.
     used = set()
     for p in SHIPPED:
-        used |= imports_of_source((HERE / p).read_text(encoding="utf-8"))
+        try:
+            used |= imports_of_source((HERE / p).read_text(encoding="utf-8"))
+        except (SyntaxError, ValueError, UnicodeDecodeError):
+            continue
     by_pip = {v.lower(): k for k, v in THIRD_PARTY.items()}
     for pip in sorted(requirement_names()):
         if pip in INDIRECT:

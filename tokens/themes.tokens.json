@@ -1,0 +1,1820 @@
+{
+  "$description": "Jarvis theme tokens - the single source both clients' palettes are generated from (docs/HANDOFF-UI-RESEARCH-2026-10-09.md Phase B; the drift it retires is measured in docs/THEME-VALUE-PARITY-FINDINGS.md).",
+  "$schema_note": "DTCG shape: a token is any node carrying $value; a group is any node without one; $type inherits down. Aliases are {group.token}. Values are exactly what a browser computes for the property, so a generated file and a checker can never disagree about `rgb(237, 241, 246)` versus `#edf1f6`.",
+  "meta": {
+    "$description": "Which generator owns which output, the mapping between the two clients' theme ids, and the CSS property names that are not derivable from a token name.",
+    "outputs": {
+      "css": {
+        "$value": "jarvis-desktop/src/theme.css"
+      },
+      "kotlin": {
+        "$value": "jarvis-client/app/src/main/java/com/jarvis/client/ui/theme/Themes.kt"
+      }
+    },
+    "$themeIds": {
+      "$description": "Deliberate and already tested (jarvis-desktop/tests/continuity.mjs). The desktop ids are older, so a saved choice keeps working.",
+      "desktop": {
+        "$value": [
+          "deep-space",
+          "paper",
+          "high-contrast"
+        ]
+      },
+      "phone": {
+        "$value": [
+          "reactor",
+          "daylight",
+          "contrast"
+        ]
+      }
+    },
+    "$cssNames": {
+      "$description": "Theme token -> CSS custom property, for the names a kebab rule would get wrong. Anything not listed kebabs (`accentBright` -> `--accent-bright`).",
+      "$value": {
+        "surface0": "--bg-window",
+        "surface1": "--surface-1",
+        "surface2": "--surface-2",
+        "surfaceSunken": "--surface-sunken",
+        "surfaceHover": "--surface-hover",
+        "surfaceActive": "--surface-active",
+        "hairline": "--border",
+        "hairlineStrong": "--border-strong",
+        "borderAccent": "--border-accent",
+        "hairlineFocus": "--focus-ring",
+        "textHi": "--text",
+        "textMid": "--text-muted",
+        "textLo": "--text-faint",
+        "textOnAccent": "--text-on-accent",
+        "accent": "--accent",
+        "accentBright": "--accent-bright",
+        "accentDim": "--accent-dim",
+        "accentFaint": "--accent-faint",
+        "accentText": "--accent-text",
+        "ok": "--ok",
+        "warn": "--warn",
+        "bad": "--bad",
+        "info": "--info",
+        "okFaint": "--ok-faint",
+        "warnFaint": "--warn-faint",
+        "badFaint": "--bad-faint",
+        "infoFaint": "--info-faint",
+        "okFill": "--ok-fill",
+        "okEdge": "--ok-edge",
+        "okText": "--ok-text",
+        "badFill": "--bad-fill",
+        "badText": "--bad-text",
+        "prose": "--prose",
+        "proseStrong": "--prose-strong",
+        "proseEm": "--prose-em",
+        "codeBg": "--code-bg",
+        "codeText": "--code-text",
+        "diffAdd": "--diff-add",
+        "diffRemove": "--diff-remove",
+        "accentRgb": "--accent-rgb",
+        "okRgb": "--ok-rgb",
+        "warnRgb": "--warn-rgb",
+        "badRgb": "--bad-rgb",
+        "infoRgb": "--info-rgb",
+        "mutedRgb": "--muted-rgb",
+        "sheenRgb": "--sheen-rgb",
+        "shadeRgb": "--shade-rgb",
+        "edge": "--edge",
+        "edgeActive": "--edge-active",
+        "nodeH1": "--node-h1",
+        "nodeH2": "--node-h2",
+        "nodeH3": "--node-h3",
+        "nodeH4": "--node-h4",
+        "nodeH5": "--node-h5",
+        "tag0": "--tag-0",
+        "tag1": "--tag-1",
+        "tag2": "--tag-2",
+        "tag3": "--tag-3",
+        "tag4": "--tag-4",
+        "tag5": "--tag-5",
+        "tag6": "--tag-6",
+        "tag7": "--tag-7",
+        "tagTint": "--tag-tint",
+        "shadowCard": "--shadow-card",
+        "shadowPane": "--shadow-pane",
+        "glowAccent": "--glow-accent",
+        "stateIdle": "--state-idle",
+        "stateListening": "--state-listening",
+        "stateThinking": "--state-thinking",
+        "stateSpeaking": "--state-speaking",
+        "stateApproval": "--state-approval",
+        "stateStandby": "--state-standby",
+        "stateError": "--state-error",
+        "stateBanked": "--state-banked",
+        "swatchReactorGround": "--swatch-reactor-ground",
+        "swatchReactorInk": "--swatch-reactor-ink",
+        "swatchDaylightGround": "--swatch-daylight-ground",
+        "swatchDaylightInk": "--swatch-daylight-ink",
+        "swatchContrastGround": "--swatch-contrast-ground",
+        "swatchContrastInk": "--swatch-contrast-ink",
+        "radiusWindow": "--radius-window",
+        "radiusCard": "--radius-card",
+        "radiusControl": "--radius-control",
+        "radiusChip": "--radius-chip",
+        "strokeHair": "--stroke-hair",
+        "text2xs": "--text-2xs",
+        "textXs": "--text-xs",
+        "textSm": "--text-sm",
+        "textMd": "--text-md",
+        "textLg": "--text-lg",
+        "ease": "--ease",
+        "easeOut": "--ease-out",
+        "durInstant": "--dur-instant",
+        "durQuick": "--dur-quick",
+        "durSettle": "--dur-settle",
+        "fontUi": "--font-ui",
+        "fontDisplay": "--font-display",
+        "fontMono": "--font-mono"
+      }
+    }
+  },
+  "palette": {
+    "$description": "The spec's own ramps, as jarvis-visual-spec.json carries them. Held here because the phone's overrides name them, and the desktop's state tokens are these exact steps.",
+    "$type": "color",
+    "ice": {
+      "1": {
+        "$value": "#0a3a4a"
+      },
+      "2": {
+        "$value": "#12657f"
+      },
+      "3": {
+        "$value": "#2ea8cc"
+      },
+      "4": {
+        "$value": "#6fe3ff"
+      },
+      "5": {
+        "$value": "#b8f4ff"
+      }
+    },
+    "azure": {
+      "1": {
+        "$value": "#0c2a55"
+      },
+      "2": {
+        "$value": "#14479a"
+      },
+      "3": {
+        "$value": "#2f74e0"
+      },
+      "4": {
+        "$value": "#62a3ff"
+      },
+      "5": {
+        "$value": "#b0d2ff"
+      }
+    },
+    "indigo": {
+      "1": {
+        "$value": "#1a1a52"
+      },
+      "2": {
+        "$value": "#2b2b8f"
+      },
+      "3": {
+        "$value": "#4a4ad4"
+      },
+      "4": {
+        "$value": "#7b7bff"
+      },
+      "5": {
+        "$value": "#c0c0ff"
+      }
+    },
+    "violet": {
+      "1": {
+        "$value": "#33115c"
+      },
+      "2": {
+        "$value": "#551f9c"
+      },
+      "3": {
+        "$value": "#8340e0"
+      },
+      "4": {
+        "$value": "#ae7bff"
+      },
+      "5": {
+        "$value": "#d9c0ff"
+      }
+    },
+    "magenta": {
+      "1": {
+        "$value": "#4d0c40"
+      },
+      "2": {
+        "$value": "#8a1470"
+      },
+      "3": {
+        "$value": "#cc2fa8"
+      },
+      "4": {
+        "$value": "#ff6fd0"
+      },
+      "5": {
+        "$value": "#ffb8ea"
+      }
+    },
+    "rose": {
+      "1": {
+        "$value": "#521018"
+      },
+      "2": {
+        "$value": "#8f1b28"
+      },
+      "3": {
+        "$value": "#d4384a"
+      },
+      "4": {
+        "$value": "#ff7b86"
+      },
+      "5": {
+        "$value": "#ffc0c5"
+      }
+    },
+    "ember": {
+      "1": {
+        "$value": "#4d1f08"
+      },
+      "2": {
+        "$value": "#8a3a0e"
+      },
+      "3": {
+        "$value": "#d4661c"
+      },
+      "4": {
+        "$value": "#ff9b52"
+      },
+      "5": {
+        "$value": "#ffcfa8"
+      }
+    },
+    "amber": {
+      "1": {
+        "$value": "#4a3708"
+      },
+      "2": {
+        "$value": "#8a680e"
+      },
+      "3": {
+        "$value": "#d4a41c"
+      },
+      "4": {
+        "$value": "#ffb648"
+      },
+      "5": {
+        "$value": "#ffe0a0"
+      }
+    },
+    "verdant": {
+      "1": {
+        "$value": "#0a3d2a"
+      },
+      "2": {
+        "$value": "#126b47"
+      },
+      "3": {
+        "$value": "#22a874"
+      },
+      "4": {
+        "$value": "#5fe0a8"
+      },
+      "5": {
+        "$value": "#b0f4d8"
+      }
+    },
+    "neutral": {
+      "1": {
+        "$value": "#0a0e14"
+      },
+      "2": {
+        "$value": "#1e2833"
+      },
+      "3": {
+        "$value": "#46566a"
+      },
+      "4": {
+        "$value": "#8fa3b8"
+      },
+      "5": {
+        "$value": "#dde7f2"
+      }
+    }
+  },
+  "root": {
+    "surface0": {
+      "$value": "rgba(4, 7, 12, 0.86)",
+      "$description": "Reactor's blue-black - the HUD's --void / --plate / --plate-2 and the\n     phone's Themes.REACTOR surface0-2 (#04070c, #0a1119, #0e1822) - at the\n     alphas these see-through windows always had. They were a neutral\n     grey-black before, so the spotlight, widget, Brain and Settings matched\n     neither the HUD beside them nor the phone. Only the surfaces moved: the\n     text colours below are tuned for transparent windows over any wallpaper\n     and stay as they are."
+    },
+    "surface1": {
+      "$value": "rgba(10, 17, 25, 0.9)"
+    },
+    "surface2": {
+      "$value": "rgba(14, 24, 34, 0.92)"
+    },
+    "surfaceSunken": {
+      "$value": "#04070c",
+      "$description": "Opaque, not translucent black. A sunken well at rgba(0,0,0,0.55) composites\n     to light grey over a white desktop, and muted text on it measured 2.21:1 —\n     the original CSS had exactly this bug. Making it solid means its contrast\n     no longer depends on how many translucent parents it happens to sit\n     inside, which is a property worth having when a component gets moved."
+    },
+    "surfaceHover": {
+      "$value": "rgba(255, 255, 255, 0.045)"
+    },
+    "surfaceActive": {
+      "$value": "rgba(255, 255, 255, 0.08)"
+    },
+    "hairline": {
+      "$value": "rgba(255, 255, 255, 0.08)",
+      "$description": "---- Edges ------------------------------------------------------------"
+    },
+    "hairlineStrong": {
+      "$value": "rgba(255, 255, 255, 0.14)"
+    },
+    "borderAccent": {
+      "$value": "rgba(56, 240, 255, 0.32)"
+    },
+    "hairlineFocus": {
+      "$value": "#7df3ff",
+      "$description": "The one edge that carries meaning rather than decoration, so it is the one\n     held to the 3:1 non-text floor. `--border` and `--border-strong` are\n     separators; they are allowed to be quiet."
+    },
+    "textHi": {
+      "$value": "#f2f5f8",
+      "$description": "---- Text -------------------------------------------------------------\n     `--text-faint` measured 2.37:1 over white in the old quickbar palette,\n     which is unreadable on a light desktop. It is lifted here and the check\n     holds it above 4.5:1 on both backdrops."
+    },
+    "textMid": {
+      "$value": "#a8b2c1"
+    },
+    "textLo": {
+      "$value": "#8e99a9"
+    },
+    "textOnAccent": {
+      "$value": "#04222a"
+    },
+    "accent": {
+      "$value": "#38f0ff",
+      "$description": "---- Accent -----------------------------------------------------------"
+    },
+    "accentBright": {
+      "$value": "#b8fbff"
+    },
+    "accentDim": {
+      "$value": "rgba(56, 240, 255, 0.32)"
+    },
+    "accentFaint": {
+      "$value": "rgba(56, 240, 255, 0.12)"
+    },
+    "accentText": {
+      "$value": "#b8fbff"
+    },
+    "ok": {
+      "$value": "#3ddc97",
+      "$description": "---- Semantic ---------------------------------------------------------\n     These four carry meaning, so a theme may retune them but must not swap\n     what they mean. Every one of them is paired with a non-colour channel\n     somewhere in the UI — a shape, a word or a position — because one man in\n     twelve cannot tell `--ok` from `--warn`."
+    },
+    "warn": {
+      "$value": "#ffc860"
+    },
+    "bad": {
+      "$value": "#ff6b7a"
+    },
+    "info": {
+      "$value": "#b98bff"
+    },
+    "okFaint": {
+      "$value": "rgba(61, 220, 151, 0.12)"
+    },
+    "warnFaint": {
+      "$value": "rgba(255, 200, 96, 0.12)"
+    },
+    "badFaint": {
+      "$value": "rgba(255, 107, 122, 0.12)"
+    },
+    "infoFaint": {
+      "$value": "rgba(185, 139, 255, 0.12)"
+    },
+    "okFill": {
+      "$value": "rgba(61, 220, 151, 0.14)",
+      "$description": "---- Semantic surfaces -------------------------------------------------\n     A tinted fill and a legible text colour for each semantic state. These\n     exist because components were reaching for `rgba(61,220,151,0.14)` and\n     `#9ff0cc` directly — a green wash and a green text that a light theme\n     could not touch, which is why Approve came out pale-on-pale on paper."
+    },
+    "okEdge": {
+      "$value": "rgba(61, 220, 151, 0.45)"
+    },
+    "okText": {
+      "$value": "#9ff0cc"
+    },
+    "badFill": {
+      "$value": "rgba(255, 107, 122, 0.12)"
+    },
+    "badText": {
+      "$value": "#ffb3bb"
+    },
+    "prose": {
+      "$value": "#dfe5ec",
+      "$description": "---- Prose -------------------------------------------------------------\n     A rendered answer is read for minutes at a time, so its body sits a shade\n     below `--text` and its emphasis a shade above. Both were hex literals in\n     `style.css`, which made a light theme render a model's answer in near-white\n     on white."
+    },
+    "proseStrong": {
+      "$value": "#ffffff"
+    },
+    "proseEm": {
+      "$value": "#e8eef5"
+    },
+    "codeBg": {
+      "$value": "#000000",
+      "$description": "Code and diffs. A pure-black block is correct on a near-black theme and\n     absurd on paper, so the ink and the ground are both tokens."
+    },
+    "codeText": {
+      "$value": "#cfe9ee"
+    },
+    "diffAdd": {
+      "$value": "#9ff0cc"
+    },
+    "diffRemove": {
+      "$value": "#ffc4ca"
+    },
+    "accentRgb": {
+      "$value": "56 240 255",
+      "$description": "---- Raw channels ------------------------------------------------------\n     The same colours as above, as bare `R G B` triples for `rgb(... / a)`.\n\n     A component that needs a hue at 7% alpha had no token to reach for and\n     wrote `rgba(56, 240, 255, 0.07)` — seventy-five such literals, each one a\n     colour no theme could move. Adding seventy-five alpha-specific tokens\n     would have been worse; this way the hue is the contract and the alpha\n     stays where it is used, next to the thing it is tinting.\n\n     `--sheen` and `--shade` are the two neutrals: the wash that LIFTS a\n     surface and the one that SINKS it. On a dark theme the lift is white; on\n     `paper` it is ink, which is the whole reason a component may not write\n     `rgba(255, 255, 255, 0.05)` for a hover state. `--shade` stays dark\n     everywhere — a drop shadow is a shadow on any theme."
+    },
+    "okRgb": {
+      "$value": "61 220 151"
+    },
+    "warnRgb": {
+      "$value": "255 200 96"
+    },
+    "badRgb": {
+      "$value": "255 107 122"
+    },
+    "infoRgb": {
+      "$value": "185 139 255"
+    },
+    "mutedRgb": {
+      "$value": "139 148 163"
+    },
+    "sheenRgb": {
+      "$value": "255 255 255"
+    },
+    "shadeRgb": {
+      "$value": "0 0 0"
+    },
+    "edge": {
+      "$value": "rgba(140, 165, 190, 0.22)",
+      "$description": "--node-h5: #f73b3b; /* agents"
+    },
+    "edgeActive": {
+      "$value": "rgba(56, 240, 255, 0.65)"
+    },
+    "nodeH1": {
+      "$value": "#66ccaa",
+      "$description": "FIVE hues, not ten, and a group is (hue x form) — see `drawNode` in\n     brain.js. Ten hues cannot encode ten categories: the previous set measured\n     CIEDE2000 6.0 between `core` and `cluster` in NORMAL vision and 1.0 under\n     deuteranopia, and high-contrast gave those two the same value outright. A\n     search over the whole HSL space found no ten that work, so the tenth\n     channel is shape: five colours, each drawn as a filled disc or a hollow\n     ring. Form survives greyscale, colour blindness and a 6px dot.\n\n     These are search results, not picks. Every pair clears CIEDE2000 20 as the\n     worst of normal, deuteranopia and protanopia, against a target of 15.\n     Hand-tuning toward the spec's own families was tried and measured 1.7,\n     because ice/indigo and amber/ember collide under CVD."
+    },
+    "nodeH2": {
+      "$value": "#3b7af7",
+      "$description": "--node-h1: #66ccaa; /* structure"
+    },
+    "nodeH3": {
+      "$value": "#f7f73b",
+      "$description": "--node-h2: #3b7af7; /* provenance"
+    },
+    "nodeH4": {
+      "$value": "#6cd3f9",
+      "$description": "--node-h3: #f7f73b; /* knowledge"
+    },
+    "nodeH5": {
+      "$value": "#f73b3b",
+      "$description": "--node-h4: #6cd3f9; /* capability"
+    },
+    "tag0": {
+      "$value": "#93b4ff",
+      "$description": "Chat tag colours (docs/CHAT-TAGS-DESIGN.md section 10; history-tags.js\n     COLOURS): light ink for the dark themes, 4.5:1 or better on the tinted header. The header tint is the ink at 16% over the surface."
+    },
+    "tag1": {
+      "$value": "#86e0a6"
+    },
+    "tag2": {
+      "$value": "#f5c26b"
+    },
+    "tag3": {
+      "$value": "#c4a8ff"
+    },
+    "tag4": {
+      "$value": "#7adfd3"
+    },
+    "tag5": {
+      "$value": "#ff9ab5"
+    },
+    "tag6": {
+      "$value": "#b6c2d1"
+    },
+    "tag7": {
+      "$value": "#ffb385"
+    },
+    "tagTint": {
+      "$value": "16%"
+    },
+    "shadowCard": {
+      "$value": "0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45)",
+      "$description": "---- Depth -------------------------------------------------------------\n     Self-drawn. Acrylic (`window-vibrancy`, windows.rs) genuinely blurs what\n     is behind the quickbar, widget and HUD on a current Windows 11 machine -\n     only its TINT colour is ignored above build 22523, where DWM takes over\n     with its own transient backdrop colour instead (windows.rs\n     `apply_quickbar_effects` has the detail). Brain, Settings and onboarding\n     get no vibrancy at all: those windows are built opaque on purpose (the\n     UI audit turned down a Mica backdrop for them, 2026-09-26), so `--shadow-pane`\n     is their whole depth model, with nothing behind it to blur."
+    },
+    "shadowPane": {
+      "$value": "0 24px 64px rgba(0, 0, 0, 0.55)"
+    },
+    "glowAccent": {
+      "$value": "0 0 0 1px rgba(56, 240, 255, 0.32), 0 0 22px rgba(56, 240, 255, 0.18)"
+    },
+    "stateIdle": {
+      "$value": "{palette.ice.3}",
+      "$description": "---- Face states -------------------------------------------------------\n     The eight states the backend resolves, bound to the colours\n     `jarvis-visual-spec.json` binds them to. These exist as tokens because\n     without them a surface improvises: brain.css painted `listening` in\n     `--warn`, which is amber — the colour the spec binds to APPROVAL — and had\n     no rule for `approval` or `standby` at all, so both fell through to the\n     base accent, which is what `speaking` uses. A missing state is now a\n     missing token, and the token check can see it.\n\n     `--state-standby` is the one declared divergence. The spec binds\n     neutral-3 #46566a, which measures 2.03:1 on this window: fine for a face\n     that fills a quarter of the screen and has its own rules, unreadable as a\n     7px chrome dot against a 3:1 floor. #6b7d94 measures 3.61:1."
+    },
+    "stateListening": {
+      "$value": "{palette.ember.4}"
+    },
+    "stateThinking": {
+      "$value": "{palette.violet.4}"
+    },
+    "stateSpeaking": {
+      "$value": "{palette.ice.4}"
+    },
+    "stateApproval": {
+      "$value": "{palette.amber.4}"
+    },
+    "stateStandby": {
+      "$value": "#6b7d94"
+    },
+    "stateError": {
+      "$value": "{palette.rose.4}"
+    },
+    "stateBanked": {
+      "$value": "{palette.neutral.4}"
+    },
+    "swatchReactorGround": {
+      "$value": "#0a1119",
+      "$description": "---- Theme swatches ----------------------------------------------------\n     The little preview beside each theme in Settings. Each shows THAT\n     theme's ground and accent, whatever theme is showing, so these are the\n     same in every theme block - which is why they live only here."
+    },
+    "swatchReactorInk": {
+      "$value": "{themes.deep-space.accent}"
+    },
+    "swatchDaylightGround": {
+      "$value": "#ffffff"
+    },
+    "swatchDaylightInk": {
+      "$value": "#00697f"
+    },
+    "swatchContrastGround": {
+      "$value": "#000000"
+    },
+    "swatchContrastInk": {
+      "$value": "#ffffff"
+    },
+    "radiusWindow": {
+      "$value": "18px",
+      "$description": "---- Shape ------------------------------------------------------------\n     A theme may change these. They are here so \"cutting edge\" can mean\n     something structural — a sharper radius reads as a different product than\n     a rounder one — rather than only meaning a different hue."
+    },
+    "radiusCard": {
+      "$value": "14px"
+    },
+    "radiusControl": {
+      "$value": "9px"
+    },
+    "radiusChip": {
+      "$value": "999px"
+    },
+    "strokeHair": {
+      "$value": "1px",
+      "$description": "A WIDTH, and named so. It used to be `--hairline`, which is also the name\n     `style.css` uses for a hairline COLOUR in 21 `border: 1px solid\n     var(--hairline)` rules. The day style.css imports this file, every one of\n     those would have become `border: 1px solid 1px` and silently vanished.\n     `scripts/check-tokens.py` now fails on a name declared in two files."
+    },
+    "text2xs": {
+      "$value": "10px",
+      "$description": "---- Type scale ---------------------------------------------------------\n     Five sizes, standing in for about twenty near-duplicates that had drifted\n     across style.css, widget.css, settings.css and brain.css (10, 10.5, 11,\n     11.5, 12, 12.5, 13, 13.5px all meant \"small label\" or \"compact body text\"\n     somewhere) - item 8, UI-AUDIT-2026-09-26.md. `--text-sm` is also the\n     floor: nothing that protects or warns the owner is set below it.\n\n     Left OUTSIDE this scale, deliberately: the prompt textarea and Brain's\n     big stat number (each a one-off display size, not body text), the\n     voice-training sentence in settings.css (already commented as \"the\n     biggest thing in the box, so it can be read from a normal sitting\n     distance\"), and the markdown h1-h4 heading ramp in style.css - a real,\n     already-consistent four-step hierarchy of its own, not loose drift."
+    },
+    "textXs": {
+      "$value": "11px"
+    },
+    "textSm": {
+      "$value": "12px"
+    },
+    "textMd": {
+      "$value": "14px"
+    },
+    "textLg": {
+      "$value": "17px"
+    },
+    "ease": {
+      "$value": "cubic-bezier(0.22, 1, 0.36, 1)",
+      "$description": "---- Motion -----------------------------------------------------------\n     Durations and easings are tokens so a theme can be calmer or sharper, and\n     so `prefers-reduced-motion` has one place to collapse them."
+    },
+    "easeOut": {
+      "$value": "cubic-bezier(0.16, 1, 0.3, 1)"
+    },
+    "durInstant": {
+      "$value": "90ms"
+    },
+    "durQuick": {
+      "$value": "160ms"
+    },
+    "durSettle": {
+      "$value": "260ms"
+    },
+    "fontUi": {
+      "$value": "\"Segoe UI Variable Display\", \"Segoe UI\", system-ui, -apple-system, sans-serif",
+      "$description": "---- Type --------------------------------------------------------------"
+    },
+    "fontDisplay": {
+      "$value": "\"Chakra Petch\", \"Segoe UI Variable Display\", system-ui, sans-serif"
+    },
+    "fontMono": {
+      "$value": "\"Cascadia Code\", \"IBM Plex Mono\", \"JetBrains Mono\", Consolas, \"SF Mono\", monospace"
+    }
+  },
+  "themes": {
+    "deep-space": {
+      "surface0": {
+        "$value": "rgba(4, 7, 12, 0.86)",
+        "$extensions": {
+          "phone": {
+            "$value": "#04070c",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surface1": {
+        "$value": "rgba(10, 17, 25, 0.9)",
+        "$extensions": {
+          "phone": {
+            "$value": "#0a1119",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surface2": {
+        "$value": "rgba(14, 24, 34, 0.92)",
+        "$extensions": {
+          "phone": {
+            "$value": "#0e1822",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surfaceSunken": {
+        "$value": "#04070c"
+      },
+      "surfaceHover": {
+        "$value": "rgba(255, 255, 255, 0.045)"
+      },
+      "surfaceActive": {
+        "$value": "rgba(255, 255, 255, 0.08)"
+      },
+      "hairline": {
+        "$value": "rgba(255, 255, 255, 0.08)",
+        "$extensions": {
+          "phone": {
+            "$value": "#172836",
+            "reason": "the desktop writes a separator as translucent white; the phone writes an opaque slate"
+          }
+        }
+      },
+      "hairlineStrong": {
+        "$value": "rgba(255, 255, 255, 0.14)",
+        "$extensions": {
+          "phone": {
+            "$value": "#24485e",
+            "reason": "the desktop writes a separator as translucent white; the phone writes an opaque slate"
+          }
+        }
+      },
+      "borderAccent": {
+        "$value": "rgba(56, 240, 255, 0.32)"
+      },
+      "hairlineFocus": {
+        "$value": "#7df3ff",
+        "$extensions": {
+          "phone": {
+            "$value": "#4e7690",
+            "reason": "both clear the 3:1 non-text floor; different answers to it"
+          }
+        }
+      },
+      "textHi": {
+        "$value": "#f2f5f8",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.neutral.5}",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textMid": {
+        "$value": "#a8b2c1",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.neutral.4}",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textLo": {
+        "$value": "#8e99a9",
+        "$extensions": {
+          "phone": {
+            "$value": "#6e8397",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textOnAccent": {
+        "$value": "#04222a"
+      },
+      "accent": {
+        "$value": "#38f0ff"
+      },
+      "accentBright": {
+        "$value": "#b8fbff"
+      },
+      "accentDim": {
+        "$value": "rgba(56, 240, 255, 0.32)"
+      },
+      "accentFaint": {
+        "$value": "rgba(56, 240, 255, 0.12)"
+      },
+      "accentText": {
+        "$value": "#b8fbff"
+      },
+      "ok": {
+        "$value": "#3ddc97",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.verdant.4}",
+            "reason": "the desktop's --ok is in no spec palette family; the phone takes a spec step"
+          }
+        }
+      },
+      "warn": {
+        "$value": "#ffc860",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.amber.4}",
+            "reason": "the desktop's --warn is a bespoke deuteranopia retune; the phone takes a spec step"
+          }
+        }
+      },
+      "bad": {
+        "$value": "#ff6b7a",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.rose.4}",
+            "reason": "the desktop's --bad is in no spec palette family; the phone takes a spec step"
+          }
+        }
+      },
+      "info": {
+        "$value": "#b98bff",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.violet.4}",
+            "reason": "the desktop's --info is bespoke; the phone takes a spec step"
+          }
+        }
+      },
+      "okFaint": {
+        "$value": "rgba(61, 220, 151, 0.12)"
+      },
+      "warnFaint": {
+        "$value": "rgba(255, 200, 96, 0.12)"
+      },
+      "badFaint": {
+        "$value": "rgba(255, 107, 122, 0.12)"
+      },
+      "infoFaint": {
+        "$value": "rgba(185, 139, 255, 0.12)"
+      },
+      "okFill": {
+        "$value": "rgba(61, 220, 151, 0.14)"
+      },
+      "okEdge": {
+        "$value": "rgba(61, 220, 151, 0.45)"
+      },
+      "okText": {
+        "$value": "#9ff0cc"
+      },
+      "badFill": {
+        "$value": "rgba(255, 107, 122, 0.12)"
+      },
+      "badText": {
+        "$value": "#ffb3bb"
+      },
+      "prose": {
+        "$value": "#dfe5ec"
+      },
+      "proseStrong": {
+        "$value": "#ffffff"
+      },
+      "proseEm": {
+        "$value": "#e8eef5"
+      },
+      "codeBg": {
+        "$value": "#000000"
+      },
+      "codeText": {
+        "$value": "#cfe9ee"
+      },
+      "diffAdd": {
+        "$value": "#9ff0cc"
+      },
+      "diffRemove": {
+        "$value": "#ffc4ca"
+      },
+      "accentRgb": {
+        "$value": "56 240 255"
+      },
+      "okRgb": {
+        "$value": "61 220 151"
+      },
+      "warnRgb": {
+        "$value": "255 200 96"
+      },
+      "badRgb": {
+        "$value": "255 107 122"
+      },
+      "infoRgb": {
+        "$value": "185 139 255"
+      },
+      "mutedRgb": {
+        "$value": "139 148 163"
+      },
+      "sheenRgb": {
+        "$value": "255 255 255"
+      },
+      "shadeRgb": {
+        "$value": "0 0 0"
+      },
+      "edge": {
+        "$value": "rgba(140, 165, 190, 0.22)"
+      },
+      "edgeActive": {
+        "$value": "rgba(56, 240, 255, 0.65)"
+      },
+      "nodeH1": {
+        "$value": "#66ccaa"
+      },
+      "nodeH2": {
+        "$value": "#3b7af7"
+      },
+      "nodeH3": {
+        "$value": "#f7f73b"
+      },
+      "nodeH4": {
+        "$value": "#6cd3f9"
+      },
+      "nodeH5": {
+        "$value": "#f73b3b"
+      },
+      "tag0": {
+        "$value": "#93b4ff"
+      },
+      "tag1": {
+        "$value": "#86e0a6"
+      },
+      "tag2": {
+        "$value": "#f5c26b"
+      },
+      "tag3": {
+        "$value": "#c4a8ff"
+      },
+      "tag4": {
+        "$value": "#7adfd3"
+      },
+      "tag5": {
+        "$value": "#ff9ab5"
+      },
+      "tag6": {
+        "$value": "#b6c2d1"
+      },
+      "tag7": {
+        "$value": "#ffb385"
+      },
+      "tagTint": {
+        "$value": "16%"
+      },
+      "shadowCard": {
+        "$value": "0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45)"
+      },
+      "shadowPane": {
+        "$value": "0 24px 64px rgba(0, 0, 0, 0.55)"
+      },
+      "glowAccent": {
+        "$value": "0 0 0 1px rgba(56, 240, 255, 0.32), 0 0 22px rgba(56, 240, 255, 0.18)"
+      },
+      "stateIdle": {
+        "$value": "{palette.ice.3}"
+      },
+      "stateListening": {
+        "$value": "{palette.ember.4}"
+      },
+      "stateThinking": {
+        "$value": "{palette.violet.4}"
+      },
+      "stateSpeaking": {
+        "$value": "{palette.ice.4}"
+      },
+      "stateApproval": {
+        "$value": "{palette.amber.4}"
+      },
+      "stateStandby": {
+        "$value": "#6b7d94"
+      },
+      "stateError": {
+        "$value": "{palette.rose.4}"
+      },
+      "stateBanked": {
+        "$value": "{palette.neutral.4}"
+      },
+      "swatchReactorGround": {
+        "$value": "#0a1119"
+      },
+      "swatchReactorInk": {
+        "$value": "{themes.deep-space.accent}"
+      },
+      "swatchDaylightGround": {
+        "$value": "#ffffff"
+      },
+      "swatchDaylightInk": {
+        "$value": "#00697f"
+      },
+      "swatchContrastGround": {
+        "$value": "#000000"
+      },
+      "swatchContrastInk": {
+        "$value": "#ffffff"
+      },
+      "radiusWindow": {
+        "$value": "18px"
+      },
+      "radiusCard": {
+        "$value": "14px"
+      },
+      "radiusControl": {
+        "$value": "9px"
+      },
+      "radiusChip": {
+        "$value": "999px"
+      },
+      "strokeHair": {
+        "$value": "1px"
+      },
+      "text2xs": {
+        "$value": "10px"
+      },
+      "textXs": {
+        "$value": "11px"
+      },
+      "textSm": {
+        "$value": "12px"
+      },
+      "textMd": {
+        "$value": "14px"
+      },
+      "textLg": {
+        "$value": "17px"
+      },
+      "ease": {
+        "$value": "cubic-bezier(0.22, 1, 0.36, 1)"
+      },
+      "easeOut": {
+        "$value": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "durInstant": {
+        "$value": "90ms"
+      },
+      "durQuick": {
+        "$value": "160ms"
+      },
+      "durSettle": {
+        "$value": "260ms"
+      },
+      "fontUi": {
+        "$value": "\"Segoe UI Variable Display\", \"Segoe UI\", system-ui, -apple-system, sans-serif"
+      },
+      "fontDisplay": {
+        "$value": "\"Chakra Petch\", \"Segoe UI Variable Display\", system-ui, sans-serif"
+      },
+      "fontMono": {
+        "$value": "\"Cascadia Code\", \"IBM Plex Mono\", \"JetBrains Mono\", Consolas, \"SF Mono\", monospace"
+      },
+      "$description": "The Reactor theme, as the desktop holds it. These are the values this repository's own checks measure (tests/themecheck.mjs, tests/distinct.mjs, tests/contrast.mjs against both a black and a white backdrop).",
+      "phoneId": {
+        "$value": "reactor"
+      },
+      "label": {
+        "$value": "Reactor"
+      },
+      "blurb": {
+        "$value": "The default. Cool near-black, built around the reactor's own light."
+      },
+      "dark": {
+        "$value": true
+      },
+      "well": {
+        "$value": "#04070c",
+        "$description": "The reactor's ground, and the ONE theme token the face is allowed to read. It must stay essentially black: faces composite additively, so a light well erases the glow. Not a CSS token - the desktop's face ground is a spec constant, not a theme token.",
+        "$extensions": {
+          "phone": {
+            "$value": "#04070c",
+            "reason": "the reactor's ground is the same colour on both clients"
+          }
+        }
+      }
+    },
+    "paper": {
+      "surface0": {
+        "$value": "rgb(244, 246, 249)",
+        "$extensions": {
+          "phone": {
+            "$value": "#eef1f6",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surface1": {
+        "$value": "rgb(255, 255, 255)"
+      },
+      "surface2": {
+        "$value": "rgb(237, 241, 246)",
+        "$extensions": {
+          "phone": {
+            "$value": "#e8edf4",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surfaceSunken": {
+        "$value": "rgb(228, 233, 240)"
+      },
+      "surfaceHover": {
+        "$value": "rgba(10, 30, 60, 0.05)"
+      },
+      "surfaceActive": {
+        "$value": "rgba(10, 30, 60, 0.09)"
+      },
+      "hairline": {
+        "$value": "rgba(16, 34, 60, 0.14)",
+        "$extensions": {
+          "phone": {
+            "$value": "#c6d0dc",
+            "reason": "the desktop writes a separator as translucent white; the phone writes an opaque slate"
+          }
+        }
+      },
+      "hairlineStrong": {
+        "$value": "rgba(16, 34, 60, 0.24)",
+        "$extensions": {
+          "phone": {
+            "$value": "#98a6b6",
+            "reason": "the desktop writes a separator as translucent white; the phone writes an opaque slate"
+          }
+        }
+      },
+      "borderAccent": {
+        "$value": "rgba(0, 110, 140, 0.4)"
+      },
+      "hairlineFocus": {
+        "$value": "#005263",
+        "$extensions": {
+          "phone": {
+            "$value": "#7c8998",
+            "reason": "both clear the 3:1 non-text floor; different answers to it"
+          }
+        }
+      },
+      "textHi": {
+        "$value": "#10161f",
+        "$extensions": {
+          "phone": {
+            "$value": "#0d1319",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textMid": {
+        "$value": "#48566b",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.neutral.3}",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textLo": {
+        "$value": "#59687d",
+        "$extensions": {
+          "phone": {
+            "$value": "#54677c",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textOnAccent": {
+        "$value": "#ffffff"
+      },
+      "accent": {
+        "$value": "#00697f"
+      },
+      "accentBright": {
+        "$value": "#005263"
+      },
+      "accentDim": {
+        "$value": "rgba(0, 105, 127, 0.32)"
+      },
+      "accentFaint": {
+        "$value": "rgba(0, 105, 127, 0.1)"
+      },
+      "accentText": {
+        "$value": "#00505f"
+      },
+      "ok": {
+        "$value": "#17694a",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.verdant.1}",
+            "reason": "the desktop's --ok is in no spec palette family; the phone takes a spec step",
+            "mark": "{palette.verdant.2}"
+          }
+        }
+      },
+      "warn": {
+        "$value": "#632303",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.amber.1}",
+            "reason": "the desktop's --warn is a bespoke deuteranopia retune; the phone takes a spec step",
+            "mark": "{palette.amber.2}"
+          }
+        },
+        "$description": "Deep burnt orange, not amber. #8a5800 separated from --bad by only 4.7\n     CIEDE2000 under deuteranopia — on a light background a warning and an\n     error were the same colour to one reader in twelve. This measures 10.0."
+      },
+      "bad": {
+        "$value": "#b3202f",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.rose.1}",
+            "reason": "the desktop's --bad is in no spec palette family; the phone takes a spec step",
+            "mark": "{palette.rose.2}"
+          }
+        }
+      },
+      "info": {
+        "$value": "#5b34a8",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.violet.2}",
+            "reason": "the desktop's --info is bespoke; the phone takes a spec step"
+          }
+        }
+      },
+      "okFaint": {
+        "$value": "rgba(23, 105, 74, 0.12)"
+      },
+      "warnFaint": {
+        "$value": "rgba(138, 88, 0, 0.13)"
+      },
+      "badFaint": {
+        "$value": "rgba(179, 32, 47, 0.1)"
+      },
+      "infoFaint": {
+        "$value": "rgba(91, 52, 168, 0.1)"
+      },
+      "okFill": {
+        "$value": "rgba(23, 105, 74, 0.12)"
+      },
+      "okEdge": {
+        "$value": "rgba(23, 105, 74, 0.5)"
+      },
+      "okText": {
+        "$value": "#0d4a32"
+      },
+      "badFill": {
+        "$value": "rgba(179, 32, 47, 0.1)"
+      },
+      "badText": {
+        "$value": "#8c1622"
+      },
+      "prose": {
+        "$value": "#1b2532"
+      },
+      "proseStrong": {
+        "$value": "#050a12"
+      },
+      "proseEm": {
+        "$value": "#263243"
+      },
+      "codeBg": {
+        "$value": "#10151c"
+      },
+      "codeText": {
+        "$value": "#dbe6ee"
+      },
+      "diffAdd": {
+        "$value": "#7ee0b0"
+      },
+      "diffRemove": {
+        "$value": "#ffb3bb"
+      },
+      "accentRgb": {
+        "$value": "0 105 127"
+      },
+      "okRgb": {
+        "$value": "23 105 74"
+      },
+      "warnRgb": {
+        "$value": "99 35 3"
+      },
+      "badRgb": {
+        "$value": "179 32 47"
+      },
+      "infoRgb": {
+        "$value": "91 52 168"
+      },
+      "mutedRgb": {
+        "$value": "72 86 107"
+      },
+      "sheenRgb": {
+        "$value": "10 30 60",
+        "$description": "Ink, not white. A white wash on a white surface is not a hover state."
+      },
+      "shadeRgb": {
+        "$value": "16 34 60"
+      },
+      "edge": {
+        "$value": "rgba(30, 55, 85, 0.28)"
+      },
+      "edgeActive": {
+        "$value": "rgba(0, 105, 127, 0.7)"
+      },
+      "nodeH1": {
+        "$value": "#257e6d"
+      },
+      "nodeH2": {
+        "$value": "#056cc7",
+        "$description": "--node-h1: #257e6d; /* structure"
+      },
+      "nodeH3": {
+        "$value": "#c74605",
+        "$description": "--node-h2: #056cc7; /* provenance"
+      },
+      "nodeH4": {
+        "$value": "#030377",
+        "$description": "--node-h3: #c74605; /* knowledge"
+      },
+      "nodeH5": {
+        "$value": "#6b0f22",
+        "$description": "--node-h4: #030377; /* capability"
+      },
+      "tag0": {
+        "$value": "#1d4ed8",
+        "$description": "Chat tag colours (docs/CHAT-TAGS-DESIGN.md section 10; history-tags.js\n     COLOURS): dark ink for Daylight, 4.5:1 or better on the tinted header. The header tint is the ink at 12% over the surface."
+      },
+      "tag1": {
+        "$value": "#146c36"
+      },
+      "tag2": {
+        "$value": "#8a5300"
+      },
+      "tag3": {
+        "$value": "#6d28d9"
+      },
+      "tag4": {
+        "$value": "#0f766e"
+      },
+      "tag5": {
+        "$value": "#be123c"
+      },
+      "tag6": {
+        "$value": "#475569"
+      },
+      "tag7": {
+        "$value": "#b43a00"
+      },
+      "tagTint": {
+        "$value": "12%"
+      },
+      "shadowCard": {
+        "$value": "0 1px 2px rgba(16, 34, 60, 0.1), 0 6px 20px rgba(16, 34, 60, 0.1)"
+      },
+      "shadowPane": {
+        "$value": "0 20px 56px rgba(16, 34, 60, 0.18)"
+      },
+      "glowAccent": {
+        "$value": "0 0 0 1px rgba(0, 105, 127, 0.32), 0 0 0 4px rgba(0, 105, 127, 0.1)"
+      },
+      "stateIdle": {
+        "$value": "{palette.ice.3}"
+      },
+      "stateListening": {
+        "$value": "{palette.ember.4}"
+      },
+      "stateThinking": {
+        "$value": "{palette.violet.4}"
+      },
+      "stateSpeaking": {
+        "$value": "{palette.ice.4}"
+      },
+      "stateApproval": {
+        "$value": "{palette.amber.4}"
+      },
+      "stateStandby": {
+        "$value": "#6b7d94"
+      },
+      "stateError": {
+        "$value": "{palette.rose.4}"
+      },
+      "stateBanked": {
+        "$value": "{palette.neutral.4}"
+      },
+      "swatchReactorGround": {
+        "$value": "#0a1119"
+      },
+      "swatchReactorInk": {
+        "$value": "{themes.deep-space.accent}"
+      },
+      "swatchDaylightGround": {
+        "$value": "#ffffff"
+      },
+      "swatchDaylightInk": {
+        "$value": "#00697f"
+      },
+      "swatchContrastGround": {
+        "$value": "#000000"
+      },
+      "swatchContrastInk": {
+        "$value": "#ffffff"
+      },
+      "radiusWindow": {
+        "$value": "18px"
+      },
+      "radiusCard": {
+        "$value": "14px"
+      },
+      "radiusControl": {
+        "$value": "9px"
+      },
+      "radiusChip": {
+        "$value": "999px"
+      },
+      "strokeHair": {
+        "$value": "1px"
+      },
+      "text2xs": {
+        "$value": "10px"
+      },
+      "textXs": {
+        "$value": "11px"
+      },
+      "textSm": {
+        "$value": "12px"
+      },
+      "textMd": {
+        "$value": "14px"
+      },
+      "textLg": {
+        "$value": "17px"
+      },
+      "ease": {
+        "$value": "cubic-bezier(0.22, 1, 0.36, 1)"
+      },
+      "easeOut": {
+        "$value": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "durInstant": {
+        "$value": "90ms"
+      },
+      "durQuick": {
+        "$value": "160ms"
+      },
+      "durSettle": {
+        "$value": "260ms"
+      },
+      "fontUi": {
+        "$value": "\"Segoe UI Variable Display\", \"Segoe UI\", system-ui, -apple-system, sans-serif"
+      },
+      "fontDisplay": {
+        "$value": "\"Chakra Petch\", \"Segoe UI Variable Display\", system-ui, sans-serif"
+      },
+      "fontMono": {
+        "$value": "\"Cascadia Code\", \"IBM Plex Mono\", \"JetBrains Mono\", Consolas, \"SF Mono\", monospace"
+      },
+      "$description": "The Daylight theme, as the desktop holds it. These are the values this repository's own checks measure (tests/themecheck.mjs, tests/distinct.mjs, tests/contrast.mjs against both a black and a white backdrop).",
+      "phoneId": {
+        "$value": "daylight"
+      },
+      "label": {
+        "$value": "Daylight"
+      },
+      "blurb": {
+        "$value": "Light chrome for reading outdoors. The reactor keeps its dark well."
+      },
+      "dark": {
+        "$value": false
+      },
+      "well": {
+        "$value": "#04070c",
+        "$description": "The reactor's ground, and the ONE theme token the face is allowed to read. It must stay essentially black: faces composite additively, so a light well erases the glow. Not a CSS token - the desktop's face ground is a spec constant, not a theme token.",
+        "$extensions": {
+          "phone": {
+            "$value": "#04070c",
+            "reason": "dark on a light theme on purpose: faces composite additively, so a light well erases the glow (Chrome.wellIsLegal)"
+          }
+        }
+      }
+    },
+    "high-contrast": {
+      "surface0": {
+        "$value": "rgb(0, 0, 0)"
+      },
+      "surface1": {
+        "$value": "rgb(10, 10, 12)",
+        "$extensions": {
+          "phone": {
+            "$value": "#000000",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surface2": {
+        "$value": "rgb(20, 20, 24)",
+        "$extensions": {
+          "phone": {
+            "$value": "#0a0a0a",
+            "reason": "the desktop window is translucent on purpose; the phone's surfaces are opaque"
+          }
+        }
+      },
+      "surfaceSunken": {
+        "$value": "rgb(0, 0, 0)"
+      },
+      "surfaceHover": {
+        "$value": "rgba(255, 255, 255, 0.12)"
+      },
+      "surfaceActive": {
+        "$value": "rgba(255, 255, 255, 0.2)"
+      },
+      "hairline": {
+        "$value": "rgba(255, 255, 255, 0.34)",
+        "$extensions": {
+          "phone": {
+            "$value": "#6b7a8a",
+            "reason": "the desktop writes a separator as translucent white; the phone writes an opaque slate"
+          }
+        }
+      },
+      "hairlineStrong": {
+        "$value": "rgba(255, 255, 255, 0.6)",
+        "$extensions": {
+          "phone": {
+            "$value": "#9fb0c0",
+            "reason": "the desktop writes a separator as translucent white; the phone writes an opaque slate"
+          }
+        }
+      },
+      "borderAccent": {
+        "$value": "#63f7ff"
+      },
+      "hairlineFocus": {
+        "$value": "#ffffff",
+        "$extensions": {
+          "phone": {
+            "$value": "#9fb0c0",
+            "reason": "both clear the 3:1 non-text floor; different answers to it"
+          }
+        }
+      },
+      "textHi": {
+        "$value": "#ffffff"
+      },
+      "textMid": {
+        "$value": "#e2e8f0",
+        "$extensions": {
+          "phone": {
+            "$value": "#d5dde6",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textLo": {
+        "$value": "#c3ccd9",
+        "$extensions": {
+          "phone": {
+            "$value": "#d5dde6",
+            "reason": "the desktop's text tier is tuned for a transparent window over any wallpaper"
+          }
+        }
+      },
+      "textOnAccent": {
+        "$value": "#000000"
+      },
+      "accent": {
+        "$value": "#63f7ff"
+      },
+      "accentBright": {
+        "$value": "#ffffff"
+      },
+      "accentDim": {
+        "$value": "rgba(99, 247, 255, 0.6)"
+      },
+      "accentFaint": {
+        "$value": "rgba(99, 247, 255, 0.2)"
+      },
+      "accentText": {
+        "$value": "#ffffff"
+      },
+      "ok": {
+        "$value": "#5cff9d",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.verdant.4}",
+            "reason": "the desktop's --ok is in no spec palette family; the phone takes a spec step"
+          }
+        }
+      },
+      "warn": {
+        "$value": "#ffd257",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.amber.4}",
+            "reason": "the desktop's --warn is a bespoke deuteranopia retune; the phone takes a spec step"
+          }
+        }
+      },
+      "bad": {
+        "$value": "#ff8a95",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.rose.4}",
+            "reason": "the desktop's --bad is in no spec palette family; the phone takes a spec step"
+          }
+        }
+      },
+      "info": {
+        "$value": "#d0a9ff",
+        "$extensions": {
+          "phone": {
+            "$value": "{palette.violet.4}",
+            "reason": "the desktop's --info is bespoke; the phone takes a spec step"
+          }
+        }
+      },
+      "okFaint": {
+        "$value": "rgba(92, 255, 157, 0.16)"
+      },
+      "warnFaint": {
+        "$value": "rgba(255, 210, 87, 0.16)"
+      },
+      "badFaint": {
+        "$value": "rgba(255, 138, 149, 0.16)"
+      },
+      "infoFaint": {
+        "$value": "rgba(208, 169, 255, 0.16)"
+      },
+      "okFill": {
+        "$value": "rgba(92, 255, 157, 0.18)"
+      },
+      "okEdge": {
+        "$value": "#5cff9d"
+      },
+      "okText": {
+        "$value": "#d6ffe8"
+      },
+      "badFill": {
+        "$value": "rgba(255, 138, 149, 0.18)"
+      },
+      "badText": {
+        "$value": "#ffd6da"
+      },
+      "prose": {
+        "$value": "#ffffff"
+      },
+      "proseStrong": {
+        "$value": "#ffffff"
+      },
+      "proseEm": {
+        "$value": "#ffffff"
+      },
+      "codeBg": {
+        "$value": "#000000"
+      },
+      "codeText": {
+        "$value": "#ffffff"
+      },
+      "diffAdd": {
+        "$value": "#5cff9d"
+      },
+      "diffRemove": {
+        "$value": "#ff8a95"
+      },
+      "accentRgb": {
+        "$value": "99 247 255"
+      },
+      "okRgb": {
+        "$value": "92 255 157"
+      },
+      "warnRgb": {
+        "$value": "255 210 87"
+      },
+      "badRgb": {
+        "$value": "255 138 149"
+      },
+      "infoRgb": {
+        "$value": "208 169 255"
+      },
+      "mutedRgb": {
+        "$value": "195 204 217"
+      },
+      "sheenRgb": {
+        "$value": "255 255 255"
+      },
+      "shadeRgb": {
+        "$value": "0 0 0"
+      },
+      "edge": {
+        "$value": "rgba(220, 230, 245, 0.45)"
+      },
+      "edgeActive": {
+        "$value": "#63f7ff"
+      },
+      "nodeH1": {
+        "$value": "#affdd4"
+      },
+      "nodeH2": {
+        "$value": "#b8dcf5",
+        "$description": "--node-h1: #affdd4; /* structure"
+      },
+      "nodeH3": {
+        "$value": "#fafa4c",
+        "$description": "--node-h2: #b8dcf5; /* provenance"
+      },
+      "nodeH4": {
+        "$value": "#a87efc",
+        "$description": "--node-h3: #fafa4c; /* knowledge"
+      },
+      "nodeH5": {
+        "$value": "#d67e71",
+        "$description": "--node-h4: #a87efc; /* capability"
+      },
+      "tag0": {
+        "$value": "#93b4ff"
+      },
+      "tag1": {
+        "$value": "#86e0a6"
+      },
+      "tag2": {
+        "$value": "#f5c26b"
+      },
+      "tag3": {
+        "$value": "#c4a8ff"
+      },
+      "tag4": {
+        "$value": "#7adfd3"
+      },
+      "tag5": {
+        "$value": "#ff9ab5"
+      },
+      "tag6": {
+        "$value": "#b6c2d1"
+      },
+      "tag7": {
+        "$value": "#ffb385"
+      },
+      "tagTint": {
+        "$value": "16%"
+      },
+      "shadowCard": {
+        "$value": "0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 28px rgba(0, 0, 0, 0.45)"
+      },
+      "shadowPane": {
+        "$value": "0 24px 64px rgba(0, 0, 0, 0.55)"
+      },
+      "glowAccent": {
+        "$value": "0 0 0 1px rgba(99, 247, 255, 0.6), 0 0 22px rgba(56, 240, 255, 0.18)"
+      },
+      "stateIdle": {
+        "$value": "{palette.ice.3}"
+      },
+      "stateListening": {
+        "$value": "{palette.ember.4}"
+      },
+      "stateThinking": {
+        "$value": "{palette.violet.4}"
+      },
+      "stateSpeaking": {
+        "$value": "{palette.ice.4}"
+      },
+      "stateApproval": {
+        "$value": "{palette.amber.4}"
+      },
+      "stateStandby": {
+        "$value": "#6b7d94"
+      },
+      "stateError": {
+        "$value": "{palette.rose.4}"
+      },
+      "stateBanked": {
+        "$value": "{palette.neutral.4}"
+      },
+      "swatchReactorGround": {
+        "$value": "#0a1119"
+      },
+      "swatchReactorInk": {
+        "$value": "{themes.deep-space.accent}"
+      },
+      "swatchDaylightGround": {
+        "$value": "#ffffff"
+      },
+      "swatchDaylightInk": {
+        "$value": "#00697f"
+      },
+      "swatchContrastGround": {
+        "$value": "#000000"
+      },
+      "swatchContrastInk": {
+        "$value": "#ffffff"
+      },
+      "radiusWindow": {
+        "$value": "10px"
+      },
+      "radiusCard": {
+        "$value": "8px"
+      },
+      "radiusControl": {
+        "$value": "6px"
+      },
+      "radiusChip": {
+        "$value": "999px"
+      },
+      "strokeHair": {
+        "$value": "2px"
+      },
+      "text2xs": {
+        "$value": "10px"
+      },
+      "textXs": {
+        "$value": "11px"
+      },
+      "textSm": {
+        "$value": "12px"
+      },
+      "textMd": {
+        "$value": "14px"
+      },
+      "textLg": {
+        "$value": "17px"
+      },
+      "ease": {
+        "$value": "cubic-bezier(0.22, 1, 0.36, 1)"
+      },
+      "easeOut": {
+        "$value": "cubic-bezier(0.16, 1, 0.3, 1)"
+      },
+      "durInstant": {
+        "$value": "90ms"
+      },
+      "durQuick": {
+        "$value": "160ms"
+      },
+      "durSettle": {
+        "$value": "260ms"
+      },
+      "fontUi": {
+        "$value": "\"Segoe UI Variable Display\", \"Segoe UI\", system-ui, -apple-system, sans-serif"
+      },
+      "fontDisplay": {
+        "$value": "\"Chakra Petch\", \"Segoe UI Variable Display\", system-ui, sans-serif"
+      },
+      "fontMono": {
+        "$value": "\"Cascadia Code\", \"IBM Plex Mono\", \"JetBrains Mono\", Consolas, \"SF Mono\", monospace"
+      },
+      "$description": "The High Contrast theme, as the desktop holds it. These are the values this repository's own checks measure (tests/themecheck.mjs, tests/distinct.mjs, tests/contrast.mjs against both a black and a white backdrop).",
+      "phoneId": {
+        "$value": "contrast"
+      },
+      "label": {
+        "$value": "High Contrast"
+      },
+      "blurb": {
+        "$value": "Maximum legibility. Flat surfaces, strong borders, two text weights."
+      },
+      "dark": {
+        "$value": true
+      },
+      "well": {
+        "$value": "#04070c",
+        "$description": "The reactor's ground, and the ONE theme token the face is allowed to read. It must stay essentially black: faces composite additively, so a light well erases the glow. Not a CSS token - the desktop's face ground is a spec constant, not a theme token.",
+        "$extensions": {
+          "phone": {
+            "$value": "#000000",
+            "reason": "this theme's ground is pure black, so the well is too"
+          }
+        }
+      }
+    }
+  }
+}

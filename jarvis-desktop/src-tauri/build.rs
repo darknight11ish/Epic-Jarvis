@@ -64,11 +64,22 @@ fn main() {
             "get_digest",
             "mark_digest_seen",
             "set_attention_muted",
+            // How many times a day Jarvis may speak up unasked, and the hour
+            // the brief arrives (2026-10-08). The Brain's budget card sets
+            // them; the write is the backend's to decide - raising a number is
+            // a loosening and the backend puts one card to the owner first.
+            "set_attention_limits",
             // The Brain. One fan-out read over a fixed allowlist, then one
             // command per power it can exercise.
             "brain_read",
             "brain_revert_undo",
             "brain_cancel_job",
+            // The job list's steering command (2026-10-08, JARVIS-API section
+            // 118). Listed here as well as in lib.rs's generate_handler! - a
+            // command in one and not the other is refused by the ACL from every
+            // window, which is invisible at compile time
+            // (tools/check_command_acl.py is what catches it).
+            "brain_task_act",
             "brain_cancel_hold",
             "brain_watch_add",
             "brain_watch_remove",
@@ -168,10 +179,19 @@ fn main() {
             "set_theme_follow_system",
             // Settings' "Open Faces" button.
             "open_faces",
+            // Settings' "Everything Jarvis can do" button, and the same row in
+            // the tray menu (2026-10-08, docs/FEATURES-LIST-DESIGN.md). The page
+            // this opens holds no command of its own.
+            "open_features",
             // The right/wrong mark on one answer (feedback.patch). Quickbar.
             "mark_answer",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
+            // Re-opening that same walkthrough on demand (the owner's request
+            // of 2026-10-10), from Settings' "Show the intro again" button.
+            // Settings window only: it is the only surface with the button,
+            // and it opens the same narrow window `finish_onboarding` closes.
+            "replay_onboarding",
             // Windows Hello (lock.rs). The Security settings are read and
             // changed from the settings window only; loosening one asks
             // Windows Hello first. Show, for the Brain's private lists, is
@@ -249,10 +269,52 @@ fn main() {
             "get_account_secrets",
             "save_account_secret",
             "forget_account_secret",
+            // Settings' "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md
+            // steps 1-2, 2026-10-06): the six API services the chatbot
+            // driver can use (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
+            // Groq), each key written straight into Credential Manager on
+            // this PC under the name `jarvis_chatbot_api.KEY_TARGETS` builds
+            // - never sent over HTTP, never to the phone, never shown again.
+            // The names cannot drift from the Python side:
+            // backend/test_chatbot_keys.py and token_store.rs's own
+            // `the_six_chatbot_targets_are_the_python_sides_own` both fail
+            // if they do. Settings window only - rule 3.
+            "get_chatbot_api_keys",
+            "save_chatbot_api_key",
+            "forget_chatbot_api_key",
+            // The monthly money limits and the price list of those same six
+            // services (docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, 2026-10-06):
+            // a key with no limit leaves the service unusable, so the two
+            // were built together. Raising a limit is a loosening - the
+            // BACKEND raises ONE approval card (raise_api_limit) plus
+            // Windows Hello and refuses it from another device; lowering
+            // one, removing one and correcting a price need no card. Every
+            // write is held on a stale link. Settings window only.
+            "chatbot_money",
+            "set_chatbot_money",
+            // Settings' "Accounts", the ADDRESS half (backend/accounts.patch,
+            // jarvis_accounts.py, 2026-10-06): the mail server, its port and
+            // mailbox, the sending server, its port and how the email is
+            // encrypted, the Home Assistant address and the calendar's CalDAV
+            // address - read, and ONE address saved at a time over the PC's
+            // own route, which keeps them in accounts.json beside
+            // web-search.json. ADDRESSES ONLY: the four secrets above are
+            // never carried by these two, and this side refuses any other
+            // name before a request is even built. Settings window only.
+            "get_account_addresses",
+            "save_account_address",
             // Settings' "What Jarvis can reach" (backend/reach.patch): every
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // Settings' "Limits and frequency" (backend/limits-read.patch and
+            // backend/limits-settings.patch, 2026-10-08): the seven limits the
+            // owner can change, read and written through one table on the PC.
+            // The write refuses nothing this side - the BACKEND decides which
+            // way a change goes and puts one card to the owner before a
+            // loosening. Settings window only.
+            "get_limits",
+            "set_limit",
             // The sun, the moon and the weather behind the animal faces
             // (backend/sky.patch, 2026-09-28): the settings and the weather
             // now (a read - Settings, the Widget and the floating face keep
@@ -282,6 +344,22 @@ fn main() {
             "set_asks_first",
             "set_lights_without_card",
             "set_tool_enabled",
+            // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
+            // owner's request of 2026-10-08; backend/prompt-coach.patch):
+            // whether the coach is on, in the PC's own words (a read), and
+            // the switch - at once in BOTH directions, no approval card
+            // either way and never held on a stale link: it opens no way out
+            // of the PC, takes no action and loosens no rule. Settings window
+            // only.
+            "get_prompt_coach",
+            "set_prompt_coach",
+            // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
+            // critique of the words in the box plus the last few turns, from
+            // the same local model, through the same route. It sends nothing
+            // and decides nothing (the owner's own two buttons do the
+            // sending), raises no card and is never held on a stale link.
+            // Jarvis bar only - "quickbar-surface".
+            "coach_prompt",
             // Settings' "Sending email" (backend/email-send.patch): whether
             // sending is set up - from which address, through which server -
             // in the PC's own words. A read; never the password. Settings
@@ -333,14 +411,15 @@ fn main() {
             // address for the QR code, start / watch / cancel a pairing
             // (the QR code drawn in Rust; the window hidden from screen
             // capture while a code shows), the device list, Remove ONE
-            // device, and retire / bring back the old shared key. Settings
-            // window only.
+            // device, label ONE device (docs/MULTI-DEVICE-DESIGN.md), and
+            // retire / bring back the old shared key. Settings window only.
             "pair_phone_address",
             "pair_start",
             "pair_session",
             "pair_cancel",
             "devices_list",
             "devices_remove",
+            "devices_label",
             "devices_shared",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
@@ -431,6 +510,16 @@ fn main() {
             // itself has no button to call either from.
             "get_floating",
             "set_floating",
+            // Where the floating face's own page says its picture is drawn,
+            // so a click can be let past the window everywhere except on the
+            // animal (2026-10-10, the integration evaluation). A command
+            // rather than an event on purpose: `core:event:allow-emit` is
+            // forbidden to every window (apps security audit M1,
+            // tests/security.mjs), because a page that could emit could fake
+            // the voice check or an approval card. Granted to the floating
+            // window alone - permissions/surfaces.toml's "floating-hit-mask"
+            // set.
+            "note_floating_hit_mask",
             // Bug audit 2026-09-27, desktop-rust finding #2: crash_notes and
             // find_python were added to generate_handler! in lib.rs but
             // never added here, so no permission file ever existed for
@@ -724,8 +813,8 @@ fn main() {
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",
-            // The HUD's chat box opens the Jarvis bar instead (the chat
-            // audit, 2026-09-28). Sends nothing. The HUD only.
+            // The HUD's "Open the Jarvis bar" button, beside that window's
+            // own chat box (reversed 2026-10-06). Sends nothing. The HUD only.
             "hud_open_bar",
             // Lip-sync: hands the Jarvis bar's mouth track and playback
             // clock to every window's face (voice.rs `face_voice`). Checked
@@ -734,6 +823,23 @@ fn main() {
             // Before a screen capture is sent: can the local model see it?
             // Asks the Jarvis server and loopback Ollama; quickbar only.
             "local_model_vision",
+            // How long "Solve it here" stays on offer (handoff.rs; the owner's
+            // decision of 2026-10-08). One command for the setting alone: read
+            // it, put it back to "Stop early" at once, or ask to keep offering
+            // it (ONE card on this PC). Settings only, and it carries one word
+            // and fixed sentences - never a picture of the paused browser
+            // window, which this PC's windows have no route to.
+            "handoff_mode",
+            // What a captcha does about the browser window it is blocking
+            // (handoff.rs `handoff_front`; the owner's decision of 2026-10-09:
+            // "1 by default with the option for 2 in the settings of Jarvis").
+            // One command for the setting alone: read it, put it back to
+            // "Leave it where it is" at once, or ask to bring that one window
+            // to the front (ONE card on this PC). Settings only, and it carries
+            // one word and fixed sentences - it never raises a window itself
+            // and never pictures the paused browser window, which this PC's
+            // windows have no route to.
+            "handoff_front",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

@@ -111,6 +111,28 @@ class Verdict:
         self.request_id, self.reason = request_id, reason
 
 
+def check_tier_refusal(out, action, tier, label):
+    """A route that refuses because the action's OWN tier is not "ask": the
+    owner must read plain words with the next step in them, never the tier, and
+    the technical half (the action, the tier, why that cannot be allowed) must
+    still be there in `detail` for a bug report (2026-10-10).
+
+    The old words were `"<action> is tier 'auto' in jarvis-framework.toml; ...
+    it must be 'ask'"` - accurate and no use to the owner, who has just been
+    told nothing happened and cannot tell what to do about it. This fails on
+    that wording: it names the tier in the sentence a person reads."""
+    error = str(out.get("error") or "")
+    detail = str(out.get("detail") or "")
+    check(f"{label}: the words the owner reads name no tier",
+          "tier" not in error, error)
+    check(f"{label}: ... and say where to put it back",
+          "jarvis-framework.toml" in error and "ask" in error, error)
+    check(f"{label}: ... and nothing was done, in those words",
+          "nothing was" in error, error)
+    check(f"{label}: the action and the tier are kept in `detail`, for a bug report",
+          action in detail and repr(tier) in detail, detail)
+
+
 # ------------------------------------------------------------ parsing --
 
 
@@ -533,8 +555,8 @@ def t_third_card_approval_card():
               and "Pictures" in SC._LAST["third"]["reason"], SC._LAST.get("third"))
         code, out = SC.request_change("third", assign="long_context", gate=gate,
                                       tier_of=lambda a: "auto")
-        check("tier not 'ask': refused before any card",
-              code == 503 and "must be 'ask'" in out["error"])
+        check("tier not 'ask': refused before any card", code == 503)
+        check_tier_refusal(out, "second_card_third_assign", "auto", "the third card's assignment")
 
 
 def t_third_card_lane_independent():
@@ -655,8 +677,8 @@ def t_switches():
         check("... and the second card too",
               SC._read_switches()["features"]["vision"] is False)
         code, out = SC.request_change("vision", True, gate=gate, tier_of=lambda a: "auto")
-        check("tier not 'ask': refused before any card", code == 503 and "must" in out["error"]
-              and "be 'ask'" in out["error"])
+        check("tier not 'ask': refused before any card", code == 503)
+        check_tier_refusal(out, "second_card_enable", "auto", "the second card's switch")
         check("unknown feature: 400", SC.request_change("nope", True)[0] == 400)
         check("enabled must be a boolean", SC.handle_post({"feature": "vision", "enabled": "yes"})[0] == 400)
         check("a body that is not an object: 400", SC.handle_post([1])[0] == 400)
@@ -944,7 +966,8 @@ def t_browser_control_card_is_honest():
         code, out = SC.request_change("browser_control", True, gate=gate,
                                       tier_of=lambda act: tiers[act])
         check("its own tier is the one checked: not 'ask' -> 503 naming that action",
-              code == 503 and "second_card_browser_enable is tier 'notify'" in out["error"], out)
+              code == 503, out)
+        check_tier_refusal(out, "second_card_browser_enable", "notify", "Browser control")
         # The master card, with Browser control left on, says so too.
         seen.clear()
         w.switches(master=False, long_context=True, browser_control=True)
@@ -1214,13 +1237,30 @@ def t_last_card():
               "was turned on." and isinstance(last["at"], int), last)
         for v, want, words in ((Verdict(False, "ask", "denied"), "denied", "You said no"),
                                (Verdict(False, "ask", "timed_out"), "timed_out",
-                                "Nobody answered the card in time"),
-                               (Verdict(True, "auto", "auto"), "refused", "not a person saying yes")):
+                                "Nobody answered the card in time")):
             SC.request_change("vision", True, gate=lambda *a, v=v: v)
             last = SC.status()["last"]
             check(f"{want}: said as {want}, in words",
                   last["feature"] == "vision" and last["outcome"] == want and words in last["why"],
                   last)
+        # A gate that answered WITHOUT asking anybody (tier "auto": its own
+        # verdict is not a person's yes). 2026-10-10: what the owner reads is
+        # plain words with the next step in them, and the tier - the words this
+        # module used to show, `"the gate answered at tier 'auto', which is not
+        # a person saying yes"` - is kept in `last["gate"]`, which no app shows
+        # (the desktop reads `why`: settings.js cardLast/cardEndedWords). This
+        # check fails on the old wording, which put the tier in `why`.
+        SC.request_change("vision", True, gate=lambda *a: Verdict(True, "auto", "auto"))
+        last = SC.status()["last"]
+        check("nobody asked: the owner reads plain words, with no tier in them",
+              "tier" not in last["why"] and "not a person saying yes" not in last["why"]
+              and "Ask again from Jarvis on your PC" in last["why"], last)
+        check("... and it says what happened: nothing changed",
+              "nothing changed" in last["why"], last)
+        check("... while the diagnosis keeps the tier and the old sentence, for a bug report",
+              last.get("gate", "").startswith(
+                  "the gate answered at tier 'auto', which is not a person saying yes")
+              and "auto" in last["gate"], last)
         held = []
         SC.request_change("vision", True, gate=lambda *a: Verdict(True, "ask", "approved"),
                           spawn=held.append)
@@ -1645,8 +1685,8 @@ def t_the_chat_card_pin_asks_first():
         check("an unknown action: 400 with the two shapes", code == 400, out)
         code, out = SC.handle_pin({"action": "pin", "card": G.U_2060},
                                   tier_of=lambda a: "auto", spawn=lambda fn: None)
-        check("a tier that is not ask: 503, before any card is raised",
-              code == 503 and "must stay" in out["error"], out)
+        check("a tier that is not ask: 503, before any card is raised", code == 503, out)
+        check_tier_refusal(out, "chat_card_pin", "auto", "pinning everyday chat")
     with G.World("garbage only\n"):
         code, out = SC.handle_pin({"action": "pin", "card": "0"}, tier_of=lambda a: "ask")
         check("no card at all: 503, nothing to pin", code == 503, out)
@@ -2733,7 +2773,8 @@ def t_study_and_referee_cards():
                 SC.request_change(fid, True, gate=lambda a, dd, p, v=v: v)
                 check(f"{fid}, {label}: stays off", SC._read_switches()["features"][fid] is False)
         code, out = SC.request_change("study", True, gate=gate, tier_of=lambda a: "auto")
-        check("tier not 'ask': refused before any card", code == 503 and "be 'ask'" in out["error"])
+        check("tier not 'ask': refused before any card", code == 503)
+        check_tier_refusal(out, "second_card_enable", "auto", "a feature switch")
         w.switches(master=False)
         seen.clear()
         code, out = SC.request_change("referee", True, gate=gate)

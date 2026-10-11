@@ -34,4 +34,4 @@
 +                body["messages"] = said[-1:]
              return urllib.request.urlopen(
                  urllib.request.Request(
-                     _completions_url(lane),
+                     _completions_url(lane, body),

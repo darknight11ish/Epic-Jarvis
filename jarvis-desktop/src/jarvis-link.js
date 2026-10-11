@@ -727,7 +727,12 @@ export async function decide(id, approved, optionId = null) {
     );
   }
   const args = { id: String(id), approved };
-  if (optionId !== null && optionId !== undefined) args.option_id = String(optionId);
+  // `optionId`, not `option_id`: Tauri renames a command's arguments to
+  // lowerCamelCase at the IPC boundary (tauri-macros' plain `#[tauri::command]`
+  // default, `ArgumentCase::Camel`), and a key it does not recognise for an
+  // `Option<T>` argument is simply absent - no error, just None. See
+  // tests/ipc-args.mjs, which fails on a snake_case InvokeArgs key.
+  if (optionId !== null && optionId !== undefined) args.optionId = String(optionId);
   return TAURI.core.invoke("decide_approval", args);
 }
 

@@ -104,4 +104,23 @@ object PhoneNotifications {
         false -> "Jarvis never sees a phone notification."
         null -> "Couldn't tell whether your phone may read notifications."
     }
+
+    // "Send test" on Settings -> Phone notifications (Android audit
+    // 2026-10-08). The button set its own success flag whatever happened, so
+    // it said TEST_SENT in exactly the state where
+    // [com.jarvis.client.service.ScheduleNotifier.post] returns early and
+    // every approval notification is dropped too. The words now come from
+    // whether the notification was actually posted, and the failure says
+    // what that means and where to unblock it - the row's own "Android
+    // notification settings" button - the same shape [PlatformReadiness]'s
+    // notifications check uses for the same state.
+    const val TEST_SENT = "Test notification sent."
+
+    const val TEST_BLOCKED =
+        "Nothing was sent: notifications are switched off for Jarvis on this phone, so no " +
+            "reminder, timer, alarm or approval alert can appear. Tap \"Android notification " +
+            "settings\" above and turn notifications on, then press Send test again."
+
+    /** What to say under "Send test", from whether a notification was really posted. */
+    fun testWords(posted: Boolean): String = if (posted) TEST_SENT else TEST_BLOCKED
 }

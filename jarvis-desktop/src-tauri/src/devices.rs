@@ -53,6 +53,7 @@ use crate::commands::{
 pub(crate) const LIST_PATH: &str = "/api/devices";
 const VERSION_PATH: &str = "/api/version";
 const REMOVE_PATH: &str = "/api/devices/remove";
+const LABEL_PATH: &str = "/api/devices/label";
 const SHARED_PATH: &str = "/api/devices/shared";
 const PAIR_START_PATH: &str = "/api/pair/start";
 const PAIR_SESSION_PATH: &str = "/api/pair/session";
@@ -553,6 +554,33 @@ pub(crate) fn device_id_ok(id: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// What the owner reads when a label could not be accepted (the PC's own
+/// sentence, word for word: `jarvis_devices.DEVICES_WORDS["bad_label"]`).
+/// Kept here so a label is refused before it makes a round trip, and checked
+/// against the backend's copy by `backend/test_devices.py`.
+pub(crate) const LABEL_BAD: &str = concat!(
+    "Use a shorter label, with letters, numbers, spaces and - _ . ' ( ) only. ",
+    "Leave it empty to go back to the name the device gave itself."
+);
+
+/// The owner's own label for a device: 0-40 characters, letters and digits of
+/// any script, space, and `- _ . ' ( )`. The same rule the PC applies and the
+/// same rule a paired device's name is held to (`jarvis_devices.name_ok`) -
+/// a label is shown in both apps' device lists and inside a pairing card, so
+/// it must not be able to fake a card's words. An empty label is valid: it
+/// clears the label and the device goes back to the name it gave itself.
+pub(crate) fn label_ok(label: &str) -> bool {
+    if label.is_empty() {
+        return true;
+    }
+    if label.chars().count() > 40 {
+        return false;
+    }
+    label
+        .chars()
+        .all(|c| c.is_alphanumeric() || matches!(c, ' ' | '-' | '_' | '.' | '\'' | '(' | ')'))
+}
+
 /// A change's answer (remove, retire, bring back, cancel).
 pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
     if (200..300).contains(&status) {
@@ -579,20 +607,52 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 // ---------------------------------------------------------------------------
 // The settings window's screen-capture guard (design 7.1)
 // ---------------------------------------------------------------------------
+//
+// ON while a pairing code or the four words are on screen, OFF once the session
+// ends or the panel closes - the design's own shape ("put back when the panel
+// closes").
+//
+// Why this is not Tauri's `set_content_protected`, which is the obvious call:
+// on Windows that reaches `SetWindowDisplayAffinity`, and tao applies it by
+// RECREATING the window. Pressing "Pair a phone" therefore closed the Settings
+// window exactly as the pairing succeeded - the code never appeared and nothing
+// was logged, because the window was rebuilt rather than crashed. The owner's
+// report, 2026-10-07: "when i go to devices in the settings to pair a phone and
+// click pair it closes the settings on desktop".
+//
+// The first fix removed the toggle and set the guard once at window creation.
+// The owner asked for the toggle back the same day, on condition that it cannot
+// close the window - so the Win32 call is made directly, on the window this app
+// already owns. `SetWindowDisplayAffinity` changes an attribute of an existing
+// window; it does not touch how the window was created, so nothing is rebuilt
+// and Settings stays open. `WDA_EXCLUDEFROMCAPTURE` needs Windows 10 2004 or
+// newer; where it is refused the code is still shown, which is the same failure
+// the old helper had (a cheap guard against the easiest copy, not a wall -
+// ARCHITECTURE section 3).
 
 /// Hides the settings window from screenshots, screen recordings and screen
-/// sharing (`on`), or puts it back. Tauri's own `set_content_protected`,
-/// which on Windows is `SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`
-/// (tao 0.35's `set_content_protection`, read in its source) - a black box
-/// instead of the code on Windows 10 2004 and newer. A cheap guard against
-/// the easiest copy, not a wall (ARCHITECTURE section 3). No window, or a
-/// refusal, is logged and otherwise ignored: the code is still shown.
+/// sharing (`on`), or puts it back. No window is ignored quietly: the code is
+/// still shown.
+///
+/// The Win32 call itself lives in `lock::set_affinity`, because since
+/// 2026-10-11 the same attribute is used for a second reason - keeping every
+/// Jarvis window out of a capture while App lock is on (the owner's decision;
+/// see `lock.rs`'s own section). Two copies of one Win32 call would be two
+/// things to keep in step, and worse, two things fighting: this guard's "off"
+/// would clear a block the lock still wanted.
+///
+/// So while the app is locked this does nothing at all, in either direction.
+/// The lock's own rule is the stricter one and owns the window then - and the
+/// pairing panel cannot be reached while locked anyway, because Settings is
+/// one of the windows App lock hides and asks Windows Hello for.
 fn guard_capture(app: &AppHandle, on: bool) {
-    if let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) {
-        if let Err(e) = window.set_content_protected(on) {
-            eprintln!("[jarvis] could not change the settings window's capture guard: {e}");
-        }
+    let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) else {
+        return;
+    };
+    if crate::lock::capture_blocked(app) {
+        return;
     }
+    crate::lock::set_affinity(&window, on);
 }
 
 // ---------------------------------------------------------------------------
@@ -681,7 +741,7 @@ pub async fn pair_start(app: AppHandle, address: String) -> Result<serde_json::V
         }
     };
     remember_address(&app, &address_text(&host, port));
-    // Before the code reaches the page, never after.
+    // Before the code reaches the page, never after (design 7.1).
     guard_capture(&app, true);
     Ok(serde_json::json!({
         "ok": true,
@@ -737,6 +797,36 @@ pub async fn devices_remove(app: AppHandle, id: String) -> Result<serde_json::Va
         return Err("That is not a device this app can remove.".to_string());
     }
     let (status, text) = post_raw(&app, REMOVE_PATH, serde_json::json!({ "id": id })).await?;
+    change_answer(status, &text)
+}
+
+/// The owner's own name for a device (docs/MULTI-DEVICE-DESIGN.md, the first
+/// slice, 2026-10-09). Immediate, no card and never held on a stale link: a
+/// label grants nothing and revokes nothing - it is what the list calls a
+/// device the owner already paired. An empty `label` clears it, and the
+/// device goes back to the name it gave itself at pairing.
+#[tauri::command]
+pub async fn devices_label(
+    app: AppHandle,
+    id: String,
+    label: String,
+) -> Result<serde_json::Value, String> {
+    if !device_id_ok(&id) {
+        return Err("That is not a device this app can label.".to_string());
+    }
+    let label = label.trim().to_string();
+    if !label_ok(&label) {
+        // Refused here as well as on the PC: the PC's own sentence is the one
+        // the owner reads, but a label that could never be accepted should
+        // not make a round trip first.
+        return Err(LABEL_BAD.to_string());
+    }
+    let (status, text) = post_raw(
+        &app,
+        LABEL_PATH,
+        serde_json::json!({ "id": id, "label": label }),
+    )
+    .await?;
     change_answer(status, &text)
 }
 
@@ -1099,6 +1189,30 @@ mod tests {
             "d3f9a1c2g",
         ] {
             assert!(!device_id_ok(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn only_a_label_the_pc_would_take_is_sent() {
+        // docs/MULTI-DEVICE-DESIGN.md, the first slice: the same rule the PC
+        // applies (jarvis_devices.label_ok), refused here first so a label
+        // that could never be accepted does not make a round trip. The empty
+        // label IS valid: it is how a label is cleared, and the device goes
+        // back to the name it gave itself at pairing.
+        assert!(label_ok(""));
+        assert!(label_ok("Garden phone"));
+        assert!(label_ok("Sam's (old) phone"));
+        assert!(label_ok("Zoë's tablet"));
+        assert!(label_ok(&"A".repeat(40)));
+        for bad in [
+            &"A".repeat(41),
+            "Phone\nsecond line",
+            "Phone | Fake card",
+            "<b>Phone</b>",
+            "Phone\u{202e}gnihs",
+            "Phone\ttab",
+        ] {
+            assert!(!label_ok(bad), "{bad:?}");
         }
     }
 

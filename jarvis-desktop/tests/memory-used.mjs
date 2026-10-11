@@ -389,9 +389,19 @@ await check("CONTROL: stream_chat sends temporary only to a PC that has it; memo
   const set = sets.slice(sets.indexOf('identifier = "memory-used"'));
   // And (the chat audit, 2026-09-28) which chat a fact came from, a read, so
   // "Erase the words" can name it: nothing else.
+  //
+  // `allow-brain-conversation-facts` joined it on 2026-10-07 (bug audit,
+  // desktop finding B1), and it is the same question as the line above: "Also
+  // delete the chat it came from?" has to say how many OTHER facts that chat
+  // taught, because deleting the chat forgets none of them. That read was
+  // granted only by the `brain-memory` set, which the Brain holds and the
+  // Jarvis bar does not - so in the bar the call was refused and the refusal
+  // swallowed into the number 0, and the bar said "some other facts stay"
+  // where the Brain named the count. A read of the same conversation, beside
+  // the two calls it is part of; still no bulk form, and still one fact per tap.
   const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1).match(/allow-[a-z-]+/g);
   assert.deepEqual(perms, ["allow-memory-used", "allow-brain-memory-forget", "allow-brain-memory-erase",
-    "allow-brain-fact-chat"]);
+    "allow-brain-fact-chat", "allow-brain-conversation-facts"]);
 });
 
 if (fails.length) {

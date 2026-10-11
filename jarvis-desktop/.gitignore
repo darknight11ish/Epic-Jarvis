@@ -12,3 +12,8 @@ npm-debug.log*
 *.swp
 Thumbs.db
 desktop.ini
+
+# tests/make-before-overlay.mjs: the BEFORE copy of src/ that
+# tests/poll-hygiene-measure.mjs serves to measure the poll-hygiene fix
+# (2026-10-08). Scratch, rebuilt on demand, never imported.
+src-old/

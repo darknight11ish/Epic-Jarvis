@@ -144,15 +144,23 @@ permissions = [
 # microphone opens only when the owner holds that button - the `voice` set
 # above, which stays with the quickbar alone.
 #
-# And the HUD's chat box, which opens the Jarvis bar ready to type (the chat
-# audit, 2026-09-28: the PC has one chat box) - `hud_open_bar`, which sends
-# nothing either.
+# And the HUD's own "Open the Jarvis bar" button, beside that window's own
+# chat box, which chats as HUD and has no Temporary chat, New conversation,
+# "Used in this answer" or crisis panel (reversed 2026-10-06) - `hud_open_bar`,
+# which sends nothing either.
+#
+# The same button hides the bar again when it is already up (the owner's ask of
+# 2026-10-09: one button that toggles, labelled from what the shell says is on
+# screen). `hide_quickbar` is the Jarvis bar's own hide, so the worst this page
+# can do with it is take the bar off screen - less than `hud_open_bar` already
+# lets it do, and it decides nothing, approves nothing and hides nothing else.
 [[set]]
 identifier = "hud-voice"
-description = "Show the quickbar with push-to-talk ready, or with its box ready to type in. Opens no microphone, sends and records nothing."
+description = "Show the quickbar with push-to-talk ready, or with its box ready to type in, and hide it again. Opens no microphone, sends and records nothing."
 permissions = [
   "allow-summon-push-to-talk",
   "allow-hud-open-bar",
+  "allow-hide-quickbar",
 ]
 
 # The HUD page's requests to Jarvis, made in Rust with the token, so the page
@@ -181,13 +189,21 @@ permissions = [
 # approve anything: marking read stamps a delivery time, and muting has a fixed
 # end at midnight. There is deliberately no bulk-decide route in the API to
 # grant even if a window asked for one.
+#
+# `set_attention_limits` (2026-10-08) writes the two numbers the budget card
+# shows: how many times a day Jarvis may speak up unasked, and the hour the
+# brief arrives. It can still approve nothing - turning the budget DOWN, and
+# moving the hour, apply at once, and turning it UP is a loosening that the
+# BACKEND puts to the owner on its own approval card before writing anything.
+# The window grants the ask, never the yes.
 [[set]]
 identifier = "attention-surface"
-description = "Read the daily brief, mark it read, and mute spoken interruptions until tomorrow. Approves nothing."
+description = "Read the daily brief, mark it read, mute spoken interruptions until tomorrow, and set how often Jarvis may speak up or when the brief arrives. Approves nothing."
 permissions = [
   "allow-get-digest",
   "allow-mark-digest-seen",
   "allow-set-attention-muted",
+  "allow-set-attention-limits",
 ]
 
 # ---------------------------------------------------------------------------
@@ -217,6 +233,12 @@ permissions = [
 # whichever window it opens. Bug audit 2026-10-05, R5: it was granted only by
 # quickbar-surface, so the Brain's own button was refused and silently did
 # nothing.
+#
+# The HUD pulls this set in as well since 2026-10-10: the owner asked for the
+# settings gear on the big HUD window too (question 2 of
+# docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md), and the gear is the same
+# navigation-only door the bar's and the widget's gears are. See
+# capabilities/hud.json for the argument; it is the widget's, one window over.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "open-fix-place"
@@ -280,6 +302,18 @@ permissions = [
   # Is "Hide memory lists and chat history" on? Yes or no; the bar hides its
   # thread of earlier answers with it (the second chat audit, 2026-09-28).
   "allow-chat-thread-hidden",
+  # The prompt coach's "Coach this" (docs/PROMPT-COACH-DESIGN.md, the owner's
+  # request of 2026-10-08; src/prompt-coach-panel.js; src-tauri/src/
+  # prompt_coach.rs's `coach_prompt`): ONE critique of the words in the box,
+  # plus the last few turns the bar was already going to re-send to the same
+  # local model. It SENDS NOTHING and decides nothing - only the owner's own
+  # press of "Send mine" or "Send the suggestion" sends a turn (main.js's
+  # `send`) - it opens no way out of the PC, keeps nothing (the PC writes no
+  # chat history, no fact and no count), raises no approval card and is never
+  # held on a stale link, for exactly the reasons the switch's own set above
+  # gives. The Jarvis bar's alone: the button lives beside the box that holds
+  # the words it reads.
+  "allow-coach-prompt",
 ]
 
 # "Used in this answer" under the quickbar's answer, and "Jarvis remembered N
@@ -299,6 +333,17 @@ permissions = [
   # "Erase the words" names the chat it would also delete (the chat audit,
   # 2026-09-28): which chat a fact came from, a read.
   "allow-brain-fact-chat",
+  # ...and "Also delete the chat it came from?" asks how many OTHER facts that
+  # chat taught, because deleting the chat forgets none of them. That count is
+  # the whole warning, and it is a read of the same conversation.
+  #
+  # It used to be granted only by the `brain-memory` set, which the Brain holds
+  # and the Jarvis bar does not: the bar's copy of this exact flow asked, was
+  # refused by Tauri, and swallowed the refusal into the number 0, so the bar
+  # said "some other facts stay" where the Brain named the count. Same read,
+  # same question, so it belongs beside the two calls it is part of
+  # (2026-10-07 bug audit, desktop finding B1).
+  "allow-brain-conversation-facts",
 ]
 
 # "Where this came from" (feasibility I42/I132, answer-sources.patch): the
@@ -337,6 +382,15 @@ permissions = [
   "allow-capture-note-status",
   # Which of those note apps this PC is set up for: names only.
   "allow-note-targets",
+  # The gear on the widget's own bar, and the fix buttons on its offline card
+  # ("Reconnect", "Show me where"). Both call the same navigation-only command
+  # the Jarvis bar and the Brain already hold: it opens or focuses the Settings
+  # window (or the Brain) at a named place, changes no setting and approves
+  # nothing (plain_errors.rs `open_fix_place`). The widget's offline card had
+  # been invoking it since it was written, and every one of those taps was
+  # refused at the ACL - the permission was never granted to this surface, so
+  # the one button offered when Jarvis is unreachable did nothing at all.
+  "allow-open-fix-place",
 ]
 
 # ---------------------------------------------------------------------------
@@ -473,11 +527,51 @@ permissions = [
   "allow-get-account-secrets",
   "allow-save-account-secret",
   "allow-forget-account-secret",
+  # "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md steps 1-2, 2026-10-06):
+  # the six API services the chatbot driver can use, each key written
+  # straight into Credential Manager on this PC by save_chatbot_api_key -
+  # never sent to the backend or the phone, never read back to a page. The
+  # Credential Manager names are the Python side's own
+  # (jarvis_chatbot_api.KEY_TARGETS); a cross-check test fails if the two
+  # ever drift. Settings window only - rule 3.
+  "allow-get-chatbot-api-keys",
+  "allow-save-chatbot-api-key",
+  "allow-forget-chatbot-api-key",
+  # "Chatbot money limits" (docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, 2026-10-06):
+  # the same six services' monthly limits and each model's price, read from
+  # the PC and set from here. The RAISE is the loosening - the PC raises ONE
+  # approval card and asks Windows Hello for it, and refuses it from any other
+  # device; a lowering, a removal and a price correction change at once. Every
+  # write is held on a stale link in Rust (rule 4). Settings window only.
+  "allow-chatbot-money",
+  "allow-set-chatbot-money",
+  # "Accounts", the ADDRESS half (backend/accounts.patch, jarvis_accounts.py,
+  # 2026-10-06): the mail server, its port and mailbox, the sending server,
+  # its port and how the email is encrypted, the Home Assistant address and
+  # the calendar's CalDAV address - kept on the PC in accounts.json beside
+  # web-search.json, read back to this page, ONE saved at a time. ADDRESSES
+  # ONLY: nothing here carries a key, a password, a token or the private
+  # calendar link (those are the three above, written straight into
+  # Credential Manager and never sent over HTTP), and the command refuses any
+  # name but the eight before a request is built. Settings window only - rule
+  # 3. Holds a save while the event stream is stale, like every other change
+  # sent to the PC.
+  "allow-get-account-addresses",
+  "allow-save-account-address",
   # "What Jarvis can reach": every way Jarvis can reach something outside
   # itself, whether each is on, where it goes (a host only) and whether it
   # asks first - written by the PC from its settings, never by the model.
   # A read: it changes nothing, and no key or private link is in it.
   "allow-get-reach",
+  # "Limits and frequency" (backend/limits-read.patch + limits-settings.patch,
+  # 2026-10-08): the limits the owner can change, read and written through ONE
+  # table on the PC. The READ changes nothing. The WRITE approves nothing: a
+  # number turned DOWN applies at once, and turning one UP that lets Jarvis do
+  # more is a loosening the BACKEND puts to the owner on its own approval card
+  # before writing anything. Held on a stale link in Rust, like every other
+  # change sent to the PC.
+  "allow-get-limits",
+  "allow-set-limit",
   # The sun, the moon and the weather behind the animal faces (backend/
   # sky.patch, the owner's decisions of 2026-09-28): the settings (a read),
   # and ONE change at a time - show them, the town (this PC only; the PC
@@ -507,6 +601,17 @@ permissions = [
   # Rust; OFF is at once. Rust refuses any tool off the short list before
   # sending; so does the PC. Desktop only.
   "allow-set-tool-enabled",
+  # "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the owner's request of
+  # 2026-10-08; backend jarvis_prompt_coach.py): whether the coach is on, in
+  # the PC's own words (a read), and the switch - OFF by default. NEITHER
+  # DIRECTION raises a card and NEITHER is held on a stale link, the one
+  # setting in this window of that shape: it opens no way out of the PC, takes
+  # no action and loosens no rule (the design's choice B, written down so "no
+  # card" stays a decision and never an oversight). The "Coach this" button
+  # beside the box in the Jarvis bar is a later piece of work, with its own
+  # commands.
+  "allow-get-prompt-coach",
+  "allow-set-prompt-coach",
   # "Sending email": whether it is set up, from which address and through
   # which server (GET /api/email/sending). A read: it sends nothing and
   # never carries the password. Each email is its own approval card.
@@ -541,6 +646,11 @@ permissions = [
   # (Windows Hello, PC only), answered in the Jarvis bar or the widget like
   # every other - held on a stale link in Rust. Removing a device and
   # retiring the old shared key only take access away: at once, never held.
+  # Labelling a device (docs/MULTI-DEVICE-DESIGN.md, the first slice,
+  # 2026-10-09) is the owner's own name for a device he already paired: it
+  # grants nothing and revokes nothing, so it is at once and never held,
+  # like Remove - and like Remove it can never approve a new device
+  # (`pair_device` stays PC-only plus Windows Hello).
   # Bringing the shared key back is one card plus Windows Hello, held.
   "allow-pair-phone-address",
   "allow-pair-start",
@@ -548,6 +658,7 @@ permissions = [
   "allow-pair-cancel",
   "allow-devices-list",
   "allow-devices-remove",
+  "allow-devices-label",
   "allow-devices-shared",
   # "How Jarvis talks" (backend/manner.patch): warm and brief, or plain, and
   # the Humour switch beside it (the owner's decision, 2026-09-27). Wording
@@ -701,10 +812,19 @@ permissions = ["allow-brain-read"]
 # together and apart from the set below.
 [[set]]
 identifier = "brain-act"
-description = "Revert an undo entry, cancel a Long Fuse job, stop a message inside its send window, and manage the GitHub watchlist."
+description = "Revert an undo entry, cancel a Long Fuse job, steer the job list, stop a message inside its send window, and manage the GitHub watchlist. None of these approves anything: resuming or retrying a job only puts it back in the queue, where every step still raises its own approval card."
 permissions = [
   "allow-brain-revert-undo",
   "allow-brain-cancel-job",
+  # The job list (2026-10-08, JARVIS-API section 118): pause, resume, cancel,
+  # retry, and answer a question a job stopped on. It sits in this set rather
+  # than one of its own because it has the same shape as the two above it -
+  # Pause and Cancel stop something unfinished, Retry moves back toward a state
+  # the owner already had, and Resume re-queues work whose steps still ask one
+  # at a time. It holds no way to answer an approval: brain_task_act has no
+  # branch that reaches /api/approve or /api/deny, and the read allowlist in
+  # brain/routes.rs asserts the same thing from the other side.
+  "allow-brain-task-act",
   "allow-brain-cancel-hold",
   "allow-brain-watch-add",
   "allow-brain-watch-remove",
@@ -1404,23 +1524,81 @@ identifier = "sky-read"
 description = "Read whether the sun and moon show behind the face, the rough position and the weather now. Cosmetic and read-only."
 permissions = ["allow-get-sky"]
 
+# THE ONE SET A PAGE WRITES THROUGH, and it is one command with one window
+# holding it (2026-10-10, the integration evaluation). With "click through to
+# what is behind" on, the floating face has to tell Rust where its own picture
+# is drawn before Rust can decide which clicks to let past the window
+# (`windows.rs`'s pointer watcher). The shorter road would have been an event
+# from the page, and that road is closed on purpose: `core:event:allow-emit`
+# is forbidden to every window (apps security audit M1), because the quickbar
+# trusts what it hears and a page that could emit could fake the owner's
+# checked voice or an approval card. So it is a granted command, and the
+# floating window is the only one granted it.
+# What it carries: 1,024 characters of geometry - "1" where the face's own
+# drawing is, "0" where the background is. No words, no picture, nothing about
+# the owner, nothing written down; a grid that is not exactly one clears it,
+# and a window with no grid keeps every click (the animal stays clickable).
+[[set]]
+identifier = "floating-hit-mask"
+description = "Tell Rust where the floating face's own picture is drawn, so clicks pass through everywhere else. Geometry only; cosmetic."
+permissions = ["allow-note-floating-hit-mask"]
+
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.
 [[set]]
 identifier = "faces-open"
 description = "Open the Faces window."
 permissions = ["allow-open-faces"]
 
+# The "Everything Jarvis can do" button (2026-10-08,
+# docs/FEATURES-LIST-DESIGN.md), and the same row in the tray menu, which calls
+# `windows::show_features` in process and needs no grant for it. Opens a window
+# that reads one bundled list of text and draws it; it changes nothing, on this
+# PC or on the phone, and the page it opens holds no command of its own.
+#
+# It used to be granted to the settings window, from a button in the "Help and
+# FAQ" card. Both moved to the Brain's "Tutorials and the FAQ" on 2026-10-08
+# (the owner folded Help into one place), so the grant moved with them: the
+# capability that carries it now is capabilities/brain.json, and the settings
+# window no longer asks for it - nothing in settings.js calls `open_features`
+# any more, and a grant no page uses is one more command reachable from a
+# window that has no reason to hold it.
+[[set]]
+identifier = "features-open"
+description = "Open the read-only \"Everything Jarvis can do\" window."
+permissions = ["allow-open-features"]
+
 # ---------------------------------------------------------------------------
 # The first-run walkthrough: closes itself, and nothing else.
 #
 # It does not read `onboarding_seen` — `lib.rs` decides whether to build this
 # window at all from that flag, before the page exists. The one thing the page
-# itself can do is say "seen" and close, once, so it never reopens.
+# itself can do is say "seen" and close, once, so it never reopens by itself.
+#
+# "By itself" is the precise word, and it is the owner's decision of
+# 2026-10-10: the walkthrough still opens unprompted exactly once, and the
+# owner can now also REPLAY it from Settings (see `onboarding-replay` below).
+# The set below is the page's own power and is unchanged by that.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "onboarding-surface"
-description = "Mark the first-run walkthrough as seen and close it. Opens at most once."
+description = "Mark the first-run walkthrough as seen and close it. Opens at most once on its own."
 permissions = ["allow-finish-onboarding"]
+
+# Settings' "Show the intro again" button (the owner's request of 2026-10-10:
+# the walkthrough is interactive and skippable, but a skip should not be
+# final). It re-opens that same window through the same
+# `windows::show_onboarding` the first run uses.
+#
+# Settings only, and deliberately here rather than in `onboarding-surface`:
+# that set belongs to the walkthrough PAGE, and a window that can open itself
+# is a different power from one that can close itself. This carries no state
+# at all — it takes no argument, reads and writes no marker, and cannot make
+# the walkthrough appear by itself on the next start. The marker stays
+# `finish_onboarding`'s alone.
+[[set]]
+identifier = "onboarding-replay"
+description = "Open the first-run walkthrough again on demand. Reads and writes no marker; changes nothing about when it appears by itself."
+permissions = ["allow-replay-onboarding"]
 
 
 # Tutorials and the FAQ (the owner's request of 2026-10-05; src/tutorials.rs,
@@ -1436,3 +1614,38 @@ permissions = [
   "allow-mark-tutorial",
   "allow-get-faq",
 ]
+
+# How long "Solve it here" stays on offer (handoff.rs; backend/jarvis_handoff_mode.py;
+# docs/CAPTCHA-HANDOFF-DESIGN.md section 5; the owner's decision of 2026-10-08:
+# "make this a setting for both options with 1 as the default"). Read the
+# choice, its two names, the PC's own lines and whether a card is waiting; or
+# set it - "Stop early" is applied at once and NEVER held on a stale link
+# (it only makes Jarvis do less), "Keep offering it" is ONE approval card on
+# this PC with Windows Hello and is held on a stale link.
+#
+# Settings only, and deliberately NOT the hand-off's own routes: this carries
+# one word and fixed sentences. The live picture of the paused browser window
+# goes PC to the owner's own phone, and this PC's windows hold no command that
+# asks for it or passes a tap.
+[[set]]
+identifier = "handoff-mode"
+description = "How long the captcha hand-off stays on offer: read it, choose \"Stop early\" at once, or ask to keep offering it (one approval card on this PC). Settings only; never a picture of the browser window."
+permissions = ["allow-handoff-mode"]
+
+# What a captcha does about the browser window it is blocking (handoff.rs
+# `handoff_front`; backend/jarvis_handoff_front.py; the owner's decision of
+# 2026-10-09: "1 by default with the option for 2 in the settings of Jarvis").
+# Read the choice, its two names, the PC's own lines and whether a card is
+# waiting; or set it - "Leave it where it is" is applied at once and NEVER held
+# on a stale link (it only makes Jarvis do less - it touches no window at all),
+# "Bring it to the front" is ONE approval card on this PC with Windows Hello and
+# is held on a stale link.
+#
+# Settings only, and deliberately NOT the hand-off's own routes: this carries
+# one word and fixed sentences, and it never raises a window itself. The live
+# picture of the paused browser window goes PC to the owner's own phone, and
+# this PC's windows hold no command that asks for it or passes a tap.
+[[set]]
+identifier = "handoff-front"
+description = "What a captcha does about the browser window it is blocking: read it, choose \"Leave it where it is\" at once, or ask to bring that one window to the front (one approval card on this PC). Settings only; it raises no window itself and never pictures it."
+permissions = ["allow-handoff-front"]

@@ -77,6 +77,21 @@ brag-output-*/
 # this repository on purpose.
 dshwork/
 
+# The DSH harness's own scratch folder (rule added 2026-10-09). It was NOT
+# ignored, and it is far larger than dshwork/ ever was: measured 2026-10-09,
+# 207,942 files and about 75 GB - pasted copies of the backend, test vaults,
+# node_modules trees and whole browser profiles. Among them are
+# AppData/Local/Chromium|Google/Chrome|Chrome Beta|Chrome SxS|Microsoft/Edge
+# Beta|Edge Dev "User Data/Default/Login Data" and ".../Network/Cookies" -
+# a credential store in a folder a plain `git add -A` would have committed.
+# `git status --porcelain -uall` reported 4,104 paths under it. This is the
+# same failure the dshwork/ note above records, found a second time: that
+# note fixed the folder it named and this one was left uncovered.
+# It also made tools/check_literal_keys.py red locally while CI stayed green,
+# because the checker reads this folder and finds a duplicate dict key in one
+# of the pasted copies of jarvis_gate.py.
+.dsh-scratch/
+
 # An accidental nested copy of the repository root. A directory of this name
 # INSIDE the repository is never intended. This does not match the
 # repository's own root: a .gitignore pattern is relative to the directory the

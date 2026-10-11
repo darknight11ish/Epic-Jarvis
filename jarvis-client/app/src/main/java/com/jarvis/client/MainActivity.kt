@@ -17,9 +17,12 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -33,6 +36,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,7 +61,9 @@ import com.jarvis.client.net.ChatPicture
 import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
+import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.NoteCapture
+import com.jarvis.client.net.PromptCoach
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
@@ -92,6 +98,7 @@ import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
 import com.jarvis.client.ui.screens.FaceVoiceOfferFromPc
 import com.jarvis.client.ui.screens.FaqScreen
+import com.jarvis.client.ui.screens.FeaturesScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
@@ -113,6 +120,7 @@ import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.PlateEdges
 import com.jarvis.client.ui.theme.Themes
 import com.jarvis.client.ui.theme.systemPrefersDark
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -121,6 +129,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 
 /**
  * The one activity.
@@ -135,6 +144,21 @@ import kotlinx.serialization.json.JsonObject
 class MainActivity : FragmentActivity() {
 
     private val permissionTick = mutableIntStateOf(0)
+
+    /**
+     * What the last "Set Jarvis as the assistant app" tap ended up doing, or
+     * null. Android offers no way to ask whether the role can actually be
+     * REQUESTED before asking for it: on the owner's handset
+     * `isRoleAvailable` answers yes while the permission controller refuses
+     * with "Role is not requestable: android.app.role.ASSISTANT" and closes
+     * its own screen without drawing anything (measured on the attached
+     * phone, 2026-10-09). The screen used to swallow that, so the button
+     * looked dead; the outcome is reported here instead.
+     */
+    private val assistantRoleNote = mutableStateOf<String?>(null)
+
+    /** The plain line the last "Start link" tap produced, or null. */
+    private val linkStartNote = mutableStateOf<String?>(null)
 
     /** The approval a notification asked us to open, or null. */
     private val focusApproval = mutableStateOf<String?>(null)
@@ -290,7 +314,16 @@ class MainActivity : FragmentActivity() {
      *  whatever this Activity assumes a dialog dismissal meant. */
     private val assistantRolePermission = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult(),
-    ) { permissionTick.intValue += 1 }
+    ) {
+        permissionTick.intValue += 1
+        // A role request that comes back without the role is not always the
+        // owner saying no: the phone may have refused to open a screen at all
+        // (see [assistantRoleNote]). Say so, and point at the route that does
+        // work, rather than leaving the tap silent.
+        if (!PlatformReadiness.assistantRoleHeld(this)) {
+            assistantRoleNote.value = ASSISTANT_ROLE_NOT_DONE
+        }
+    }
 
     /**
      * Android's own screen-sharing question for "Watch with me" on this phone
@@ -494,6 +527,15 @@ class MainActivity : FragmentActivity() {
         // so every carefully paced frame in the reactor was landing on half
         // the vsyncs the hardware had available.
         DisplayRate.request(this, window.peekDecorView())
+        // The owner's own screen-refresh-rate pick, restored before the window
+        // is asked for anything (data/ScreenRate.kt). `request` above only
+        // READS the panel's modes and rate for the picker; this is what
+        // actually asks for the owner's choice, and it reads back what the
+        // panel did with it - the pick may be refused (ColorOS ignores a
+        // window's request outright), and when it is, the plate says so rather
+        // than leaving the owner believing it worked.
+        DisplayRate.setChosenHz(JarvisRuntime.appearance.screenRate.value)
+        DisplayRate.applyChosen(this, window.peekDecorView())
     }
 
     /**
@@ -912,13 +954,28 @@ class MainActivity : FragmentActivity() {
         // rollback: the setting was never written and the card was gone until
         // tomorrow. The suppressing flag and the work it belongs to now share
         // a lifetime, so a rotation re-offers the card instead of eating it.
-        // `cachedSleepOffer` stays plain `remember`: a raw
-        // JsonObject isn't Bundle-saveable, and it doesn't need to be - the
-        // LaunchedEffect(brain.memory) block below re-populates it from the
-        // still-cached server data on the next recomposition, and the
-        // survived `dismissed` flag is what stops that from re-adopting the
-        // offer just turned down.
-        var cachedSleepOffer by remember { mutableStateOf<JsonObject?>(null) }
+        // `cachedSleepOffer` used to be plain `remember`, on the grounds that a
+        // raw JsonObject isn't Bundle-saveable. That was the whole of finding 5
+        // in the first Android audit: the suppression flag is saveable and the
+        // payload was not, so after a process death the payload was gone, the
+        // restart's read returned no offer (the PC marks the day as made when it
+        // SERVES one), and the card could not appear again that day. A Saver
+        // carries the offer's own JSON text across that boundary and gives it
+        // back as the same object, so the payload now has the lifetime its
+        // suppression flag already had.
+        val sleepOfferSaver = remember {
+            Saver<JsonObject?, String>(
+                save = { it?.toString().orEmpty() },
+                restore = { text ->
+                    text.takeIf { it.isNotBlank() }?.let {
+                        runCatching { JarvisJson.parseToJsonElement(it).jsonObject }.getOrNull()
+                    }
+                },
+            )
+        }
+        var cachedSleepOffer by rememberSaveable(stateSaver = sleepOfferSaver) {
+            mutableStateOf<JsonObject?>(null)
+        }
         // A date string, not a bare Boolean - "not now" means not now, not
         // forever. See [todayLocal]'s own doc comment for the bug a plain
         // Boolean had: rememberSaveable outlives the exact process death
@@ -953,6 +1010,16 @@ class MainActivity : FragmentActivity() {
         // The face editor's quality, frame rate, speed, Auto adjust and
         // Battery saver. Phone-only - see AppearanceStore.faceTuning.
         val faceTuning by appearance.faceTuning.collectAsState()
+        // The SCREEN's refresh rate the owner picked, or null for "follow the
+        // phone" (data/ScreenRate.kt, ScreenRatePlate.kt). A different setting
+        // from faceTuning above - that one is how often the animal is DRAWN,
+        // this one is what the PANEL is asked to run at - and ScreenRate.kt's
+        // own doc says why the two must never be merged. Phone-only.
+        val screenRate by appearance.screenRate.collectAsState()
+        val screenRates by DisplayRate.modes.collectAsState()
+        val screenPanelHz by DisplayRate.panelHz.collectAsState()
+        val screenRateNote by DisplayRate.pickNote.collectAsState()
+        val screenRateChecked by DisplayRate.pickChecked.collectAsState()
         // "Keep the animal still", shared with the desktop since 2026-09-28
         // (kept on the PC): the PC's value once heard, else - or until this
         // phone's old "on" has reached the PC - this phone's own old switch.
@@ -1037,6 +1104,10 @@ class MainActivity : FragmentActivity() {
         val floatingAvatar by JarvisRuntime.settings.floatingAvatar.collectAsState()
         // Settings -> Quick Settings tiles (data/QuickTiles.kt): this phone only.
         val quickTiles by JarvisRuntime.settings.quickTiles.collectAsState()
+        // "A new conversation starts after ..." (the audit of 2026-10-08):
+        // Settings, this phone only - one of ChatHistory.IDLE_NEW_CHOICES' five
+        // ids, 30 minutes (the default) unless the owner chose another.
+        val idleNewChoice by JarvisRuntime.settings.idleNewChoice.collectAsState()
         LaunchedEffect(floatingAvatar, tick) {
             if (floatingAvatar == FloatingAvatarMode.OVERLAY &&
                 Settings.canDrawOverlays(this@MainActivity)
@@ -1111,6 +1182,11 @@ class MainActivity : FragmentActivity() {
         val deciding by JarvisRuntime.deciding.collectAsState()
         val attention by JarvisRuntime.attention.collectAsState()
         val notice by JarvisRuntime.notice.collectAsState()
+        // Whether the last POST of the shared face/colours landed - null until
+        // one is tried. The Appearance screen's own paragraph says whether the
+        // desktop has them (finding A1), and a flow rather than `.value`
+        // because the send finishes after the frame that drew the claim.
+        val appearanceSent by JarvisRuntime.appearanceSent.collectAsState()
         // The failure behind the notice, in plain words, with its fix button
         // and scrubbed Details - only while the notice on screen IS it.
         val noticeProblem by JarvisRuntime.problem.collectAsState()
@@ -1189,6 +1265,11 @@ class MainActivity : FragmentActivity() {
         // audit 2026-09-28), and its one quiet line. Memory only.
         val thread by chat.thread.collectAsState()
         val chatNote by chat.chatNote.collectAsState()
+        // The prompt coach's switch, as the PC last had it - the words of the
+        // chat bar's "Coach this" button and of its two send buttons
+        // ([com.jarvis.client.net.PromptCoach]). Null is "not read yet", which
+        // draws nothing, the same as off. Read by the LaunchedEffect below.
+        var promptCoach by remember { mutableStateOf<PromptCoach.View?>(null) }
         // Whether this conversation read outside text, and whether the chat is a
         // game (the PC made it temporary) - both from the chat, memory only.
         val readOutsideChat by chat.readOutside.collectAsState()
@@ -1524,6 +1605,27 @@ class MainActivity : FragmentActivity() {
             }
         }
 
+        // The prompt coach's switch, read for the chat bar's "Coach this"
+        // button (docs/PROMPT-COACH-DESIGN.md, docs/JARVIS-API.md section 119).
+        // Off - the default - it draws nothing at all, so this read is what
+        // decides whether the button exists; a PC with no coach route is
+        // remembered as `routeKnown = false` so the bar can say so in the
+        // desktop's own words instead of offering a button that would 404.
+        //
+        // Re-read when `version` moves as well as when the link comes back: a
+        // PC that has just had apply-patches.ps1 run on it still reports the
+        // same link, and the route appears with the new version.
+        LaunchedEffect(link, paired, version) {
+            if (!paired || link != LinkState.CONNECTED) return@LaunchedEffect
+            when (val r = JarvisRuntime.promptCoach()) {
+                is ApiResult.Ok -> PromptCoach.parse(r.value)?.let { promptCoach = it }
+                is ApiResult.Failed ->
+                    if (PromptCoach.missing(r.error)) promptCoach = PromptCoach.absentView()
+                // Any other failure leaves whatever was last read alone: a
+                // blip must not take a working button away.
+            }
+        }
+
         // Asked once per process, the first time there is somewhere to talk
         // to — not at launch.
         //
@@ -1757,7 +1859,54 @@ class MainActivity : FragmentActivity() {
                 // jumps there at once, so the page behind every screen would
                 // cut while everything drawn on it faded.
                 .background(LocalChrome.current.surface0)
-                .windowInsetsPadding(WindowInsets.systemBars)
+                // The system bars UNION the display cutout (2026-10-09,
+                // Android 15 / targetSdk 35+).
+                //
+                // `WindowInsets.systemBars` is statusBars + navigationBars +
+                // captionBar and has never included `displayCutout`. That was
+                // survivable while the cutout was on the top edge and the
+                // status bar (which IS in systemBars) happened to be at least
+                // as deep. Android 15 changed the default: for an app
+                // targeting 35+, `layoutInDisplayCutoutMode` is
+                // LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS for a non-floating
+                // window, so the platform lays this window under the cutout and
+                // leaves the inset to the app - the same hand-over
+                // `enableEdgeToEdge` already made for the bars and the keyboard.
+                //
+                // Checked on the real phone (f0a5b32b, Android 15, API 35):
+                // `dumpsys window` reports
+                // `layoutInDisplayCutoutMode=always` and
+                // `EDGE_TO_EDGE_ENFORCED` for
+                // com.jarvis.client/.MainActivity, and its frame is the whole
+                // display. That phone's notch is 107px / 35.7dp deep. In
+                // portrait the status bar is also 107px, so systemBars alone
+                // covered it and nothing looked wrong - which is exactly why
+                // this went unnoticed. Rotated to landscape the notch becomes a
+                // 35.7dp strip down one SIDE edge and the status bar is a strip
+                // along the top: nothing in systemBars covers it, so the first
+                // ~36dp of every full-width row (the Brain plates, Settings,
+                // History) sat under the camera.
+                //
+                // `union`, not two `windowInsetsPadding` calls in a row: each
+                // one consumes the insets it applies, and the cutout is a
+                // different type from the bars, so a second call would ADD the
+                // full cutout depth under a status bar that already covers it -
+                // 71dp of dead space at the top in portrait. `union` takes the
+                // larger of the two per side, so portrait is byte-for-byte
+                // unchanged and landscape gains the strip it was missing.
+                .windowInsetsPadding(
+                    WindowInsets.systemBars.union(WindowInsets.displayCutout),
+                )
+                // The keyboard inset, on the root so every screen gets it
+                // (UI audit 2026-10-05, finding A2). `enableEdgeToEdge` means
+                // this app owns the IME inset, and the root only asked for the
+                // system bars - so on 11 of 14 screens the keyboard covered
+                // the field being typed into: every Brain plate, the support
+                // form, pairing's address and token. Three screens had added
+                // `imePadding` for themselves (Home, Live, Handoff), which is
+                // how the gap was found; one inset on the root covers those
+                // too, and a screen never repeats another screen's inset.
+                .imePadding()
             // Calm motion for the face: the owner's Motion choice, or the
             // phone's own "remove animations", read from the same flag the
             // theme's Motion already reads. Only ever slows the face.
@@ -2001,20 +2150,37 @@ class MainActivity : FragmentActivity() {
                         ReadinessScreen(
                             items = items,
                             onRequestNotifications = {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                    val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                                    if (shouldShowRequestPermissionRationale(Manifest.permission.POST_NOTIFICATIONS)) {
-                                        notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                    } else {
-                                        runCatching { startActivity(intent) }.onFailure {
-                                            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                                        }
-                                    }
+                                // One helper, one screen: the same Android page the
+                                // Settings row ("Notifications from Jarvis") opens,
+                                // because Android owns the per-kind switches. The
+                                // permission prompt stays as the fallback, for a
+                                // phone where even that page cannot be opened.
+                                val explainFirst = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                    shouldShowRequestPermissionRationale(
+                                        Manifest.permission.POST_NOTIFICATIONS,
+                                    )
+                                if (explainFirst) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else if (!openAppNotificationSettings()) {
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
                             },
                             onRequestBatteryExemption = ::requestBatteryExemption,
-                            onStartService = { EventService.start(this@MainActivity) },
+                            // The card used to read exactly the same before and
+                            // after this tap, so an owner who tapped twice could
+                            // not tell the first tap worked (device tour,
+                            // 2026-10-09). The note below is the line that
+                            // changes, and it names where the real answer shows.
+                            onStartService = {
+                                EventService.start(this@MainActivity)
+                                linkStartNote.value = if (paired) {
+                                    "Asked Android to start the link. The Connection card " +
+                                        "above says whether your desktop has answered."
+                                } else {
+                                    "Asked Android to start the link. This phone is not paired " +
+                                        "yet, so there is nothing for it to reach."
+                                }
+                            },
                             onBack = { if (!nav.back()) nav.resetTo(Screen.HOME) },
                             // remember(tick), like `items` above: both of these
                             // are RoleManager binder calls, and unkeyed they ran
@@ -2023,16 +2189,23 @@ class MainActivity : FragmentActivity() {
                             // `tick` is what already drives the permission
                             // re-read, so keying on it keeps the answer as fresh
                             // as every other check on this screen.
+                            //
+                            // Shown whenever the role is NOT held, not only when
+                            // the role also claims to be available: on the
+                            // owner's phone that claim is true while the request
+                            // itself is refused, and hiding the button there
+                            // would hide the only way to the explanation. The
+                            // card's own words still say which case it is.
                             onRequestAssistantRole = remember(tick) {
-                                if (
-                                    PlatformReadiness.assistantRoleAvailable(this@MainActivity) &&
-                                    !PlatformReadiness.assistantRoleHeld(this@MainActivity)
-                                ) {
+                                if (!PlatformReadiness.assistantRoleHeld(this@MainActivity)) {
                                     { requestAssistantRole() }
                                 } else {
                                     null
                                 }
                             },
+                            onOpenAssistantSettings = ::openAssistantSettings,
+                            assistantRoleNote = assistantRoleNote.value,
+                            linkStartNote = linkStartNote.value,
                             wakeWord = wakeWord,
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
@@ -2301,6 +2474,10 @@ class MainActivity : FragmentActivity() {
                             brain = brain,
                             onRefresh = { scope.launch { JarvisRuntime.refreshBrain() } },
                             onBack = { nav.back() },
+                            // The Attention card's own re-read, after a mute or
+                            // a change to "Speak up" / "Brief at": one route,
+                            // not the dozen refreshBrain probes.
+                            onRefreshAttention = { scope.launch { JarvisRuntime.refreshAttention() } },
                             memoryDecideBusyId = memoryDecideBusyId,
                             onDecideMemory = { id, accept ->
                                 if (memoryDecideBusyId == null) {
@@ -2525,6 +2702,11 @@ class MainActivity : FragmentActivity() {
                             // audit row 16, 2026-09-27), where the old
                             // "Settings" group moved to.
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
+                            // "Everything Jarvis can do" (docs/FEATURES-LIST-
+                            // DESIGN.md, the owner's request of 2026-10-08):
+                            // its own read-only screen, opened from the row
+                            // beside Tutorials.
+                            onOpenFeatures = { nav.go(Screen.FEATURES) },
                             // "Open the morning briefing", "hardware", ... by
                             // voice or chat (OpenPlace).
                             initialSection = sectionFor(Screen.BRAIN),
@@ -2599,6 +2781,39 @@ class MainActivity : FragmentActivity() {
                         // "Open about" by voice or chat (OpenPlace).
                         initialSection = sectionFor(Screen.FAQ),
                         onSectionConsumed = sectionConsumed,
+                    )
+
+                    // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md,
+                    // the owner's request of 2026-10-08): every feature, in
+                    // plain words, read from this app's own copy of
+                    // features/features.json. Read-only, no card, no request to
+                    // the PC.
+                    Screen.FEATURES -> FeaturesScreen(
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
+                    // "Find anything" (ui/screens/FindScreen.kt; the parity
+                    // audit of 2026-10-10, gap 8): the typed search over every
+                    // place in the app, opened from the Find button on Home's
+                    // status line. It navigates and does nothing else.
+                    Screen.FIND -> com.jarvis.client.ui.screens.FindScreen(
+                        // The two hiding rules, read the same way the screens
+                        // read them: what "Show or hide menus" hides, and the
+                        // memory lists and chat history while that switch is on.
+                        menus = com.jarvis.client.JarvisRuntime.menus.view.collectAsState().value,
+                        privateHidden = privateHidden,
+                        onOpen = { row ->
+                            // The same one-time scroll "open <a place>" by voice
+                            // uses (OpenPlace, above). Deliberately NOT
+                            // `menus.showForVisit`: a hidden menu is never in a
+                            // result, so finding something can never un-hide it.
+                            pendingSection = row.section
+                            pendingSectionScreen = row.screen.name
+                            nav.go(row.screen)
+                        },
+                        onBack = { nav.back() },
+                        modifier = root,
                     )
 
                     Screen.SECURITY -> {
@@ -2688,9 +2903,41 @@ class MainActivity : FragmentActivity() {
                                 .contains(packageName)
                         },
                         onOpenNotificationAccess = ::openNotificationAccessSettings,
+                        // "Notifications from Jarvis" (the owner's decision of
+                        // 2026-10-09; SettingsScreen.kt's "jarvis-notify" row):
+                        // Android's own per-app notification screen, where this
+                        // phone's per-kind switches really are.
+                        onOpenNotificationSettings = { openAppNotificationSettings() },
                         quickTiles = quickTiles,
                         onQuickTileChange = { slot, action ->
                             JarvisRuntime.settings.setQuickTile(slot, action)
+                        },
+                        // "A new conversation starts after ..." (Settings, this
+                        // phone only; data/ClientSettings.kt): one tap sets it,
+                        // no card and no request - the PC serves no route for it.
+                        idleNewChoice = idleNewChoice,
+                        onIdleNewChoiceChange = { JarvisRuntime.settings.setIdleNewChoice(it) },
+                        // "Screen refresh rate" (2026-10-09): the PANEL's rate
+                        // while Jarvis is on screen. Saved on this phone only.
+                        // Picking asks the panel for it there and then and reads
+                        // back what actually happened, so a refused request is
+                        // never left looking like it worked. This is NOT the
+                        // face editor's Frame rate (faceTuning above, on the
+                        // Appearance screen): that one is how often the animal is
+                        // DRAWN; see data/ScreenRate.kt for why they must never
+                        // be merged.
+                        screenRate = screenRate,
+                        screenRates = screenRates,
+                        screenPanelHz = screenPanelHz,
+                        screenRateNote = screenRateNote,
+                        screenRateChecked = screenRateChecked,
+                        onScreenRateChange = { hz ->
+                            appearance.setScreenRate(hz)
+                            DisplayRate.setChosenHz(hz)
+                            DisplayRate.applyChosen(this@MainActivity, window.peekDecorView())
+                        },
+                        onScreenRateRecheck = {
+                            DisplayRate.readBack(this@MainActivity)
                         },
                     )
 
@@ -2762,7 +3009,15 @@ class MainActivity : FragmentActivity() {
                         // Sets the dark theme and leaves Follow the system on,
                         // unlike a normal theme pick, which turns it off.
                         onPickDarkTheme = appearance::setPreferredDark,
-                        desktopSyncs = version?.can("appearance") == true,
+                        // Both halves, not just the capability: the screen's
+                        // own words follow whether the last send actually
+                        // landed (UI audit 2026-10-05, finding A1). `capable`
+                        // alone used to make it claim a send that a dead link
+                        // had dropped on the floor.
+                        sharedStatus = AppearanceShared.statusOf(
+                            capability = version?.can("appearance") == true,
+                            sendOk = appearanceSent,
+                        ),
                         onUndoBindings = { appearance.setBindings(it) },
                         // On the runtime's scope, not a composition one: this can
                         // fire from the screen's onDispose as it leaves, and on a
@@ -2905,6 +3160,7 @@ class MainActivity : FragmentActivity() {
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
                             lockdown = lockdown,
+                            promptCoach = promptCoach,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -2935,6 +3191,10 @@ class MainActivity : FragmentActivity() {
                                 onStartPhoneWatch = { startPhoneWatch() },
                                 onStopPhoneWatch = { com.jarvis.client.net.ScreenWatch.requestStop() },
                                 onOpenUsageAccess = { openUsageAccess() },
+                                // "Find anything" (ui/screens/FindScreen.kt):
+                                // the typed search over every place in the app,
+                                // from the Find button on the status line.
+                                onOpenFind = { nav.go(Screen.FIND) },
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
@@ -3019,6 +3279,11 @@ class MainActivity : FragmentActivity() {
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
                                 onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
                                 onLoadSources = { tid -> JarvisRuntime.chatSources(tid) },
+                                // "3 recalled · 2 near" (the owner's decision of
+                                // 2026-10-08, "Just the number"): counts only,
+                                // and the runtime sends nothing at all unless the
+                                // PC's handshake says it has the count-only read.
+                                onLoadRetrieveCount = { q -> JarvisRuntime.retrieveCount(q) },
                                 onLoadSpendingTable = { tid -> JarvisRuntime.spendingTable(tid) },
                                 onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that
@@ -3032,14 +3297,42 @@ class MainActivity : FragmentActivity() {
                                     scope.launch { approveItem(item) }
                                 },
                                 onDeny = { item -> JarvisRuntime.decideDetached(item, approve = false) },
+                                // Approve and Deny hand in the card's own
+                                // `onReset` so a decision that never left the
+                                // phone un-sticks it (Android audit
+                                // 2026-10-08: Deny took the callback and never
+                                // called it, and the approve path's plain
+                                // branch answered `true` the moment the POST
+                                // was dispatched - so a refused approve froze
+                                // Approve, Deny and the swipe just as a
+                                // refused deny did). Both go through the one
+                                // shared function below, and for the same
+                                // reason: [ApprovalCard] greys both buttons
+                                // and the swipe out the instant a decision is
+                                // sent, and only this closure clears that
+                                // again.
+                                //
+                                // The wait for the answer runs on the
+                                // runtime's own scope - a screen going away
+                                // mid-decision must not cancel a POST already
+                                // on its way, which is exactly why
+                                // decideDetached exists, and it is also what
+                                // keeps a half-sent approval from being
+                                // dropped by a rotation - and the card's
+                                // reset comes back to this screen's scope,
+                                // because that closure writes Compose state.
+                                //
+                                // The `onApprove`/`onDeny` fallbacks above are
+                                // the cards that hand in no onReset at all;
+                                // Home always hands one in, so both of its
+                                // paths come through here. They are left as
+                                // they were: there is no flag for them to
+                                // un-stick.
                                 onApproveWithReset = { item, onReset ->
-                                    scope.launch {
-                                        val sent = approveItem(item)
-                                        if (!sent) onReset()
-                                    }
+                                    decideAndReset(item, approve = true, onReset = onReset, scope = scope)
                                 },
                                 onDenyWithReset = { item, onReset ->
-                                    JarvisRuntime.decideDetached(item, approve = false)
+                                    decideAndReset(item, approve = false, onReset = onReset, scope = scope)
                                 },
                                 onReconnect = {
                                     // `force = true`, and only because a person
@@ -3062,6 +3355,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenInbox = { nav.go(Screen.INBOX) },
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
+                                // Settings from Home's own row (2026-10-08).
+                                onOpenSettings = { nav.go(Screen.SETTINGS) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
                                 // Jarvis Live (ui/screens/LiveScreen.kt).
                                 onOpenLive = { nav.go(Screen.LIVE) },
@@ -3266,13 +3561,23 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Approve [item]. Which way it goes is [SignedApproval.pathFor]: a risky
+     * Approve [item], answering whether the decision actually went out - see
+     * [decideAndReset], which is what reads this.
+     *
+     * Which way it goes is [SignedApproval.pathFor]: a risky
      * card on a paired phone with signed approvals on is signed with the
      * fingerprint or PIN (docs/PAIRING-DESIGN.md §11); a paired phone
      * without them is offered the one button that turns them on; everything
      * else - a card that is not risky, the old shared key, a PC that does
      * not know signed approvals, or a PC that could not be read - takes
      * today's way, and the PC says `no_approval_key` if it needed one.
+     *
+     * The PLAIN branch's POST is awaited, because its answer is what the
+     * card needs; the SIGNED branch dispatches its POST on the runtime's own
+     * scope (a signature is made once and is already sent by the time it
+     * returns) and answers "sent" there. Nothing here approves anything by
+     * itself: the gates in [confirmed] and [signedApprove] come first, and a
+     * decision is only ever sent after the owner's own answer.
      */
     private suspend fun approveItem(item: PendingItem): Boolean {
         val risky = SecurityRules.riskyByToday(item)
@@ -3281,8 +3586,11 @@ class MainActivity : FragmentActivity() {
         return when (val path = SignedApproval.pathFor(risky, read?.state)) {
             SignedApproval.Path.PLAIN -> {
                 if (confirmed(item)) {
-                    JarvisRuntime.decideDetached(item, approve = true)
-                    true
+                    // Awaited, not dispatched and answered `true`: a POST the
+                    // PC did not take has to come back as "not sent" or the
+                    // card keeps the `decided` flag the tap set - the same
+                    // freeze the Deny path had (Android audit 2026-10-08).
+                    JarvisRuntime.decide(item, approve = true) is ApiResult.Ok
                 } else {
                     false
                 }
@@ -3358,6 +3666,91 @@ class MainActivity : FragmentActivity() {
         )
         return true
     }
+
+    /**
+     * Both card decisions, the one shape (Android audit 2026-10-08).
+     *
+     * [ApprovalCard] sets its own `decided` flag the instant either button or
+     * the swipe is used, greys both buttons out, and only the `onReset` it
+     * hands in clears that again. So the answer to "did this decision actually
+     * leave the phone?" is the whole point of this function, and a branch that
+     * cannot answer it leaves the card undecidable for the rest of its life -
+     * until the owner leaves Home and comes back.
+     *
+     * [approveItem] and [denyItem] are awaited, never dispatched and forgotten:
+     * their answers are the real outcome. Where a POST is sent, `decideDetached`
+     * is not the right tool here for the same reason it was introduced - a
+     * screen going away while the answer is outstanding. Launching the whole
+     * decision on the runtime's scope means a rotation during the round trip
+     * cannot cancel a POST already on its way, and the answer is always
+     * collected; only the card's reset comes back to this screen's scope,
+     * because that closure writes Compose state.
+     *
+     * Reset means "not sent", never "sent and refused" - rule 4. A [false]
+     * answer here is a stale link, an expired card, one already on its way, a
+     * cancelled fingerprint, a PC still waiting for a signature, or a POST the
+     * PC refused. None of those was a decision, so the card comes back and the
+     * owner may answer again; nothing is approved, retried or reported as
+     * approved by clearing that flag. The refusal's own sentence is shown by
+     * the call that refused ([JarvisRuntime.decide] and the security gates in
+     * [confirmed]).
+     *
+     * A throw from either helper is "not sent" too. Nothing was approved on
+     * that path and the card's own flag is the only thing left set, so
+     * unlocking it is the safe direction - a decision that failed must never
+     * look like one that was taken, and it must not leave the card dead
+     * either.
+     *
+     * [scope] - the screen's own scope, the one `App()` makes with
+     * `rememberCoroutineScope()` - has to be handed in (2026-10-08). Deny's
+     * original body sat inside that composable, where `scope` was simply a
+     * local; moving both bodies here into a plain member function left the
+     * reset's `scope.launch` with nothing named `scope` to resolve to, and
+     * that - not the fix's shape - is what CI refused to compile. It is a
+     * parameter rather than a second scope of this function's own because the
+     * reset writes Compose state that belongs to that screen: a fresh scope
+     * would outlive the composition it is resetting. Deliberately the last
+     * parameter, so both call sites still read
+     * `decideAndReset(item, approve = ..., onReset = onReset, scope = scope)`.
+     */
+    private fun decideAndReset(
+        item: PendingItem,
+        approve: Boolean,
+        onReset: () -> Unit,
+        scope: CoroutineScope,
+    ) {
+        JarvisRuntime.launchDetached {
+            val sent = try {
+                if (approve) approveItem(item) else denyItem(item)
+            } catch (e: Exception) {
+                // Covers the runtime's scope being cancelled (the process
+                // itself) as well as a bug: either way, say "not sent" and let
+                // the card unlock instead of leaving the flag latched.
+                false
+            }
+            if (!sent) scope.launch { onReset() }
+        }
+    }
+
+    /**
+     * Deny [item], answering whether the decision actually went out.
+     *
+     * [JarvisRuntime.decide] is awaited rather than [JarvisRuntime.decideDetached]
+     * handed the job, because its answer is the whole point: [ApprovalCard]
+     * greys both buttons and the swipe out the moment a decision is sent, and
+     * only the `onReset` it passes in clears that again - see [decideAndReset],
+     * which both decisions now go through. [approveItem]'s own refusals (a
+     * cancelled fingerprint, a signed approval the PC is still waiting for)
+     * return false for the same reason; a deny had no equivalent, so anything
+     * `decide` refused before sending - a stale link, an expired card, one
+     * already on its way, the PC unreachable - left the card undecidable for
+     * the rest of its life (Android audit 2026-10-08).
+     *
+     * A deny carries no signature and no option to choose, so nothing is
+     * prepared first here, unlike [approveItem].
+     */
+    private suspend fun denyItem(item: PendingItem): Boolean =
+        JarvisRuntime.decide(item, approve = false) is ApiResult.Ok
 
     private fun currentSecurity(): Security = JarvisRuntime.settings.security.value
 
@@ -3488,6 +3881,13 @@ class MainActivity : FragmentActivity() {
         // The rate can change under us — battery saver, brightness, heat — and
         // nothing reports why, so re-read rather than trust the request.
         DisplayRate.refresh(this)
+        // ...and read back what the panel did with the owner's own pick, so the
+        // "Screen refresh rate" row shows the truth after the phone has been in
+        // someone else's hands (the phone's own display settings, battery
+        // saver). It also re-sends the request, because a mode picked earlier
+        // can have been dropped while the app was away.
+        DisplayRate.setChosenHz(JarvisRuntime.appearance.screenRate.value)
+        DisplayRate.applyChosen(this, window.peekDecorView())
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
@@ -3591,6 +3991,31 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Android's own per-app notification screen, under Jarvis's own entry -
+     * where this phone's per-kind switches really are, because the app's
+     * channels (alarm, schedule, approval, handoff) are Android's own
+     * ([com.jarvis.client.service.ScheduleNotifier], `ApprovalNotifier`,
+     * `HandoffNotifier`).
+     *
+     * The owner's decision of 2026-10-09 was to point at this screen from
+     * Settings ("Notifications from Jarvis") rather than build a second copy
+     * of the PC's Notifications card, which would then have to agree with
+     * Android's own settings and could drift. This phone's own screen for it
+     * was seen working in the device tour of the same day ("Allow
+     * notifications" opened Jarvis's page in Android's Settings).
+     *
+     * @return whether a screen actually opened, so the caller on Platform
+     *   checks can fall back to the permission prompt when this phone has
+     *   neither screen.
+     */
+    private fun openAppNotificationSettings(): Boolean {
+        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (runCatching { startActivity(intent) }.isSuccess) return true
+        return runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }.isSuccess
+    }
+
+    /**
      * Opens the platform's own exemption dialog. Never granted silently, and the
      * readiness screen keeps reporting the real state either way.
      */
@@ -3605,18 +4030,51 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
-     * Opens the system's own "make Jarvis the assistant app" dialog.
+     * Opens the system's own "make Jarvis the assistant app" dialog, and says
+     * what happened when it will not.
      *
      * `RoleManager.createRequestRoleIntent` is the only way onto this dialog -
      * there is no direct grant, and there should not be one: choosing the
      * assistant app is the owner's decision, made in the system's own UI,
      * the same as every other role request on the platform.
+     *
+     * It used to return silently on both failure paths, so the button looked
+     * dead while the card said the owner needed the role (device tour,
+     * 2026-10-09). Both paths report now, and
+     * [openAssistantSettings] is the second route the card offers beside it,
+     * because that is the one that works on a phone which refuses the request.
      */
     private fun requestAssistantRole() {
-        val rm = getSystemService(RoleManager::class.java) ?: return
-        if (!runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)) return
-        val intent = rm.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
-        runCatching { assistantRolePermission.launch(intent) }
+        val rm = getSystemService(RoleManager::class.java)
+        val available = rm != null &&
+            runCatching { rm.isRoleAvailable(RoleManager.ROLE_ASSISTANT) }.getOrDefault(false)
+        if (!available) {
+            assistantRoleNote.value = "This phone's Android does not offer Jarvis the " +
+                "assistant role, so there is nothing to ask it for. Tap Open Android's " +
+                "assistant settings to see whether it can be picked there."
+            return
+        }
+        val intent = rm!!.createRequestRoleIntent(RoleManager.ROLE_ASSISTANT)
+        if (!runCatching { assistantRolePermission.launch(intent) }.isSuccess) {
+            assistantRoleNote.value = ASSISTANT_ROLE_NOT_DONE
+        }
+    }
+
+    /**
+     * Android's own screen for choosing the assistant app - the route that
+     * worked on the owner's phone when the role request did not (measured
+     * 2026-10-09: `ACTION_VOICE_INPUT_SETTINGS` resolves to ColorOS's
+     * `Settings$ManageAssistActivity` there, which is where the assistant app
+     * is picked). Falls back to the default-apps list and then to Settings
+     * itself, so the button always opens something rather than nothing - the
+     * same runCatching ladder [requestBatteryExemption] uses.
+     */
+    private fun openAssistantSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS)) }
+            .onFailure {
+                runCatching { startActivity(Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)) }
+                    .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+            }
     }
 
     companion object {
@@ -3683,6 +4141,17 @@ class MainActivity : FragmentActivity() {
  * the work is gone and the flag starts `false` again.
  */
 private val pairingBusy = mutableStateOf(false)
+
+/**
+ * What the Digital assistant card says when Android did not hand the role
+ * over. Deliberately true of both shapes of "no": the owner declining the
+ * system's own dialog, and a phone that refuses to show one at all. It names
+ * the second button in the same card, which is the route that works on the
+ * owner's handset.
+ */
+private const val ASSISTANT_ROLE_NOT_DONE =
+    "Android has not made Jarvis your assistant. Use Open Android's assistant " +
+        "settings and pick Jarvis there."
 
 /**
  * The app lock's clock ([LockSession]): whether Jarvis is unlocked and

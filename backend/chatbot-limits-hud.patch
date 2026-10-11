@@ -1,0 +1,28 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3736,6 +3736,25 @@ def _read_body(handler) -> bytes:
+     except Exception as exc:
+         print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")
+         print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")
++    # chatbot-limits.patch ("Chatbot API keys" in Settings, the owner's approval of
++    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, JARVIS-API section 87.4.1):
++    # GET /api/chatbot/money reads every service's monthly limit, what is spent, what
++    # is left and its model's price WITH where that number came from; POST sets ONE
++    # change. Raising a limit raises ONE approval card (raise_api_limit, tier ask)
++    # plus Windows Hello on the PC; lowering one, removing one, correcting a price
++    # and resetting one need no card. Both are PC only - a request from any other
++    # device is refused 403 pc_only. Wrapped round Handler here, before anything
++    # listens, like quiz-cloud above; every rule is in jarvis_chatbot_limits.py.
++    # Needs jarvis_chatbot_limits.py copied in and chatbot.patch's
++    # jarvis_chatbot_api.py; without them, or on any error, the banner says so and
++    # the route is simply not there.
++    try:
++        import jarvis_chatbot_limits
++        print(jarvis_chatbot_limits.install(Handler, origin_ok=_origin_ok,
++                                            token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  chatbot money NOT ON ({type(exc).__name__}) - chatbot money limits are off")
++        print("             until jarvis_chatbot_limits.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

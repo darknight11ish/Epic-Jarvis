@@ -363,6 +363,13 @@ def main() -> int:
         except ValueError as err:
             unreadable.append((rel(path), f"not readable as JSON: {err}"))
             continue
+        except RecursionError:
+            # A JSON file nested deeper than the interpreter's stack. `json`
+            # raises RecursionError, not ValueError, so this used to end the
+            # whole check with a traceback and no verdict at all (2026-10-08).
+            # The file is reported like any other this check cannot read.
+            unreadable.append((rel(path), "nested too deeply to check (RecursionError)"))
+            continue
         # The scanner reports the key as `repr`; the stdlib hands back the value
         # itself. Read the repr back rather than trimming quotes off it, which
         # would turn `"don't"` into `dont` and quietly compare two wrong things.

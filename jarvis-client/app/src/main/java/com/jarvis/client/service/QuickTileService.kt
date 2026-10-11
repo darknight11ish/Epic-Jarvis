@@ -30,7 +30,11 @@ import kotlinx.coroutines.launch
  * Settings tiles ([QuickTiles], docs/JARVIS-API.md section 81.2). Android
  * cannot add a tile while the app runs, so there are exactly
  * [QuickTiles.SLOTS] of these, one class per slot ([QuickTileOneService],
- * [QuickTileTwoService], [QuickTileThreeService]), each in the manifest.
+ * [QuickTileTwoService], [QuickTileThreeService]), each in the manifest and
+ * each named "Tap to choose" there ([QuickTiles.UNASSIGNED_LABEL]): Android's
+ * editor reads the manifest, which cannot know the action the owner picks
+ * later, so an unchosen slot is named for the one thing its tap does. Before
+ * 2026-10-11 the three were "Jarvis tile 1" to "Jarvis tile 3".
  *
  * NOT a second link tile. [LinkTileService] stays what it is (the link's
  * state and Mute); none of the actions here is Mute, so the two never do the
@@ -128,9 +132,19 @@ abstract class QuickTileService(private val slot: Int) : TileService() {
         } else {
             Tile.STATE_INACTIVE
         }
-        tile.label = action?.tileLabel ?: "${QuickTiles.UNASSIGNED_LABEL} ${slot + 1}"
+        // The label is the tile's OWN words ([QuickTiles.tileLabel]): the tile
+        // used to draw the PC's shared button word, which for the briefing
+        // slot promised a briefing the tap does not start.
+        val label = QuickTiles.tileLabel(action, slot)
+        tile.label = label
         // minSdk is 33, so the subtitle (API 29) is always there.
-        tile.subtitle = QuickTiles.subtitle(action, paired, connected, stale)
+        val subtitle = QuickTiles.subtitle(action, paired, connected, stale)
+        tile.subtitle = subtitle
+        // Set here as well, exactly as the Live tile does
+        // ([com.jarvis.client.service.LiveTileService]): a tile's label is what
+        // a screen reader has to go on, and until 2026-10-11 an unchosen slot
+        // offered it "Jarvis tile 3" - a shape and a number, no action.
+        tile.contentDescription = "$label, $subtitle"
         tile.updateTile()
     }
 
@@ -215,7 +229,11 @@ abstract class QuickTileService(private val slot: Int) : TileService() {
     }
 }
 
-/** Tile slot 1 ("Jarvis tile 1" in Android's tile editor). */
+/**
+ * Tile slot 1: unchosen, it is the "Tap to choose" tile in Android's editor
+ * ([QuickTiles.UNASSIGNED_LABEL]); once the owner gives it an action it draws
+ * that action's own name.
+ */
 class QuickTileOneService : QuickTileService(0)
 
 /** Tile slot 2. */

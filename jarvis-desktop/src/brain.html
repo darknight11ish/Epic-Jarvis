@@ -99,7 +99,7 @@
             <button class="rail-item" role="tab" id="tab-tutorials" data-goto="tutorials"
                     aria-selected="false" aria-controls="view-tutorials" tabindex="-1">
               <span class="rail-glyph" aria-hidden="true">❐</span>
-              <span class="rail-label">Tutorials</span>
+              <span class="rail-label">Tutorials and the FAQ</span>
             </button>
           </li>
           <!-- The other four views are unchanged and still fully wired — see
@@ -231,13 +231,30 @@
             </div>
           </div>
 
-          <div class="galaxy-stage">
-            <!-- Canvas rather than SVG: a few thousand nodes as DOM elements
-                 is a layout cost per frame, and this is the one surface where
-                 node count is set by how much the owner's memory store knows
-                 rather than by anything the UI controls. -->
-            <canvas id="graph-canvas" tabindex="0"
-                    aria-label="The people and things Jarvis knows about, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To pick a name, use the search field; the panel that opens reports it and lists the names it shares facts with."></canvas>
+          <div class="galaxy-stage" tabindex="0"
+               aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, Enter opens one, and the search field finds one by name.">
+            <!-- The constellation: an SVG picture with ONE REAL BUTTON per name
+                 laid over it (galaxy-constellation.js). It replaced the canvas
+                 below on 2026-10-09, because the project's rule is "nothing
+                 drawn only on the canvas" and a canvas cannot satisfy it - a
+                 dot is pixels, not a control. Here a dot is focusable by Tab,
+                 clicked with Enter, themed by CSS and reached by a screen
+                 reader, and `tests/galaxy-constellation.mjs` +
+                 `tests/galaxy-button-engine.mjs` hold all four.
+
+                 The drawing and the buttons are split on purpose: an SVG
+                 `<button>` is NOT focusable in Chromium (measured - it was the
+                 first version of this, and Tab walked straight past every dot),
+                 so the shapes are SVG and the controls are HTML over them. -->
+            <svg id="graph-svg" class="galaxy-svg" aria-hidden="true" focusable="false"></svg>
+            <div class="galaxy-overlay" id="graph-overlay"></div>
+
+            <!-- The canvas the constellation replaced. Kept, hidden, for two
+                 reasons worth stating: it is the fallback the pan/zoom keyboard
+                 help is written against, and `tests/a11y.mjs` reads its label
+                 for the way in that really exists. -->
+            <canvas id="graph-canvas" class="galaxy-canvas" tabindex="0" hidden
+                    aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, and typing in the search field finds one by name; the panel reports it and lists the names it shares facts with."></canvas>
 
             <div class="galaxy-empty" id="graph-empty" hidden>
               <p id="graph-empty-text">Reading the names…</p>
@@ -294,6 +311,22 @@
               <h2>Interruption budget</h2>
               <div class="budget" id="budget"></div>
               <p class="note" id="budget-note"></p>
+              <!--
+                The two numbers behind the pips (2026-10-08): how many times a
+                day Jarvis may speak up unasked, and when the brief arrives.
+                Turning the budget DOWN, and moving the hour, change at once.
+                Turning it UP is a loosening, so the BACKEND puts one approval
+                card to the owner first and writes nothing until it is
+                approved — the line under these two pickers is the backend's
+                own sentence, never a guess made on this page.
+              -->
+              <div class="budget-set">
+                <label class="budget-label" for="budget-per-day">Speak up</label>
+                <select id="budget-per-day" class="budget-input"></select>
+                <label class="budget-label" for="budget-hour">Brief at</label>
+                <select id="budget-hour" class="budget-input"></select>
+              </div>
+              <p class="note" id="budget-set-note"></p>
             </div>
 
             <div class="card card-trace" id="trace-card" data-menu-id="brain.now.trace">
@@ -844,10 +877,38 @@
 
         <!-- ── Tutorials and the FAQ (tutorials.js draws it, the owner's own
              request of 2026-10-05: the same tutorials the phone shows, with
-             reading progress kept on this PC) ───────────────────────────── -->
+             reading progress kept on this PC). It is the ONE Help place since
+             2026-10-08: the desktop's own questions moved here from the Settings
+             card "Help and FAQ", and with them the button into "Everything
+             Jarvis can do" (features.html). The tab is named for both halves -
+             the same words the phone's own menu carries
+             (`brain.tab.tutorials`). ─────────────────────────────────────── -->
         <section class="view view-panes" id="view-tutorials" role="tabpanel"
                  aria-labelledby="tab-tutorials" hidden>
-          <div class="panes" id="tutorials-root"></div>
+          <div class="panes">
+            <div id="tutorials-root"></div>
+            <!-- "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the
+                 owner's request of 2026-10-08): PR #106's read-only page, opened
+                 from here since 2026-10-08, when the Settings card that used to
+                 hold this button was folded into this one Help place. Static
+                 markup rather than a button built at run time, so it is part of
+                 the tab the moment the tab exists, and its click is wired by
+                 tutorials.js (the module that already draws this view). The tray
+                 row opens the same page (tray.rs), and nothing else does:
+                 tests/features.mjs holds both. -->
+            <section class="card card-wide" id="features-card">
+              <h2>Everything Jarvis can do</h2>
+              <p class="note">
+                For the whole feature set rather than one question: every feature, in
+                plain words, in nine groups, each with what it does, how to reach it,
+                whether it asks first and one real limit. It only reads.
+              </p>
+              <div class="row">
+                <button class="btn" id="open-features" type="button">Everything Jarvis can do</button>
+                <span class="status" id="features-status" role="status"></span>
+              </div>
+            </section>
+          </div>
         </section>
 
         <!-- ── Trust ──────────────────────────────────────────────────── -->

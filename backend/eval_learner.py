@@ -3,8 +3,16 @@
     python eval_memory.py                              # runs this too
     python eval_memory.py --learner-model qwen3:8b     # ... with the model
 
-Run by eval_memory.py; not on its own. It is not copied to the backend
-folder.
+Run by eval_memory.py, and on its own:
+
+    python eval_memory.py                              # runs this too
+    python eval_memory.py --learner-model qwen3:8b     # ... with the model
+    python eval_learner.py                             # just the learner cases
+    python eval_learner.py --learner-model qwen3:8b    # ... with the real learner
+
+It was run only by eval_memory.py until 2026-10-08, so the command the docs
+named printed nothing and exited 0 - see `main()` at the foot of this file.
+It is not copied to the backend folder.
 
 WHY A LEARNER TEST
 
@@ -79,6 +87,8 @@ WITH A MODEL (optional: --learner-model NAME, on the PC)
              from the assistant's or a tool's words, and did a correction
              point at the right stored fact. Needs JARVIS_BACKEND pointing
              at the backend folder, because jarvis_extract.py is only there.
+             The file it really loaded is named in the report, so a run that
+             fell back to something else cannot look like a real score.
              NOT RUN in this repository's container: there is no model and
              no jarvis_extract.py here, so this part is untested here.
 
@@ -90,6 +100,7 @@ the loopback address given.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import time
@@ -554,9 +565,51 @@ def _has(text: str, words) -> bool:
     return all((" " + str(w).lower() in low) for w in words)
 
 
-def _propose(M, I, A, case, ask, store) -> dict:
+def real_extract_path() -> Optional[Path]:
+    """Where the real jarvis_extract.py is: JARVIS_BACKEND's copy when that
+    variable names a folder holding one, else beside this file."""
+    backend = os.environ.get("JARVIS_BACKEND")
+    if backend and (Path(backend) / "jarvis_extract.py").is_file():
+        return (Path(backend) / "jarvis_extract.py").resolve()
+    here = HERE / "jarvis_extract.py"
+    return here.resolve() if here.is_file() else None
+
+
+def load_real_extract():
+    """The REAL jarvis_extract.py, read from disk. Raises ImportError if it is
+    not there.
+
+    WHY THIS IS NOT `import jarvis_extract`. Python answers that import from
+    `sys.modules` first, and `World.__init__` has already put a stand-in there
+    (the patch stack's own text, with no file behind it) so that the no-model
+    cases can run without the owner's install. The model cases were then handed
+    that same stand-in, so the real learner never ran: every `--learner-model`
+    measurement read as unmeasured rather than as a number. The stand-in is set
+    aside only for the length of this import, so `jarvis_intake` and the rest
+    keep the one they were given."""
+    path = real_extract_path()
+    if path is None:
+        raise ImportError("no jarvis_extract.py beside eval_learner.py or in "
+                          "JARVIS_BACKEND - set JARVIS_BACKEND to the backend folder")
+    stand_in = sys.modules.pop("jarvis_extract", None)
+    try:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("jarvis_extract", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"jarvis_extract.py could not be read from {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["jarvis_extract"] = module
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if stand_in is not None:
+            sys.modules["jarvis_extract"] = stand_in
+        else:
+            sys.modules.pop("jarvis_extract", None)
+
+
+def _propose(M, I, A, case, X, ask, store) -> dict:
     """One conversation through the real learner, scored."""
-    import jarvis_extract as X      # the owner's file: JARVIS_BACKEND must hold it
     for text in case.get("stored", []):
         store.add(text, source="eval")
     import jarvis_intake
@@ -581,12 +634,15 @@ def run_model_part(M, I, A, cases, scratch: Path, model: str, ollama: str) -> di
     if A._remote(model):
         return {"ran": False, "why": f"{model} is a cloud model - refused"}
     try:
-        import jarvis_extract  # noqa: F401
-        if not hasattr(jarvis_extract, "propose"):
-            raise ImportError("no propose()")
+        # load_real_extract, never `import jarvis_extract`: the stand-in the
+        # no-model cases need is in sys.modules under that name, and a plain
+        # import hands the model cases the stand-in too - see its docstring.
+        extract = load_real_extract()
+        if not hasattr(extract, "propose"):
+            raise ImportError("the file has no propose()")
     except Exception as exc:
         return {"ran": False, "why": "jarvis_extract.py could not be loaded "
-                f"({type(exc).__name__}); set JARVIS_BACKEND to the backend folder"}
+                f"({type(exc).__name__}: {exc}); set JARVIS_BACKEND to the backend folder"}
     ask = _ollama(ollama, model)
     rows = []
     for case in [c for c in cases if c["kind"] == "propose"]:
@@ -597,13 +653,14 @@ def run_model_part(M, I, A, cases, scratch: Path, model: str, ollama: str) -> di
         try:
             with closing(st._connect()) as c:
                 _proposals_table(c)
-            r = _propose(M, I, A, case, ask, st)
+            r = _propose(M, I, A, case, extract, ask, st)
         except Exception as exc:
             r = {"ok": False, "got": {"error": f"{type(exc).__name__}: {exc}"[:300]}}
         finally:
             M._store = old
         rows.append({"id": case["id"], "what": case.get("what", ""), **r})
     return {"ran": True, "model": model, "cases": rows,
+            "real_file": str(getattr(extract, "__file__", "") or ""),
             "right": sum(r["ok"] for r in rows), "total": len(rows)}
 
 
@@ -721,10 +778,75 @@ def markdown(res: dict) -> list:
     if mp.get("ran"):
         lines += ["", f"The real learner ({mp['model']}): {mp['right']}/{mp['total']} "
                   "conversations right (every expected fact proposed with its \"not\" kept, "
-                  "nothing from the assistant's or a tool's words, corrections aimed right)."]
+                  "nothing from the assistant's or a tool's words, corrections aimed right). "
+                  f"jarvis_extract.py: {mp.get('real_file') or 'unknown'}."]
         for r in mp["cases"]:
             if not r["ok"]:
                 lines.append(f"- {r['id']} ({r['what']}): {r['got']}")
     else:
         lines += ["", f"The real learner: not run - {mp.get('why')}."]
     return lines
+
+
+# ------------------------------------------------------------------ the CLI --
+
+def main(argv=None) -> int:
+    """`python eval_learner.py` - the command the docs name.
+
+    WHY THIS EXISTS. This module was run by `eval_memory.py` and by nothing
+    else, so the command `CLAUDE.md` and `docs/MEMORY-SCOREBOARD.md` both name
+    as one of the two memory self-tests printed nothing at all and exited 0.
+    Silence and success looked exactly alike, and a person following the docs
+    by hand had no way to tell them apart. This prints the same table
+    `eval_memory.py` prints for the learner half, and exits non-zero when a
+    case is wrong - so the number can be recorded on the scoreboard.
+
+    Nothing is downloaded and nothing is sent anywhere unless
+    `--learner-model` names a local model; every case runs on a scratch store
+    in a temporary folder, removed afterwards unless `--keep` says otherwise."""
+    import argparse
+    import shutil
+
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--learner-model", default=None,
+                    help="also run the real learner on the made-up conversations with "
+                         "this local Ollama model (needs JARVIS_BACKEND pointing at a "
+                         "backend carrying jarvis_extract.py). Off by default: the "
+                         "default run needs no model")
+    ap.add_argument("--ollama", default=LOCAL,
+                    help=f"this PC's Ollama, for --learner-model (loopback only; {LOCAL})")
+    ap.add_argument("--out", default=None,
+                    help="folder to write learner-eval.md and learner-eval.json into")
+    ap.add_argument("--keep", action="store_true", help="keep the scratch store")
+    a = ap.parse_args(argv)
+
+    scratch = Path(tempfile.mkdtemp(prefix="jarvis-learner-"))
+    try:
+        import eval_memory                       # the store the cases must share
+        M, _P = eval_memory._load_memory(scratch)
+        res = run(M, scratch, model=a.learner_model, ollama=a.ollama)
+        lines = markdown(res)
+        print("\n".join(lines))
+        if a.out:
+            out = Path(a.out)
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "learner-eval.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+            (out / "learner-eval.json").write_text(json.dumps(res, indent=1), encoding="utf-8")
+            print(f"\nwritten: {out / 'learner-eval.md'} and learner-eval.json")
+        if not res.get("available"):
+            print(f"\nthe learner self-test could not run: {res.get('why')}")
+            return 2
+        wrong = [r for r in res["cases"] if not r["ok"]]
+        total = len(res["cases"])
+        print(f"\n{total - len(wrong)} of {total} case(s) right")
+        if wrong:
+            print("failed: " + ", ".join(r["id"] for r in wrong))
+            return 1
+        return 0
+    finally:
+        if not a.keep:
+            shutil.rmtree(scratch, ignore_errors=True)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

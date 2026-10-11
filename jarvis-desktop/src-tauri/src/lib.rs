@@ -18,6 +18,7 @@
 //! | `quickbar` | 750×80 frameless transparent spotlight bar, always on top    |
 //! | `hud`      | 1280×820 frameless HUD pointed at the local Jarvis server    |
 
+pub mod account_addresses;
 pub mod account_secrets;
 pub mod aec;
 pub mod animal;
@@ -28,22 +29,27 @@ pub mod autostart;
 pub mod backup;
 pub mod brain;
 pub mod browser_engine;
+pub mod chatbot_money;
 pub mod clipboard_privacy;
 pub mod commands;
 pub mod crash_notes;
 pub mod devices;
 pub mod email_sending;
 pub mod folders;
+pub mod handoff;
 pub mod hardware;
 pub mod hotkeys;
 pub mod hud_proxy;
+pub mod limits;
 pub mod live;
 pub mod lock;
 pub mod logfile;
 pub mod look;
 pub mod notifications;
+pub mod open_app;
 pub mod plain_errors;
 pub mod proctree;
+pub mod prompt_coach;
 pub mod pyfind;
 pub mod reach;
 pub mod screen_work;
@@ -95,8 +101,18 @@ const TELEMETRY_INTERVAL: std::time::Duration = std::time::Duration::from_secs(3
 pub const JARVIS_SERVER_URL: &str = commands::DEFAULT_BASE;
 /// Local Ollama daemon.
 pub const OLLAMA_URL: &str = "http://127.0.0.1:11434";
-/// Local LiteLLM proxy.
-pub const LITELLM_URL: &str = "http://127.0.0.1:4000";
+/// The cloud escalation lane's own state, answered by the backend.
+///
+/// This replaced `LITELLM_URL` (2026-10-06, the owner's decision,
+/// docs/ACCOUNT-KEYS-DESIGN.md section 5 and part C). That constant pointed at
+/// `http://127.0.0.1:4000`, the port of a LiteLLM proxy that was never
+/// installed, so the health light went red for a service that did not exist
+/// and could not have carried a lane anyway. A cloud lane is now a service and
+/// a model inside `jarvis_chatbot_api.py`, reached through the backend that
+/// already owns the key and the monthly money limit - so the health check asks
+/// the backend. The route is `jarvis_chatbot_limits.PATH`
+/// (`/api/chatbot/money`), a plain read of this month's limits and spending.
+pub const CLOUD_LANE_STATUS_PATH: &str = "/api/chatbot/money";
 
 /// Event names shared with the frontend. Keeping them in one place stops the
 /// Rust and JavaScript sides from drifting apart.
@@ -105,9 +121,12 @@ pub mod events {
     pub const FOCUS_INPUT: &str = "focus-input";
     /// Payload: `String` — clipboard text to pre-load into the quickbar.
     pub const CLIPBOARD_INJECT: &str = "clipboard-inject";
-    /// Payload: [`crate::commands::CapturePayload`] — a JPEG data URI.
+    /// Payload: [`crate::commands::CapturePayload`] — the CLEANED picture of a
+    /// "Look at this" look, as a PNG data URI (the PC's own
+    /// `jarvis_picture.clean` output; see `look.rs`).
     pub const SCREEN_CAPTURED: &str = "screen-captured";
-    /// Payload: `String` — a human readable failure message.
+    /// Payload: `String` — a human readable failure message, or the plain
+    /// reason there was no picture to attach to the question.
     pub const CAPTURE_FAILED: &str = "capture-failed";
     /// Payload: [`crate::commands::HealthReport`].
     pub const HEALTH_REPORT: &str = "health-report";
@@ -445,9 +464,26 @@ pub struct RouteState {
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut system = telemetry_system();
+        //: Which wake-up we are on, so the notification choices are re-read
+        //: every `SYNC_EVERY` ticks rather than every three seconds (2026-10-09).
+        let mut tick: u32 = 0;
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
+
+            // A choice made on the PHONE has to reach the toasts without anyone
+            // opening this PC's Settings window (notifications.rs,
+            // `refresh_notification_prefs`). It rides this loop because the loop
+            // already runs whether or not a window is open, and it is the lowest
+            // -risk place to put it: one plain GET, nothing raised, nothing
+            // written, and every failure leaves the choices already in force.
+            // The interval is the loop's own, so this is at most ~30 s late -
+            // and a change made HERE still applies at once, through
+            // `set_notification_prefs`.
+            tick = tick.wrapping_add(1);
+            if tick.is_multiple_of(notifications::SYNC_EVERY) {
+                notifications::refresh_notification_prefs(app.clone()).await;
+            }
 
             // A drag is persisted even while the widget is collapsed or
             // hidden - and the same for the floating face. `flush` writes a
@@ -853,6 +889,7 @@ pub fn run() {
             brain::brain_read,
             brain::brain_revert_undo,
             brain::brain_cancel_job,
+            brain::brain_task_act,
             brain::brain_cancel_hold,
             brain::brain_watch_add,
             brain::brain_watch_remove,
@@ -988,6 +1025,7 @@ pub fn run() {
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
+            attention::set_attention_limits,
             sidecar::supervisor_status,
             sidecar::set_supervision,
             sidecar::start_backend,
@@ -999,7 +1037,14 @@ pub fn run() {
             commands::get_theme_prefs,
             commands::set_theme_follow_system,
             commands::open_faces,
+            // "Everything Jarvis can do" (2026-10-08): the whole feature set,
+            // read-only, opened from Settings and the tray.
+            commands::open_features,
             commands::mark_answer,
+            // Re-opening the walkthrough on demand, from Settings (the owner,
+            // 2026-10-10). It reads and writes no marker: the automatic
+            // first-run show below is unchanged.
+            commands::replay_onboarding,
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
@@ -1028,11 +1073,48 @@ pub fn run() {
             account_secrets::get_account_secrets,
             account_secrets::save_account_secret,
             account_secrets::forget_account_secret,
+            // The six chatbot API services' keys (docs/ACCOUNT-KEYS-DESIGN.md
+            // steps 1-2, 2026-10-06): each written straight into Credential
+            // Manager on this PC, under the name the Python side builds -
+            // never sent over HTTP, never to the phone, never shown again.
+            // Settings window only - rule 3.
+            account_secrets::get_chatbot_api_keys,
+            account_secrets::save_chatbot_api_key,
+            account_secrets::forget_chatbot_api_key,
+            // The monthly money limits and the price list of those same six
+            // services (docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, 2026-10-06): a
+            // key with no limit leaves the service unusable, so the two were
+            // built together. A RAISE is one approval card plus Windows Hello,
+            // decided by the backend; a lowering, a removal and a price
+            // correction need no card. Every write is held on a stale link.
+            // Settings window only.
+            chatbot_money::chatbot_money,
+            chatbot_money::set_chatbot_money,
+            account_addresses::get_account_addresses,
+            account_addresses::save_account_address,
             reach::get_reach,
+            limits::get_limits,
+            limits::set_limit,
             asks_first::get_asks_first,
             asks_first::set_asks_first,
             asks_first::set_lights_without_card,
             asks_first::set_tool_enabled,
+            // Settings' "Prompt coach" (docs/PROMPT-COACH-DESIGN.md, the
+            // owner's request of 2026-10-08): whether the coach is on, in the
+            // PC's own words (a read), and the switch - at once in BOTH
+            // directions, no approval card either way and NEVER held on a
+            // stale link: it opens no way out of the PC, takes no action and
+            // loosens no rule. Settings window only.
+            prompt_coach::get_prompt_coach,
+            prompt_coach::set_prompt_coach,
+            // The Jarvis bar's "Coach this" (src/prompt-coach-panel.js): one
+            // critique of the words in the box plus the last few turns, asked
+            // of the same local model the chat would use. It SENDS NOTHING and
+            // decides nothing - the owner's own press of "Send mine" or "Send
+            // the suggestion" is what sends a turn - and it raises no card and
+            // is never held on a stale link either, for the same reasons as
+            // the switch above. Jarvis bar only.
+            prompt_coach::coach_prompt,
             email_sending::get_email_sending,
             folders::get_folders,
             folders::add_folder,
@@ -1061,6 +1143,7 @@ pub fn run() {
             devices::pair_cancel,
             devices::devices_list,
             devices::devices_remove,
+            devices::devices_label,
             devices::devices_shared,
             tool_updates::get_tool_updates,
             tool_updates::check_tool_updates,
@@ -1094,6 +1177,11 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::get_floating,
             commands::set_floating,
+            // Where the floating face's own page says its picture is drawn,
+            // so clicks can pass through the window everywhere except on the
+            // animal (2026-10-10). The floating window is the only one
+            // granted it - permissions/surfaces.toml's "floating-hit-mask".
+            commands::note_floating_hit_mask,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -1136,6 +1224,18 @@ pub fn run() {
             // Picture mode's switch (look.rs): read it, turn it on (ONE
             // approval card) or off (at once). Settings only.
             look::screen_picture,
+            // How long "Solve it here" stays on offer (handoff.rs; the owner's
+            // own decision of 2026-10-08): the choice, and the ONE approval card
+            // (with Windows Hello, on this PC) that choosing "Keep offering it"
+            // raises. Settings only.
+            handoff::handoff_mode,
+            // What a captcha does about the browser window it is blocking
+            // (handoff.rs `handoff_front`; the owner's decision of 2026-10-09:
+            // "1 by default with the option for 2 in the settings of Jarvis"):
+            // leave that one window exactly where it is (the default), or ask
+            // to bring it to the front - ONE approval card on this PC with
+            // Windows Hello. Settings only; it raises no window itself.
+            handoff::handoff_front,
             browser_engine::browser_engine,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
@@ -1216,16 +1316,14 @@ pub fn run() {
                     match action {
                         // With Watch with me on, a fresh look is taken first,
                         // while the program the owner is in is still in front
-                        // (look.rs).
+                        // (look.rs). `toggle_quickbar` centres and focuses the
+                        // window AND tells the WebView to put the caret in the
+                        // input itself (windows.rs `focus_quickbar_input`), so
+                        // there is no second emit here any more - the tray
+                        // icon's left click goes through the same function and
+                        // gets the same caret.
                         "toggle_quickbar" => match look::toggle_bar_with_look(app) {
-                            Ok(visible) => {
-                                if visible {
-                                    // `toggle_quickbar` has already centred and
-                                    // focused the window; tell the WebView to
-                                    // put the caret in the input.
-                                    emit_quickbar(app, events::FOCUS_INPUT, ());
-                                }
-                            }
+                            Ok(_) => {}
                             Err(err) => eprintln!("[jarvis] quickbar toggle failed: {err}"),
                         },
                         "ingest_clipboard" => ingest_clipboard(app),
@@ -1302,6 +1400,11 @@ pub fn run() {
         // the first one drawn rather than a swap after the default.
         let appearance = app.state::<appearance::AppearanceState>().snapshot();
         push_to_hud(app, "appearance", &appearance);
+
+        // And same reason again, for the button beside the box: a HUD that
+        // reloads while the Jarvis bar is already up would otherwise offer to
+        // open a bar that is on screen (`windows.rs` `publish_bar_state`).
+        windows::publish_bar_state(app);
     });
 
     let app = builder
@@ -1325,6 +1428,13 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // "open Notion" (jarvis_open.py, the owner's request of 2026-10-10):
+            // read this PC's Start menu shortcuts now, once, rather than on the
+            // first sentence that needs them. It is two shallow folder reads -
+            // milliseconds - and doing it here means the first "open Notion" of
+            // a session opens the app instead of saying "still reading".
+            open_app::warm_up();
 
             // Before anything reads the token (the HUD bootstrap, the backend
             // it may start): a token an older version kept in the settings
@@ -1532,6 +1642,11 @@ pub fn run() {
             // this line is what makes Jarvis actually work, and a walkthrough
             // that opened before the tray icon or the event stream existed
             // would be explaining surfaces that were not there yet.
+            //
+            // ONCE, and only here. `commands::replay_onboarding` opens the
+            // same window on demand from Settings (the owner, 2026-10-10) and
+            // never touches the marker, so this gate still means exactly what
+            // it always did: unprompted, the walkthrough appears one time.
             if !commands::onboarding_seen(&handle) {
                 if let Err(err) = windows::show_onboarding(&handle) {
                     logfile::log(&format!(

@@ -14,7 +14,7 @@ use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 use serde::Serialize;
 use tauri::{ipc::Channel, AppHandle, Manager, State};
 
-use crate::{windows, ChatState, HUD_LABEL, LITELLM_URL, OLLAMA_URL};
+use crate::{windows, ChatState, CLOUD_LANE_STATUS_PATH, HUD_LABEL, OLLAMA_URL};
 
 /// JPEG quality for desktop captures. 82 keeps text legible while staying well
 /// under the size at which a base64 data URI becomes painful over IPC.
@@ -81,7 +81,7 @@ pub struct CapturePayload {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceStatus {
-    /// Stable identifier: `"jarvis"`, `"ollama"` or `"litellm"`.
+    /// Stable identifier: `"jarvis"`, `"ollama"` or `"cloud_lane"`.
     pub id: &'static str,
     /// Human readable name for the UI.
     pub name: &'static str,
@@ -98,9 +98,10 @@ pub struct ServiceStatus {
     /// Parsed JSON body, when the service returned one and it was small enough
     /// to be worth forwarding (the Ollama model list, for instance).
     pub payload: Option<serde_json::Value>,
-    /// Only needed for something the owner may not use. LiteLLM is the cloud
-    /// lane's proxy: with no cloud lane set up, nothing runs on :4000, and
-    /// that is the normal state, not a fault. An optional service counts in
+    /// Only needed for something the owner may not use. The cloud escalation
+    /// lane is off unless the owner has set one up: with no cloud lane, the
+    /// backend still answers this probe and says there is nothing to use,
+    /// which is the normal state, not a fault. An optional service counts in
     /// the totals only when it answers - see [`summarise_health`].
     pub optional: bool,
 }
@@ -595,6 +596,18 @@ pub async fn open_faces(app: AppHandle) -> Result<(), String> {
     crate::windows::show_faces(&app)
 }
 
+/// Opens "Everything Jarvis can do" (`features.html`) from a page. Settings has
+/// a button for it because the owner asked for one place listing the whole
+/// feature set (2026-10-08, docs/FEATURES-LIST-DESIGN.md).
+///
+/// `async` for the same reason [`open_faces`] is: `show_features` builds a
+/// window the first time it runs, and building a window inside a plain command
+/// deadlocks on Windows (bug audit 2026-09-27, desktop-rust finding #3).
+#[tauri::command]
+pub async fn open_features(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_features(&app)
+}
+
 /// Which version of the first-run walkthrough is on screen now.
 ///
 /// Raise this by one whenever `onboarding.html` changes in a way the owner
@@ -606,9 +619,17 @@ pub async fn open_faces(app: AppHandle) -> Result<(), String> {
 ///
 /// The 2026-10-05 walkthrough added two screens ON THE END (how to talk to
 /// it, and where the settings are) and left the memory screen at version 2's
-/// number and wording, so this stays 2 on purpose: the owner's rule is that
-/// the walkthrough is shown once and never again, and a new owner gets all
-/// five screens because they have no marker at all.
+/// number and wording, so this stays 2 on purpose: the walkthrough still
+/// opens BY ITSELF once, and a new owner gets all five screens because they
+/// have no marker at all.
+///
+/// "Once by itself" is no longer the whole story (the owner, 2026-10-10). It
+/// was "shown once, never again", which left an owner who skipped it by
+/// accident with no way back. It is now "shown once by itself, and replayable
+/// on demand" - see [`replay_onboarding`] below, which opens the same window
+/// again and deliberately does NOT touch this marker or the store at all. So
+/// this constant still means exactly one thing: the version `lib.rs` compares
+/// against to decide whether the walkthrough appears unprompted.
 pub const ONBOARDING_VERSION: u64 = 2;
 
 /// The store key holding the version of the walkthrough the owner last
@@ -646,6 +667,9 @@ pub fn onboarding_seen(app: &AppHandle) -> bool {
 /// not open again until [`ONBOARDING_VERSION`] is raised, and closes it — one
 /// command rather than two, since the page has no reason to do either
 /// without the other.
+///
+/// This is the ONLY writer of the marker. [`replay_onboarding`] is the other
+/// half of the owner's decision of 2026-10-10 and never comes near it.
 #[tauri::command]
 pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_store::StoreExt;
@@ -667,6 +691,44 @@ pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     window
         .close()
         .map_err(|e| format!("unable to close the walkthrough: {e}"))
+}
+
+/// Opens the first-run walkthrough again, on demand, from the Settings
+/// window's "Show the intro again" button.
+///
+/// The owner's request of 2026-10-10: the walkthrough is interactive and
+/// skippable, but it was not REDOABLE — one Escape and it was gone for good.
+/// He asked for it to be replayable if it was skipped by accident. This is
+/// that, and nothing more.
+///
+/// What it deliberately does NOT do, because that is the boundary that
+/// matters:
+///
+///   * It does not read, write or clear the versioned marker. [`finish_onboarding`]
+///     is the only writer, and `lib.rs`'s auto-show is still gated on
+///     [`onboarding_seen`] exactly as before. Clearing the marker here would
+///     make the walkthrough open by itself on the next launch — the one
+///     behaviour the owner did not ask to change. Pressing this button is
+///     therefore invisible to the next start.
+///   * It does not build a window. It reuses [`crate::windows::show_onboarding`],
+///     so the replay is the same fixed-size, non-resizable window with the
+///     same `ONBOARDING_LABEL` — and therefore the same narrow capability
+///     (`onboarding-surface`: mark seen, close). That function is already
+///     idempotent: while the walkthrough is open it does nothing, so a second
+///     press cannot open a second copy.
+///
+/// What finishing the replay does is what finishing a first-run walkthrough
+/// always did — writes the marker for this version, which it already holds.
+/// So the marker's meaning is unchanged: "the owner has closed this version
+/// at least once".
+///
+/// `async` for the same reason [`open_faces`] is: `show_onboarding` builds a
+/// window the first time it runs, and building a window inside a plain
+/// command deadlocks on Windows (bug audit 2026-09-27, desktop-rust
+/// finding #3).
+#[tauri::command]
+pub async fn replay_onboarding(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_onboarding(&app)
 }
 
 /// Reports the base and whether a token is configured — never the token
@@ -1606,15 +1668,15 @@ async fn probe(
     }
 }
 
-/// Pings the local Jarvis orchestrator, Ollama and LiteLLM, and returns a
-/// structured report. All three are probed concurrently, so the command costs
-/// roughly one timeout in the worst case rather than three.
+/// Pings the local Jarvis orchestrator, Ollama and the cloud lane's own state,
+/// and returns a structured report. All three are probed concurrently, so the
+/// command costs roughly one timeout in the worst case rather than three.
 #[tauri::command]
 pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String> {
     let client = reqwest::Client::builder()
         .timeout(HEALTH_TIMEOUT)
         .connect_timeout(HEALTH_TIMEOUT)
-        // These are loopback services; a proxy would only get in the way.
+        // These loopback services; a proxy would only get in the way.
         .no_proxy()
         // Never follow a redirect: reqwest would carry X-Jarvis-Token to
         // wherever it points (apps security audit L1).
@@ -1625,7 +1687,7 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
     // A refused address: Jarvis is not asked at all (the probe below would
     // only fail on the empty base), and the sentence says why.
     require_base_allowed(&app)?;
-    let (jarvis, ollama, litellm) = tokio::join!(
+    let (jarvis, ollama, cloud_lane) = tokio::join!(
         probe(
             &client,
             "jarvis",
@@ -1640,28 +1702,31 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
             format!("{OLLAMA_URL}/api/tags"),
             None,
         ),
+        // The cloud escalation lane's real state - not a proxy on :4000. It is
+        // the backend that owns the lane's key and monthly limit, so the
+        // backend is what is asked; this is a read, and a lane that is not set
+        // up answers "nothing to use" rather than failing.
         probe(
             &client,
-            "litellm",
-            "LiteLLM",
-            format!("{LITELLM_URL}/health"),
-            None,
+            "cloud_lane",
+            "Cloud model",
+            format!("{}{CLOUD_LANE_STATUS_PATH}", jarvis_base(&app)),
+            jarvis_headers(&app).ok(),
         ),
     );
 
-    // The cloud lane's proxy. Not running is the normal state when no cloud
-    // lane is set up - which is the default, and today's setup - so it no
-    // longer turns every status check into "2/3 online - offline: LiteLLM".
-    let mut litellm = litellm;
-    litellm.optional = true;
-    if !litellm.online {
-        litellm.detail = format!(
-            "not running — only needed if you set up a cloud model ({})",
-            litellm.detail
+    // The cloud lane is optional: not set up is the normal state, so it does
+    // not turn every status check into "2/3 online - offline: Cloud model".
+    let mut cloud_lane = cloud_lane;
+    cloud_lane.optional = true;
+    if !cloud_lane.online {
+        cloud_lane.detail = format!(
+            "not answering — only needed if you set up a cloud model ({})",
+            cloud_lane.detail
         );
     }
 
-    let services = vec![jarvis, ollama, litellm];
+    let services = vec![jarvis, ollama, cloud_lane];
     let (online_count, total_count, summary) = summarise_health(&services);
     Ok(HealthReport {
         checked_at: now_ms(),
@@ -1673,9 +1738,10 @@ pub async fn check_server_health(app: AppHandle) -> Result<HealthReport, String>
     })
 }
 
-/// The counts and the one-line summary. An optional service (LiteLLM) is
-/// counted only when it answers; when it does not, the summary says so in a
-/// separate, calm sentence instead of listing it as offline.
+/// The counts and the one-line summary. An optional service (the cloud
+/// escalation lane) is counted only when it answers; when it does not, the
+/// summary says so in a separate, calm sentence instead of listing it as
+/// offline.
 pub(crate) fn summarise_health(services: &[ServiceStatus]) -> (usize, usize, String) {
     let counted: Vec<&ServiceStatus> = services
         .iter()
@@ -1940,6 +2006,24 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         // one). The page checks both again, and nothing is filed until the
         // owner taps a chat.
         "history_q",
+        // "open Notion", "open settings", "open Jarvis settings"
+        // (jarvis_open.py, the owner's request of 2026-10-10). `open_app` is
+        // the program or the `ms-settings:` address, `open_app_kind` says
+        // which of the four it is, `open_app_built` says whether the backend
+        // named the program itself (read as a boolean below), and
+        // `open_app_note` is the one extra sentence for a phrase with two
+        // readings. `open_place` is the Jarvis Settings section id, and ""
+        // means the top of that window - a real answer, so it is passed on
+        // exactly as it arrives.
+        //
+        // Rust reads these itself in [`open_app_from_route`] (the app has to
+        // be started here, not by a page); the page reads the same values
+        // from this line only for the `jarvis` kind, which is a Settings-window
+        // door and not a program.
+        "open_app",
+        "open_app_kind",
+        "open_app_note",
+        "open_place",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
@@ -2001,6 +2085,14 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
             out.insert(key.to_string(), serde_json::json!(b));
         }
     }
+    // "open Notion" (jarvis_open.py, 2026-10-10): whether the backend named
+    // the program itself. A boolean, like the two above. Missing (an older
+    // backend) is read as false, which sends the app looking the name up on
+    // this PC's Start menu - the safe direction, since a name that is not
+    // found opens nothing rather than starting something else.
+    if let Some(b) = route.get("open_app_built").and_then(|v| v.as_bool()) {
+        out.insert("open_app_built".to_string(), serde_json::json!(b));
+    }
     // "Used in this answer": which remembered facts went in, as the fact ids
     // alone (`injected_ids`' "mem:<id>" entries, as numbers) - never a word
     // of them. The quickbar asks for the words only when the owner opens the
@@ -2041,6 +2133,71 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
 pub fn quick_intent_from_route(header: &str) -> Option<String> {
     let route: serde_json::Value = serde_json::from_str(header).ok()?;
     route.get("quick")?.as_str().map(str::to_string)
+}
+
+/// "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+/// the owner's request of 2026-10-10): opens what the owner named, and answers
+/// with the one plain sentence to show when it could not.
+///
+/// Runs on the `X-Jarvis-Route` header of a fast-path answer, from
+/// [`stream_chat`], so nothing here crosses the IPC boundary and no window
+/// needs a grant to start a program. Only the four kinds `jarvis_open.py`
+/// produces are acted on, and only the `app`, `panel` and `other` kinds start
+/// anything - `jarvis` is a door to the Settings window, which main.js opens
+/// from the same header (`openSettingsFromRoute`).
+///
+/// A failure is never silent: it comes back as one plain sentence for the
+/// owner, because the backend has already answered "Opening Notion on this
+/// PC." and a sentence that promised something which did not happen is the
+/// one outcome this must not leave standing.
+pub fn open_app_from_route(header: &str, _app: &AppHandle) -> Result<Option<String>, String> {
+    let Ok(route) = serde_json::from_str::<serde_json::Value>(header) else {
+        return Ok(None);
+    };
+    if route.get("quick").and_then(|v| v.as_str()) != Some("open_app") {
+        return Ok(None);
+    }
+    let kind = route
+        .get("open_app_kind")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let target = route.get("open_app").and_then(|v| v.as_str()).unwrap_or("");
+    let built = route
+        .get("open_app_built")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    // `jarvis`: not a program. main.js's own `openSettingsFromRoute` opens the
+    // Settings window from this same route line, so this returns "nothing to
+    // say" rather than a second, competing door.
+    if kind == "jarvis" {
+        return Ok(None);
+    }
+    if target.is_empty() || kind.is_empty() {
+        return Ok(None);
+    }
+
+    match crate::open_app::open(kind, target, built) {
+        Ok(crate::open_app::Opened::Started) => Ok(None),
+        Ok(crate::open_app::Opened::NotFound) => Ok(Some(format!(
+            "I could not find an app called {} on this PC. Open it once from the \
+             Start menu, then ask me again.",
+            target
+        ))),
+        Ok(crate::open_app::Opened::Ambiguous(_)) => Ok(Some(format!(
+            "There is more than one shortcut called {} on this PC, so I have not \
+             opened either. Open the one you want from the Start menu.",
+            target
+        ))),
+        Ok(crate::open_app::Opened::NotReady) => Ok(Some(
+            "I am still reading this PC's Start menu. Ask me again in a moment.".to_string(),
+        )),
+        // A real failure to start something: a policy blocking it, or nothing
+        // on this PC set up to handle it. The backend's own sentence has
+        // already told the owner it was opening, so the reason is appended to
+        // it rather than replacing it.
+        Err(why) => Ok(Some(why)),
+    }
 }
 
 /// The fact ids in `X-Jarvis-Route`'s `injected_ids`: each `"mem:<id>"`
@@ -2302,6 +2459,24 @@ async fn pump_chat(
         }
     }
 
+    // "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    // the owner's request of 2026-10-10): acted on HERE, in Rust, for the same
+    // reason "open a chat" is - the owner's words arrive on this stream, which
+    // this side already owns, so no page has to hold a permission to start a
+    // program. The `jarvis` kind is not started here: it is a door to the
+    // Settings window, and main.js opens that from the same route line
+    // (`openSettingsFromRoute`), exactly as "open the web search settings"
+    // already does.
+    if let Some(header) = response
+        .headers()
+        .get("X-Jarvis-Route")
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Ok(Some(note)) = open_app_from_route(header, app) {
+            let _ = on_event.send(note);
+        }
+    }
+
     // Lines are cut from raw bytes so a multi-byte character split across two
     // network chunks is never decoded half-way.
     let mut buffer: Vec<u8> = Vec::with_capacity(8 * 1024);
@@ -2448,6 +2623,27 @@ async fn answer_approval(
         return Err(
             "the event stream is stale, so the approval queue cannot be confirmed live - \
              nothing can be answered until it reconnects"
+                .to_string(),
+        );
+    }
+
+    // ARCHITECTURE section 3 requires every command to be approved IN FULL.
+    // The gate cuts `detail` at 4000 characters, so a long command reaches the
+    // card truncated; `main.js` and `widget.js` then disable their Approve
+    // button on `approval.cutOff`. Until now that disabled button was the
+    // whole enforcement, in the two pages - the identical mistake rule 4 made
+    // above, and refused here for the identical reason: another window holding
+    // the `approvals` capability reaches this command directly.
+    //
+    // APPROVE ONLY. Deny stays available on a card nobody can read in full -
+    // refusing costs a retry, and leaving the owner unable to dismiss a
+    // truncated card would be worse than the bug. This mirrors the email rule
+    // and the App-lock widget rule below, which also gate Approve alone.
+    if approved && waiting_cut_off(&app, id) {
+        return Err(
+            "this request was cut off before it reached the card, so no one has seen \
+             all of what would run - approving it is refused. Deny still works; ask \
+             Jarvis for a shorter version of the same thing."
                 .to_string(),
         );
     }
@@ -3230,18 +3426,27 @@ pub fn get_widget_prefs(app: AppHandle) -> windows::WidgetPrefs {
 // Floating face
 // ---------------------------------------------------------------------------
 
-/// Whether the floating face is on, and where it last sat. Settings'
-/// "Floating face" toggle reads this to paint itself correctly on load.
+/// Whether the floating face is on, where it last sat, and whether clicks
+/// pass through it. Settings' "Floating face" toggle reads this to paint
+/// itself correctly on load, and so does "Click through to what is behind".
 #[tauri::command]
 pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
     app.state::<windows::FloatingState>().snapshot()
 }
 
-/// Turns the floating face on or off. Off by default, like every new surface
-/// in this app; on, it opens at once with no approval card — it changes
-/// nothing Jarvis does, asks or remembers, only how its own state is shown
-/// on screen, so `asks_first.rs`'s list of things that ask first does not
-/// apply here.
+/// Turns the floating face on or off, and - with `click_through` - whether
+/// clicks on it go to whatever is behind it instead. Both are off by default,
+/// like every new surface in this app; both apply at once with no approval
+/// card — neither changes anything Jarvis does, asks or remembers, only how
+/// its own state is shown on screen, so `asks_first.rs`'s list of things that
+/// ask first does not apply here.
+///
+/// ONE command for the two, rather than a second `set_floating_click_through`:
+/// a new command means the whole ACL path (a line in `build.rs`, a set in
+/// `permissions/surfaces.toml`, a grant in `capabilities/settings.json` and
+/// the generated permission file), and what this buys is a second checkbox on
+/// the row below the first one. `click_through` is `Option`, so the existing
+/// callers and tests that send only `enabled` keep working.
 ///
 /// `async`, not a plain command: the first time it turns the face on,
 /// `show_floating` builds a window, and Tauri 2.11.5's own docs say that
@@ -3249,7 +3454,21 @@ pub fn get_floating(app: AppHandle) -> windows::FloatingPrefs {
 /// callback thread rather than off it (bug audit 2026-09-27, desktop-rust
 /// finding #3).
 #[tauri::command]
-pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String> {
+pub async fn set_floating(
+    app: AppHandle,
+    enabled: bool,
+    click_through: Option<bool>,
+) -> Result<bool, String> {
+    if let Some(click_through) = click_through {
+        // Only the preference: the window itself is dealt with by the
+        // pointer watcher (`windows::start_floating_hit_watch`), which reads
+        // this every tick and changes the window a moment later of its own
+        // accord. Nothing is forced here on purpose - the watcher is what
+        // knows where the animal is, and until it does, the window keeps
+        // taking every click.
+        app.state::<windows::FloatingState>()
+            .update(|prefs| prefs.click_through = click_through);
+    }
     if enabled {
         windows::show_floating(&app)?;
     } else if windows::floating_is_open(&app) {
@@ -3264,6 +3483,24 @@ pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String>
     // this while the window is open (bug audit 2026-09-27, finding #5).
     crate::emit_all(&app, crate::events::FLOATING_CHANGED, enabled);
     Ok(enabled)
+}
+
+/// The floating face's own page reporting where its picture is drawn: one
+/// character per cell of a `windows::FLOATING_HIT_GRID`-square grid, `1` for
+/// a cell the face is drawn in, read left to right and top to bottom; or the
+/// empty string when the page cannot measure itself.
+///
+/// A COMMAND, not an event, and the difference matters. `core:event:allow-emit`
+/// would be the shorter road, and `tests/security.mjs` (apps security audit
+/// M1) forbids it to every window on purpose: the quickbar trusts what it
+/// hears, so a page able to emit could fake the owner's checked voice or an
+/// approval card. A command is granted to exactly one window and can do
+/// exactly one thing. This one carries geometry only - no words, no picture,
+/// nothing about the owner - and clears the grid for anything that is not
+/// exactly one grid (`windows::note_floating_hit_mask`).
+#[tauri::command]
+pub fn note_floating_hit_mask(app: AppHandle, grid: String) {
+    windows::note_floating_hit_mask(&app, &grid);
 }
 
 /// Whether App lock is on - all the widget needs to know to show an approval
@@ -3319,6 +3556,35 @@ fn waiting_email(app: &AppHandle, id: &str) -> bool {
         .find(|item| crate::stream::approval_id(item).as_deref() == Some(id));
     match card {
         Some(item) => crate::email_sending::is_email(item),
+        None => true,
+    }
+}
+
+/// Whether the request behind `id` was cut off before it reached the card, so
+/// nothing on screen is the whole of what would run.
+///
+/// The gate stores `detail` as `json.dumps(detail)[:4000]`, so a long command
+/// arrives as text that no longer parses AND is exactly as long as the cut.
+/// `crate::stream::detail_was_cut_off` is the test for that, and it lives
+/// beside the row it reads.
+///
+/// This existed only in the webviews (`main.js`, `widget.js` set
+/// `Approve.disabled = ... || approval.cutOff`), which is the same mistake
+/// rule 4 made - and the comment above the staleness check in
+/// `answer_approval` already says why a disabled button is not a gate: "any
+/// window holding the `approvals` capability reaches this directly". So the
+/// refusal is re-checked here, on the one path that sends a decision, exactly
+/// as the staleness rule is. ARCHITECTURE section 3: every command, in FULL.
+///
+/// An id this process has not read yet fails CLOSED (it might be cut off),
+/// matching `waiting_email`.
+fn waiting_cut_off(app: &AppHandle, id: &str) -> bool {
+    let pending = app.state::<crate::stream::StreamState>().pending();
+    let card = pending
+        .iter()
+        .find(|item| crate::stream::approval_id(item).as_deref() == Some(id));
+    match card {
+        Some(item) => crate::stream::detail_was_cut_off(item),
         None => true,
     }
 }
@@ -5684,28 +5950,29 @@ mod health_tests {
         }
     }
 
-    /// The everyday state: no cloud lane, so nothing on :4000. That is not
-    /// "2/3 online - offline: LiteLLM".
+    /// The everyday state: no cloud lane set up. The backend still answers the
+    /// probe and says so, but if it is not answering either, that is not
+    /// "2/3 online - offline: Cloud model".
     #[test]
-    fn litellm_not_running_is_not_an_outage() {
+    fn a_cloud_lane_that_is_not_set_up_is_not_an_outage() {
         let (online, total, summary) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
             svc("ollama", "Ollama", true, false),
-            svc("litellm", "LiteLLM", false, true),
+            svc("cloud_lane", "Cloud model", false, true),
         ]);
         assert_eq!((online, total), (2, 2));
         assert!(summary.starts_with("All 2 services online."), "{summary}");
         assert!(!summary.contains("offline"), "{summary}");
-        assert!(summary.contains("LiteLLM is not running"), "{summary}");
+        assert!(summary.contains("Cloud model is not running"), "{summary}");
     }
 
-    /// When it does run, it counts like anything else.
+    /// When it does answer, it counts like anything else.
     #[test]
-    fn litellm_running_is_counted() {
+    fn a_cloud_lane_that_answers_is_counted() {
         let (online, total, _) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
             svc("ollama", "Ollama", true, false),
-            svc("litellm", "LiteLLM", true, true),
+            svc("cloud_lane", "Cloud model", true, true),
         ]);
         assert_eq!((online, total), (3, 3));
     }
@@ -5716,7 +5983,7 @@ mod health_tests {
         let (online, total, summary) = summarise_health(&[
             svc("jarvis", "Jarvis Core", true, false),
             svc("ollama", "Ollama", false, false),
-            svc("litellm", "LiteLLM", false, true),
+            svc("cloud_lane", "Cloud model", false, true),
         ]);
         assert_eq!((online, total), (1, 2));
         assert!(summary.contains("offline: Ollama"), "{summary}");
@@ -5987,6 +6254,105 @@ mod onboarding_tests {
         assert!(!walkthrough_is_current(Some(&json!("2"))));
         assert!(!walkthrough_is_current(Some(&json!(-1))));
     }
+
+    /// Closing the current walkthrough once still means it never opens by
+    /// itself again until the version is raised. This is the half of the
+    /// owner's decision of 2026-10-10 that did NOT change: replaying it on
+    /// demand is a separate door, not a second automatic show.
+    #[test]
+    fn finishing_once_still_means_it_does_not_return_by_itself() {
+        let closed = json!(ONBOARDING_VERSION);
+        assert!(walkthrough_is_current(Some(&closed)));
+        // Raising the version stays the ONE way it comes back unprompted.
+        assert!(!walkthrough_is_current(Some(&json!(
+            ONBOARDING_VERSION - 1
+        ))));
+    }
+
+    /// The body of one function in this file, from its `fn` line to the
+    /// closing brace at column zero. `commands.rs` is compiled in and read
+    /// back, the same source guard `brain/progress.rs` uses: there is no
+    /// `AppHandle` in `cargo test`, and the store write that must NOT happen is
+    /// exactly the thing worth checking.
+    fn fn_body<'a>(src: &'a str, name: &str) -> &'a str {
+        let needle = format!("fn {name}(");
+        let at = src
+            .find(&needle)
+            .unwrap_or_else(|| panic!("commands.rs has no `{needle}`"));
+        let end = src[at..]
+            .find("\n}\n")
+            .unwrap_or_else(|| panic!("`{name}` is never closed"));
+        &src[at..at + end + 3]
+    }
+
+    /// The replay path of 2026-10-10 can never change when the walkthrough
+    /// appears by itself.
+    ///
+    /// `lib.rs` decides that from the versioned marker alone, so the rule that
+    /// keeps the two halves apart is: `finish_onboarding` is the only writer,
+    /// and `replay_onboarding` writes nothing at all. If someone later clears
+    /// the marker from the replay path, the walkthrough would open by itself
+    /// on the next start - the one behaviour the owner did not ask to change -
+    /// and this test is what says so before it ships.
+    #[test]
+    fn the_replay_path_can_never_change_the_seen_marker() {
+        let src = include_str!("commands.rs");
+
+        let replay = fn_body(src, "replay_onboarding");
+        assert!(
+            replay.contains("crate::windows::show_onboarding(&app)"),
+            "the replay no longer opens the walkthrough's own window: {replay}"
+        );
+        assert!(
+            !replay.contains("WebviewWindowBuilder"),
+            "the replay builds its own window instead of reusing the walkthrough's"
+        );
+        for forbidden in [
+            "ONBOARDING_VERSION_KEY",
+            "ONBOARDING_VERSION",
+            "onboarding_seen",
+            ".store(",
+            "store.set",
+            "store.save",
+        ] {
+            assert!(
+                !replay.contains(forbidden),
+                "the replay path touches {forbidden} - playing the intro again must not \
+                 change when it appears on its own"
+            );
+        }
+
+        // And the marker really does still have exactly one writer.
+        let finish = fn_body(src, "finish_onboarding");
+        assert!(
+            finish.contains("store.set(") && finish.contains("ONBOARDING_VERSION_KEY"),
+            "finish_onboarding no longer writes the versioned marker"
+        );
+        // `onboarding_seen` is still the read `lib.rs`'s gate is built on.
+        let seen = fn_body(src, "onboarding_seen");
+        assert!(
+            seen.contains("store.get(ONBOARDING_VERSION_KEY)"),
+            "onboarding_seen no longer reads the marker the gate depends on"
+        );
+    }
+
+    /// Least privilege: the walkthrough's own window is not handed the power
+    /// to open itself. Replay belongs to Settings' button, not to the page
+    /// being replayed.
+    #[test]
+    fn the_walkthrough_window_cannot_reopen_itself() {
+        let capability = include_str!("../capabilities/onboarding.json");
+        assert!(capability.contains("onboarding-surface"));
+        assert!(
+            !capability.contains("onboarding-replay"),
+            "the walkthrough's own page was handed the power to open itself"
+        );
+        let settings = include_str!("../capabilities/settings.json");
+        assert!(
+            settings.contains("onboarding-replay"),
+            "the Settings window's replay button has no grant, so it would do nothing"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -6090,6 +6456,62 @@ mod turn_tests {
                 "{}",
                 case["name"]
             );
+        }
+    }
+
+    /// "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    /// the owner's request of 2026-10-10): every field of that answer reaches
+    /// the page, an EMPTY `open_place` reaches it too (it means the top of the
+    /// Settings window, which is a real answer), and a value of the wrong type
+    /// is left out rather than guessed at.
+    #[test]
+    fn the_route_line_carries_what_open_named() {
+        let line = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app":"notion","open_app_kind":"app","open_app_built":false}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["quick"], "open_app");
+        assert_eq!(got["open_app"], "notion");
+        assert_eq!(got["open_app_kind"], "app");
+        assert_eq!(got["open_app_built"], serde_json::json!(false));
+
+        let panel = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app":"ms-settings:display","open_app_kind":"panel","open_app_built":true,"open_app_note":"That is Windows' own display page."}"#,
+        )
+        .unwrap();
+        let panel: serde_json::Value = serde_json::from_str(&panel).unwrap();
+        assert_eq!(panel["open_app"], "ms-settings:display");
+        assert_eq!(panel["open_app_kind"], "panel");
+        assert_eq!(panel["open_app_built"], serde_json::json!(true));
+        assert!(panel["open_app_note"].as_str().unwrap().contains("Windows"));
+
+        // The Jarvis kind: `open_place` is the section id, and "" means the
+        // top of the window - dropped here, the page would never open it.
+        let jarvis = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app_kind":"jarvis","open_place":""}"#,
+        )
+        .unwrap();
+        let jarvis: serde_json::Value = serde_json::from_str(&jarvis).unwrap();
+        assert_eq!(jarvis["open_app_kind"], "jarvis");
+        assert_eq!(jarvis["open_place"], "");
+        assert!(jarvis.get("open_app").is_none());
+
+        let section = super::route_line_from_header(
+            r#"{"lane":"x","quick":"open_app","open_app_kind":"jarvis","open_place":"web-search"}"#,
+        )
+        .unwrap();
+        let section: serde_json::Value = serde_json::from_str(&section).unwrap();
+        assert_eq!(section["open_place"], "web-search");
+
+        // Wrong types are left out: the page then opens nothing for them,
+        // which is the safe direction.
+        let odd = super::route_line_from_header(
+            r#"{"lane":"x","open_app":7,"open_app_kind":true,"open_place":[],"open_app_built":"yes"}"#,
+        )
+        .unwrap();
+        for key in ["open_app", "open_app_kind", "open_place", "open_app_built"] {
+            assert!(!odd.contains(key), "{key} should be left out: {odd}");
         }
     }
 

@@ -34,6 +34,10 @@ Runs anywhere; no Home Assistant, no model, no network, no Windows Hello
    reaches this file unchanged - proved end to end, not only at run()'s own
    boundary - and `is_command()` recognises every new sentence, so
    jarvis_intake.owner_turns never learns one of these as a fact.
+8. The settings.html jump list is still a map of that page, after the
+   owner's 2026-10-06 tidy-up: its bands are the page's own three headings
+   in order, every link is a real card on the page, none is listed twice and
+   none is missing (t_jump_list_matches_the_page).
 """
 from __future__ import annotations
 
@@ -53,6 +57,7 @@ require_shipped("jarvis_quick.py", "jarvis_settings_registry.py", "jarvis_asks_f
 sys.path.append(str(HERE / "rebuilt"))
 import jarvis_quick as Q  # noqa: E402
 import jarvis_settings_registry as R  # noqa: E402
+import jarvis_menus as M  # noqa: E402
 import jarvis_asks_first as AF  # noqa: E402
 import jarvis_auto_learn as AL  # noqa: E402
 import jarvis_watch_notify as WN  # noqa: E402
@@ -96,6 +101,51 @@ def check(name, cond, detail=""):
 def go(text, *, peer=None, local="127.0.0.1", now=None):
     body = {"messages": [{"role": "user", "content": text, "provenance": "typed"}]}
     return Q.answer_turn(body, now=now or time.time(), peer=peer, local=local)
+
+
+#: `settings.` ids `features/features.json` claims that are ROWS INSIDE a
+#: section rather than sections of their own, with the reason. Everything else
+#: it claims must name a real Section.
+SUB_ROWS = {
+    "second-card.chat-card": "a row inside the second-card card",
+    "second-card.referee": "a row inside the second-card card",
+    "second-card.study-helper": "a row inside the second-card card",
+    "second-card.third-card": "a row inside the second-card card",
+}
+
+
+def t_every_feature_settings_claim_names_a_section():
+    """"Open <a feature's setting>" must be able to name the place.
+
+    `features/features.json` says where each feature can be changed (`covers`),
+    and `jarvis_quick._run_settings_open` turns such an id into the words it
+    says and the place it opens through `section_by_id` - falling back to the
+    raw id when the section is missing. That fallback hid a real gap for
+    months: `settings.floating-avatar` was claimed with no Section, so "open
+    Floating Jarvis" answered "Opening floating-avatar in Settings." and named
+    nothing either app could find (measured 2026-10-08: five claimed ids had no
+    section - four are rows inside the second-card card, listed above with the
+    reason, and the fifth was this one)."""
+    import json
+    try:
+        rows = json.loads((REPO / "features" / "features.json").read_text(encoding="utf-8"))
+    except Exception as exc:
+        return check("features/features.json is readable", False,
+                     f"{type(exc).__name__}: {exc}")
+    claims: dict = {}
+    for row in rows:
+        for cover in (row.get("covers") or []):
+            if isinstance(cover, str) and cover.startswith("settings."):
+                claims.setdefault(cover.split(".", 1)[1], row.get("id"))
+    missing = sorted(i for i in claims if R.section_by_id(i) is None and i not in SUB_ROWS)
+    check("every settings.* id a feature claims names a Section (or a listed sub-row)",
+          not missing,
+          "; ".join(f"{i} (claimed by {claims[i]})" for i in missing)
+          + " - add it to jarvis_settings_registry.SECTIONS, or to SUB_ROWS above "
+            "with the section it sits in")
+    stale = sorted(i for i in SUB_ROWS if R.section_by_id(i) is not None)
+    check("...and no SUB_ROWS entry has quietly become a section of its own", not stale,
+          f"{stale} - drop it from SUB_ROWS")
 
 
 PC, PHONE = "127.0.0.1", "100.100.5.9"
@@ -158,7 +208,15 @@ def t_every_real_settings_card_is_listed():
     # The phone's "appearance" row is the registry's "appearance-card"; "tail" is
     # a spacer; "floating-avatar" and "voice-switches"/"jump-list" are rows of
     # the same screen reached through Appearance / Voice / the top.
-    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list"}
+    # "jarvis-notify" (2026-10-09) is the same shape for the same reason: it is a
+    # row that opens Android's OWN per-app notification screen and is
+    # deliberately not a Jarvis setting at all (the owner's decision of
+    # 2026-10-09, docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1). The
+    # registry's "notifications" Section stays desktop-only, because the four
+    # per-kind switches and quiet hours really are the PC's, and
+    # _check_phone_declines_the_pc_only_cards below still holds the phone to
+    # that.
+    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",
@@ -168,12 +226,179 @@ def t_every_real_settings_card_is_listed():
               R.find_section(sid.replace("-", " ")) is not None)
     check("'devices' is on both apps, 'crash-notes' is desktop only",
           R.section_by_id("devices").app == "both" and R.section_by_id("crash-notes").app == "desktop")
+    _check_phone_declines_the_pc_only_cards()
+
+
+def _check_phone_declines_the_pc_only_cards():
+    """A section this file says the phone has must really be on the phone.
+
+    Settings-coverage audit, 2026-10-09: `notifications` was declared
+    `app="both"` for months while the phone has no notifications screen at
+    all - its controls are Android's own, per channel. Nothing failed,
+    because the phone half of the two checks above is satisfied by an id
+    that is a desktop card (`s.id not in phone_keys and s.id not in
+    desktop_ids`), so one id could be "both" for a reason that only ever
+    held on the PC. `jarvis-client`'s own `ui/OpenPlace.kt` had the right
+    answer all along ("notifications" is in its PC_ONLY set, so the phone
+    answers "only in Jarvis on your PC"); this reads that same file as text
+    and holds the registry to it, the way OpenPlaceTest reads this file."""
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client"
+          / "ui" / "OpenPlace.kt").read_text(encoding="utf-8")
+    block = re.search(r"val PC_ONLY: Set<String> = setOf\((.*?)\n    \)", kt, re.S)
+    pc_only = set(re.findall(r'"([\w-]+)"', block.group(1))) if block else set()
+    check("OpenPlace.kt's own PC_ONLY set was found and parsed", bool(pc_only), sorted(pc_only))
+    lying = sorted(s.id for s in R.SECTIONS
+                   if s.app in ("both", "phone") and s.id in pc_only)
+    check("no section claims the phone has it while the phone says 'only on your PC'",
+          not lying, f"{lying} - set app=\"desktop\" on each, or take it out of OpenPlace.PC_ONLY")
+    check("'notifications' is desktop only, as the phone's own OpenPlace says",
+          R.section_by_id("notifications").app == "desktop"
+          and "notifications" in pc_only
+          and all(s.id != "notifications" for s in R.sections_for("phone")))
+
+
+def t_jump_list_matches_the_page():
+    """The settings.html jump list, held to the page it is a map of.
+
+    The owner, 2026-10-06: "organize the jump to settings in the settings
+    menu? This is really disorganized" - about forty links in eleven flat
+    rows. The fix groups them under the page's own three bands (Everyday,
+    Rare, What Jarvis does) and, inside each band, under the short groups
+    `docs/ease-audit-2026-09-27/customize.md` proposed and `critic.md:199`
+    kept as "the target order of the jump list".
+
+    WHY THIS TEST AND NOT A REGISTRY FIELD. Checked before the grouping was
+    chosen: `jarvis_settings_registry.py`'s SECTIONS carries an id, its
+    spoken names, `app` and `where` - and NO group and NO order - and
+    `jarvis_menus.py`'s groups (graphics-cards, finance, study, chatbots,
+    goals-projects, home) are feature groups for the hide-a-menu list, not
+    places on this page (most settings cards, and all but three of the jump
+    list's own links, are in no group at all). So there was no grouping to
+    use, and adding one would have made the backend a second, quieter owner
+    of where a card sits on one desktop page. What is checked instead is the
+    two things that can really drift apart: the page's own band order, and
+    the jump list's agreement with it.
+
+    Proves, and does NOT prove:
+      * every jump link points at a real `<section class="card" id=...>` (or
+        the one `<details id="more-options">`) on this page;
+      * no link is listed twice, and none is missing - all of them are still
+        there, which is what "every existing link must keep working" means
+        for a list that only ever adds an anchor;
+      * each band's links ARE that band's cards, in the page's own order -
+        a link that floated to another band, or a card inserted in the wrong
+        place, fails here;
+      * every link is in SECTIONS with app "both"/"desktop", so nothing on
+        this list is a place "open <name>" cannot name.
+    It does NOT prove that clicking a link scrolls anywhere: that needs the
+    page in a browser, and Playwright is not installed here.
+    """
+    settings_html = (REPO / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
+
+    # The page's three bands, in order, with the exact heading each carries.
+    headings = [(m.start(), m.group(1)) for m in
+                re.finditer(r'<h2 class="settings-group-heading">([^<]+)</h2>', settings_html)]
+    check("the page still has its three bands, in this order",
+          [h for _, h in headings] == ["Everyday", "Rare", "What Jarvis does"],
+          [h for _, h in headings])
+
+    # Every card the page has, in page order, split by the band it sits under.
+    card_ids = [m.group(1) for m in
+                re.finditer(r'<section class="card"[^>]*\bid="([^"]+)"', settings_html)]
+    card_ids.append("more-options")          # the one top-level <details>
+    card_pos = {cid: settings_html.index(f'id="{cid}"') for cid in card_ids}
+    band_of = {}
+    for n, (at, name) in enumerate(headings):
+        end = headings[n + 1][0] if n + 1 < len(headings) else len(settings_html)
+        for cid, pos in card_pos.items():
+            # "start-jarvis" and "crash-notes" are cards INSIDE the folded "More
+            # options" (<details id="more-options">), whose own row is the jump
+            # link - they are reached through it, so they are not rows here.
+            # (The same two are the named exceptions in
+            # t_every_real_settings_card_is_listed.)
+            if at < pos < end and cid not in ("start-jarvis", "crash-notes"):
+                band_of[cid] = name
+
+    nav_at = settings_html.index('class="settings-jump"')
+    nav_end = settings_html.index("</nav>", nav_at)
+    nav = settings_html[nav_at:nav_end]
+
+    # Read the list back the way a person does: the band labels divide it, and
+    # every link belongs to the band label above it.
+    listed_by_band = {name: [] for _, name in headings}
+    band_now = None
+    for m in re.finditer(r'<span class="settings-jump-label">([^<]+)</span>'
+                         r'|<a href="#([\w-]+)">', nav):
+        if m.group(1) is not None:
+            band_now = m.group(1)
+        else:
+            check(f"jump link #{m.group(2)} sits under a band label",
+                  band_now in listed_by_band, band_now)
+            if band_now in listed_by_band:
+                listed_by_band[band_now].append(m.group(2))
+
+    by_band = {name: [] for _, name in headings}
+    for cid in card_ids:
+        if cid in band_of:
+            by_band[band_of[cid]].append(cid)
+
+    for name in listed_by_band:
+        check(f"the {name} band lists every card in it, in the page's own order",
+              listed_by_band[name] == by_band[name],
+              f"listed {listed_by_band[name]}, page has {by_band[name]}")
+
+    every = [cid for ids in listed_by_band.values() for cid in ids]
+    check("no jump link is listed twice", len(every) == len(set(every)),
+          sorted({c for c in every if every.count(c) > 1}))
+    # Every href really is on this page - an anchor to nothing scrolls nowhere.
+    check("every jump link points at a real card on this page",
+          all(cid in card_pos for cid in every),
+          sorted(c for c in every if c not in card_pos))
+
+    # ...and every one of them is a place "open <name>" can name.
+    unopenable = [c for c in every
+                  if R.section_by_id(c) is None
+                  or R.section_by_id(c).app not in ("both", "desktop")]
+    check("every jump link is a SECTION this app has", not unopenable, unopenable)
+
+    # The grouping is short rows inside a band, never a third level: a band's
+    # own direct children are its `.settings-jump-place` rows and nothing else.
+    for g in re.findall(r'<div class="settings-jump-group">(.*?)\n        </div>', nav, re.S):
+        check("a band holds only jump rows and its own label",
+              not re.search(r'<a\s', re.sub(r'<div class="settings-jump-place">.*?</div>', "", g, flags=re.S)),
+              g[:80])
+    check("no jump row is empty",
+          all(re.search(r'<a href="#', p) for p in
+              re.findall(r'<div class="settings-jump-place">(.*?)</div>', nav, re.S)))
+
+
+#: A row's `item(key = ...)`: either a quoted string or a `SettingsJump`
+#: constant. The search box (2026-10-09) names `SettingsJump.SEARCH_KEY`, and
+#: the jump list's own row names `SettingsJump.LIST_KEY`, so the screen and
+#: the tests that read it cannot disagree about those two keys by spelling
+#: them twice. `SettingsJumpTest` reads the same two shapes
+#: (jarvis-client/app/src/test/java/com/jarvis/client/SettingsJumpTest.kt,
+#: its own ROW_KEY) - this reader mirrors it, because a reader that only
+#: understood quoted keys silently SKIPPED both rows and then reported the
+#: whole map as shifted by two.
+_ROW_KEY = re.compile(r'item\(key\s*=\s*(?:"([\w.-]+)"|SettingsJump\.(\w+))')
+
+#: A declared position is a plain number OR a `SettingsJump` constant
+#: (`"search" to SettingsJump.SEARCH_KEY_INDEX`), so `SEARCH_KEY_INDEX` is
+#: held to the row it names rather than trusted.
+_JUMP_CONST = re.compile(r'const val (\w+) = "([\w.-]+)"')
+_JUMP_INT = re.compile(r'const val (\w+) = (\d+)')
+
+
+def _settings_jump_source() -> str:
+    return (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+            / "client" / "ui" / "SettingsJump.kt").read_text(encoding="utf-8")
 
 
 def _check_settings_item_index(kt: str):
     """`SettingsScreen.kt`'s own `SETTINGS_ITEM_INDEX` claims a `LazyColumn`
     position for each key it lists - checked here against the REAL, current
-    order of `item(key = "...")` calls in the same file, never trusted as
+    order of `item(key = ...)` calls in the same file, never trusted as
     still accurate.
 
     Bug audit 2026-09-27: this map went stale the moment a concurrent piece
@@ -181,12 +406,43 @@ def _check_settings_item_index(kt: str):
     was one item too early, and nothing caught it because the map was never
     checked against the file's real order, only checked (by the test above)
     for which keys it lists at all. A silent, plausible-looking wrong
-    number is exactly what a presence-only check misses."""
-    real_order = re.findall(r'item\(key\s*=\s*"([^"]+)"', kt)
+    number is exactly what a presence-only check misses.
+
+    Settings search, 2026-10-09: the search box became the FIRST row and the
+    jump list's own row started naming `SettingsJump.LIST_KEY`. Both are real
+    `item(key = ...)` rows, but neither spells its key as a quoted string, so
+    the old quoted-only reader counted NEITHER: every declared position then
+    looked two too high. The map itself was right (search 0, jump-list 1,
+    voice 2, ... limits 22) - the reader was the stale half. A row key and a
+    declared position may now both be a `SettingsJump` constant, resolved
+    from `SettingsJump.kt` itself, so the map is still held to every row it
+    names - the two rows the old reader skipped are now counted rather than
+    ignored. This is what SettingsJumpTest's own ROW_KEY already does."""
+    jump_src = _settings_jump_source()
+    keys = dict(_JUMP_CONST.findall(jump_src))
+    numbers = dict(_JUMP_INT.findall(jump_src))
+    real_order = [quoted or keys.get(const) for quoted, const in _ROW_KEY.findall(kt)]
+    unresolved = sorted({c for q, c in _ROW_KEY.findall(kt) if not q and c not in keys})
+    check("every SettingsJump constant a row key names is a real const val",
+          not unresolved, f"{unresolved} - SettingsJump.kt has no such constant")
     real_index = {key: i for i, key in enumerate(real_order)}
     map_block = re.search(r"SETTINGS_ITEM_INDEX[^{(]*\(\s*(.*?)\n\)", kt, re.S)
-    declared = dict(re.findall(r'"([\w-]+)"\s+to\s+(\d+)', map_block.group(1))) if map_block else {}
+    declared, unresolved_numbers = {}, []
+    if map_block:
+        for key, value in re.findall(r'"([\w-]+)"\s+to\s+([\w.]+)', map_block.group(1)):
+            if value.isdigit():
+                declared[key] = value
+            else:
+                name = value.split(".")[-1]
+                if name in numbers:
+                    declared[key] = numbers[name]
+                else:
+                    unresolved_numbers.append(key)
     check("SETTINGS_ITEM_INDEX's own map block was found and parsed", bool(declared))
+    check("every declared position is a number or a real SettingsJump constant",
+          not unresolved_numbers,
+          f"{unresolved_numbers} - SettingsJump.kt has no such const val, so that "
+            "row's position would go unchecked")
     # "appearance-card" is the desktop's own id, deliberately aliased to the
     # phone's own item key "appearance" (docs/JARVIS-API.md section 58.1's
     # own note on this one intentional name mismatch) - checked against
@@ -209,15 +465,43 @@ def t_open_is_pure_navigation():
                         ("show me the security settings", "security"),
                         ("go to accounts", "account-secrets"),
                         ("take me to what asks first", "asks-first"),
-                        ("open the faq", "faq"),
                         ("show me how jarvis talks", "manner")):
         i = Q.match(phrase)
         check(f"{phrase!r} opens {want!r}", i is not None and i.name == "settings_open"
               and i.f.get("id") == want, i)
+    # "open the faq" opened the Settings card "Help and FAQ" until 2026-10-08.
+    # The card is gone (its questions moved to the Brain's "Tutorials and the
+    # FAQ"), so the phrase must no longer name a settings section - there is no
+    # #faq element left for the window to scroll to, and a section that names a
+    # card that no longer exists is the drift this test is for. What DID stay is
+    # the help itself: the Brain's own menu answers to "faq", "the faq" and
+    # "frequently asked questions" (backend/jarvis_menus.py), which is where the
+    # owner is sent instead - checked right here rather than left implied.
+    i = Q.match("open the faq")
+    check("'open the faq' no longer names a Settings section (the card is gone)",
+          i is None or i.f.get("id") != "faq", i)
+    check("the Brain's Help place still answers to the names 'open the faq' used",
+          {"faq", "the faq", "frequently asked questions"}
+          <= set(M.menu("brain.tab.tutorials").names),
+          M.menu("brain.tab.tutorials").names)
     for phrase in ("open the door", "open the pod bay doors", "show me the money",
-                  "go to sleep"):
+                   "go to sleep"):
         i = Q.match(phrase)
-        check(f"{phrase!r} names no section, so it is not ours", i is None, i)
+        # What this suite is about: none of them names a SECTION, so none of
+        # them is a settings jump. Since 2026-10-10 the two "open ..." ones are
+        # claimed by the other feature that owns those words (jarvis_open.py:
+        # "open the pod bay doors" is a program name this PC will not find, and
+        # it is reported plainly rather than guessed at), so what is checked is
+        # that the answer is NOT a settings jump - never that the phrase is
+        # nobody's.
+        check(f"{phrase!r} names no section, so it is not a settings jump",
+              (i is None) or not i.f.get("id"), i)
+    for phrase in ("open the door", "open the pod bay doors"):
+        got = Q.match(phrase)
+        check(f"{phrase!r} is the app opener's, not this module's",
+              got is not None and got.name == "open_app", got)
+    for phrase in ("show me the money", "go to sleep"):
+        check(f"{phrase!r} is still nobody's", Q.match(phrase) is None, Q.match(phrase))
     r = go("open web search", peer=PHONE)
     check("the reply names the place and carries open_settings, nothing else runs",
           r is not None and r.open_settings == "web-search" and "web search" in r.reply.lower())

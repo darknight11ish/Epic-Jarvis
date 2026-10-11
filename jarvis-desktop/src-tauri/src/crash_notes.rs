@@ -598,19 +598,152 @@ mod tests {
         }
     }
 
+    /// The name for a throwaway file under the OS temp dir.
+    ///
+    /// Pulled out of [`scratch_path`] so a test can assert on the name itself
+    /// - see `the_scratch_name_is_a_legal_windows_file_name`.
+    ///
+    /// WHY THIS IS NOT `{:?}` OF A TIME (2026-10-09). It used to be
+    /// `format!("...-{:?}.json", SystemTime::now())`. On this PC that debug
+    /// print is:
+    ///
+    /// ```text
+    /// SystemTime { intervals: 134360335466685117 }
+    /// ```
+    ///
+    /// The colon after `intervals` is the problem, and it is not a legal
+    /// Windows filename character. NTFS reads everything after a colon as an
+    /// alternate data stream name, so the file on disk was truncated at the
+    /// colon and `fs::write` still reported **success** while nothing was
+    /// stored. The helper's round-trip test then read back 0 notes and failed,
+    /// on Windows only, which is why Linux CI never caught it: a colon is an
+    /// ordinary filename character there, so the same name was perfectly
+    /// legal. Measured on this PC: 717 passed, 2 failed with the real
+    /// `%TEMP%`, 719/719 with `TEMP` inside the checkout.
+    ///
+    /// Nanoseconds since the epoch, printed as plain decimal, are just as
+    /// unique as the debug form and contain nothing Windows objects to. The
+    /// process id and the caller's tag stay in front so a failure names the
+    /// test that left the file behind.
+    fn scratch_file_name(tag: &str) -> String {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        format!(
+            "jarvis-crash-notes-test-{tag}-{}-{nanos}.json",
+            std::process::id()
+        )
+    }
+
     /// A throwaway file under the OS temp dir, unique per call - avoids
     /// adding a `tempfile` dev-dependency to `Cargo.toml` for two tests.
     /// Cleaned up by the caller with [`cleanup`].
     fn scratch_path(tag: &str) -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "jarvis-crash-notes-test-{tag}-{}-{:?}.json",
-            std::process::id(),
-            std::time::SystemTime::now()
-        ))
+        std::env::temp_dir().join(scratch_file_name(tag))
     }
 
     fn cleanup(path: &Path) {
         let _ = std::fs::remove_file(path);
+    }
+
+    /// The scratch name must be something Windows will actually store.
+    ///
+    /// This is the assertion that would have caught the 2026-10-09 failure,
+    /// and it catches it on any platform rather than only where it reproduced:
+    /// the round-trip test below passed on Linux CI while the name was
+    /// illegal, because a colon is an ordinary character there. Checking the
+    /// name itself needs no filesystem, so it cannot be skipped by a temp dir
+    /// that refuses writes, and it names the offending character when it
+    /// fails.
+    #[test]
+    fn the_scratch_name_is_a_legal_windows_file_name() {
+        let name = scratch_file_name("legal-name");
+        for illegal in [':', '\\', '/', '*', '?', '"', '<', '>', '|'] {
+            assert!(
+                !name.contains(illegal),
+                "scratch name {name:?} contains {illegal:?}, which Windows will not store"
+            );
+        }
+        // Control characters are illegal too, and `{:?}` of a time never
+        // produced one - asserted so a future change cannot introduce one
+        // quietly.
+        assert!(
+            !name.chars().any(|c| c.is_control()),
+            "scratch name {name:?} contains a control character"
+        );
+        // A device name is reserved whether or not it has an extension, so
+        // the stem is what gets compared.
+        let stem = name
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_uppercase();
+        for reserved in [
+            "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",
+            "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        ] {
+            assert_ne!(stem, reserved, "scratch name {name:?} is a reserved name");
+        }
+        // Uniqueness was the whole reason the time was in the name; it must
+        // survive the change from `{:?}` to plain nanoseconds.
+        assert_ne!(
+            scratch_file_name("a"),
+            scratch_file_name("a"),
+            "two calls made the same scratch name"
+        );
+    }
+
+    /// A write that reports success must really have stored the bytes.
+    ///
+    /// This is the second half of the 2026-10-09 failure, and it survives the
+    /// name check above being fixed by accident. On the old colon-bearing
+    /// name, NTFS treated everything after the colon as an alternate data
+    /// stream: `fs::write` returned **`Ok`**, `fs::metadata` even reported the
+    /// right length, and yet the ordinary directory listing showed a
+    /// **0-byte** file, because the bytes had gone into the stream and not
+    /// into the file. `fs::read` also succeeded, which is why trusting either
+    /// the write's answer or a read-back alone proved nothing.
+    ///
+    /// Measured directly on this PC, which is where the shape below comes
+    /// from: the file on disk was `...-SystemTime { intervals` at 0 bytes
+    /// while the write said `Ok`.
+    #[test]
+    fn a_successful_write_really_lands_on_disk() {
+        let path = scratch_path("really-written");
+        let payload = serde_json::to_string_pretty(&[CrashNote {
+            when: 7,
+            source: "desktop".into(),
+            kind: "panic".into(),
+            detail: "a real note".into(),
+        }])
+        .expect("json");
+        std::fs::write(&path, &payload).expect("write");
+        // `fs::metadata` is not enough on its own - it reports the size of the
+        // whole path including any stream, which was the misleading part. The
+        // directory entry is what has to be right.
+        let name = path.file_name().expect("file name");
+        let on_disk = std::fs::read_dir(path.parent().expect("parent"))
+            .expect("list")
+            .flatten()
+            .find(|e| e.file_name() == name)
+            .expect("the file the write just made is in the directory")
+            .metadata()
+            .expect("metadata");
+        assert_eq!(
+            on_disk.len(),
+            payload.len() as u64,
+            "the directory entry for {name:?} is {} bytes, not the {} that were written",
+            on_disk.len(),
+            payload.len()
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).expect("read back"),
+            payload,
+            "the write reported success but the file did not keep the bytes"
+        );
+        assert_eq!(load(&path).len(), 1, "the note did not round-trip");
+        cleanup(&path);
     }
 
     #[test]

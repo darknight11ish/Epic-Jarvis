@@ -43,8 +43,12 @@ Not a test (no `test_` prefix). Standard library and git only.
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _gitapply  # noqa: E402  (beside this file; see its docstring)
 
 HERE = Path(__file__).resolve().parent
 PS1 = HERE.parent / "scripts" / "apply-patches.ps1"
@@ -78,8 +82,115 @@ GAP = "# gap"
 #: (Left as it is, so nobody re-derives it: `jarvis_gate.py` is 2 under its
 #: pin. Tightening a pin is its own decision - test_installed_stand_in.py
 #: prints the same note.)
+#:
+#: RAISED 2026-10-06, 22 -> 24, for `jarvis_gate.py`, and both extra hunks are
+#: honest rather than drift - the two names are in `by_patch`:
+#:
+#:   * `chatbot-limits.patch` (this pass) +1. Its `_RISK` hunk sits directly
+#:     after quiz-cloud.patch's own `quiz_cloud_grade` row, whose lines are
+#:     themselves a materialised pre-image, so the context is text only the
+#:     owner's PC holds. There is no earlier patch this could anchor to
+#:     instead: `_RISK`'s last entry before quiz-cloud is 800 lines earlier.
+#:     Its `_NO_RULE_FROM_DENIAL` hunk materialised nothing, so this patch
+#:     costs the walk exactly one hunk.
+#:   * `readpage.patch` +1, already on this branch before this pass. Its third
+#:     hunk anchors to an `_TOOL_ACTIONS` line `inbox-tidy.patch` writes, and
+#:     that patch is not in this branch's 116-entry walk - the same
+#:     different-stacks gap described above, not a patch that drifted.
+#:
+#: Neither can be fixed by editing a patch: what is missing is the owner's own
+#: lines. The pin may come back down when `inbox-tidy.patch` joins the walk.
 RATCHET = {
-    "jarvis_hud.py": 45,
+    #: 46, LOWERED from 47 on 2026-10-06, when `ollama-direct.patch` stopped
+    #: carrying the cloud lane's whole resolution in the HUD and left
+    #: `body["model"]`, the key and the reason to `jarvis_chatbot_api.py`'s
+    #: `lane_state()`. Measured, not argued: with the patch as it was, the walk
+    #: materialised 47 hunks and THREE patches were in `by_patch` for this file
+    #: - `ollama-direct.patch` 3, and then `cloud-one-turn.patch` 1 and
+    #: `chat-stream.patch` 1, both of which had to invent context that
+    #: ollama-direct was supposed to have written and did not. With the smaller
+    #: patch the walk materialises 46 and only `ollama-direct.patch` is there,
+    #: at 4: its one added hunk still needs the owner's own lines, and the other
+    #: two no longer drift. 3 + 1 + 1 became 4 + 0 + 0, which is one hunk less
+    #: and, more to the point, two patches that now anchor on real text. A
+    #: ratchet: it may still only go down.
+    #: Raised 2026-10-08, 46 -> 48, for `retrieve-count.patch`, and both extra
+    #: hunks are honest rather than drift - the patch is in `by_patch`:
+    #:
+    #:   * The count-only retrieval trace (the owner's decision of 2026-10-08,
+    #:     "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B;
+    #:     JARVIS-API section 119). Two hunks in `jarvis_hud.py`, both on text
+    #:     only the owner's PC holds: `retrieve()`'s own closing
+    #:     `return {"hits": pack(hits), ...}` line in the middle of the file,
+    #:     and the `/api/retrieve` handler's `q = (parse_qs(...))[0]` near the
+    #:     end. No earlier patch in this walk writes either, and nothing else
+    #:     in `jarvis_hud.py` was ever patched around them - the nearest
+    #:     patched region for the second is `brain-reads.patch`'s route table,
+    #:     hundreds of lines away. Both hunks were verified to apply to
+    #:     `jarvis-backend/jarvis_hud.py` (this repository's copy of the state
+    #:     the whole stack leaves) with `git apply`, which is the check this
+    #:     walk cannot make; `backend/test_retrieve_count.py` re-runs it. A
+    #:     ratchet: it may still only go down.
+    # prompt-coach.patch (2026-10-08) also contributed one, when it was raised to
+# 47 on this branch alone: its POST hunk is anchored on task-control.patch's own
+# `if route in ("/api/task/pause"` block, and the four lines of leading context
+# above that line are the tail of a route which predates every patch - text only
+# the owner's real file holds. The other hunk was re-anchored onto patch-written
+# lines and no longer needs one. The number above is the walk's own MEASUREMENT
+# with both features in it, not a sum worked out by hand: test_retrieve_count.py
+# asserts the pin equals what it measures, so it must be the measured value.
+    # attention-settings.patch (2026-10-08) adds one more, 48 -> 49: its single
+    # hunk - the interruption budget's route, POST /api/attention/settings -
+    # anchors on the blank line and the `if route == "/api/digest/seen":` that
+    # follow the `/api/attention/unmute` block. That context is text only the
+    # owner's PC holds: the walk's stand-in has a gap there, so the hunk
+    # materialises its pre-image honestly rather than drifting, the same reason
+    # `gate-risk-rows.patch`'s `_RISK` hunk does. Measured, not argued:
+    # `_stack.materialised("jarvis_hud.py")` reads 48 without this patch and 49
+    # with it, and `by_patch` names `retrieve-count.patch: 2` and
+    # `attention-settings.patch: 1`, with `prompt-coach.patch` absent. A
+    # ratchet: it may still only go down.
+    # limits-read.patch (2026-10-08) adds two more, 49 -> 51: GET /api/limits.
+    # Both of its hunks materialise a pre-image for the same honest reason -
+    # they anchor on the HUD's read-only route set and its `/api/attention`
+    # dispatch, and that whole block is text only the owner's PC holds, so the
+    # walk cannot rebuild it. Measured, not argued:
+    # `_stack.materialised("jarvis_hud.py")` reads 49 without this patch and 51
+    # with it, and `by_patch` names `limits-read.patch: 2`. A ratchet: it may
+    # still only go down.
+    # LOWERED 2026-10-09, 51 -> 50, and this one IS a drift fixed rather than a
+    # patch that stopped needing an honest pre-image. `tutorials.patch` was
+    # anchored on quiz-cloud.patch's two print lines, with the banner comment
+    # below them; `chatbot-limits-hud.patch` runs first and writes its own
+    # `chatbot money NOT ON` block between those lines and that comment, so on
+    # the owner's backend the hunk could not match and the walk invented a
+    # pre-image for it - 51, with `by_patch` naming `tutorials.patch: 1`. The
+    # patch now anchors on `chatbot-limits-hud.patch`'s own block instead: the
+    # hunk applies to lines an earlier patch really writes, `tutorials.patch`
+    # is out of `by_patch`, and the walk reads 50. Measured, not argued:
+    # `_stack.materialised("jarvis_hud.py")` reads 51 with the old anchor and
+    # 50 with this one. A ratchet: it may still only go down, and the pin has
+    # to move with a LOWERING too - test_retrieve_count.py asserts this number
+    # EQUALS what the walk measures.
+    # 2026-10-11, and this pin did NOT move: `picture-card.patch`'s one hunk made
+    # the walk read 51, and it was DRIFT rather than an honest pre-image, so the
+    # patch was re-anchored instead. Its hunk sat between `progress.patch` and
+    # `topics.patch`, on `progress.patch`'s block, with `topics.patch`'s own banner
+    # as its trailing context - and `topics.patch` runs AFTER it in `order()`. The
+    # finished file holds both blocks, so the hunk applied to the after-image; the
+    # file as it stands at that patch's own turn does not, which is the state
+    # `apply-patches.ps1` rebuilds by stripping its rehearsal copy and putting the
+    # whole list back on in order. There it would have been one more "will not
+    # apply", refusing the run with NOTHING HAS BEEN CHANGED. Measured, not argued:
+    # `materialised("jarvis_hud.py")` reads 51 with the patch in its old place and
+    # 50 with it moved to just BEFORE `plugin-loader.patch` - the one patch that
+    # must stay last of all (see `backend/test_gate_touches.py`) - anchored on the
+    # OWNER's own lines under `_loopback_companion`, which no patch writes, instead
+    # of on an install block; `by_patch` names `picture-card.patch` in the first
+    # case and not in the second, and `backend/test_picture_card.py` now checks
+    # exactly that, so the drift cannot come back silently. The pin stays 50. A
+    # ratchet: it may still only go down.
+    "jarvis_hud.py": 50,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
     #: is text only the owner's PC holds: the short `"delete it and it is gone"`
@@ -89,7 +200,70 @@ RATCHET = {
     #: pin moves with it. The note above already records that this stack reads
     #: 20 for this file against the old pin of 22 - the pin was loose either way.
     #: 23 is what the walk measures now. A ratchet: it may still only go down.
-    "jarvis_gate.py": 23,
+    #:
+    #: Raised once more, to 25, when this branch and PR #80 met: the two patches
+    #: are independent, so the walk now carries BOTH materialised `_RISK` hunks.
+    #: This branch's own `chatbot-limits.patch` adds the two api-limit actions,
+    #: each needing a `_RISK` row, and the nearest non-materialised `_RISK`
+    #: anchor in this walk is ~800 lines away - the same honest reason as
+    #: `gate-risk-rows.patch`'s, not a patch that drifted. The number below is
+    #: what the walk measures with both patches in it; `test_installed_stand_in.py`
+    #: is what says so, and it may still only go down. (SUPERSEDED below.)
+    #:
+    #: LOWERED 2026-10-06, 25 -> 23, when the walk was read again while this
+    #: branch and PR #89's `main` were merged. The note above called
+    #: `chatbot-limits.patch`'s two materialised hunks honest, and they were not:
+    #: BOTH hunks were anchored on the entry each list held when that patch was
+    #: written - `"youtube_captions_read"` in `_RISK`, `"quiz_cloud_grade"` in
+    #: `_NO_RULE_FROM_DENIAL` - and neither was the last entry any more, because
+    #: `quiz-cloud.patch` and `readpage.patch` add their own entries after them
+    #: and both run earlier in this walk. A hunk that cannot match is
+    #: materialised at the END of the file (see the module docstring), so the
+    #: `_RISK` hunk re-emitted its context lines - `youtube_captions_read` among
+    #: them - and `jarvis_gate.py`'s `_RISK` held that action TWICE. The last row
+    #: wins, so the first was dead code; `test_gate_risk_words.py`'s duplicate
+    #: check is what caught it. Both hunks now name `read_web_page`,
+    #: `readpage.patch`'s own last entry in each of those two lists, so both
+    #: apply to real context: neither is in `by_patch` and the walk reads 23.
+    #: This was never a missing-line problem of the owner's PC's, which is what
+    #: the note above assumed - it was a patch anchored one entry too early. A
+    #: ratchet: it may still go down.
+    #:
+    #: RAISED 2026-10-10, 23 -> 25, for `gate-touches.patch`, and both extra
+    #: hunks are honest rather than drift - the patch is in `by_patch` at 2:
+    #:
+    #:   * Both of its hunks anchor on text NO PATCH IN THIS WALK WRITES, and
+    #:     that is a fact about the gate rather than about this patch. The first
+    #:     sits directly under `_PROTECTED` and `_PROTECTED_RE` (the tuple of
+    #:     nine file names the rule exists for); the second replaces
+    #:     `check()`'s own `hit = _touches_protected(prompt, detail)` call.
+    #:     Every `.patch` here was searched for `_PROTECTED`: the only matches
+    #:     are `gate-outcome.patch`'s CONTEXT lines around that call (`hit =`
+    #:     and the `_audit` line below it), `no-auto-approve.patch`'s REMOVED
+    #:     `if _touches_protected(prompt):`, and this patch's own lines. The
+    #:     tuple itself, the `_touches_protected` body and `check()` are the
+    #:     owner's text in every version of his file, so the walk cannot
+    #:     rebuild them and invents their pre-image - 8 lines for one hunk and
+    #:     7 for the other.
+    #:   * There is no anchor to move to. Every patch that runs earlier in this
+    #:     walk and touches this region (`gate-outcome.patch`,
+    #:     `no-auto-approve.patch`) is itself materialised here, so the nearest
+    #:     text an earlier patch really writes is `gate-entries.patch`'s and
+    #:     `gate-action-name.patch`'s additions to `_TOOL_ACTIONS`, hundreds of
+    #:     lines away. A hunk is materialised when its CONTEXT cannot be found,
+    #:     and no context in this region can be found - which is why
+    #:     `gate-push.patch`, `gate-outcome.patch` and
+    #:     `rebuilt-patches/approval-notice.patch` are already in `by_patch`
+    #:     for this same file.
+    #:   * What it costs, said plainly: the walk cannot verify these two hunks
+    #:     against the owner's file. `backend/test_gate_touches.py` covers that
+    #:     from the other side - it runs the repository's published copy of the
+    #:     gate and checks the patch applies to it and reverses back out - and
+    #:     `jarvis-backend/jarvis_gate.py` holds the very lines the hunks
+    #:     anchor on, so a fresh copy of the owner's file does too.
+    #:
+    #: A ratchet: it may still only go down.
+    "jarvis_gate.py": 25,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,
@@ -176,11 +350,11 @@ def hunks(patch_text: str, target: str) -> list:
     return [("\n".join(h) + "\n", pre) for h, pre in out]
 
 
-def _apply(git: str, d: Path, target: str, hunk: str, *extra: str) -> bool:
+def _apply(git: str, d: Path, target: str, hunk: str, *extra: str, env: dict = None) -> bool:
     p = d / "one.patch"
     p.write_text(f"--- a/{target}\n+++ b/{target}\n{hunk}", encoding="utf-8")
     r = subprocess.run([git, "apply", *extra, "--include", target, str(p)], cwd=d,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     return r.returncode == 0
 
 
@@ -201,6 +375,11 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
         return None, ["git is not installed"]
     patches = order() if patches is None else list(patches)
     d = Path(tempfile.mkdtemp(prefix="jarvis-stack-"))
+    # A scratch folder inside a git work tree makes every `git apply` below
+    # resolve its paths against the repository root instead of `d` - and then a
+    # bare `--include <name>` matches nothing while git still exits 0. See
+    # _gitapply.py: this is what keeps a stand-in from coming back empty.
+    env = _gitapply.env_for(git, d)
     log = []
     gaps = 0
     seen = 0
@@ -214,7 +393,7 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
                 text_of = (HERE / name).read_text(encoding="utf-8")
             for hunk, pre in hunks(text_of, target):
                 seen += 1
-                if _apply(git, d, target, hunk):
+                if _apply(git, d, target, hunk, env=env):
                     continue
                 gaps += 1
                 by_patch[name] = by_patch.get(name, 0) + 1
@@ -223,11 +402,20 @@ def stand_in(target: str, patches=None, *, replace: dict = None, stats: dict = N
                     text += "\n"
                 f.write_text(text + f"{GAP} {gaps}\n" + "\n".join(pre) + "\n",
                              encoding="utf-8")
-                if not _apply(git, d, target, hunk):
+                if not _apply(git, d, target, hunk, env=env):
                     return None, log + [f"{name}: a hunk does not apply even to its own "
                                         f"pre-image:\n{hunk[:400]}"]
                 log.append(f"{name}: materialised {len(pre)} line(s) of the original")
-        return f.read_text(encoding="utf-8"), log
+        text = f.read_text(encoding="utf-8")
+        if seen and not text.strip():
+            # The walk applied hunks and produced nothing: the stand-in is a
+            # lie, and returning it would let a suite assert against "". Say so
+            # instead - a review on 2026-10-08 lost an hour to exactly this.
+            return None, log + [
+                f"{target}: the walk applied {seen} hunk(s) and built an EMPTY file. "
+                "`git apply` matched no path - usually a scratch folder inside a git "
+                "work tree (see _gitapply.py)."]
+        return text, log
     finally:
         if stats is not None:
             stats.update(target=target, hunks=seen, materialised=gaps,

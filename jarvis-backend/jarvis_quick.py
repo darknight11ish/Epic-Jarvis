@@ -1066,6 +1066,9 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _settings_open(s)
     if got is not None:
         return got
+    got = _settings_help(s)
+    if got is not None:
+        return got
     got = _settings_adjust(s)
     if got is not None:
         return got
@@ -1146,6 +1149,29 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    # --- "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    # the owner's request of 2026-10-10) --------------------------------------
+    # LAST among the real matchers, and the placement is the fix, not a
+    # preference. `jarvis_open.parse` reads any sentence beginning with
+    # "open"/"launch"/"start" as naming a program, and `_watch` above owns
+    # "start watching my screen" (jarvis_screen.py, 2026-09-29). Tried before
+    # `_watch`, this claimed that phrase: "start watching my screen" resolved to
+    # a program called "watching my", so the watch session never started and no
+    # screen was ever read. backend/test_screen_turn.py caught it on CI. Last,
+    # it can only claim a phrase no other feature already owns - exactly what
+    # the owner's request adds, and nothing already answered changes hands.
+    #
+    # It still runs before the model: like music and video control (the owner,
+    # 2026-09-27, "no card, only from the owner's own words"), opening a program
+    # the owner already has changes nothing Jarvis holds, and the model gets no
+    # tool for it, so outside text cannot reach it either. "open a chat" (about
+    # this conversation, not a program) and "open web search" (the settings
+    # block's own phrase, always answered `settings_open`) are matched above and
+    # keep their own answers.
+    got = _open(s)
+    if got is not None:
+        return got
+
     # --- an animal request nothing above understood (2026-09-28) ------------------
     # Last, so a reminder or a list that happens to mention "the animal" is
     # never taken for one: a plain question back, never a guess.
@@ -2676,6 +2702,27 @@ def _settings_open(s: str) -> Optional[Intent]:
     return Intent("settings_open", {"id": section.id})
 
 
+#: "What can I change?" (the owner's decision, 2026-10-10). Without this the
+#: question reached the AI model, which invented an answer: some switches it
+#: named did not exist, and it never said that a change which loosens a rule
+#: still raises a card. The answer is built by
+#: jarvis_settings_registry.changeable_words, straight off the real switches.
+_SETTINGS_HELP = re.compile(
+    r"what\s+can\s+i\s+change"
+    r"|what\s+settings\s+can\s+i\s+change"
+    r"|what\s+can\s+(?:you|i)\s+change\s+by\s+(?:talking|asking|voice)(?:\s+to\s+(?:you|jarvis))?"
+    r"|which\s+settings\s+can\s+i\s+change"
+    r"|what\s+settings\s+(?:do\s+you\s+have|are\s+there)"
+    r"|list\s+(?:my\s+|the\s+)?settings"
+    r"|what\s+can\s+i\s+change\s+in\s+settings")
+
+
+def _settings_help(s: str) -> Optional[Intent]:
+    if _SETTINGS_HELP.fullmatch(s):
+        return Intent("settings_help")
+    return None
+
+
 #: The plain on/off settings (jarvis_settings_registry.BOOL_SETTINGS): "turn
 #: on background learning", "switch off lights without asking", "enable
 #: smartwatch notifications", "disable senders in my briefing".
@@ -2704,12 +2751,67 @@ _TOOL_ON = re.compile(r"let\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+
 _TOOL_OFF = re.compile(
     r"(?:don'?t\s+let|stop\s+letting)\s+the\s+ai\s+model\s+(?:read|access|use|check)\s+(.+)")
 
+#: "How much Jarvis may interrupt you" (jarvis_arbiter.py, 2026-10-08) - the
+#: number of times a day it may speak up UNASKED, and the hour the brief
+#: arrives. Digits only, and whole sentences only, like every setting here:
+#: the number is the one thing this must never guess, and a sentence it does
+#: not match exactly falls through to the model rather than picking one.
+#:   "speak up 5 times a day", "let jarvis speak up 2 times a day"
+#:   "speak up less" / "speak up more"      (one step of one, that direction)
+#:   "the brief at 8pm", "the brief at 20", "the digest arrives at 7 in the morning"
+_BUDGET_PER_DAY = re.compile(
+    r"(?:let\s+)?(?:jarvis\s+)?speak\s+up\s+(?:to\s+)?(\d{1,2})\s+times?\s+(?:a|per)\s+day")
+_BUDGET_STEP = re.compile(
+    r"(?:let\s+)?(?:jarvis\s+)?speak\s+up\s+(less|less\s+often|more|more\s+often)")
+_BRIEF_AT = re.compile(
+    r"(?:the\s+)?(?:brief|digest)\s+(?:arrives?\s+|comes?\s+)?at\s+(\d{1,2})\s*"
+    r"(am|pm|in\s+the\s+morning|in\s+the\s+afternoon|in\s+the\s+evening|at\s+night)?")
+
+
+def _brief_hour(hour: int, part: Optional[str]) -> Optional[int]:
+    """A spoken hour as the 0-23 the settings file holds, or None.
+
+    "8" on its own is 8 (the owner reading their own file), "8pm" is 20, and
+    "7 in the morning" is 7. 12am is midnight and 12pm is noon - the two the
+    arithmetic gets wrong if it is not written down."""
+    part = (part or "").strip()
+    if not part:
+        return hour if 0 <= hour <= 23 else None
+    if part in ("am", "in the morning"):
+        if hour == 12:
+            return 0
+        return hour if 1 <= hour <= 11 else None
+    # pm / afternoon / evening / night
+    if hour == 12:
+        return 12
+    return hour + 12 if 1 <= hour <= 11 else None
+
+
+def _budget_intent(s: str) -> Optional[Intent]:
+    m = _BUDGET_PER_DAY.fullmatch(s)
+    if m:
+        return Intent("settings_budget", {"body": {"spoken_per_day": int(m.group(1))}})
+    m = _BUDGET_STEP.fullmatch(s)
+    if m:
+        return Intent("settings_budget", {"step": 1 if m.group(1).startswith("more") else -1})
+    m = _BRIEF_AT.fullmatch(s)
+    if m:
+        hour = _brief_hour(int(m.group(1)), m.group(2))
+        if hour is not None:
+            return Intent("settings_budget", {"body": {"digest_hour": hour}})
+    return None
+
 
 def _settings_adjust(s: str) -> Optional[Intent]:
     try:
         import jarvis_settings_registry as R
     except Exception:
         return None
+    # The interruption budget first: its sentences are the most specific ones
+    # here ("speak up 3 times a day"), so nothing below can swallow one.
+    budget = _budget_intent(s)
+    if budget is not None:
+        return budget
     m = _TOOL_ON.fullmatch(s) or _TOOL_OFF.fullmatch(s)
     if m:
         tool = R.find_tool_target(m.group(1))
@@ -3029,6 +3131,27 @@ _OPEN_CHAT = re.compile(
     r"|open\s+(?:the\s+)?jarvis\s+bar"
     r"|show\s+(?:me\s+)?(?:the\s+)?jarvis\s+bar"
     r"|bring\s+up\s+(?:the\s+)?jarvis\s+bar")
+
+
+def _open(s: str) -> Optional[Intent]:
+    """"open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    the owner's request of 2026-10-10).
+
+    The grammar lives in that module and this only asks it - one place decides
+    what the owner's words name, so the desktop and the phone cannot drift
+    apart over it. A phrase it cannot place (anything that is not an "open
+    ..." sentence) falls through to the model exactly as before.
+    """
+    try:
+        import jarvis_open as OPEN
+    except Exception:
+        return None
+    got = OPEN.parse(s)
+    if got is None:
+        return None
+    what, is_jarvis = got
+    opened = OPEN.resolve(what, is_jarvis)
+    return Intent("open_app", {"opened": opened})
 
 
 def _run_sayable(intent: Intent) -> Result:
@@ -3551,6 +3674,30 @@ class Result:
     # sensitive one stays on screen like any memory answer (route_fields).
     facts: list = field(default_factory=list)
     facts_sensitive: int = 0
+    # "open Notion", "open settings", "open Jarvis settings" (jarvis_open.py,
+    # the owner's request of 2026-10-10): what the app that heard the words
+    # should open, and which of the four kinds it is. Additive, like every
+    # field above - a client that does not know `open_app` (the phone) shows
+    # the answer and opens nothing, which is why the reply says "on this PC".
+    open_app: Optional[str] = None
+    open_app_kind: Optional[str] = None
+    # True when `open_app` is a program the BACKEND named itself (Windows'
+    # own accessories - notepad, calc), so the app opens it as it stands. False
+    # for a name in the owner's own words, which the app resolves against this
+    # PC's own Start menu rather than trusting a guess. Only meaningful when
+    # `open_app_kind` is "app".
+    open_app_built: bool = False
+    # The Jarvis Settings section id when the owner named one ("open web
+    # search" -> "web-search"), or "" for the top of the window ("open Jarvis
+    # settings"). Only ever set when `open_app_kind` is "jarvis": the other
+    # kinds have their own target. A separate field because "" is a real
+    # answer here and `open_app` above is dropped from the route line when it
+    # is empty.
+    open_place: Optional[str] = None
+    # The one extra sentence for a phrase with two real readings ("open
+    # settings" is Windows'; this is how to ask for Jarvis's). Never an error,
+    # never a card: the request was answered.
+    open_app_note: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -3637,6 +3784,18 @@ def _run_settings_open(f: dict) -> Result:
     return Result(f"Opening {name} in Settings.", "settings_open", open_settings=f["id"])
 
 
+def _run_settings_help() -> Result:
+    """"What can I change?" (the owner's decision, 2026-10-10).
+
+    Nothing is changed and no model is used: the words come straight from the
+    real switches (jarvis_settings_registry.changeable_words), so the list
+    cannot promise a setting that is not there. It says plainly that a change
+    which loosens a rule still raises a card, so the answer cannot be read as
+    "everything happens at once"."""
+    import jarvis_settings_registry as R
+    return Result(R.changeable_words(), "settings_help")
+
+
 def _run_menu_visibility(f: dict) -> Result:
     """"Hide the finance menu": no state here, no gate, no model. The reply is the
     same for every device; the route field tells each app what to apply."""
@@ -3652,6 +3811,31 @@ def _run_settings_bool(f: dict, peer, local) -> Result:
         return Result(SETTINGS_MISSING, "settings_bool")
     out = setting.set(f["on"], peer=peer, local=local)
     return Result(out.said, "settings_bool")
+
+
+def _run_settings_budget(f: dict, peer, local) -> Result:
+    """"How much Jarvis may interrupt you", by asking (2026-10-08).
+
+    The rule - and the ONE card a raise needs - lives in
+    jarvis_arbiter.change(), the same function the apps' own route calls, so
+    asking and using the screen cannot drift apart. `step` is the "+1/-1"
+    form ("speak up less"), read against the budget in force right now; a
+    plain number is applied as it is. A raise waits on a card that this lane
+    raises through the gate, exactly like a loosening from a screen."""
+    try:
+        import jarvis_arbiter as AR
+    except Exception:
+        return Result(SETTINGS_MISSING, "settings_budget")
+    body = f.get("body")
+    if body is None:
+        step = int(f.get("step") or 0)
+        now = AR._limit()
+        body = {"spoken_per_day": max(AR.SPOKEN_PER_DAY_MIN,
+                                      min(AR.SPOKEN_PER_DAY_MAX, now + step))}
+    code, out = AR.change(body, peer=peer, local=local)
+    if code >= 400 or out.get("ok") is False:
+        return Result(str(out.get("error") or "That did not work."), "settings_budget")
+    return Result(str(out.get("said") or "Done."), "settings_budget")
 
 
 def _run_settings_asks_first(f: dict, peer, local) -> Result:
@@ -3726,10 +3910,14 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
+    if n == "settings_help":
+        return _run_settings_help()
     if n == "menu_visibility":
         return _run_menu_visibility(f)
     if n == "settings_bool":
         return _run_settings_bool(f, peer, local)
+    if n == "settings_budget":
+        return _run_settings_budget(f, peer, local)
     if n == "settings_asks_first":
         return _run_settings_asks_first(f, peer, local)
     if n == "settings_tool":
@@ -3786,6 +3974,23 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         # (commands.rs, stream_chat, for its floating face); this file does
         # not know or care which app asked.
         return Result("Here you go.", n)
+    if n == "open_app":
+        # "open Notion", "open settings", "open Jarvis settings"
+        # (jarvis_open.py, 2026-10-10). Nothing is opened from here: the app
+        # that heard the owner's words reads `open_app` off its own route
+        # line (route_fields below) and opens it. The desktop does that in
+        # Rust through the Windows shell; the phone cannot, so it says so -
+        # which is also why the sentence says "on this PC".
+        import jarvis_open as OPEN
+        opened = intent.f.get("opened")
+        if opened is None:
+            return Result("I could not tell what to open.", n)
+        return Result(OPEN.words(opened), n,
+                      open_app=(None if opened.kind == "jarvis" else opened.target),
+                      open_app_kind=opened.kind,
+                      open_app_built=(opened.kind == "app" and opened.built),
+                      open_place=(opened.target if opened.kind == "jarvis" else None),
+                      open_app_note=opened.note or None)
     if n.startswith("media_"):
         return _run_media(intent)
     if n.startswith("next_time_"):
@@ -4622,6 +4827,30 @@ def route_fields(res: Result) -> dict:
         # existing reader of X-Jarvis-Route that does not look for this key
         # is unaffected, exactly like `gate` above.
         out["open_settings"] = res.open_settings
+    if res.open_app or res.open_app_kind == "jarvis":
+        # "open Notion", "open settings", "open Jarvis settings"
+        # (jarvis_open.py, the owner's request of 2026-10-10): what to open
+        # and which kind it is. An app that reads this opens it itself (the
+        # desktop, in Rust, through the Windows shell); an app that does not
+        # - the phone - shows the answer and opens nothing, and the answer
+        # says "on this PC" so that is not a claim it cannot keep. Additive,
+        # like open_settings above.
+        #
+        # `jarvis` carries `open_place` instead of `open_app`: it is the
+        # Settings section id, and "" means the top of the window - a real
+        # answer that an empty `open_app` could not carry.
+        if res.open_app:
+            out["open_app"] = res.open_app
+        if res.open_app_kind:
+            out["open_app_kind"] = res.open_app_kind
+        # A boolean, like `inject_memory` above: True when the backend named
+        # the program itself (Windows' own accessories), so the app opens it
+        # straight away instead of looking it up on this PC's Start menu.
+        out["open_app_built"] = bool(res.open_app_built)
+        if res.open_app_kind == "jarvis":
+            out["open_place"] = res.open_place or ""
+        if res.open_app_note:
+            out["open_app_note"] = res.open_app_note
     if res.menu_visibility:
         # "Hide the finance menu" (jarvis_menus.py, 2026-09-30): per device, so each
         # app that hears this applies it to its own menu list. Additive, like

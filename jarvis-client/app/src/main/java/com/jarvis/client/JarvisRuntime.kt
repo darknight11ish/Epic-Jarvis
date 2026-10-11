@@ -34,6 +34,7 @@ import com.jarvis.client.net.PcHelp
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.net.Tasks
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.platform.UpdateChecker
 import com.jarvis.client.widget.ApprovalWidget
@@ -67,6 +68,7 @@ import com.jarvis.client.voice.VoiceTraining
 import com.jarvis.client.voice.liveIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -680,7 +682,15 @@ object JarvisRuntime {
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
         // section 18.1): read from the last handshake, when it is asked.
-        val chatSession = ChatSession(jarvisApi, canTemporary = { can(com.jarvis.client.net.TemporaryChat.CAPABILITY) })
+        val chatSession = ChatSession(
+            jarvisApi,
+            canTemporary = { can(com.jarvis.client.net.TemporaryChat.CAPABILITY) },
+            // "A new conversation starts after ..." (Settings, this phone only):
+            // read at the moment the decision is made, so a change takes effect
+            // with the next question - and a missing or unreadable choice reads
+            // as 30 minutes, never as "never" (ChatHistory.idleNewMsFor).
+            idleWaitMs = { com.jarvis.client.net.ChatHistory.idleNewMsFor(clientSettings.idleNewChoice.value) },
+        )
         // The link check is a lambda, not a value: it is read at the moment
         // "hey Jarvis" ON is asked for, and `actionBlocker` reads the flows.
         val voiceSession = VoiceSession(
@@ -879,10 +889,19 @@ object JarvisRuntime {
         //    itself only in an in-app notice nobody is looking at - which is
         //    the exact failure ApprovalWidget's own comment claims to prevent.
         widgetJob = scope.launch {
-            combine(_pending, _link, _stale) { _, _, _ -> }.collect {
-                ApprovalWidget().updateAll(app)
-                QuickLinkWidget().updateAll(app)
-            }
+            // `settings.security` is in this combine for the same reason
+            // `boardJob` below has it, and it was the one thing missing here
+            // (2026-10-07 bug audit, stream C finding C1). `ApprovalWidget`
+            // reads App lock and "Hide memory lists" at DRAW time, so a card
+            // already on the home screen kept its full notice title and body -
+            // and a one-tap Deny - until something else happened to redraw it.
+            // Switching either setting on redraws it now.
+            combine(_pending, _link, _stale) { _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
+                .collect {
+                    ApprovalWidget().updateAll(app)
+                    QuickLinkWidget().updateAll(app)
+                }
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
@@ -1982,6 +2001,37 @@ object JarvisRuntime {
      */
     suspend fun pcHelp(): PcHelp.Read = PcHelp.readOf(api.pcHelp())
 
+    // -------------------------------------------------------- job list -----
+
+    /**
+     * Reads `/api/tasks` ([Tasks]): work that outlives one chat turn. Counted
+     * only - ids, states, step counts and tool names, never a title or a
+     * step's text. The screen that asked holds the answer, like PC help: the
+     * list is small and there is nothing in it worth keeping in memory.
+     */
+    suspend fun tasks(): Tasks.Read = Tasks.readOf(api.tasks())
+
+    /**
+     * Steers one job: pause, resume, cancel or retry ([Tasks.ACTS]).
+     *
+     * **Approves nothing.** Resume puts the job back in the queue and Retry
+     * tries an interrupted step again; every step still raises its own
+     * approval card when its turn comes, through the same gate as any ordinary
+     * tool call. The screen must never report the job as paused or resumed on
+     * a click - only when a later read says so.
+     */
+    suspend fun taskAct(id: String, act: String): ApiResult<JsonObject> =
+        api.taskAct(id, act)
+
+    /**
+     * Answers a question a job stopped on. **Approves nothing**: the answer
+     * goes into the job list, and whatever the job does next still raises its
+     * own approval card when its turn comes. A blank answer is refused before
+     * anything is sent.
+     */
+    suspend fun taskAnswer(id: String, answer: String): ApiResult<JsonObject> =
+        api.taskAnswer(id, answer)
+
     // -------------------------------------------------------- tutorials ----
 
     /**
@@ -2074,6 +2124,103 @@ object JarvisRuntime {
 
     /** `GET /api/search`. A read: never held. */
     suspend fun webSearch(): ApiResult<JsonObject> = api.webSearch()
+
+    // ------------------------------------------------------- prompt coach ----
+    // docs/PROMPT-COACH-DESIGN.md; docs/JARVIS-API.md section 119; see
+    // [com.jarvis.client.net.PromptCoach], ui/screens/PromptCoachPlate.kt (the
+    // switch) and ui/screens/PromptCoachBar.kt (the chat bar's button and the
+    // advice panel it opens).
+    //
+    // ONE change, off by default: the master switch for the "Coach this"
+    // button. Neither direction raises an approval card - the coach reads only
+    // words the chat is about to send to the same local model, takes no action
+    // and opens no way out of the PC.
+    //
+    // [coach] is the READ half: it reads the words in the box and returns
+    // advice, sends nothing, and keeps nothing. It is deliberately NOT held on
+    // a stale link the way the switch is ([actionBlocker], rule 4). Rule 4 is
+    // about ACTING - "blocks acting when the event stream is stale" - and a
+    // critique acts on nothing: it raises no card, touches no file, runs no
+    // tool, and the owner cannot mistake it for something done, because the
+    // only two things that can follow it are the two buttons that send, and
+    // those go down the chat's own path. Held there, a stale stream would take
+    // the button away for no reason the owner could see.
+
+    /** `GET /api/prompt/coach`. A read: never held. */
+    suspend fun promptCoach(): ApiResult<JsonObject> = api.promptCoach()
+
+    /**
+     * The prompt coach switch. Held on a stale link like every change sent to
+     * the PC ([actionBlocker], rule 4): "at once" means no approval card, not
+     * "works while the link is down". Neither direction asks, so nothing here
+     * waits for a card - [writeNoticingCards] is still used, so this screen can
+     * never say "done" over a card that did turn up while the request was out.
+     * @return the sentence to show under the switch.
+     */
+    suspend fun setPromptCoach(on: Boolean): String {
+        actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPromptCoach(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.said(on, r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                    com.jarvis.client.net.PromptCoach.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * ONE of the four settings beside the switch (the owner's answers,
+     * 2026-10-09): when it speaks up, how blunt it is, what it coaches on,
+     * per-platform behaviour. The same route, the same rules and the same link
+     * gate as [setPromptCoach] - at once, no card either way.
+     *
+     * The line it returns is built by the PC's own answer ([PromptCoach.View],
+     * which the screen re-reads straight after) rather than from words kept on
+     * this side; `view` is the state as last read, so the row's own name is the
+     * PC's.
+     */
+    suspend fun setPromptCoachChoice(
+        key: String,
+        value: String,
+        view: com.jarvis.client.net.PromptCoach.View? = null,
+    ): String {
+        actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPromptCoachChoice(key, value) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.saidChoice(key, r.value, view)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                    com.jarvis.client.net.PromptCoach.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * "Coach this": the words in the box, with the last few turns, read for
+     * advice. A read - never held on a stale link (see the block above).
+     *
+     * The PC's own refusal is the PC's own sentence ([PromptCoach.Read.Refused]):
+     * "That is too short to coach - write a little more and try again.", "The
+     * prompt coach is switched off." (the PC's `OFF_LINE`), "Jarvis could not
+     * find the model on this PC, so there is nothing to coach with.", or the
+     * sentence that says the model stayed silent. None of them is re-worded
+     * here, and none of them is a generic failure.
+     */
+    suspend fun coach(
+        text: String,
+        history: List<com.jarvis.client.net.PromptCoach.Turn>,
+    ): com.jarvis.client.net.PromptCoach.Read =
+        when (val r = api.coach(text, history)) {
+            is ApiResult.Ok -> com.jarvis.client.net.PromptCoach.classify(r.value.code, r.value.body)
+            is ApiResult.Failed -> if (com.jarvis.client.net.PromptCoach.missing(r.error)) {
+                com.jarvis.client.net.PromptCoach.Read.Missing
+            } else {
+                com.jarvis.client.net.PromptCoach.Read.Failed(describe(r.error))
+            }
+        }
 
     // ------------------------------------------------ what Jarvis can reach ----
     // The Muse audit, 2026-09-25 - see [com.jarvis.client.net.Reach] and
@@ -2318,6 +2465,75 @@ object JarvisRuntime {
         actionBlocker()?.let { return it }
         val body = com.jarvis.client.net.Thinking.bodyString(role, level)
         return com.jarvis.client.net.Thinking.replyLine(api.thinkingPost(body), level)
+    }
+
+    // ------------------------------------------ limits and frequencies ----
+
+    /**
+     * `GET /api/limits` - "Limits and how often Jarvis does things" on the
+     * phone's Settings (the PC's own `jarvis_limits.py` table). The PC answers
+     * with this phone's own view, and [com.jarvis.client.net.Limits.offered]
+     * filters `pc_only` again. A read: never held on a stale link.
+     */
+    suspend fun limits(): ApiResult<JsonObject> = api.limits()
+
+    /**
+     * ONE change to ONE limit - the row's key and its new value
+     * ([com.jarvis.client.net.Limits.body]).
+     *
+     * Held on a stale link like every change sent to the PC ([actionBlocker],
+     * rule 4): turning a number UP raises an approval card on the PC, and a
+     * card is a decision, not a setting. The PC's OWN sentence is what comes
+     * back and is what the plate shows; a change that did not go through ALSO
+     * goes into the shared [notice], the way [setMuted]'s failure does, so a
+     * refusal is never only a line inside one plate. The screen re-reads the
+     * row afterwards, because a 2xx can mean "a card is waiting there" and
+     * never means "it is on".
+     *
+     * BOTH HALVES OF THE ANSWER COME BACK (2026-10-10), not just the sentence:
+     * the plate has to be able to say that the save did NOT happen, which is
+     * what [com.jarvis.client.net.Limits.Answer.changed] is. This call used to
+     * return the sentence alone, so a failed save was drawn exactly like a
+     * successful one.
+     */
+    suspend fun setLimit(key: String, value: JsonElement): com.jarvis.client.net.Limits.Answer {
+        actionBlocker()?.let { return com.jarvis.client.net.Limits.Answer(it, changed = false) }
+        val answer = com.jarvis.client.net.Limits.answer(
+            api.setLimit(com.jarvis.client.net.Limits.body(key, value)),
+        )
+        if (!answer.changed) _notice.value = answer.sentence
+        return answer
+    }
+
+    // ---------------------------------------- the interruption budget ----
+
+    /**
+     * ONE change to the interruption budget ([com.jarvis.client.net.AttentionSettings.body]):
+     * how many times a day Jarvis may speak up unasked, or the hour the morning
+     * brief arrives - the two numbers the Attention card used to be able to read
+     * and not change.
+     *
+     * Held on a stale link like every change sent to the PC ([actionBlocker],
+     * rule 4), exactly as [setLimit] and [setMuted] are: raising the count puts
+     * an approval card to the owner on the PC, and a card is a decision, not a
+     * setting. The PC's OWN sentence is what comes back and what the plate
+     * shows, and anything that did not go through ALSO goes into the shared
+     * [notice], so a refusal is never only a line inside one plate.
+     *
+     * `GET /api/attention` is re-read after EVERY attempt, whatever the answer
+     * was - the `LimitsPlate` habit, and for the same reason: a 2xx can mean "a
+     * card is waiting there" and never means "it is on", and an out-of-date
+     * count or hour on this card would be a number the owner reads and trusts.
+     * A read is cheap, never held on a stale link, and this card draws from it.
+     */
+    suspend fun setAttentionSettings(key: String, value: Int): String {
+        actionBlocker()?.let { return it }
+        val answer = com.jarvis.client.net.AttentionSettings.answer(
+            api.setAttentionLimit(com.jarvis.client.net.AttentionSettings.body(key, value)),
+        )
+        if (!answer.changed) _notice.value = answer.sentence
+        refreshAttention()
+        return answer.sentence
     }
 
     // ------------------------------------------ sun, moon and weather ----
@@ -2890,19 +3106,54 @@ object JarvisRuntime {
     }
 
     /**
+     * Whether the last `POST /api/appearance` this phone made actually landed:
+     * true once one answered OK, false once one failed, null until one is
+     * tried.
+     *
+     * Not reset by a handshake, unlike [appearanceRoute] - a handshake only
+     * re-asks whether the route exists, and this answer is about what a send
+     * already did. A send to a backend that has since gone away shows up here
+     * the moment the next send fails, which is the honest moment to say so.
+     *
+     * Read by the Appearance screen, which used to tell the owner the face and
+     * colours "are sent to your desktop" whenever the backend had the
+     * `appearance` capability - while [pushAppearance] threw the `ApiResult`
+     * away, so a dead link or a refused POST still got the claim (UI audit
+     * 2026-10-05, finding A1). The words now come from
+     * [com.jarvis.client.AppearanceShared], which needs this answer.
+     */
+    private val _appearanceSent = MutableStateFlow<Boolean?>(null)
+    val appearanceSent: StateFlow<Boolean?> = _appearanceSent.asStateFlow()
+
+    /**
      * Pushes this device's face/bindings so the owner's other device picks
-     * it up - called after any local change to either. Same silent-on-
-     * failure reasoning as [refreshAppearance]: this is a convenience sync,
-     * not a decision, and nothing on this screen depends on it succeeding.
+     * it up - called after any local change to either. Silent on screen: this
+     * is a convenience sync, not a decision, and nothing on this screen acts
+     * on it. It is NOT silent about the answer any more - the Appearance
+     * screen's own paragraph says whether the desktop has the change, so the
+     * owner is never told a send happened that did not (finding A1).
      */
     suspend fun pushAppearance() {
         if (!can("appearance")) {
             // Ask first, without applying what comes back: applying it here
             // would overwrite the change this push is about to send.
             if (appearanceRoute == null) noteAppearanceRoute(api.getAppearance())
-            if (appearanceRoute != true) return
+            if (appearanceRoute != true) {
+                // No route, so nothing was sent. False rather than null: the
+                // screen's group has to be able to say the change is on this
+                // phone only, and "Not synced: your desktop doesn't support it
+                // yet" is the same answer said with the capability it lacks.
+                _appearanceSent.value = false
+                return
+            }
         }
-        api.postAppearance(appearance.toSyncDocument().toString())
+        val result = api.postAppearance(appearance.toSyncDocument().toString())
+        // The one line that was the whole bug: the result used to be dropped
+        // on the floor. `noteAppearanceRoute` still learns whether the route
+        // exists; this learns whether the send arrived, which is a different
+        // question and the one the owner was being lied to about.
+        noteAppearanceRoute(result)
+        _appearanceSent.value = result is ApiResult.Ok
     }
 
     /**
@@ -3159,7 +3410,7 @@ object JarvisRuntime {
                 val ledger = async { api.probe("/api/ledger").asSection() }
                 val skills = async { api.probe(com.jarvis.client.net.Skills.PATH).asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
-                val contentRisk = async { api.probe("/api/content-risk").asSection() }
+                val contentRisk = async { api.probe(com.jarvis.client.net.ContentRisk.PATH).asSection() }
                 val secondCardRead = async { refreshSecondCard() }
                 val bigModelRead = async { refreshBigModel() }
                 val hardwareRead = async { refreshHardware() }
@@ -3236,6 +3487,43 @@ object JarvisRuntime {
     suspend fun refreshMemoryQueue() {
         val (memory, read) = api.probe(MemoryCards.PENDING_PATH).asSection()
         _brain.update { it.copy(memory = memory, memoryRead = read) }
+    }
+
+    /**
+     * Just the content-risk panel - the second reader of that route, on "Past
+     * approvals" ([com.jarvis.client.ui.screens.ContentRiskSection]), where the
+     * phone draws the desktop's read-only Content risk card. The Brain reads the
+     * same route as part of its whole-board refresh; this is for the screen that
+     * wants that one answer and nothing else on the board.
+     *
+     * Leaves [BrainSnapshot.fetchedAtMs] alone, like [refreshMemoryQueue]: only
+     * this one section was read, and stamping the board would make Brain claim
+     * everything on it had just been read.
+     *
+     * The keep-on-failure rule is the same one [refreshBrain] applies, written
+     * once here so the two readers cannot disagree: a FAILED check keeps the
+     * last latch it saw (with its age), because a latch that vanishes because
+     * the check failed reads as "nothing is raising the tier" - which the phone
+     * does not know. An ABSENT route (404/503: a PC with no scanner) clears it,
+     * because that is a fact about the PC, not a failed check.
+     */
+    suspend fun refreshContentRisk() {
+        val (data, read) = api.probe(com.jarvis.client.net.ContentRisk.PATH).asSection()
+        val now = System.currentTimeMillis()
+        _brain.update { prev ->
+            prev.copy(
+                contentRisk = when (read) {
+                    is SectionRead.Failed -> prev.contentRisk
+                    else -> data
+                },
+                contentRiskAtMs = when (read) {
+                    SectionRead.Read -> now
+                    is SectionRead.Failed -> prev.contentRiskAtMs
+                    else -> 0L
+                },
+                contentRiskRead = read,
+            )
+        }
     }
 
     /**
@@ -4082,6 +4370,81 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------- how long the hand-off stays on offer ----------
+    // The owner's decision of 2026-10-08 ("make this a setting for both options
+    // with 1 as the default"); backend/jarvis_handoff_mode.py; see
+    // [com.jarvis.client.net.Handoff]. This phone shows what the PC says and
+    // sends one word: "Stop early" (the default) ends the offer after about a
+    // minute and the PC says which window it is stuck on, or "Keep offering it"
+    // keeps it for the full 15 minutes. Choosing the second is a loosening, so
+    // it raises ONE approval card on the PC with Windows Hello; choosing the
+    // first is instant, from either app.
+
+    /** `GET /api/chatbot/handoff_mode`. */
+    suspend fun handoffModeSettings(): ApiResult<JsonObject> = api.handoffModeSettings()
+
+    /**
+     * The choice. "Keep offering it" is held on a stale link (rule 4) and
+     * raises an approval card on the PC; "Stop early" is NEVER held - it only
+     * makes Jarvis do less (@return the sentence to show under the choices).
+     */
+    suspend fun setHandoffMode(mode: String): String {
+        val body = com.jarvis.client.net.HandoffMode.body(mode)
+            ?: return "That is not one of the two choices."
+        if (mode != com.jarvis.client.net.HandoffMode.STOP_EARLY) {
+            actionBlocker()?.let { return it }
+        }
+        return when (val r = writeNoticingCards { api.setHandoffMode(body) }) {
+            is ApiResult.Ok -> when (val o = r.value) {
+                is com.jarvis.client.net.DesktopWrite.Outcome.Refused ->
+                    "Not changed. " + o.why
+                is com.jarvis.client.net.DesktopWrite.Outcome.Done -> o.said
+                    ?: com.jarvis.client.net.HandoffMode.OFF_NOW
+                is com.jarvis.client.net.DesktopWrite.Outcome.Waiting ->
+                    com.jarvis.client.net.HandoffMode.WAITING_LINE
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
+    // --------------- what a captcha does about its browser window ---------
+    // The owner's decision of 2026-10-09 ("1 by default with the option for 2
+    // in the settings of Jarvis"); backend/jarvis_handoff_front.py; see
+    // [com.jarvis.client.net.HandoffFront]. This phone shows what the PC says
+    // and sends one word: "Leave it where it is" (the default) touches no
+    // window at all, while "Bring it to the front" raises and activates that
+    // one stuck window. Choosing the second is a loosening, so it raises ONE
+    // approval card on the PC with Windows Hello; choosing the first is
+    // instant, from either app.
+
+    /** `GET /api/chatbot/handoff_front`. */
+    suspend fun handoffFrontSettings(): ApiResult<JsonObject> = api.handoffFrontSettings()
+
+    /**
+     * The choice. "Bring it to the front" is held on a stale link (rule 4) and
+     * raises an approval card on the PC; "Leave it where it is" is NEVER held -
+     * it only makes Jarvis do less (@return the sentence to show under the
+     * choices).
+     */
+    suspend fun setHandoffFront(mode: String): String {
+        val body = com.jarvis.client.net.HandoffFront.body(mode)
+            ?: return "That is not one of the two choices."
+        if (mode != com.jarvis.client.net.HandoffFront.LEAVE_IN_PLACE) {
+            actionBlocker()?.let { return it }
+        }
+        return when (val r = writeNoticingCards { api.setHandoffFront(body) }) {
+            is ApiResult.Ok -> when (val o = r.value) {
+                is com.jarvis.client.net.DesktopWrite.Outcome.Refused ->
+                    "Not changed. " + o.why
+                is com.jarvis.client.net.DesktopWrite.Outcome.Done -> o.said
+                    ?: com.jarvis.client.net.HandoffFront.OFF_NOW
+                is com.jarvis.client.net.DesktopWrite.Outcome.Waiting ->
+                    com.jarvis.client.net.HandoffFront.WAITING_LINE
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     /**
      * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
      * to decide whether to store anything at all - the cached last-known
@@ -4176,6 +4539,27 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Devices.retireSaid(r.value.first, r.value.second)
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
         }
+
+    /**
+     * Name ONE device (docs/MULTI-DEVICE-DESIGN.md, the first slice): the
+     * owner's own name for a device he already paired, kept beside its key on
+     * the PC. Immediate and never held on a stale link, like Remove - a label
+     * grants nothing and revokes nothing. An empty [label] clears it, and the
+     * device goes back to the name it gave itself at pairing.
+     *
+     * A label the PC could never accept is refused here first, in the PC's own
+     * words, so it never makes the round trip. @return the sentence to show.
+     */
+    suspend fun renameDevice(device: com.jarvis.client.net.Devices.Device, label: String): String {
+        val problem = com.jarvis.client.net.Devices.labelProblem(label)
+        if (problem != null) return problem
+        return when (val r = api.devicesPost(com.jarvis.client.net.Devices.LABEL_PATH,
+            com.jarvis.client.net.Devices.labelBody(device.id, label))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Devices.labelSaid(
+                r.value.first, r.value.second, device.displayName)
+            is ApiResult.Failed -> "Not named. " + describe(r.error)
+        }
+    }
 
     // ------------------------------------------------ signed approvals ----
     // docs/PAIRING-DESIGN.md §11; the words and rules are in [SignedApproval].
@@ -4420,6 +4804,33 @@ object JarvisRuntime {
                 com.jarvis.client.net.ChatSources.Read.Failed(describe(r.error))
             }
         }
+
+    /**
+     * `GET /api/retrieve?q=...&count=1` - "3 recalled · 2 near" under an
+     * answer, and never a word of what was recalled (the owner's decision of
+     * 2026-10-08, "Just the number"; [com.jarvis.client.net.RetrieveCount]).
+     *
+     * A read: never held on a stale link, and **nothing is sent at all**
+     * unless the PC's handshake says it has the count-only read - on an
+     * older PC the same question would come back with the matched facts,
+     * documents and Logseq pages themselves, and the phone must never be
+     * sent those. The reply is read as two numbers or dropped entirely.
+     */
+    suspend fun retrieveCount(question: String?): com.jarvis.client.net.RetrieveCount.Read {
+        if (!can(com.jarvis.client.net.RetrieveCount.CAPABILITY)) {
+            return com.jarvis.client.net.RetrieveCount.Read.Missing
+        }
+        return when (val r = api.retrieveCount(question)) {
+            is ApiResult.Ok -> com.jarvis.client.net.RetrieveCount.parse(r.value)
+                ?.let { com.jarvis.client.net.RetrieveCount.Read.Shown(it) }
+                ?: com.jarvis.client.net.RetrieveCount.Read.Missing
+            is ApiResult.Failed -> if (com.jarvis.client.net.RetrieveCount.missing(r.error)) {
+                com.jarvis.client.net.RetrieveCount.Read.Missing
+            } else {
+                com.jarvis.client.net.RetrieveCount.Read.Failed(describe(r.error))
+            }
+        }
+    }
 
     /**
      * `GET /api/chat/table?id=` - the spending table under an answer
@@ -6919,6 +7330,16 @@ object JarvisRuntime {
     /** The alert already raised, so one pause alerts once. */
     @Volatile private var handoffAlerted: String? = null
 
+    private val _handoffStuck = MutableStateFlow<Pair<String, String>?>(null)
+
+    /**
+     * The PC's own line for the window Jarvis is stuck on (the owner's setting
+     * of 2026-10-08: "Stop early"), read from `handoff.stuck` - or null. Shown
+     * on the "Solve it here" screen once the offer has ended that way, so the
+     * owner is told plainly which window to solve the puzzle in on the PC.
+     */
+    val handoffStuck: StateFlow<Pair<String, String>?> = _handoffStuck.asStateFlow()
+
     private val _handoffOpen = MutableStateFlow(false)
 
     /**
@@ -6946,6 +7367,9 @@ object JarvisRuntime {
     private fun noteHandoff(status: JsonObject?) {
         val o = com.jarvis.client.net.Handoff.offer(status)
         _handoffOffer.value = o
+        // "Stop early" (the owner's setting of 2026-10-08): the PC's own line
+        // naming the window it is stuck on, or null. Never invented here.
+        _handoffStuck.value = com.jarvis.client.net.Handoff.stuck(status)
         val ctx = appContext ?: return
         if (o == null) {
             if (handoffAlerted != null) com.jarvis.client.service.HandoffNotifier.cancel(ctx)

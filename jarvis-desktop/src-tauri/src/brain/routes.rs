@@ -25,6 +25,13 @@ const READ_ROUTES: &[(&str, &str)] = &[
     ("compute", "/api/compute"),
     ("skills", "/api/skills"),
     ("jobs", "/api/jobs"),
+    // The job list (2026-10-08, JARVIS-API section 118): work that outlives
+    // one chat turn. Counted only — ids, states, kinds, step counts and tool
+    // names, never the text of a note or a task title — the same rule
+    // jarvis_task_control.status() follows, so this cannot become a new way
+    // for private words to reach a screen. Read-only: every steering action
+    // is a POST on purpose, through [`brain_task_act`].
+    ("tasks", "/api/tasks"),
     ("undo", "/api/undo"),
     // "Activity" (ease-of-use audit, 2026-09-27, row 11): past approvals,
     // read-only. The SAME route [`crate::stream`]'s own polling reads for
@@ -111,6 +118,15 @@ mod tests {
             "/api/shutdown",
             "/api/undo/revert",
             "/api/jobs/cancel",
+            // The job list's steering actions (2026-10-08). They are POSTs
+            // for a reason and must never be reachable through the read
+            // grant: Pause and Cancel stop work, Resume puts a job back in
+            // the queue, Retry tries an interrupted step again, and the
+            // input route carries the owner's own words into the job list.
+            // None of them approves anything — a resumed or retried step
+            // still raises its own approval card when its turn comes.
+            "/api/tasks/act",
+            "/api/tasks/input",
             "/api/holds/cancel",
             "/api/watch/add",
             "/api/watch/remove",

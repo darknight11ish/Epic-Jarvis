@@ -76,6 +76,34 @@ TITLES = {
     "search_the_web": "search the web",
     # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
     "chatbot_session": "hold a conversation with an AI chatbot for you",
+    # jarvis_chatbot_limits.py (2026-10-06): raising a monthly API limit is a
+    # loosening, so it raises ONE card plus Windows Hello; lowering one,
+    # removing one, correcting a price and resetting one tighten or correct, so
+    # they need no card at all. Two names for one direction of travel, because
+    # the owner-check attaches Windows Hello to the action, not the direction.
+    "raise_api_limit": "raise a chatbot's monthly spending limit",
+    "lower_api_limit": "lower a chatbot's monthly spending limit",
+    # jarvis_arbiter.py (2026-10-08): the interruption budget. ONE name, for the
+    # raise only - turning the budget DOWN asks nothing and needs no card, so it
+    # has no action for a card to be worded for. The card says how many times a
+    # day Jarvis may speak up, because that is the number the owner is agreeing
+    # to, not "interruptions" in the abstract.
+    "raise_attention_budget": "let Jarvis interrupt you more often",
+    # jarvis_limits.py (2026-10-08): the limits and frequencies the owner can
+    # change, ONE name for every one of them - the card's own words carry which
+    # limit and how far. Only the RAISE is named, because turning a number DOWN
+    # asks nothing and needs no card; the card itself says the limit and both
+    # numbers ("How long you can undo: change it from 24 to 168...").
+    "raise_a_limit": "let Jarvis do more, for longer, or more often",
+    # The ONE limit whose loosening goes the OTHER way (jarvis_limits.py, the
+    # owner's decision of 2026-10-08): LOWERING the voice check's bar means more
+    # clips count as the owner's voice, so a lowering is the change that asks.
+    # `raise_a_limit` would be a lie over that card, and this row needs its own
+    # name for the same reason the chatbot limits have two ("raise_api_limit" /
+    # "lower_api_limit"): the owner-check attaches Windows Hello to the action
+    # NAME, not to a direction. Making the bar stricter asks nothing at all, so
+    # there is no action for that direction to be worded for.
+    "lower_the_voice_check_bar": "lower the bar for your voice check",
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",
@@ -161,6 +189,31 @@ TITLES = {
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
     "phone_notifications_read": "start reading notifications from apps you choose on your phone",
+    # --- the captcha hand-off (jarvis_handoff_mode.py, the owner's decision of
+    # 2026-10-08): keeping the live picture of one of the owner's own browser
+    # windows on offer for the full 15 minutes instead of about a minute.
+    "handoff_keep_offering": "keep the phone's live view on offer for 15 minutes",
+    # --- what a captcha does about its browser window (jarvis_handoff_front.py,
+    # the owner's decision of 2026-10-09): bringing that one stuck window to
+    # the front instead of leaving it exactly where it is.
+    "handoff_bring_to_front": "bring the stuck browser window to the front",
+    # --- the owner's uncensored opt-ins, BOTH halves (jarvis_optin_models.py,
+    # the owner's OWN decision of 2026-10-10, Decision 5): one clearly-labelled
+    # choice for fiction and role-play, and the abliterated models already on
+    # this PC offered as choices with no new download. Two separate switches,
+    # both off by default, and turning either one ON is ONE card.
+    "uncensored_models_enable": "offer the uncensored AI models already on this PC",
+    "fiction_roleplay_enable": "turn on a separate lane for fiction and role-play",
+    # --- Docker (jarvis_docker.py, the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list,
+    # and start/stop for one. The words are the module's own: `card_text()` asks
+    # "Start <name> on this PC?" / "Stop <name> on this PC?", and `WORDS["detail"]`
+    # says "the containers it uses on this PC". A start gives Jarvis more, so it
+    # is tier "ask" and always raises ONE card; a stop gives it less and is
+    # expected to be instant, but it still goes through the gate and takes tier
+    # "ask" on a fresh install (unknown_action_tier), so it needs a phrase too.
+    "docker_service_start": "start one of the containers it uses on this PC",
+    "docker_service_stop": "stop one of the containers it uses on this PC",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
     # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)

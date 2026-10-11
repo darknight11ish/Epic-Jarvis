@@ -162,7 +162,13 @@ internal fun FaceEditor(
         )
 
         Setting(
-            title = "Quality",
+            // "Quality" until 2026-10-09, and it is the SAME stored field and the
+            // same control as "Sharpness" under Animal options - the two names
+            // sat on one screen over one value (first Android audit, finding 12).
+            // Sharpness is what the rest of the app calls it: the section that
+            // draws it there, and every sentence Jarvis says about it
+            // (net/AnimalOptions.kt, ChatSession.kt).
+            title = "Sharpness",
             caption = when {
                 saver -> null
                 auto -> "Auto is using ${live.tier.label}. Picking one turns Auto adjust off."
@@ -339,7 +345,19 @@ private fun RowScope.Swatch(
                     Modifier
                 },
             )
-            .pressable(role = Role.RadioButton, onClick = { onPick(colour) }),
+            .pressable(
+                role = Role.RadioButton,
+                // The one place that opts out of pressable's new 48dp minimum
+                // (UI audit 2026-10-05, finding A4). Ten columns across a
+                // phone's plate are about 23-31dp each, so a 48dp-tall target
+                // here is 48dp TALL against a 23dp WIDE column: every swatch
+                // in the 5x10 grid becomes a rectangle and the palette grows
+                // from about 115dp to 240dp. The grid would have to go to five
+                // columns to fit real targets, which is a redesign of the
+                // face editor, not a bug fix. Reported rather than forced.
+                minTouchTarget = 0.dp,
+                onClick = { onPick(colour) },
+            ),
     )
 }
 

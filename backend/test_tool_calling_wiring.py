@@ -152,8 +152,24 @@ def t_the_tool_branch_calls_run_local_turn_with_the_enabled_tools_whitelist():
           "jarvis_agent.run_local_turn(" in src)
     check("enabled_tools is passed, not omitted (which would mean every tool, unfiltered)",
           "enabled_tools=" in src)
-    check("it reads the same [tools].enabled config collect_tools() uses",
-          'cfg.get("tools")' in src or "cfg.get('tools')" in src)
+    # 2026-10-06 (PR #80, chat-stream.patch): the condition above this call no
+    # longer reads [tools].enabled. It asks whether jarvis_agent is new enough
+    # to run a turn at all (`_agent_ok`), and the owner's actual choice travels
+    # in the whitelist instead. That is the one-source fix working, not a
+    # regression: the old inline read answered from the inherited
+    # ~/.openjarvis/config.toml, in which 24 of 27 names are not tools here, so
+    # the owner's own "What asks first" switch wrote a file this turn never
+    # read and could not do the one thing it promises. This check is therefore
+    # re-aimed at the thing it was really guarding - that the whitelist has ONE
+    # source - and it fails if a second, independent read of the config creeps
+    # back in beside it. It went unnoticed because this suite needs the real
+    # jarvis_hud.py, so CI skips it and the owner's PC is the only place it
+    # runs.
+    check("the whitelist comes from enabled_tools_for_turn(), the one source "
+          "collect_tools() reads too - not a second read of [tools].enabled",
+          "enabled_tools_for_turn(" in src)
+    check("...and tools are still gated to the local lane alone",
+          "_agent_ok" in src or ("tools" in src and "enabled" in src))
     check("announce is wired to _activity, the same doorbell every other capability uses",
           "announce=" in src and "_activity(" in src)
 

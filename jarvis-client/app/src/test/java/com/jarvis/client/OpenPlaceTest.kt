@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.ui.OpenPlace
 import com.jarvis.client.ui.Screen
+import com.jarvis.client.ui.screens.PlateList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,7 +20,19 @@ class OpenPlaceTest {
         assertEquals(OpenPlace.Where.Go(Screen.FAQ, null), OpenPlace.whereFor("faq"))
         assertEquals(OpenPlace.Where.Go(Screen.FAQ, "about"), OpenPlace.whereFor("about"))
         assertEquals(OpenPlace.Where.Go(Screen.CHECKS, "connection"), OpenPlace.whereFor("connection"))
-        assertEquals(OpenPlace.Where.Go(Screen.BRAIN, "briefing"), OpenPlace.whereFor("briefing-settings"))
+        // The phone's own Brain plates (BrainScreen.kt). "spending" belongs in
+        // this list and was missing from it - it sat in OpenPlace.PC_ONLY, so
+        // "open spending" on the phone answered "only in Jarvis on your PC"
+        // although the phone draws the Spending plate (`item(key =
+        // "spending")`, menu "settings.spending", available on the phone in
+        // contract/menu-cases.json). Adding it here is what would have caught
+        // that (2026-10-08).
+        for ((id, key) in listOf(
+            "briefing-settings" to "briefing",
+            "spending" to "spending",
+        )) {
+            assertEquals(id, OpenPlace.Where.Go(Screen.BRAIN, key), OpenPlace.whereFor(id))
+        }
         assertEquals(OpenPlace.Where.Go(Screen.VOICES, null), OpenPlace.whereFor("voices"))
     }
 
@@ -88,9 +101,26 @@ class OpenPlaceTest {
             val section = where.section ?: continue
             val file = files[where.screen] ?: continue
             val src = repoFile(dir + file).readText()
-            assertTrue("$id: $file has no item(key = \"$section\")", src.contains("item(key = \"$section\")"))
+            assertTrue("$id: $file draws no plate/item named \"$section\"", src.draws(section))
         }
     }
+
+    /**
+     * Does this screen draw the plate/item named [name]?
+     *
+     * Brain's plates go through `plate("...")` since 2026-10-10 (BrainSections.kt):
+     * one recorder writes their item keys, `brain-plate:<name>`, which is what
+     * keeps a plate's key from ever equalling its heading's. The screen's own line
+     * names the plate, and the other screens still spell out `item(key = "...")`.
+     *
+     * A Brain plate's key is looked up by equality elsewhere (the screen's own
+     * `plateKeyAt`), so this also accepts the literal `item(key = "brain-plate:...")`
+     * spelling, which is what `BrainListTest` pins.
+     */
+    private fun String.draws(name: String): Boolean =
+        contains("plate(\"$name\")") ||
+            contains("item(key = \"$name\")") ||
+            contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")")
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
     private fun repoFile(rel: String): File {

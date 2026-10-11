@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-note-floating-hit-mask"
+description = "Enables the note_floating_hit_mask command without any pre-configured scope."
+commands.allow = ["note_floating_hit_mask"]
+
+[[permission]]
+identifier = "deny-note-floating-hit-mask"
+description = "Denies the note_floating_hit_mask command without any pre-configured scope."
+commands.deny = ["note_floating_hit_mask"]

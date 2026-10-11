@@ -52,6 +52,9 @@ object OpenPlace {
         "animal-options" to Where.Go(Screen.SETTINGS, "appearance-card"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
+        // The prompt coach's master switch (docs/PROMPT-COACH-DESIGN.md,
+        // docs/JARVIS-API.md section 119): its own row on Settings.
+        "prompt-coach" to Where.Go(Screen.SETTINGS, "prompt-coach"),
         "asks-first" to Where.Go(Screen.SETTINGS, "asks-first"),
         "reach" to Where.Go(Screen.SETTINGS, "reach"),
         "email-sending" to Where.Go(Screen.SETTINGS, "email-sending"),
@@ -63,12 +66,51 @@ object OpenPlace {
         "screen-look" to Where.Go(Screen.SETTINGS, "screen-look"),
         // The headless browser (Obscura): its switch, default and install line (2026-09-29).
         "browser-engine" to Where.Go(Screen.SETTINGS, "browser-engine"),
+        // "When the phone does not answer" (2026-10-08): the registry's own
+        // Section for the captcha hand-off. It is an ordinary Settings row on
+        // the phone (SettingsScreen.kt, item "handoff"), which is what makes
+        // "open the captcha hand-off" land on it instead of the top of Settings
+        // - OpenPlaceTest's new-section check is what caught it missing.
+        "handoff" to Where.Go(Screen.SETTINGS, "handoff"),
+        // "When a captcha stops Jarvis" (2026-10-09): the registry's own Section
+        // for what a captcha does about the browser window it is blocking. An
+        // ordinary Settings row on the phone (SettingsScreen.kt, item
+        // "handoff-front"), which is what makes "open the captcha window
+        // setting" land on it instead of the top of Settings -
+        // OpenPlaceTest's new-section check is what caught it missing for the
+        // row above.
+        "handoff-front" to Where.Go(Screen.SETTINGS, "handoff-front"),
         // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").
         "quick-tiles" to Where.Go(Screen.SETTINGS, "quick-tiles"),
+        // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is
+        // on screen. Phone-only - the registry marks it app="phone" - and an
+        // ordinary Settings row (SettingsScreen.kt, item "screen-rate"), so
+        // "open the screen refresh rate" lands on it rather than the top of
+        // Settings. OpenPlaceTest's new-section check is what would catch it
+        // missing.
+        "screen-rate" to Where.Go(Screen.SETTINGS, "screen-rate"),
+        // Floating Jarvis (SettingsScreen.kt, item "floating-avatar", saved on
+        // this phone only). It is a registry Section since 2026-10-08 - before
+        // that "open Floating Jarvis" answered with the raw id - and
+        // OpenPlaceTest requires every phone-relevant Section to have a place
+        // here, which is what caught this missing line in CI.
+        "floating-avatar" to Where.Go(Screen.SETTINGS, "floating-avatar"),
         // Hidden navigation menus section (SettingsScreen.kt, item "menu-visibility").
         "menu-visibility" to Where.Go(Screen.SETTINGS, "menu-visibility"),
+        // "Limits and how often Jarvis does things" (2026-10-08): the PC's own
+        // backend/jarvis_limits.py table, as a Settings row of its own on the
+        // phone (SettingsScreen.kt, item "limits"; LimitsPlate.kt). So "open
+        // limits" lands on it instead of the top of Settings.
+        "limits" to Where.Go(Screen.SETTINGS, "limits"),
+        // "A new conversation starts after" (the audit of 2026-10-08): a
+        // CLIENT-SIDE choice with its own Settings row on the phone
+        // (SettingsScreen.kt, item "idle-new"; IdleNewPlate.kt), so "open a new
+        // conversation starts after" lands on it rather than the top of
+        // Settings. OpenPlaceTest's own new-section check is what requires a
+        // decision here for every registry Section.
+        "idle-new" to Where.Go(Screen.SETTINGS, "idle-new"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).
@@ -88,6 +130,12 @@ object OpenPlace {
         "second-card" to Where.Go(Screen.BRAIN, "second-card"),
         "big-model" to Where.Go(Screen.BRAIN, "big-model"),
         "backend-supports" to Where.Go(Screen.BRAIN, "capabilities"),
+        // Spending summaries (2026-10-08): the phone draws this plate itself
+        // (BrainScreen.kt `item(key = "spending")`, menu "settings.spending",
+        // which `contract/menu-cases.json` marks available on the phone). It
+        // sat in [PC_ONLY] instead, so "open spending" answered "only in
+        // Jarvis on your PC" with the plate one tap away.
+        "spending" to Where.Go(Screen.BRAIN, "spending"),
         // "Forget a time frame" (2026-09-28): not a settings section - the
         // place "forget what you learned last week" opens, named by the
         // answer's `open_brain` (net/ForgetRange.kt, ChatSession).
@@ -101,19 +149,26 @@ object OpenPlace {
      * Registry ids with no phone equivalent at all: keyboard shortcuts,
      * account secrets (the owner is never asked for one on the phone), the
      * PC's tool-update check, "More options" (startup and logs), starting
-     * Jarvis with Windows, and the first-run setup page (2026-10-06), which
-     * is a card on the PC's Settings screen only.
+     * Jarvis with Windows, the first-run setup page (2026-10-06), which
+     * is a card on the PC's Settings screen only, and "The big HUD window"
+     * (2026-10-06), which is a switch for a button in a window only the PC
+     * has - the big "Jarvis" window and its own chat box are the PC's.
      */
     val PC_ONLY: Set<String> = setOf(
         "shortcuts",
         "account-secrets",
+        // "Chatbot API keys" (docs/ACCOUNT-KEYS-DESIGN.md steps 1-2,
+        // 2026-10-06): the six chatbot services' keys. They go straight into
+        // Windows Credential Manager from the PC's own Rust, so there is no
+        // version of this screen that could work on the phone.
+        "chatbot-api-keys",
         "tool-updates",
         "more-options",
         "crash-notes",
         "start-jarvis",
-        "spending",
         "notifications",
         "first-run",
+        "hud-window",
     )
 
     /** Every id this file has made a decision about - for the test. */

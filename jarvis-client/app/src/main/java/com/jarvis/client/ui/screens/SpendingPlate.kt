@@ -344,6 +344,18 @@ internal fun SpendingSection(
                             Gap(6)
                             Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         }
+                        // Where the things above are changed (2026-10-08): the
+                        // card showed the PC's own layouts and categories and
+                        // never said which screen sets them. One plain
+                        // sentence, the same voice as Backups' own line - no
+                        // control, the PC does the changing.
+                        Gap(8)
+                        Text(
+                            "Nothing here can be changed on the phone: the bank layouts, the shop " +
+                                "categories and the folders are set on your PC, in Settings → Spending.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textMid,
+                        )
                     }
                 }
             }

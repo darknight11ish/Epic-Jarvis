@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.AppearanceShared
 import com.jarvis.client.FaceState
 import com.jarvis.client.data.EdgePref
 import com.jarvis.client.data.FaceTuning
@@ -126,9 +127,11 @@ private const val EDIT_SETTLE_MS = 2_000L
  *   never in its sync document.
  * - **Shared with your desktop**: the face and the state colours - a shared
  *   vocabulary rather than a taste, because a phone whose `thinking` is violet
- *   while the desktop's is green has learned a private language. When the
- *   backend lacks the `appearance` capability [desktopSyncs] is false and the
- *   group says, in words, that it is not synced yet.
+ *   while the desktop's is green has learned a private language. That group's
+ *   sentence follows [sharedStatus], which is the capability AND the last
+ *   send's real result: it says "are sent" only once a send landed, and says
+ *   in words when the change is on this phone only (UI audit 2026-10-05,
+ *   finding A1 - it used to say "are sent" on the capability flag alone).
  *
  * Nothing here edits the desktop's configuration. The phone's rule against
  * deep config editing is about the backend; every control on this screen is
@@ -166,8 +169,20 @@ fun AppearanceScreen(
      * before it existed.
      */
     onPickDarkTheme: (Chrome) -> Unit = onPickTheme,
-    /** Whether the desktop takes the shared part: the backend's `appearance` capability. */
-    desktopSyncs: Boolean = true,
+    /**
+     * What this phone knows about the shared face and state colours: whether
+     * the backend takes them at all (the `appearance` capability) AND whether
+     * the last send actually landed, resolved by
+     * [com.jarvis.client.AppearanceShared.statusOf] at the call site.
+     *
+     * One value rather than a capability flag, on purpose - UI audit
+     * 2026-10-05, finding A1: with only the flag, this screen said "are sent
+     * to your desktop" while `pushAppearance` threw the `ApiResult` away, so a
+     * dead link got the claim. Every sentence about sharing comes from
+     * [com.jarvis.client.AppearanceShared], which is where "are sent" is held
+     * to the one status that earns it.
+     */
+    sharedStatus: AppearanceShared.Status = AppearanceShared.Status.MAYBE_NEXT,
     /**
      * The Undo window after Randomise or Reset has closed - by running out,
      * by Undo, or by leaving this screen. This is when the state colours
@@ -339,11 +354,11 @@ fun AppearanceScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    undoMessage + if (desktopSyncs) {
-                        " Sent to your desktop when this goes away."
-                    } else {
-                        ""
-                    },
+                    // From AppearanceShared, like the group below: after a send
+                    // that failed this adds nothing, and the group's own line
+                    // says the change is on this phone only (finding A1). It
+                    // never claims a send that has not happened.
+                    undoMessage + (AppearanceShared.undoLineSuffix(sharedStatus) ?: ""),
                     style = MaterialTheme.typography.bodySmall,
                     color = chrome.textMid,
                     modifier = Modifier.weight(1f),
@@ -471,16 +486,13 @@ fun AppearanceScreen(
             item(key = "group-shared") {
                 GroupHeader(
                     "Shared with your desktop",
-                    if (desktopSyncs) {
-                        "The face and the state colours are sent to your desktop, and a " +
-                            "change made there shows up here too. The animal options are kept " +
-                            "on your PC and shared the same way - except sharpness and frame " +
-                            "rate, which stay on this phone. Nothing else on this screen " +
-                            "leaves the phone."
-                    } else {
-                        "Not synced: your desktop doesn't support it yet. For now the face " +
-                            "and the state colours stay on this phone."
-                    },
+                    // The words are AppearanceShared's, and they follow the
+                    // SEND, not a capability flag (UI audit 2026-10-05, finding
+                    // A1): only the status that actually landed says "are sent
+                    // to your desktop"; a failed one says the colours are on
+                    // this phone only, in the same plain words as everything
+                    // else here.
+                    AppearanceShared.groupWords(sharedStatus),
                 )
             }
 
@@ -544,7 +556,7 @@ fun AppearanceScreen(
                             live = liveBudget,
                             stats = faceStats,
                             phoneBatterySaver = phoneBatterySaver,
-                            desktopSyncs = desktopSyncs,
+                            desktopSyncs = AppearanceShared.capabilityOf(sharedStatus),
                             onRandomise = { roll("New colours.", onRandomise) },
                             onReset = {
                                 val before = faceTuning

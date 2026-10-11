@@ -23,6 +23,12 @@
  * @module tutorials
  */
 
+// The desktop's OWN questions - the fifteen the Settings card "Help and FAQ"
+// held until 2026-10-08, moved here so the one Help place answers them too
+// (desktop-help.js says why in full). The backend still serves the questions
+// both apps ask; `mergeQuestions` is what puts the two halves on one screen.
+import { DESKTOP_FAQ, WORDS as HELP_WORDS, mergeQuestions } from "./desktop-help.js";
+
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 
@@ -39,6 +45,9 @@ export const LABELS = {
   resume: "Continue at step",
   restart: "Start again",
   search: "Search the answers",
+  // The button's own label is markup in brain.html (the CSP check counts the
+  // static controls); this is only the line it says once the window is open.
+  featuresOpened: "Opened.",
   stepOf: "Step",
   of: "of",
   done: "Done",
@@ -47,10 +56,66 @@ export const LABELS = {
   notStarted: "Not started",
   skipped: "Skipped",
   nothingFound: "Nothing matched that. Try a word from the question.",
+  showMe: "Show me",
+  pointed: "There it is.",
+  otherWindow: "It is in another window",
+  noPoint: "Nothing on this screen to point at for this step.",
+};
+
+/**
+ * The real controls a tutorial may point at, by the name the catalogue uses
+ * (`backend/jarvis_tutorials.py`'s per-step `point.desktop`).
+ *
+ * A tutorial POINTS; it never presses. The pointing below is a highlight and a
+ * scroll - `pointAt` has no other verb available to it, and the suite in
+ * `tests/tutorials.mjs` fails if one is ever added. That is not tidiness: this
+ * app never approves anything by itself (rule 4), and a tutorial that can press
+ * a button can approve.
+ *
+ * Two kinds, because the Brain panel can only reach its OWN document:
+ *
+ *   * `{ selector }` - a control in this window. It is found, scrolled to and
+ *     marked, so the owner sees the real thing rather than a picture of it.
+ *   * `{ file, id, label }` - a control in a different window (Settings, the
+ *     HUD, the Faces window). No script here can highlight it, so the step says
+ *     which window to open instead of pretending. `tests/tutorials.mjs` checks
+ *     that the file really holds that id, so this cannot rot into a lie.
+ *
+ * The name is a registry key and never a raw selector, so the catalogue cannot
+ * name a `div` that merely happens to exist, and a control that moves is fixed
+ * in one place here.
+ */
+export const CONTROL_POINTS = {
+  // This window - the Jarvis bar (index.html), which is where the Brain panel
+  // and this panel both live.
+  "prompt-field": { selector: "#prompt-field" },
+  "approval-card": { selector: "#approval" },
+  "brain-memory": { selector: "#view-memory" },
+  "brain-tutorials": { selector: "#tutorials-root" },
+  "brain-about": { selector: "#memory-about" },
+
+  // Other windows - pointed at by naming the window, which is all that is
+  // honest from here.
+  "hotkeys": { file: "settings.html", id: "hotkey-rows", label: "Settings → Hotkeys" },
+  "asks-first": { file: "settings.html", id: "asks-first", label: "Settings → What asks first" },
+  "faces": { file: "faces.html", id: "face-n", label: "The Faces window" },
+  "hud-talk": { file: "jarvis_hud.html", id: "talk", label: "The HUD's own talk button" },
+  "stop-everything": { file: "settings.html", id: "hotkey-rows", label: "Settings → Hotkeys → Stop everything" },
 };
 
 /** The two sections, in the order the backend sends them. */
 export const SECTION_ORDER = ["pc", "phone"];
+
+/**
+ * Where the place key sends the Brain for this page - "Tutorials and the FAQ".
+ *
+ * Since 2026-10-08 this is also where Help goes: the palette's own Help row
+ * (`entry.help`) and anything else that leaves `TUTORIALS_PLACE` under
+ * `jarvis.brain.place` opens this tab rather than the Settings card "Help and
+ * FAQ", which no longer exists. It is the view's own key in brain.js's `VIEWS`,
+ * which is what lets the Brain open it the same way it opens History.
+ */
+export const TUTORIALS_PLACE = "tutorials";
 
 /**
  * The tutorials of one section, plus the shared ones.
@@ -141,6 +206,48 @@ function el(tag, className, text) {
   return n;
 }
 
+/** The step's target for an app, or null. The catalogue sends both names. */
+export function pointFor(step, app) {
+  const point = (step && step.point) || null;
+  const name = point && point[app];
+  return typeof name === "string" && name.trim() ? name : null;
+}
+
+/** What this window can point at for a step: a registry name, or null. */
+export function pointName(step) {
+  const name = pointFor(step, "desktop");
+  return name && Object.prototype.hasOwnProperty.call(CONTROL_POINTS, name) ? name : null;
+}
+
+/**
+ * Point at the real control a step names, in THIS window. Returns words for the
+ * owner, and never acts.
+ *
+ * This is the whole of "interactive" on the PC: the owner sees the control the
+ * step means, in the app as it is right now, rather than a screenshot of how it
+ * looked the day the picture was taken.
+ *
+ * Every entry that lives in another window is answered in words, because no
+ * script here can reach across windows and pretending otherwise would be the
+ * kind of small lie a tutorial cannot afford.
+ */
+export function pointAt(step, doc = document) {
+  const name = pointFor(step, "desktop");
+  const entry = name ? CONTROL_POINTS[name] : null;
+  if (!entry) return LABELS.noPoint;
+  if (entry.file) return `${LABELS.otherWindow}: ${entry.label}.`;
+
+  const target = doc.querySelector(entry.selector);
+  if (!target) return LABELS.noPoint;
+  // Mark, then unmark: for as long as the owner is looking, and no longer.
+  target.classList.add("tutorial-pointed");
+  if (typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ block: "center", inline: "nearest" });
+  }
+  globalThis.setTimeout(() => target.classList.remove("tutorial-pointed"), 2400);
+  return LABELS.pointed;
+}
+
 /** An error in words, never a bridge error or JSON. */
 function problemWords(error) {
   const said = String((error && error.message) || error || "").trim();
@@ -217,36 +324,97 @@ export async function showTutorials(root) {
 
   const faqBox = el("section", "tutorial-faq");
   faqBox.append(el("h3", null, LABELS.faqHeading));
+  // The shared questions come from the PC; the desktop's own fifteen come from
+  // desktop-help.js and are drawn whether or not the PC answered. So a backend
+  // that is down, or one older than /api/faq, still leaves the owner with the
+  // half only this app can answer - rather than an empty help page. A failure
+  // is still said out loud, above those fifteen.
   let questions = [];
   try {
-    const answer = await loadFaq();
-    questions = (answer && answer.questions) || [];
+    questions = mergeQuestions(await loadFaq());
   } catch (error) {
     faqBox.append(el("p", "problem", problemWords(error)));
+    questions = mergeQuestions(null);
   }
   const search = el("input", "tutorial-search");
   search.type = "search";
   search.placeholder = LABELS.search;
   const answers = el("div", "tutorial-answers");
+  // Where the desktop's own half begins, said plainly rather than left to be
+  // guessed at from one question about the pairing token. It is appended by
+  // `paint`, between the two halves, so a search that finds only shared answers
+  // does not leave an "On this computer" heading over an empty list.
+  const localHead = el("div", "tutorial-faq-local");
+  localHead.append(el("h4", null, HELP_WORDS.heading));
+  localHead.append(el("p", "note", HELP_WORDS.note));
+  // The shared half is whatever the PC answered; the rest is this file's own.
+  // Counted against the local length rather than assumed, so a backend that
+  // answered nothing (or with fewer questions than the last build) still
+  // splits the two halves in the right place.
+  const localOnly = mergeQuestions(null).length;
+  const sharedQuestions = questions.slice(0, questions.length - localOnly);
   const paint = (typed) => {
     answers.textContent = "";
-    const found = searchFaq(questions, typed);
-    if (!found.length && questions.length) {
+    const draw = (list) => {
+      for (const item of searchFaq(list, typed)) {
+        const one = el("details", "tutorial-question");
+        one.append(el("summary", null, item.q));
+        one.append(el("p", null, item.a));
+        if (item.where) one.append(el("p", "where", item.where));
+        answers.append(one);
+      }
+    };
+    const local = searchFaq(DESKTOP_FAQ, typed);
+    const shared = searchFaq(sharedQuestions, typed);
+    if (!local.length && !shared.length) {
       answers.append(el("p", "empty", LABELS.nothingFound));
       return;
     }
-    for (const item of found) {
-      const one = el("details", "tutorial-question");
-      one.append(el("summary", null, item.q));
-      one.append(el("p", null, item.a));
-      if (item.where) one.append(el("p", "where", item.where));
-      answers.append(one);
-    }
+    const hasLocal = sharedQuestions.length > 0 && local.length > 0;
+    draw(shared);
+    if (hasLocal) answers.append(localHead);
+    draw(local);
   };
   search.addEventListener("input", () => paint(search.value));
   faqBox.append(search, answers);
   paint("");
   body.append(faqBox);
+
+  // "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, the owner's
+  // request of 2026-10-08): the whole feature set, opened from the one Help
+  // place. This is PR #106's page, moved here on 2026-10-08 with the FAQ - the
+  // button was NOT deleted with the Settings card, because the Brain is now the
+  // only way in that is not the tray icon (tests/features.mjs holds that).
+  mountFeaturesButton();
+}
+
+/**
+ * The "Everything Jarvis can do" button, and the live line that says what
+ * happened when it is pressed.
+ *
+ * The same three lines the Settings card used for the same command
+ * (`open_features`, in the `features-open` permission set): the window it opens
+ * reads one bundled list of text and draws it, there is nothing to wait for but
+ * the window itself, and a refusal is said out loud rather than swallowed - the
+ * failure mode this project has shipped before, where a button calls a command
+ * the ACL does not grant and simply does nothing.
+ *
+ * Wired here, in the tab that draws the FAQ, rather than in brain.js: this is
+ * the one Help place, and the button is part of it.
+ */
+function mountFeaturesButton() {
+  const open = document.getElementById("open-features");
+  const status = document.getElementById("features-status");
+  if (!open || !status) return;
+  open.addEventListener("click", async () => {
+    status.textContent = "";
+    try {
+      await invoke("open_features");
+      status.textContent = LABELS.featuresOpened;
+    } catch (error) {
+      status.textContent = problemWords(error);
+    }
+  });
 }
 
 /** One tutorial's step card, inside its own section column. */
@@ -264,6 +432,20 @@ function openTutorial(tutorial, column) {
     box.append(el("h4", null, step.title || ""));
     box.append(el("p", null, step.body || ""));
     if (step.where) box.append(el("p", "where", step.where));
+
+    // "Show me" is the interactive part, and it is offered only when the
+    // catalogue names a control this app actually declares. A step with no
+    // target simply has no button, rather than a button that does nothing.
+    if (pointName(step)) {
+      const show = el("button", "tutorial-show", LABELS.showMe);
+      show.type = "button";
+      const said = el("span", "tutorial-show-said");
+      show.addEventListener("click", () => {
+        said.textContent = pointAt(step);
+      });
+      box.append(show);
+      box.append(said);
+    }
 
     const row = el("div", "tutorial-buttons");
     const back = el("button", null, LABELS.back);

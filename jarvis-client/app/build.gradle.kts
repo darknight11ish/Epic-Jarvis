@@ -224,8 +224,20 @@ android {
         // Compressed in the APK and unpacked at install, rather than stored
         // uncompressed: ONNX Runtime's library is ~15 MB per ABI raw and
         // ~7 MB compressed, and a sideloaded APK's download size is the one
-        // the owner waits for. Its .so files are 16 KB page-aligned
-        // (checked), so either way loads on Android 15's 16 KB devices.
+        // the owner waits for.
+        //
+        // 16 KB page sizes (Android 15+). "Checked" above used to mean a
+        // one-off reading, with nothing keeping it true. Measured again on
+        // 2026-10-09 over the ten libraries this actually packages: every
+        // PT_LOAD of every one of them has p_align = 16384, so they load on a
+        // 16 KB device, and `tools/check_apk_16kb.py` now says so on every CI
+        // run. Note which half of "16 KB alignment" that is: the ELF's own
+        // p_align is what decides whether the library loads, and it is
+        // unchanged by this setting. The zip-entry alignment `zipalign -P 16`
+        // checks only matters for libraries stored UNCOMPRESSED
+        // (`extractNativeLibs="false"`), which is not what this line does -
+        // useLegacyPackaging = true means extractNativeLibs="true", so the
+        // .so files are unpacked at install and no zip offset is load-bearing.
         jniLibs { useLegacyPackaging = true }
     }
 }

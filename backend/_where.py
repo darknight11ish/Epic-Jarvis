@@ -46,14 +46,23 @@ jarvis_memory` works without each test repeating it.
 """
 from __future__ import annotations
 
+import inspect as _inspect
 import os
 import sys
 from pathlib import Path
 
-# Python < 3.10 compatibility: Path.write_text did not accept newline
-try:
-    Path("").write_text("", newline="\n")
-except TypeError:
+# Python < 3.10 compatibility: Path.write_text did not accept newline.
+#
+# The probe used to be `Path("").write_text("", newline="\n")`, which asks the
+# filesystem rather than the signature: `Path("")` is the current directory,
+# so opening it for writing raises IsADirectoryError or PermissionError, never
+# the TypeError being tested for. On a Python 3.9 machine the shim therefore
+# never installed, and all 84 `write_text(..., newline=...)` call sites raised
+# TypeError. Asking the signature directly cannot be defeated by a permission
+# or a path, and it never touches a file.
+if "newline" in _inspect.signature(Path.write_text).parameters:
+    pass
+else:
     _orig_write_text = Path.write_text
 
     def _compat_write_text(self, data, encoding=None, errors=None, newline=None):
@@ -63,8 +72,36 @@ except TypeError:
         return _orig_write_text(self, data, encoding=encoding, errors=errors)
 
     Path.write_text = _compat_write_text
-except Exception:
-    pass
+
+# A SUITE'S OWN OUTPUT, CARRIED BY A WINDOWS CONSOLE TOO.
+#
+# A Windows console - and a pipe - defaults Python's stdout to the machine's
+# ANSI code page (cp1252 here), and 56 suites print a character it cannot
+# encode: a curly quote from a fixture, an em dash, the Cyrillic host
+# test_youtube.py refuses. The print raises UnicodeEncodeError INSIDE the
+# suite, so a check that passed is reported as a failing suite. run_suites.py
+# sets PYTHONIOENCODING for its children for exactly this reason (its own
+# docstring documents the class) and scripts/apply-patches.ps1 asks for it
+# too - but a bare `python backend\test_wakeword.py`, which is how one suite
+# gets run by hand, has neither.
+#
+# Measured 2026-10-10, test_wakeword.py direct in this checkout: 101 passed,
+# 1 failed, exit 1 without this, and 121 passed, 0 failed, 1 skipped with
+# PYTHONIOENCODING=utf-8 - the exception abandoned one check twenty checks
+# early. Every suite imports this module, so the fix belongs here once rather
+# than in each of the 56 files, which is how such a line gets rediscovered one
+# suite at a time. tools/check_tutorial_places.py sets its two streams the
+# same way for the same reason; there the check IS the process, so nobody can
+# set the variable for it. A character the console cannot draw is replaced
+# rather than fatal.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        # Not a text stream (a suite's own capture, a closed pipe): nothing to
+        # reconfigure, and never a reason for an import to fail.
+        pass
+del _stream
 
 _HERE = Path(__file__).resolve().parent
 
@@ -96,6 +133,32 @@ if _b in sys.path:
     sys.path.remove(_b)
 sys.path.insert(0, _b)
 
+#: The ten modules this repository ships WHOLE, as this checkout holds them:
+#: `backend/rebuilt/`. APPENDED, never prepended - a copy in BACKEND is the one
+#: under test and must win (see `_b` above).
+_REBUILT = _HERE / "rebuilt"
+
+# WHY THIS LINE IS HERE, AND WHY IT IS NOT IN EVERY SUITE.
+# On the owner's PC, apply-patches.ps1 flattens these ten BESIDE jarvis_hud.py;
+# run_suites.py flattens them into the staged backend it hands every suite. In
+# both of those `import jarvis_memory` just works. A suite run straight out of a
+# clone (JARVIS_BACKEND unset - `python backend/test_x.py`, which is how the
+# owner runs them) has neither: this folder holds the patches and the tests, and
+# `rebuilt/` holds the ONLY copy of those ten modules that exists anywhere. So
+# 110 suites already carry the same line themselves, in FOUR spellings
+# (`append(str(HERE / "rebuilt"))` x51, `insert(0, ...)` x32, `insert(1, ...)`
+# x14, `append(str(REPO / "backend" / "rebuilt"))` x14). The six that forgot it
+# died at `ModuleNotFoundError: No module named 'jarvis_memory'` before a single
+# check could run - which is how this drift is found: one suite at a time, by
+# whoever runs the next one. This module already owns sys.path (its docstring
+# above says putting `BACKEND` on it is so "`import jarvis_memory` works without
+# each test repeating it"), so the missing half lives here too, once. A suite
+# that needs these modules FIRST still says so itself - `test_rebuilt.py` tests
+# the rebuilt copies and puts them at the front - and for everyone else BACKEND's
+# copy still wins.
+if _REBUILT.is_dir() and str(_REBUILT) not in sys.path:
+    sys.path.append(str(_REBUILT))
+
 
 def missing(*names: str) -> list[str]:
     """Which of these backend files are not where BACKEND says they are.
@@ -113,6 +176,70 @@ def explain() -> str:
     where = "JARVIS_BACKEND" if os.environ.get("JARVIS_BACKEND") else "this folder"
     return (f"Backend modules were looked for in {BACKEND} ({where}). "
             f"Set JARVIS_BACKEND to the folder holding jarvis_hud.py.")
+
+
+def hud_block(start: str, end: str) -> tuple:
+    """(the text between `start` and `end` in the patched jarvis_hud.py, where
+    it came from) - or (None, why this run cannot have it).
+
+    WHY THIS IS HERE AND NOT IN ONE SUITE. jarvis_hud.py is the entry point
+    scripts/apply-patches.ps1 edits IN PLACE (it is never copied), so a clone's
+    backend/ does not hold it and `SRC = BACKEND / "jarvis_hud.py"` died as a
+    FileNotFoundError before a single check. Seven suites read it; one of them,
+    test_appearance.py, only ever looks at ONE self-contained block of it, and
+    that block is the text the patch stack itself writes. So the block is what
+    this returns, from whichever of the two this run can honestly use:
+
+      * BACKEND's own jarvis_hud.py when it is there - the file the backend
+        runs, and the only thing a check that reads the SURROUNDING file may
+        use. Anything asking "is this route still wired up in main()" needs
+        the owner's own lines, which no stand-in holds; those suites say so
+        and skip instead (a stand-in that made such a check pass would be the
+        patch grading itself).
+      * otherwise, in repo mode only (no JARVIS_BACKEND), the patch stack's
+        own text for it (`_stack.stand_in`, which walks every patch
+        apply-patches.ps1 applies, in order). Ten suites already lift real
+        code out of that stand-in - test_chat_log.py, test_temporary_chat.py,
+        test_tidy.py, eval_learner.py and the rest - so this is the project's
+        own way of driving patch-written code in a clone, not a new one.
+
+    IT REFUSES A BLOCK THE STACK COULD NOT REBUILD WHOLE. `_stack` leaves a
+    "# gap" where the owner's own lines between two hunks are missing, so a
+    block with a gap in it is part real, part absent, and a suite that drove
+    it would be testing a fragment. The block must also compile. Both are
+    returned as the reason, so the caller skips saying which and why - never a
+    pass, and never a traceback.
+    """
+    path = BACKEND / "jarvis_hud.py"
+    if path.is_file():
+        src, where = path.read_text(encoding="utf-8"), str(path)
+    elif os.environ.get("JARVIS_BACKEND"):
+        # A run that NAMES a backend: a file missing from it is that install's
+        # problem and is said so, not papered over with the stack's text.
+        return None, (f"jarvis_hud.py is not in {BACKEND}, which JARVIS_BACKEND "
+                      f"names, and the patcher edits it in place. {explain()}")
+    else:
+        import _stack                                   # beside this file
+        src, log = _stack.stand_in("jarvis_hud.py")
+        if src is None:
+            return None, ("the patch stack could not build jarvis_hud.py: "
+                          + "; ".join(log[-2:]))
+        where = "the patch stack's own text for it, from backend/_stack.py"
+    try:
+        block = src[src.index(start):src.index(end)]
+    except ValueError:
+        return None, (f"jarvis_hud.py ({where}) does not hold both `{start}` and "
+                      f"`{end}`")
+    if any(line.startswith("# gap") for line in block.splitlines()):
+        return None, (f"the stand-in has a gap between `{start}` and `{end}`: the "
+                      f"owner's own lines are missing there, so this block is not "
+                      f"all real and a check that drove it would prove nothing")
+    try:
+        compile(block, f"<jarvis_hud.py {start!r}>", "exec")
+    except SyntaxError as exc:
+        return None, (f"the block from `{start}` to `{end}` in jarvis_hud.py "
+                      f"({where}) does not compile: {exc.msg} (line {exc.lineno})")
+    return block, where
 
 
 #: Modules this repository ships WHOLE, for the owner's backend folder:
@@ -166,6 +293,11 @@ SHIPPED = (
     "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
+    # The one connection class that CLOSES when its `with` block ends, shared
+    # by jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py
+    # (2026-10-08: the WinError 32 "schedule.json is being used by another
+    # process" failure, fixed by hand three times before it was shared).
+    "jarvis_sqlite.py",
     "jarvis_schedule.py", "jarvis_quick.py",
     # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
     # (already SHIPPED, above) is the only importer - no patch of its own.
@@ -186,6 +318,13 @@ SHIPPED = (
     "jarvis_energy.py", "jarvis_injection.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
+    # the ADDRESSES of the owner's accounts - the mail server, its port and
+    # mailbox, the sending server, its port and how the email is encrypted, the
+    # Home Assistant address and the calendar's CalDAV address - in
+    # accounts.json beside web-search.json (accounts.patch, the owner's
+    # decision of 2026-10-06). ADDRESSES ONLY: the four secrets stay in
+    # Windows Credential Manager and this file refuses to carry one.
+    "jarvis_accounts.py",
     # Stop everything (stop-all.patch)
     "jarvis_stop_all.py",
     # "tell me when ..." - a kind of job on the one scheduler (not a tool)
@@ -338,6 +477,11 @@ SHIPPED = (
     # second AI on this PC" (another Ollama model, loopback only). No patch
     # of their own: jarvis_chatbot.py loads both.
     "jarvis_chatbot_api.py",
+    # The monthly money limits and the price list, set from the PC's own app
+    # (chatbot-limits.patch; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3):
+    # GET/POST /api/chatbot/money, PC only. A raise is ONE card plus Windows
+    # Hello; a lowering, a removal and a price correction are not.
+    "jarvis_chatbot_limits.py",
     "jarvis_chatbot_local.py",
     # "Look at this" and "Watch with me": the session rules, pause rules,
     # caps, the Never look at list and the routes (screen.patch installs
@@ -349,6 +493,13 @@ SHIPPED = (
     # a small picture model on the processor, off by default, ON is one card
     # (screen-picture.patch adds the gate lines); the routes are jarvis_screen.py's
     "jarvis_screen_picture.py",
+    # ... and a look handing its CLEANED picture to the question box: "look at
+    # this" with a chart or an error message, the one key, nothing saved (the
+    # owner's decision of 2026-10-07, .dsh-scratch/SCREEN-ATTACH-DESIGN.md;
+    # screen-attach.patch installs its wrapper round jarvis_screen.py's own
+    # route). No second cleaner: the picture handed on is
+    # jarvis_picture.clean(..., want_png=True)'s own output, never the capture.
+    "jarvis_screen_attach.py",
     # The headless browser, Obscura (2026-09-29): the driver (started over
     # standard input/output, --stealth always, no port, no proxy) and the
     # engine choice, the switch (off by default, ON is one card) and its
@@ -382,6 +533,25 @@ SHIPPED = (
     # "Solve it here" (2026-09-28): a captcha or sign-in page handed to the
     # owner's phone. No patch: jarvis_chatbot_routes.py answers its routes.
     "jarvis_handoff.py",
+    # how long that hand-off stays on offer (the owner's setting of
+    # 2026-10-08: "Stop early" by default, or keep offering it for the full
+    # 15 minutes). No patch: jarvis_chatbot_routes.py answers its one route,
+    # and jarvis_handoff.py reads it.
+    "jarvis_handoff_mode.py",
+    # what a captcha does about its browser window (the owner's setting of
+    # 2026-10-09: "1 by default with the option for 2 in the settings of
+    # Jarvis": leave it exactly where it is, or bring it to the front). No
+    # patch: jarvis_chatbot_routes.py answers its one route, and
+    # jarvis_handoff.py reads it.
+    "jarvis_handoff_front.py",
+    # The first Docker integration (the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list
+    # (today SearXNG, the default search provider) and start/stop for one. It
+    # deliberately cannot create or pull - a start is refused unless the pinned
+    # image is already on this PC - and it never touches a container that is
+    # not ours (wrong image, a port beyond loopback, or privileged). Start is
+    # one card, stop is instant; docker.patch installs its routes.
+    "jarvis_docker.py",
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
@@ -411,6 +581,13 @@ SHIPPED = (
     # "Activity heatmap and balance chart" (2026-09-30; progress.patch): the
     # heatmap and the owner's balance chart. Not reachable from any model.
     "jarvis_progress.py",
+    # "Which card draws the pictures" (2026-10-10; picture-card.patch): the
+    # three ways of running a picture-maker beside the everyday chat, each its
+    # own switch, all off until the owner turns one on. It draws nothing
+    # itself - asking for a picture is jarvis_pictures.py's route - and it is
+    # not reachable from any model. Not a tool, no card: it only moves which
+    # card a local program runs on and unloads/reloads the owner's own chat.
+    "jarvis_picture_card.py",
     # "Topic controls" (2026-09-30; topics.patch): a mode per topic (learn /
     # use), the sorting, the one card. The search filter is in the rebuilt
     # jarvis_memory.py; test_topics_leaks.py lists every reader of facts.
@@ -434,9 +611,124 @@ SHIPPED = (
     # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
     # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
     "jarvis_menus.py",
+    # "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the
+    # owner's request): which app, Windows panel or Jarvis Settings section the
+    # owner's own words name. jarvis_quick.py calls it. No patch, no route, NO
+    # card and no model tool - the same shape as jarvis_media.py.
+    "jarvis_open.py",
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",
+    # The page this server hands to a browser at `GET /` (2026-10-07).
+    #
+    # Found while debugging a desktop app that had NEVER connected: the backend
+    # answered `GET /` with 500 "jarvis_hud.html is missing from this folder",
+    # because the file was in the published base but in neither SHIPPED list and
+    # in no patch - so the patcher never copied it. The app lost the connection
+    # menu and fell back to its demo data, which reads as "Jarvis is not
+    # connected" however healthy the backend is.
+    #
+    # This is not a module: it is a resource the shipped `jarvis_hud.py` reads
+    # from `HERE` at request time, so it has to sit beside the server. Adding it
+    # here is all that is needed - `test_shipped_modules.py` requires a shipped
+    # entry to be a file in `backend/` as well as in the base, which is why it is
+    # copied there too.
+    "jarvis_hud.html",
+    # --- the five the base already carried but SHIPPED did not list (2026-10-07) ---
+    # Found by comparing a working backend against this list: all five were
+    # already IN jarvis-backend/, and a SHIPPED module imports each of them, but
+    # none was in SHIPPED and no patch delivered any of them. So a backend
+    # assembled from the published base imported a shipped module which imported
+    # a file this repository never handed over - an import error for anyone
+    # building from scratch, and their tests could not run in CI either.
+    # `docs/audit-2026-10-07/` and .dsh-scratch/UNSHIPPED-MODULES-REPORT.md carry
+    # the evidence. Listing them changes nothing about what each does; it makes
+    # the delivery match what the code already assumes.
+    #
+    # The one place that decides whether to interrupt the owner: nothing
+    # unsolicited reaches a client directly, it holds an attention budget and
+    # drains the overflow into one daily digest. jarvis_hud.py and jarvis_watch.py
+    # import it.
+    "jarvis_arbiter.py",
+    # A tamper-evident record of what the assistant did, and a "why did you do
+    # that" view over it: append-only, hashing metadata only so the integrity
+    # feature and forgetting do not cancel each other out. jarvis_hud.py imports it.
+    "jarvis_ledger.py",
+    # "Tell me what's new on GitHub for the things I care about": pull, never
+    # push, results handed over when asked, and a repo page treated as text from
+    # a stranger. jarvis_hud.py and jarvis_settings_registry.py import it.
+    "jarvis_watch.py",
+    # A smoke test for a model swap, and deliberately not an eval suite: the
+    # header explains why a judge-scored corpus from real transcripts was
+    # rejected (noise floor, and a second copy of the owner's life that
+    # forgetting cannot reach). jarvis_models.py imports it.
+    "jarvis_tripwire.py",
+    # Makes a malformed tool call structurally impossible: builds the JSON
+    # Schema Ollama's `format` field constrains decoding to, instead of retrying
+    # until bad JSON parses. jarvis_extract.py imports it.
+    "jarvis_structured.py",
+    # These two are pulled in by the five above (jarvis_arbiter and jarvis_watch
+    # import jarvis_jobs; jarvis_watch imports jarvis_content_risk). Adding them
+    # is not optional: test_shipped_modules.py fails a shipped file that imports
+    # an unshipped module, which is what caught the first five in the first place.
+    #
+    # Long Fuse: work that outlives the conversation.
+    "jarvis_jobs.py",
+    # The limits and frequencies the owner can change: one table, one route.
+    "jarvis_limits.py",
+    # One pipeline for text that arrived from outside.
+    "jarvis_content_risk.py",
+    # The job list (2026-10-08, tasks.patch, JARVIS-API section 118): work that
+    # outlives one chat turn - a task is a named job with steps, each step still
+    # goes through the one gate, and the list remembers where it got to through a
+    # restart. Copied in shape from OpenMuse's task worker
+    # (docs/COMPETITORS-OPENMUSE-2026-10-08.md, including a correction: the report
+    # first called the address check a gap, and Jarvis already had it).
+    # A lease so a crashed job is picked up again and never run twice at once, a
+    # checkpoint after every step, `outcome_unknown` for an interrupted send, an
+    # idempotency key so one request makes one action, and a card whose decision
+    # must carry the hash of the words that were shown. Local SQLite only,
+    # standard library only, no network, no child process, approves nothing.
+    "jarvis_tasks.py",
+    # The prompt coach (2026-10-08, prompt-coach.patch, JARVIS-API section
+    # 119): checks ONE prompt the owner is about to send and returns what is
+    # missing - a score, up to four gaps and a rewritten version. Advice only:
+    # it sends nothing, runs no tool, raises no card, keeps nothing, and the
+    # address it sends to is checked with jarvis_auto_learn.check_local_model
+    # before the request is built. Off until the owner turns it on.
+    "jarvis_prompt_coach.py",
+    # This PC's own notification choices - which of its toasts fire and the
+    # quiet hours around them - in the OWNER'S SETTINGS FILE instead of one
+    # webview's localStorage, so the phone can change them too (the owner's
+    # decision of 2026-10-08). jarvis_limits.py rides the same seven values as
+    # rows and calls this module's check_time for the two clock times, which is
+    # why it is shipped whole. No patch, no route of its own.
+    "jarvis_notify_prefs.py",
+    # Drop-in modules (feat/plug-and-play-modules): the loader that replaces a
+    # feature's one startup patch by calling each module's own install() from
+    # a folder. plugins/loader/plugin-loader.patch adds the single call;
+    # plugins/registry.json says which features fit and why the rest do not.
+    # Standard library only, no network, no child process, writes nothing.
+    "jarvis_plugins.py",
+    # The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5):
+    # ONE clearly-labelled opt-in for fiction and role-play that is never the
+    # everyday assistant and never a default, AND the abliterated models
+    # already on disk offered as opt-in choices with no new download, each
+    # carrying the measured cost on its label. Two switches, off on a machine
+    # that has never run it, in their own JSON beside hardware-choice.json.
+    # Uses Ollama's own import of a local .gguf path and the existing switch;
+    # no route, no tool, and it never writes jarvis-framework.toml.
+    "jarvis_optin_models.py",
+    # What this machine can hold, and what may be offered on it (2026-10-10,
+    # the owner's Decision 6): free space on the drive models live on, card
+    # count and video memory, then the Lean / Comfortable / Generous tiers with
+    # their size on disk, what each is for, which card it uses and what it
+    # leaves free. may_download() is the one gate every download passes: never
+    # a silent download, and never one leaving under MIN_FREE_AFTER_DOWNLOAD -
+    # the night C: hit 5.7 GB free and every build broke. Reads no network,
+    # starts nothing, downloads nothing; the work setups use it rather than
+    # building a second chooser.
+    "jarvis_storage.py",
 )
 
 
@@ -480,4 +772,46 @@ def require_shipped(*names: str) -> None:
             print("FAIL  " + p)
         print("\nNot run: this suite would have tested this repository's copy "
               "instead of the one your backend uses.")
+        sys.exit(1)
+
+
+def require_rebuilt(*modules: str) -> None:
+    """Stop the suite, plainly, if a module this repository ships WHOLE
+    (`backend/rebuilt/`) cannot be imported in this run.
+
+    THE GUARD FOR THE LINE AT THE TOP OF THIS FILE. `_REBUILT` is put on
+    sys.path above, so a suite that needs one of the ten shipped-whole modules
+    imports it in every run mode. If that line is ever lost, the suite used to
+    die at the next `import jarvis_memory` with a bare traceback and no checks
+    at all; five suites failed exactly that way in a clone of this repository
+    (`ModuleNotFoundError: No module named 'jarvis_memory'`, measured
+    2026-10-10). This says so in one named line instead, and exits.
+
+    Sibling of `require_shipped` above, with the same shape for the same
+    reason: a suite that cannot import the module under test must say that,
+    not look like nine assertion failures. Call it BEFORE the import:
+
+        from _where import require_rebuilt
+        require_rebuilt("jarvis_memory")
+        import jarvis_memory as M
+
+    When JARVIS_BACKEND is set, `require_shipped` is still the check that the
+    backend's own copy is the one being used; this only asks whether the
+    module can be imported at all.
+    """
+    problems = []
+    for name in modules:
+        try:
+            __import__(name)
+        except Exception as exc:                 # noqa: BLE001 - report, never raise
+            problems.append(f"{name}: {type(exc).__name__}: {exc}")
+    if problems:
+        print("FAIL  this run cannot import the modules this repository ships "
+              "whole (backend/rebuilt/):")
+        for p in problems:
+            print("      " + p)
+        print(f"      _where.py looks in {_REBUILT} and puts it on sys.path; "
+              f"BACKEND is {BACKEND}. {explain()}")
+        print("\nNot run: this suite would have tested something other than the "
+              "modules it is about.")
         sys.exit(1)

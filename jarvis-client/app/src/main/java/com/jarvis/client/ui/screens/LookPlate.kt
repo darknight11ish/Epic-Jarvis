@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -29,6 +30,8 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * "Looking at your screen" on the Security screen (the owner's decision of
@@ -113,19 +116,31 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
     )
     if (picking) {
         Gap(8)
-        val candidates = remember(security.neverApps) {
-            store.installedApps(skipNotificationList = false)
-                .filter { it.packageName !in security.neverApps }
-                // Already always refused (password managers and bank-looking
-                // apps): adding them would say nothing.
-                .filter { ScreenNever.blocked(it.packageName, emptySet()) == null }
+        // Read off the main thread, exactly as PhoneNotificationsPlate's
+        // identical walk is: it asks Android for every installed app and each
+        // one's name, and in a `remember` during composition that froze the
+        // screen (bug audit 2026-09-29 there; the first Android audit's finding
+        // 7 here - this was the copy that was missed). Null while it loads.
+        val loaded by produceState<List<NotificationAllowListStore.InstalledApp>?>(
+            initialValue = null, security.neverApps,
+        ) {
+            value = withContext(Dispatchers.IO) {
+                store.installedApps(skipNotificationList = false)
+                    .filter { it.packageName !in security.neverApps }
+                    // Already always refused (password managers and bank-looking
+                    // apps): adding them would say nothing.
+                    .filter { ScreenNever.blocked(it.packageName, emptySet()) == null }
+            }
         }
+        val candidates = loaded
         if (security.neverApps.size >= ScreenNever.MAX_APPS) {
             Text(
                 "The list is full (${ScreenNever.MAX_APPS} apps).",
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textLo,
             )
+        } else if (candidates == null) {
+            Text("Looking for apps…", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
         } else if (candidates.isEmpty()) {
             Text("No other apps found to add.", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
         } else {

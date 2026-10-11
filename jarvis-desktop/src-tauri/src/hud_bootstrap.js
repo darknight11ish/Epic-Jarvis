@@ -300,6 +300,11 @@
     // Every call, not only when `connected` flips: stale comes and goes
     // while connected stays true.
     paintLink();
+    // The page's own verdict on /api/status (see the block just below).
+    // Every call, for the same reason: the push that arrives right after a
+    // reload lands before the page's own read has finished, so it is a later
+    // one that finds a fallback left standing by a read that failed.
+    recheckBrand(link);
     var up = !!(link && link.connected);
     if (up === linkUp) return;
     linkUp = up;
@@ -307,6 +312,105 @@
       if (up) es._open();
       else es._fail();
     });
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The page's own "not connected" verdict, re-checked
+   *
+   * 2026-10-09, from the owner's running app: the main window read
+   * "DEMO · NOT CONNECTED" while the shell held a live, established stream
+   * to its own backend. boot() reads /api/status ONCE, through this shell,
+   * and writes #brand-sub from that one answer - "demo · not connected"
+   * when the read threw, which is what an unreachable backend does
+   * (hud_proxy.rs returns Err, so the page's fetch rejects). Nothing in the
+   * page reads it again: not its 30 s safety net (apprPoll/initPoll), not
+   * the stream's hello. So one failed read at load was that window's verdict
+   * for the rest of the session, however healthy the link became. And
+   * S.online is left at false by the same read, which is the page's whole
+   * idea of "am I talking to Jarvis": Send answers with sampleReply() -
+   * "Jarvis is not connected" - and the face is shown asleep.
+   *
+   * The link is live and checked: Rust sets `connected` from the stream's
+   * hello frame alone, and pushes it here on every change. So it, not a
+   * boot-time default, is what decides whether that verdict still stands.
+   * When it says the backend is answering, the page's own read is made
+   * again; if that succeeds, the page was wrong, and it is put back through
+   * its own boot path by reloading - the page's own words for this state are
+   * "reload this window and your messages will get real answers". Nothing
+   * smaller would do: the line, the banner, the face, the lane list and Send
+   * all come from that one read, and the page's `S` is a top-level `const`,
+   * so no other script can correct it - only the page can re-derive it.
+   *
+   * Three guards, and no way through them: only while #brand-sub still holds
+   * the page's own fallback; never while the owner has unsent words in the
+   * box; and at most once per window (`window.name` outlives a reload of the
+   * same window), so a backend that answers the stream and not /api/status
+   * cannot put this window in a reload loop.
+   * ---------------------------------------------------------------- */
+  var DEMO_BRAND = /^\s*demo\b/i; // the page's own "demo · not connected"
+  var BRAND_RELOADED = "jarvis-hud-demo-reload";
+  var brandReading = false;
+
+  function brandIsFallback() {
+    var sub = document.getElementById("brand-sub");
+    return !!sub && DEMO_BRAND.test(sub.textContent || "");
+  }
+
+  function recheckBrand(link) {
+    if (brandReading || !link || !link.connected || !brandIsFallback()) return;
+    if (window.name === BRAND_RELOADED) return;
+    var box = document.getElementById("input");
+    if (box && String(box.value || "").trim()) return;
+    brandReading = true;
+    // Through the same shim, the same proxy and the same route the page's own
+    // read took - this is that read, made again, not a second opinion.
+    window
+      .fetch("/api/status", { cache: "no-store", headers: { "X-Jarvis-Client": "hud" } })
+      .then(function (res) {
+        return res && res.ok ? res.json() : null;
+      })
+      .then(function (status) {
+        brandReading = false;
+        // Only a read that actually landed proves the fallback wrong. Still
+        // no answer means the page's verdict is not disproved, so it stands
+        // and the live link line under it says what is really happening.
+        if (!status || !brandIsFallback()) return;
+        try {
+          window.name = BRAND_RELOADED;
+        } catch (err) {
+          /* a window that will not take a name: the landed read above is
+             still what stops a second reload, since the page it reloads
+             into will read the same answer and never show the fallback */
+        }
+        window.location.reload();
+      })
+      .catch(function () {
+        brandReading = false;
+      });
+  }
+
+  /* The page's own beat, so a fallback left standing is still found when the
+   * link never changes again - a quiet Jarvis pushes no events at all, and
+   * the owner would be left reading the wrong word on an idle desktop.
+   * `apprPoll` is a top-level function declaration, so the page's
+   * `setInterval` resolves it on the global object and sees this wrapper -
+   * the same reason section 4 can wrap `setView`. Installed once the page's
+   * own script has run, which is where the function exists at all. */
+  function watchPageBeat() {
+    if (typeof window.apprPoll !== "function" || window.apprPoll.__jarvisBrandBeat) return;
+    var pagePoll = window.apprPoll;
+    var beat = function () {
+      var result = pagePoll.apply(this, arguments);
+      recheckBrand(lastLink);
+      return result;
+    };
+    beat.__jarvisBrandBeat = true;
+    window.apprPoll = beat;
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", watchPageBeat, { once: true });
+  } else {
+    watchPageBeat();
   }
 
   /* The feed.
@@ -326,6 +430,7 @@
       if (channel === "event") deliver(payload);
       else if (channel === "link") linkChanged(payload);
       else if (channel === "appearance") appearanceChanged(payload);
+      else if (channel === "bar") barStateChanged(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
@@ -1022,6 +1127,12 @@
    * - it shows a window and sends nothing). The mic button stays: it
    * already opens the bar.
    *
+   * AND IT IS ONE BUTTON THAT TOGGLES (the owner's ask of 2026-10-09, with a
+   * screenshot): its label follows what is on screen - "Open the Jarvis bar"
+   * while the bar is hidden, "Hide the Jarvis bar" while it is shown - and
+   * clicking it again hides the bar. The state reaches this page from the
+   * shell, never from the click: see `barOnScreen` below.
+   *
    * Why the reversal was possible: what was held against the box is now a
    * KNOWN LIMITATION of this window, not a reason to hide it. It is its
    * own conversation, with its own id, and it is filed in History as HUD
@@ -1033,54 +1144,279 @@
    * a plain browser, has no Jarvis bar to open. There the button is not
    * added and the box was never hidden - the page's own composer, exactly
    * as it ships.
+   *
+   * AND A SWITCH FOR THE BUTTON (the owner's request of 2026-10-06). Looking
+   * at this window, the owner asked for its "Open the Jarvis bar" button to be
+   * replaced by a text box he could type into, and then chose: keep the button
+   * beside the box, AND add a Settings option controlling whether the button
+   * shows in this window at all. That option is "The big HUD window" in
+   * Settings (settings.html, src/hud-window.js), ON by default - the state the
+   * owner already approved ("The 'Open the Jarvis bar' button stays in that
+   * window, beside the box").
+   *
+   * Cosmetic, so it changes at once and raises no approval card (CLAUDE.md):
+   * the box, its Send and the mic button are untouched, and Alt+Space still
+   * opens the Jarvis bar. It is per computer, in this window origin's
+   * localStorage, like the floating face and "Interrupt Jarvis while it
+   * talks".
+   *
+   * This file cannot `import` src/hud-window.js: it is injected as a plain
+   * script, before the page's own. So the key and the reading are spelled a
+   * second time here, deliberately, and tests/hud-window.mjs reads this file
+   * and fails unless the two agree - value by value, by running this code.
    * ---------------------------------------------------------------- */
   var OPEN_BAR = "Open the Jarvis bar";
-  var OPEN_BAR_SAID = "Chat with Jarvis in the Jarvis bar - it opens now.";
+  var HIDE_BAR = "Hide the Jarvis bar";
+
+  /* The localStorage key src/hud-window.js exports as OPEN_BAR_KEY. */
+  var OPEN_BAR_KEY = "jarvis.hud.openBar";
+
+  /* Whether the Jarvis bar is on screen. NOT guessed and NOT remembered from
+   * a click: the shell knows (src-tauri/src/windows.rs `publish_bar_state`)
+   * and pushes it on the feed's own "bar" channel, because the bar can also
+   * go away by itself - losing focus, its X, an open-a-chat call from another
+   * window - and a label that only followed this button's own clicks would go
+   * on saying "Hide the Jarvis bar" with nothing on screen to hide.
+   *
+   * A page that has just loaded has heard nothing yet, and a bar summoned
+   * before it loaded is already up, so the shell pushes the state again on
+   * every page load (lib.rs, `on_page_load`), exactly as it does the link and
+   * the appearance document. Until then: hidden, which is how the bar
+   * starts. */
+  var barOnScreen = false;
+
+  /* Whether the button shows: ON unless this computer saved it off, and ON
+   * when storage cannot be read at all - the reading notifications-prefs.js's
+   * loadBool and src/hud-window.js's openBarShown both use ("true"/"on" is on,
+   * nothing stored is on, any other stored value is off). */
+  function openBarShown() {
+    try {
+      var saved = window.localStorage.getItem(OPEN_BAR_KEY);
+      if (saved === null) return true;
+      return saved === "true" || saved === "on";
+    } catch (err) {
+      return true;
+    }
+  }
+
+  /* The words the button carries, given what is on screen (the owner's ask of
+   * 2026-10-09: it said "Open the Jarvis bar" whether the bar was open or
+   * not). The same shape as the wording that was already there - an imperative
+   * and the bar's name - and the SAME string is the tooltip and the accessible
+   * name, so a screen reader is never told something the sighted label
+   * contradicts. `title` is set from this, never from a fixed line. */
+  function barLabel(on) {
+    return on ? HIDE_BAR : OPEN_BAR;
+  }
+
+  function paintOpenBarLabel() {
+    var drawn = document.getElementById("hud-open-bar");
+    if (!drawn) return;
+    var words = barLabel(barOnScreen);
+    if (drawn.textContent !== words) drawn.textContent = words;
+    if (drawn.title !== words) drawn.title = words;
+  }
+
+  /* The shell's push: the bar came on screen, or went. Repaints the label and
+   * nothing else - it decides nothing, and it is the only writer of
+   * `barOnScreen`. */
+  function barStateChanged(visible) {
+    barOnScreen = visible === true;
+    paintOpenBarLabel();
+  }
 
   function openBarFromHud() {
     var tauri = window.__TAURI__;
     var invoke = tauri && tauri.core && tauri.core.invoke;
     if (typeof invoke !== "function") return;
+    /* One button, both directions (the owner's ask of 2026-10-09: clicking it
+     * again hides the bar). Which command to send follows the state the shell
+     * pushed, because the button is labelled from that same state - so the
+     * words on it and what a click does can never disagree. The shell answers
+     * a push of its own, which is what flips the label back. */
+    var command = barOnScreen ? "hide_quickbar" : "hud_open_bar";
     Promise.resolve()
       .then(function () {
-        return invoke("hud_open_bar");
+        return invoke(command);
       })
       .catch(function (err) {
         hudMicNote(
-          "Could not open the Jarvis bar: " +
+          "Could not " +
+            (command === "hide_quickbar" ? "hide" : "open") +
+            " the Jarvis bar: " +
             String((err && err.message) || err) +
-            ". Open it with its shortcut (Alt+Space unless you changed it)."
+            (command === "hide_quickbar"
+              ? ". Press Escape in it, or close it with its X."
+              : ". Open it with its shortcut (Alt+Space unless you changed it).")
         );
       });
   }
   window.__jarvisOpenBar = openBarFromHud;
 
-  /* The HUD's box and Send stay exactly as the page made them: visible, in
-   * the tab order, and working. This only adds the button that opens the
-   * Jarvis bar, before the box. */
-  function hudChatBox() {
-    var tauri = window.__TAURI__;
-    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+  /* Adds the button, once, before the box. Silent if it is already there. */
+  function addOpenBarButton() {
     var input = document.getElementById("input");
-    var send = document.getElementById("send");
-    if (!input || !send || document.getElementById("hud-open-bar")) return;
+    if (!input || !input.parentNode || document.getElementById("hud-open-bar")) return;
     var open = document.createElement("button");
     open.type = "button";
     open.id = "hud-open-bar";
     open.className = "act primary hud-open-bar";
-    open.textContent = OPEN_BAR;
+    open.textContent = barLabel(barOnScreen);
     // The page's `.act` is a square icon button; this one carries words.
     // hud-link.css could not be used for it: that file has rules for the
     // mark and the link line only, and no width rule for this id.
     open.style.width = "auto";
     open.style.padding = "0 14px";
-    open.title = OPEN_BAR_SAID;
+    // The tooltip and the accessible name are the visible label, so the two
+    // can never contradict each other in a screen reader.
+    open.title = barLabel(barOnScreen);
     open.addEventListener("click", openBarFromHud);
     input.parentNode.insertBefore(open, input);
+  }
+
+  /* The setting, applied: drawn when it is on, gone when it is off. */
+  function applyOpenBar() {
+    var drawn = document.getElementById("hud-open-bar");
+    if (openBarShown()) {
+      if (!drawn) addOpenBarButton();
+    } else if (drawn && drawn.parentNode) {
+      drawn.parentNode.removeChild(drawn);
+    }
+  }
+
+  /* The HUD's box and Send stay exactly as the page made them: visible, in
+   * the tab order, and working. This only adds the button that opens the
+   * Jarvis bar, before the box - when the owner's setting says to. */
+  function hudChatBox() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    var input = document.getElementById("input");
+    var send = document.getElementById("send");
+    if (!input || !send) return;
+    applyOpenBar();
+    // A change made in Settings while this window is open. This computer's
+    // localStorage is shared by every Jarvis window on this origin, and a
+    // write in one of them fires `storage` in the others - so the button
+    // appears or goes at once rather than at the next launch. Where a browser
+    // does not deliver that event, the window obeys the setting the next time
+    // it loads.
+    window.addEventListener("storage", function (event) {
+      if (event && event.key && event.key !== OPEN_BAR_KEY) return;
+      applyOpenBar();
+    });
   }
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", hudChatBox, { once: true });
   } else {
     hudChatBox();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The HUD's settings gear
+   *
+   * THE OWNER'S DECISION (2026-10-10, question 2 of
+   * docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the big HUD window gets a
+   * settings gear too. The audit had left it off - this window's capability
+   * file was the one that said, in so many words, that it holds "no approve,
+   * deny, memory-write, recording or settings command" - and the owner chose
+   * otherwise, so that sentence has been corrected in
+   * capabilities/hud.json rather than left to contradict the code.
+   *
+   * WHERE IT SITS, AND WHAT IT CALLS. The HUD has no title bar of its own
+   * (it is an ordinary decorated window, so the OS draws one); its own
+   * controls live on the stage bar at the top of the conversation view. The
+   * gear goes there, immediately before the page's own "Telemetry" button,
+   * so it reads as part of the window's chrome rather than of the
+   * conversation. It calls exactly what the Jarvis bar's gear and the
+   * widget's gear call - plain_errors.rs's `open_fix_place {place:
+   * "settings"}`, navigation only, through the app lock like every other way
+   * in - so there is NO new Tauri command and no new Rust code. It carries
+   * the same gear glyph and the same "Jarvis settings" name for a screen
+   * reader, so all three gears look and read alike.
+   *
+   * WHY IT IS ADDED HERE rather than in the page: jarvis_hud.html is
+   * vendored byte-identical from the backend folder, and section 2b below
+   * says why that matters (a new copy from the backend must need no
+   * re-patching). This script is how the shell adapts the page without
+   * forking it, and it adds no buttons on its own - the one control it
+   * already adds is beside the chat box.
+   *
+   * THE ACL CHANGE THIS NEEDED, deliberately: `open-fix-place` (the set that
+   * holds `allow-open-fix-place`) is now granted to this window in
+   * capabilities/hud.json. It was the widget that needed it last, for the
+   * same reason and with the same argument: a visible control wired to a
+   * command the window does not hold fails silently, which is exactly how
+   * the widget's offline card stayed dead. tests/bar-chrome.mjs holds both
+   * halves.
+   * ---------------------------------------------------------------- */
+  var GEAR_SAID = "Jarvis settings";
+
+  function settingsFromHud() {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") return;
+    Promise.resolve()
+      .then(function () {
+        return invoke("open_fix_place", { place: "settings" });
+      })
+      .catch(function (err) {
+        hudMicNote(
+          "Could not open Jarvis settings: " +
+            String((err && err.message) || err) +
+            ". Open them from the Jarvis tray icon."
+        );
+      });
+  }
+  window.__jarvisOpenSettings = settingsFromHud;
+
+  /* Adds the gear, once, onto the stage bar. Silent if the page has no stage
+   * bar (an older or newer copy of the vendored page). */
+  function addSettingsGear() {
+    var bar = document.querySelector(".stage-bar");
+    if (!bar || document.getElementById("hud-settings")) return;
+    var gear = document.createElement("button");
+    gear.type = "button";
+    gear.id = "hud-settings";
+    gear.className = "ghost hud-settings";
+    gear.title = GEAR_SAID;
+    // The page's `.ghost` pads for a word; this one is a square icon button,
+    // so it is sized here. 26px matches the page's own small controls (the
+    // Telemetry toggle beside it), not the 44px composer buttons.
+    gear.style.width = "26px";
+    gear.style.height = "26px";
+    gear.style.padding = "0";
+    gear.style.display = "flex";
+    gear.style.alignItems = "center";
+    gear.style.justifyContent = "center";
+    gear.setAttribute("aria-label", GEAR_SAID);
+    // The SAME gear glyph the Jarvis bar's gear and the widget's gear draw
+    // (index.html #open-settings, widget.html #btn-settings), so the three
+    // are recognisably one control. inline SVG, so neither CSP objects.
+    gear.innerHTML =
+      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />' +
+      '<path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />' +
+      "</svg>";
+    gear.addEventListener("click", settingsFromHud);
+    // Before "Telemetry", which the media query above only shows on a narrow
+    // window - so on a wide one the gear is the last thing on the bar.
+    var telemetry = document.getElementById("rail-toggle");
+    if (telemetry && telemetry.parentNode === bar) bar.insertBefore(gear, telemetry);
+    else bar.appendChild(gear);
+  }
+
+  /* Only with the shell (window.__TAURI__): the page served on its own, in a
+   * plain browser, has no Settings window to open and no `open_fix_place` to
+   * call - there the gear is not added at all, exactly as the "Open the
+   * Jarvis bar" button is not. */
+  function hudSettingsGear() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    addSettingsGear();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hudSettingsGear, { once: true });
+  } else {
+    hudSettingsGear();
   }
 })();

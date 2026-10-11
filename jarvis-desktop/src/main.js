@@ -180,7 +180,8 @@ import {
   CONTINUED_TAINTED,
   CONTINUED_TEMPORARY_OFF,
   CARRY_ON_LAST,
-  CARRY_ON_LAST_TITLE,
+  carryOnLastTitle,
+  storedIdleNewMs,
   continuedLine,
   continuedSkipped,
   continuedTrimmed,
@@ -226,6 +227,9 @@ import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 // "Inbox tidy by voice" (2026-09-28): the Undo strip under the input.
 import { mountInboxTidy } from "./inbox-tidy.js";
+// "Coach this" - the prompt coach's button above the box and the panel its
+// critique opens (prompt-coach-panel.js; the owner's request of 2026-10-08).
+import { historyFor, mountPromptCoach } from "./prompt-coach-panel.js";
 // "Spending summaries" (2026-09-30): the table a spending answer announced.
 import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending.js";
 import { mountFormReview } from "./form-review.js";
@@ -264,6 +268,9 @@ import {
   SEEN,
   TITLE,
 } from "./live-rules.js";
+// The approval clock's own second-level ticker (2026-10-08 cohesion audit,
+// finding 2: this file's `setInterval(..., 1000)` and widget.js's).
+import { clockTimer, IDLE_MS } from "./clock-timer.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -373,6 +380,8 @@ const dom = {
   liveEnd: $("jarvis-live-end"),
   liveChips: $("jarvis-live-chips"),
   pin: $("pin"),
+  openSettings: $("open-settings"),
+  hideBar: $("hide-bar"),
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
   noteChipLabel: $("note-chip-label"),
@@ -423,6 +432,10 @@ const dom = {
   captureFindDate: $("capture-find-date"),
   photoProposal: $("photo-proposal"),
   inboxTidy: $("inbox-tidy"),
+  // The prompt coach: the `.field` the "Coach this" button is put into, above
+  // the box, and the panel the critique is drawn in (prompt-coach-panel.js).
+  promptField: $("prompt-field"),
+  coachPanel: $("coach-panel"),
   spendingTable: $("spending-table"),
   approvalPicture: $("approval-picture"),
   clipboardChip: $("attachment-clipboard"),
@@ -455,7 +468,8 @@ const dom = {
   earlierChatsPrimer: $("earlier-chats-primer"),
   chatNote: $("chat-note"),
   // "Carry on the last chat": beside the note that a new conversation began
-  // after 30 quiet minutes (the second chat audit, 2026-09-28).
+  // after the owner's own quiet wait - 30 minutes by default (the second chat
+  // audit, 2026-09-28; the wait is set in Settings, chat-history.js).
   carryOnLast: $("carry-on-last"),
   // "You: ..." above the answer - the question this answer is for.
   youLine: $("you-line"),
@@ -534,8 +548,9 @@ const state = {
    */
   conversationId: newConversationId(),
   /** When the last answer of this conversation finished (ms) - a new
-   *  conversation starts after 30 quiet minutes (chat-history.js
-   *  IDLE_NEW_MS; the owner's decision, 2026-09-28). 0: none yet. */
+   *  conversation starts after the owner's own wait (chat-history.js
+   *  `storedIdleNewMs()`, 30 quiet minutes by default; the owner's decision,
+   *  2026-09-28). 0: none yet. */
   lastTurnAt: 0,
   /**
    * Where the words now in the box came from: "typed", "clipboard" (the
@@ -784,6 +799,52 @@ const formReview = dom.approvalPicture
     invoke: (command, args) => invokeStrict(command, args),
     onChange: () => syncWindowHeight(),
     announce,
+  })
+  : null;
+
+/**
+ * "Coach this" (prompt-coach-panel.js; docs/PROMPT-COACH-DESIGN.md, the
+ * owner's request of 2026-10-08): the button above the box, and the panel that
+ * shows ONE critique of the words in it - a score out of 10, what is missing
+ * and why it matters and the smallest fix for each, the questions it would
+ * have to ask, and the rewritten prompt in full.
+ *
+ * The button is drawn only while the PC says the coach is on (off by default);
+ * with it off there is no button at all, which is the owner's own rule.
+ *
+ * NOTHING HERE SENDS A TURN BY ITSELF. The critique is advice: the score is
+ * never a gate, and the panel's own two buttons are the only things that send
+ * anything -
+ *
+ *  - "Send mine" hands back exactly what is in the box, unchanged, through the
+ *    same `send()` the Enter key uses;
+ *  - "Send the suggestion" puts the rewritten prompt in the box and sends
+ *    that. Writing it marks the box "typed" - the words are a question for
+ *    Jarvis written for the owner to read and send, not something pasted in
+ *    from elsewhere (chat-history.js `boxTagAfter`, which holds that rule).
+ *
+ * The history handed over is the bar's own thread - the last few turns it was
+ * going to re-send to the same local model anyway, and never anything the PC
+ * does not already have.
+ */
+const promptCoach = dom.coachPanel
+  ? mountPromptCoach(dom.promptField, dom.coachPanel, {
+    invoke: (command, args) => invokeStrict(command, args),
+    boxText: () => dom.prompt.value,
+    history: () => historyFor(state.thread),
+    sendMine: (text) => send(text, state.boxTag),
+    sendSuggestion: async (text) => {
+      dom.prompt.value = text;
+      // A rewritten question is the owner's own typing, not a paste: it was
+      // written for them to read and send, and every rule about pasted words
+      // stays with words that really were pasted (chat-history.js).
+      state.boxTag = boxTagAfter("typed", "edit", text);
+      state.historyIndex = null;
+      autoGrowPrompt();
+      await send(text, state.boxTag);
+    },
+    announce,
+    onChange: () => syncWindowHeight(),
   })
   : null;
 
@@ -1188,8 +1249,9 @@ function paintYouLine(question) {
   dom.youLine.append(who, document.createTextNode(` ${q.length > 240 ? `${q.slice(0, 239)}…` : q}`));
 }
 
-/** "Carry on the last chat": shown with the note that 30 quiet minutes
- *  began a new conversation, for a chat that was kept. */
+/** "Carry on the last chat": shown with the note that the owner's own quiet
+ *  wait began a new conversation (30 minutes by default), for a chat that was
+ *  kept. Its tooltip says the wait the owner really chose ([carryOnLastTitle]). */
 function showCarryOn(id) {
   if (!dom.carryOnLast) return;
   state.lastChatId = id;
@@ -1534,10 +1596,55 @@ function menuVisibilityFromRoute(route) {
  * the same day, to any section id, not only "Starting Jarvis for you")
  * takes it from there. Nothing here changes a setting - this only jumps
  * the app to it, the owner still makes the change by hand.
+ *
+ * Since 2026-10-10 this function is also the door for the `jarvis` kind of
+ * "open Jarvis settings" (jarvis_open.py): see handleOpenAppRoute below.
  */
 function openSettingsFromRoute(route) {
   const place = route && typeof route.open_settings === "string" ? route.open_settings : "";
-  if (!place) return;
+  if (!place) {
+    // "open Jarvis settings" and "open web search" said out loud
+    // (jarvis_open.py, the owner's request of 2026-10-10) arrive as
+    // `open_app_kind: "jarvis"` instead: a program or a Windows panel is
+    // opened in Rust (`commands.rs open_app_from_route`, which starts nothing
+    // for this kind), while THIS window is the one that opens the Settings
+    // window. `open_place` is the section id, and "" is the top of the page -
+    // a real answer, not a missing one, so it is not treated as absent.
+    handleOpenAppRoute(route);
+    return;
+  }
+  goToSettingsPlace(place);
+}
+
+/**
+ * "open Jarvis settings" / "open web search" (jarvis_open.py, the owner's
+ * request of 2026-10-10): the Jarvis kind of an "open ..." answer. Opens or
+ * focuses the Settings window at the named section, or at the top when the
+ * owner asked for Jarvis's settings as a whole.
+ *
+ * The other two kinds in the same answer are not this window's business: an
+ * app or a Windows panel has already been started in Rust by the time the
+ * route line is painted (`commands.rs open_app_from_route`), so acting on
+ * them here would open each thing twice.
+ */
+function handleOpenAppRoute(route) {
+  if (!route || route.open_app_kind !== "jarvis") return;
+  const place = typeof route.open_place === "string" ? route.open_place : "";
+  if (!place) {
+    invoke("open_fix_place", { place: "settings" });
+    return;
+  }
+  goToSettingsPlace(place);
+}
+
+/**
+ * Leave a place for settings.js to read, then ask Rust to open or focus the
+ * Settings window. The same mechanism "Show me where" already uses
+ * (plain-errors.js's own button): settings.js's `goToPlace()` takes it from
+ * there. Nothing here changes a setting - this only jumps the app to it, and
+ * the owner still makes the change by hand.
+ */
+function goToSettingsPlace(place) {
   try {
     localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
   } catch {
@@ -1710,8 +1817,8 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
     const dot = dom.services.querySelector(`[data-service="${service.id}"]`);
     if (!dot) continue;
     dot.dataset.online = String(Boolean(service.online));
-    // LiteLLM (the cloud lane's proxy) is optional: not running is normal
-    // with no cloud model set up, so its dot is drawn quiet, not red.
+    // The cloud escalation lane is optional: not set up is normal, so its
+    // dot is drawn quiet, not red.
     dot.dataset.optional = String(Boolean(service.optional));
     dot.title = `${service.name}: ${service.detail}`;
     // Shape and hue are for the eye; this is the same fact for a screen
@@ -1743,7 +1850,8 @@ function applyHealth(report) {  if (!report || !Array.isArray(report.services)) 
  *
  * Called when something has actually changed — the window is summoned, the
  * stream connects or drops, a request fails — and never on a timer. Ollama and
- * the LiteLLM proxy are not on the event bus, so their dots still need a probe;
+ * the cloud lane's own state are not on the event bus, so their dots still need
+ * a probe;
  * Jarvis itself does not, because a live event stream *is* the proof that it is
  * up, and a better one than a request that succeeded a moment ago.
  */
@@ -2669,13 +2777,16 @@ function syncApprovalButtons() {
     || (state.approval && state.decided === state.approval.id);
   dom.approvalNoteInput.disabled = noteBlocked;
   dom.approvalNoteSend.disabled = noteBlocked;
+  // A card opened, closed or was replaced: the line under the risk row is
+  // about to change, so wake its clock now instead of waiting out a slow beat.
+  nudgeApprovalClock();
 }
 
 /**
  * The line under the risk line: "Nothing runs until you decide", plus how
  * long the card has left (the gate refuses it by itself at the deadline -
  * approval-expiry.patch), or why Approve is off for a cut-off request.
- * Re-painted every second by the ticker below, and only this line: it is not
+ * Re-painted by the ticker below, and only this line: it is not
  * a live region, so the countdown is never read out.
  */
 function paintApprovalClock() {
@@ -2701,9 +2812,43 @@ function paintApprovalClock() {
   const text = parts.join(" ");
   if (line.textContent !== text) line.textContent = text;
 }
-setInterval(() => {
+
+/**
+ * What the shown line is worth waiting for, in ms (2026-10-08 cohesion audit,
+ * finding 2).
+ *
+ * This used to be a flat `setInterval(..., 1000)`: 3,600 wake-ups an hour
+ * whether or not a card was up, and whether or not this window was on screen.
+ * Measured at 61 runs a simulated minute by `tests/timers.mjs`.
+ *
+ * The wait is now the thing the text can actually do next:
+ *  - nothing on screen, or the card's clock is not running          -> IDLE_MS
+ *  - an approval is counting down, or the heavy gate is ("unlocks in 2s") -> 1 s
+ * The align step in `clock-timer.js` is added to this, so the digits turn
+ * over on the second rather than a little later every tick.
+ */
+function clockWaitMs() {
+  const line = document.querySelector("#approval .approval-reassure");
+  if (!state.approval || !line || dom.approval.hidden) return IDLE_MS;
+  if (isHeavy(state.approval) && !heavyGate.ok) return 1000;
+  return state.approval.expiresAt ? 1000 : IDLE_MS;
+}
+
+const approvalClock = clockTimer(() => {
   if (state.approval && !dom.approval.hidden) paintApprovalClock();
-}, 1000);
+}, { delay: clockWaitMs, name: "hud" });
+approvalClock.wake();
+
+/**
+ * The card opened, closed or was replaced: the line under the risk row is
+ * about to change, so the clock re-arms now rather than on its next wake -
+ * which may be the idle minute away (2026-10-08 cohesion audit, finding 2).
+ * Called from `syncApprovalButtons`, the one place every surface repaints a
+ * card from.
+ */
+export function nudgeApprovalClock() {
+  approvalClock.wake();
+}
 
 function desktopUndoNotice(approval) {
   if (!approval) return null;
@@ -3376,10 +3521,14 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   state.inFlight = message;
   hideChatNote();
   if (dom.chatEndedNote) dom.chatEndedNote.hidden = true;
-  // A new conversation after 30 quiet minutes (the owner's decision,
-  // 2026-09-28) - never in the middle of Jarvis Live, which has its own
-  // quiet rule. The old one stays in History; Continue brings it back.
-  if (!liveOnHere() && idleExpired(state.lastTurnAt, Date.now(), state.conversation.length > 0)) {
+  // A new conversation after the owner's own wait (Settings -> "A new
+  // conversation starts after"; 30 quiet minutes by DEFAULT - the owner's
+  // decision, 2026-09-28, and what a missing or unreadable choice reads as).
+  // "Never" is a real choice: then this only fires when the owner starts a new
+  // conversation. Never in the middle of Jarvis Live, which has its own quiet
+  // rule. The old one stays in History; Continue brings it back.
+  const idleWaitMs = storedIdleNewMs();
+  if (!liveOnHere() && idleExpired(state.lastTurnAt, Date.now(), state.conversation.length > 0, idleWaitMs)) {
     // A temporary chat or a game was never kept, so there is no "last one in
     // History" to point to or carry on (the second chat audit, desktop C2).
     const kept = !(temporaryChat.on || state.gameChat);
@@ -3556,6 +3705,20 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
     // true, the same rule it already follows for `temporary`.
     cloudYes,
   };
+  // The picture is this ONE question's, and it goes with it (the owner's
+  // decision of 2026-10-07; SCREEN-ATTACH-DESIGN.md's flow, step 5). The
+  // design described the old attachment as already working this way; it did
+  // not - a capture stayed in the box until it was removed or the bar closed,
+  // so a screenshot taken for a chart would quietly ride on the next,
+  // unrelated question. Cleared AFTER `content`, `turnProvenance` and
+  // `hasImage` are built from it, and never on the path that holds the words
+  // back (the "your model can't see pictures" notice returns above, with the
+  // picture still attached and still on screen).
+  if (state.capture) {
+    state.capture = null;
+    dom.captureThumb.removeAttribute("src");
+    syncAttachments();
+  }
   // What this answer used, and what the PC said about a temporary one,
   // start from nothing (answer-memory.js).
   answerMemory.begin(temporaryChat.on);
@@ -5009,7 +5172,7 @@ dom.stop.addEventListener("click", abortStream);
 if (dom.newConversation) dom.newConversation.addEventListener("click", newConversation);
 if (dom.carryOnLast) {
   dom.carryOnLast.textContent = CARRY_ON_LAST;
-  dom.carryOnLast.title = CARRY_ON_LAST_TITLE;
+  dom.carryOnLast.title = carryOnLastTitle(storedIdleNewMs());
   dom.carryOnLast.addEventListener("click", () => {
     const id = state.lastChatId;
     hideCarryOn();
@@ -5049,6 +5212,29 @@ dom.copy.addEventListener("click", async () => {
 });
 
 dom.pin.addEventListener("click", () => setPinned(!state.pinned));
+
+// "Hide the Jarvis bar" - the × on the bar itself (the owner's request,
+// 2026-10-10). Exactly what Esc does: `hide_quickbar` in Rust drops the pin
+// first, so the next summon starts clean rather than reappearing stuck open.
+// The command is already in the quickbar's own permission set
+// (`allow-hide-quickbar`), so this added no new command and no new grant.
+if (dom.hideBar) {
+  dom.hideBar.addEventListener("click", () => {
+    invoke("hide_quickbar");
+  });
+}
+
+// "Jarvis settings" - the gear on the bar itself (the owner's request,
+// 2026-10-10). `open_fix_place` is the one door to the Settings window that
+// already existed for this window's own error-fix buttons (plain_errors.rs),
+// and the quickbar already holds `allow-open-fix-place`. It builds the window
+// if it is not open, shows and focuses it if it is, and goes through the app
+// lock either way, so a locked PC asks Windows Hello first.
+if (dom.openSettings) {
+  dom.openSettings.addEventListener("click", () => {
+    invoke("open_fix_place", { place: "settings" });
+  });
+}
 
 // Push-to-talk: pointer down starts, pointer up sends, the pointer leaving
 // the button (or a second pointer cancelling it) abandons the clip rather
@@ -5265,8 +5451,15 @@ listen("quick-note-summon", (event) => {
   dom.prompt.setSelectionRange(caret, caret);
 });
 
+// A look the PC could not hand a picture back for (the owner's decision of
+// 2026-10-07; SCREEN-ATTACH-DESIGN.md): the reason is said in the watch strip,
+// in the PC's own plain words, and NOT as an error banner - the look itself
+// worked, the answer box and the owner's words are left exactly as they are,
+// and nothing about the screen is shown. `screenNotice` is the strip's own
+// notice, the same place a refused look speaks.
 listen("capture-failed", (event) => {
-  showError(`Desktop capture failed: ${String(event.payload || "unknown error")}`);
+  const why = String(event.payload || "").trim();
+  screenNotice(why || "Jarvis could not attach a picture of your screen.");
 });
 
 listen("health-report", (event) => applyHealth(event.payload));

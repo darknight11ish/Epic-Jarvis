@@ -108,6 +108,9 @@ const ID_SHOW_BRAIN: &str = "show-brain";
 /// "Chat history…" (the chat audit, 2026-09-28): the Brain, on History.
 const ID_CHAT_HISTORY: &str = "chat-history";
 const ID_SHOW_FACES: &str = "show-faces";
+/// "Everything Jarvis can do" (docs/FEATURES-LIST-DESIGN.md, 2026-10-08): the
+/// whole feature set, in plain words, read-only.
+const ID_SHOW_FEATURES: &str = "show-features";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
 const ID_TOGGLE_FLOATING: &str = "toggle-floating";
@@ -137,6 +140,16 @@ struct Rows {
     backend: MenuItem<tauri::Wry>,
     /// Shown only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
+    // The rows that PRINT a hotkey. Kept so a rebind can re-label them:
+    // `accel()` was only ever read while the menu was built, so a row went on
+    // advertising the key the owner had just replaced - the exact thing the
+    // `toggle_spotlight` comment below exists to prevent (click audit,
+    // 2026-10-08: the tooltip, rebuilt live, showed the new key while the row
+    // showed the old one).
+    stop_everything: MenuItem<tauri::Wry>,
+    toggle_spotlight: MenuItem<tauri::Wry>,
+    toggle_widget: MenuItem<tauri::Wry>,
+    toggle_floating: MenuItem<tauri::Wry>,
 }
 
 /// What was last painted: the two colours, the notch count, the state, and
@@ -254,9 +267,24 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     )?;
 
     // Jarvis Live: never greyed - starting is refused with a reason (a stale
-    // link, App lock, no voice print), and ending always works.
-    let live = MenuItem::with_id(app, ID_LIVE, live_label(), true, None::<&str>)?;
-    let watch = MenuItem::with_id(app, ID_WATCH, watch_label(), true, None::<&str>)?;
+    // link, App lock, no voice print), and ending always works. Both rows print
+    // their hotkey when the owner has set one: the tray is where most people
+    // learn a key exists (see the shield icon's own note), and these two shipped
+    // unbound, so the row said nothing at all about them.
+    let live = MenuItem::with_id(
+        app,
+        ID_LIVE,
+        live_label(),
+        true,
+        accel(app, "toggle_live").as_deref(),
+    )?;
+    let watch = MenuItem::with_id(
+        app,
+        ID_WATCH,
+        watch_label(),
+        true,
+        accel(app, "toggle_watch").as_deref(),
+    )?;
 
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
@@ -274,6 +302,16 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     let chat_history =
         MenuItem::with_id(app, ID_CHAT_HISTORY, "Chat history…", true, None::<&str>)?;
     let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
+    // The whole feature set in one window (2026-10-08). In the windows group,
+    // beside Faces, and needing no new separator: `ia.mjs` counts five
+    // separators for six groups, and a seventh group is not wanted for this.
+    let show_features = MenuItem::with_id(
+        app,
+        ID_SHOW_FEATURES,
+        "Everything Jarvis can do…",
+        true,
+        None::<&str>,
+    )?;
     let toggle_spotlight = MenuItem::with_id(
         app,
         ID_TOGGLE_SPOTLIGHT,
@@ -360,6 +398,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &show_brain,
             &chat_history,
             &show_faces,
+            &show_features,
             &PredefinedMenuItem::separator(app)?,
             // The machinery. `backend` and `reconnect` were three groups apart
             // while being the same subject: is the thing on the other end of
@@ -388,6 +427,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             watch,
             backend,
             update,
+            stop_everything,
+            toggle_spotlight,
+            toggle_widget,
+            toggle_floating,
         });
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
@@ -1220,6 +1263,52 @@ fn accel(app: &AppHandle, id: &str) -> Option<String> {
     bound.get(id).cloned().filter(|s| !s.trim().is_empty())
 }
 
+/// Re-labels every tray row that prints a hotkey, after one is set or reset.
+/// The menu is built ONCE, so without this a row kept showing the key the owner
+/// had just replaced for the rest of the session - while the hover tooltip,
+/// which IS rebuilt live (`tooltip()`, called from `repaint()`), showed the new
+/// one. The comment on `toggle_spotlight` says why that row exists at all: a
+/// tray advertising "Alt+Space" after PowerToys took it points the owner at the
+/// one key that cannot work.
+///
+/// Called from the two hotkey commands, deferred to the event loop
+/// (`hotkeys::relabel_tray`) - NOT from `apply()`, which also runs during setup
+/// where touching the native menu hangs the main thread. A missing tray is
+/// simply left alone; at startup the rows are built with their keys already.
+pub fn hotkeys_changed(app: &AppHandle) {
+    let handles = app.state::<TrayHandles>();
+    let guard = handles
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let Some(rows) = guard.as_ref() else {
+        return; // no tray was built (startup, or create_tray failed)
+    };
+    // What the OS actually ACCEPTED, from the state `apply()` has just written:
+    // a row must never print a key that was refused, or it points the owner at
+    // the one key that cannot work. That is not hypothetical - this PC's
+    // Alt+Space is held by another program, and the Jarvis bar's row said
+    // "Alt+Space" while the key was refused (2026-10-08).
+    let applied = app.state::<crate::hotkeys::HotkeyState>().snapshot();
+    let registered = |id: &str| applied.iter().find(|b| b.id == id).map(|b| b.registered);
+    for (id, item) in [
+        ("stop_everything", &rows.stop_everything),
+        ("toggle_quickbar", &rows.toggle_spotlight),
+        ("toggle_widget", &rows.toggle_widget),
+        ("toggle_floating", &rows.toggle_floating),
+        ("toggle_live", &rows.live),
+        ("toggle_watch", &rows.watch),
+    ] {
+        let key = match registered(id) {
+            Some(false) => None, // refused by the OS: print nothing at all
+            _ => accel(app, id),
+        };
+        if let Err(err) = item.set_accelerator(key.as_deref()) {
+            eprintln!("[jarvis] tray: could not re-label the row for {id}: {err}");
+        }
+    }
+}
+
 fn first_sentence(text: &str) -> String {
     let text = text.trim();
     // A full stop only ends a sentence when whitespace or the end follows it.
@@ -1387,6 +1476,19 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             }
         }
 
+        ID_SHOW_FEATURES => {
+            if let Err(err) = windows::show_features(app) {
+                eprintln!("[jarvis] feature list unavailable: {err}");
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "The list of what Jarvis can do could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
+            }
+        }
+
         ID_SHOW_BRAIN => {
             if let Err(err) = windows::show_brain(app) {
                 eprintln!("[jarvis] tray: the Brain would not open: {err}");
@@ -1413,11 +1515,14 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             }
         }
 
-        ID_TOGGLE_SPOTLIGHT => match windows::toggle_quickbar(app) {
-            Ok(true) => crate::emit_quickbar(app, events::FOCUS_INPUT, ()),
-            Ok(false) => {}
-            Err(err) => eprintln!("[jarvis] tray: quickbar toggle failed: {err}"),
-        },
+        // The menu row and the icon's own left click are the same toggle now,
+        // and `toggle_quickbar` places the caret itself - no second
+        // `emit_quickbar` here (2026-10-10).
+        ID_TOGGLE_SPOTLIGHT => {
+            if let Err(err) = windows::toggle_quickbar(app) {
+                eprintln!("[jarvis] tray: quickbar toggle failed: {err}");
+            }
+        }
 
         ID_TOGGLE_WIDGET => {
             if let Err(err) = windows::toggle_widget(app) {
@@ -1546,8 +1651,18 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
     }
 }
 
-/// Left click on the icon summons the spotlight, matching what users expect
-/// from a launcher that lives in the notification area. Not emitted on Linux.
+/// Left click on the icon SUMMONS the spotlight, and a second left click sends
+/// it away again - matching what users expect from a launcher that lives in
+/// the notification area.
+///
+/// This used to call `windows::show_quickbar` unconditionally, so clicking the
+/// icon while the bar was already up did nothing visible: the owner's own
+/// request of 2026-10-10, "open jarvis bar ... should also hide it if it is
+/// clicked again after it pops up". It now goes through the one toggle every
+/// other route uses (the `Alt+Space` hotkey, "open the Jarvis bar" said out
+/// loud, and the tray menu's own Show/Hide row), so all four agree. The caret
+/// is placed by `toggle_quickbar` itself, which is why there is no
+/// `emit_quickbar` here any more. Not emitted on Linux.
 fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
     if let TrayIconEvent::Click {
         button: MouseButton::Left,
@@ -1556,9 +1671,10 @@ fn handle_tray_icon_event(tray: &tauri::tray::TrayIcon, event: TrayIconEvent) {
     } = event
     {
         let app = tray.app_handle();
-        match windows::show_quickbar(app) {
-            Ok(()) => crate::emit_quickbar(app, events::FOCUS_INPUT, ()),
-            Err(err) => eprintln!("[jarvis] tray: unable to summon the quickbar: {err}"),
+        // App lock may ask Windows Hello first; `Ok(false)` is "not on screen
+        // yet", which is not a failure and is not reported as one.
+        if let Err(err) = windows::toggle_quickbar(app) {
+            eprintln!("[jarvis] tray: unable to toggle the quickbar: {err}");
         }
     }
 }

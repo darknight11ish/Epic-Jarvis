@@ -61,10 +61,13 @@
   are affected and the command to run.
 
 .PARAMETER Force
-  By default the script refuses to change anything while a Python program that
-  looks like Jarvis (its command line names the backend folder or jarvis_hud.py)
-  is running, because a running Jarvis has the files open and would go on
-  running the old code. Close Jarvis and run again; -Force skips that check.
+  By default the script refuses to change anything while the Jarvis that runs
+  THIS backend folder is still running - a Python program whose command line
+  names this folder's own jarvis_hud.py (see Test-NamesThisBackendsHud for the
+  exact rule, and for what it cannot see). It has to: a running Jarvis has the
+  files open and would go on running the old code. A Python program that is
+  not this folder's Jarvis - another backend folder's, or a test suite - is not
+  a reason to refuse. Close Jarvis and run again; -Force skips that check.
 
 .PARAMETER SkipPackages
   Do not run pip. The packages in backend/requirements.txt are then yours to
@@ -75,6 +78,29 @@
   the rest. A PARTIAL install: the features those patches carry will not be
   present. Only use it once you have looked for the missing files and they
   really are gone - the script prints the command to search for them.
+
+.PARAMETER StateJson
+  Write what the rehearsal decided about each patch to this file, as JSON, and
+  carry on exactly as before. Give it a path:
+  `-StateJson "C:\somewhere\jarvis-state.json"`. One entry per patch: "taken-off"
+  (the run found its work and took it off, to put the current text back on),
+  "taken-off-older-text" (the same, but what came off was an older committed
+  version of the patch), "on-but-unstrippable" (its work is there and no text of
+  it can take it off these files) or "not-recognised" (neither). Off unless
+  given: without it nothing is written and the run is unchanged. The file is
+  written even when the run then refuses - a refusal is when the record matters
+  most. No behaviour depends on it yet; it is the classification step 1 of
+  docs/UPDATER-REDESIGN.md section 5 asks for, and the manifest, the drift check
+  and the backup decision are built on top of it.
+
+.PARAMETER Manifest
+  Where the record of a finished run goes. Defaults to `_jarvis-state.json`
+  beside the backend, which is what this script reads on a later run to know
+  what the files are supposed to hold. Off with `-Manifest none`. The record is
+  written only after a run that finished with no problem at all: a run that
+  refused, or that stopped part way, leaves any earlier record exactly as it
+  was, so the baseline it holds is never quietly replaced. See the note under
+  step 2 in this script, and docs/UPDATER-REDESIGN.md sections 4.1 and 5.
 
 .EXAMPLE
   From the folder this repository is cloned into. -ExecutionPolicy Bypass
@@ -94,7 +120,9 @@ param(
     [switch] $SkipMissing,
     [switch] $SkipPackages,
     [switch] $FixLineEndings,
-    [switch] $Force
+    [switch] $Force,
+    [string] $StateJson = '',
+    [string] $Manifest = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1044,6 +1072,26 @@ $PATCHES = @(
     # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'quiz-cloud.patch'
+    # "Chatbot money limits" - the INSTALL BLOCK half (the owner's approval of
+    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
+    # section 87.4.1). ONE block in jarvis_hud.py, wrapped round Handler right
+    # after quiz-cloud.patch's own, before anything listens.
+    #
+    # This is a SEPARATE PATCH from chatbot-limits.patch below, and that is
+    # load-bearing rather than tidiness: the two halves need different positions
+    # in this list. This hunk's context is quiz-cloud.patch's own printed lines,
+    # so it must run straight after quiz-cloud; put later, the tutorials.patch
+    # and readpage.patch blocks land between its anchor and that context, so it
+    # is materialised at the END of the file instead - which duplicates the
+    # `_loopback_companion(bind, HUD_PORT, Handler)` line it uses as trailing
+    # context (test_installed_stand_in.py, test_bind_wildcard.py,
+    # test_loopback_too.py). The gate half must run after readpage.patch, for
+    # its own reason. One patch cannot sit in two places, so there are two.
+    #
+    # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
+    # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
+    # banner says so and the route is simply not there.
+    'chatbot-limits-hud.patch'
     # The gate renamed an action on its way out (2026-10-03). For the 58
     # _TOOL_ACTIONS entries whose value is a TIER literal ("calculator": "auto"),
     # action_for_tool() returned f"tool:{name}" as the action name. That string
@@ -1062,8 +1110,15 @@ $PATCHES = @(
     'gate-action-name.patch'
     # "Tutorials and the FAQ" (the owner's request of 2026-10-05; docs/TUTORIALS-DESIGN.md,
     # JARVIS-API section 114): GET /api/tutorials, POST /api/tutorials/progress and GET
-    # /api/faq. ONE hunk in jarvis_hud.py, an install block right after retirement.patch's
-    # own, so it goes after it. One catalogue and the owner's reading progress, kept on the
+    # /api/faq. ONE hunk in jarvis_hud.py, an install block at the END of the
+    # chain before `_loopback_companion` - right after chatbot-limits-hud.patch's
+    # own block, which is what its context names. (It said "right after
+    # retirement.patch's own" until 2026-10-09 and that had been wrong since
+    # 2026-10-04, when the patch was rebuilt onto quiz-cloud; the note was left
+    # behind and the anchor drifted again with it. The anchor it names now is
+    # the one it is written against, and that is worth keeping true: it is how
+    # the next person sees which earlier patch this one's context belongs to.)
+    # One catalogue and the owner's reading progress, kept on the
     # PC and shared by both apps: it writes its own one JSON file in the config folder,
     # raises no card and calls nothing out. Needs jarvis_tutorials.py copied in (it is in
     # SHIPPED below); without it, or on any error, the banner says so and the routes are
@@ -1080,6 +1135,52 @@ $PATCHES = @(
     # It needs jarvis_readpage.py and jarvis_agent.py copied in (both are in SHIPPED below);
     # without them the tool is simply not offered to the model and the gate row is never used.
     'readpage.patch'
+    # "Chatbot money limits" - the GATE half (the owner's approval of
+    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md decisions 1 and 3, JARVIS-API
+    # section 87.4.1). Raising a limit is a loosening, so it raises ONE
+    # approval card (`raise_api_limit`) plus Windows Hello on the PC, and is
+    # refused from any other device. Lowering one, removing one, correcting a
+    # price and resetting one tighten or correct, so they need no card - the
+    # reason there are TWO action names, since the owner-check attaches Windows
+    # Hello to the action and not to the direction. TWO hunks in jarvis_gate.py:
+    # the names join the "acts only on tier ask" set and get their _RISK lines.
+    # Each of the two goes at the END of its list, right after readpage.patch's
+    # own last entry there (`read_web_page`), which is where readpage.patch and
+    # quiz-cloud.patch each put theirs. Both hunks first named the entry that was
+    # last when this patch was written - `quiz_cloud_grade` in the set,
+    # `youtube_captions_read` in _RISK - and neither was last any more, so
+    # `_stack.py` could not match them and materialised a pre-image at the end of
+    # the file instead: that re-emitted the context lines and gave
+    # `youtube_captions_read` a second _RISK row, of which only the last is ever
+    # read (test_gate_risk_words.py's duplicate check is what caught it). Both
+    # hunks now apply to real context - `_stack.py`'s RATCHET for jarvis_gate.py
+    # came down from 25 to 23 with the fix.
+    #
+    # It sits HERE, after readpage.patch, and that position is load-bearing:
+    # written straight after quiz-cloud.patch it stopped readpage.patch applying
+    # at all, because readpage's own jarvis_gate.py hunks anchor on the same two
+    # lists these two names join. test_readpage.py and
+    # test_installed_stand_in.py are what prove the order is right. The install
+    # block half is chatbot-limits-hud.patch above, which must stay where it is.
+    #
+    # Needs jarvis_chatbot_limits.py copied in (it is in SHIPPED below) and
+    # chatbot.patch's jarvis_chatbot_api.py; without them, or on any error, the
+    # banner says so and the route is simply not there.
+    'chatbot-limits.patch'
+    # The ADDRESSES of the owner's accounts (the owner's decision of 2026-10-06,
+    # CLAUDE.md: "anything needing a key or a sign-in should be settable in the
+    # Jarvis app itself, desktop only, stored under rule 3"): GET and POST
+    # /api/accounts/addresses - the mail server, its port and mailbox, the
+    # sending server, its port and how the email is encrypted, the Home
+    # Assistant address and the calendar's CalDAV address. TWO hunks in
+    # jarvis_hud.py, each sitting on a line web-search.patch wrote (its own GET
+    # block's 503 return, and its POST block's own return), so it goes after
+    # web-search.patch and touches nothing any later patch rewrites. It carries
+    # ADDRESSES ONLY: POST refuses every name but the eight, so no route here
+    # can put a key, a password, a token or the private calendar link in a
+    # plain-text file (rule 3). Needs jarvis_accounts.py copied in (it is in
+    # SHIPPED below); without it the routes answer 503 and carry on.
+    'accounts.patch'
     # The gate's risk table held draft_email TWICE: the owner's own original
     # line ("a draft is not a sent message", rated local) and draft-email.patch's
     # row ("saves the draft ... to your own Drafts folder", rated outbound -
@@ -1092,6 +1193,213 @@ $PATCHES = @(
     # Tested by test_gate_risk_rows.py; the apply itself is proven by this
     # script's dry run, as for every patch here.
     'gate-risk-rows.patch'
+    # --- The job list (2026-10-08, JARVIS-API section 118) ---
+    # tasks.patch: GET /api/tasks (counted only - ids, tool names, states and step
+    # counts, never the text of a note) plus POST /api/tasks/act (pause, resume,
+    # cancel, retry) and POST /api/tasks/input (answer a question a job stopped on).
+    # Two hunks in jarvis_hud.py whose context is task-control.patch's own added
+    # lines, so it goes after task-control. It needs jarvis_tasks.py copied in (in
+    # SHIPPED below); without it both routes answer 503 and nothing enqueues a job.
+    # No gate hunk: this module approves nothing, and the rehearsal in
+    # test_tasks.py asserts that no steering route reaches the gate at all.
+    'tasks.patch'
+    # This one MUST stay last but for the patches written after it:
+    # test_screen_attach.py asserts that, because its wrapper reads the request
+    # body once and every later patch would be applied behind its back.
+    # retrieve-count.patch (2026-10-08) is the one written after it, and it is
+    # safe there: it adds `_retrieve_counts()` and the `count=1` branch of the
+    # /api/retrieve handler, and touches the screen route not at all.
+    # The interruption budget the Brain shows (2026-10-08): ONE route in
+    # jarvis_hud.py, POST /api/attention/settings, whose context is the
+    # attention routes already there (/api/attention/mute and /unmute), so it
+    # only has to come after attention.patch - and it touches nothing
+    # screen-attach.patch also touches, so it goes just before that one, like
+    # every new patch. It is three lines: the rule that lowering the budget is
+    # immediate and RAISING it needs one approval card lives in
+    # jarvis_arbiter.py (a module this repository ships whole), not here.
+    'attention-settings.patch'
+    # The limits and frequencies the owner can change (2026-10-08): ONE route in
+    # jarvis_hud.py, POST /api/limits/settings, right after the interruption
+    # budget's own route, so it only has to come after attention-settings.patch -
+    # and it touches nothing screen-attach.patch touches, so it goes just before
+    # that one too. The whole table and the card a loosening needs live in
+    # jarvis_limits.py (a module this repository ships whole), so every limit
+    # after this one is a line in that table and no patch at all.
+    'limits-settings.patch'
+    # The limits' READ route (2026-10-08): GET /api/limits, which answers the
+    # seven limits with the owner's words for each one, so a screen can show
+    # what the numbers are before changing one. It joins the HUD's read-only
+    # route set (the one that refuses cross-origin and bad-token requests) and
+    # changes nothing on its own - the write is still /api/limits/settings. It
+    # goes right after limits-settings.patch, whose table it reads.
+    'limits-read.patch'
+    # "Look at this" can hand the owner the CLEANED picture of the look, for the
+    # question box (the owner's decision of 2026-10-07;
+    # .dsh-scratch/SCREEN-ATTACH-DESIGN.md): ONE install block in jarvis_hud.py,
+    # whose context is tutorials.patch's own block (the last one before
+    # `_loopback_companion`), so it goes last, like every new patch. Its wrapper
+    # takes over POST /api/screen so the request body is read once, and hands
+    # every other verb to jarvis_screen.handle_post - so it MUST come after
+    # screen.patch, whose route it wraps. Needs jarvis_screen_attach.py copied
+    # in; without it, or on any error, the banner says so and a look is exactly
+    # what it was before (the words only, no picture).
+    # prompt-coach.patch (2026-10-08, JARVIS-API section 120): "Coach this" and
+    # the switch that turns it on. Two hunks in jarvis_hud.py - one GET route
+    # and one POST block - anchored on routes that predate it. It goes BEFORE
+    # screen-attach.patch, which must stay last (test_screen_attach.py asserts
+    # it), and it touches jarvis_gate.py not at all: it approves nothing.
+    'prompt-coach.patch'
+    # More Docker integration, slice 1's missing half (the owner's request of
+    # 2026-10-09; docs/DOCKER-INTEGRATION-DESIGN.md sections 3, 4 and 7a): the
+    # containers on Jarvis's OWN list (today SearXNG, the default web-search
+    # provider) get their two routes. ONE install block in jarvis_hud.py -
+    # `jarvis_docker.install(Handler, ...)` - wiring GET /api/docker/containers
+    # (the list) and POST /api/docker/service (start or stop one) into the
+    # server, which is what makes jarvis_docker.py reachable at all. A start is
+    # ONE approval card (docker_service_start, tier ask) and a stop goes through
+    # the same gate; the module itself refuses a start unless the pinned image is
+    # ALREADY on this PC, so nothing here ever pulls, and it refuses a container
+    # that is not ours, one that publishes beyond loopback and one that is
+    # privileged. Its context is chatbot-limits-hud.patch's own block and
+    # tutorials.patch's first two lines, so it goes BEFORE screen-attach.patch,
+    # which must stay last (test_screen_attach.py asserts it): a block inserted
+    # between tutorials' block and the socket comment would break that patch's
+    # anchor. Needs jarvis_docker.py copied in; without it, or on any error, the
+    # banner says "docker NOT ON" and neither route is there.
+    'docker.patch'
+    'screen-attach.patch'
+    # The count-only retrieval trace (the owner's decision of 2026-10-08,
+    # "Just the number"; docs/RETRIEVE-PORT-BRIEF.md, option B; JARVIS-API
+    # section 120): `count=1` on GET /api/retrieve answers with four keys and
+    # no words at all - how many were recalled, how many were near misses -
+    # so the phone can show "3 recalled - 2 near" without ever being sent a
+    # saved fact, a document or a Logseq page. Two hunks in jarvis_hud.py:
+    # `_retrieve_counts()` beside retrieve(), and the handler's own
+    # `count=1` branch. Nothing else in the file changes, and the desktop's
+    # trace is untouched (no `count` on its own request). No new module.
+    'retrieve-count.patch'
+    # How long "Solve it here" stays on offer (the owner's OWN decision of
+    # 2026-10-08, his words: "make this a setting for both options with 1 as
+    # the default"; backend/jarvis_handoff_mode.py; docs/CAPTCHA-HANDOFF-DESIGN.md
+    # section 5; JARVIS-API section 87.8). TWO hunks in jarvis_gate.py ONLY -
+    # the new action joins the "acts only on tier ask" list and gets its _RISK
+    # line, both right after the last patch that wrote those two tables, so it
+    # goes last, like every new patch - and NO jarvis_hud.py hunk at all: the
+    # route is answered by jarvis_chatbot_routes.py, which
+    # chatbot-routes.patch already installs. Needs jarvis_handoff_mode.py
+    # copied in; without it, or on any error, the route answers 503 in plain
+    # words and the hand-off keeps stopping early - the safe direction. The
+    # hand-off's own picture and input routes are untouched, and the desktop
+    # still names none of them (tests/handoff.mjs).
+    'handoff-mode.patch'
+    # What a captcha does about the browser window it is blocking (the owner's
+    # OWN decision of 2026-10-09, his words: "1 by default with the option for 2
+    # in the settings of Jarvis"; backend/jarvis_handoff_front.py). TWO hunks in
+    # jarvis_gate.py ONLY - the new action joins the "acts only on tier ask" list
+    # and gets its _RISK line, both right after the last patch that wrote those
+    # two tables, so it goes last, like every new patch - and NO jarvis_hud.py
+    # hunk at all: the route is answered by jarvis_chatbot_routes.py, which
+    # chatbot-routes.patch already installs. Needs jarvis_handoff_front.py copied
+    # in; without it, or on any error, the route answers 503 in plain words and
+    # the window is left exactly where it is - the safe direction. The hand-off's
+    # own picture and input routes are untouched, and the desktop still names
+    # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
+    'handoff-front.patch'
+    # --- the owner's uncensored opt-ins, BOTH halves -------------------------
+    # jarvis_optin_models.py, the owner's OWN decision of 2026-10-10 (Decision
+    # 5): (a) one clearly-labelled opt-in for fiction and role-play, never the
+    # everyday assistant and never a default, and (b) the abliterated models
+    # already on disk offered as opt-in choices with no new download. TWO hunks
+    # in jarvis_gate.py - each switch's action joins the "acts only on tier
+    # ask" list and gets its _RISK line, both right after handoff-front.patch's
+    # own last entry in those two tables, so it goes after that patch - and ONE
+    # hunk in jarvis_hud.py, whose context is screen-attach.patch's own last
+    # printed line, calling jarvis_optin_models.install().
+    #
+    # It sits HERE, immediately BEFORE plugin-loader.patch, and that position
+    # is load-bearing in both directions: plugin-loader.patch must stay the
+    # LAST entry in this list (the repository's own rule for the loader -
+    # everything after it must be a drop-in folder, never another core patch,
+    # and tools/check_plugins.py fails if it is not last), so a new CORE patch
+    # goes in front of it and the loader's own hunk is re-anchored onto this
+    # block's last two printed lines. That re-anchor is exactly what
+    # tools/check_plugins.py derives and checks.
+    #
+    # Why it is a patch and not a drop-in folder: it needs a line in the core
+    # it does not own - the gate's tier tables, where "turning it on raises an
+    # approval card" is actually expressed. Its two [autonomy.tiers] lines are
+    # in backend/rebuilt/jarvis-framework.toml, which this script merges into
+    # the owner's own file ONLY when the line is missing, so a value they set
+    # themselves is never overwritten.
+    #
+    # Nothing here leaves the PC. Nothing is downloaded: the import names a
+    # local .gguf PATH through the EXISTING models_create route, and the module
+    # itself refuses to offer - or to import anything into - a model store that
+    # is not on this PC (rule 1). OFF, for either switch, is instant and needs
+    # no card, and the everyday assistant is never changed by either one.
+    'uncensored-optins.patch'
+    # --- drop-in modules (feat/plug-and-play-modules) ------------------------
+    # Last, like every new patch, and its context is uncensored-optins.patch's
+    # own last two printed lines - the last install block before
+    # `_loopback_companion` (it was screen-attach.patch's printed lines until
+    # that block landed in front of it, in the same change). It adds ONE more
+    # block of the same shape, calling jarvis_plugins.install(), which loads
+    # every folder in jarvis_plugins\ beside jarvis_hud.py and calls that
+    # folder's module's own install(). Nothing else about the core changes, and
+    # nothing about the 18 features it can carry changes: each still ships its
+    # own module and each module still wraps the Handler itself.
+    #
+    # This patch is applied ONCE, and it is the only core change the whole
+    # plug-in system needs. After it, adding or removing one of those features
+    # is a folder - scripts\add-plugin.ps1 and remove-plugin.ps1 - and never
+    # another patch. plugins/registry.json says which features those are, and
+    # for every other patch in this list, in plain words, what it does that
+    # stops it being one (a gate entry, a route in the core, an edit to a line
+    # the core already has).
+    #
+    # It cannot be applied on its own: its context is the output of the stack
+    # above it, so it needs that stack, which is what this script rehearses
+    # and enforces. If your tree differs, the dry run stops and nothing at all
+    # is changed - the safe failure this script already has. A tree that
+    # differs on purpose can skip the patch and paste the four lines by hand;
+    # plugins/loader/README.md prints them.
+    # gate-touches.patch (2026-10-10). THE GATE READ THE CARD, NOT THE ACTION.
+    # Its first rule - the one above the tier table, that stops anything
+    # rewriting the policy or the gate itself - searched the whole PROMPT it
+    # was handed for its own _PROTECTED file names. For a card raised by a
+    # route, that prompt IS the card's own text, so a card that merely
+    # DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier
+    # "never" before any card existed: no card, no Windows Hello, nobody
+    # asked, for anybody, ever. The owner's own log holds 45 of them
+    # (2026-10-03 .. 2026-10-10) - enable_reading_tool 21,
+    # loosen_what_asks_first 21, restore_backup 3 - and three features had
+    # never once worked. It now reads what the action TOUCHES: the
+    # parameters it was handed, and the model's own tool call (the JSON
+    # object inside the prompt). Card prose is not a target. ONE hunk pair,
+    # in jarvis_gate.py alone; see backend/README.md's own section.
+    'gate-touches.patch'
+    # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
+    # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
+    # on the OWNER's own lines just before the main socket is built, NOT inside the chain of install
+    # blocks above it. That chain ends at the owner's `# Before the main socket` line and every block in
+    # it anchors on the block the patch before wrote, so a block inserted in the middle of the chain
+    # leaves the next patch's hunk without its context. This one was first written between progress.patch
+    # and topics.patch, on progress.patch's block with topics.patch's OWN banner as its trailing context -
+    # a patch that runs AFTER it - so it applied to the finished file and not to the file as it stands at
+    # its own turn (measured 2026-10-11: the stack's walk had to invent its pre-image, 51 hunks against a
+    # pin of 50, and this script's own strip-and-re-apply rehearsal would have refused the whole run with
+    # "will not apply"). It sits immediately before plugin-loader.patch, which MUST be last of all (see
+    # backend/test_gate_touches.py), as well as after devices.patch.
+    # The three ways of running a picture-maker
+    # beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card
+    # with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched), each
+    # its own switch, ALL OFF until the owner turns one on. It draws nothing (asking for a picture is
+    # jarvis_pictures.py's route, section 123), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
+    # that, reading these settings) and needs no gate line and no card: it only chooses a card for a local
+    # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
+    # or on any error, the banner says so and the routes are simply not there.
+    'picture-card.patch'
+    'plugin-loader.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1164,6 +1472,9 @@ $SHIPPED = @(
     'jarvis_profiles.py'         # hardware.patch: the three setups' arithmetic, words and one-line command (no I/O)
     'jarvis_hardware.py'         # hardware.patch: finding the cards, the steps, making a tuned model, measuring
     'jarvis_scrub.py'            # log-scrub.patch: passwords, keys and the token kept out of backend.log
+    'jarvis_sqlite.py'           # the one connection class that CLOSES when its `with` block ends, shared by
+                                 # jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py (2026-10-08; the
+                                 # WinError 32 "schedule.json is in use" failure, fixed by hand three times)
     'jarvis_schedule.py'         # schedule.patch: the one scheduler - timers, alarms, reminders, the to-do list
     'jarvis_quick.py'            # schedule.patch: timers and reminders answered without the AI model
     'jarvis_settings_registry.py' # "open"/"adjust" any setting by voice or chat, 2026-09-27; jarvis_quick.py (above) calls it, no patch of its own
@@ -1195,6 +1506,7 @@ $SHIPPED = @(
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch
+    'jarvis_accounts.py'         # the ADDRESSES of the owner's accounts (mail server, sending server, Home Assistant, CalDAV) in accounts.json beside web-search.json; accounts.patch. ADDRESSES ONLY - never a key, password or token (rule 3)
     # --- Stop everything (2026-09-25) ---
     'jarvis_stop_all.py'         # stop-all.patch: POST /api/stop_all, and the hook other features register with
     'jarvis_tellme.py'           # "tell me when ..." (an email from someone, a device changing): a kind of job on the one scheduler, no patch; NOT a model tool
@@ -1286,11 +1598,18 @@ $SHIPPED = @(
     'jarvis_chatbot_lechat.py'   # Le Chat by Mistral AI (chat.mistral.ai): a thin site file
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
+    'jarvis_chatbot_limits.py'   # chatbot-limits.patch: the monthly money limits and the price list, set from the PC's app - a raise is ONE card plus Windows Hello, a lowering and a price correction are not; GET/POST /api/chatbot/money, PC only
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
     # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
     'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
     'jarvis_screen_picture.py'   # slow picture mode for one graphics card: a small picture model on the PROCESSOR in its own copy of Ollama; off by default, ON is one card, OFF is instant; secrets blacked out first or no picture; GET/POST /api/screen/picture (routes in jarvis_screen.py, gate lines in screen-picture.patch)
+    # "look at this" can hand back the CLEANED picture of the look, for the question box
+    # (the owner's decision of 2026-10-07, .dsh-scratch/SCREEN-ATTACH-DESIGN.md;
+    # screen-attach.patch installs its wrapper round jarvis_screen.py's route). It takes
+    # no picture of its own: the look is jarvis_screen.Screen._grab's, in its one order,
+    # and the bytes handed on are jarvis_picture.clean's own output - never the capture.
+    'jarvis_screen_attach.py'
     # --- the headless browser, Obscura (2026-09-29, browser-engine.patch) ---
     'jarvis_obscura.py'          # the driver for Obscura, a browser with no window: started over standard input/output (no port), --stealth always, no proxy, allow-listed tools only, one program at a time, hard limits; the owner's install line and check
     'jarvis_browser_engine.py'   # which browser Jarvis uses (visible or headless), the switch (off by default, ON is one card), the mode rule, GET/POST /api/browser/engine (browser-engine.patch)
@@ -1306,6 +1625,9 @@ $SHIPPED = @(
     'jarvis_support_widget.py'   # the support window on the chatbot websites' shared base: the company's help page, its chat widget (Zendesk, Intercom, LivePerson, Gorgias, Freshchat, Salesforce, unbranded); needs Playwright (not installed by this script)
     # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
     'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
+    'jarvis_handoff_mode.py'     # how long that hand-off stays on offer (the owner's OWN setting of 2026-10-08): "Stop early" by default, or keep offering it for the full 15 minutes - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
+    'jarvis_handoff_front.py'    # what a captcha does about its browser window (the owner's OWN setting of 2026-10-09): leave it exactly where it is by default, or bring it to the front - choosing THAT is one card on the PC with Windows Hello; route in jarvis_chatbot_routes.py, gate lines in handoff-mode.patch
+    'jarvis_docker.py'           # the first Docker integration (the owner's request of 2026-10-09, docs/DOCKER-INTEGRATION-DESIGN.md): list the containers on Jarvis's OWN list (today SearXNG, the default search provider) and start or stop one. It cannot create or pull: a start is refused unless the pinned image is ALREADY on this PC, and a container that is not ours (wrong image, a port beyond loopback, or privileged) is never touched. Start is one card; stop is instant. Its routes are installed by docker.patch
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online
@@ -1325,6 +1647,8 @@ $SHIPPED = @(
     'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
     # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Which card draws the pictures" (2026-10-10, picture-card.patch) ---
+    'jarvis_picture_card.py'     # picture-card.patch: the three ways of running a picture-maker beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched) - each its own switch, ALL OFF until the owner turns one on; it draws nothing, starts nothing and is not a model tool; the card is pinned by UUID from nvidia-smi and never by index
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)
@@ -1337,8 +1661,45 @@ $SHIPPED = @(
     'jarvis_readpage.py'         # readpage.patch: the model's read_web_page tool - ONE card per address (read_web_page, tier ask, risky: the PC contacts that one site), then ONE plain GET and the words a reader would see, handed back as outside text; never a link on the page, never a second page, no new dependency
     # --- "Show or hide menus" (2026-09-30, no patch) ---
     'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
+    # --- "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the owner's request; no patch) ---
+    'jarvis_open.py'             # which app, Windows panel or Jarvis Settings section the owner's own words name; jarvis_quick.py (already SHIPPED) calls it - no patch, no route, NO card, and no model tool, like jarvis_media.py
     # --- Per-model thinking levels (2026-10-01, Section 5.5) ---
     'jarvis_thinking.py'         # thinking.patch: setting per model (everyday, second, third), capabilities check, voice fast override, plain words (no card)
+    # --- The page `GET /` serves (2026-10-07) ---
+    # Not a module: jarvis_hud.py reads it from its own folder at request time,
+    # so it has to sit beside the server. It was in the base and in neither
+    # SHIPPED list, so the patcher never copied it and the backend answered
+    # `GET /` with 500 "jarvis_hud.html is missing from this folder" - which is
+    # why the desktop app had never connected on the owner's PC and fell back to
+    # its demo data. test_shipped_modules.py keeps this list and _where.py's
+    # SHIPPED in step.
+    'jarvis_hud.html'            # the HUD page itself: the server hands it to a browser at GET / - no patch, no route of its own
+    # --- The five the base carried but this list did not (2026-10-07) ---
+    # All five were already in jarvis-backend/ and a SHIPPED module imports each,
+    # but none was listed here and no patch delivered any of them - so a backend
+    # built from the published base imported a shipped module that imported a
+    # file the repository never handed over. test_shipped_modules.py keeps this
+    # list and _where.py's SHIPPED in step. See .dsh-scratch/UNSHIPPED-MODULES-REPORT.md.
+    'jarvis_arbiter.py'          # the one place that decides whether to interrupt the owner: an attention budget, overflow drained into one daily digest; jarvis_hud.py and jarvis_watch.py import it - no patch
+    'jarvis_ledger.py'           # a tamper-evident append-only record of what the assistant did, hashing metadata only so integrity and forgetting do not cancel out; jarvis_hud.py imports it - no patch
+    'jarvis_watch.py'            # "tell me what's new on GitHub for the things I care about": pull not push, a repo page treated as text from a stranger; jarvis_hud.py and jarvis_settings_registry.py import it - no patch
+    'jarvis_tripwire.py'         # a smoke test for a model swap, deliberately not an eval suite; jarvis_models.py imports it - no patch
+    'jarvis_structured.py'       # makes a malformed tool call structurally impossible via Ollama's `format` JSON Schema; jarvis_extract.py imports it - no patch
+    # Pulled in by the five above: jarvis_arbiter and jarvis_watch import
+    # jarvis_jobs, and jarvis_watch imports jarvis_content_risk.
+    'jarvis_jobs.py'             # Long Fuse: work that outlives the conversation; imported by jarvis_arbiter.py and jarvis_watch.py - no patch
+    'jarvis_limits.py'           # The limits and frequencies the owner can change: ONE table and ONE route (limits-settings.patch) for the numbers that were readable and unchangeable - the undo window, jobs at once, what counts as news from a watched project, study questions a day, the new-conversation window, and whether a model looks for people and things in what the owner saves. Writes ONE line of jarvis-framework.toml, atomically, keeping its comments; raising a number that lets Jarvis do more raises ONE approval card first, and turning one down is instant - no patch
+    'jarvis_content_risk.py'     # one pipeline for text that arrived from outside; imported by jarvis_watch.py - no patch
+    # --- The job list (2026-10-08, tasks.patch, JARVIS-API section 118) ---
+    'jarvis_tasks.py'            # Work that outlives one chat turn. tasks.db holds tasks, runs, run-events, actions and a memo; a lease makes a crashed job be picked up again and never run twice at once, a checkpoint follows every step, an interrupted send becomes outcome_unknown rather than a failure to retry, an idempotency key makes one request make one action, and a card's decision must carry the hash of the words that were shown. Local SQLite, standard library only, no network, no child process, approves nothing
+    'jarvis_prompt_coach.py'  # "Coach this": what is missing from a prompt the owner is about to send. Advice only - it sends nothing, runs no tool, raises no card, keeps nothing, and checks the model is on this PC before building the request; prompt-coach.patch wires its one route
+    'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
+    # --- Drop-in modules (feat/plug-and-play-modules) ---
+    'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
+    # --- The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5) ---
+    'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
+    # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
+    'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -1372,6 +1733,25 @@ $REBUILT_SUPERSEDES = @{
 $RepoRoot   = Split-Path -Parent $PSScriptRoot
 $PatchDir   = Join-Path $RepoRoot 'backend'
 $Stamp      = Get-Date -Format 'yyyy-MM-dd-HHmmss'
+# The name every throwaway folder under %TEMP% is built from - and it is NOT
+# $Stamp above (2026-10-09, the staging race several agents hit on this PC).
+#
+# $Stamp is a clock reading to the second, and on Windows the clock only moves
+# on the system timer tick, so a second run started inside the same second as
+# the first reads the SAME value. Five folders under %TEMP% were named from it:
+# jarvis-patches-lf-, jarvis-rehearsal-, jarvis-result-check-,
+# jarvis-undo-check- and - the one that cost the time - jarvis-suite-state-,
+# which is handed to `run_suites.py --state-env`. Every one of them is then
+# created with -Force, and removed with Remove-Item -Force at the end of the
+# run, so two runs in one second do not merely share a folder: whichever ends
+# first DELETES it underneath the other. `remove` (the patcher) then reports
+# spurious patch failures, and the suites that `update` started report spurious
+# test failures against a config folder that has been deleted mid-run - which
+# is why "run it alone again" always made them pass. A name that cannot collide
+# is the fix, so it comes from the operating system rather than from a clock.
+# `update-jarvis.ps1` names its source folder this way for the same reason.
+$RunId      = $([Guid]::NewGuid().ToString('N').Substring(0, 12))
+$TempName   = "$Stamp-$RunId"
 
 # The list above is hand-ordered because the order matters, which means it can
 # fall behind the directory - and it did: event-allowlist.patch was written,
@@ -1653,6 +2033,41 @@ Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
 if ($RunLog) { Say "Log     : $RunLog (a copy of everything printed here)" }
 else { Say "Log     : none - the log file could not be started, so copy this window if you need a record" Yellow }
 
+# --- where the classification of this run is written (docs/UPDATER-REDESIGN section 5
+# step 1) ---------------------------------------------------------------------
+#
+# Resolved HERE, before the script changes directory: a relative name is then
+# relative to the folder the command was run from, not to whatever folder the
+# rehearsal is standing in when the file is written.
+$StateJsonPath = ''
+if ($StateJson) {
+    $StateJsonPath = $StateJson
+    if (-not [IO.Path]::IsPathRooted($StateJsonPath)) {
+        $StateJsonPath = Join-Path (Get-Location).Path $StateJsonPath
+    }
+}
+
+# --- where the record of a finished run is kept (docs/UPDATER-REDESIGN section 5
+# step 2) ----------------------------------------------------------------------
+#
+# Beside the backend, which is what section 4.1 asks for ("a file the owner's
+# folder carries"), and only ever a HASH of a backend file: nothing of the
+# owner's own text is copied into it. `-Manifest none` turns the whole step off,
+# exactly as -StateJson's absence turns step 1 off. -Manifest <path> puts it
+# somewhere else (used by the tests to keep two records apart).
+$ManifestPath = Join-Path $BackendPath '_jarvis-state.json'
+if ($Manifest -eq 'none') { $ManifestPath = '' }
+elseif ($Manifest) { $ManifestPath = $Manifest }
+# The record this run reads at the start, once it is known to be usable, and the
+# files whose hashes this run could NOT tie to a patch verdict.
+$script:ManifestCurrent = $null
+$script:ManifestUnmatched = @()
+$script:ManifestKeep = @()
+# Set when a recorded file has changed since the last good run: a run that found
+# drift must not replace the record it found the drift against (see the write
+# step near the end).
+$script:ManifestDrifted = $false
+
 # --- a backend folder inside ANOTHER git repository --------------------------
 #
 # `git apply` behaves differently inside a repository than outside one: it
@@ -1732,7 +2147,7 @@ if ($UsingRebuilt) {
 # is. That half is pinned at the one call that writes anything (Invoke-Patch,
 # with `-c core.autocrlf=false -c core.eol=lf`); the comment there has the
 # measured bytes.
-$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$Stamp"
+$LfDir = Join-Path ([IO.Path]::GetTempPath()) "jarvis-patches-lf-$TempName"
 New-Item -ItemType Directory -Path $LfDir -Force | Out-Null
 
 # Copies $Src to $Dest with every CRLF made LF. Returns how many it changed.
@@ -1971,12 +2386,85 @@ if ($crlfFiles.Count -gt 0) {
 }
 Say ""
 
+# Is this Python process the Jarvis that runs THIS backend folder?
+#
+# WHAT THIS REPLACED, AND WHY (2026-10-08). The rule used to be: a Python
+# process whose command line contains the backend folder, OR contains
+# "jarvis_hud.py". Neither half was anchored to the folder being patched:
+#
+#   * the second half matched the owner's own app in ITS folder while this
+#     script was rehearsing on a copy, so a run refused over a folder nothing
+#     was using. On the owner's PC that was 37 checks red in
+#     backend/test_apply_outcomes.py, and the process the refusal named
+#     (pid 34612) was the owner's live backend, which that run never touched.
+#     It had been read twice before as something else: once as "the owner's app
+#     is up" (true - but not the folder being patched) and once as a race.
+#   * the first half matched ANY file inside the folder, so
+#     `python.exe <backend folder>\test_x.py` - how run_suites.py starts every
+#     suite, and how a person runs one by hand - counted as Jarvis running too.
+#
+# A PORT PROBE WAS CONSIDERED AND REJECTED. jarvis_hud.py's port is a
+# machine-wide fact and the owner's app holds it while this script rehearses on
+# a copy, so probing it would refuse exactly the rehearsals the incident was
+# about - and it still could not say WHICH folder the answering program runs
+# from. The question here is per-folder, and only the command line carries the
+# folder. So: no port probe.
+#
+# WHAT THIS STILL CANNOT DO, PLAINLY. Windows will not let one process read
+# another's working directory, so a command line that names jarvis_hud.py with
+# no folder at all - `py -3 jarvis_hud.py`, the line setup-jarvis.ps1 gives the
+# owner - cannot be tied to a folder; it is read as a hit, the refusing side.
+# A process whose command line cannot be read at all (an elevated one) is
+# invisible to any of this, and Get-RunningBackend says how many of those there
+# were rather than pretending there were none.
+#
+# update-jarvis.ps1 carries the same rule, verbatim, and the two are checked
+# against each other - see backend/test_apply_outcomes.py.
+function Test-NamesThisBackendsHud {
+    param([string] $Cmd, [string] $Backend)
+
+    if (-not $Cmd) { return $false }
+    $bp = ([string]$Backend).TrimEnd('\', '/')
+    if (-not $bp) { return $false }
+
+    # 1. The shape the desktop app starts it with - the whole path:
+    #    python.exe "C:\...\Desktop program\jarvis_hud.py"
+    if ($Cmd.IndexOf($bp + '\jarvis_hud.py', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+    if ($Cmd.IndexOf($bp + '/jarvis_hud.py', [StringComparison]::OrdinalIgnoreCase) -ge 0) { return $true }
+
+    # 2. A launch that names no folder: `py -3 jarvis_hud.py` from inside the
+    #    backend folder, or `python -m jarvis_hud`. See "cannot do" above.
+    if ($Cmd -match '(^|[\s"''=])jarvis_hud\.py([\s"'']|$)') { return $true }
+    if ($Cmd -match '-m\s+jarvis_hud([\s"''=]|$)') { return $true }
+
+    # 3. The same file spelled another way: an 8.3 short name, ./.., a forward
+    #    slash. Resolve each candidate's folder and compare it with the folder
+    #    being patched. Reached only when the command line already names
+    #    jarvis_hud.py somewhere, so the common path above stays cheap.
+    foreach ($m in [regex]::Matches($Cmd, '(?i)[^\s"'']*jarvis_hud\.py')) {
+        $t = $m.Value.Trim('"', "'")
+        $dir = Split-Path -Path $t -Parent
+        if (-not $dir) { continue }
+        $cand = $dir
+        # A relative one is read against the folder being patched, the only
+        # folder whose Jarvis this check is about.
+        if (-not [System.IO.Path]::IsPathRooted($dir)) { $cand = Join-Path $bp $dir }
+        try {
+            $full = (Get-Item -LiteralPath $cand -ErrorAction Stop).FullName.TrimEnd('\', '/')
+            if ($full -eq $bp) { return $true }
+        } catch { }
+    }
+    return $false
+}
+
 # A running Jarvis has its files open (Windows will not let a locked file be
 # replaced) and keeps running the OLD code from memory after they change. Best
-# effort: a Python program whose command line names the backend folder or
-# jarvis_hud.py. -Force skips it. Returns a list of short descriptions.
+# effort: a Python program whose command line names THIS backend's own
+# jarvis_hud.py - see Test-NamesThisBackendsHud above for what that means and
+# what it cannot see. -Force skips it. Returns a list of short descriptions.
 function Get-RunningBackend {
     $found = @()
+    $script:UnreadablePython = @()
     try {
         $bp = (Resolve-Path -LiteralPath $BackendPath).Path
         $rows = @()
@@ -1994,8 +2482,14 @@ function Get-RunningBackend {
         foreach ($r in $rows) {
             if ($r.Id -eq $PID) { continue }
             if ($r.Name -notmatch '^(py|pyw|python[0-9.]*|pythonw[0-9.]*)(\.exe)?$') { continue }
-            if (-not $r.Cmd) { continue }
-            if ($r.Cmd.IndexOf($bp, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or $r.Cmd -match 'jarvis_hud\.py') {
+            if (-not $r.Cmd) {
+                # A Python program that will not say what it is running (an
+                # elevated one). Named below, never silently counted as "not
+                # Jarvis".
+                $script:UnreadablePython += "$($r.Id)"
+                continue
+            }
+            if (Test-NamesThisBackendsHud -Cmd $r.Cmd -Backend $bp) {
                 $found += "process $($r.Id): $($r.Name)"
             }
         }
@@ -2006,6 +2500,9 @@ function Get-RunningBackend {
 function Assert-JarvisClosed {
     if ($Force) { return }
     $running = @(Get-RunningBackend)
+    if ($script:UnreadablePython.Count -gt 0) {
+        Warn "$($script:UnreadablePython.Count) Python program(s) would not say what they are running (pid $($script:UnreadablePython -join ', ')). If one of them is Jarvis, this check cannot see it - close Jarvis by hand first."
+    }
     if ($running.Count -eq 0) { return }
     Say ""
     Bad "Jarvis (or something else using this backend folder) looks like it is still running:"
@@ -2185,6 +2682,466 @@ if ($absent.Count -gt 0) {
 Push-Location -LiteralPath $BackendPath
 try {
 
+    # --- what the rehearsal decided about each patch, for -StateJson ---------
+    #
+    # docs/UPDATER-REDESIGN.md section 5, build step 1: the verdict the run
+    # reaches is written down per patch, in a form a program can read, instead
+    # of only in prose. Nothing here decides anything - every verdict is
+    # recorded at a decision the run was already making - and with no switch
+    # `$classify` is never read. Built on top of this and not here: the
+    # manifest (step 2), the drift check, and the backup-and-overwrite the owner
+    # chose on 2026-10-08 (step 4).
+    $classify = @{}
+    $classifyRound = @{}
+    function Set-PatchClass {
+        param([string] $Name, [string] $Verdict, [string] $Older = '', [int] $Round = 1)
+        # ONE ANSWER FROM THREE SOURCES (2026-10-08; every claim below measured on
+        # a copy of the owner's backend, and each one got the first version of
+        # this function wrong).
+        #
+        # Three phases of one run learn something about a patch, and they must be
+        # ranked, because "last one wins" is wrong in both directions:
+        #
+        #   0 - the first rehearsal. "This patch went on a clean copy", which is
+        #       the ONLY thing that ever says so: the strip below never runs when
+        #       the first rehearsal leaves nothing broken (measured - a backend
+        #       with its patches already on gets `found=0 alreadyOn=0` there, and
+        #       with this recorded nowhere, every verdict came out the default
+        #       "not-recognised").
+        #   1 - the re-apply, after the strip. What the state the run would leave
+        #       actually carries: it re-applies every patch and says so per patch.
+        #   2 - the strip. What was FOUND on the files, which is the only thing
+        #       that can say "an older committed text of this patch was what was
+        #       on them" - cloud-one-turn and ollama-direct, measured.
+        #
+        # A later, higher round overrides an earlier one - EXCEPT that the two
+        # stronger statements below outrank a round as well, because they are
+        # about what the RUN'S OWN RESULT carries rather than about what was
+        # found:
+        #
+        #   - "on-but-unstrippable" is worth more than "taken-off", in any round:
+        #     it says the work is on the files AND that this run cannot put the
+        #     current text there. Measured on the owner's state, tutorials.patch
+        #     and screen-attach.patch come off the strip (round 2, "taken off")
+        #     and then will NOT go back on (round 1, "on but unstrippable") - and
+        #     it is the second that the result gate refuses over.
+        #   - "not-recognised" is worth more than everything: it says the state
+        #     the run would leave does not carry that patch at all.
+        #
+        # Nothing else overrides round 2, so a "taken-off-older-text" is never
+        # replaced by a plain "taken-off" (cloud-one-turn and ollama-direct,
+        # measured: the first version of this threw away the only record that
+        # what the files carried was an older committed text).
+        if ($script:classifyRound.ContainsKey($Name)) {
+            $prevRound = $script:classifyRound[$Name]
+            $prev = $script:classify[$Name].Verdict
+            if ($Verdict -eq 'not-recognised') {
+                # upgraded only: never downgrade it back
+            } elseif ($Verdict -eq 'on-but-unstrippable' -and $prev -ne 'not-recognised') {
+                # upgraded only
+            } else {
+                if ($Round -lt $prevRound) { return }
+                if ($Round -eq $prevRound) {
+                    if ($prev -eq $Verdict) { return }
+                    if ($prev -eq 'taken-off-older-text' -and $Verdict -eq 'taken-off') { return }
+                    if ($prev -eq 'not-recognised') { return }
+                }
+            }
+        }
+        $script:classify[$Name] = @{ Verdict = $Verdict; Older = $Older }
+        $script:classifyRound[$Name] = $Round
+    }
+
+    # --- the manifest: what the files held after a run that finished ----------
+    #
+    # docs/UPDATER-REDESIGN.md section 5, build step 2 (built 2026-10-09). After
+    # a run that finishes, this writes _jarvis-state.json beside the backend:
+    # each patch's own text hash, and the hash of every .py this run left in
+    # place. On a later run it is read FIRST, and if nothing it records has
+    # changed the rehearsal is not run at all - "what is on?" becomes a read.
+    # That is the whole of step 2, and it is why it is worth having: the
+    # rehearsal cannot agree with itself on a stack where any patch came off and
+    # would not go back on (section 1).
+    #
+    # It does NOT relax the result gate. The gate still runs, unchanged, on every
+    # run where the manifest is absent, does not cover this list, or disagrees
+    # with the files (sections 8 and 9: the gate is the only thing catching the
+    # four patches that re-apply on top of themselves, and step 5 is what fixes
+    # the underlying verdict - not this).
+    #
+    # The owner's answers of 2026-10-09, recorded in section 6 of that note and
+    # honoured here:
+    #   * question 2 - the FIRST run takes the owner's current files as the
+    #     starting baseline (hashes only; nothing of his is modified) and then
+    #     names whatever it could not tie to a patch. See Write-Manifest: a file
+    #     whose patch has no verdict is recorded "unverified" and LISTED, because
+    #     a baseline that silently said "all good" about a file the patches
+    #     cannot reproduce is exactly the silence section 8 warns about.
+    #   * question 4 - still open, and deliberately not answered here: a run that
+    #     had to skip patches reports exactly what it reported before.
+    #
+    # A file the patches DO produce but that the owner edited by hand does not
+    # silently become the new baseline either: drift is named and the record is
+    # left alone (see Test-ManifestDrift and the note on Write-Manifest).
+    if ($ManifestPath) {
+
+        function Get-Sha256Hex {
+            param([string] $Path, [switch] $AsLf)
+            if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return '' }
+            # -AsLf: on a backend whose files carry Windows line endings, the
+            # ending is not what "the same file" means (section 7 of the design
+            # note measured that LF and CRLF have both been the state at
+            # different times), so the text is normalised the way
+            # test_apply_line_endings.py compares it. In memory only.
+            if ($AsLf) {
+                try { $t = [IO.File]::ReadAllText($Path) -replace "`r`n", "`n" } catch { return '' }
+            } else {
+                try { $t = [IO.File]::ReadAllText($Path) } catch { return '' }
+            }
+            $sha = [Security.Cryptography.SHA256]::Create()
+            try {
+                $h = $sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($t))
+            } finally {
+                $sha.Dispose()
+            }
+            return (($h | ForEach-Object { $_.ToString('x2') }) -join '')
+        }
+
+        function Read-Manifest {
+            if (-not (Test-Path -LiteralPath $ManifestPath -PathType Leaf)) { return $null }
+            try { return ([IO.File]::ReadAllText($ManifestPath) | ConvertFrom-Json) } catch { return $null }
+        }
+
+        # Is a record usable for the list this run is about to work on? It has to
+        # name this run's own list, in order, and it has to name every patch of
+        # that list as the thing some file's hash came from.
+        function Test-ManifestCurrent {
+            param($Doc)
+            if (-not $Doc) { return $false }
+            $listed = @($Doc.patchList)
+            if ($listed.Count -ne $PATCHES.Count) { return $false }
+            for ($i = 0; $i -lt $PATCHES.Count; $i++) {
+                if ($listed[$i] -ne $PATCHES[$i]) { return $false }
+            }
+            $named = @()
+            if ($Doc.files) {
+                foreach ($p in $Doc.files.PSObject.Properties) {
+                    if ($p.Value.patch) { $named += $p.Value.patch }
+                }
+            }
+            foreach ($n in $PATCHES) { if ($named -notcontains $n) { return $false } }
+            return $true
+        }
+
+        # What this run's OWN rehearsal decided about one patch, in the words
+        # Write-StateJson uses, so the two files cannot disagree about a backend.
+        function Get-PatchVerdict {
+            param([string] $Name)
+            if ($script:classify.ContainsKey($Name)) { return $script:classify[$Name].Verdict }
+            return 'not-recognised'
+        }
+
+        # Where a patch's text is (the run's own LF copy, or the directory it
+        # came from). Both are tried: in a repository that ships no patches of
+        # its own, the LF copy has none of them, and the hash and the file a
+        # patch names have to be read from wherever the text really is.
+        function Get-PatchFile {
+            param([string] $Name)
+            $leaf = $Name
+            try { $leaf = Split-Path -Leaf $Name } catch { $leaf = $Name }
+            foreach ($d in @($PatchSrc, $PatchDir)) {
+                $p = Join-Path $d $leaf
+                if (Test-Path -LiteralPath $p -PathType Leaf) { return $p }
+            }
+            return ''
+        }
+
+        # Every file a patch of this list names, tied to that patch's own name.
+        function Get-TargetOwners {
+            $own = [ordered]@{}
+            foreach ($n in $PATCHES) {
+                $full = Get-PatchFile -Name $n
+                if (-not $full) { continue }
+                $leaf = Split-Path -Leaf $full
+                foreach ($line in [IO.File]::ReadAllLines($full)) {
+                    if ($line -match '^\+\+\+ b/([^\t]+)') { $own[$Matches[1].Trim()] = $leaf }
+                }
+            }
+            return $own        }
+
+        # A file two patches of this list both write is never called verified:
+        # its hash cannot say which of the two put the text there, so a hand-edit
+        # in it would read as a clean record. It is named instead.
+        function Get-SharedFiles {
+            $owner = [ordered]@{}
+            foreach ($n in $PATCHES) {
+                $full = Get-PatchFile -Name $n
+                if (-not $full) { continue }
+                $leaf = Split-Path -Leaf $full
+                foreach ($line in [IO.File]::ReadAllLines($full)) {
+                    if ($line -match '^\+\+\+ b/([^\t]+)') {
+                        $f = $Matches[1].Trim()
+                        if ($owner.Contains($f)) { $owner[$f] = $owner[$f] + ' ' + $leaf }
+                        else { $owner[$f] = $leaf }
+                    }
+                }
+            }
+            $shared = New-Object System.Collections.Generic.List[string]
+            foreach ($k in $owner.Keys) {
+                # A patch's own name cannot contain a space, so MORE THAN ONE
+                # word here is exactly "more than one patch writes this file".
+                # (@($s -split ' ').Count is 1 for every string - measured
+                # 2026-10-09, and it made every file read as shared.)
+                if (($owner[$k] -split ' ').Count -gt 1) { $shared.Add([string]$k) }
+            }
+            return $shared.ToArray()
+        }
+
+        # What the record says about the files as they are RIGHT NOW. A file it
+        # cannot speak for is named, never silently called fine.
+        function Test-ManifestDrift {
+            param($Doc)
+            # A real list, added to one name at a time and handed back with
+            # `return ,$bad.ToArray()`: a plain `@()` that a caller wraps again
+            # comes back as a LIST INSIDE A LIST, and "$($drift.Count)" then
+            # prints the file name as "System.Object[]" (measured 2026-10-09).
+            # An empty string cannot be a file name, so one is never added.
+            $bad = New-Object System.Collections.Generic.List[string]
+            foreach ($f in @($Doc.files.PSObject.Properties)) {
+                $rel = [string]$f.Name
+                if (-not $rel) { continue }
+                $rec = $f.Value
+                if ($rec.verified -eq $false -or $script:ManifestShared -contains $rel) {
+                    $script:ManifestUnmatched += $rel
+                    continue
+                }
+                $now = Get-Sha256Hex -Path (Join-Path $BackendPath $rel) -AsLf
+                if (-not $now -or $now -ne [string]$rec.sha256) { $bad.Add($rel) }
+            }
+            # No comma before the array: PowerShell unrolls what a function
+            # returns, and the caller's @() puts it back together. With the comma
+            # the caller gets a LIST INSIDE A LIST - measured 2026-10-09, where
+            # the run then printed one "file" whose name was "System.Object[]".
+            return $bad.ToArray()        }
+
+        # The one moment the record is written. It preserves any file it cannot
+        # speak for this run, so the baseline the owner's own files were first
+        # recorded with is never quietly replaced.
+        function Write-Manifest {
+            param($Doc, [array] $Entries, [string] $State, [string[]] $NameList, [hashtable] $Verified, $Owners)
+            # `$patchRecs`, never `$patches`: PowerShell compares variable names
+            # case-insensitively, so a local `$patches` inside a function that
+            # also reads the run's `$PATCHES` is the SAME variable (measured
+            # 2026-10-09 - the record's patch list came out as the patch objects
+            # instead of their names, which made the record unusable to the run
+            # that read it). The list and the verified map are parameters for the
+            # same reason: the function is given what it records, not left to
+            # find it by name in whatever scope happens to be above it.
+            $files = [ordered]@{}
+            $oldSha = @{}
+            if ($script:ManifestCurrent -and $script:ManifestCurrent.patches) {
+                foreach ($p in $script:ManifestCurrent.patches) { $oldSha[[string]$p.Patch] = [string]$p.Sha256 }
+            }
+            $patchRecs = @()
+            $unmatched = @()
+            foreach ($e in $Entries) {
+                if ($e.Verified) {
+                    $full = Get-PatchFile -Name $e.Patch
+                    $sha = ''
+                    if ($full) { $sha = Get-Sha256Hex -Path $full }
+                    if (-not $sha -and $oldSha.ContainsKey($e.Patch)) { $sha = $oldSha[$e.Patch] }
+                    $patchRecs += [ordered]@{
+                        Patch   = [string]$e.Patch
+                        Sha256  = $sha
+                        Verdict = [string]$e.Verdict
+                    }
+                } else {
+                    $script:ManifestKeep += [string]$e.Name
+                    $unmatched += [ordered]@{
+                        Patch   = [string]$e.Name
+                        Verdict = [string]$e.Verdict
+                    }
+                }
+            }
+            # Carry forward what an earlier record said about a file this run
+            # does not hash itself (the modules step 3 copies), so the record
+            # does not lose what it knows. A file this run HAS produced is
+            # written fresh below and always wins; a carried entry is kept only
+            # while its hash is still the one on disk AND it was verified.
+            if ($script:ManifestCurrent -and $script:ManifestCurrent.files -and $Doc.Count -gt 0) {
+                foreach ($p in $script:ManifestCurrent.files.PSObject.Properties) {
+                    if ($p.Value.verified -ne $true) { continue }
+                    if ($files.Contains($p.Name)) { continue }
+                    $nowSha = Get-Sha256Hex -Path (Join-Path $BackendPath $p.Name) -AsLf
+                    if ($nowSha -and $nowSha -eq [string]$p.Value.sha256) { $files[$p.Name] = $p.Value }
+                }
+            }
+            # $Verified and $Owners are the CALLER's, given to this function by
+            # name, so this function never reaches for a variable it does not
+            # own (see the note at the top of it).
+            foreach ($rel in @($Doc.Keys | Sort-Object)) {
+                if ($Verified[$rel]) {
+                    $files[$rel] = [ordered]@{
+                        sha256   = [string]$Doc[$rel]
+                        patch    = [string]$Owners[$rel]
+                        verified = $true
+                    }
+                } else {
+                    $files[$rel] = [ordered]@{
+                        sha256   = [string]$Doc[$rel]
+                        patch    = ''
+                        verified = $false
+                    }
+                    if ($script:ManifestUnmatched -notcontains $rel) { $script:ManifestUnmatched += $rel }
+                }
+            }
+            $out = [ordered]@{}
+            $out['schema']    = 'jarvis-updater-manifest/1'
+            $out['written']   = (Get-Date).ToString('yyyy-MM-ddTHH:mm:ss')
+            $out['backend']   = (Resolve-Path -LiteralPath $BackendPath).Path
+            $out['run']       = $State
+            $out['patches']   = @($patchRecs)
+            $out['patchList'] = [string[]]$NameList
+            $out['unmatched'] = @($unmatched)
+            $out['files']     = $files
+            $why = ''
+            $wrote = $false
+            $attempt = 0
+            while (-not $wrote -and $attempt -lt 3) {
+                $attempt = $attempt + 1
+                try {
+                    $json = $out | ConvertTo-Json -Depth 6
+                    # No byte-order mark: Python and PowerShell both read this
+                    # file, and plain UTF-8 keeps the first byte an honest one.
+                    $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                    [IO.File]::WriteAllText($ManifestPath, $json, $utf8NoBom)
+                    $wrote = $true
+                } catch {
+                    $why = $_.Exception.Message
+                    Start-Sleep -Milliseconds 200
+                }
+            }
+            if (-not $wrote) {
+                Warn "could not write the record of this run ($ManifestPath): $why"
+                return $false
+            }
+            Say "Record  : wrote what the backend holds to $ManifestPath" Cyan
+            Say "          $($files.Count) file hash(es), $($patchRecs.Count) patch(es) named by their own text" Cyan
+            if ($unmatched.Count -gt 0) {
+                Say "          could not be tied to a patch (recorded, not overwritten):" Yellow
+                foreach ($u in $unmatched) { Say "            $($u.Patch) ($($u.Verdict))" Yellow }
+            }
+            return $true
+        }
+
+        # --- read it, and need no rehearsal at all if nothing has moved --------
+        #
+        # Everything above is definitions; this is the one decision, and it is
+        # taken BEFORE the rehearsal: "the files are still the ones the last
+        # successful run left" makes the strip, the re-apply and the result gate
+        # unnecessary work. Nothing here applies a patch - the $already flag
+        # further down is what stops the real files being touched, and it is
+        # only ever set here after every hash has agreed.
+        $script:ManifestOwner = @{}
+        $script:ManifestExisting = $null
+        $script:ManifestShared = @()
+        if ($ManifestPath) {
+            $script:ManifestExisting = Read-Manifest
+        }
+        if ($script:ManifestExisting -and (Test-ManifestCurrent $script:ManifestExisting)) {
+            $script:ManifestOwner = Get-TargetOwners
+            $script:ManifestShared = @(Get-SharedFiles)
+            $script:ManifestCurrent = $script:ManifestExisting
+            $script:ManifestUnmatched = @()
+            $drift = @(Test-ManifestDrift $script:ManifestExisting)
+            if ($drift.Count -gt 0) {
+                Say ""
+                Bad "$($drift.Count) file(s) have changed since this backend was last recorded:"
+                foreach ($d in $drift) { Say "        $d" Red }
+                Say "        That is drift: an edit by hand, or a patch that was not put on" Cyan
+                Say "        by this tool. The record of the last good run is left exactly as it" Cyan
+                Say "        was, so the next run says this again rather than forgetting it." Cyan
+                Say "        Each file above is backed up and then OVERWRITTEN by this run, as" Cyan
+                Say "        you asked - the copy of your own file goes into the backup folder" Cyan
+                Say "        and the patched version goes in its place. Named again at the end." Cyan
+                $mfDriftList = ($drift -join ', ')
+                Add-Note "$($drift.Count) file(s) have changed since the last recorded run and are NOT recorded by a patch of this list: $mfDriftList. Each one is backed up and overwritten by this run, as you asked; your own copy is in the run's backup folder and the patched version is in place."
+                $script:ManifestCurrent = $null
+                $script:ManifestDrifted = $true
+            } else {
+                $already = $true
+                # No rehearsal ran, so nothing filled the classification in.
+                # Leaving it empty would say "not-recognised" about every patch
+                # in a run that has just proved they are all on - in the record
+                # this run is about to write, and in -StateJson. The record says
+                # what this run established: every patch of the list is on the
+                # files (that is what every hash agreeing means), so that is the
+                # verdict, in the same words step 1 already uses.
+                foreach ($n in $PATCHES) { Set-PatchClass -Name $n -Verdict 'taken-off' -Round 0 }
+                # ... and the same for the list the record names each file with:
+                # this run established that every patch of it is on, so every
+                # file of theirs may be tied to its patch in the record this run
+                # writes. Without this, a fast-path run's own record called its
+                # files unverified, and the run AFTER it could not use the record
+                # at all (measured 2026-10-09).
+                $verifiedPatches = @($PATCHES)
+                Say ""
+                Ok "All $($PATCHES.Count) patches are already on your backend (recorded by the last run)."
+                Say "          No rehearsal was needed: the record of that run says what these files hold." Cyan
+                if ($script:ManifestUnmatched.Count -gt 0) {
+                    Say "          $($script:ManifestUnmatched.Count) file(s) this record cannot speak for - a patch of this" Yellow
+                    Say "          list was not found on them when it was written:" Yellow
+                    foreach ($u in $script:ManifestUnmatched) { Say "            $u" Yellow }
+                }
+            }
+        } elseif ($script:ManifestExisting) {
+            Say ""
+            Say "Note    : $ManifestPath is from a different patch list, so it cannot be" Cyan
+            Say "          used for this one. Rehearsing as usual; it is not replaced" Cyan
+            Say "          unless this run finishes cleanly." Cyan
+        }
+    }
+
+
+    function Write-StateJson {
+        param([string] $Path)
+        $order = @('taken-off', 'taken-off-older-text', 'on-but-unstrippable', 'not-recognised')
+        $counts = [ordered]@{}
+        foreach ($v in $order) { $counts[$v] = 0 }
+        $entries = @()
+        foreach ($n in $PATCHES) {
+            $v = 'not-recognised'; $older = ''
+            if ($script:classify.ContainsKey($n)) {
+                $v = $script:classify[$n].Verdict
+                $older = $script:classify[$n].Older
+            }
+            if ($counts.Contains($v)) { $counts[$v] = $counts[$v] + 1 }
+            $entries += [ordered]@{ Patch = $n; Verdict = $v; Older = $older }
+        }
+        $resolved = $BackendPath
+        try { $resolved = (Resolve-Path -LiteralPath $BackendPath).Path } catch { }
+        $doc = [ordered]@{
+            schema      = 'jarvis-updater-state/1'
+            backend     = $resolved
+            patches     = $entries
+            totals      = $counts
+        }
+        $why = ''
+        for ($try = 1; $try -le 3; $try++) {
+            try {
+                ($doc | ConvertTo-Json -Depth 5) | Set-Content -LiteralPath $Path -Encoding UTF8
+                Say "State   : wrote what this run decided about $($entries.Count) patch(es) to $Path" Cyan
+                Say ("          " + (@($order | ForEach-Object { "$_ $($counts[$_])" }) -join ', ')) Cyan
+                return $true
+            } catch {
+                $why = $_.Exception.Message
+                Start-Sleep -Milliseconds 200
+            }
+        }
+        Warn "could not write the classification file ($Path): $why"
+        return $false
+    }
+
     # --- revert ---------------------------------------------------------------
     if ($Revert) {
         Assert-JarvisClosed
@@ -2250,12 +3207,21 @@ try {
     #
     # Both rehearsals run on a throwaway copy, so the real files are not
     # opened until an answer is known.
-    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$Stamp"
+    $rehearsal = Join-Path ([IO.Path]::GetTempPath()) "jarvis-rehearsal-$TempName"
     $broken    = @()
     $already   = $false
     # Set only by (c): the patches an earlier run left on, newest first,
     # which come off the real files before the whole list goes on.
     $undoFirst = @()
+    # Set only by (c): the patches an earlier run left on that this rehearsal
+    # cannot take off and put back on. They are on the real files already, so
+    # the real run leaves them alone - see Test-PatchOnBackend.
+    $alreadyOn = @()
+    # For the manifest (step 2), both set by the branch that actually applied the
+    # list. Empty means "this run did not get to the point of applying", which is
+    # what keeps a run that refused from recording anything about the files.
+    $verifiedPatches = @()
+    $targetFiles     = @()
 
     function Reset-Rehearsal {
         if (Test-Path -LiteralPath $rehearsal) {
@@ -2281,7 +3247,14 @@ try {
     # it is right now? True means every patch in the list is on. Used for
     # the "already applied?" question, and again after the real run: a real
     # run that reported success is checked against the files themselves.
+    #
+    # -Accept holds the patches (c) found to be on already and could not put
+    # back on top of themselves - name and file, the same shape the strip loop
+    # builds. A reverse that fails for one of those is EXPECTED, not a
+    # problem, so the check carries on past it; every other patch still has to
+    # come off, and the answer is False the moment one of those will not.
     function Test-StackReverses {
+        param([array] $Accept = @())
         Reset-Rehearsal
         Push-Location -LiteralPath $rehearsal
         $all = $true
@@ -2290,10 +3263,245 @@ try {
             foreach ($nm in $bw) {
                 $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
                 if (-not (Test-Path -LiteralPath $fp)) { $all = $false; break }
+                if ($Accept -contains $nm) {
+                    # Leaves the tree in the shape the file really is in.
+                    [void](Invoke-Patch -File $fp -Reverse)
+                    continue
+                }
                 if (-not (Invoke-Patch -File $fp -Reverse).Ok) { $all = $false; break }
             }
         } finally { Pop-Location }
         return $all
+    }
+
+    # Is this patch PROVABLY on the backend's own files, as they are right
+    # now? Two questions, asked of the real backend folder and of no other
+    # copy of it. Either one answering yes is enough.
+    #
+    # WHY THIS EXISTS (2026-10-08). The run of 2026-10-07 refused to do
+    # anything on the owner's PC: "2 patch(es) will not apply. NOTHING HAS
+    # BEEN CHANGED." Both were already on their backend. (c) below takes off
+    # what is applied and puts the whole list back on, and a patch that is on
+    # can be one it cannot do that with:
+    #
+    #   * tutorials.patch - on the backend, but the file has moved on around
+    #     its context (a hand-edit of two lines' indents is enough), so no
+    #     copy of the patch text comes off it cleanly. It is on; it just
+    #     cannot be taken off and put back on.
+    #   * screen-attach.patch - written to sit on tutorials.patch's own block,
+    #     as the last one before `_loopback_companion`. Take tutorials off and
+    #     put the whole list back on, and tutorials is materialised exactly in
+    #     the place screen-attach's own context expects to find itself: the
+    #     two are nested, so one of them cannot be put back on in that
+    #     rehearsal however the taking-off went.
+    #
+    # Either way the patch is on the backend, so putting it on again is not
+    # work that needs doing - and refusing the whole run over it is what left
+    # the owner with no way to update at all.
+    #
+    # 1. `git apply --reverse --check` against those real files. This is the
+    #    maker's canonical evidence and the answer when the patch is the top
+    #    of the stack on the backend. It is not enough on its own: a patch
+    #    with another patch sitting directly under it can never reverse, so
+    #    it answers "not on" for a patch that IS on (measured 2026-10-08:
+    #    screen-attach answers yes, tutorials answers no, and both are on).
+    #
+    # 2. Then the patch's own bytes, read out of the .patch file itself and
+    #    from no other copy of it: EVERY line the patch ADDS is in the target
+    #    file, verbatim, AND THE HUNK IT BELONGS TO IS IN THE SHAPE THE PATCH
+    #    WRITES IT - each added line after the one before it in the patch's own
+    #    order, and no further from it than the patch itself puts it, plus
+    #    $Tolerance for what later patches inserted between them. And every
+    #    line the patch takes out is gone. Every hunk of every file it names,
+    #    or a patch only half on would pass - and a half-applied backend is
+    #    the worst outcome this script exists to prevent, so that one MUST
+    #    still refuse. A patch that adds nothing at all is not evidence of
+    #    anything and answers no.
+    #
+    #    WHERE, and not just WHETHER, is load-bearing (2026-10-08). A patch's
+    #    added lines are ordinary code, and lines identical to them are
+    #    elsewhere in a long file: a later patch in the same list may even add
+    #    the same line. Measured here before the position was asked for: a
+    #    three-patch stack whose middle patch was NOT on the backend answered
+    #    "already on" for it, its added line being repeated further down by the
+    #    patch above it, and the run then refused anyway - the very refusal
+    #    this fallback exists to remove. So a hunk that adds only ONE line is
+    #    not answered by that line being somewhere in the file: it also needs a
+    #    NEIGHBOUR out of its own hunk - a line the patch prints around it -
+    #    found as near to it as the patch puts it.
+    #
+    #    AND THE POSITION IS NOT AN ABSOLUTE LINE NUMBER (the correction of
+    #    2026-10-08, the same day as the first attempt at this rule). The first
+    #    version asked for each added line within $Tolerance lines of the line
+    #    its HUNK HEADER names. That line is where the patch was WRITTEN. A
+    #    real backend has other patches applied above it, and they push the
+    #    work down, so the number means nothing: measured on the owner's own
+    #    files, the hunks' work sat 593 to 3,673 lines below the line its
+    #    header named, and the rule answered "not on" for 112 patches that ARE
+    #    on - proof: on a copy of that same backend with jarvis_hud.py in LF,
+    #    the strip loop above takes 122 of them off cleanly. Order and shape
+    #    survive that drift; a line number does not.
+    #
+    #    This is weaker than taking the patch off, and it is meant to be: it
+    #    answers "the work is in the file", not "the file is exactly the
+    #    patch's output". It is only ever asked about a patch the rehearsal has
+    #    already failed to put on, and only to decide that the patch may be
+    #    LEFT ALONE - never to decide that a patch may be left off.
+    function Test-PatchOnBackend {
+        # $Tolerance is no longer a distance from the hunk header's line: it is
+        # the slack allowed BETWEEN the added lines of one hunk, over and above
+        # the gap the patch itself writes. 200 lines is generous for a later
+        # patch that inserted into the middle of a block.
+        param([string] $File, [int] $Tolerance = 200)
+        $here = (Get-Location).Path
+        try {
+            Set-Location -LiteralPath $BackendPath
+            if ((Invoke-Patch -File $File -Check -Reverse).Ok) { return $true }
+
+            # What the patch adds (with the line each one should be at) and
+            # takes out, per target file. A header names the file as
+            # `b/<name>`; the date some of these patches carry sits after a
+            # tab, exactly as in the missing-file check at the top of this
+            # script. Every line also carries the HUNK it belongs to, because a
+            # hunk is the unit the patch writes and the unit the rule below
+            # judges; a context line is kept too, as the neighbour a one-line
+            # hunk has to have.
+            $adds = @{}
+            $dels = @{}
+            $ctxs = @{}
+            $cur = $null
+            $rem = 0
+            $addLeft = 0
+            $at = 0
+            $hunk = 0
+            foreach ($line in (Get-Content -LiteralPath $File)) {
+                if ($rem -gt 0 -or $addLeft -gt 0) {
+                    # The body of a patch line, whatever its prefix. An empty
+                    # line is an empty context line: git accepts it, and an
+                    # editor that strips trailing spaces writes it.
+                    $body = ''
+                    if ($line.Length -gt 1) { $body = $line.Substring(1) }
+                    if ($line.StartsWith('+')) {
+                        $adds[$cur] += , @{ Line = $body; At = $at; Hunk = $hunk }
+                        $addLeft--
+                        $at++
+                    }
+                    elseif ($line.StartsWith('-')) { $dels[$cur] += , $body; $rem-- }
+                    else {
+                        $ctxs[$cur] += , @{ Line = $body; At = $at; Hunk = $hunk }
+                        $rem--; $addLeft--; $at++
+                    }
+                    continue
+                }
+                if ($line.StartsWith('+++ ')) {
+                    $cur = $line.Substring(4).Split("`t")[0].Trim()
+                    if ($cur.StartsWith('b/')) { $cur = $cur.Substring(2) }
+                    if (-not $adds.ContainsKey($cur)) {
+                        $adds[$cur] = @(); $dels[$cur] = @(); $ctxs[$cur] = @()
+                    }
+                    continue
+                }
+                if ($line -match '^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@') {
+                    $rem     = if ($Matches[1]) { [int]$Matches[1] } else { 1 }
+                    $addLeft = if ($Matches[3]) { [int]$Matches[3] } else { 1 }
+                    $at      = [int]$Matches[2]
+                    $hunk++
+                }
+            }
+
+            $anyAdded = $false
+            $seen = @{}
+            $where = @{}
+            foreach ($name in $adds.Keys) {
+                # Every file it names must be there, or this cannot be answered
+                # about it.
+                if (-not (Test-Path -LiteralPath (Join-Path (Get-Location).Path $name))) { return $false }
+                # Read once per file: a patch may name the same file in several
+                # headers (the first screen.patch did), and re-reading it for
+                # every line is what makes this slow on a 6,500-line file. The
+                # line numbers each distinct line sits at are indexed beside it,
+                # so a hunk can be followed down the file without walking it
+                # once per added line.
+                if (-not $seen.ContainsKey($name)) {
+                    $text = @(Get-Content -LiteralPath (Join-Path $BackendPath $name))
+                    $seen[$name] = $text
+                    $index = @{}
+                    for ($i = 0; $i -lt $text.Count; $i++) {
+                        $key = $text[$i]
+                        if (-not $index.ContainsKey($key)) {
+                            $index[$key] = [System.Collections.Generic.List[int]]::new()
+                        }
+                        $index[$key].Add($i + 1)
+                    }
+                    $where[$name] = $index
+                }
+                $lines = $seen[$name]
+                $index = $where[$name]
+                # One hunk at a time, in the order the patch writes them.
+                $list = @($adds[$name])
+                $k = 0
+                while ($k -lt $list.Count) {
+                    $h = $list[$k].Hunk
+                    $run = @()
+                    while ($k -lt $list.Count -and $list[$k].Hunk -eq $h) {
+                        $run += $list[$k]; $k++
+                    }
+                    # Follow the hunk's added lines down the file: each one
+                    # there, after the line before it in the patch's own order,
+                    # no further from it than the patch itself puts it (plus
+                    # $Tolerance for what a later patch inserted in between).
+                    # A line missing, or out of order, or on the far side of the
+                    # file, means the work is not there in the shape the patch
+                    # writes it.
+                    $prev = 0
+                    for ($j = 0; $j -lt $run.Count; $j++) {
+                        $gap = $Tolerance
+                        if ($j -gt 0) {
+                            $gap = $Tolerance + [Math]::Abs($run[$j].At - $run[$j - 1].At)
+                        }
+                        if (-not $index.ContainsKey($run[$j].Line)) { return $false }
+                        $spots = $index[$run[$j].Line]
+                        $idx = $spots.BinarySearch($prev)
+                        if ($idx -lt 0) { $idx = -$idx - 1 }
+                        else { while ($idx -lt $spots.Count -and $spots[$idx] -le $prev) { $idx++ } }
+                        if ($idx -ge $spots.Count) { return $false }
+                        $spot = $spots[$idx]
+                        if ($prev -gt 0 -and ($spot - $prev) -gt $gap) { return $false }
+                        $prev = $spot
+                    }
+                    # A hunk of ONE added line has no order to prove anything
+                    # with: the line being somewhere in the file is what a later
+                    # patch repeating it looks like too (measured 2026-10-08).
+                    # So it needs a neighbour out of its own hunk - a context
+                    # line the patch prints around it - and that neighbour has to
+                    # be as near to it as the patch puts it.
+                    if ($run.Count -lt 2) {
+                        $anchored = $false
+                        foreach ($c in @($ctxs[$name])) {
+                            if ($c.Hunk -ne $h) { continue }
+                            if ($c.Line.Trim().Length -lt 3) { continue }
+                            if (-not $index.ContainsKey($c.Line)) { continue }
+                            $near = [Math]::Abs($c.At - $run[0].At) + $Tolerance
+                            foreach ($p in $index[$c.Line]) {
+                                if ([Math]::Abs($p - $prev) -le $near) { $anchored = $true; break }
+                            }
+                            if ($anchored) { break }
+                        }
+                        if (-not $anchored) { return $false }
+                    }
+                    $anyAdded = $true
+                }
+                # And the lines it takes out are gone. Only the distinctive
+                # ones (three characters or more once trimmed): a one- or
+                # two-character snip is far more likely to be some other line
+                # that happens to match.
+                foreach ($d in @($dels[$name])) {
+                    if ($d.Trim().Length -lt 3) { continue }
+                    if (@($lines) -ccontains $d) { return $false }
+                }
+            }
+            return $anyAdded
+        } finally { Set-Location -LiteralPath $here }
     }
 
     try {
@@ -2318,7 +3526,13 @@ try {
                     continue
                 }
                 $r = Invoke-Patch -File $full
-                if ($r.Ok) { Say "  ok           $name" }
+                if ($r.Ok) {
+                    Say "  ok           $name"
+                    # Round 0: it goes on a clean copy from the text in this
+                    # list. Overridden later by anything the strip or the
+                    # re-apply learns.
+                    Set-PatchClass -Name $name -Verdict 'taken-off' -Round 0
+                }
                 else {
                     $broken += @{ Name = $name; Why = $r.Output }
                     # Not "FAIL" yet: on a backend an earlier run patched,
@@ -2356,6 +3570,10 @@ try {
                 # Each: @{ Name = <list entry>; File = <the text that came
                 # off>; Older = <plain words, or $null for the current text> }
                 $found = @()
+                # The ones that are on but could not be taken off AND put back
+                # on by this rehearsal (Test-PatchOnBackend). Named and left
+                # exactly as they are - on both the copy and the real files.
+                $alreadyOn = @()
                 $backwards = @($PATCHES); [array]::Reverse($backwards)
                 foreach ($name in $backwards) {
                     $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
@@ -2363,47 +3581,302 @@ try {
                     if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
                         if ((Invoke-Patch -File $full -Reverse).Ok) {
                             $found += @{ Name = $name; File = $full; Older = $null }
+                            Set-PatchClass -Name $name -Verdict 'taken-off' -Round 2
                         }
                         continue
                     }
+                    # Not the current text. An older one, from before it was
+                    # edited? (The same order -Revert uses.)
+                    $older = $null
                     foreach ($o in @(Get-OlderVersions -Name $name)) {
-                        if ((Invoke-Patch -File $o.File -Check -Reverse).Ok) {
-                            if ((Invoke-Patch -File $o.File -Reverse).Ok) {
-                                $found += @{ Name = $name; File = $o.File; Older = $o.Label }
-                            }
-                            break
+                        if ((Invoke-Patch -File $o.File -Check -Reverse).Ok) { $older = $o; break }
+                    }
+                    if ($older) {
+                        if ((Invoke-Patch -File $older.File -Reverse).Ok) {
+                            $found += @{ Name = $name; File = $older.File; Older = $older.Label }
+                            Set-PatchClass -Name $name -Verdict 'taken-off-older-text' -Older $older.Label -Round 2
                         }
+                        continue
+                    }
+                    # Nothing comes off: this patch is either already on in a
+                    # form no text of it can take off, or it is not on at all.
+                    # The strip above is the ONLY question that needs the whole
+                    # copy, so it is the only place the weaker one is asked.
+                    # Answering yes takes this patch out of both the strip and
+                    # the re-apply - on the copy and on the real files - so the
+                    # two stay the same shape (see Test-PatchOnBackend).
+                    if (Test-PatchOnBackend -File $full) {
+                        $alreadyOn += @{ Name = $name; File = $full }
+                        Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
                     }
                 }
-                if ($found.Count -gt 0) {
+                if ($found.Count -gt 0 -or $alreadyOn.Count -gt 0) {
                     $olderFound = @($found | Where-Object { $_.Older })
                     Say ""
-                    Say "$($found.Count) of these are already on your backend from an earlier run." Cyan
-                    if ($olderFound.Count -gt 0) {
-                        Say "$($olderFound.Count) of those are an OLDER version of the patch, from before it" Cyan
-                        Say "was changed here. Each is taken off and the current version put on:" Cyan
-                        foreach ($f in $olderFound) { Say "  older        $($f.Name)  -  $($f.Older)" Yellow }
+                    if ($found.Count -gt 0) {
+                        Say "$($found.Count) of these are already on your backend from an earlier run." Cyan
+                        if ($olderFound.Count -gt 0) {
+                            Say "$($olderFound.Count) of those are an OLDER version of the patch, from before it" Cyan
+                            Say "was changed here. Each is taken off and the current version put on:" Cyan
+                            foreach ($f in $olderFound) { Say "  older        $($f.Name)  -  $($f.Older)" Yellow }
+                        }
+                    }
+                    if ($alreadyOn.Count -gt 0) {
+                        # Said plainly, because the patch does NOT come off and
+                        # go back on: this run leaves it exactly as it is.
+                        Say "$($alreadyOn.Count) more are already on your backend and cannot be taken off and" Cyan
+                        Say "put back on: the file has moved on around them. They are LEFT AS THEY" Cyan
+                        Say "ARE - not taken off, not applied again - and the run carries on:" Cyan
+                        foreach ($f in $alreadyOn) { Say "  already on   $($f.Name)" Yellow }
                     }
                     Say "Rehearsing again: take those off, newest first, then put all" Cyan
                     Say "$($PATCHES.Count) back on in order. Still on the copy." Cyan
                     $again = @()
+                    # The patches this strip took off this copy, by name - read
+                    # once, because the loop below asks about every patch in the
+                    # list. See the note under the apply for what asking it about
+                    # one of these cost.
+                    $stripped = @($found | ForEach-Object { $_.Name })
                     foreach ($name in $PATCHES) {
                         $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
                         if (-not (Test-Path -LiteralPath $full)) {
                             $again += @{ Name = $name; Why = "missing from $PatchDir" }
                             continue
                         }
+                        # Already on, and left exactly as it is: the strip could
+                        # not take it off, so this rehearsal cannot put it back
+                        # on either. The real run leaves it alone for the same
+                        # reason (see Test-PatchOnBackend).
+                        if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $name) { continue }
+                        # A PATCH THE STRIP TOOK OFF THIS COPY IS NOT ON THIS
+                        # COPY ANY MORE, so putting it back on IS this loop's
+                        # job for it (2026-10-10).
+                        #
+                        # Why the question below must not be asked about one of
+                        # those. Test-PatchOnBackend reads the REAL backend
+                        # folder. Every patch the strip took off came off that
+                        # folder, so the answer there is "yes, already on" for
+                        # all of them - correctly. Skipping them on that answer
+                        # leaves the rehearsal copy WITHOUT their work, and the
+                        # copy is then not the tree the real run builds: the real
+                        # run keeps only the patches it could not take off, and
+                        # puts every one of these back.
+                        #
+                        # What that cost, measured. The owner's run of
+                        # 2026-10-10 16:22 (the log this branch was opened for)
+                        # stripped 134, skipped 101 of them here, and named 16
+                        # "will not apply" - and all 16 are patches whose context
+                        # lines are other patches' own output, so they cannot
+                        # apply to a copy missing those 101:
+                        # schedule.patch's hunk wants wiki.patch's comment,
+                        # token-store.patch's wants bind-wildcard.patch's
+                        # `_binds_every_interface`, docker.patch's wants
+                        # tutorials.patch's block, and so on. Measured on a copy
+                        # of that same backend (2026-10-10): strip what reverses
+                        # and put ALL 135 back on, and 135 of 135 apply, and the
+                        # copy comes out byte for byte the owner's own files plus
+                        # docker.patch's install block - the one patch that was
+                        # genuinely not on them. Nothing about those 16 patches
+                        # was wrong.
+                        #
+                        # And the question cannot be moved earlier to avoid this:
+                        # asked of the 34 the strip would otherwise re-apply,
+                        # while the 101 above them are still on the files, NONE
+                        # of the 34 reverses at all, and 33 of the 34 then cannot
+                        # be applied either (measured 2026-10-10) - they are only
+                        # reversible from the top of the stack down. So the strip
+                        # takes the whole stack off, and this loop puts the whole
+                        # stack back on; the one question left is about a patch
+                        # the strip did NOT take off, which is what it was built
+                        # for.
+                        # (docs/UPDATER-REDESIGN.md section 5, build step 5.)
+                        #
+                        # THE "LEFT ALONE" VERDICT IS OBTAINED HERE, BEFORE THE
+                        # APPLY, AND NOT FROM THE APPLY FAILING (2026-10-11).
+                        # Until now the only way this loop learned that a patch
+                        # was already on was `Invoke-Patch` failing first and
+                        # Test-PatchOnBackend explaining it afterwards - "the
+                        # verdict was obtained by failing to put it on", which is
+                        # not proof that the work is there. That is a real
+                        # distinction and not a cosmetic one: on 2026-10-09 a
+                        # patch that IS on the owner's files was treated as a
+                        # patch this run had PUT on (`taken-off`, the same word a
+                        # genuine apply gets), and the strip/undo step then took
+                        # it back OFF the real files while `$todo` dropped it from
+                        # the re-apply - tutorials.patch and screen-attach.patch
+                        # were deleted, silently, and the run still said every
+                        # patch was on (commit ba344211 closed that half).
+                        #
+                        # Asking first cannot change WHERE the work ends up,
+                        # because Test-PatchOnBackend reads the real backend
+                        # folder and never the rehearsal copy: the question and
+                        # its answer are the same before and after the apply. It
+                        # also cannot turn a patch that used to go on into one
+                        # that is skipped: a patch whose work is genuinely absent
+                        # still answers no here and is applied exactly as before,
+                        # and one whose apply would have SUCCEEDED -- the case
+                        # the design note's own acceptance test names, "a test
+                        # whose expected answer is 'left alone' must answer the
+                        # same way whether the patch would have applied or not"
+                        # -- is now answered from the file instead of from
+                        # whichever way the text happened to land on it.
+                        if (Test-PatchOnBackend -File $full) {
+                            # ... AND A PATCH THE STRIP TOOK OFF THIS COPY IS ONE
+                            # THIS LOOP HAS TO PUT BACK ON IT (2026-10-10).
+                            #
+                            # Test-PatchOnBackend reads the REAL backend folder,
+                            # and every patch the strip took off came off that
+                            # folder - so the answer above is "yes, already on"
+                            # for all of them, correctly. Leaving them there
+                            # leaves the rehearsal COPY without their work, and
+                            # the copy is then not the tree the real run builds:
+                            # the real run keeps only the patches it could not
+                            # take off, and puts every one of these back.
+                            #
+                            # What that cost, measured. The owner's run of
+                            # 2026-10-10 16:22 (the log this branch answers)
+                            # stripped 134, left 101 of them here, and named 16
+                            # "will not apply" - and all 16 are patches whose
+                            # CONTEXT LINES ARE OTHER PATCHES' OWN OUTPUT, so
+                            # they cannot apply to a copy those 101 are missing
+                            # from: schedule.patch's hunk wants wiki.patch's
+                            # comment, token-store.patch's wants bind-wildcard's
+                            # `_binds_every_interface`, docker.patch's wants
+                            # tutorials.patch's own block, and so on. Measured on
+                            # a copy of that backend: strip what reverses and put
+                            # ALL 135 back on, and 135 of 135 apply, and the copy
+                            # comes out byte for byte the owner's files PLUS
+                            # docker.patch's install block - the one patch
+                            # genuinely not on them. Nothing about those 16 was
+                            # wrong.
+                            #
+                            # And the answer above cannot simply be ignored: a
+                            # patch the strip took off can still be one this copy
+                            # cannot carry. The miniature state in
+                            # backend/test_apply_outcomes.py's
+                            # t_a_patch_answered_already_on_is_never_reversed_off
+                            # is exactly that - another patch that is NOT on the
+                            # files has to go on first, and its line breaks the
+                            # older patch's own context. So the COPY is asked
+                            # whether it will take it, with `--check`, which
+                            # changes nothing: yes -> it goes on below like any
+                            # other patch, and the copy is left whole; no -> it is
+                            # what "left alone" was built for, and the verdict is
+                            # still reached from a question asked before the
+                            # apply, never from an apply that failed.
+                            $copyTakesIt = ($stripped -contains $name) -and
+                                           (Invoke-Patch -File $full -Check).Ok
+                            if (-not $copyTakesIt) {
+                                # On the backend already, and this rehearsal is
+                                # the thing that cannot put it back on without
+                                # changing the state it is asked to build (see
+                                # Test-PatchOnBackend). It leaves the copy alone
+                                # from here, and the real run leaves the real
+                                # files alone too - $todo below drops it. Round 2,
+                                # the round the strip records in: this is what was
+                                # FOUND on the files, which outranks round 0's
+                                # "it went on a clean copy".
+                                $alreadyOn += @{ Name = $name; File = $full }
+                                Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
+                                Say "  already on   $name  (left as it is - not put on this run)" Cyan
+                                continue
+                            }
+                        }
                         $r = Invoke-Patch -File $full
-                        if ($r.Ok) { Say "  ok           $name" }
+                        if ($r.Ok) {
+                            Say "  ok           $name"
+                            Set-PatchClass -Name $name -Verdict 'taken-off'
+                        }
                         else {
                             $again += @{ Name = $name; Why = $r.Output }
+                            # The final answer for this patch, and it overrides
+                            # the strip's: after re-applying, this patch is not
+                            # on the state the run would leave, whatever the
+                            # strip thought of it. Written as "not recognised"
+                            # rather than left as its earlier verdict, so the
+                            # file never says a patch is on a backend that would
+                            # not carry it.
+                            Set-PatchClass -Name $name -Verdict 'not-recognised'
                             Bad "$name - will not apply"
                         }
                     }
                     # The second answer is the one that means something: the
                     # first was measured against files half-way through.
                     $broken = $again
-                    if ($broken.Count -eq 0) { $undoFirst = $found }
+                    if ($broken.Count -eq 0) {
+                        # THE RESULT IS CHECKED BEFORE ANYTHING OF THE OWNER'S IS
+                        # TOUCHED (2026-10-08). "Take off what is applied, put the
+                        # whole list back on" only produces the state it promises
+                        # if every patch that goes on can be taken off again from
+                        # where it lands. One that cannot (measured 2026-10-08:
+                        # screen-attach.patch sits after tutorials.patch's block
+                        # on the real files, and re-applying tutorials puts that
+                        # block back exactly where screen-attach's own context
+                        # expects to find itself) is dropped from the list by the
+                        # branch above and never applied - so the copy ends up
+                        # WITHOUT work the real files already had, and the run
+                        # would report success on a backend missing a patch. That
+                        # is the half-applied backend this script exists to
+                        # prevent, so it is refused here, on the copy, while
+                        # nothing of the owner's has been changed.
+                        $check = Join-Path ([IO.Path]::GetTempPath()) "jarvis-result-check-$TempName"
+                        $intact = $true
+                        $why = ""
+                        try {
+                            if (Test-Path -LiteralPath $check) { Remove-Item -LiteralPath $check -Recurse -Force }
+                            New-Item -ItemType Directory -Path $check -Force | Out-Null
+                            Copy-Item -Path (Join-Path $rehearsal '*.py') -Destination $check -Force
+                            $was = (Get-Location).Path
+                            Set-Location -LiteralPath $check
+                            $bw2 = @($PATCHES); [array]::Reverse($bw2)
+                            foreach ($nm in $bw2) {
+                                $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
+                                if (-not (Test-Path -LiteralPath $fp)) { continue }
+                                # A patch in $alreadyOn is ON the real files and is left
+                                # exactly as it is: the re-apply step below skips it for the
+                                # same reason (see the $todo filter further down). Asking this
+                                # loop to take it off the rehearsal copy asks for the one thing
+                                # it cannot do - screen-attach.patch is nested on
+                                # tutorials.patch's own block, so one of the two can never come
+                                # off that state however the taking-off went. Refusing the whole
+                                # run over it is what left the owner with no way to update at
+                                # all (2026-10-09: four runs, every one of them
+                                # "NOTHING HAS BEEN CHANGED", the owner still on the build from
+                                # the morning of 2026-10-08). It is not the half-applied backend
+                                # this check exists to prevent: those patches are not being
+                                # re-applied, they are staying on the owner's files untouched.
+                                if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $nm) { continue }
+                                $r2 = Invoke-Patch -File $fp -Reverse
+                                if (-not $r2.Ok) {
+                                    $intact = $false
+                                    $why = "$nm cannot be taken off the state this run would leave"
+                                    break
+                                }
+                            }
+                            Set-Location -LiteralPath $was
+                        } finally {
+                            Set-Location -LiteralPath $rehearsal
+                            Remove-Item -LiteralPath $check -Recurse -Force -ErrorAction SilentlyContinue
+                        }
+                        if (-not $intact) {
+                            $script:ResultRefused = $why
+                            $broken += @{ Name = "the state this run would leave"; Why = $why }
+                        }
+                        # NOT everything the strip found: a patch in BOTH lists
+                        # is one the strip took off the copy and the re-apply
+                        # above could not put back on, so it was answered
+                        # "already on" and this run leaves it alone - $todo
+                        # drops it, and so does the result check above. Reversing
+                        # it off the owner's real files and then skipping it is
+                        # how tutorials.patch and screen-attach.patch were
+                        # switched off silently by the run of 2026-10-09 09:40:
+                        # "already on ... (left as it is)" in its own log, then
+                        # "ok off tutorials.patch" two screens later, then "all
+                        # 131 patches are on" - with both features gone.
+                        $undoFirst = @($found | Where-Object {
+                            -not (@($alreadyOn | ForEach-Object { $_.Name }) -contains $_.Name)
+                        })
+                    }
                 }
                 Pop-Location
             }
@@ -2411,6 +3884,12 @@ try {
     } finally {
         Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue
     }
+
+    # The rehearsal is over, so every verdict is in - including the ones from
+    # the re-apply, and including a refusal. Written here, before the refusal is
+    # printed and before anything of the owner's is touched: a run that refuses
+    # is exactly the run whose classification is worth having on disk.
+    if ($StateJsonPath) { [void](Write-StateJson -Path $StateJsonPath) }
 
     if ($broken.Count -gt 0) {
         Say ""
@@ -2422,11 +3901,45 @@ try {
             Say $b.Why
         }
         Say ""
-        Say "Usually this means the backend file has moved on since the patch was" Cyan
-        Say "written, or was edited by hand. (Older versions of these patches that" Cyan
-        Say "this repository ever published were already tried and would have" Cyan
-        Say "been recognised.) Send the block above back and the patch gets" Cyan
-        Say "regenerated." Cyan
+        if ($script:ResultRefused) {
+            # Not a patch that has drifted: the state this run would leave does
+            # not carry every patch, so it is refused before anything is
+            # touched. What to do is different, and said plainly.
+            Say "This is not a patch that has drifted. Taking the applied ones off and" Cyan
+            Say "putting the whole list back on would leave a backend that does not carry" Cyan
+            Say "every patch in this list - and a backend missing part of a feature is" Cyan
+            Say "worse than one waiting to be updated. So nothing was changed, on" Cyan
+            Say "purpose. The patch named above is the one already on your files that" Cyan
+            Say "cannot survive that. Send this whole window back, with the line under" Cyan
+            Say "its name, and this script gets the case added." Cyan
+        }
+        else {
+            # THE LINE ENDINGS COME FIRST, when they are there (2026-10-08).
+            # The owner's run of that day ended with 112 patch names and the
+            # message below, on a backend whose jarvis_hud.py had Windows line
+            # endings throughout: a patch written with LF can neither go on nor
+            # come off a file like that, so the rehearsal cannot tell "on"
+            # from "drifted" and blames 112 patches for one file's endings. The
+            # check at the top of this script already knows which files they
+            # are; saying it here is the difference between an afternoon of
+            # regenerating patches and one command.
+            if ($crlfFiles.Count -gt 0) {
+                Say "START HERE: $($crlfFiles.Count) of the files these patches change have" Cyan
+                Say "Windows line endings, and the patches are written with LF. A patch" Cyan
+                Say "cannot go on or come off a file like that, so the list above is mostly" Cyan
+                Say "that one thing, not $($broken.Count) broken patches:" Cyan
+                foreach ($cf in $crlfFiles) { Say "  $($cf.Name) ($($cf.Count) CRLF lines)" Yellow }
+                Say "Run this same command again with  -FixLineEndings  on the end: each file" Cyan
+                Say "is copied into _jarvis-backup-<date>-endings first, then only its line" Cyan
+                Say "endings change. Nothing else about it is touched." Cyan
+                Say ""
+            }
+            Say "Usually this means the backend file has moved on since the patch was" Cyan
+            Say "written, or was edited by hand. (Older versions of these patches that" Cyan
+            Say "this repository ever published were already tried and would have" Cyan
+            Say "been recognised.) Send the block above back and the patch gets" Cyan
+            Say "regenerated." Cyan
+        }
         Add-Problem "$($broken.Count) patch(es) will not apply to your files as they are: $(($broken | ForEach-Object { $_.Name }) -join ', '). Nothing was changed."
         Finish-Run
     }
@@ -2449,7 +3962,15 @@ try {
     $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
     $script:State.Backup = $backup
     if (-not $already) {
-        $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
+        # The patches this run puts on. (c) already knows which ones must NOT
+        # be: the ones it found on the backend and could not put back on, which
+        # stay on the real files - applying those again is the one thing that
+        # cannot work (see Test-PatchOnBackend). Everything else goes on,
+        # whether it was taken off above or was never on at all.
+        $todo = @($PATCHES | Where-Object {
+            $n = $_
+            -not (@($alreadyOn | ForEach-Object { $_.Name }) -contains $n)
+        } | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
         New-Item -ItemType Directory -Path $backup -Force | Out-Null
 
         # Every file named in any patch header, so a revert is always possible
@@ -2479,12 +4000,58 @@ try {
         }
         Say ""
         Ok "Backed up $($touched.Count) file(s) to $backup"
+        # For the manifest (step 2), written below: the files this list's own
+        # patch headers name.
+        $targetFiles = @($touched.Keys)
 
         # From (c): what an earlier run left on, taken off newest first -
         # exactly what the rehearsal did before the whole list applied, with
         # the same text (the current one, or the older one it found).
         if ($undoFirst.Count -gt 0) {
             Say ""
+            # ASK FIRST, ON A COPY (2026-10-08). Taking patches off the real
+            # files and putting them back on only works if the WHOLE undo can
+            # be done. (c) proved that on a copy of a copy: its strip went
+            # through the rehearsal tree, and a patch that is on the real files
+            # but cannot come off there can stop the undo in the middle - after
+            # the earlier ones are already off. That leaves a half-updated
+            # backend, which is the one outcome this script exists to prevent.
+            # So the same strip is done once more on a throwaway copy of the
+            # real files first; if it cannot finish, nothing of the owner's has
+            # been touched.
+            $undoTest = Join-Path ([IO.Path]::GetTempPath()) "jarvis-undo-check-$TempName"
+            $undoOk = $false
+            $why = ""
+            try {
+                if (Test-Path -LiteralPath $undoTest) { Remove-Item -LiteralPath $undoTest -Recurse -Force }
+                New-Item -ItemType Directory -Path $undoTest -Force | Out-Null
+                Copy-Item -Path (Join-Path $BackendPath '*.py') -Destination $undoTest -Force
+                $was = (Get-Location).Path
+                Set-Location -LiteralPath $undoTest
+                $undoOk = $true
+                foreach ($u in $undoFirst) {
+                    $r = Invoke-Patch -File $u.File -Reverse
+                    if (-not $r.Ok) {
+                        $undoOk = $false
+                        $why = "$($u.Name): " + (($r.Output -split "`n")[0])
+                        break
+                    }
+                }
+                Set-Location -LiteralPath $was
+            } finally {
+                Set-Location -LiteralPath $BackendPath
+                Remove-Item -LiteralPath $undoTest -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            if (-not $undoOk) {
+                Bad "The patches an earlier run applied cannot all be taken off your files."
+                Say "          $why" Red
+                Say ""
+                Say "Putting the whole list back on needs every one of them off first, so this" Cyan
+                Say "run stops HERE, before anything of yours is touched. NOTHING HAS BEEN" Cyan
+                Say "CHANGED." Cyan
+                Add-Problem "Taking the patches off would stop part-way ($why), so nothing was changed. The backend is exactly as it was."
+                Finish-Run
+            }
             Say "Taking off $($undoFirst.Count) patch(es) an earlier run applied, newest first." Cyan
             $script:State.Changed = $true
             $script:State.Patching = $true
@@ -2503,6 +4070,9 @@ try {
                 }
             }
         }
+        # The patches (c) found to be on and unable to put back on are NOT in
+        # $todo: the rehearsal applied every one of them that could go on, and
+        # the rest are on the files already.
         Say ""
         Say "Applying $($todo.Count)." Cyan
         $script:State.Changed = $true
@@ -2526,11 +4096,23 @@ try {
         # now; if it cannot, the tool reported success on files that do not
         # carry the patches (which is what a git that skipped or reshaped
         # the work would look like).
+        #
+        # A patch (c) left alone is handed to the check as accepted: it is on
+        # the backend and this run never touched it, so a reverse that fails
+        # for it is the state the owner started from, not a fault. Every other
+        # patch still has to come off.
         $verified = $false
-        try { $verified = Test-StackReverses }
+        try { $verified = Test-StackReverses -Accept @($alreadyOn | ForEach-Object { $_.Name }) }
         finally { Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue }
         if ($verified) {
             Ok "Checked again on the real files: all $($PATCHES.Count) patches are on."
+            if ($alreadyOn.Count -gt 0) {
+                Say "  $($alreadyOn.Count) of them were on already and were left as they were:" Cyan
+                foreach ($a in $alreadyOn) { Say "    $($a.Name)" Cyan }
+            }
+            # The whole list really is on the files, so every patch of it can be
+            # named in the manifest as the thing this file's text came from.
+            $verifiedPatches = @($PATCHES)
             $script:State.Patching = $false
         } else {
             Bad "Every patch said ok, but the real files do not show them all."
@@ -2538,6 +4120,200 @@ try {
             Finish-Run
         }
     }
+
+# --- 4. what this run could not reproduce: backed up, overwritten, NAMED ----
+#
+# docs/UPDATER-REDESIGN.md section 5, build step 4, and the owner's answer to
+# section 6 question 1 (2026-10-08, "back it up and overwrite"), widened by his
+# own words of 2026-10-11: a file the run could NOT reproduce triggers the
+# backup-and-overwrite ON THE RUN THAT NOTICED IT, and Jarvis says what it
+# replaced, BY NAME. Nothing here may be silent.
+#
+# WHERE THIS SITS, AND WHY IT IS *BEFORE* STEP 3. Both halves of the owner's
+# answer are already carried out by the two steps above and below this one, and
+# this block is their one honest voice - it writes no file itself:
+#
+#   * the files a patch of this list names are rewritten by applying the patch
+#     (step 2), and step 2 copied each of them into `_jarvis-backup-$Stamp`
+#     BEFORE anything touched it;
+#   * the modules this repository ships whole are copied over by step 3, which
+#     backs the old copy up first ("replaced an older copy (the old one is in
+#     ...)" is its own line).
+#
+# It has to run BEFORE step 3 and not after, and that is the whole reason it is
+# here rather than beside the record. Measured 2026-10-11: run after step 3, the
+# evidence is already gone - step 3 has replaced the owner's hand-edited module
+# with this repository's copy, so the file on disk matches the source, the
+# detection finds nothing, and a hand-edit that WAS just overwritten is reported
+# nowhere. Before step 3 the owner's own bytes are still on the disk and the
+# question can be answered.
+#
+# WHAT "COULD NOT REPRODUCE" MEANS, in one rule. The record of the last run that
+# finished wrote a hash for every `.py` file it left. A file whose hash is no
+# longer that one is a file whose bytes this run did not produce - the record
+# cannot speak for it. That is the owner's `verified: false` and his "a hash that
+# has moved" in a single test, and it needs no separate vocabulary:
+#
+#   * a hash that has moved  -> the record cannot speak for it (its bytes are
+#     not the ones the last good run produced);
+#   * `verified: false`      -> the record never could speak for it.
+#
+# Both end the same way, which is what the owner asked for: the copy of HIS file
+# goes into the backup folder and the version this run produces - the patch's
+# output, or this repository's own copy - goes in its place, and the run says so
+# by name.
+#
+# WHAT A FILE WITH NO SOURCE IS, AND WHY IT IS NAMED RATHER THAN REPLACED.
+# Measured (read only) on the owner's folder 2026-10-11, of its 201 `.py` files:
+# 7 are named by a patch header, 180 are shipped by this repository, and 17 have
+# no version anywhere in this repository at all - `jarvis_preview.py`,
+# `jarvis_style.py`, `jarvis_undo.py`, `patch_openjarvis.py`,
+# `spike_sandbox.py` and twelve `test_*.py`. There is nothing to write for
+# those. Overwriting them from the published base is not possible (they are not
+# in it) and would in any case move files BACKWARDS: section 11 measures
+# `jarvis-backend/` differing from the owner's folder in both directions, and
+# `test_base_matches_repo.py` exists to refuse exactly that. So they are NAMED,
+# in the run's own words, and left alone. Nothing about them is silent and
+# nothing of the owner's is destroyed with nothing to restore it from.
+#
+# IT RUNS ON THE FAST PATH TOO. A hand-edited module this repository ships whole
+# does not make the record unusable - `Test-ManifestCurrent` checks the patch
+# list and every file a PATCH names, and a shipped module is in neither - so the
+# next run prints "No rehearsal was needed" and goes straight to step 3. A
+# report that only existed after a rehearsal would be missing for exactly the
+# file that needs it (measured 2026-10-11), so this runs on both paths. On the
+# first run there is no record at all, so there is nothing for it to compare
+# against and nothing for it to claim.
+if ($ManifestPath -and $script:ManifestExisting -and $script:ManifestExisting.files) {
+    $script:Replaced = @()
+    $script:ReplacedWhy = @{}
+    $script:NoSource = @()
+
+    # What the last run that finished said about each file.
+    $hadRecord = @{}
+    foreach ($p in $script:ManifestExisting.files.PSObject.Properties) {
+        $hadRecord[[string]$p.Name] = $p.Value
+    }
+
+    foreach ($f in @(Get-ChildItem -LiteralPath $BackendPath -Filter '*.py' -File -ErrorAction SilentlyContinue)) {
+        $rel = $f.Name
+        if (-not $hadRecord.ContainsKey($rel)) { continue }
+        $rec = $hadRecord[$rel]
+
+        # The source this run owns for the file, if any: a patch of this list
+        # that names it, or a module this repository ships whole. Both are
+        # byte-exact, which is what makes an overwrite honest rather than a
+        # guess. A file with neither is named and left alone (see above).
+        $srcPatch = ''
+        if ($rec -and [string]$rec.patch) { $srcPatch = [string]$rec.patch }
+        # The full $SHIPPED entry, not just the leaf: ten of them live under
+        # `rebuilt/`, so joining the leaf onto the backend folder would look for
+        # a source that is not there (measured 2026-10-11).
+        $srcShipped = ''
+        foreach ($m in $SHIPPED) {
+            if ((Split-Path -Leaf $m) -eq $rel) { $srcShipped = $m; break }
+        }
+        $hasSource = ($srcPatch -ne '' -or $srcShipped -ne '')
+        if (-not $hasSource) {
+            $script:NoSource += $rel
+            Add-Note "$rel is a file the patches do not produce and this repository does not ship whole. The record cannot speak for it, and there is nothing this tool could restore it from, so nothing in it was changed - it is named here so that is not a silent gap."
+            continue
+        }
+
+        # THE QUESTION, asked against the bytes of the SOURCE this run owns -
+        # not against the record's `verified` flag, and this distinction was
+        # measured the hard way (2026-10-11).
+        #
+        # `verified` alone is not the answer. On the owner's folder the first run
+        # that finishes records EVERY module this repository ships whole as
+        # `verified: false`, because no patch of the list names one - so reading
+        # `verified: false` as "this run could not reproduce it" made a run name
+        # 180 modules, when in truth step 3 had reproduced every one of them
+        # perfectly from this repository, and the one file that had really been
+        # missed was lost in the middle of the list.
+        #
+        # So ask the source. For a module this repository ships whole the source
+        # is a file in this checkout and the answer is exact: are the bytes on
+        # the disk the ones this repository holds? For a file a patch of the list
+        # names the source is the patch output the record wrote down, and the
+        # record's hash is the only thing that can say what that was.
+        $srcPath = ''
+        if ($srcShipped -ne '') { $srcPath = Join-Path $PatchDir $srcShipped }
+        $nowSha = Get-Sha256Hex -Path $f.FullName -AsLf
+        $wasSha = [string]$rec.sha256
+
+        $unreproduced = $false
+        $why = ''
+        if ($srcPath -and (Test-Path -LiteralPath $srcPath -PathType Leaf)) {
+            $srcSha = Get-Sha256Hex -Path $srcPath -AsLf
+            if ($nowSha -and $srcSha -and $nowSha -eq $srcSha) {
+                # The bytes on the disk are exactly what this repository holds,
+                # so this run reproduced the file perfectly - whether the record
+                # could speak for it or not. Nothing was missed and nothing is
+                # reported.
+                continue
+            }
+            $unreproduced = $true
+            if ($srcPatch -ne '') {
+                $why = 'this run replaced it with the version the patches and this repository produce'
+            } else {
+                $why = 'this run replaced it with this repository''s own copy'
+            }
+        } elseif ($srcPatch -ne '' -and $rec) {
+            if ($rec.verified -ne $true) {
+                # The record could never tie this file to the patch that was
+                # supposed to produce it. That is the owner's case - the half
+                # that did nothing until now.
+                $unreproduced = $true
+                $why = 'the last finished run could not tie it to the patch that produces it'
+            } elseif ($nowSha -and $wasSha -and $nowSha -ne $wasSha) {
+                $unreproduced = $true
+                $why = 'its hash has moved past the one the last finished run produced'
+            }
+        }
+        if ($unreproduced) {
+            $script:Replaced += $rel
+            $script:ReplacedWhy[$rel] = $why
+        }
+    }
+
+# --- 4b. the report, AFTER step 3 has actually replaced them --------------------
+#
+# The DETECTION above runs before step 3 because that is the only moment the
+# owner's own bytes are still on the disk to be compared against. The REPORT
+# runs here, after step 3, because until step 3 has run the overwrite has not
+# happened - and a run that says it replaced something it did not replace is
+# the same class of untruth this whole step exists to remove. Here the claim
+# is also true of the backup folder, which steps 2 and 3 have created by now.
+
+    if ($script:Replaced.Count -gt 0) {
+        Say ""
+        Say "Replaced: $($script:Replaced.Count) file(s) this run could not reproduce have been" Cyan
+        Say "          backed up and overwritten, exactly as you asked. By name:" Cyan
+        foreach ($r in ($script:Replaced | Sort-Object)) {
+            Say "            $r  -  $($script:ReplacedWhy[$r])" Yellow
+        }
+        if ($script:State.Backup) {
+            Say "          Your own copy of each one, byte for byte, is in:" Cyan
+            Say "            $($script:State.Backup)" Cyan
+        } else {
+            Say "          Each one is backed up by the step that replaces it; see the" Cyan
+            Say "          _jarvis-backup-* folder in the backend folder." Cyan
+        }
+        Say "          The version this run produces is in place. Anything you added by hand to" Yellow
+        Say "          those files is NO LONGER in the live ones until you put it back from the" Yellow
+        Say "          backup folder." Yellow
+        $mfBackupSaid = '_jarvis-backup-<date>'
+        if ($script:State.Backup) { $mfBackupSaid = $script:State.Backup }
+        Add-Note "$($script:Replaced.Count) file(s) were backed up and overwritten because this run could not reproduce them: $(($script:Replaced | Sort-Object) -join ', '). Your copies are in $mfBackupSaid. Any hand-edit in them is no longer in the live files until it is put back."
+    }
+    if ($script:NoSource.Count -gt 0) {
+        Say ""
+        Say "Left alone: $($script:NoSource.Count) file(s) have no version in this repository to" Yellow
+        Say "          write, so nothing in them was changed. By name:" Yellow
+        foreach ($r in ($script:NoSource | Sort-Object)) { Say "            $r" Yellow }
+    }
+}
 
     # --- 3. every module this repository ships whole -------------------------
     #
@@ -2832,6 +4608,99 @@ if (-not (Test-Path -LiteralPath $cfgSrc)) {
     }
 }
 
+# --- write the record of this run (docs/UPDATER-REDESIGN.md section 5 step 2) ----
+#
+# Here, and not earlier, on purpose: the patches are on, every module this
+# repository ships has been copied in, and the settings file is as settled as it
+# gets. What is hashed is therefore the state the rest of this run proved, not a
+# state it is about to change. The tests below cannot change a .py file, so the
+# record is still true when they have finished.
+#
+# The record is written on EVERY run that gets here, not only where no record
+# existed, and that is the point of "run it twice": the second run reads it,
+# finds the files unchanged, and needs no rehearsal at all - while still
+# re-checking the modules and the settings, which no hash of a .py file covers.
+#
+# What it records about a file it could not tie to a patch (see Write-Manifest)
+# is decided by the verdicts above, never assumed. On a refusal this line is
+# never reached, so the baseline an earlier good run wrote is left exactly as it
+# was - the one thing that would make a hand-edit invisible on the next run.
+if ($ManifestPath) {
+    # Built here as well as on the fast path: a run whose record was unusable
+    # still has to write down which patch produced which file, or the next run
+    # could never tie a hash to a patch and the record would never become usable.
+    $script:ManifestOwner = Get-TargetOwners
+    if (-not $already) {
+        $script:ManifestShared = @(Get-SharedFiles)
+    }
+    # This line is only reached by a run that got here with the whole list on the
+    # files - either the rehearsal applied it and checked it again, or the record
+    # said so and every hash agreed. So the patch list of this run is the list
+    # this run can speak for, and a file only one patch of it writes may be tied
+    # to that patch. (Setting this only on the fast path left the record written
+    # by a drift run calling its own files unverified - measured 2026-10-09.)
+    $verifiedPatches = @($PATCHES)
+    $mfEntries = @()
+    # $script:ManifestDrifted is set when a recorded file has changed since the
+    # last good run. A run that found drift does NOT rewrite the record: writing
+    # it would bless the hand-edit as the new baseline, and the next run would
+    # then whistle past it - the one failure mode section 8 of the design note
+    # warns about. Measured 2026-10-09: the first version of this wrote anyway,
+    # and the run after a drift reported no drift at all.
+    if ($script:ManifestDrifted) {
+        Say "Record  : left as it was - this run found drift, so the record of the last" Cyan
+        Say "          good run is not replaced (that is what makes the next run say so again)." Cyan
+    } else {
+    foreach ($n in $PATCHES) {
+        $mfEntries += @{
+            Name     = Split-Path -Leaf $n
+            Patch    = $n
+            Verdict  = Get-PatchVerdict -Name $n
+            Verified = (@($verifiedPatches) -contains $n)
+        }
+    }
+    $mfDoc = [ordered]@{}
+    $mfDocVerified = [ordered]@{}
+    # The files a patch of THIS list names, taken from the patch headers rather
+    # than from what the apply branch happened to touch: on the fast path that
+    # branch never runs, so its list is empty - and a record written there with
+    # no verified file in it cannot be used by the run after it (measured
+    # 2026-10-09).
+    foreach ($rel in @($script:ManifestOwner.Keys)) {
+        $full = Join-Path $BackendPath $rel
+        if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+        $mfDoc[$rel] = Get-Sha256Hex -Path $full -AsLf
+        # A file is tied to a patch only when exactly one patch of this list
+        # names it AND that patch was applied by this run. Everything else - a
+        # file two patches write, a file no patch of the list names - is recorded
+        # as a hash the record cannot speak for, and is LISTED by the run's own
+        # words. That is the owner's answer of 2026-10-09 (question 2): the first
+        # run snapshots what his files hold, and then tells him what it could not
+        # match. Without this, a file no patch can reproduce would be blessed as
+        # verified on the very first run - the silence section 8 warns about.
+        $mfOwner = [string]$script:ManifestOwner[$rel]
+        $mfDocVerified[$rel] = ($mfOwner -ne '' -and (@($verifiedPatches) -contains $mfOwner))
+    }
+    foreach ($f in @(Get-ChildItem -LiteralPath $BackendPath -Filter '*.py' -File -ErrorAction SilentlyContinue)) {
+        $rel = $f.Name
+        if ($mfDoc.Contains($rel)) { continue }
+        $mfDoc[$rel] = Get-Sha256Hex -Path $f.FullName -AsLf
+        $mfDocVerified[$rel] = $false
+    }
+    # The first run has no record at all, so every file it names is what the
+    # owner's files hold RIGHT NOW - the baseline he chose on 2026-10-09
+    # (question 2: "snapshot first, then tell me what it could not match").
+    # Nothing of his is modified by this: it is a hash, written beside the
+    # backend, and the run's own words name whatever it could not tie to a patch.
+    $mfNames = New-Object System.Collections.Generic.List[string]
+    foreach ($pn in $PATCHES) { $mfNames.Add([string]$pn) }
+    $runState = 'baseline'
+    if ($script:ManifestCurrent) { $runState = 'checked' }
+    elseif ($script:ManifestExisting) { $runState = 'partial' }
+    [void](Write-Manifest -Doc $mfDoc -Entries $mfEntries -State $runState -NameList $mfNames.ToArray() -Verified $mfDocVerified -Owners $script:ManifestOwner)
+    }
+}
+
 # --- 5. Python packages ---------------------------------------------------------
 #
 # The backend starts without any of these - every import is guarded - but
@@ -2963,7 +4832,7 @@ $ErrorActionPreference = 'Continue'
 # audit log in .openjarvis\logs. So for this run the config folder and the
 # audit log are a temporary folder, deleted afterwards. run_suites.py works
 # out the variables (the same ones CI's runner uses), one KEY=VALUE a line.
-$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $Stamp)
+$stateDir = Join-Path ([System.IO.Path]::GetTempPath()) ("jarvis-suite-state-" + $TempName)
 $savedEnv = @{}
 $stateLines = & $py.Exe (Join-Path $PatchDir 'run_suites.py') --state-env $stateDir 2>$null
 foreach ($line in @($stateLines)) {

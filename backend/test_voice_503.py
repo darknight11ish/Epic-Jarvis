@@ -17,6 +17,19 @@ client whether speaking it itself is acceptable.
 That field, `client_fallback_ok`, is the load-bearing part, and it is NOT the
 same answer on every route. These tests hold that line.
 
+WHERE THE CODE COMES FROM. `jarvis_hud.py` is the owner's file and is not in
+this repository, so in CI this suite used to be skipped BY NAME and every
+check in it ran only on the owner's PC (`backend/run_suites.py`'s NEEDS_OWNER
+list). Two of its four groups of checks execute the code rather than read it -
+`_no_speech()` itself, and the sentence `_SAY_FALLBACK` - and both of those are
+written entirely by patches, so the whole patch stack's text for that file HAS
+them: `_lift()` below takes them from the real file when this machine has one
+and from the stand-in built by `backend/_stack.py` when it does not, one piece
+at a time. The route checks still need the whole file - the stand-in carries
+the routes' own lines but not the `if route == "..."` that owns them, and
+`ast.parse` cannot read it - so those are named as skips here and run on the
+owner's PC (2026-10-10).
+
     python3 test_voice_503.py
 """
 import ast, sys, traceback
@@ -29,9 +42,14 @@ sys.path.insert(0, str(HERE))
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
 from _where import BACKEND, REPO, missing, explain
-SRC = BACKEND / "jarvis_hud.py"
+HUD = BACKEND / "jarvis_hud.py"
 
-FAILED, PASSED = [], []
+FAILED, PASSED, SKIPPED = [], [], []
+
+#: Why a check that reads a statement out of the WHOLE file cannot run here.
+_WHOLE_FILE = ("jarvis_hud.py is not on this machine and this check reads a statement out of "
+               "the whole file with ast; the patch stack's stand-in (backend/_stack.py) is "
+               "fragments and cannot be parsed, so it still needs the owner's file")
 
 
 def check(name, cond, detail=""):
@@ -39,19 +57,90 @@ def check(name, cond, detail=""):
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
 
 
+def skip(name, why):
+    """A check this machine cannot run. Printed as `skip`, counted on its own,
+    never as a pass - and the summary line at the end carries the number into
+    backend/run_suites.py, which reports whole-suite and inside-suite skips
+    separately."""
+    SKIPPED.append(name)
+    print(f"skip  {name} - {why}")
+
+
+_STAND_IN = None
+
+
+def _stack_text() -> str:
+    """The whole patch stack's text for jarvis_hud.py, built once ("" when it
+    cannot be built at all)."""
+    global _STAND_IN
+    if _STAND_IN is None:
+        import _stack
+        _STAND_IN = _stack.stand_in("jarvis_hud.py")[0] or ""
+    return _STAND_IN
+
+
+def _assignment_text(source: str, name: str):
+    """One module-level `name = ...` and every line it spans, cut by lines.
+
+    `_stack.function_text()` cuts a `def` out of the stand-in; `_SAY_FALLBACK`
+    is a constant, and the stand-in is fragments, so ast cannot find it either.
+    Brackets are counted, so a value written across several lines comes out
+    whole - which is the shape `_SAY_FALLBACK` is written in."""
+    lines = source.splitlines()
+    starts = [i for i, l in enumerate(lines)
+              if l.startswith(f"{name} =") or l.startswith(f"{name}=")]
+    if len(starts) != 1:
+        return None
+    out, depth = [], 0
+    for line in lines[starts[0]:]:
+        out.append(line)
+        depth += sum(line.count(c) for c in "([{") - sum(line.count(c) for c in ")]}")
+        if depth <= 0:
+            break
+    return "\n".join(out) + "\n"
+
+
 def _lift():
-    """The real _no_speech and _SAY_FALLBACK, executed in isolation."""
-    tree = ast.parse(SRC.read_text(encoding="utf-8"))
-    body = [n for n in tree.body
-            if (isinstance(n, ast.FunctionDef) and n.name == "_no_speech")
-            or (isinstance(n, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "_SAY_FALLBACK" for t in n.targets))]
-    names = {getattr(n, "name", None) or n.targets[0].id for n in body}
-    if {"_no_speech", "_SAY_FALLBACK"} - names:
-        raise AssertionError(f"missing from jarvis_hud.py: {sorted({'_no_speech','_SAY_FALLBACK'} - names)}")
+    """The real _no_speech and _SAY_FALLBACK, executed in isolation.
+
+    The owner's jarvis_hud.py when this machine has one - the way this suite
+    has always read it. Otherwise the patch stack's stand-in, one piece at a
+    time: `_stack.function_text("_no_speech")` and `_assignment_text(
+    "_SAY_FALLBACK")`, compiled together. Both are code the patches write
+    outright, so the stand-in has them verbatim, and a missing piece is a
+    failure rather than a skip - it means the stack no longer writes the
+    helper these routes are built on."""
+    if HUD.is_file():
+        tree = ast.parse(HUD.read_text(encoding="utf-8"))
+        body = [n for n in tree.body
+                if (isinstance(n, ast.FunctionDef) and n.name == "_no_speech")
+                or (isinstance(n, ast.Assign) and any(
+                    isinstance(t, ast.Name) and t.id == "_SAY_FALLBACK" for t in n.targets))]
+        names = {getattr(n, "name", None) or n.targets[0].id for n in body}
+        if {"_no_speech", "_SAY_FALLBACK"} - names:
+            raise AssertionError(f"missing from jarvis_hud.py: {sorted({'_no_speech','_SAY_FALLBACK'} - names)}")
+        ns = {}
+        exec(compile(ast.Module(body=body, type_ignores=[]), "<lifted>", "exec"), ns)
+        return ns
+    import _stack
+    src = _stack_text()
+    if not src:
+        raise AssertionError("jarvis_hud.py is not here and the patch stack's stand-in for it "
+                             "could not be built")
+    pieces = {"_no_speech": _stack.function_text(src, "_no_speech"),
+              "_SAY_FALLBACK": _assignment_text(src, "_SAY_FALLBACK")}
+    gone = sorted(n for n, p in pieces.items() if p is None)
+    if gone:
+        raise AssertionError(f"missing from the patch stack's jarvis_hud.py: {gone}")
     ns = {}
-    exec(compile(ast.Module(body=body, type_ignores=[]), "<lifted>", "exec"), ns)
+    for name in ("_SAY_FALLBACK", "_no_speech"):
+        exec(compile(pieces[name], f"<{name}, lifted from the patch stack>", "exec"), ns)
     return ns
+
+
+def _whole_file():
+    """The whole file's text, or None when only the owner's PC has it."""
+    return HUD.read_text(encoding="utf-8") if HUD.is_file() else None
 
 
 def t_the_shape():
@@ -168,7 +257,15 @@ def _imports_of(src, name):
 
 def t_each_route_answers_for_itself():
     """CONTROL. Reading speech and speaking text are opposite directions."""
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for name in ("every voice route that can find no speech module says so through "
+                     "_no_speech, with the right answer for its direction",
+                     "the utterance route is still there to check",
+                     "the utterance route refuses local speech-to-text in words",
+                     "and it does not offer a fallback"):
+            skip(name, _WHOLE_FILE)
+        return
 
     # Which route may offer the client's own fallback is the whole point of
     # the field, so it is pinned per route rather than counted.
@@ -198,7 +295,13 @@ def t_each_route_answers_for_itself():
 
 def t_nothing_returns_500_for_a_missing_module():
     """CONTROL on the regression."""
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for route in ("/api/voice/utterance", "/api/voice/say"):
+            skip(f"{route} is still there to check", _WHOLE_FILE)
+            skip(f"{route} reaches _no_speech before any 500", _WHOLE_FILE)
+        skip("/api/voice/wake no longer imports without a guard", _WHOLE_FILE)
+        return
     for route in ("/api/voice/utterance", "/api/voice/say"):
         seg = _route_block(src, f'route == "{route}"')
         check(f"{route} is still there to check", bool(seg))
@@ -224,7 +327,10 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
+    if SKIPPED:
+        print(f"      ({len(SKIPPED)} check(s) read the whole of jarvis_hud.py, which only the "
+              f"owner's PC has; they run there)")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

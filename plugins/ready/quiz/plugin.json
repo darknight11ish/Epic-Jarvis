@@ -1,0 +1,8 @@
+{
+  "name": "quiz",
+  "summary": "\"Quiz me on a text\".",
+  "module": "jarvis_quiz",
+  "install": "handler",
+  "replaces_patch": "quiz.patch",
+  "stack_order": 107
+}

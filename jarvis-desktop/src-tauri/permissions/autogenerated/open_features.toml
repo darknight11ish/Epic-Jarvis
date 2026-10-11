@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-features"
+description = "Enables the open_features command without any pre-configured scope."
+commands.allow = ["open_features"]
+
+[[permission]]
+identifier = "deny-open-features"
+description = "Denies the open_features command without any pre-configured scope."
+commands.deny = ["open_features"]

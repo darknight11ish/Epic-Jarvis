@@ -1,0 +1,53 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -175,4 +175,6 @@ _NO_RULE_FROM_DENIAL = frozenset({
+     "quiz_cloud_grade",  # jarvis_quiz_cloud.py acts only on tier "ask": ONE card per "grade this better" request; it lists exactly what leaves the PC and bends rule 1 for that one quiz (quiz-cloud.patch)
++    "raise_api_limit",  # jarvis_chatbot_limits.py acts only on tier "ask": ONE card per raise of a chatbot service's monthly money limit, plus Windows Hello, because raising it lets Jarvis spend more of the owner's money (chatbot-limits.patch)
++    "lower_api_limit",  # jarvis_chatbot_limits.py: LOWERING a limit only ever spends less, so it asks nothing - this name exists so the owner-check's Windows Hello, which is attached to the action and not to the direction, lands on the raise alone (chatbot-limits.patch)
+ })
+ 
+ 
+@@ -869,6 +871,15 @@ _RANK = {"auto": 0, "notify": 1, "ask": 2, "never": 3}
+     # "outbound": a risky approval (Windows Hello on the PC, a screen lock on
+     # the phone). Only the caption text comes back, never video or sound.
+     "youtube_captions_read": ("no", "outbound", "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back"),
++    # chatbot-limits.patch (jarvis_chatbot_limits.py, JARVIS-API section 87.4.1;
++    # the owner's approval of 2026-10-06, docs/ACCOUNT-KEYS-DESIGN.md decisions 1
++    # and 3). Raising a monthly money limit LOOSENS: it lets Jarvis spend more of
++    # the owner's money on that service's account than it could before. It stays on
++    # this PC ("local" - nothing is sent anywhere), it cannot be taken back
++    # ("no"), and it is in PC_ONLY_ACTIONS, so it always asks Windows Hello on
++    # this PC and is refused from any other device.
++    "raise_api_limit": ("no", "local", "lets Jarvis spend more of your money a month on the chatbot service named on the card; the limit is what stops that service being used once it is reached, so raising it spends more, and the change cannot be taken back"),
++    "lower_api_limit": ("yes", "local", "lowers or removes a chatbot service's monthly money limit, so Jarvis can spend LESS of your money than before; nothing is sent anywhere and it can be raised again with a card"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3736,6 +3736,25 @@ def _read_body(handler) -> bytes:
+     except Exception as exc:
+         print(f"  quiz-cloud NOT ON ({type(exc).__name__}) - Grade this better is off")
+         print("             until jarvis_quiz_cloud.py is back: run apply-patches.ps1 again")
++    # chatbot-limits.patch ("Chatbot API keys" in Settings, the owner's approval of
++    # 2026-10-06; docs/ACCOUNT-KEYS-DESIGN.md steps 3-5, JARVIS-API section 87.4.1):
++    # GET /api/chatbot/money reads every service's monthly limit, what is spent, what
++    # is left and its model's price WITH where that number came from; POST sets ONE
++    # change. Raising a limit raises ONE approval card (raise_api_limit, tier ask)
++    # plus Windows Hello on the PC; lowering one, removing one, correcting a price
++    # and resetting one need no card. Both are PC only - a request from any other
++    # device is refused 403 pc_only. Wrapped round Handler here, before anything
++    # listens, like quiz-cloud above; every rule is in jarvis_chatbot_limits.py.
++    # Needs jarvis_chatbot_limits.py copied in and chatbot.patch's
++    # jarvis_chatbot_api.py; without them, or on any error, the banner says so and
++    # the route is simply not there.
++    try:
++        import jarvis_chatbot_limits
++        print(jarvis_chatbot_limits.install(Handler, origin_ok=_origin_ok,
++                                            token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  chatbot money NOT ON ({type(exc).__name__}) - chatbot money limits are off")
++        print("             until jarvis_chatbot_limits.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

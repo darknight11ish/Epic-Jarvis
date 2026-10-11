@@ -102,6 +102,11 @@ object AsksFirst {
     val SWITCHABLE = listOf(
         "calendar_read", "email_read", "notes_search", "home_read",
         "append_obsidian_daily", "append_logseq_journal", "create_joplin_note",
+        // 2026-10-08: the five rows the audit found running without asking and
+        // switchable nowhere. browse_model_catalog (leaves this PC) and
+        // rollback_model (the undo for a switch must never wait) stay off.
+        "read_files_readonly", "read_joplin_note", "read_logseq_page",
+        "create_logseq_page", "power_manage",
     )
 
     data class Switch(val asks: Boolean, val canLoosen: Boolean)

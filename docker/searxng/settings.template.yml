@@ -1,0 +1,47 @@
+# SearXNG's settings, as this PC should run it, at the moment the container
+# starts for the first time. Added 2026-10-09.
+#
+# THIS IS NOT THE LIVE FILE. docker-compose.yml mounts it over the settings
+# template that ships inside the pinned image, and the image's entrypoint copies
+# it to %USERPROFILE%\searxng\settings.yml - the file SearXNG actually reads -
+# when that file does not exist yet (container/entrypoint.sh, setup(), at tag
+# 2026.10.9-f4822b3fc):
+#
+#     cp -pfT "$template_settings" "$target_settings"
+#     sed -i "s/ultrasecretkey/<24 random bytes>/g" "$target_settings"
+#
+# So: edit %USERPROFILE%\searxng\settings.yml to change a running SearXNG, and
+# this file only to change what a FRESH one starts with - a settings.yml that
+# already exists is never overwritten.
+
+# Start from everything the image ships, and change only what is written below.
+use_default_settings: true
+
+server:
+  # Placeholder, exactly as SearXNG's own repository writes it. The entrypoint
+  # replaces this string with a random value while it copies this file into
+  # place, so no secret is committed here and the live file gets a key of its
+  # own.
+  secret_key: "ultrasecretkey"
+  # Jarvis reads a 429 from SearXNG as "too many searches (its limiter is on)"
+  # and tells the owner to switch it off by hand (backend/jarvis_search.py:
+  # 1025-1028). The pinned image already defaults to false; this line keeps that
+  # true if a later tag changes its default. Switching the limiter on would also
+  # need a valkey database alongside SearXNG, which this one-PC setup
+  # deliberately does not run.
+  limiter: false
+
+search:
+  # THE setting Jarvis cannot work without. SearXNG ships HTML output only
+  # (searx/settings.yml inside the image: "formats:" then "- html"), so a
+  # request asking for JSON is answered 403 Forbidden - the exact answer
+  # backend/jarvis_search.py:1020-1024 explains to the owner ("its JSON output is
+  # switched off ... Add json to the formats list in its settings.yml and
+  # restart it"). jarvis_search.py asks every search as
+  # "/search?q=...&format=json" (:1011) and reads the answer's "results" list
+  # (:1034-1037). "json" is one of the four formats SearXNG knows
+  # (OUTPUT_FORMATS = ['html', 'csv', 'json', 'rss'], searx/settings_defaults.py
+  # at this tag).
+  formats:
+    - html
+    - json

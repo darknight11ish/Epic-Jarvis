@@ -86,6 +86,64 @@ def t_the_catalogue_is_well_formed():
                   step.get("shows") is None or isinstance(step.get("shows"), str))
 
 
+def t_a_step_points_at_one_real_control_per_app():
+    """`point` is the interactive half: which REAL control a step sends the
+    owner to, in each app's own words.
+
+    What is checked here is the shape and the split. Whether the named control
+    exists is each app's own business and each app's own suite -
+    jarvis-desktop/tests/tutorials.mjs against its CONTROL_POINTS and the
+    markup, and jarvis-client's TutorialsTest.kt against the phone's. That is
+    deliberate: only the app knows what it has, and a catalogue that could
+    invent a control would be the silent lie this field exists to prevent.
+    """
+    points = 0
+    for t in T.CATALOGUE:
+        for n, step in enumerate(t["steps"], 1):
+            where = f"{t['id']} step {n}"
+            raw = step.get("point")
+            check(f"{where}: a point is a per-app map, or absent",
+                  raw is None or isinstance(raw, dict), raw)
+            if not isinstance(raw, dict):
+                continue
+            for app in raw:
+                check(f"{where}: names an app that exists", app in ("desktop", "phone"), app)
+            for app in ("desktop", "phone"):
+                got = T.point_of(step, app)
+                check(f"{where}: {app}'s target is a name or None",
+                      got is None or isinstance(got, str), got)
+                if got:
+                    points += 1
+    check("at least one step points at a real control, or none of this is "
+          "interactive", points > 0, points)
+
+
+def t_a_phone_tutorial_never_points_at_a_pc_control():
+    """The failure the owner named: a phone step sending him to a hotkey, or a
+    desktop step telling him to tap a card.
+
+    A tutorial whose section is `phone` may only ever carry phone targets, and
+    a `pc` one only desktop targets. The shared `both` tutorials are the only
+    place a step may have one of each - and there it must be a real target per
+    app, not the same name twice pretending the two apps are the same.
+    """
+    for t in T.CATALOGUE:
+        for n, step in enumerate(t["steps"], 1):
+            where = f"{t['id']} step {n}"
+            desktop, phone = T.point_of(step, "desktop"), T.point_of(step, "phone")
+            if t["section"] == "pc":
+                check(f"{where}: a PC tutorial has nothing for the phone",
+                      phone is None, phone)
+            if t["section"] == "phone":
+                check(f"{where}: a phone tutorial has nothing for the PC",
+                      desktop is None, desktop)
+    phone_steps = [T.point_of(s, "phone")
+                   for t in T.CATALOGUE if t["section"] == "phone"
+                   for s in t["steps"]]
+    check("the phone's own tutorials really do point at the phone",
+          any(phone_steps), phone_steps)
+
+
 def t_both_sections_have_tutorials():
     for section in ("pc", "phone"):
         mine = [t for t in T.CATALOGUE if t["section"] == section]
@@ -360,6 +418,8 @@ def t_the_routes_are_wired_and_guarded():
 
 if __name__ == "__main__":
     for fn in (t_the_catalogue_is_well_formed, t_both_sections_have_tutorials,
+               t_a_step_points_at_one_real_control_per_app,
+               t_a_phone_tutorial_never_points_at_a_pc_control,
                t_nothing_is_done_before_it_is_read,
                t_quitting_records_the_step_and_resuming_continues,
                t_finishing_is_recorded_and_not_due_again,

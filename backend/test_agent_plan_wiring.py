@@ -509,9 +509,19 @@ def t_a_step_the_model_did_not_flag_but_whose_real_tier_needs_a_person_is_refuse
               any(c[0] in HOME_CONTROL_NAMES for c in calls), repr(calls))
         check("but it is refused anyway - nobody was really asked",
               result.get("ok") is False, repr(result))
-        check("the reason says which tool, and that it was let through unasked",
-              "home_control" in (result.get("reason") or "")
-              and "without asking anyone" in (result.get("reason") or ""), repr(result))
+        # The wording moved on 2026-10-10 (the owner's decision, queue item 4):
+        # the sentence a person reads says what happened and what to do next,
+        # and the technical reason - which tier answered, which setting to put
+        # back - moved to the same record's `gate` field for a bug report. So
+        # this check is about the plain sentence now, and the next one keeps
+        # the rule that the tier never appears in it.
+        reason = result.get("reason") or ""
+        check("the reason says which tool, and that nobody was asked, so nothing ran",
+              "home_control" in reason
+              and "nobody was asked" in reason
+              and "nothing was run" in reason, repr(result))
+        check("and the sentence a person reads names no tier",
+              "tier" not in reason, reason)
         check("nothing ran", result.get("done") == [], repr(result))
     _with_real_enabled(body)
 

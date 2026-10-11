@@ -111,9 +111,20 @@ def t_cli():
     out = _TMP / "cli"
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
     env.pop("JARVIS_MEMORY_DB", None)
+    # 1800 seconds, was 600. This is a TIMEOUT, not a slow assertion: the whole
+    # LoCoMo evaluation runs here as a subprocess, and on the owner's 24-core PC
+    # it takes 38 seconds - but GitHub's shared 2-core Windows runner is about
+    # 15x slower, so 600 expired partway through and the suite failed with no
+    # failing check at all (13 passed, 1 failed, `t_cli`, TimeoutExpired).
+    # Measured 2026-10-07: it failed that way in three separate CI runs - twice
+    # on the bug-audit branch and once on the videos branch, neither of which
+    # touches this file or eval_memory.py. The Windows job's own ceiling is 90
+    # minutes and the rest of the sweep takes about 40, so 1800 still fits with
+    # room to spare. Raising a timeout does not hide a wrong answer: every check
+    # below still runs, and the evaluation's own numbers are asserted.
     r = subprocess.run([sys.executable, str(HERE / "eval_memory.py"), "--locomo",
                         "--words-only", "--out", str(out)],
-                       capture_output=True, text=True, timeout=600, env=env)
+                       capture_output=True, text=True, timeout=1800, env=env)
     check("eval_memory.py --locomo --words-only runs", r.returncode == 0, r.stderr[-800:])
     js = sorted(out.glob("memory-eval-locomo-*.json"))
     md = sorted(out.glob("memory-eval-locomo-*.md"))

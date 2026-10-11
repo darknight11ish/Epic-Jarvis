@@ -136,6 +136,55 @@ pub async fn set_attention_muted(app: AppHandle, muted: bool) -> Result<serde_js
     Ok(out)
 }
 
+/// Sets **how many times a day Jarvis may speak up unasked**, or **the hour the
+/// brief arrives** - the two numbers the Brain's "Interruption budget" card
+/// shows and, until 2026-10-08, could not change anywhere.
+///
+/// ONE command for both numbers and ONE value per call, the way
+/// [`set_attention_muted`] is one command for both directions of the mute: two
+/// commands would drift, and a card asking about both numbers at once is a card
+/// nobody can answer well.
+///
+/// The BACKEND decides which way the change is - the number against the budget
+/// already in force, never a flag from here. Turning the budget down, and
+/// moving the brief's hour, apply at once. RAISING the budget is a loosening,
+/// so the backend puts one approval card to the owner first and writes nothing
+/// until it is approved; that answer comes back whole (`said`, or the card's
+/// own refusal words) and is handed to the page as it is.
+///
+/// A PC whose Jarvis has no such route yet - the route arrives with
+/// `attention-settings.patch`, so an install that has not run
+/// `apply-patches.ps1` since - answers 404. That is said in the owner's words
+/// rather than passed on as an HTTP line.
+#[tauri::command]
+pub async fn set_attention_limits(
+    app: AppHandle,
+    spoken_per_day: Option<i64>,
+    digest_hour: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let body = match (spoken_per_day, digest_hour) {
+        (Some(n), None) => serde_json::json!({ "spoken_per_day": n }),
+        (None, Some(h)) => serde_json::json!({ "digest_hour": h }),
+        _ => return Err("Send one setting at a time.".to_string()),
+    };
+    let base = commands::jarvis_base(&app);
+    let out = post_json(&app, &base, "/api/attention/settings", body)
+        .await
+        .map_err(|e| {
+            if e.contains("HTTP 404") {
+                "Your PC's Jarvis does not have this setting yet - run \
+                 apply-patches.ps1 on the PC."
+                    .to_string()
+            } else {
+                e
+            }
+        })?;
+    // `budget()` comes back, not `status()`: re-read so `pending`, `banked` and
+    // the digest fields cannot go stale behind the click.
+    refresh(&app, &base).await;
+    Ok(out)
+}
+
 // ---------------------------------------------------------------------------
 // Plumbing
 // ---------------------------------------------------------------------------

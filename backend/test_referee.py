@@ -613,9 +613,103 @@ def t_the_patch_and_the_lists():
     # table above the action names referee.patch's own risk line sits in, and it
     # touches no list referee.patch's hunks anchor on. The checks below are what
     # really says so.
+    # chatbot-limits.patch (2026-10-06) goes after those too, and for a
+    # stronger reason than the order it happened to be written in: its two
+    # jarvis_gate.py hunks add the api-limit actions to the same two lists
+    # readpage.patch's own hunks do, so whichever of the two runs second must
+    # run against the other's finished text. readpage goes first; written the
+    # other way round it stopped applying at all (test_readpage.py). It adds no
+    # gate list entry referee.patch's hunks anchor on.
+    #
+    # accounts.patch (2026-10-06) goes after those too: its two hunks are in
+    # jarvis_hud.py, anchored on web-search.patch's own added lines, and it
+    # adds no gate list entry, no risk row and no _TOOL_ACTIONS line - it
+    # rewrites nothing referee.patch's hunks anchor on.
     later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch",
              "gate-action-name.patch", "tutorials.patch", "readpage.patch",
-             "gate-risk-rows.patch"}
+             "chatbot-limits.patch", "chatbot-limits-hud.patch",
+             "gate-risk-rows.patch", "accounts.patch",
+             # screen-attach.patch (2026-10-07): one hunk in jarvis_hud.py's
+             # tutorials install block. It touches jarvis_gate.py not at all, so
+             # it rewrites nothing referee.patch's hunks anchor on.
+             "screen-attach.patch",
+             # prompt-coach.patch (2026-10-08): two hunks in jarvis_hud.py, one GET
+             # route and one POST block, anchored on routes that predate it. It
+             # touches jarvis_gate.py not at all, so it rewrites nothing
+             # referee.patch's hunks anchor on.
+             "prompt-coach.patch",
+             # tasks.patch (2026-10-08): two hunks in jarvis_hud.py - one GET
+             # route and one POST block - and jarvis_gate.py not at all. It
+             # rewrites nothing referee.patch's hunks anchor on.
+             "tasks.patch",
+             # retrieve-count.patch (2026-10-08): two hunks in jarvis_hud.py -
+             # `_retrieve_counts()` beside retrieve() and the handler's own
+             # `count=1` branch - and jarvis_gate.py not at all. It rewrites
+             # nothing referee.patch's hunks anchor on.
+             "retrieve-count.patch",
+             # attention-settings.patch (2026-10-08): ONE route in jarvis_hud.py
+             # (POST /api/attention/settings), anchored on the attention routes
+             # already there, and jarvis_gate.py not at all. It rewrites nothing
+             # referee.patch's hunks anchor on.
+             "attention-settings.patch",
+             # handoff-mode.patch (2026-10-08): two hunks in jarvis_gate.py,
+             # both at the END of the two lists referee.patch's own hunks anchor
+             # on (the "acts only on tier ask" set and the _RISK table), so it
+             # rewrites none of referee.patch's lines either.
+             "handoff-mode.patch",
+             # limits-settings.patch (2026-10-08): ONE route in jarvis_hud.py
+             # (POST /api/limits/settings), right after the budget's own, and
+             # jarvis_gate.py not at all. It rewrites nothing referee.patch's
+             # hunks anchor on.
+             "limits-settings.patch",
+             # limits-read.patch (2026-10-08): GET /api/limits, joining the
+             # HUD's read-only route set. jarvis_gate.py not at all again, so it
+             # rewrites nothing referee.patch's hunks anchor on either.
+             "limits-read.patch",
+             # handoff-front.patch (2026-10-09): the same two hunks in
+             # jarvis_gate.py as handoff-mode.patch's, both at the END of the
+             # "acts only on tier ask" set and the _RISK table, so it rewrites
+             # none of referee.patch's lines either.
+             "handoff-front.patch",
+             # docker.patch (2026-10-09): the route half of the first Docker
+             # integration - ONE install block in jarvis_hud.py, between
+             # chatbot-limits-hud.patch's block and tutorials.patch's. It touches
+             # jarvis_gate.py not at all, so it rewrites nothing referee.patch's
+             # hunks anchor on either. (Its two actions, docker_service_start and
+             # docker_service_stop, take unknown_action_tier - "ask" - until
+             # section 9.2 of docs/DOCKER-INTEGRATION-DESIGN.md lands their rows.)
+             "docker.patch",
+             # plugin-loader.patch (2026-10-10, this branch) is appended last
+             # and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED lines
+             # at the end of the install chain. It removes no line and does not
+             # touch jarvis_gate.py at all, so it rewrites nothing this patch
+             # wrote.
+             # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
+             # hunks, both in jarvis_gate.py: under `_PROTECTED`/`_PROTECTED_RE` and
+             # at check()'s own `hit = _touches_protected(prompt, detail)` call. It
+             # removes no line, adds no tier row and no _RISK row - referee.patch's
+             # own rows are further down the same file - so it rewrites nothing
+             # referee.patch wrote. test_gate_touches.py's own check confirms no
+             # other patch adds or removes the call it replaces.
+             "gate-touches.patch",
+             "plugin-loader.patch",
+             # picture-card.patch (2026-10-11) is the first patch to go
+             # immediately BEFORE plugin-loader.patch, and it has exactly ONE
+             # hunk, in jarvis_hud.py: an install block on the OWNER's own lines
+             # just before the main socket is built. It does not touch
+             # jarvis_gate.py at all, so it adds no tier row and no _RISK row, and
+             # rewrites nothing referee.patch wrote. (It was re-anchored there on
+             # 2026-10-11: it used to sit between progress.patch and topics.patch
+             # with topics.patch's OWN banner as its trailing context, and
+             # topics.patch runs after it. See _stack.py's RATCHET note.)
+             # uncensored-optins.patch (2026-10-11) is appended in front of
+             # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+             # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+             # install block at the end of jarvis_hud.py's chain. It removes no line,
+             # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+             # it cannot rewrite a line this patch wrote.
+             "uncensored-optins.patch",
+             "picture-card.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

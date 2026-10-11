@@ -75,14 +75,18 @@ approve with their eyes open, and a card that says "read the whole house"
 is not a request, it is a standing grant.
 
 CREDENTIALS - NEVER STORED HERE, NEVER LOGGED, NEVER ON A CARD
-`JARVIS_HOME_URL` is read fresh from the environment on every call. The
-token is a little more careful still (ease-of-use audit row 15): `_token()`
-reads `JARVIS_HOME_TOKEN` if the owner set it, else Windows Credential
-Manager under `TOKEN_TARGET` - entered on the PC only, in the desktop's
-Settings ("Accounts") - else "". An installation that already has the
-environment variable set keeps using it unchanged. This module never writes
-the token to disk and never puts it in a `Plan`, a `Query`, or `describe()`'s
-output.
+`JARVIS_HOME_URL` is read fresh on every call, the environment variable FIRST
+- an installation that already sets one keeps working exactly as before - and
+otherwise the address the owner typed into the desktop's Settings ->
+"Accounts" card, kept on this PC in `accounts.json` beside `web-search.json`
+(`_base_url()`; jarvis_accounts.py; accounts.patch, 2026-10-06). An ADDRESS is
+not a secret, so it is a plain JSON file. The token is a little more careful
+still (ease-of-use audit row 15): `_token()` reads `JARVIS_HOME_TOKEN` if the
+owner set it, else Windows Credential Manager under `TOKEN_TARGET` - entered
+on the PC only, in the desktop's Settings ("Accounts") - else "". An
+installation that already has the environment variable set keeps using it
+unchanged. This module never writes the token to disk and never puts it in a
+`Plan`, a `Query`, or `describe()`'s output.
 
 TESTING WITHOUT A REAL HOME ASSISTANT
 `run()` takes an injectable `fetch`, exactly the shape
@@ -148,8 +152,36 @@ _ALONE_DOMAINS = frozenset({"camera", "script", "scene", "automation", "button",
 MAX_GROUP = 10
 
 
+def _base_url() -> str:
+    """Where Home Assistant is, in the order that is the whole point:
+
+      1. `JARVIS_HOME_URL`, if the owner set it - read FIRST and returned
+         unchanged, so an installation that already relies on it behaves
+         exactly as it did before there was a Settings box;
+      2. otherwise the address saved on this PC in `accounts.json`
+         (`jarvis_accounts.py`, `value()`), written by the desktop's
+         Settings -> Accounts card (accounts.patch, 2026-10-06);
+      3. otherwise "" - Home Assistant is simply not set up.
+
+    The environment variable is checked here as well as inside
+    `jarvis_accounts.value()` on purpose: if that module is not on this PC at
+    all, step 1 must still work, and nothing that works today may stop.
+
+    An ADDRESS is not a secret, which is why it is a plain JSON file rather
+    than Credential Manager; the TOKEN stays in `_token()` below, where it has
+    always been."""
+    from_env = os.environ.get(URL_ENV, "").strip()
+    if from_env:
+        return from_env
+    try:
+        import jarvis_accounts
+        return jarvis_accounts.value("home_url")
+    except Exception:
+        return ""
+
+
 def _configured() -> bool:
-    return bool(os.environ.get(URL_ENV, "").strip())
+    return bool(_base_url())
 
 
 def _token() -> str:
@@ -282,11 +314,13 @@ def plan_states(entity_ids: list) -> Plan:
         return Plan(kind="get_states", if_refused=if_refused,
                      authenticated=authenticated(),
                      reason_empty="no entity ids were given to read")
-    base = os.environ.get(URL_ENV, "").strip()
+    base = _base_url()
     if not base:
         return Plan(kind="get_states", if_refused=if_refused,
                      authenticated=authenticated(),
-                     reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to read")
+                     reason_empty=(f"{URL_ENV} is not set, and no Home Assistant address "
+                                   f"is saved in Settings, Accounts on this PC - there is "
+                                   f"no Home Assistant to read"))
     insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
     if insecure:     # security audit L7
         return Plan(kind="get_states", if_refused=if_refused,
@@ -327,11 +361,13 @@ def plan_service(domain: str, service: str, entity_id: str,
                      authenticated=authenticated(),
                      reason_empty=(f"{domain!r}.{service!r} is not a Home Assistant "
                                    "domain and service, so nothing was sent"))
-    base = os.environ.get(URL_ENV, "").strip()
+    base = _base_url()
     if not base:
         return Plan(kind="call_service", if_refused=if_refused,
                      authenticated=authenticated(),
-                     reason_empty=f"{URL_ENV} is not set - there is no Home Assistant to control")
+                     reason_empty=(f"{URL_ENV} is not set, and no Home Assistant address "
+                                   f"is saved in Settings, Accounts on this PC - there is "
+                                   f"no Home Assistant to control"))
     insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
     if insecure:     # security audit L7
         return Plan(kind="call_service", if_refused=if_refused,
@@ -445,9 +481,10 @@ def plan_services(domain: str, service: str, entity_ids,
     problem = group_problem(domain, service, ids, data)
     if problem:
         return refused(problem)
-    base = os.environ.get(URL_ENV, "").strip()
+    base = _base_url()
     if not base:
-        return refused(f"{URL_ENV} is not set - there is no Home Assistant to control")
+        return refused(f"{URL_ENV} is not set, and no Home Assistant address is saved in "
+                       f"Settings, Accounts on this PC - there is no Home Assistant to control")
     insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
     if insecure:     # security audit L7
         return refused(insecure)
@@ -595,9 +632,10 @@ def plan_forecast(entity_id: Optional[str] = None, kind: str = "daily") -> Plan:
                        f"(weather.<name>) - check {WEATHER_ENV}")
     if kind not in FORECAST_TYPES:
         return refused(f"{kind!r} is not a kind of forecast Home Assistant gives")
-    base = os.environ.get(URL_ENV, "").strip()
+    base = _base_url()
     if not base:
-        return refused(f"{URL_ENV} is not set - there is no Home Assistant to read")
+        return refused(f"{URL_ENV} is not set, and no Home Assistant address is saved in "
+                       f"Settings, Accounts on this PC - there is no Home Assistant to read")
     insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")
     if insecure:
         return refused(insecure)
@@ -620,7 +658,7 @@ def _forecast_problem(p: Plan) -> str:
     if body is None or set(body) != {"entity_id", "type"} or body.get("entity_id") != eid \
             or body.get("type") not in FORECAST_TYPES:
         return "not the forecast request"
-    base = os.environ.get(URL_ENV, "").strip()
+    base = _base_url()
     want = _forecast_queries(base, eid, body["type"]) if base else []
     if not want or [(q.method, q.url, q.body) for q in p.queries] != \
             [(q.method, q.url, q.body) for q in want]:
@@ -965,7 +1003,7 @@ def check_token(*, probe: Optional[Callable] = None) -> dict:
     """{"state", "why"}: "not_set_up", "insecure", "refused" (HA does not
     accept the token), "unreachable", "user" (a plain user's - good) or
     "admin" (an administrator's). Never the token itself. Never raises."""
-    base = os.environ.get(URL_ENV, "").strip()
+    base = _base_url()
     if not base or not authenticated():
         return {"state": "not_set_up", "why": "Home Assistant is not set up on this PC"}
     insecure = jarvis_local_http.plain_http_problem(base, URL_ENV, "the Home Assistant token")

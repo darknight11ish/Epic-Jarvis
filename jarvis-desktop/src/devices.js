@@ -9,8 +9,10 @@
  *    page never holds the text inside it), the typed backup code, the
  *    countdown. Rust hides this window from screen capture before it
  *    answers. Held on a stale link (it ends in an approval card).
- *  - pair_session: read every 2 s while a pairing is open - the state, the
- *    phone's name and the four words, and the PC's own sentence.
+ *  - pair_session: read every 2 s for the first minute a pairing is open,
+ *    then every 15 s (2026-10-08 cohesion audit, finding 1) - the state, the
+ *    phone's name and the four words, and the PC's own sentence. See
+ *    [`POLL_MS_HOT`] for why the first minute is not the whole session.
  *  - pair_cancel: ends it; never held.
  *  - devices_list / devices_remove({id}) / devices_shared({retired}):
  *    the list; Remove ONE device (immediate, after "are you sure?"); Retire
@@ -26,13 +28,17 @@
  */
 
 import { onLink, onEvent, currentLink, linkWords } from "./jarvis-link.js";
+import { pairWaitMs } from "./devices-pair-poll.js";
 import {
   CODE_GONE,
+  LABEL_BUTTON,
+  LABEL_PROMPT,
   NEEDS_ADDRESS,
   STALE,
   countdown,
   deviceLine,
   isActive,
+  labelDone,
   problemWords,
   removeQuestion,
   sessionLine,
@@ -45,7 +51,6 @@ import {
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
 const $ = (id) => document.getElementById(id);
-const POLL_MS = 2000;
 
 const el = {
   section: $("devices"),
@@ -84,6 +89,7 @@ let address = { value: "", editing: true };
 let busy = false;
 let pollTimer = null;
 let tickTimer = null;
+let codeShownAt = 0; // when the code went on screen - see pairWaitMs
 let secondsLeft = 0;
 let showingCode = false;
 
@@ -165,9 +171,21 @@ function signedOn() {
 function deviceRow(d) {
   const li = node("li", "sc-gpu dv-device");
   li.dataset.id = d.id;
-  const name = node("span", "sc-gpu-name", d.name || d.id);
+  // The owner's label when he gave one, else the name the phone sent at
+  // pairing. `shown` comes off the PC (jarvis_devices.row_shown), so the list
+  // here and the list on the phone can never word one device differently.
+  const name = node("span", "sc-gpu-name", d.shown || d.name || d.id);
   if (d.this_device) name.append(node("span", "hint", " (this app)"));
   li.append(name, node("span", "sc-gpu-role", deviceLine(d)));
+  if (d.label && d.name && d.name !== d.label) {
+    // The device's own name stays reachable, so the owner can see what he is
+    // going back to by clearing the label. Never a key, and never on a row
+    // whose label IS the name it sent (there it would say the same thing
+    // twice).
+    const source = node("span", "sc-gpu-role dv-source", `The phone calls itself ${d.name}.`);
+    li.dataset.dvSource = d.name;
+    li.append(source);
+  }
   const signed = signedLine(d, signedOn());
   if (signed) {
     const line = node("span", "sc-gpu-role dv-signed", signed);
@@ -176,14 +194,33 @@ function deviceRow(d) {
   }
   if (d.removable) {
     const row = node("div", "row");
-    const remove = node("button", "btn small", "Remove…");
+    // "Name this device…" (docs/MULTI-DEVICE-DESIGN.md, the first slice):
+    // the name the owner types, beside the key. No card - it grants nothing
+    // and revokes nothing - and it is never held on a stale link, exactly
+    // like Remove beside it. A device's own key never appears here.
+    const label = node("button", "btn ghost small dv-label", LABEL_BUTTON);
+    label.type = "button";
+    label.disabled = busy;
+    label.title = d.label ? `Currently called ${d.label}` : "";
+    label.addEventListener("click", () => labelDevice(d));
+    const remove = node("button", "btn small dv-remove", "Remove…");
     remove.type = "button";
     remove.disabled = busy;
     remove.addEventListener("click", () => removeDevice(d));
-    row.append(remove);
+    row.append(label, remove);
     li.append(row);
   }
   return li;
+}
+
+/** The freshest row for `id` off the PC's own list, or `d` itself. A row is
+ * rebuilt from `GET /api/devices` after every change, so this is what the
+ * owner is looking at right now - and reading the label from the CURRENT list
+ * (never from the row that was on screen when the button was built) is what
+ * keeps "press OK without changing anything" from sending a second rename. */
+function freshRow(d) {
+  const rows = view && Array.isArray(view.devices) ? view.devices : [];
+  return rows.find((r) => r && r.id === d.id) || d;
 }
 
 function paint() {
@@ -256,13 +293,49 @@ async function loadAddress() {
 }
 
 async function removeDevice(d) {
-  if (!window.confirm(removeQuestion(d.name || d.id))) return;
+  if (!window.confirm(removeQuestion(d.shown || d.name || d.id))) return;
   busy = true;
   say(el.status, "Removing…");
   paint();
   try {
     const out = await TAURI.core.invoke("devices_remove", { id: d.id });
     say(el.status, `${(out && out.name) || d.name} was removed.`, "ok");
+  } catch (error) {
+    say(el.status, problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await loadList();
+}
+
+/**
+ * Naming a device (docs/MULTI-DEVICE-DESIGN.md, the first slice): the owner's
+ * own name for a device he already paired, kept beside its key on the PC.
+ *
+ * Immediate, no approval card, and never held on a stale link - the same
+ * treatment Remove gets, for the opposite reason: a label grants nothing and
+ * revokes nothing, it only changes what the list on the PC and the phone call
+ * that device. A device can never approve another device from here; the
+ * pairing card that does stays PC-only with Windows Hello.
+ *
+ * The box starts at the name the device is called NOW, so pressing OK
+ * unchanged changes nothing, and clearing it goes back to the name the device
+ * gave itself at pairing. A label the PC refuses (empty is fine; too long or
+ * the wrong characters is not) says so in the PC's own words, above.
+ */
+async function labelDevice(d) {
+  const row = freshRow(d);
+  const now = String(row.label || "");
+  const typed = window.prompt(LABEL_PROMPT, now);
+  if (typed === null) return;                       // Cancel: nothing sent
+  const next = typed.trim();
+  if (next === now) return;                         // unchanged: nothing sent
+  busy = true;
+  say(el.status, "Naming…");
+  paint();
+  try {
+    const out = await TAURI.core.invoke("devices_label", { id: d.id, label: next });
+    say(el.status, labelDone((out && out.shown) || next || row.name || d.id), "ok");
   } catch (error) {
     say(el.status, problemWords(error), "bad");
   } finally {
@@ -312,7 +385,7 @@ async function bringBack() {
 /* ── Pairing a phone ─────────────────────────────────────────────────── */
 
 function stopTimers() {
-  if (pollTimer) clearInterval(pollTimer);
+  if (pollTimer) clearTimeout(pollTimer);
   if (tickTimer) clearInterval(tickTimer);
   pollTimer = null;
   tickTimer = null;
@@ -369,12 +442,37 @@ async function poll() {
 
 function startTimers() {
   stopTimers();
-  pollTimer = setInterval(poll, POLL_MS);
+  codeShownAt = Date.now();
+  armPoll();
+  // The countdown under the code: 1 s while the code is on screen. It needs
+  // no self-aligning tick, unlike the approval clocks - it is repainted by
+  // the same second it counts, so it drifts by nothing a reader can see.
   tickTimer = setInterval(() => {
     if (!showingCode) return;
     secondsLeft = Math.max(0, secondsLeft - 1);
     el.countdown.textContent = countdown(secondsLeft);
   }, 1000);
+}
+
+/**
+ * One read of the pairing state, then the next one at the wait
+ * [`pairWaitMs`] asks for (2026-10-08 cohesion audit, finding 1). `setTimeout`
+ * rather than a flat 2 s `setInterval`, so the wait can follow the session -
+ * 2 s while the phone is still likely to be pointed at the code, 15 s after
+ * that, which is the cadence `brain.js` polls its own panels at.
+ *
+ * The DEVICE LIST is not polled at all: it is re-read by the `devices` event
+ * below (`loadList()` on every `devices` frame), which is the freshness this
+ * page actually needs. This timer only carries the pairing panel, where the
+ * phone's four words arrive with the PC's approval card.
+ */
+function armPoll() {
+  pollTimer = setTimeout(runPoll, pairWaitMs(codeShownAt, Date.now()));
+}
+
+function runPoll() {
+  pollTimer = null;
+  poll().finally(armPoll);
 }
 
 async function pairPhone() {

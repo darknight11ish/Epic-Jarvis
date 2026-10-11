@@ -19,16 +19,24 @@ is built here from the same settings the rest of Jarvis reads:
     action's tier in [autonomy.tiers]; the tools jarvis_agent.py only
     ever runs on a person's yes (NEEDS_A_PERSON) say "every time" whatever
     the tier;
-  * which accounts are set up: the same environment variables each module
-    reads (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...) - for
-    the IMAP username and password, the private calendar link, and the Home
+  * which accounts are set up: the same values each module reads
+    (JARVIS_IMAP_HOST, JARVIS_CALDAV_URL, JARVIS_HOME_URL, ...) - for the
+    IMAP username and password, the private calendar link, and the Home
     Assistant token, `_env` asks the module that owns each one
     (`jarvis_email.imap_user()`, ...), so a value saved in Windows
     Credential Manager instead of typed as an environment variable
-    (ease-of-use audit row 15) shows here too;
+    (ease-of-use audit row 15) shows here too; and for the ADDRESSES - the
+    mail server, the sending server, Home Assistant and the calendar's CalDAV
+    address - it reads the environment variable first and otherwise the value
+    typed into Settings -> Accounts on this PC (accounts.json,
+    jarvis_accounts.py; accounts.patch, 2026-10-06), so a row stops saying
+    "not set up" the moment the owner fills that box in;
   * web search: jarvis_search.settings() and whether a key is SAVED;
-  * the cloud lanes: the chat route's own `_lane_names()` when this runs
-    inside the server, else the same file it reads (litellm-proxy.yaml);
+  * the cloud lanes: `jarvis_chatbot_api.lane_status()` - each lane's real
+    service and model, and whether the key and the month's limit allow it.
+    (Until 2026-10-06 this read lane names out of `litellm-proxy.yaml`, the
+    config of a proxy that was never installed; the lane is a service and a
+    model in that module now - docs/ACCOUNT-KEYS-DESIGN.md section 5, part C);
   * the second card and the big model: their switch files (read only -
     nothing is started, woken or probed).
 
@@ -160,7 +168,48 @@ def _fw():
         return None
 
 
+def _inherited_config() -> dict:
+    """`config.toml` from the config folder, as the turn's own fallback reads it.
+
+    A copy of `jarvis_hud.py`'s reader, deliberately: the folder is the HUD's
+    (`OPENJARVIS_CONFIG_DIR`, else `~/.openjarvis`), the file is `config.toml`,
+    and only `[tools].enabled` is needed. The HUD is the program rather than a
+    library, so it cannot be imported here - but the FILE must be the same one,
+    or this page answers a question about a different settings file."""
+    folder = Path(os.environ.get("OPENJARVIS_CONFIG_DIR") or (Path.home() / ".openjarvis"))
+    path = folder / "config.toml"
+    if not path.exists():
+        return {}
+    try:
+        import tomllib
+        with open(path, "rb") as fh:
+            return tomllib.load(fh)
+    except ImportError:
+        pass
+    except Exception:
+        return {}
+    try:
+        raw = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return {}
+    block = re.search(r"^\[tools\]\s*$(.*?)(?=^\[)", raw, re.M | re.S)
+    names = re.findall(r'"([a-z0-9_]+)"', block.group(1)) if block else []
+    return {"tools": {"enabled": names}}
+
+
 def _tools_enabled() -> set:
+    """The tools the model may be offered, from the place the turn reads.
+
+    `jarvis-framework.toml`'s `[tools] enabled` wins as soon as it names
+    anything. When it names nothing - which is what an owner who has never
+    touched the switch has, and what the owner's PC had on 2026-10-08 - the
+    turn falls back to the inherited `config.toml` list, and so must this page.
+    It read only the settings file until then, so on that PC it said "None: the
+    AI model is offered no tools, so it can only write answers" while a turn
+    really offered web search, the calculator and memory search; the preflight
+    read the same list and skipped its web-search check for the same wrong
+    reason. The fallback is asked of `jarvis_agent` rather than copied, so the
+    page and the turn cannot drift apart again."""
     fw = _fw()
     try:
         cfg = fw.load_framework() if fw is not None else {}
@@ -169,7 +218,13 @@ def _tools_enabled() -> set:
         # the tool "email_check": read it as the tool (jarvis_asks_first).
         if "email_read" in names:
             names.add("email_check")
-        return names
+        if names:
+            return names
+    except Exception:
+        return set()
+    try:
+        import jarvis_agent as ag
+        return set(ag.enabled_tools_for_turn(_inherited_config()))
     except Exception:
         return set()
 
@@ -204,7 +259,25 @@ def _env(name: str) -> str:
             return str(_H._token() or "").strip()
     except Exception:
         pass
-    return str(os.environ.get(name, "") or "").strip()
+    # The environment variable still WINS, unchanged.
+    got = str(os.environ.get(name, "") or "").strip()
+    if got:
+        return got
+    # Otherwise an ADDRESS the owner typed into Settings -> Accounts on this PC
+    # (accounts.patch, 2026-10-06), kept in accounts.json beside
+    # web-search.json: the mail server and its port and mailbox, the sending
+    # server and its port and how the email is encrypted, the Home Assistant
+    # address and the calendar's CalDAV address. NO SECRET is here - the
+    # username, the password, the private iCal link and the token come from
+    # Credential Manager through the block above, and jarvis_accounts answers
+    # "" for any name that is not one of its own eight. Without that module,
+    # or on any error, this is exactly what it was before: the environment
+    # variable alone.
+    try:
+        import jarvis_accounts
+        return jarvis_accounts.env_or_file(name)
+    except Exception:
+        return ""
 
 
 def _server_lanes() -> Optional[list]:
@@ -472,24 +545,68 @@ def _join(items: list) -> str:
 # --------------------------------------------------------------------------
 
 
+def _cloud_lane_status() -> dict:
+    """What jarvis_chatbot_api can say about the cloud escalation lanes
+    without sending anything: the lane names, the service and model each one
+    means, and whether each can be used right now.
+
+    THIS REPLACED READING `litellm-proxy.yaml` (2026-10-06, the owner's
+    decision, docs/ACCOUNT-KEYS-DESIGN.md section 5 and part C). That file is
+    the config of a LiteLLM proxy that was never installed, and the lane names
+    in it went to JARVIS_URL - a request that could not work. The lane now
+    goes through this module's own adapter family, so this is the only honest
+    place left to ask. Opens no socket: ready_for() only checks a saved key,
+    a price and this month's limit."""
+    try:
+        import jarvis_chatbot_api as A
+        return A.lane_status()
+    except Exception:
+        return {"available": False, "lanes": [], "ready": []}
+
+
 def _cloud_model(ctx: Ctx) -> dict:
-    lanes, provs = ctx.lanes, ctx.providers
-    if lanes is None:
-        server = _server_lanes()
-        f_lanes, f_provs = _file_lanes(_proxy_file())
-        lanes = server if server is not None else f_lanes
-        provs = f_provs if provs is None else provs
-    lanes = [str(x)[:60] for x in (lanes or [])][:6]
-    provs = sorted({str(p)[:40] for p in (provs or [])})
     name = "Cloud model"
-    if not lanes:
+    # A caller that hands in its own lanes (most of test_reach.py's cases, and
+    # tools/gen_reach_cases.py) still gets exactly what it passed. Only the
+    # real reading - ctx.lanes is None - asks the module.
+    if ctx.lanes is not None:
+        lanes = [str(x)[:60] for x in (ctx.lanes or [])][:6]
+        provs = sorted({str(p)[:40] for p in (ctx.providers or [])})
+        if not lanes:
+            return _row("cloud_model", name, "not_set_up", "", ASK_NA,
+                        "No cloud model is set up, so every answer is written on this PC.")
+        where = ", ".join(provs) if provs else "the cloud service named in its settings"
+        return _row("cloud_model", name, "on", where, "Yes, every question",
+                    f"Jarvis may offer to send one question to a cloud model ({', '.join(lanes)}). "
+                    f"It goes only if you say yes to that one question, and never with your "
+                    f"memory, a picture, or a conversation that has read private or outside text.")
+    st = _cloud_lane_status()
+    lanes = st.get("lanes") or []
+    ready = [r for r in lanes if r.get("ready")]
+    if not st.get("available") or not lanes:
         return _row("cloud_model", name, "not_set_up", "", ASK_NA,
                     "No cloud model is set up, so every answer is written on this PC.")
-    where = ", ".join(provs) if provs else "the cloud service named in litellm-proxy.yaml"
+    if not ready:
+        # The TRUE reason, once, from the module that owns the rule.
+        why = str((lanes[0].get("why") or "").strip())
+        return _row("cloud_model", name, "not_set_up", "", ASK_NA,
+                    ("Not set up: " + why) if why else
+                    "No cloud model is set up, so every answer is written on this PC.")
+    where = _join(sorted({str(r.get("host") or "") for r in ready}))
+    models = sorted({f"{r.get('lane')} is {r.get('model')}" for r in ready})
+    note = ""
+    if len(ready) != len(lanes):
+        note = (f" {len(lanes) - len(ready)} other lane(s) cannot be used yet; the line "
+                f"beside each one says why.")
     return _row("cloud_model", name, "on", where, "Yes, every question",
-                f"Jarvis may offer to send one question to a cloud model ({', '.join(lanes)}). "
-                f"It goes only if you say yes to that one question, and never with your "
-                f"memory, a picture, or a conversation that has read private or outside text.")
+                f"Jarvis may offer to send one question to a cloud model "
+                f"({_join(sorted(str(r.get('lane')) for r in ready))}). "
+                f"Each lane means a real service and model - {_join(models)} - reached through "
+                f"that service's own official API with the key saved on this PC, with the "
+                f"same monthly money limit as any other chatbot conversation. A lane whose "
+                f"limit is reached is not offered at all. It goes only if you say yes to that "
+                f"one question, and never with your memory, a picture, or a conversation that "
+                f"has read private or outside text." + note)
 
 
 def _search_where(provider: Optional[str], url: str) -> str:

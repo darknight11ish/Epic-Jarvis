@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "features",
+  "description": "\"Everything Jarvis can do\" (docs/FEATURES-LIST-DESIGN.md, the owner's request of 2026-10-08): the whole feature set, in plain words, read from the bundled src/features.json and drawn. It is read-only on purpose - it changes nothing on this PC or on the phone, so it holds NO app command and no permission beyond the core window calls every window needs. It does not even read the theme over IPC: features.js takes the saved theme from this computer's localStorage, the way every other window's first-paint guard does, so there is no command for it to call. It holds no event permission at all: in Tauri 2 a page's global listen() hears every event the app sends, even one sent to another window (event/listener.rs match_any_or_filter), and nothing here needs to hear anything - the words on it are static.",
+  "windows": [
+    "features"
+  ],
+  "permissions": [
+    "core:app:default",
+    "core:path:default",
+    "core:webview:default",
+    "core:window:default",
+    "core:webview:allow-set-webview-zoom"
+  ]
+}

@@ -41,6 +41,14 @@ import {
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import { createMenuManager, WORDS } from "./menu-visibility.js";
+import {
+  buildConstellation,
+  buttonLabel,
+  labelFor,
+  labelledNodes,
+  paintConstellation,
+  shapeFor,
+} from "./galaxy-constellation.js";
 const menuManager = createMenuManager();
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
@@ -52,7 +60,7 @@ import { CANNOT_CHAT, canChat } from "./model-chat.js";
 import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 // Brain -> Tutorials and the FAQ: its own module (tutorials.js), its own three
 // commands (brain/tutorials.rs), progress kept on this PC (JARVIS-API 114).
-import { showTutorials } from "./tutorials.js";
+import { showTutorials, TUTORIALS_PLACE } from "./tutorials.js";
 import { tellChatsGone } from "./chat-history.js";
 // Brain -> History -> "Forget a time frame": its own module too.
 import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
@@ -112,7 +120,7 @@ import {
   whoOf as supportWhoOf,
   WORDS as SUPPORT,
 } from "./support.js";
-import { pcLine as handoffPcLine } from "./handoff.js";
+import { pcLine as handoffPcLine, stuckPcLine } from "./handoff.js";
 import {
   actionsOf,
   addPlaceholder,
@@ -557,8 +565,11 @@ const VIEWS = {
   projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
   // The owner's own request (2026-10-05): a skippable intro and a tutorial for
   // each major part, the same ones the phone shows, with reading progress kept
-  // on this PC and shared by both apps (JARVIS-API section 114).
-  tutorials: { title: "Tutorials", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
+  // on this PC and shared by both apps (JARVIS-API section 114). Named for the
+  // FAQ it also answers since 2026-10-08, when the Settings card "Help and FAQ"
+  // was folded in here - the same words the phone's own menu carries
+  // (`brain.tab.tutorials`, PR #108's retitle).
+  tutorials: { title: "Tutorials and the FAQ", sub: "how Jarvis works, step by step - and the answers to the usual questions" },
   galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
   // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
   // not confused with Jarvis Live (the voice conversation).
@@ -587,7 +598,7 @@ const VIEW_SECTIONS = {
   // stream already polls for the live queue, read again here for its
   // `history` half - see brain/routes.rs's own comment on why one more GET
   // to that route is the right way to reach it.
-  work: ["jobs", "undo", "gate_history"],
+  work: ["jobs", "tasks", "undo", "gate_history"],
   // Read through its own command (brain/projects.rs), by projects-panel.js.
   projects: [],
   trust: ["content_risk", "ledger"],
@@ -616,6 +627,12 @@ const dom = {
   countAdvanced: $("count-advanced"),
 
   canvas: $("graph-canvas"),
+  // The constellation: an SVG picture with one real button per name over it
+  // (galaxy-constellation.js). `canvas` above is kept as the drawing fallback
+  // and because `tests/a11y.mjs` reads its label for the way in that exists.
+  galaxySvg: $("graph-svg"),
+  galaxyOverlay: $("graph-overlay"),
+  galaxyStage: document.querySelector(".galaxy-stage"),
   graphEmpty: $("graph-empty"),
   graphEmptyText: $("graph-empty-text"),
   graphStat: $("graph-stat"),
@@ -645,6 +662,9 @@ const dom = {
   nowKv: $("now-kv"),
   budget: $("budget"),
   budgetNote: $("budget-note"),
+  budgetPerDay: $("budget-per-day"),
+  budgetHour: $("budget-hour"),
+  budgetSetNote: $("budget-set-note"),
   trace: $("trace"),
   traceClear: $("trace-clear"),
 
@@ -2606,6 +2626,19 @@ function proposalRow(p) {
     const main = item.querySelector(".row-main");
     (main || item).append(warn);
   }
+  // Jarvis's own guess (the owner's decision of 2026-10-10): a "no" on a card
+  // carries none of the owner's words, so anything proposed from one is marked
+  // as a guess - in the proposal's own text, in `guessed`/`auto_reason` from
+  // the PC, and here where the owner actually reads it. Keep or Discard still
+  // decides it; nothing is saved by the marking either way.
+  if (p.guessed === true) {
+    const guess = el("div", "row-warning");
+    guess.append(el("strong", "", "Jarvis's guess, not something you said. "));
+    guess.append(el("span", "", "A Reject click carries none of your words, so this rule was worked out from the action's name, and no reason was given. "));
+    guess.append(el("span", "", "Keep it to have Jarvis ask first before it does this again; Discard it and nothing is saved."));
+    const main = item.querySelector(".row-main");
+    (main || item).append(guess);
+  }
   return item;
 }
 
@@ -2877,7 +2910,7 @@ function renderFacts() {
             );
             if (validTo === undefined) return; // the date prompt was cancelled
             const args = { id: Number(f.id), text };
-            if (validTo !== null) args.valid_to = validTo;
+            if (validTo !== null) args.validTo = validTo;
             await memoryWrite("brain_memory_edit", args,
               "Reworded. The old wording is kept as history.");
           }, { title: "Replace the wording. The old one is retired, not erased." }),
@@ -2896,7 +2929,7 @@ function renderFacts() {
               return;
             }
             const args = { id: Number(f.id) };
-            if (validTo !== null) args.valid_to = validTo;
+            if (validTo !== null) args.validTo = validTo;
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
           }, { danger: true, title: "Stop this being recalled. There is no undo." })
         );
@@ -7596,6 +7629,11 @@ function paintChatbot() {
     // an "unusual activity" page - the window is right here on the PC.
     const waitsForYou = s.state === "paused" ? handoffPcLine(v.handoff, "chatbot", s.id) : null;
     if (waitsForYou) now.append(handoffAlert(waitsForYou));
+    // "Stop early" (the owner's setting of 2026-10-08, handoff.js
+    // stuckLine): the hand-off ended because nobody was looking, so the PC
+    // says plainly which window Jarvis is stuck on - the owner solves it here.
+    const stuckHere = s.state === "paused" ? stuckPcLine(v.handoff, "chatbot", s.id) : null;
+    if (stuckHere) now.append(handoffAlert(stuckHere, "stuck"));
     if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
     if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
     if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
@@ -8107,11 +8145,14 @@ function supportOfferBox(c) {
 /**
  * "Solve it here" on the PC: the same alert the phone gets, pointing at the
  * browser window on this PC (handoff.js). Only a site and a reason - never
- * a picture or a word from the page.
+ * a picture or a word from the page. `tone` "stuck" marks the PC's line for a
+ * hand-off that already ended the "Stop early" way (the owner's setting of
+ * 2026-10-08): same box, same fixed words, a different colour.
  */
-function handoffAlert(line) {
+function handoffAlert(line, tone) {
   const box = el("div", "chatbot-handoff");
   box.setAttribute("role", "status");
+  if (tone) box.dataset.tone = tone;
   box.append(el("p", "subhead", line.title), el("p", "note", line.text));
   return box;
 }
@@ -8150,6 +8191,10 @@ function paintSupport() {
     if (c.live) now.append(el("p", "chatbot-line", supportStatusLine(c)));
     const waitsForYou = c.state === "paused" ? handoffPcLine(v.handoff, "support", c.id) : null;
     if (waitsForYou) now.append(handoffAlert(waitsForYou));
+    // "Stop early": the hand-off ended because nobody was looking, so the PC
+    // names the window Jarvis is stuck on (handoff.js stuckPcLine).
+    const stuckHere = c.state === "paused" ? stuckPcLine(v.handoff, "support", c.id) : null;
+    if (stuckHere) now.append(handoffAlert(stuckHere, "stuck"));
     if (c.state !== "refused") now.append(el("p", "note", supportProgress(c)));
     if (c.tierName) now.append(el("p", "note", `${SUPPORT.version}: ${c.tierName}`));
     if (c.hidden) {
@@ -11207,10 +11252,145 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadBriefing);
 }
 
+/**
+ * The job list (2026-10-08, JARVIS-API section 116): work that outlives one
+ * chat turn, shown under the Long Fuse jobs.
+ *
+ * WHAT THE BACKEND SENDS, AND WHAT IT DOES NOT. `/api/tasks` is counted
+ * only: ids, states, kinds, step counts and tool names. There is no task
+ * title and no step text in the reply at all, which is why this pane cannot
+ * show what a job is about - the same rule `jarvis_task_control.status()`
+ * follows, so a job list never becomes a new way for private words to reach
+ * a screen. The readable feed (`JobList().feed()`) is the PC's own window's,
+ * not this one's.
+ *
+ * NOTHING HERE APPROVES ANYTHING. Pause and Cancel are immediate - stopping
+ * is never gated. Resume and Retry only put the job back in the queue, and
+ * every step of it still raises its own approval card when its turn comes,
+ * through the same gate as any ordinary tool call. The reply to a question
+ * carries the owner's own words into the job list and nowhere else.
+ */
+function renderTaskList() {
+  const why = unavailable("tasks");
+  if (why && sectionState("tasks").kind === "absent") {
+    // An older PC: say so plainly rather than showing an empty list that
+    // looks like "no jobs".
+    return whyNode("tasks");
+  }
+  const body = state.data.tasks || {};
+  const tasks = Array.isArray(body.tasks) ? body.tasks : [];
+  const block = el("div", "tasks-block");
+  const head = el("p", "row-meta", "");
+  const waiting = Number(body.waiting) || 0;
+  const running = Number(body.running) || 0;
+  const blocked = Number(body.blocked) || 0;
+  const bits = [`${waiting} waiting`, `${running} running`];
+  if (blocked) bits.push(`${blocked} needs you`);
+  if (body.stop) bits.push("stopped");
+  head.textContent = `Job list: ${bits.join(" · ")}`;
+  if (why) {
+    // No rows to draw, so the heading survives: nothing clears the block here.
+    block.append(head);
+    block.append(whyNode("tasks"));
+    return block;
+  }
+  if (!tasks.length) {
+    block.append(head);
+    block.append(el("p", "empty", "No jobs."));
+    return block;
+  }
+
+  /** Pause/Cancel/Resume/Retry, and the answer to a question. */
+  const act = (id, what, value) => async () => {
+    try {
+      const args = { id: String(id), act: what };
+      if (value !== undefined) args.value = value;
+      await invoke("brain_task_act", args);
+      await load(["tasks"], { quiet: true });
+      render("work");
+    } catch (error) {
+      toast(String((error && error.message) || error), "bad");
+    }
+  };
+
+  rows(
+    block,
+    tasks,
+    (t) => {
+      const jobState = String(t.state || "queued");
+      const steps = Number(t.steps) || 0;
+      const at = Number(t.step) || 0;
+      const tools = Array.isArray(t.tools) ? t.tools.filter(Boolean) : [];
+      const on = jobState === "running" || jobState === "queued"
+        || jobState === "waiting_approval" || jobState === "waiting_input";
+      const actions = [];
+      if (on) {
+        actions.push(button("Pause", act(t.id, "pause", undefined), { live: true }));
+        actions.push(button("Cancel", act(t.id, "cancel", undefined),
+          { danger: true, live: true, title: "Stops this job. A cancelled job is not resumable." }));
+      }
+      if (jobState === "paused") {
+        actions.push(button("Resume", act(t.id, "resume", undefined), { live: true }));
+        actions.push(button("Cancel", act(t.id, "cancel", undefined), { danger: true, live: true }));
+      }
+      if (jobState === "blocked" || jobState === "failed" || jobState === "cancelled") {
+        actions.push(button("Retry", act(t.id, "retry", undefined), { live: true }));
+      }
+      const entry = row({
+        tag: jobState,
+        state: jobState,
+        // No title is sent for a job, on purpose. What can be named is the
+        // shape of the work: how far it got and which tools it will use.
+        title: `${at && steps ? `step ${at} of ${steps}` : `${steps} step(s)`}${
+          tools.length ? ` — ${tools.join(", ")}` : ""}`,
+        meta: [
+          t.kind ? `kind: ${t.kind}` : "",
+          t.attempts ? `tries: ${t.attempts}` : "",
+          t.needs_attention && t.question ? t.question : "",
+        ],
+        actions,
+      });
+      // A job that stopped to ask gets a box, and only that job. This is the
+      // one place here that carries the owner's own words - into the job list,
+      // never out of the PC.
+      if (jobState === "waiting_input") {
+        const box = el("div", "row-actions");
+        const field = el("input", "task-answer");
+        field.type = "text";
+        field.placeholder = "Your answer";
+        field.setAttribute("aria-label", "Your answer");
+        const send = button("Send answer", async () => {
+          const value = field.value.trim();
+          if (!value) return;
+          await act(t.id, "input", value)();
+        }, { live: true });
+        send.disabled = true;
+        field.addEventListener("input", () => {
+          send.disabled = !field.value.trim();
+        });
+        box.append(field, send);
+        entry.append(box);
+      }
+      return entry;
+    },
+    "No jobs."
+  );
+  // `rows()` CLEARS the container before painting, so the heading goes in
+  // afterwards - appended before the call it was silently wiped, and the pane
+  // showed rows with no name and no counts (caught by the DOM half of
+  // tests/job-list.mjs, which is the half that had never run).
+  block.prepend(head);
+  return block;
+}
+
 function renderJobs() {
   const body = state.data.jobs || {};
   const why = unavailable("jobs");
-  if (why) return rows(dom.jobs, [], null, whyNode("jobs"));
+  if (why) {
+    rows(dom.jobs, [], null, whyNode("jobs"));
+    dom.jobs.append(renderTaskList());
+    return;
+  }
   const list = Array.isArray(body.jobs) ? body.jobs : [];
 
   rows(
@@ -11268,6 +11448,11 @@ function renderJobs() {
     },
     "No background jobs."
   );
+  // Appended AFTER the Long Fuse list is painted, so this adds a section to
+  // the same card without touching a line of the code above. `rows()` clears
+  // the container, so the block has to be rebuilt on every render - which is
+  // why this is here and not in a render of its own.
+  dom.jobs.append(renderTaskList());
 }
 
 function renderUndo() {
@@ -11638,11 +11823,36 @@ function renderWatchReport() {
   const body = state.data.watch_report || {};
   const why = unavailable("watch_report");
   if (why) return rows(dom.watchReport, [], null, whyNode("watch_report"));
-  const findings = Array.isArray(body.findings)
-    ? body.findings
-    : Array.isArray(body.items)
-      ? body.items
-      : [];
+  // `GET /api/watch/report` serves {available, new, updated, count, topics,
+  // note} and splits its rows by `kind`; the module's own consumer reads
+  // `peek["new"] + peek["updated"]`, in that order (jarvis_watch.py:524).
+  // Checked against the owner's running backend on 2026-10-09: `findings` and
+  // `items` are not in the payload at all, and this read only those two - so
+  // `findings` was always [] and the block drew "Nothing new since you last
+  // marked the list read." over a list it had never read. A permanent false
+  // all-clear on the SUCCESS path, with the badge above free to say
+  // "Watches · 3 new" at the same moment - the notification all-clear of #128
+  // on a security-watch list.
+  const servedByBackend = Array.isArray(body.new) || Array.isArray(body.updated);
+  const findings = servedByBackend
+    ? [...(body.new || []), ...(body.updated || [])]
+    : Array.isArray(body.findings)
+      ? body.findings
+      : Array.isArray(body.items)
+        ? body.items
+        : null;
+
+  // A 200 whose body is a shape nobody here knows is NOT a report of nothing
+  // new. The empty sentence is the reassuring one, so it is not borrowed for a
+  // read that did not happen: the block says so instead (2026-10-09). The list
+  // stays readable if a future backend renames these keys, so this is drift
+  // made visible, not drift made fatal.
+  if (findings === null) {
+    dom.watchSeen.disabled = true;
+    return rows(dom.watchReport, [], null,
+      el("p", "empty failed", "Could not read what is new: your PC's Jarvis sent a " +
+        "list this window does not recognise."));
+  }
 
   dom.watchSeen.disabled = findings.length === 0;
 
@@ -11651,13 +11861,19 @@ function renderWatchReport() {
     findings,
     (f) => {
       // "none stated" means no permission, not "probably fine" — so an absent
-      // licence is rendered as a warning, not as a blank.
+      // licence is rendered as a warning, not as a blank. `jarvis_watch.py:492`
+      // sends exactly those two words for a repository with no licence file, and
+      // the filter below used to test only `none|unknown|null`, so an
+      // unlicensed repository was drawn as a settled `none stated` and this
+      // warning never appeared (2026-10-09).
       const licence = String(f.licence || f.license || "").trim();
-      const stated = licence && !/^(none|unknown|null)$/i.test(licence);
+      const stated = licence && !/^(none|none stated|unknown|null)$/i.test(licence);
       return row({
         tag: stated ? licence : "no licence",
         state: stated ? "ok" : "warn",
-        title: String(f.full_name || f.name || "(repository)"),
+        // `repo` is what the route serves for a repository
+        // (jarvis_watch.py:489); it used to be titled "(repository)" always.
+        title: String(f.repo || f.full_name || f.name || "(repository)"),
         meta: [
           String(f.descr || f.description || ""),
           [
@@ -11680,6 +11896,85 @@ function renderWatchReport() {
 /* ==========================================================================
    Live
    ========================================================================== */
+
+// ---------------------------------------------------------------------------
+// The two numbers behind the budget (2026-10-08)
+// ---------------------------------------------------------------------------
+// How many times a day Jarvis may speak up unasked, and when the brief
+// arrives. DOWN is instant; UP is a loosening, so the backend puts one
+// approval card to the owner before it writes anything. That is why the
+// sentence under the two pickers is the backend's own (`said`, or its refusal
+// in the owner's words) rather than a guess made here, and why nothing is
+// written locally: the answer comes back from the PC that holds the file.
+const BUDGET_CHOICES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20, 24];
+
+/** An hour as the owner reads a clock: "8 pm (20:00)", "midnight (00:00)". */
+function budgetHourWords(h) {
+  const clock = String(h).padStart(2, "0") + ":00";
+  if (h === 0) return `midnight (${clock})`;
+  if (h === 12) return `noon (${clock})`;
+  return `${h % 12} ${h < 12 ? "am" : "pm"} (${clock})`;
+}
+
+function fillBudgetPickers() {
+  if (!dom.budgetPerDay || dom.budgetPerDay.options.length) return;
+  for (const n of BUDGET_CHOICES) {
+    const option = el("option", "", n === 0 ? "not at all" : `${n} times a day`);
+    option.value = String(n);
+    dom.budgetPerDay.append(option);
+  }
+  for (let h = 0; h < 24; h++) {
+    const option = el("option", "", budgetHourWords(h));
+    option.value = String(h);
+    dom.budgetHour.append(option);
+  }
+}
+
+/** Asks the PC to change one of the two numbers, and says what it answered. */
+async function setAttentionLimit(body) {
+  if (!dom.budgetSetNote) return;
+  dom.budgetSetNote.textContent = "Saving…";
+  try {
+    const out = await TAURI.core.invoke("set_attention_limits", body);
+    dom.budgetSetNote.textContent = (out && out.said) || "Done.";
+  } catch (err) {
+    dom.budgetSetNote.textContent = String((err && err.message) || err);
+  }
+}
+
+function wireBudgetPickers() {
+  fillBudgetPickers();
+  if (dom.budgetPerDay) {
+    dom.budgetPerDay.addEventListener("change", () =>
+      setAttentionLimit({ spoken_per_day: Number(dom.budgetPerDay.value) })
+    );
+  }
+  if (dom.budgetHour) {
+    dom.budgetHour.addEventListener("change", () =>
+      setAttentionLimit({ digest_hour: Number(dom.budgetHour.value) })
+    );
+  }
+}
+
+/** Puts the numbers the PC holds into the pickers, without fighting a click. */
+function syncBudgetPickers(attention) {
+  if (!attention || !attention.known) return;
+  if (dom.budgetPerDay && document.activeElement !== dom.budgetPerDay) {
+    const want = String(attention.limit);
+    // A budget the settings file holds that is not one of the picks - a
+    // hand-typed 9, say - still has to be selectable, so it is added rather
+    // than silently showing a different number.
+    if (![...dom.budgetPerDay.options].some((o) => o.value === want)) {
+      const option = el("option", "", `${attention.limit} times a day`);
+      option.value = want;
+      dom.budgetPerDay.append(option);
+    }
+    dom.budgetPerDay.value = want;
+  }
+  if (dom.budgetHour && document.activeElement !== dom.budgetHour) {
+    dom.budgetHour.value = String(attention.digestHour);
+  }
+}
 
 function renderLive() {
   const link = currentLink();
@@ -11726,6 +12021,7 @@ function renderLive() {
   } else {
     dom.budgetNote.textContent = "The interruption budget has not been read yet.";
   }
+  syncBudgetPickers(attention);
 }
 
 function pushTrace(frame) {
@@ -12067,7 +12363,7 @@ function renderGraph() {
     }
   }
 
-  state.graph = { nodes: N, links: L, byId, signature };
+  state.graph = { nodes: N, links: L, byId, signature, layoutToken: `${++layoutCount}:${signature}` };
   selected = null;
   dom.inspector.hidden = true;
   galaxyPanel.clear();
@@ -12347,7 +12643,7 @@ function fitToContent({ ease = 1 } = {}) {
     minY = Math.min(minY, n.y);
     maxY = Math.max(maxY, n.y);
   }
-  const rect = dom.canvas.getBoundingClientRect();
+  const rect = stageRect();
   const pad = 60;
   const sx = (rect.width - pad * 2) / Math.max(1, maxX - minX);
   const sy = (rect.height - pad * 2) / Math.max(1, maxY - minY);
@@ -12360,7 +12656,229 @@ function fitToContent({ ease = 1 } = {}) {
   view.y += (y - view.y) * k;
 }
 
+/* ---- The constellation ---------------------------------------------------
+ *
+ * One real button per name, over an SVG drawing (galaxy-constellation.js). This
+ * is the accessible rendering: Tab moves between dots, Enter picks one, CSS and
+ * forced-colors paint it, and a screen reader lists them. The canvas below
+ * stays as the fallback for a page without the two elements.
+ *
+ * `built` is the tree from the last build. The tree is rebuilt only when the
+ * SET of names changes (or the theme, which moves every colour); a pan, a zoom
+ * and a settle tick only repaint, because rebuilding a hundred buttons per
+ * frame is the layout cost the old comment on the canvas was worried about -
+ * and it is paid once per view now, not sixty times a second.
+ */
+let constellation = null;
+let constellationToken = "";
+let constellationTheme = "";
+
+/** Bumped once per laid-out graph. It is what tells the constellation to
+ *  rebuild - see the rebuild rule in `drawConstellation`. */
+let layoutCount = 0;
+
+/** Where the picture is on screen, so a node's place and a pointer's place are
+ *  measured from the same origin. */
+function stageRect() {
+  return (dom.galaxyStage ?? dom.canvas).getBoundingClientRect();
+}
+
+function constellationReady() {
+  return Boolean(dom.galaxySvg && dom.galaxyOverlay);
+}
+
+/** The panel opens and closes asynchronously (its facts are read over the
+ *  bridge), so a repaint is needed the moment its rectangle changes - otherwise
+ *  a dot that has just landed under it keeps its button, and that button eats
+ *  the panel's own clicks. A `MutationObserver` rather than a call at each site:
+ *  the panel is shown and hidden from several places, and this way a new one
+ *  cannot forget. */
+function watchInspectorBox() {
+  if (!dom.inspector || typeof MutationObserver !== "function") return;
+  new MutationObserver(() => invalidate()).observe(dom.inspector,
+    { attributes: true, attributeFilter: ["hidden"] });
+}
+
+/** Dots that would sit under the inspector panel.
+ *
+ *  The canvas drew underneath that panel and nobody noticed, because pixels
+ *  under an opaque-ish panel are not interactive. A BUTTON is: a dot landing in
+ *  the panel's corner sat on top of "Open in Memory" and took the click, so the
+ *  panel looked broken while nothing errored. `tests/galaxy-panel.mjs` caught it
+ *  (four checks went red). The fix keeps the dots out of the panel's rectangle -
+ *  the picture is still drawn, it just does not offer controls through the
+ *  panel.
+ *
+ *  Only consulted while the panel is OPEN: with no inspector there is nothing to
+ *  avoid, and the ordinary path costs one `hidden` check. */
+let inspectorBox = null;
+function underInspector(n) {
+  if (!inspectorBox) return false;
+  const p = constellationModel.translate(n);
+  return p.x >= inspectorBox.left && p.x <= inspectorBox.right
+    && p.y >= inspectorBox.top && p.y <= inspectorBox.bottom;
+}
+
+function syncInspectorBox() {
+  const el = dom.inspector;
+  // While the panel is open the constellation yields the pointer entirely.
+  //
+  // Clipping just the dots that fall inside the panel was not enough, and the
+  // reason is worth writing down: the panel's surface is 92% opaque, so a dot
+  // near its edge can still sit over one of the panel's own controls, and a
+  // hit test at that point finds the dot. Suppressing the overlay for as long as
+  // the panel is up removes the whole class of problem instead of chasing the
+  // geometry. The picture stays; it just stops offering controls while a panel
+  // is covering it. `tests/galaxy-panel.mjs` holds this.
+  const open = Boolean(el && !el.hidden);
+  dom.galaxyOverlay?.classList.toggle("is-yielding", open);
+  if (!el || el.hidden || !dom.galaxyStage) { inspectorBox = null; return; }
+  const s = dom.galaxyStage.getBoundingClientRect();
+  const i = el.getBoundingClientRect();
+  inspectorBox = { left: i.left - s.left, top: i.top - s.top, right: i.right - s.left, bottom: i.bottom - s.top };
+}
+
+const constellationModel = {
+  get nodes() { return state.graph ? state.graph.nodes : []; },
+  get links() { return state.graph ? state.graph.links : []; },
+  hidden: (n) => !visible(n) || underInspector(n),
+  get focus() { return selected || hovered; },
+  get selected() { return selected; },
+  get near() { return galaxyNear; },
+  get labels() { return constellationLabels; },
+  translate: (n) => ({ x: n.x * view.scale + view.x, y: n.y * view.scale + view.y }),
+  describe: (n) => {
+    const radius = radiusOf(n) * Math.max(0.55, Math.min(1.6, view.scale));
+    const ink = themeInk();
+    const isFocus = n === (selected || hovered);
+    const dim = Boolean(constellationModel.focus && !galaxyNear.has(n.id) && n !== constellationModel.focus);
+    const name = labelFor(n);
+    if (!name) return null;
+    return {
+      x: n.x * view.scale + view.x,
+      y: n.y * view.scale + view.y,
+      colour: colourFor(n.group),
+      shape: shapeFor(radius, styleFor(n.group)[1]),
+      // The words a screen reader hears, and the words the label shows, are
+      // built from the same name so they can never disagree.
+      label: buttonLabel(n, groupWords(n.group, { plural: false }), "facts"),
+      dim,
+      selected: n === selected,
+      near: galaxyNear.has(n.id),
+      labelled: constellationLabels.some((l) => l.node === n),
+      focusable: true,
+    };
+  },
+};
+
+
+/** The focused node and everything joined to it, as ids. Rebuilt per draw, the
+ *  same way the canvas computed it inline. */
+let galaxyNear = new Set();
+let constellationLabels = [];
+
+function refreshConstellationDerived() {
+  const g = state.graph;
+  galaxyNear = new Set();
+  if (!g) { constellationLabels = []; return; }
+  const focus = selected || hovered;
+  if (focus) {
+    galaxyNear.add(focus.id);
+    for (const l of g.links) {
+      if (l.s === focus) galaxyNear.add(l.t.id);
+      if (l.t === focus) galaxyNear.add(l.s.id);
+    }
+  }
+  constellationLabels = labelledNodes(g.nodes, {
+    scale: view.scale,
+    focus,
+    near: galaxyNear,
+    hidden: (n) => !visible(n),
+  });
+}
+
+/** Draws the constellation, and says whether it did. False means "no
+ *  constellation on this page", and the caller falls back to the canvas.
+ *
+ *  THE REBUILD RULE, and it is the subtle part: the tree is rebuilt only when a
+ *  NEW GRAPH has been laid out, never on a pan, a zoom or a settle tick.
+ *
+ *  The first version decided this from a signature of the node ids - but
+ *  `renderGraph` keeps settled positions when the node set is unchanged, so
+ *  that signature was already the same the moment a re-layout started, and
+ *  every animation frame during a DRAG rebuilt a hundred buttons. Rebuilding
+ *  destroys the button under the pointer, so the pointerup and the click that
+ *  should have followed went to a detached element: pressing a dot and releasing
+ *  it selected nothing, with no error anywhere. `tests/galaxy-dots.mjs` caught
+ *  it. So the caller now hands over an explicit token that changes only when a
+ *  new graph is laid out. */
+function drawConstellation() {
+  if (!constellationReady() || !state.graph) return false;
+  syncInspectorBox();
+  refreshConstellationDerived();
+  const token = state.graph.layoutToken ?? "";
+  const theme = dom.root.getAttribute("data-theme") ?? "";
+  if (constellation && token === constellationToken && theme === constellationTheme) {
+    paintConstellation({ svg: dom.galaxySvg, overlay: dom.galaxyOverlay }, constellationModel, constellation);
+    return true;
+  }
+  constellationToken = token;
+  constellationTheme = theme;
+  constellation = buildConstellation(
+    { svg: dom.galaxySvg, overlay: dom.galaxyOverlay },
+    constellationModel,
+    document
+  );
+  wireConstellation();
+  return true;
+}
+
+/** One listener for the whole overlay, added once: a button's own `click` is
+ *  enough for the pointer and the keyboard, and a per-button listener would be
+ *  a hundred listeners rebuilt on every layout change. */
+let constellationWired = false;
+function wireConstellation() {
+  if (constellationWired || !dom.galaxyOverlay) return;
+  constellationWired = true;
+  watchInspectorBox();
+  dom.galaxyOverlay.addEventListener("click", (event) => {
+    const button = event.target.closest?.(".galaxy-node-button");
+    if (!button) return;
+    const node = state.graph?.byId?.get(nodeIdOf(button));
+    if (!node) return;
+    select(node);
+    centreOn(node);
+  });
+  // Hovering a dot lights it and everything joined to it, exactly as the canvas
+  // did - without a pointermove handler doing a hit test per mouse event.
+  dom.galaxyOverlay.addEventListener("pointerover", (event) => {
+    const button = event.target.closest?.(".galaxy-node-button");
+    if (!button) return;
+    const node = state.graph?.byId?.get(nodeIdOf(button));
+    if (node && node !== hovered) { hovered = node; invalidate(); }
+  });
+  dom.galaxyOverlay.addEventListener("pointerout", (event) => {
+    if (!event.target.closest?.(".galaxy-node-button")) return;
+    if (hovered) { hovered = null; invalidate(); }
+  });
+}
+
+/** A button's `data-node` as the id the graph indexes by.
+ *
+ *  These ids come from `galaxy-view.js` as STRINGS - `e:1`, `e:2` - because the
+ *  graph joins an entity id with a prefix so a fact id can never collide with
+ *  it (`buildEntityGraph`). Coercing to Number here (the first version did)
+ *  made every lookup miss, so a click selected nothing and no error was thrown:
+ *  exactly the silent failure a test catches and a reader cannot. */
+function nodeIdOf(button) {
+  return button.getAttribute("data-node");
+}
+
 function draw() {
+  // The constellation is the picture now: an SVG drawing with a real button per
+  // name over it. It needs no canvas at all, which is the point - a dot is a
+  // control, not pixels.
+  if (drawConstellation()) return;
   const c = dom.canvas;
   const ctx = c.getContext("2d");
   if (!ctx) return;
@@ -12488,7 +13006,11 @@ function draw() {
 function nodeAt(clientX, clientY) {
   const g = state.graph;
   if (!g) return null;
-  const rect = dom.canvas.getBoundingClientRect();
+  // The SAME origin the buttons are placed from (`stageRect`), so the picture
+  // and the hit test can never disagree - which is the class of bug that made a
+  // click select nothing back when the canvas and `draw` used two device-pixel
+  // caps.
+  const rect = stageRect();
   const px = clientX - rect.left;
   const py = clientY - rect.top;
   let best = null;
@@ -12633,26 +13155,44 @@ function stepGalaxyFind(delta) {
 }
 
 function centreOn(node) {
-  const rect = dom.canvas.getBoundingClientRect();
+  const rect = stageRect();
   view.x = rect.width / 2 - node.x * view.scale;
   view.y = rect.height / 2 - node.y * view.scale;
   draw();
 }
 
-/* ---- Canvas interaction -------------------------------------------------- */
+/* ---- The stage's interaction ---------------------------------------------
+ *
+ * Pan, zoom and hover live on the STAGE, not on the canvas, because the canvas
+ * is no longer the picture: the constellation's SVG and buttons are, and both
+ * sit inside the stage. A dot's own click is handled once, on the overlay
+ * (`wireConstellation`), so a drag that happens to end on a dot does not select
+ * it - the same rule the canvas had.
+ */
+const stage = dom.galaxyStage ?? dom.canvas;
 
 let dragging = null;
 
-dom.canvas.addEventListener("pointerdown", (e) => {
-  dom.canvas.setPointerCapture(e.pointerId);
-  dragging = { x: e.clientX, y: e.clientY, moved: false };
+stage.addEventListener("pointerdown", (e) => {
+  // NOT captured here. `setPointerCapture` on the stage retargets every later
+  // pointer event to the stage, so a press that began on a dot ends as a
+  // pointerup on the STAGE - and the browser only synthesises a `click` when
+  // press and release share a target. Capturing on pointerdown therefore turned
+  // every pointer click on a dot into a pan that selected nothing, silently.
+  // `tests/galaxy-dots.mjs` caught it. The capture happens below, once a drag
+  // has actually started and the pointer is worth following off the element.
+  dragging = { x: e.clientX, y: e.clientY, moved: false, id: e.pointerId, captured: false };
 });
 
-dom.canvas.addEventListener("pointermove", (e) => {
+stage.addEventListener("pointermove", (e) => {
   if (dragging) {
     const dx = e.clientX - dragging.x;
     const dy = e.clientY - dragging.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) dragging.moved = true;
+    if (!dragging.moved && Math.abs(dx) + Math.abs(dy) > 3) {
+      dragging.moved = true;
+      try { stage.setPointerCapture?.(dragging.id); dragging.captured = true; } catch { /* the pointer may already be gone */ }
+    }
+    if (!dragging.moved) return; // a press that has not moved is still a click
     view.x += dx;
     view.y += dy;
     dragging.x = e.clientX;
@@ -12663,23 +13203,42 @@ dom.canvas.addEventListener("pointermove", (e) => {
   const hit = nodeAt(e.clientX, e.clientY);
   if (hit !== hovered) {
     hovered = hit;
-    dom.canvas.style.cursor = hit ? "pointer" : "grab";
+    stage.style.cursor = hit ? "pointer" : "grab";
     invalidate();
   }
 });
 
-dom.canvas.addEventListener("pointerup", (e) => {
+stage.addEventListener("pointerup", (e) => {
   const wasDrag = dragging && dragging.moved;
   dragging = null;
   if (wasDrag) return;
+  // This handler owns exactly ONE case: a press on the empty picture, which
+  // clears the selection. Everything else on the stage belongs to something
+  // with its own handler.
+  //
+  // It used to be written as "if the target is a dot button, return". That is
+  // not the same test, and the difference cost four `galaxy-panel.mjs` checks:
+  // a press on one of the PANEL's own buttons also bubbles here, is not a dot
+  // button, falls through to `select(nodeAt(...))` - and `nodeAt` excludes the
+  // dots hidden under the panel, so it returned null and WIPED the panel the
+  // owner had just clicked. The stack trace read
+  // `select(null) <- brain.js pointerup <- the row button's click`, and
+  // `tests/galaxy-dots.mjs` now holds the rule.
+  //
+  // So the test is inverted: act only when the press was on the stage itself,
+  // or on the constellation overlay with no dot under it. A press that started
+  // on the panel or on a dot is never this handler's business.
+  const onOverlay = dom.galaxyOverlay?.contains(e.target);
+  if (!onOverlay && e.target !== stage) return;
+  if (e.target !== stage && e.target.closest?.(".galaxy-node-button")) return;
   select(nodeAt(e.clientX, e.clientY));
 });
 
-dom.canvas.addEventListener(
+stage.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    const rect = dom.canvas.getBoundingClientRect();
+    const rect = stageRect();
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
     const factor = Math.exp(-e.deltaY * 0.0016);
@@ -12694,10 +13253,10 @@ dom.canvas.addEventListener(
   { passive: false }
 );
 
-// The canvas is focusable, so the graph is pannable and zoomable without a
-// mouse. Selecting a node without one goes through the search field, which is
-// also what makes the view usable with a screen reader.
-dom.canvas.addEventListener("keydown", (e) => {
+// The stage is focusable, so the picture is pannable and zoomable without a
+// mouse. Reaching a NAME without one is the buttons' job now - Tab steps
+// between them - and the search field still jumps straight to one by name.
+stage.addEventListener("keydown", (e) => {
   const stepPx = e.shiftKey ? 120 : 40;
   const keys = {
     ArrowLeft: () => (view.x += stepPx),
@@ -13105,6 +13664,22 @@ onEvent((frame) => {
   const visible = visibleTabOrder();
   const landing = visible.includes("memory") ? "memory" : (visible[0] || "memory");
   const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
+  if (!(await showPlace(place))) await showView(landing);
+})();
+
+/**
+ * Open the place the Jarvis bar or the palette left, if it names one.
+ *
+ * True when it did. Every place is navigation only - nothing here changes a
+ * setting - and the caller falls back to its own landing view when the place
+ * is empty or names nothing (a stale key from an older build).
+ *
+ * A place that is simply one of the rail's own views (`tutorials`, since Help
+ * moved to the Brain on 2026-10-08) opens that view: the view key is the
+ * catalogue's own `view`, which is what the palette writes, so a new Brain
+ * destination needs no new case here.
+ */
+async function showPlace(place) {
   if (place === FORGET_RANGE_PLACE) {
     await showView("history");
     await openForgetRange();
@@ -13115,22 +13690,23 @@ onEvent((frame) => {
     // "Switch off my work topic", said or typed: the picker opens for that
     // topic (topic controls). Nothing changes until Change is tapped.
     await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
+  } else if (place === TUTORIALS_PLACE) {
+    // Help, since 2026-10-08: the palette's own Help row leaves this place,
+    // and it is the view's key as well, so the branch below would catch it -
+    // named here so the one Help destination is greppable and cannot be
+    // renamed out from under the palette by accident.
+    await showView(place);
+  } else if (Object.prototype.hasOwnProperty.call(VIEWS, place)) {
+    await showView(place);
   } else {
-    await showView(landing);
+    return false;
   }
-})();
+  return true;
+}
 
 /** The Brain was already open when the Jarvis bar asked for a place. */
 async function goToPlace(place = takeAnyPlace()) {
-  if (place === FORGET_RANGE_PLACE) {
-    await showView("history");
-    await openForgetRange();
-  } else if (place === HISTORY_PLACE) {
-    await showView("history");
-    await applyHistoryFilePlace(takePlaceExtras());
-  } else if (place === Topics.TOPICS_PLACE) {
-    await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
-  }
+  await showPlace(place);
 }
 window.addEventListener("focus", () => goToPlace());
 window.addEventListener("storage", (e) => {
@@ -13184,6 +13760,10 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
     if (event && event.payload === HISTORY_PLACE) goToPlace(HISTORY_PLACE);
   });
 }
+
+// The interruption budget's two pickers: filled once here, and kept in step
+// with what the PC holds by renderLive().
+wireBudgetPickers();
 
 console.info(
   `[brain] ready — backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

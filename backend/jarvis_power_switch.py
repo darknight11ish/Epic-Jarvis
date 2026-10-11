@@ -50,6 +50,29 @@ standby by the time the model has loaded, it is unloaded again. The second
 card's engines are not warmed: they start when a feature needs them, as
 before. `warm_status()` says how the last one went.
 
+EVERY PRELOAD NAMES A CONTEXT (added 2026-10-11). Ollama's "load with an
+empty prompt" - `POST /api/generate` carrying a model and no prompt - loads a
+model that is NOT already loaded at Ollama's OWN default when the request
+names no `options.num_ctx`: 2,048 on the owner's install, NOT the
+`OLLAMA_CONTEXT_LENGTH` the lane was started with. So a preload that names no
+context silently shrinks the conversation window. It happened: the everyday
+lane (127.0.0.1:11436, qwen3.5:9b, started with `-ContextLength 196608`)
+reported `context_length: 2048` from GET /api/ps on 2026-10-11 00:16, and its
+own llama log shows the two loads that did it - `-c 2048` at 2026-10-10
+23:10:32 and again at 00:51:30, each right after a POST /api/generate that
+named no context, against `-c 196608` for every load that named one. Both
+shipped preloads did exactly that (this module's EverydayOllama.load and
+jarvis_agent.warm_everyday).
+
+So `EverydayOllama.load()` now always names a context, taken from
+`lane_context()`: what GET /api/ps says the model is loaded at right now,
+else what this lane was last seen at (standby unloads the model, and waking
+must keep the size it had), else the model's own Modelfile `num_ctx` from
+POST /api/show. When none of the three can say, NO preload is sent at all -
+`NoKnownContext` - and the model is left exactly as it is: the first real
+question loads it at the lane's own setting, which is the right size, rather
+than being preloaded at a smaller one. `keep_alive` is still left alone.
+
 WITH WORDS (added 2026-09-28). Loading alone left the first question to
 read Jarvis's rules and tool list from nothing - 3,000-4,000 tokens, a few
 seconds on the 8 GB card. Once the model is loaded (and Jarvis is not back
@@ -100,6 +123,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import threading
 import time
 import urllib.parse
@@ -188,11 +212,58 @@ def _is_cloud_model(name) -> bool:
         return "cloud" in str(name or "").lower()
 
 
+class NoKnownContext(Exception):
+    """A preload had to be left unsent: nothing could say which context the
+    lane is configured for, and a preload that names no context loads the
+    model at Ollama's own small default - 2,048 here - instead of the lane's
+    setting. Leaving the model alone is the safe direction: the first real
+    question then loads it at the right size. See the module docstring."""
+
+
+#: What GET /api/ps last said each (lane, bare model name) was loaded at.
+#: Standby empties /api/ps by unloading the model, so this memory is what lets
+#: the preload on waking keep the size the lane was really running at.
+_LANE_CTX_SEEN: dict = {}
+_LANE_CTX_LOCK = threading.Lock()
+
+
+def _bare_model(name) -> str:
+    x = str(name or "").strip()
+    return x[:-7] if x.endswith(":latest") else x
+
+
+def _lane_key(url, model) -> tuple:
+    return (str(url or "").strip().rstrip("/"), _bare_model(model))
+
+
+def remember_lane_context(url, model, num_ctx) -> None:
+    """Remember the context `model` was just SEEN loaded at on `url`'s lane
+    (GET /api/ps). Keyed by the bare model name, so "x" and "x:latest" are
+    one entry. A missing or zero `num_ctx` is ignored, never stored: Ollama
+    not reporting a number is not the same as the model being unloaded."""
+    try:
+        n = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n <= 0:
+        return
+    with _LANE_CTX_LOCK:
+        _LANE_CTX_SEEN[_lane_key(url, model)] = n
+
+
+def last_seen_context(url, model) -> Optional[int]:
+    """The context this lane was last SEEN loaded at, or None."""
+    with _LANE_CTX_LOCK:
+        return _LANE_CTX_SEEN.get(_lane_key(url, model))
+
+
 class EverydayOllama:
     """The everyday Ollama on THIS PC: what is loaded, unload one, load one.
-    Every call is to loopback, through jarvis_local_http (no proxy), and
-    sends only a model name. `url` is None when OLLAMA_URL is not this PC -
-    then every call does nothing and says so."""
+    Every call is to loopback, through jarvis_local_http (no proxy). A load
+    names the context the lane is configured for and is never sent without
+    one (NoKnownContext), because a preload with no context reloads the model
+    at Ollama's own default - see the module docstring. `url` is None when
+    OLLAMA_URL is not this PC - then every call does nothing and says so."""
 
     LOOPBACK = ("127.0.0.1", "localhost", "::1")
 
@@ -214,11 +285,20 @@ class EverydayOllama:
                                      headers={"Content-Type": "application/json"},
                                      method="POST")
         with jarvis_local_http.urlopen(req, timeout) as r:
-            first = (r.read().decode("utf-8", "replace").strip().splitlines() or ["{}"])[0]
-        return json.loads(first or "{}")
+            raw = r.read().decode("utf-8", "replace").strip()
+        try:
+            # A whole JSON object: /api/show, and a load with no prompt.
+            return json.loads(raw or "{}")
+        except ValueError:
+            # Ollama's streamed replies are one JSON object per line.
+            first = (raw.splitlines() or ["{}"])[0]
+            return json.loads(first or "{}")
 
     def ps(self) -> Optional[list]:
-        """Names of the models loaded now, or None when Ollama did not answer."""
+        """Names of the models loaded now, or None when Ollama did not answer.
+        Each context /api/ps reports is remembered on the way (see
+        lane_context) - that is what lets a preload after standby keep the
+        size the lane was really running at."""
         if self.url is None:
             return None
         try:
@@ -233,16 +313,76 @@ class EverydayOllama:
                 name = str(m.get("name") or m.get("model") or "").strip()
                 if name:
                     out.append(name)
+                    remember_lane_context(self.url, name, m.get("context_length"))
         return out
 
+    def context_for(self, name: str, *, timeout: float = 3.0) -> Optional[int]:
+        """The context `name` must be loaded at on this lane, or None when
+        nothing here can say - and then a preload is NOT sent (see load()).
+
+        Read-only, in this order:
+          1. GET /api/ps - the context the model is loaded at RIGHT NOW. This
+             is the number a preload must never change; reading it also
+             remembers it for step 2.
+          2. what this lane was last SEEN at (step 1 remembered it). Standby
+             unloads the model, which takes it out of /api/ps, and the preload
+             on waking must still keep the size it had.
+          3. POST /api/show - the model's own Modelfile `num_ctx`, for a lane
+             this process has never seen loaded. jarvis-primary's Modelfile
+             carries one; a plainly pulled tag usually does not, and then this
+             is None and no preload is sent."""
+        if self.url is None:
+            return None
+        self.ps()
+        seen = last_seen_context(self.url, name)
+        if seen:
+            return int(seen)
+        try:
+            show = self._post("/api/show", {"model": name}, timeout)
+        except Exception:
+            return None
+        m = re.search(r"(?m)^\s*num_ctx\s+(\d+)", str((show or {}).get("parameters") or ""))
+        return int(m.group(1)) if m else None
+
     def unload(self, name: str) -> None:
-        # Ollama's documented unload: no prompt, keep_alive 0.
+        # Ollama's documented unload: no prompt, keep_alive 0. Unloading needs
+        # no context - it loads nothing.
         self._post("/api/generate", {"model": name, "keep_alive": 0}, 15.0)
 
-    def load(self, name: str) -> None:
-        # Ollama's documented preload: no prompt. keep_alive is left to
-        # Ollama's own setting (OLLAMA_KEEP_ALIVE, -1 on the owner's PC).
-        self._post("/api/generate", {"model": name}, 180.0)
+    def load(self, name: str, *, num_ctx: Optional[int] = None) -> int:
+        """Load `name` now, NAMING the context it must load at, and return
+        that num_ctx. `num_ctx` overrides what this lane resolves for itself.
+
+        Raises NoKnownContext, sending NOTHING, when no one can say which
+        context this lane is set to: a preload that names no context loads the
+        model at Ollama's own default - 2,048 on the owner's install - not at
+        the lane's `OLLAMA_CONTEXT_LENGTH`/`-ContextLength`, and that is what
+        silently shrank the everyday lane to 2,048 on 2026-10-10 (module
+        docstring). Keeping keep_alive out of the body is unchanged: Ollama's
+        own setting (OLLAMA_KEEP_ALIVE, -1 on the owner's PC) stays in charge.
+        """
+        ctx = int(num_ctx) if num_ctx else self.context_for(name)
+        if not ctx or ctx <= 0:
+            raise NoKnownContext(
+                f"Nothing was preloaded: no one could say which context \"{name}\" is "
+                f"meant to load at on this lane, and a preload that names no context "
+                f"would load it at Ollama's own small default instead of the lane's "
+                f"setting. The first answer loads it at the lane's own setting.")
+        self._post("/api/generate", {"model": name, "options": {"num_ctx": int(ctx)}}, 180.0)
+        return int(ctx)
+
+
+def lane_context(url: str, model: str) -> Optional[int]:
+    """The context `model` must be loaded at on `url`'s lane, or None when
+    nothing can say - and then no preload is sent at all.
+
+    One place owns the answer, so this module's wake-up preload and
+    jarvis_agent.warm_everyday (Jarvis Live) cannot disagree about it. Read
+    only; never raises."""
+    try:
+        return EverydayOllama(url).context_for(model)
+    except Exception:
+        return None
 
 
 def everyday_ollama() -> EverydayOllama:
@@ -325,7 +465,13 @@ def warm_up(power=None, ollama=None, model: Optional[str] = None,
     """Load the chat model now, so the first answer after waking is quick,
     then have it read the start every question shares (`warmer`, for the
     tests; jarvis_agent.warm_after_waking otherwise). Runs on its own thread
-    (set_mode starts it). Never raises."""
+    (set_mode starts it). Never raises.
+
+    The load always names the lane's own context (EverydayOllama.load); when
+    nothing can say which context that is, nothing is preloaded and the state
+    is "skipped" with the reason - the first answer then loads the model at
+    the lane's own setting, which is the right size, rather than preloading it
+    at a smaller one."""
     name = model if model is not None else chat_model()
 
     def done(state: str, why: str = "") -> dict:
@@ -350,6 +496,12 @@ def warm_up(power=None, ollama=None, model: Optional[str] = None,
     done("loading")
     try:
         o.load(name)
+    except NoKnownContext as exc:
+        # Deliberately nothing was sent (see load()): a preload with no
+        # context would load the model at Ollama's own small default. The
+        # first answer loads it at the lane's own setting instead, so this is
+        # "skipped" with the reason - not a failure.
+        return done("skipped", str(exc))
     except Exception as exc:
         return done("failed", f"Ollama did not load it ({type(exc).__name__}); the first "
                               f"answer will load it instead.")

@@ -103,7 +103,11 @@ await check("\"last week\" asks again instead of dropping the confirmed Forget",
   assert.equal(sent.length, 1, JSON.stringify(sent));
   assert.equal(sent[0].cmd, "brain_memory_forget");
   assert.equal(sent[0].id, 7);
-  assert.equal(sent[0].valid_to, undefined, "blank means just now - no date sent");
+  assert.equal(sent[0].validTo, undefined, "blank means just now - no date sent");
+  // The key must be camelCase: Tauri renames a command's arguments at the IPC
+  // boundary, so a `valid_to` key is dropped with no error and the fact is
+  // retired as of NOW however the owner answered the date box (audit, 2026-10-08).
+  assert.equal(sent[0].valid_to, undefined, "the key is validTo, not valid_to");
 });
 
 await check("a future date asks again; a real date then goes with the Forget", async () => {
@@ -112,7 +116,8 @@ await check("a future date asks again; a real date then goes with the Forget", a
   assert.equal(prompts.length, 2);
   assert.match(prompts[1].message, /is in the future/);
   assert.equal(sent.length, 1);
-  assert.equal(sent[0].valid_to, day(2026, 1, 15));
+  assert.equal(sent[0].validTo, day(2026, 1, 15));
+  assert.equal(sent[0].valid_to, undefined, "the key is validTo, not valid_to");
 });
 
 await check("Cancel on the date box sends nothing, and says so", async () => {

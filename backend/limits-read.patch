@@ -1,0 +1,28 @@
+diff --git a/jarvis_hud.py b/jarvis_hud.py
+index 340f7f8..b84c6db 100644
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2322,7 +2322,7 @@ class Handler(BaseHTTPRequestHandler):
+                                         "error": f"{type(exc).__name__}: {exc}"})
+ 
+         if path in ("/api/attention", "/api/digest", "/api/jobs",
+-                    "/api/undo", "/api/ledger"):
++                    "/api/undo", "/api/ledger", "/api/limits"):
+             # Read-only, every one of them. Nothing here decides an approval,
+             # reverts a file or cancels a job on a GET - a state-changing
+             # thing behind a GET is one stray link-preview away from
+@@ -2336,6 +2336,14 @@ class Handler(BaseHTTPRequestHandler):
+                     import jarvis_arbiter
+                     return self._send(200, {"available": True,
+                                             **jarvis_arbiter.status()})
++                if path == "/api/limits":
++                    # Every limit this app may change, with what the owner's
++                    # file says now and the owner's words for each one. The
++                    # WRITE route is /api/limits/settings; this one only reads,
++                    # like every other route in this block.
++                    import jarvis_limits
++                    return self._send(200, {"available": True,
++                                            **jarvis_limits.view()})
+                 if path == "/api/digest":
+                     import jarvis_arbiter
+                     return self._send(200, {"available": True,

@@ -1,6 +1,6 @@
 name: Build Android APK
 
-# Builds jarvis-android, and only jarvis-android.
+# Builds jarvis-android, and only jarvis-android - ON DEMAND ONLY.
 #
 # This used to be a generic detector that worked out whether the repo held a
 # Gradle, Flutter, React Native or Capacitor project. That was right when the
@@ -10,6 +10,21 @@ name: Build Android APK
 # runner, so which app the "epic-jarvis-debug-apk" artifact contained was decided
 # by the filesystem. The path filter below says what this workflow is for; the
 # working directory now says the same thing.
+#
+# WHY THE AUTOMATIC TRIGGERS ARE GONE (owner's decision, 2026-10-07, after the
+# bug audit's stream C finding C4). This module cannot talk to Jarvis at all:
+# it speaks a WebSocket protocol invented before JARVIS-API.md existed, and none
+# of its endpoints are implemented server-side. It also keeps a bearer token and
+# an HMAC signing secret in PLAIN SharedPreferences, which breaks rule 3 - and
+# that breach shipped on every push, from a module nobody can use.
+#
+# So it is built only when someone asks. The end of this file argues that a
+# module which still compiles is far easier to port from than one that has
+# rotted quietly, and its lock-screen approvals, Glance widgets and duplex audio
+# are still worth porting into the real client. Keeping `workflow_dispatch` is
+# how both are true at once: the breach and the wasted 45-minute builds stop,
+# and anyone about to port from this module can still prove it compiles first.
+# If that reason ever stops mattering, delete this file and the module.
 
 on:
   workflow_dispatch:
@@ -17,25 +32,6 @@ on:
       java_version:
         description: "JDK version used for the Gradle build"
         default: "17"
-  push:
-    branches: [main]
-    # The desktop endpoint has no bearing on the APK.
-    # keystore/ is in here because the build now reads the shared debug key from
-    # it. Rotating that key changes what every APK is signed with, and without
-    # this the change would build nothing.
-    paths:
-      - "jarvis-android/**"
-      - "keystore/**"
-      - ".github/workflows/android-apk.yml"
-  # same shape as ci.yml and jarvis-client.yml: main by push, proposed changes
-  # by pull request, once each. The same file list as the push above, so a pull
-  # request reports exactly when its push would have.
-  pull_request:
-    branches: [main]
-    paths:
-      - "jarvis-android/**"
-      - "keystore/**"
-      - ".github/workflows/android-apk.yml"
 
 # Read only: this workflow no longer publishes a release (see the end of the
 # file), so nothing here writes to the repository.
