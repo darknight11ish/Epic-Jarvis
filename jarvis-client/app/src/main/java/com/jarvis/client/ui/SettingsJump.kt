@@ -45,6 +45,10 @@ object SettingsJump {
         Entry("Security", "security"),
         Entry("Show or hide menus", "menu-visibility"),
         Entry("Appearance", "appearance"),
+        // "Approval cards" (the owner's request of 2026-10-09): how much of a
+        // card is shown at first. Its own row, right under Appearance on the
+        // screen - what it changes is how much of a card is DRAWN.
+        Entry("Approval cards", "approval-cards"),
         Entry("Floating Jarvis", "floating-avatar"),
         Entry("How Jarvis talks", "manner"),
         Entry("Web search", "web-search"),

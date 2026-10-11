@@ -20,17 +20,38 @@ CardWordsContractTest read it, so neither app can word a card differently.
 `fallback` is what an app shows for a row with NO notice (a backend older
 than approval-notice.patch): both apps build it from the action's name the
 same way the PC does for an action it has no phrase for.
+
+`summaries` is the SHORT summary the owner asked for on 2026-10-09 ("a more
+simple summary, with an explain more button"), for every action, built by the
+real `notice_for` - so both apps' tests read the PC's own short words rather
+than a second copy somebody typed.
 """
 import json
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKEND = ROOT / "backend"
+# WHICH BACKEND THIS MEASURES, and why it is not simply ROOT/"backend".
+#
+# `backend/test_card_short_words.py` runs this file, and from inside
+# `backend/run_suites.py` that happens with JARVIS_BACKEND set to the folder the
+# suites are really exercising (a temporary copy of every shipped module, so the
+# shipped LAYOUT is tested rather than this repository's). Hard-coding
+# ROOT/"backend" made the two disagree: the suite imported one
+# `jarvis_card_words` and this file built its rows with another, so `--check`
+# reported the fixture stale while running the same tool by hand said it was
+# current. `_where` is the one answer both use - and it is also what makes this
+# tool work on the owner's PC, where the backend lives outside this repository
+# entirely (docs/ARCHITECTURE.md section 9). The same fix, for the same reason,
+# as tools/gen_risky_approval_cases.py.
+sys.path.insert(0, str(ROOT / "backend"))
+from _where import BACKEND  # noqa: E402
+
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 import jarvis_card_words as W  # noqa: E402
+import jarvis_card_summary as CS  # noqa: E402
 import test_approval_contract as C  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "card-words-cases.json"
@@ -61,6 +82,11 @@ def build() -> dict:
     notice_for = C.load_notice_for()
     titles = [{"action": a, "title": notice_for({"action": a})["title"]}
               for a in sorted(W.TITLES)]
+    # The short summary and the whole card, as the real producer makes them -
+    # no `detail`/`prompt` on these rows, so this is the same text a card with
+    # no payload carries. `full` is what "Explain more" opens.
+    summaries = [{"action": a, "notice": notice_for({"action": a})}
+                 for a in sorted(W.TITLES)]
     fallback = [{"action": a, "title": W.title_for(a)} for a in UNKNOWN]
     voice_script = [{"words": s, "says": W.voice_lines(s)} for s in SCRIPTS]
     return {
@@ -73,8 +99,18 @@ def build() -> dict:
         "voice": dict(W.VOICE),
         "until_approved": W.UNTIL_APPROVED,
         "titles": titles,
+        "summaries": summaries,
         "fallback": fallback,
         "voice_script": voice_script,
+        # The control's own words and the two choices, from the one place that
+        # names them (the PC hands these over at GET /api/card-prefs too).
+        "card_prefs": {
+            "more_label": CS.MORE_LABEL,
+            "less_label": CS.LESS_LABEL,
+            "default": CS.DEFAULT,
+            "modes": list(CS.MODES),
+            "choices": [dict(c) for c in CS.CHOICES],
+        },
     }
 
 
