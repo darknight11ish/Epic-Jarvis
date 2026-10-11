@@ -659,6 +659,16 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # jarvis_gate.py at all, so it cannot rewrite a line
                                 # devices.patch wrote - and the later_rewriting() half
                                 # below proves it.
+                                # gate-touches.patch (2026-10-11) is appended last and
+                                # has exactly TWO hunks, both in jarvis_gate.py: under
+                                # `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
+                                # `hit = _touches_protected(prompt, detail)` call. It
+                                # removes no line, adds no gate list entry, no risk row
+                                # and no _TOOL_ACTIONS line, and has no jarvis_hud.py
+                                # hunk at all - so it cannot rewrite a line
+                                # devices.patch wrote. The later_rewriting() half below
+                                # proves it.
+                                "gate-touches.patch",
                                 "plugin-loader.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

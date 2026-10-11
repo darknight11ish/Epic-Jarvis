@@ -684,6 +684,14 @@ def t_the_patch_and_the_lists():
              # at the end of the install chain. It removes no line and does not
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
+             # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
+             # hunks, both in jarvis_gate.py: under `_PROTECTED`/`_PROTECTED_RE` and
+             # at check()'s own `hit = _touches_protected(prompt, detail)` call. It
+             # removes no line, adds no tier row and no _RISK row - referee.patch's
+             # own rows are further down the same file - so it rewrites nothing
+             # referee.patch wrote. test_gate_touches.py's own check confirms no
+             # other patch adds or removes the call it replaces.
+             "gate-touches.patch",
              "plugin-loader.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])

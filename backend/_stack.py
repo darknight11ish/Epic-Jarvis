@@ -209,8 +209,43 @@ RATCHET = {
     #: apply to real context: neither is in `by_patch` and the walk reads 23.
     #: This was never a missing-line problem of the owner's PC's, which is what
     #: the note above assumed - it was a patch anchored one entry too early. A
-    #: ratchet: it may still only go down.
-    "jarvis_gate.py": 23,
+    #: ratchet: it may still go down.
+    #:
+    #: RAISED 2026-10-10, 23 -> 25, for `gate-touches.patch`, and both extra
+    #: hunks are honest rather than drift - the patch is in `by_patch` at 2:
+    #:
+    #:   * Both of its hunks anchor on text NO PATCH IN THIS WALK WRITES, and
+    #:     that is a fact about the gate rather than about this patch. The first
+    #:     sits directly under `_PROTECTED` and `_PROTECTED_RE` (the tuple of
+    #:     nine file names the rule exists for); the second replaces
+    #:     `check()`'s own `hit = _touches_protected(prompt, detail)` call.
+    #:     Every `.patch` here was searched for `_PROTECTED`: the only matches
+    #:     are `gate-outcome.patch`'s CONTEXT lines around that call (`hit =`
+    #:     and the `_audit` line below it), `no-auto-approve.patch`'s REMOVED
+    #:     `if _touches_protected(prompt):`, and this patch's own lines. The
+    #:     tuple itself, the `_touches_protected` body and `check()` are the
+    #:     owner's text in every version of his file, so the walk cannot
+    #:     rebuild them and invents their pre-image - 8 lines for one hunk and
+    #:     7 for the other.
+    #:   * There is no anchor to move to. Every patch that runs earlier in this
+    #:     walk and touches this region (`gate-outcome.patch`,
+    #:     `no-auto-approve.patch`) is itself materialised here, so the nearest
+    #:     text an earlier patch really writes is `gate-entries.patch`'s and
+    #:     `gate-action-name.patch`'s additions to `_TOOL_ACTIONS`, hundreds of
+    #:     lines away. A hunk is materialised when its CONTEXT cannot be found,
+    #:     and no context in this region can be found - which is why
+    #:     `gate-push.patch`, `gate-outcome.patch` and
+    #:     `rebuilt-patches/approval-notice.patch` are already in `by_patch`
+    #:     for this same file.
+    #:   * What it costs, said plainly: the walk cannot verify these two hunks
+    #:     against the owner's file. `backend/test_gate_touches.py` covers that
+    #:     from the other side - it runs the repository's published copy of the
+    #:     gate and checks the patch applies to it and reverses back out - and
+    #:     `jarvis-backend/jarvis_gate.py` holds the very lines the hunks
+    #:     anchor on, so a fresh copy of the owner's file does too.
+    #:
+    #: A ratchet: it may still only go down.
+    "jarvis_gate.py": 25,
     "jarvis_extract.py": 9,
     "jarvis_models.py": 5,
     "jarvis_skills.py": 2,
