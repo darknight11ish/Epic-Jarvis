@@ -103,15 +103,32 @@ The design that needs it is `docs/PHONE-PLAN-DESIGN.md`.
   one card, in plain words, saying which floor half is relaxed and what it lets
   happen - and **carrying the card's own sentence** (below). On the PC that
   means **Windows Hello**; on the phone, **the screen lock**.
-- **It is not a setting that can be flipped, and that has to change in code.**
-  `control_phone` and `run_plan` are both in the code's own `HARD_LIMITS`
-  (`backend/jarvis_asks_first.py:402-431`, the two names at `:405` and `:419`),
+- **It is not a setting that can be flipped, and that has to change in code -
+  stated precisely, because this is the entry's most consequential sentence.**
+  `control_phone` and `run_plan` are **both** in the code's own `HARD_LIMITS`
+  (`backend/jarvis_asks_first.py:402-431`; the two names at `:405` and `:419`),
   whose comment reads *"Never loosened from an app, whatever else changes"*
-  (`:398-401`), and `run_plan` is in `MUST_ASK` as well
-  (`:436-456`, name at `:446`). So **until those sets change in code, there is
-  no switch to turn on and nothing can run.** Building this feature therefore
-  *includes* changing those sets - which is precisely the floor change this
-  entry records. A reviewer should read the diff for that, not a settings file.
+  (`:398-401`) - and **both are in `MUST_ASK` as well** (`:436-456`;
+  `control_phone` at `:437`, `run_plan` at `:446`). What those two sets actually
+  do is narrow, and it is not "refuse the tool":
+  - **The loosening path refuses** (`:1174`: `if action not in LOOSE or action
+    in HARD_LIMITS or action in MUST_ASK`), and the "What asks first" page
+    renders such a row as *"Always asks. This cannot be changed from an app."*
+    (`:799`, `:82`). So **no switch for this feature can exist today** - it is
+    not that a switch exists and would be refused.
+  - **The gate would not refuse a `control_phone` call - it would ask.** Its
+    tier is already `"ask"` (`backend/rebuilt/jarvis-framework.toml:248`), so a
+    single approved call already works today, one card at a time. That is what
+    the owner has now, and it is not a session.
+  - **The session as designed cannot run for a second, separate reason**: it
+    needs `run_plan`, whose own gate is closed until a real `tools/tool_eval`
+    run clears its bar (`backend/jarvis_plan.py:453-492`), and which is
+    `MUST_ASK` too.
+  - **Therefore the rule change alone enables nothing.** Two deliberate steps
+    are needed, and the owner has to ask for both: **this floor entry**, and
+    **a code change** that takes these actions out of those sets (or adds a
+    dedicated action) so a switch can exist at all. A reviewer should read the
+    diff for the second one - no settings file can do it.
 - **The setting, and "What asks first" (step 3).** One row on the "What asks
   first" page (`backend/jarvis_asks_first.py:210-211` and its mirrors), beside
   the other loosening switches, with the design's own two switches: **the phone

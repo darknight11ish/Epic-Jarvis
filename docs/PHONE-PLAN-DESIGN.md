@@ -989,10 +989,22 @@ Stated as limitations rather than protections. The owner is accepting these
 | **A step stays inside one app** | Only in the weak sense: the check is **package-only**, so a browser is one package and every website is inside it, and a spend-or-send sheet drawn **inside** an allowed app passes by construction. That is the whole attack, and it needs no attacker |
 | **"Delete" is recognised** | Misses two shapes **by construction**: a long-press menu that shows "Delete" only *after* the press, and a swipe-to-delete that has no node to read at all (§16) |
 
-**Only two of the design's exclusions were ever enforceable**: never tapping
-inside the Jarvis app (`backend/jarvis_android_control.py:236-286`) and the
-step and time caps. Everything else in the list above is a guess with a
-documented failure mode, which is why it is on the card.
+**Of everything on the promise list above, exactly TWO items were ever
+enforceable, and these are they** - a reader should be able to name them
+without reading anything else:
+
+1. **Never tapping inside the Jarvis app itself** - real per-step code, not a
+   guess: `backend/jarvis_android_control.py:236-286` refuses any package under
+   `com.jarvis.`, and treats "could not tell" as a stop too.
+2. **The step and time caps** - hard numbers, not "about": 8 steps
+   (`backend/jarvis_plan.py:84`, `backend/jarvis_tasks.py:100`) and a fixed
+   time limit chosen before anything is built.
+
+**Every other exclusion in this design is a guess with a documented failure
+mode**, which is why the second list is on the card rather than in a promise:
+the password box, the 2FA box, the bank app, the spending-and-sending button,
+and "stays inside one app". The first draft listed those as protections; they
+are not.
 
 ### The card's own words (given to the owner for approval)
 
@@ -1017,11 +1029,18 @@ agent's (`:22-23`).
 **DRAFT RULE ENTRY 004 - awaiting the owner's word-for-word approval. NOT
 APPLIED.** The exact proposed text, in `docs/RULE-FLEXIBILITY.md`'s own entry
 shape, is in **`docs/PHONE-PLAN-RULE-DRAFT.md`**. `docs/RULE-FLEXIBILITY.md` has
-**not** been edited, no code has changed, and there is no switch to flip: both
+**not** been edited and no code has changed. Precisely what that means: both
 `control_phone` and `run_plan` sit in `HARD_LIMITS`
 (`backend/jarvis_asks_first.py:402-431`, at `:405` and `:419`) - *"Never
-loosened from an app, whatever else changes"* (`:398-401`) - and `run_plan` is
-in `MUST_ASK` too (`:436-456`, at `:446`).
+loosened from an app, whatever else changes"* (`:398-401`) - **and both are in
+`MUST_ASK` too** (`:436-456`, `control_phone` at `:437`, `run_plan` at `:446`).
+Those sets govern the **switch**, not the gate: the loosening path refuses
+(`:1174`) and the page says *"Always asks. This cannot be changed from an app."*
+(`:799`, `:82`), so **no switch for this can exist today** - while the gate
+itself would not refuse a `control_phone` call, it would **ask** (tier `ask`,
+`backend/rebuilt/jarvis-framework.toml:248`). The rule change alone therefore
+enables nothing: the owner would have to ask for this floor entry **and** a
+separate code change that takes those names out of those sets.
 
 ## What this is NOT
 
