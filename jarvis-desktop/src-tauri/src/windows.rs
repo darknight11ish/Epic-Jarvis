@@ -1409,6 +1409,13 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
 
     attach_floating_listeners(app, &window);
 
+    // The floating face is off by default but can be switched on from the tray
+    // or Settings at any moment - including while the app is locked, when it
+    // stays visible (it is the face, not Jarvis's words). It must therefore
+    // never be exposed for even the few seconds before the watch's next look
+    // (`lock::sweep`, which knows which windows a capture must not show).
+    crate::lock::sweep(app);
+
     // Clicks pass through this window except over the animal, if the owner
     // has asked for that (windows.rs's own note above explains the hit test).
     // Started here rather than in `setup` so the watcher exists exactly while

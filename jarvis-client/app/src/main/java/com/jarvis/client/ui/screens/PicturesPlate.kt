@@ -43,7 +43,7 @@ import kotlinx.coroutines.withContext
  * "Ask for a picture, and keep it" — the owner's decision of 2026-09-27
  * (*"12 GB card: longer conversations with picture understanding first, and
  * making pictures too (swapped in when asked, since both cannot sit on the
- * card at once)"*), docs/JARVIS-API.md section 124.
+ * card at once)"*), docs/JARVIS-API.md section 126.
  *
  * Brain -> Pictures. The owner types what the picture should show, taps Make,
  * and the PC draws it and keeps it. The gallery below shows each picture with

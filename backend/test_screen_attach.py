@@ -487,7 +487,35 @@ def t_hygiene():
     # is the same shape, after that one.
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
+             # hunks, both in jarvis_gate.py - under `_PROTECTED`/`_PROTECTED_RE` and
+             # at check()'s own `hit = _touches_protected(prompt, detail)` call. It
+             # removes no line and has no jarvis_hud.py hunk at all, so it cannot
+             # rewrite the POST /api/screen wrapper this patch installs.
+             "gate-touches.patch",
+             # picture-card.patch (2026-10-11) is the first patch to go
+             # immediately BEFORE plugin-loader.patch, and it has exactly ONE
+             # hunk, in jarvis_hud.py: an install block on the OWNER's own lines
+             # just before the main socket is built. It removes no line and
+             # touches jarvis_gate.py not at all, so it cannot rewrite the
+             # POST /api/screen wrapper this patch installs. (It was re-anchored
+             # there on 2026-10-11: its trailing context used to be topics.patch's
+             # OWN banner, and topics.patch runs after it. See _stack.py's RATCHET
+             # note.)
+             # uncensored-optins.patch (2026-10-11) is appended in front of
+             # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+             # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+             # install block at the end of jarvis_hud.py's chain. It removes no line,
+             # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+             # it cannot rewrite a line this patch wrote.
+             "uncensored-optins.patch",
+             "picture-card.patch",
+             # pictures.patch (2026-10-11): ONE install block at the end of
+             # jarvis_hud.py's chain - nowhere near the POST /api/screen route this
+             # patch's wrapper takes over - so the request body is still read once,
+             # and still by this wrapper.
+             "pictures.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

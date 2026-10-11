@@ -841,7 +841,7 @@ fn main() {
             // windows have no route to.
             "handoff_front",
             // "Ask for a picture, and keep it" (pictures.rs; backend
-            // jarvis_pictures.py, JARVIS-API section 124; the owner's decision
+            // jarvis_pictures.py, JARVIS-API section 126; the owner's decision
             // of 2026-09-27). Five commands, and NO APPROVAL CARD anywhere:
             // a picture is a new file in a folder on THIS PC, drawn by a
             // program on THIS PC, from the owner's own words - the same shape

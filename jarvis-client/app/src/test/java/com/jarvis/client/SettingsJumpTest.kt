@@ -175,7 +175,17 @@ class SettingsJumpTest {
         val src = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/parts/ScrollToKey.kt").readText()
         // Tapping "Voice" again, from the bottom of the screen, has to scroll
         // again: the effect is keyed on the tick as well as the key.
-        assertTrue("ScrollToKeyOnce takes a tick", src.contains("fun ScrollToKeyOnce(state: LazyListState, key: String?, tick: Int = 0, onDone: () -> Unit)"))
+        //
+        // Asserted on the two pieces rather than on the whole signature line:
+        // Brain's headings added an optional `onOpen` parameter (BrainScreen.kt,
+        // 2026-10-10) between the tick and the callback, and a test that pinned
+        // the exact text of the line would have failed for a change that has
+        // nothing to do with what this test is about.
+        assertTrue(
+            "ScrollToKeyOnce takes a tick",
+            Regex("fun ScrollToKeyOnce\\(\\s*state: LazyListState,\\s*key: String\\?,\\s*tick: Int = 0,")
+                .containsMatchIn(src),
+        )
         assertTrue("and the effect re-runs for it", src.contains("LaunchedEffect(key, tick)"))
         val screen = repoFile(dir + "SettingsScreen.kt").readText()
         assertTrue("Settings bumps the tick on every tap", screen.contains("jumpTick += 1"))

@@ -208,13 +208,37 @@ SECTIONS: tuple = (
     # the phone is never asked for an account secret.
     Section("chatbot-api-keys", ("chatbot api keys", "the api keys",
                                  "chatbot keys", "my api keys"), app="desktop"),
-    Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="desktop"),
+    # "Hardware and models" (corrected 2026-10-10, the parity audit): this said
+    # "desktop" while `backend/jarvis_menus.py` said both and the phone drew
+    # the plate - the disagreement §6.3 of the audit found. The phone HAS this
+    # section: BrainScreen.kt `item(key = "hardware")`, menu
+    # `settings.hardware`, drawn by HardwarePlate.kt. What is desktop-only is
+    # the memory bars, the "Details" arithmetic, Copy and the Modelfile, which
+    # ARCHITECTURE section 8 keeps off the phone - a limit of the section, not
+    # of its existence.
+    Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="both"),
+    # "Your second graphics card" (corrected 2026-10-10, the parity audit): the
+    # phone has SecondCardPlate.kt - all four rows, `MenuPlaces.INSIDE` - under
+    # the same menu id `settings.second-card`, which `jarvis_menus.py` already
+    # marks both. The phone cannot create the second card's own copy of Ollama
+    # or measure the card, and arch/ARCHITECTURE section 8 says so; the section
+    # itself is on both apps.
     Section("second-card", ("the second graphics card", "second card", "second gpu"),
-            app="desktop"),
-    Section("big-model", ("the big model", "big model settings"), app="desktop"),
+            app="both"),
+    # "Big model (slow)" (corrected 2026-10-10, the parity audit): the phone has
+    # BigModelPlate.kt, menu `settings.big-model`, marked both in
+    # `jarvis_menus.py`. The phone can switch it on and off like the desktop;
+    # `colibri` itself runs on the PC.
+    Section("big-model", ("the big model", "big model settings"), app="both"),
     Section("folders", ("folders jarvis may look in", "folders", "the notion export")),
     Section("backup", ("backups", "backup settings")),
-    Section("updates", ("updates", "app updates"), app="desktop"),
+    # "Updates" (corrected 2026-10-10, the parity audit): the phone HAS its own
+    # update card - net/UpdateCheck.kt, platform/UpdateChecker.kt and the
+    # "Check for new versions" row on Platform checks (ReadinessScreen.kt, item
+    # "this-app"), which is where OpenPlace.kt sends "open updates". Each app
+    # checks its own release page. `jarvis_menus.py`'s `settings.updates` is
+    # both for the same reason. `tool-updates` below really is the PC's.
+    Section("updates", ("updates", "app updates"), app="both"),
     Section("tool-updates", ("tool updates", "check for tool updates"), app="desktop"),
     Section("more-options", ("more options", "startup and logs"), app="desktop"),
     Section("start-jarvis", ("starting jarvis for you", "start jarvis automatically"),
@@ -235,14 +259,24 @@ SECTIONS: tuple = (
                        "how often jarvis does things"),
             app="both"),
     Section("email-sending", ("sending email", "email sending settings")),
-    Section("about", ("about jarvis", "about")),
+    # "About Jarvis" (corrected 2026-10-10, the parity audit): the phone HAS
+    # this card - FaqScreen.kt's `AboutCard()` at the end of Help, reached by
+    # "open about" (OpenPlace.kt) - so it is on both apps, and
+    # `jarvis_menus.py`'s `settings.about` is both for the same reason.
+    Section("about", ("about jarvis", "about"), app="both"),
     # "Hang and crash notes": inside "More options" on the desktop (its own
     # <section id="crash-notes">). The phone has no such list - its own
     # crash screen only appears after a crash - so OpenPlace.PC_ONLY says so.
     Section("crash-notes", ("crash notes", "hang and crash notes", "the crash notes"),
             app="desktop"),
+    # "What this backend supports" (corrected 2026-10-10, the parity audit):
+    # this said "desktop" while `jarvis_menus.py` said both AND the phone drew
+    # the plate - BrainScreen.kt `item(key = "capabilities")`, menu
+    # `settings.backend-supports` - which the audit's section 6.3 found. Only
+    # the capability LIST is read (the app branches on it); nothing here is a
+    # desktop-only control.
     Section("backend-supports", ("what this backend supports", "backend capabilities"),
-            app="desktop"),
+            app="both"),
     Section("watch-notify", ("smartwatch notifications", "watch notifications"),
             app="phone"),
     # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
@@ -285,7 +319,7 @@ SECTIONS: tuple = (
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
     # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 124): "Making pictures", which program on this PC draws
+    # JARVIS-API section 126): "Making pictures", which program on this PC draws
     # them (ComfyUI or stable-diffusion.cpp - a setting with named supported
     # values, never guessed at), the folder the pictures are kept in and its
     # size, and the gallery. Desktop-only as a Settings CARD: the phone reaches
@@ -325,9 +359,15 @@ SECTIONS: tuple = (
     Section("hud-window", ("the big hud window", "big hud window", "the hud window",
                            "hud window", "the big jarvis window", "big jarvis window"),
             app="desktop"),
-    # Spending (2026-09-30): a card on the desktop.
+    # Spending (2026-09-30): the phone draws this plate itself (BrainScreen.kt
+    # `item(key = "spending")`, menu `settings.spending`, which
+    # `contract/menu-cases.json` marks available on the phone, and
+    # OpenPlace.kt sends "open spending" there). Corrected from "desktop" to
+    # "both" on 2026-10-10 (the parity audit): only the bank-file layouts and
+    # the categories editor are the PC's (SpendingPlate.kt says "Set up on the
+    # PC"); the summaries themselves are on both.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
-            app="desktop"),
+            app="both"),
     # Notifications (2026-10-01): a card on the desktop ONLY, and it said
     # "both" until 2026-10-09 (settings-coverage audit) - which was untrue.
     # The PC's card is per kind: alarms, reminders, the briefing and the
@@ -535,7 +575,7 @@ def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
-# --- making pictures (jarvis_pictures.py, JARVIS-API section 124) ----------
+# --- making pictures (jarvis_pictures.py, JARVIS-API section 126) ----------
 
 def set_pictures(on: bool, *, peer=None, local=None) -> Outcome:
     """The one switch the picture feature has. BOTH directions happen at once
@@ -1264,7 +1304,7 @@ SETTINGS_ROWS: tuple = (
         "desktop",
         indent=10),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 124). The one switch that belongs to the Pictures card
+    # JARVIS-API section 126). The one switch that belongs to the Pictures card
     # and, with the record button above it, the one row on the page whose
     # subject is a whole feature rather than a behaviour. It is linked to its
     # BoolSetting (`pictures`), so "turn on making pictures" and this row are
@@ -1405,7 +1445,7 @@ BOOL_SETTINGS: tuple = (
                 "the browser with no window"),
                "browser-engine", set_browser_engine),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 124). Its own switch, OFF by default: the second card
+    # JARVIS-API section 126). Its own switch, OFF by default: the second card
     # is shared with the everyday model, and CLAUDE.md's rule is that a feature
     # using the second card stays off until THAT feature is measured. Both
     # directions happen at once - see set_pictures above for why that is not a

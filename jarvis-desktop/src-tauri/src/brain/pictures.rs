@@ -1,7 +1,7 @@
 //! Ask for a picture, and keep it (the owner's decision of 2026-09-27:
 //! *"12 GB card: longer conversations with picture understanding first, and
 //! making pictures too (swapped in when asked, since both cannot sit on the
-//! card at once)"*; JARVIS-API.md section 124; backend `jarvis_pictures.py`).
+//! card at once)"*; JARVIS-API.md section 126; backend `jarvis_pictures.py`).
 //!
 //! Four commands, one per route, in Settings -> Pictures:
 //!

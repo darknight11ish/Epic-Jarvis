@@ -103,8 +103,7 @@
     "limit": "The voice pack is a 350 MB download on the PC, checksum-pinned.",
     "surface": "both",
     "covers": [
-      "settings.voices",
-      "entry.voices"
+      "settings.voices"
     ]
   },
   {
@@ -1117,6 +1116,19 @@
     ]
   },
   {
+    "id": "crash-notes",
+    "group": "The PC itself",
+    "title": "Hang and crash notes",
+    "what": "What the PC's own process wrote down the last time it hung or crashed.",
+    "where": "Settings, More options, Hang and crash notes.",
+    "asks": "No card - it only reads.",
+    "limit": "Desktop only. The phone keeps its own crash screen, which appears after a crash on the phone.",
+    "surface": "desktop",
+    "covers": [
+      "settings.crash-notes"
+    ]
+  },
+  {
     "id": "faces",
     "group": "The PC itself",
     "title": "Choose Jarvis's face",
@@ -1132,12 +1144,25 @@
     "group": "The PC itself",
     "title": "Animal options",
     "what": "Every animal-face option in one place: Still, the sun and moon, weather and its source, sharpness and frame rate.",
-    "where": "Settings, Animal options. Asking Jarvis to change one works the same as the switch.",
+    "where": "Settings, Animal options. On the phone it is inside Appearance. Asking Jarvis to change one works the same as the switch.",
     "asks": "Cosmetic options change at once. Anything that opens a way out of the PC (online weather) still raises its card.",
     "limit": "The \"Voice follows the face\" switch starts off.",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "settings.animal-options"
+    ]
+  },
+  {
+    "id": "first-run",
+    "group": "The PC itself",
+    "title": "Set up Jarvis",
+    "what": "The card a new install meets first: the five choices that matter before Jarvis is any use.",
+    "where": "Settings, the first card on the page.",
+    "asks": "No card - it is the setup page itself.",
+    "limit": "Desktop only. The phone's first screen is pairing instead.",
+    "surface": "desktop",
+    "covers": [
+      "settings.first-run"
     ]
   },
   {
@@ -1222,6 +1247,32 @@
     ]
   },
   {
+    "id": "notifications",
+    "group": "The PC itself",
+    "title": "Notifications",
+    "what": "Which of Jarvis's notifications this PC shows - alarms and urgent alerts, reminders and to-dos, the morning briefing, and \"website needs you\" - plus quiet hours and a test button.",
+    "where": "Settings, Notifications.",
+    "asks": "No card - it only chooses which of the PC's own notifications appear.",
+    "limit": "Desktop only. On the phone these are Android's own per-channel notification controls, reached from the \"Notifications from Jarvis\" row on Settings.",
+    "surface": "desktop",
+    "covers": [
+      "settings.notifications"
+    ]
+  },
+  {
+    "id": "start-jarvis",
+    "group": "The PC itself",
+    "title": "Starting Jarvis for you",
+    "what": "Whether Jarvis may start and stop the backend on this PC.",
+    "where": "Settings, More options, Starting Jarvis for you.",
+    "asks": "No card - it is a row inside the More options fold.",
+    "limit": "Desktop only: the backend runs on the PC, next to the desktop app.",
+    "surface": "desktop",
+    "covers": [
+      "settings.start-jarvis"
+    ]
+  },
+  {
     "id": "work-tab",
     "group": "The PC itself",
     "title": "The Work tab",
@@ -1295,10 +1346,10 @@
     "group": "The PC itself",
     "title": "Updates",
     "what": "Whether a newer build of this app exists, and installing it.",
-    "where": "Settings, Updates.",
+    "where": "Settings, Updates. On the phone it is \"Check for new versions\" on Platform checks, under This app. Each app checks its own release page.",
     "asks": "Nothing installs by itself - you press to install, then to restart.",
     "limit": "",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "settings.updates"
     ]
@@ -1347,10 +1398,10 @@
     "group": "The PC itself",
     "title": "About Jarvis",
     "what": "The version, the licences and the credits.",
-    "where": "Settings, About Jarvis.",
+    "where": "Settings, About Jarvis. On the phone it is the end of Help.",
     "asks": "No card.",
     "limit": "",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "settings.about"
     ]
@@ -1412,10 +1463,10 @@
     "group": "The PC itself",
     "title": "Undo",
     "what": "The changes you can still undo.",
-    "where": "Brain, Work, Undo shelf.",
+    "where": "Brain, Work, Undo shelf. On the phone it is the shelf on the Inbox.",
     "asks": "Undo itself never asks.",
     "limit": "Some things offer 10 minutes to undo; after that they are gone.",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "brain.work.undo"
     ]
@@ -1425,10 +1476,10 @@
     "group": "The PC itself",
     "title": "Activity: cards you already decided",
     "what": "A read-only list of past approvals.",
-    "where": "Brain, Work, Activity.",
+    "where": "Brain, Work, Activity. On the phone it is its own Past approvals screen, opened from the Inbox.",
     "asks": "No card - it only reads.",
     "limit": "It shows the title, Approved / Denied / Timed out, when, and which device.",
-    "surface": "desktop",
+    "surface": "both",
     "covers": [
       "brain.work.activity"
     ]
@@ -1530,10 +1581,10 @@
     "group": "Safety",
     "title": "Trust: content risk and the audit chain",
     "what": "Outside text that looked risky, and the chain that records what Jarvis decided.",
-    "where": "Brain, Trust.",
+    "where": "Brain, Trust. The audit chain is on both apps (the phone draws it in Brain); the content-risk list is the desktop's.",
     "asks": "No card - it only reads.",
-    "limit": "It holds what is waiting on you, so it can never be hidden.",
-    "surface": "desktop",
+    "limit": "It holds what is waiting on you, so it can never be hidden. The full content-risk list is on the desktop only.",
+    "surface": "both",
     "covers": [
       "brain.tab.trust",
       "brain.trust.ledger",

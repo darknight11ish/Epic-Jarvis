@@ -261,7 +261,7 @@ CLASSIFICATION = {
                                    "without the desktop's Settings window being "
                                    "opened."),
     "/api/memory/decide": ("ported", "The review queue: one card, one decision."),    "/api/memory/edit": ("deliberate", "Rewording stored facts is deep memory editing; it stays on the desktop's Memory tab."),
-    "/api/memory/entities": ("ported", "\"People and things\" (owner, 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): the phone gets a plain grouped LIST of the names saved facts are linked to and the facts behind each (Brain, read-only, net/Entities.kt and ui/screens/EntitiesPlate.kt), hidden under Hide memory lists and chat history. Not the Galaxy or any map or links: the picture, the names under each fact, About <name> and the \"are these the same?\" merge card stay the desktop's. Backend: memory-entities.patch."),
+    "/api/memory/entities": ("ported", "\"People and things\" (owner, 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): the phone gets a plain grouped LIST of the names saved facts are linked to and the facts behind each (Brain, read-only, net/Entities.kt and ui/screens/EntitiesPlate.kt), hidden under Hide memory lists and chat history. **Widened 2026-10-11 (owner): the list now shows the Galaxy's CONNECTIONS too, in words.** The owner asked to see the Galaxy on his phone and chose a light, read-only version, so Entities.connections reports the other names that appear in the same saved facts - the desktop dot-to-dot line, said as \"Priya, 4 shared facts\" - worked out from this same read by intersecting fact_ids. No third route, no /api/graph, and still no map, no picture, no canvas, no merge and no write of any kind from this screen: the merge card, the names under each fact and About <name> stay the desktop's. Backend: memory-entities.patch."),
     "/api/memory/export": ("deliberate", "A copy of everything Jarvis knows does not belong on a phone that can be lost."),
     "/api/memory/facts": ("ported", ""),
     "/api/memory/forget": ("ported", "Forget ONE fact (retired, not deleted; no undo). Desktop: Brain, Memory, every fact (brain_memory_forget, with an optional date). Phone, since automatic learning (owner, 2026-09-24: every auto-saved fact is listed in both apps with a one-tap Forget): Brain, Saved automatically, auto-saved facts only (AutoLearnPlate.kt, JarvisApi.forgetFact). Both ask first and hold it on a stale link. Rewording (/api/memory/edit) stays desktop-only."),
@@ -292,7 +292,7 @@ CLASSIFICATION = {
     # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27:
     # "12 GB card: longer conversations with picture understanding first, and
     # making pictures too (swapped in when asked, since both cannot sit on the
-    # card at once)"; pictures.patch, JARVIS-API.md section 124). The drawing
+    # card at once)"; pictures.patch, JARVIS-API.md section 126). The drawing
     # program is a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a
     # setting with named supported values, never guessed at) and the only
     # address the backend opens is the one the owner configured, so NOTHING

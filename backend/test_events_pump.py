@@ -17,14 +17,30 @@ sys.path.insert(0, str(HERE))
 # in the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, missing, explain, require_rebuilt
+
+# jarvis_events.py is one of the ten modules this repository ships WHOLE
+# (`backend/rebuilt/`); _where.py is what puts them on sys.path. Without that
+# they are nowhere in a clone, and `import jarvis_events` inside the checks
+# below died as `ModuleNotFoundError: No module named 'jarvis_events'` - three
+# tracebacks and "0 passed, 3 failed" with nothing said about why.
+require_rebuilt("jarvis_events")
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this run cannot make, printed as `skip` and counted on its own -
+    never as a pass. `run_suites.py` counts these lines, and the summary below
+    prints the number, so a skip can never be read as a check that ran."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def stub_gate(items):
@@ -106,7 +122,19 @@ def _since(bus, last):
 
 
 def t_the_server_actually_starts_it():
-    """CONTROL. Fails if the one line in main() is ever removed again."""
+    """CONTROL. Fails if the one line in main() is ever removed again.
+
+    Reads the owner's own jarvis_hud.py, which this repository does not hold -
+    the patcher edits it in place rather than copying it
+    (scripts/apply-patches.ps1), and run_suites.py skips this whole suite by
+    name for that reason. Run this file directly and there is nothing to read:
+    it used to die on that read with `FileNotFoundError`, which counts as a
+    third failure and says nothing about the patch. One file this machine was
+    never given is a skip, printed with the reason."""
+    if not (BACKEND / "jarvis_hud.py").is_file():
+        skip(f"the control needs jarvis_hud.py, which is not in {BACKEND} - "
+             f"only the owner's PC has it. {explain()}")
+        return
     src = (BACKEND / "jarvis_hud.py").read_text()
     tree = ast.parse(src)
     found = []
@@ -134,7 +162,7 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

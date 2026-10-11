@@ -934,7 +934,7 @@ pub fn run() {
             brain::progress::brain_progress_activity,
             brain::progress::brain_progress_balance,
             brain::progress::brain_progress_balance_save,
-            // "Ask for a picture, and keep it" (JARVIS-API section 124). A
+            // "Ask for a picture, and keep it" (JARVIS-API section 126). A
             // picture is a new file in a folder on this PC, drawn by a program
             // on this PC, from words the owner typed, so drawing one raises NO
             // approval card - the same shape as a timer or a note. Changing

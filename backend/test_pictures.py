@@ -538,6 +538,21 @@ def t_the_routes_are_the_documented_ones():
           == 200)
 
 
+def t_it_owns_nothing_under_picture_card():
+    """The other half of the guard main's own suite holds.
+
+    PR #248 merged the picture-maker's CARD half as its own module, owning
+    `/api/picture-card`. Two features that both make pictures must never fight
+    over a prefix, so each module carries the check in its own suite:
+    `test_picture_card.py`'s `t_owns_nothing_under_pictures()` fails if
+    `jarvis_picture_card.py` ever grows a route under `/api/pictures`, and this
+    one fails if `jarvis_pictures.py` ever grows one under `/api/picture-card`.
+    """
+    source = (HERE / "jarvis_pictures.py").read_text(encoding="utf-8")
+    check("this module never claims a route under /api/picture-card",
+          "/api/picture-card" not in source, None)
+
+
 def t_install_wraps_the_handler_and_leaves_every_other_request_alone():
     folder = tmpdir()
     stub = StubRuntime("x")
@@ -683,8 +698,8 @@ def address_only(src: str) -> bool:
 
 def t_the_api_document_has_the_section_and_it_matches_this_code():
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("docs/JARVIS-API.md has section 124", "## 124." in api,
-          "no section 124 yet")
+    check("docs/JARVIS-API.md has section 126", "## 126." in api,
+          "no section 126 yet")
     for route in ("/api/pictures", "/api/pictures/file"):
         check(f"... and names the route {route}", route in api, route)
     check("... and says the pictures are kept on this PC",
@@ -825,6 +840,7 @@ def main() -> int:
                t_the_settings_file_round_trips_and_never_enables_itself,
                t_the_picture_itself_comes_back_as_bytes_and_nothing_else_does,
                t_the_routes_are_the_documented_ones,
+               t_it_owns_nothing_under_picture_card,
                t_install_wraps_the_handler_and_leaves_every_other_request_alone,
                t_no_picture_is_sent_anywhere_and_no_model_can_reach_this,
                t_the_api_document_has_the_section_and_it_matches_this_code):

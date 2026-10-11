@@ -201,6 +201,28 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.first-run",
+    "title": "Set up Jarvis",
+    "about": "The first-run card: the five choices that matter on a new install.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "Desktop only, and never hideable: it is the page a new owner meets first.",
+    "names": [
+      "set up jarvis",
+      "first run setup",
+      "the setup page",
+      "getting started with jarvis"
+    ]
+  },
+  {
     "id": "settings.devices",
     "title": "Devices",
     "about": "Every paired device with its own key.",
@@ -249,16 +271,17 @@ export const MENUS = [
     "title": "Animal options",
     "about": "Every animal-face option in one place.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
     "kind": "card",
     "group": null,
     "parent": null,
-    "hide": true,
-    "collapse": true,
-    "why": "",
+    "hide": false,
+    "collapse": false,
+    "why": "On the phone it is drawn inside Appearance; the Appearance menu is how it is hidden.",
     "names": [
       "animal options",
       "animal settings"
@@ -333,7 +356,8 @@ export const MENUS = [
     "title": "Morning briefing settings",
     "about": "What the morning briefing includes.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
@@ -397,7 +421,8 @@ export const MENUS = [
     "title": "Jarvis's voice",
     "about": "Custom voices and the voice pack.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
@@ -833,16 +858,17 @@ export const MENUS = [
     "title": "Updates",
     "about": "New versions of this app.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "settings",
     "view": "",
     "kind": "card",
     "group": null,
     "parent": null,
-    "hide": true,
-    "collapse": true,
-    "why": "",
+    "hide": false,
+    "collapse": false,
+    "why": "On the phone it is the \"Check for new versions\" row on Platform checks; there is no separate row to hide.",
     "names": [
       "updates",
       "app updates"
@@ -883,6 +909,47 @@ export const MENUS = [
     "collapse": false,
     "why": "Already a fold of its own; it stays where it is.",
     "names": []
+  },
+  {
+    "id": "settings.start-jarvis",
+    "title": "Starting Jarvis for you",
+    "about": "Let Jarvis start and stop the backend on this PC.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "A row inside the desktop's own More options fold, which is what is hidden.",
+    "names": [
+      "starting jarvis for you",
+      "start jarvis automatically"
+    ]
+  },
+  {
+    "id": "settings.crash-notes",
+    "title": "Hang and crash notes",
+    "about": "What the PC's own process wrote when it hung or crashed.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "A row inside the desktop's own More options fold; the phone keeps its own crash notes.",
+    "names": [
+      "crash notes",
+      "hang and crash notes",
+      "the crash notes"
+    ]
   },
   {
     "id": "settings.asks-first",
@@ -977,6 +1044,27 @@ export const MENUS = [
     "title": "About Jarvis",
     "about": "Version, licences and credits.",
     "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": false,
+    "collapse": false,
+    "why": "The version and the licence: on the phone it is the end of the Help screen, which is not hideable.",
+    "names": [
+      "about jarvis",
+      "about"
+    ]
+  },
+  {
+    "id": "settings.notifications",
+    "title": "Notifications",
+    "about": "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
+    "apps": [
       "desktop"
     ],
     "area": "settings",
@@ -984,12 +1072,13 @@ export const MENUS = [
     "kind": "card",
     "group": null,
     "parent": null,
-    "hide": true,
-    "collapse": true,
-    "why": "",
+    "hide": false,
+    "collapse": false,
+    "why": "Desktop only: the phone's notification controls are Android's own, per channel (OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
     "names": [
-      "about jarvis",
-      "about"
+      "notifications",
+      "notification settings",
+      "desktop notifications"
     ]
   },
   {
@@ -1619,16 +1708,17 @@ export const MENUS = [
     "title": "Chat tags",
     "about": "The tag chips and the tag editor.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "brain",
     "view": "history",
     "kind": "card",
     "group": null,
     "parent": "brain.tab.history",
-    "hide": true,
-    "collapse": true,
-    "why": "",
+    "hide": false,
+    "collapse": false,
+    "why": "On the phone the editor takes the History screen over and is hidden by the History entry; there is no separate row to hide.",
     "names": [
       "chat tags",
       "tags"
@@ -2069,7 +2159,8 @@ export const MENUS = [
     "title": "Undo shelf",
     "about": "Changes you can still undo.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "brain",
     "view": "work",
@@ -2086,16 +2177,17 @@ export const MENUS = [
     "title": "Activity",
     "about": "What Jarvis did lately.",
     "apps": [
-      "desktop"
+      "desktop",
+      "phone"
     ],
     "area": "brain",
     "view": "work",
     "kind": "card",
     "group": null,
     "parent": "brain.tab.work",
-    "hide": true,
-    "collapse": true,
-    "why": "",
+    "hide": false,
+    "collapse": false,
+    "why": "On the phone it is one row on the Inbox, which is never hideable; there is no separate row to hide.",
     "names": [
       "activity"
     ]
@@ -2313,25 +2405,6 @@ export const MENUS = [
     ]
   },
   {
-    "id": "entry.voices",
-    "title": "Jarvis's voice row",
-    "about": "The row that opens Jarvis's voice.",
-    "apps": [
-      "phone"
-    ],
-    "area": "entry",
-    "view": "",
-    "kind": "entry",
-    "group": null,
-    "parent": null,
-    "hide": true,
-    "collapse": false,
-    "why": "",
-    "names": [
-      "voices row"
-    ]
-  },
-  {
     "id": "entry.voice-check",
     "title": "Voice check row",
     "about": "The row that opens the voice check.",
@@ -2529,16 +2602,25 @@ export const MENUS = [
 ];
 export const NEVER_HIDE = [
   "settings.connection",
+  "settings.first-run",
   "settings.devices",
+  "settings.animal-options",
   "settings.security",
+  "settings.updates",
   "settings.more-options",
+  "settings.start-jarvis",
+  "settings.crash-notes",
   "settings.asks-first",
+  "settings.about",
+  "settings.notifications",
   "settings.menu-visibility",
   "brain.tab.trust",
   "brain.tab.watch",
   "brain.memory.waiting",
+  "brain.history.tags",
   "brain.work.coming-up",
   "brain.work.undo",
+  "brain.work.activity",
   "brain.now.budget",
   "brain.trust.rush-latch",
   "brain.trust.content-risk",
@@ -2611,12 +2693,14 @@ export const ALIASES = {
   "connection status line": "entry.checks",
   "content risk": "brain.trust.content-risk",
   "conversations": "brain.history.conversations",
+  "crash notes": "settings.crash-notes",
   "credentials": "settings.account-secrets",
   "crisis help": "safety.crisis-help",
   "custom voices": "settings.voices",
   "customer support": "brain.work.support",
   "decks": "brain.work.decks",
   "deep questions": "brain.memory.deep",
+  "desktop notifications": "settings.notifications",
   "devices": "settings.devices",
   "does the browser window come to the front": "settings.handoff-front",
   "drawing pictures": "settings.pictures",
@@ -2627,6 +2711,7 @@ export const ALIASES = {
   "finance": "group.finance",
   "finances": "group.finance",
   "findings": "brain.now.findings",
+  "first run setup": "settings.first-run",
   "floating face": "settings.floating-avatar",
   "floating jarvis": "settings.floating-avatar",
   "focus": "brain.work.focus",
@@ -2636,6 +2721,7 @@ export const ALIASES = {
   "forget a time frame": "brain.history.forget-range",
   "frequently asked questions": "brain.tab.tutorials",
   "galaxy": "brain.tab.galaxy",
+  "getting started with jarvis": "settings.first-run",
   "github watchlist": "brain.watch.watchlist",
   "goals": "brain.work.goals",
   "goals & projects": "group.goals-projects",
@@ -2644,6 +2730,7 @@ export const ALIASES = {
   "gpus": "group.graphics-cards",
   "graphics card": "group.graphics-cards",
   "graphics cards": "group.graphics-cards",
+  "hang and crash notes": "settings.crash-notes",
   "hardware": "settings.hardware",
   "hardware and models": "settings.hardware",
   "headless browser": "settings.browser-engine",
@@ -2663,7 +2750,6 @@ export const ALIASES = {
   "inbox": "safety.approvals",
   "inside jokes": "brain.memory.between-us",
   "jarvis's voice": "settings.voices",
-  "jarvis's voice row": "entry.voices",
   "jarvis's voices": "settings.voices",
   "keyboard shortcuts": "settings.shortcuts",
   "learning": "brain.memory.learning",
@@ -2691,6 +2777,8 @@ export const ALIASES = {
   "morning briefing": "brain.work.briefing",
   "morning briefing settings": "settings.briefing-settings",
   "new conversation timing": "settings.idle-new",
+  "notification settings": "settings.notifications",
+  "notifications": "settings.notifications",
   "now": "brain.tab.now",
   "paired devices": "settings.devices",
   "pairing": "settings.connection",
@@ -2737,8 +2825,10 @@ export const ALIASES = {
   "security settings": "settings.security",
   "sending email": "settings.email-sending",
   "server address": "settings.connection",
+  "set up jarvis": "settings.first-run",
   "settings": "entry.settings",
   "settings button": "entry.settings",
+  "setup page": "settings.first-run",
   "shortcuts": "settings.shortcuts",
   "show or hide": "settings.menu-visibility",
   "show the prompt coach": "settings.prompt-coach",
@@ -2748,6 +2838,8 @@ export const ALIASES = {
   "spending": "settings.spending",
   "spending summaries": "settings.spending",
   "stale-link banner": "safety.stale-link",
+  "start jarvis automatically": "settings.start-jarvis",
+  "starting jarvis for you": "settings.start-jarvis",
   "stop button in jarvis live": "safety.live-stop",
   "stop everything": "safety.stop-everything",
   "study": "group.study",
@@ -2781,7 +2873,6 @@ export const ALIASES = {
   "voice check": "entry.voice-check",
   "voice check row": "entry.voice-check",
   "voice settings": "settings.voice",
-  "voices row": "entry.voices",
   "waiting for you": "brain.memory.waiting",
   "watch": "brain.tab.watch",
   "watch notifications": "settings.watch-notify",

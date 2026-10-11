@@ -295,7 +295,7 @@ class JarvisApi(
 
     /**
      * For the calls that make the PC's own graphics card work: drawing a
-     * picture (JARVIS-API section 124) shares the 12 GB card with the everyday
+     * picture (JARVIS-API section 126) shares the 12 GB card with the everyday
      * model, so it can take minutes, not seconds. The PC waits for the drawing
      * program itself and answers only when it is done, so a short budget here
      * would cut off a picture that was about to arrive. Five minutes is the
@@ -1437,7 +1437,7 @@ class JarvisApi(
         }
 
     /**
-     * The picture gallery (docs/JARVIS-API.md section 124): a GET of
+     * The picture gallery (docs/JARVIS-API.md section 126): a GET of
      * `/api/pictures`. A 404 from a PC without the route draws nothing at all
      * ([Pictures.Reply.MISSING]); a body saying `hidden` is the PC telling the
      * phone that the private lists are hidden, and not one prompt is in it.
@@ -1474,7 +1474,7 @@ class JarvisApi(
     }
 
     /**
-     * Draws one picture (section 124): a POST of `/api/pictures` with the words
+     * Draws one picture (section 126): a POST of `/api/pictures` with the words
      * the owner typed. No card. A refusal comes back as its own status and
      * sentence - "nothing is set up yet", "start it on this PC" or "the switch
      * is off" - and the caller shows that sentence as sent.

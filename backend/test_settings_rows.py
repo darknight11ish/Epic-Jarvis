@@ -74,7 +74,7 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: than a smaller number that every other check happily agrees with.
 #:
 #: 28 since "Making pictures" (the owner's decision of 2026-09-27; the
-#: Pictures card, JARVIS-API section 124) joined the page on 2026-10-11. The
+#: Pictures card, JARVIS-API section 126) joined the page on 2026-10-11. The
 #: row and its fixture were added first and this number was left behind, which
 #: is exactly what this constant is here to catch.
 EXPECTED_ROWS = 28

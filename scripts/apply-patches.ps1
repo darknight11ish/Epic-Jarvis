@@ -1305,14 +1305,49 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # --- the owner's uncensored opt-ins, BOTH halves -------------------------
+    # jarvis_optin_models.py, the owner's OWN decision of 2026-10-10 (Decision
+    # 5): (a) one clearly-labelled opt-in for fiction and role-play, never the
+    # everyday assistant and never a default, and (b) the abliterated models
+    # already on disk offered as opt-in choices with no new download. TWO hunks
+    # in jarvis_gate.py - each switch's action joins the "acts only on tier
+    # ask" list and gets its _RISK line, both right after handoff-front.patch's
+    # own last entry in those two tables, so it goes after that patch - and ONE
+    # hunk in jarvis_hud.py, whose context is screen-attach.patch's own last
+    # printed line, calling jarvis_optin_models.install().
+    #
+    # It sits HERE, immediately BEFORE plugin-loader.patch, and that position
+    # is load-bearing in both directions: plugin-loader.patch must stay the
+    # LAST entry in this list (the repository's own rule for the loader -
+    # everything after it must be a drop-in folder, never another core patch,
+    # and tools/check_plugins.py fails if it is not last), so a new CORE patch
+    # goes in front of it and the loader's own hunk is re-anchored onto this
+    # block's last two printed lines. That re-anchor is exactly what
+    # tools/check_plugins.py derives and checks.
+    #
+    # Why it is a patch and not a drop-in folder: it needs a line in the core
+    # it does not own - the gate's tier tables, where "turning it on raises an
+    # approval card" is actually expressed. Its two [autonomy.tiers] lines are
+    # in backend/rebuilt/jarvis-framework.toml, which this script merges into
+    # the owner's own file ONLY when the line is missing, so a value they set
+    # themselves is never overwritten.
+    #
+    # Nothing here leaves the PC. Nothing is downloaded: the import names a
+    # local .gguf PATH through the EXISTING models_create route, and the module
+    # itself refuses to offer - or to import anything into - a model store that
+    # is not on this PC (rule 1). OFF, for either switch, is instant and needs
+    # no card, and the everyday assistant is never changed by either one.
+    'uncensored-optins.patch'
     # --- drop-in modules (feat/plug-and-play-modules) ------------------------
-    # Last, like every new patch, and its context is tutorials.patch's own
-    # install block - the last one in the file. It adds ONE more block of the
-    # same shape, calling jarvis_plugins.install(), which loads every folder
-    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
-    # own install(). Nothing else about the core changes, and nothing about
-    # the 18 features it can carry changes: each still ships its own module
-    # and each module still wraps the Handler itself.
+    # Last, like every new patch, and its context is uncensored-optins.patch's
+    # own last two printed lines - the last install block before
+    # `_loopback_companion` (it was screen-attach.patch's printed lines until
+    # that block landed in front of it, in the same change). It adds ONE more
+    # block of the same shape, calling jarvis_plugins.install(), which loads
+    # every folder in jarvis_plugins\ beside jarvis_hud.py and calls that
+    # folder's module's own install(). Nothing else about the core changes, and
+    # nothing about the 18 features it can carry changes: each still ships its
+    # own module and each module still wraps the Handler itself.
     #
     # This patch is applied ONCE, and it is the only core change the whole
     # plug-in system needs. After it, adding or removing one of those features
@@ -1328,11 +1363,47 @@ $PATCHES = @(
     # is changed - the safe failure this script already has. A tree that
     # differs on purpose can skip the patch and paste the four lines by hand;
     # plugins/loader/README.md prints them.
+    # gate-touches.patch (2026-10-10). THE GATE READ THE CARD, NOT THE ACTION.
+    # Its first rule - the one above the tier table, that stops anything
+    # rewriting the policy or the gate itself - searched the whole PROMPT it
+    # was handed for its own _PROTECTED file names. For a card raised by a
+    # route, that prompt IS the card's own text, so a card that merely
+    # DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier
+    # "never" before any card existed: no card, no Windows Hello, nobody
+    # asked, for anybody, ever. The owner's own log holds 45 of them
+    # (2026-10-03 .. 2026-10-10) - enable_reading_tool 21,
+    # loosen_what_asks_first 21, restore_backup 3 - and three features had
+    # never once worked. It now reads what the action TOUCHES: the
+    # parameters it was handed, and the model's own tool call (the JSON
+    # object inside the prompt). Card prose is not a target. ONE hunk pair,
+    # in jarvis_gate.py alone; see backend/README.md's own section.
+    'gate-touches.patch'
+    # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
+    # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
+    # on the OWNER's own lines just before the main socket is built, NOT inside the chain of install
+    # blocks above it. That chain ends at the owner's `# Before the main socket` line and every block in
+    # it anchors on the block the patch before wrote, so a block inserted in the middle of the chain
+    # leaves the next patch's hunk without its context. This one was first written between progress.patch
+    # and topics.patch, on progress.patch's block with topics.patch's OWN banner as its trailing context -
+    # a patch that runs AFTER it - so it applied to the finished file and not to the file as it stands at
+    # its own turn (measured 2026-10-11: the stack's walk had to invent its pre-image, 51 hunks against a
+    # pin of 50, and this script's own strip-and-re-apply rehearsal would have refused the whole run with
+    # "will not apply"). It sits immediately before plugin-loader.patch, which MUST be last of all (see
+    # backend/test_gate_touches.py), as well as after devices.patch.
+    # The three ways of running a picture-maker
+    # beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card
+    # with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched), each
+    # its own switch, ALL OFF until the owner turns one on. It draws nothing (asking for a picture is
+    # jarvis_pictures.py's route, section 126), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
+    # that, reading these settings) and needs no gate line and no card: it only chooses a card for a local
+    # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
+    # or on any error, the banner says so and the routes are simply not there.
+    'picture-card.patch'
     'plugin-loader.patch'
     # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27:
     # "12 GB card: longer conversations with picture understanding first, and
     # making pictures too (swapped in when asked, since both cannot sit on the
-    # card at once)"; docs/JARVIS-API.md section 124).
+    # card at once)"; docs/JARVIS-API.md section 126).
     #
     # LAST, by the rule every new patch follows: its context is the install
     # block progress.patch wrote, so it needs the whole stack above it. It adds
@@ -1592,6 +1663,8 @@ $SHIPPED = @(
     'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
     # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Which card draws the pictures" (2026-10-10, picture-card.patch) ---
+    'jarvis_picture_card.py'     # picture-card.patch: the three ways of running a picture-maker beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched) - each its own switch, ALL OFF until the owner turns one on; it draws nothing, starts nothing and is not a model tool; the card is pinned by UUID from nvidia-smi and never by index
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)
@@ -1643,7 +1716,7 @@ $SHIPPED = @(
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
     'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
-    # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 124) ---
+    # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 126) ---
     'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
 )
 
@@ -3577,6 +3650,11 @@ try {
                     Say "Rehearsing again: take those off, newest first, then put all" Cyan
                     Say "$($PATCHES.Count) back on in order. Still on the copy." Cyan
                     $again = @()
+                    # The patches this strip took off this copy, by name - read
+                    # once, because the loop below asks about every patch in the
+                    # list. See the note under the apply for what asking it about
+                    # one of these cost.
+                    $stripped = @($found | ForEach-Object { $_.Name })
                     foreach ($name in $PATCHES) {
                         $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
                         if (-not (Test-Path -LiteralPath $full)) {
@@ -3588,6 +3666,47 @@ try {
                         # on either. The real run leaves it alone for the same
                         # reason (see Test-PatchOnBackend).
                         if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $name) { continue }
+                        # A PATCH THE STRIP TOOK OFF THIS COPY IS NOT ON THIS
+                        # COPY ANY MORE, so putting it back on IS this loop's
+                        # job for it (2026-10-10).
+                        #
+                        # Why the question below must not be asked about one of
+                        # those. Test-PatchOnBackend reads the REAL backend
+                        # folder. Every patch the strip took off came off that
+                        # folder, so the answer there is "yes, already on" for
+                        # all of them - correctly. Skipping them on that answer
+                        # leaves the rehearsal copy WITHOUT their work, and the
+                        # copy is then not the tree the real run builds: the real
+                        # run keeps only the patches it could not take off, and
+                        # puts every one of these back.
+                        #
+                        # What that cost, measured. The owner's run of
+                        # 2026-10-10 16:22 (the log this branch was opened for)
+                        # stripped 134, skipped 101 of them here, and named 16
+                        # "will not apply" - and all 16 are patches whose context
+                        # lines are other patches' own output, so they cannot
+                        # apply to a copy missing those 101:
+                        # schedule.patch's hunk wants wiki.patch's comment,
+                        # token-store.patch's wants bind-wildcard.patch's
+                        # `_binds_every_interface`, docker.patch's wants
+                        # tutorials.patch's block, and so on. Measured on a copy
+                        # of that same backend (2026-10-10): strip what reverses
+                        # and put ALL 135 back on, and 135 of 135 apply, and the
+                        # copy comes out byte for byte the owner's own files plus
+                        # docker.patch's install block - the one patch that was
+                        # genuinely not on them. Nothing about those 16 patches
+                        # was wrong.
+                        #
+                        # And the question cannot be moved earlier to avoid this:
+                        # asked of the 34 the strip would otherwise re-apply,
+                        # while the 101 above them are still on the files, NONE
+                        # of the 34 reverses at all, and 33 of the 34 then cannot
+                        # be applied either (measured 2026-10-10) - they are only
+                        # reversible from the top of the stack down. So the strip
+                        # takes the whole stack off, and this loop puts the whole
+                        # stack back on; the one question left is about a patch
+                        # the strip did NOT take off, which is what it was built
+                        # for.
                         # (docs/UPDATER-REDESIGN.md section 5, build step 5.)
                         #
                         # THE "LEFT ALONE" VERDICT IS OBTAINED HERE, BEFORE THE
@@ -3620,19 +3739,66 @@ try {
                         # -- is now answered from the file instead of from
                         # whichever way the text happened to land on it.
                         if (Test-PatchOnBackend -File $full) {
-                            # On the backend already, and this rehearsal is the
-                            # thing that cannot put it back on without changing
-                            # the state it is asked to build (see
-                            # Test-PatchOnBackend). It leaves the copy alone from
-                            # here, and the real run leaves the real files alone
-                            # too - $todo below drops it. Round 2, the same round
-                            # the strip records it in: this is what was FOUND on
-                            # the files, which outranks round 0's "it went on a
-                            # clean copy".
-                            $alreadyOn += @{ Name = $name; File = $full }
-                            Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
-                            Say "  already on   $name  (left as it is - not put on this run)" Cyan
-                            continue
+                            # ... AND A PATCH THE STRIP TOOK OFF THIS COPY IS ONE
+                            # THIS LOOP HAS TO PUT BACK ON IT (2026-10-10).
+                            #
+                            # Test-PatchOnBackend reads the REAL backend folder,
+                            # and every patch the strip took off came off that
+                            # folder - so the answer above is "yes, already on"
+                            # for all of them, correctly. Leaving them there
+                            # leaves the rehearsal COPY without their work, and
+                            # the copy is then not the tree the real run builds:
+                            # the real run keeps only the patches it could not
+                            # take off, and puts every one of these back.
+                            #
+                            # What that cost, measured. The owner's run of
+                            # 2026-10-10 16:22 (the log this branch answers)
+                            # stripped 134, left 101 of them here, and named 16
+                            # "will not apply" - and all 16 are patches whose
+                            # CONTEXT LINES ARE OTHER PATCHES' OWN OUTPUT, so
+                            # they cannot apply to a copy those 101 are missing
+                            # from: schedule.patch's hunk wants wiki.patch's
+                            # comment, token-store.patch's wants bind-wildcard's
+                            # `_binds_every_interface`, docker.patch's wants
+                            # tutorials.patch's own block, and so on. Measured on
+                            # a copy of that backend: strip what reverses and put
+                            # ALL 135 back on, and 135 of 135 apply, and the copy
+                            # comes out byte for byte the owner's files PLUS
+                            # docker.patch's install block - the one patch
+                            # genuinely not on them. Nothing about those 16 was
+                            # wrong.
+                            #
+                            # And the answer above cannot simply be ignored: a
+                            # patch the strip took off can still be one this copy
+                            # cannot carry. The miniature state in
+                            # backend/test_apply_outcomes.py's
+                            # t_a_patch_answered_already_on_is_never_reversed_off
+                            # is exactly that - another patch that is NOT on the
+                            # files has to go on first, and its line breaks the
+                            # older patch's own context. So the COPY is asked
+                            # whether it will take it, with `--check`, which
+                            # changes nothing: yes -> it goes on below like any
+                            # other patch, and the copy is left whole; no -> it is
+                            # what "left alone" was built for, and the verdict is
+                            # still reached from a question asked before the
+                            # apply, never from an apply that failed.
+                            $copyTakesIt = ($stripped -contains $name) -and
+                                           (Invoke-Patch -File $full -Check).Ok
+                            if (-not $copyTakesIt) {
+                                # On the backend already, and this rehearsal is
+                                # the thing that cannot put it back on without
+                                # changing the state it is asked to build (see
+                                # Test-PatchOnBackend). It leaves the copy alone
+                                # from here, and the real run leaves the real
+                                # files alone too - $todo below drops it. Round 2,
+                                # the round the strip records in: this is what was
+                                # FOUND on the files, which outranks round 0's
+                                # "it went on a clean copy".
+                                $alreadyOn += @{ Name = $name; File = $full }
+                                Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
+                                Say "  already on   $name  (left as it is - not put on this run)" Cyan
+                                continue
+                            }
                         }
                         $r = Invoke-Patch -File $full
                         if ($r.Ok) {
