@@ -670,12 +670,20 @@ def t_the_patch_and_the_lists():
              # jarvis_gate.py as handoff-mode.patch's, both at the END of the
              # "acts only on tier ask" set and the _RISK table, so it rewrites
              # none of referee.patch's lines either.
+             "handoff-front.patch",
+             # docker.patch (2026-10-09): the route half of the first Docker
+             # integration - ONE install block in jarvis_hud.py, between
+             # chatbot-limits-hud.patch's block and tutorials.patch's. It touches
+             # jarvis_gate.py not at all, so it rewrites nothing referee.patch's
+             # hunks anchor on either. (Its two actions, docker_service_start and
+             # docker_service_stop, take unknown_action_tier - "ask" - until
+             # section 9.2 of docs/DOCKER-INTEGRATION-DESIGN.md lands their rows.)
+             "docker.patch",
              # plugin-loader.patch (2026-10-10, this branch) is appended last
              # and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED lines
              # at the end of the install chain. It removes no line and does not
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
-             "handoff-front.patch",
              "plugin-loader.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])

@@ -527,6 +527,15 @@ class MainActivity : FragmentActivity() {
         // so every carefully paced frame in the reactor was landing on half
         // the vsyncs the hardware had available.
         DisplayRate.request(this, window.peekDecorView())
+        // The owner's own screen-refresh-rate pick, restored before the window
+        // is asked for anything (data/ScreenRate.kt). `request` above only
+        // READS the panel's modes and rate for the picker; this is what
+        // actually asks for the owner's choice, and it reads back what the
+        // panel did with it - the pick may be refused (ColorOS ignores a
+        // window's request outright), and when it is, the plate says so rather
+        // than leaving the owner believing it worked.
+        DisplayRate.setChosenHz(JarvisRuntime.appearance.screenRate.value)
+        DisplayRate.applyChosen(this, window.peekDecorView())
     }
 
     /**
@@ -1001,6 +1010,16 @@ class MainActivity : FragmentActivity() {
         // The face editor's quality, frame rate, speed, Auto adjust and
         // Battery saver. Phone-only - see AppearanceStore.faceTuning.
         val faceTuning by appearance.faceTuning.collectAsState()
+        // The SCREEN's refresh rate the owner picked, or null for "follow the
+        // phone" (data/ScreenRate.kt, ScreenRatePlate.kt). A different setting
+        // from faceTuning above - that one is how often the animal is DRAWN,
+        // this one is what the PANEL is asked to run at - and ScreenRate.kt's
+        // own doc says why the two must never be merged. Phone-only.
+        val screenRate by appearance.screenRate.collectAsState()
+        val screenRates by DisplayRate.modes.collectAsState()
+        val screenPanelHz by DisplayRate.panelHz.collectAsState()
+        val screenRateNote by DisplayRate.pickNote.collectAsState()
+        val screenRateChecked by DisplayRate.pickChecked.collectAsState()
         // "Keep the animal still", shared with the desktop since 2026-09-28
         // (kept on the PC): the PC's value once heard, else - or until this
         // phone's old "on" has reached the PC - this phone's own old switch.
@@ -2875,6 +2894,28 @@ class MainActivity : FragmentActivity() {
                         // no card and no request - the PC serves no route for it.
                         idleNewChoice = idleNewChoice,
                         onIdleNewChoiceChange = { JarvisRuntime.settings.setIdleNewChoice(it) },
+                        // "Screen refresh rate" (2026-10-09): the PANEL's rate
+                        // while Jarvis is on screen. Saved on this phone only.
+                        // Picking asks the panel for it there and then and reads
+                        // back what actually happened, so a refused request is
+                        // never left looking like it worked. This is NOT the
+                        // face editor's Frame rate (faceTuning above, on the
+                        // Appearance screen): that one is how often the animal is
+                        // DRAWN; see data/ScreenRate.kt for why they must never
+                        // be merged.
+                        screenRate = screenRate,
+                        screenRates = screenRates,
+                        screenPanelHz = screenPanelHz,
+                        screenRateNote = screenRateNote,
+                        screenRateChecked = screenRateChecked,
+                        onScreenRateChange = { hz ->
+                            appearance.setScreenRate(hz)
+                            DisplayRate.setChosenHz(hz)
+                            DisplayRate.applyChosen(this@MainActivity, window.peekDecorView())
+                        },
+                        onScreenRateRecheck = {
+                            DisplayRate.readBack(this@MainActivity)
+                        },
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(
@@ -3813,6 +3854,13 @@ class MainActivity : FragmentActivity() {
         // The rate can change under us — battery saver, brightness, heat — and
         // nothing reports why, so re-read rather than trust the request.
         DisplayRate.refresh(this)
+        // ...and read back what the panel did with the owner's own pick, so the
+        // "Screen refresh rate" row shows the truth after the phone has been in
+        // someone else's hands (the phone's own display settings, battery
+        // saver). It also re-sends the request, because a mode picked earlier
+        // can have been dropped while the app was away.
+        DisplayRate.setChosenHz(JarvisRuntime.appearance.screenRate.value)
+        DisplayRate.applyChosen(this, window.peekDecorView())
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
