@@ -74,7 +74,8 @@ def t_the_tool_is_ascii_only():
 
 
 def t_the_rule_is_the_readme_s_rule():
-    """The five exclusions and the six beside-files, as the README writes them.
+    """The three exclusions, the six beside-files and the one derived file, as
+    the README writes them.
 
     Read out of the tool rather than restated: a rule that only exists in this
     test would drift from the tool the moment either changed.
@@ -96,6 +97,17 @@ def t_the_rule_is_the_readme_s_rule():
     check("... and jarvis-visual-spec.json is the one that DOES come from the source folder",
           srcs["jarvis-visual-spec.json"].startswith("{source}"),
           srcs["jarvis-visual-spec.json"])
+    derived = [n for n, _w, _y in G.DERIVED_FROM_REPO]
+    check("_where.py is the one file DERIVED rather than copied, and from this repository",
+          derived == ["_where.py"] and G.DERIVED_FROM_REPO[0][1] == "{repo}/backend/_where.py",
+          str(G.DERIVED_FROM_REPO))
+    check("... and it is not also listed as a file the copy leaves alone",
+          "_where.py" not in [n for n, _y in G.NOT_PART_OF_THE_COPY],
+          str([n for n, _y in G.NOT_PART_OF_THE_COPY]))
+    check("... and the base's own trailer is ASCII, like the tool that writes it",
+          bool(G.BASE_WHERE_TRAILER.strip())
+          and all(b <= 0x7F for b in G.BASE_WHERE_TRAILER.encode("utf-8")),
+          "a PowerShell 5.1 script reads this tool by the system code page")
 
 
 def t_a_duplicate_dict_key_keeps_its_last_line():
@@ -163,6 +175,14 @@ def t_a_plan_copies_what_the_rule_says_and_refuses_what_it_says():
         check("... and the owner's own visual spec IS copied in",
               want.get("jarvis-visual-spec.json") == '{"v": 1}\n',
               str(want.get("jarvis-visual-spec.json")))
+        check("... and the base's _where.py is planned too, DERIVED from this repository "
+              "rather than taken from the source folder",
+              want.get("_where.py") == G.base_where_text(REPO),
+              str(want.get("_where.py"))[-200:])
+        check("... and the source folder's own _where.py, if it had one, is not what is used",
+              want.get("_where.py", "").endswith(G.BASE_WHERE_TRAILER)
+              and want.get("_where.py", "") != "",
+              str(want.get("_where.py"))[-200:])
         check("a folder with no jarvis_hud.py in it is refused, not half-copied",
               G.planned(Path(td) / "empty", REPO)[1], "no problem reported")
 
@@ -222,11 +242,12 @@ def t_check_fails_on_a_base_that_disagrees():
 def t_the_repository_s_own_inputs_are_the_ones_in_the_base():
     """The files the rule takes from THIS repository, against the committed base.
 
-    These four have no live source at all: they are the repository's copies.
+    These have no live source at all: they are the repository's copies.
     `backend/test_base_matches_repo.py` covers the modules that ship whole; this
-    covers the four `BESIDE` inputs it does not (§1's list: `requirements.lock`,
+    covers the `BESIDE` inputs it does not (§1's list: `requirements.lock`,
     `quiz_grader_cases.json`, `rust-crates.lock`, and the settings template it
-    checks by a different route).
+    checks by a different route), and `_where.py`, which is the one file the
+    base derives rather than copies.
     """
     base = REPO / "jarvis-backend"
     pairs = [
@@ -240,10 +261,28 @@ def t_the_repository_s_own_inputs_are_the_ones_in_the_base():
               if not (base / n).is_file() or G.read_text(base / n) != G.read_text(ours)]
     check("the base's copy of each file the rule takes from this repository is this repository's copy",
           not differ, "these differ (or are absent): " + ", ".join(differ))
-    check("... and jarvis-backend/_where.py is NOT one of them: the two are deliberately different",
-          (base / "_where.py").is_file() and (REPO / "backend" / "_where.py").is_file()
-          and G.read_text(base / "_where.py") != G.read_text(REPO / "backend" / "_where.py"),
-          "the base's _where.py is byte-identical to backend/_where.py, which cannot be right")
+
+    #: `_where.py` is the exception, and it is a DERIVED file rather than a
+    #: copied or an untouched one: `backend/_where.py` plus the base's own
+    #: trailer, which says in words what this copy is. Kept by hand until
+    #: 2026-10-10, by which time the base's copy was 77 lines of SHIPPED entries
+    #: behind and nothing noticed; `tools/gen_base_from_backend.py` writes it
+    #: now (`base_where_text()`), so re-taking the base refreshes it too.
+    theirs = base / "_where.py"
+    ours = REPO / "backend" / "_where.py"
+    got = G.read_text(theirs) if theirs.is_file() else ""
+    note = G.BASE_WHERE_TRAILER
+    check("jarvis-backend/_where.py is this repository's copy plus the base's own trailer",
+          bool(got) and got == G.read_text(ours) + note,
+          "not `backend/_where.py` + BASE_WHERE_TRAILER - re-take it with "
+          "`py -3 tools/gen_base_from_backend.py --source <the backend folder>`")
+    check("... and that trailer is the whole difference (so the two are not identical)",
+          bool(note.strip()) and got != G.read_text(ours),
+          "the base's _where.py is byte-identical to backend/_where.py, which cannot be right: "
+          "the trailer is what says which copy a reader is holding")
+    check("... and the trailer says what it is, in words, not only in a filename",
+          "jarvis-backend" in note and "not" in note and "base" in note,
+          repr(note[-300:]))
 
 
 def _compiles(text: str) -> bool:

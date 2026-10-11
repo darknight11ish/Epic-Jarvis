@@ -492,7 +492,13 @@ def t_hygiene():
              # in jarvis_hud.py, at the end of the install chain - nowhere near
              # the POST /api/screen route this patch's wrapper takes over - so
              # the request body is still read once, and still by this wrapper.
-             "card-prefs.patch"}
+             "card-prefs.patch",
+             # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
+             # hunks, both in jarvis_gate.py - under `_PROTECTED`/`_PROTECTED_RE` and
+             # at check()'s own `hit = _touches_protected(prompt, detail)` call. It
+             # removes no line and has no jarvis_hud.py hunk at all, so it cannot
+             # rewrite the POST /api/screen wrapper this patch installs.
+             "gate-touches.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

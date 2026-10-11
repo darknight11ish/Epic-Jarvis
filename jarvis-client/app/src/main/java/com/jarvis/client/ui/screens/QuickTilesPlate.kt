@@ -31,8 +31,13 @@ internal fun QuickTilesSection(
             for (slot in 0 until QuickTiles.SLOTS) {
                 val chosen = tiles.getOrNull(slot)
                 Gap(12)
+                // Named by POSITION, not by a name of its own: this row is how
+                // the owner tells the three identical "Tap to choose" tiles in
+                // Android's editor apart. It used to say "Jarvis tile 1" to
+                // "3", the same placeholder Android showed, which said nothing
+                // about what the tile does (QuickTiles.UNASSIGNED_LABEL).
                 Text(
-                    "Jarvis tile ${slot + 1}",
+                    "Tile ${slot + 1} - ${chosen?.choiceLabel ?: QuickTiles.SUB_CHOOSE}",
                     style = MaterialTheme.typography.labelLarge,
                     color = chrome.textHi,
                 )

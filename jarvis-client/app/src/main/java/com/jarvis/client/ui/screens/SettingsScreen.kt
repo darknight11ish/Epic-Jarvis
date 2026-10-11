@@ -604,6 +604,20 @@ fun SettingsScreen(
             // without the guard (found during the rebase, 2026-10-09).
             if (drawn("jarvis-notify")) item(key = "jarvis-notify") {
                 NotificationsFromJarvisSection(onOpen = onOpenNotificationSettings)
+                // The PC's own Notifications card, right under the paragraph
+                // that ends "Which kinds your PC sends at all is the PC's own
+                // Notifications card." (2026-10-10, the parity audit's GAP 1-6):
+                // seven rows, read and written through the same limits route the
+                // desktop's card now uses, in the PC's own words - every one of
+                // which says "(on your PC)" so the two halves of this row can
+                // never be mistaken for each other.
+                //
+                // Inside THIS item rather than a new row of its own, because the
+                // value rows themselves already exist in the limits table (and
+                // in "Limits and how often Jarvis does things"): this card is
+                // where they belong on the phone, and giving it a new item key
+                // would move every index below it for no gain.
+                PcNotifySection(canAct = canAct)
             }
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's

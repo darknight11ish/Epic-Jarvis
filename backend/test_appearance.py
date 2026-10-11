@@ -6,59 +6,63 @@
 `py_compile` said the patch was fine while `time` was unimported and the
 palette walk found zero colours. Neither is a syntax error; both would have
 shipped. So this extracts the four helpers and runs them.
+
+WHERE THE HELPERS COME FROM. `jarvis_hud.py` is the owner's own file and is not
+in this repository, so in CI this suite used to be skipped BY NAME and its 14
+checks ran nowhere but the owner's PC (`backend/run_suites.py`'s NEEDS_OWNER
+list). The block it reads - `APPEARANCE_FILE` through `_appearance_save` - is
+written by `appearance.patch` alone, so the whole patch stack's text for that
+file HAS it: `_hud_text()` below uses the real file when this machine has one
+and the stand-in built by `backend/_stack.py` when it does not. Taking the
+suite off that list is what puts these 14 checks in CI (2026-10-10).
 """
 import json
 import os, re, sys, time, tempfile
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+HERE_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE_DIR))
 # BACKEND is where the modules under test actually live - this folder in
 # the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain, hud_block
-SPEC = REPO / "jarvis-desktop" / "src" / "jarvis-visual-spec.json"
+from _where import BACKEND, REPO, missing, explain
+HUD = Path(sys.argv[1]) if len(sys.argv) > 1 else BACKEND / "jarvis_hud.py"
 
-# THE APPEARANCE HELPERS, OUT OF THE PATCHED jarvis_hud.py.
-#
-# jarvis_hud.py is the entry point scripts/apply-patches.ps1 edits IN PLACE, so
-# a clone's backend/ does not hold it and this read used to be a
-# FileNotFoundError before one check - a suite that reported a broken patch
-# when what it was missing was one file only the owner's PC has.
-#
-# This suite never looks at the surrounding file: it drives one self-contained
-# block of it (four helpers) against the repository's real spec. That block is
-# the text the patch stack itself writes, so in a clone this reads the block
-# from the stack's own stand-in and SAYS SO - see _where.hud_block, which also
-# refuses a block the stack could not rebuild whole. Everything a stand-in
-# cannot honestly give (a route that must still be wired into main(), an
-# import that must still sit inside a try:) is a different suite's business,
-# and those skip instead.
-START, END = "APPEARANCE_FILE = CONFIG_DIR", "def _desktop_action"
-if len(sys.argv) > 1:
-    # A person naming a built file, which is what the docstring above offers:
-    # taken at their word, so a path that is wrong or a file without the block
-    # is a real error rather than something skipped quietly.
-    WHERE = sys.argv[1]
-    SRC = Path(WHERE).read_text(encoding="utf-8")
-    try:
-        block = SRC[SRC.index(START):SRC.index(END)]
-    except ValueError:
-        raise SystemExit(f"FAIL  {WHERE} does not hold both `{START}` and `{END}`, "
-                         f"so it is not a patched jarvis_hud.py")
-else:
-    block, WHERE = hud_block(START, END)
-    if block is None:
-        print(f"skip  the four appearance helpers are read out of jarvis_hud.py, "
-              f"and {WHERE}")
+
+def _hud_text() -> str:
+    """`jarvis_hud.py`'s text: the real file if this machine has one, else the
+    patch stack's stand-in for it (`backend/_stack.py`).
+
+    A path given on the command line is used as given, and its absence is an
+    error - the caller named it. Nobody named anything, so BACKEND is either
+    this repository (CI: no such file) or a real install (the file is there).
+    """
+    if HUD.is_file():
+        return HUD.read_text(encoding="utf-8")
+    if len(sys.argv) > 1:
+        raise SystemExit(f"no such file: {HUD}")
+    import _stack
+    text, log = _stack.stand_in("jarvis_hud.py")
+    if not text:
+        # No git, or a hunk that will not apply even to its own pre-image. A
+        # skip with a reason, never a pass: the runner reads the summary line,
+        # so "0 passed, 1 skipped" is honest and is not the shape it refuses
+        # (exit 0 having reported nothing at all).
+        print(f"skip  the appearance helpers - {HUD.name} is not here and the "
+              f"patch stack could not be built: {'; '.join(log[-2:])}")
         print("\n0 passed, 1 skipped, 0 failed")
         sys.exit(0)
-    if WHERE != str(BACKEND / "jarvis_hud.py"):
-        print(f"note  no jarvis_hud.py in {BACKEND}, so this run drives the block "
-              f"the patch stack itself writes - {WHERE}. The same four helpers, "
-              f"against the same real spec; read _where.hud_block for what that "
-              f"does and does not prove. {explain()}")
+    return text
 
+
+SRC = _hud_text()
+SPEC = REPO / "jarvis-desktop" / "src" / "jarvis-visual-spec.json"
+
+# Pull the block from APPEARANCE_FILE to the end of _appearance_save.
+start = SRC.index("APPEARANCE_FILE = CONFIG_DIR")
+end = SRC.index("def _desktop_action")
+block = SRC[start:end]
 
 tmp = Path(tempfile.mkdtemp())
 ns = {

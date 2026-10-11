@@ -3484,7 +3484,7 @@ object JarvisRuntime {
                 val ledger = async { api.probe("/api/ledger").asSection() }
                 val skills = async { api.probe(com.jarvis.client.net.Skills.PATH).asSection() }
                 val initiative = async { api.probe("/api/initiative").asSection() }
-                val contentRisk = async { api.probe("/api/content-risk").asSection() }
+                val contentRisk = async { api.probe(com.jarvis.client.net.ContentRisk.PATH).asSection() }
                 val secondCardRead = async { refreshSecondCard() }
                 val bigModelRead = async { refreshBigModel() }
                 val hardwareRead = async { refreshHardware() }
@@ -3561,6 +3561,43 @@ object JarvisRuntime {
     suspend fun refreshMemoryQueue() {
         val (memory, read) = api.probe(MemoryCards.PENDING_PATH).asSection()
         _brain.update { it.copy(memory = memory, memoryRead = read) }
+    }
+
+    /**
+     * Just the content-risk panel - the second reader of that route, on "Past
+     * approvals" ([com.jarvis.client.ui.screens.ContentRiskSection]), where the
+     * phone draws the desktop's read-only Content risk card. The Brain reads the
+     * same route as part of its whole-board refresh; this is for the screen that
+     * wants that one answer and nothing else on the board.
+     *
+     * Leaves [BrainSnapshot.fetchedAtMs] alone, like [refreshMemoryQueue]: only
+     * this one section was read, and stamping the board would make Brain claim
+     * everything on it had just been read.
+     *
+     * The keep-on-failure rule is the same one [refreshBrain] applies, written
+     * once here so the two readers cannot disagree: a FAILED check keeps the
+     * last latch it saw (with its age), because a latch that vanishes because
+     * the check failed reads as "nothing is raising the tier" - which the phone
+     * does not know. An ABSENT route (404/503: a PC with no scanner) clears it,
+     * because that is a fact about the PC, not a failed check.
+     */
+    suspend fun refreshContentRisk() {
+        val (data, read) = api.probe(com.jarvis.client.net.ContentRisk.PATH).asSection()
+        val now = System.currentTimeMillis()
+        _brain.update { prev ->
+            prev.copy(
+                contentRisk = when (read) {
+                    is SectionRead.Failed -> prev.contentRisk
+                    else -> data
+                },
+                contentRiskAtMs = when (read) {
+                    SectionRead.Read -> now
+                    is SectionRead.Failed -> prev.contentRiskAtMs
+                    else -> 0L
+                },
+                contentRiskRead = read,
+            )
+        }
     }
 
     /**
