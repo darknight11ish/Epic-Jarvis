@@ -181,6 +181,7 @@ on a throwaway copy instead.
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `readpage.patch` | `jarvis_gate.py` | **"Read one web page out loud"** (the owner's request of 2026-10-05: "does jarvis have the ability for me to post a webpage into jarvis and it can read the content out loud?"; `docs/JARVIS-API.md` section 115). THREE hunks in `jarvis_gate.py` only - no route and no `jarvis_hud.py` block at all, because the door is a MODEL TOOL (`read_web_page`), not a route: `read_web_page` joins the "acts only on tier ask" set, gets its `_RISK` line (`"no", "outbound"` - the PC contacts that one website and the request cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and its `_TOOL_ACTIONS` line (the third hunk, added 2026-10-06 - without it `action_for_tool()` fell through to `unclassified_tool`, so the card the owner was shown was never the one this tool raises; found on the owner's own PC, see below). Its context is `quiz-cloud.patch`'s own added lines and `inbox-tidy.patch`'s own `_TOOL_ACTIONS` line, so it goes after both - last, like every new patch. Needs `jarvis_readpage.py` and `jarvis_agent.py` copied in (both are in `apply-patches.ps1`'s shipped list); without them the tool is simply not offered to the model and the gate row is never used. The tool is **off until `"read_web_page"` is added to `[tools].enabled`** in `jarvis-framework.toml`, like every tool but `web_search`. Tests: `backend/test_readpage.py`. See "Read one web page out loud", at the very end. |
 | `gate-touches.patch` | `jarvis_gate.py` | **The gate read the card, not the action** (2026-10-10). `jarvis_gate.check()`'s one rule above the tier table - nothing may edit the policy or the gate itself - searched the whole PROMPT it was handed for its own `_PROTECTED` file names, BEFORE the tier branches. For a card raised by a route the prompt IS the card's text, so a card that merely DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier `never` before any card existed: no card, no Windows Hello, nobody asked, for anybody, ever. The owner's own log holds **45** of them (2026-10-03 .. 2026-10-10) - `enable_reading_tool` 21, `loosen_what_asks_first` 21, `restore_backup` 3 - and the redaction lengths name the files exactly (21 characters is jarvis-framework.toml, 13 is jarvis_hud.py). The rule now reads what the action **TOUCHES**: the parameters it was handed (`detail`, minus the keys that hold the card's own text) and the model's own tool call (the JSON object inside the prompt). Card prose is not a target. TWO hunks, `jarvis_gate.py` only, appended last: `_JSON_OBJECT_RE`/`_PROSE_KEYS`/`_target_blobs()`/`_touches_protected()`'s docstring, and the comment above `check()`'s call. No tier, stamp, Windows Hello or refusal-wording change - the refusal sentence and the "never" tier are identical. Its own suite is `backend/test_gate_touches.py`, which raises the three REAL cards through the real gate; see "The gate reads what an action touches" below. |
+| `uncensored-optins.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The owner's uncensored opt-ins, BOTH halves** (the owner's OWN decision of 2026-10-10, Decision 5 - `.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md`: "Uncensored: both of these - (a) one clearly-labelled opt-in model for fiction/role-play, never the everyday assistant and never a default, and (b) make the abliterated models already on disk usable as opt-in choices rather than downloading anything new"). TWO hunks in `jarvis_gate.py`, both right after `handoff-front.patch`'s own last entry in those two tables, so it goes after that patch: `uncensored_models_enable` and `fiction_roleplay_enable` join the "acts only on tier ask" set and get their `_RISK` lines (`"yes", "local"` - neither leaves this PC, and turning either off again is instant). ONE hunk in `jarvis_hud.py`, whose context is `screen-attach.patch`'s own last printed line: `jarvis_optin_models.install(Handler, ...)`, which answers `GET`/`POST /api/models/uncensored`. **It sits immediately BEFORE `plugin-loader.patch`**, and that position is load-bearing - the loader must stay the LAST entry in the list (everything after the loader must be a drop-in folder, never another core patch, and `tools/check_plugins.py` fails if it is not last), so the loader's own hunk was re-anchored onto this block's last two printed lines in the same change. **Every switch here is off by default and turning either one ON is ONE approval card; OFF is instant** - the project's standing rule for anything that loosens a limit. Both `[autonomy.tiers]` lines are `"ask"` in `backend/rebuilt/jarvis-framework.toml`, which the script merges into the owner's own file only when the line is missing. Needs `jarvis_optin_models.py` (shipped whole since PR #231); without it, or on any error, the banner says "optin NOT ON" and the route is not there. **Nothing is downloaded** (the import names a local `.gguf` PATH through the EXISTING `models_create` route) and the module refuses outright if the model store is not on this PC (rule 1). Tests: `backend/test_uncensored_optins.py` (the switch, the card and the route) and `backend/test_optin_models.py` (the naming, the label and the storage rules). See "The owner's uncensored opt-ins", at the very end. |
 
 ## The gate reads what an action touches, not the words on its card
 
@@ -18971,3 +18972,83 @@ copy of the owner's own `jarvis_gate.py` is present under `dshwork/` - that ever
 line the hunk needs is in that file verbatim. What no test in a checkout can prove is
 the apply itself: **`scripts/apply-patches.ps1`'s dry run is what proves it**, as for
 every patch here.
+
+---
+
+# The owner's uncensored opt-ins: `uncensored-optins.patch`, `jarvis_optin_models.py`
+
+**What they are, in the owner's own words** (2026-10-10, Decision 5, in
+`.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md`): "Uncensored: both of these -
+(a) one clearly-labelled opt-in model for fiction/role-play, never the everyday
+assistant and never a default, and (b) make the abliterated models already on
+disk usable as opt-in choices rather than downloading anything new." The
+measured cost goes on every label: TruthfulQA drops 5.8 to 6.9 points on this
+model family, MMLU is about noise, and the only fitting build is 7 months old
+against a 5-day-old official one.
+
+**Two switches, both off on a machine that has never run the module**, in their
+own `optin-models.json` beside `hardware-choice.json` and `model-state.json`:
+
+| `body` | what it turns on | gate action | tier |
+|---|---|---|---|
+| `{"on": true}` | `jarvis-uncensored-*`: the abliterated and uncensored `.gguf` files already on this PC, offered as choices, each labelled | `uncensored_models_enable` | `ask` |
+| `{"fiction": true}` | one model set aside for stories and role-play, with its own instructions | `fiction_roleplay_enable` | `ask` |
+
+**Turning either one ON is ONE approval card, and OFF is instant.** That is the
+project's standing rule for anything that loosens a limit, and it is expressed
+in `jarvis_gate.py`'s `_RISK` table and its "acts only on tier ask" set - which
+is the whole reason this is a patch and not a drop-in folder. A card that is
+denied, times out, is refused, or whose switch is turned back off while it waits
+changes nothing. `jarvis_optin_models.request()` is the shape
+`jarvis_phone_notifications.request()` already proves, including the rule that
+OFF waits for an approved card's own write rather than racing it.
+
+**The route.**
+
+    GET  /api/models/uncensored   -> {on, fiction, choices[], off, never_default,
+                                      measured_cost, waiting, last, local_only}
+    POST /api/models/uncensored   -> {"on": true|false}      (opt-in b)
+                                     {"fiction": true|false}   (opt-in a)
+                                     202 waiting on ON; 200 instantly on OFF
+
+It is wrapped round the running server's handler by `install()`, after the
+server's own origin and token checks, like `jarvis_watch_notify.install()` and
+`jarvis_phone_notifications.install()`; every other path goes straight through.
+`docs/JARVIS-API.md` section 125 has the full shape.
+
+**Nothing is downloaded, and nothing leaves this PC.** Adding one of these models
+is Ollama's own `POST /api/create` with `from` set to a LOCAL `.gguf` path - a
+path, not a registry reference - handed to the EXISTING `models_create` route
+(`jarvis_hardware.py`); each entry in `choices[]` carries that exact body under
+`create`, so a screen can offer "add this one" without a second import path.
+Making one the model in use goes through the EXISTING `/api/models/switch`
+(`switch_model`, tier `ask`). The module writes no TOML and adds no tool.
+
+**Rule 1 in code, not only in prose.** `jarvis_optin_models.local_only()` reads
+the address `jarvis_models` itself reaches Ollama on and refuses - with plain
+words, before any card is raised - when that is not this PC. Nothing is offered,
+nothing is imported, and the fiction lane refuses too. That check will not invent
+a refusal when `jarvis_models` is absent (a staged test backend), and it does
+**not** read `OLLAMA_HOST`, which is Ollama's own BIND address and would turn a
+safe install off for no reason.
+
+**Never the everyday assistant**, in code and not just in prose: with both
+switches ON the everyday lane's model is byte-for-byte what it was, which
+`test_optin_models.py` proves, and no path in the module calls `switch_to`.
+
+**Every action that can raise a card has plain words on it**:
+`uncensored_models_enable` and `fiction_roleplay_enable` are rows in
+`jarvis_card_words.TITLES`, and `tools/gen_card_words_cases.py` was re-run so
+both apps' fixtures are what the producer makes today.
+
+**Tests.** `backend/test_uncensored_optins.py` is the switch, the card and the
+route (112 checks): off by default, ONE card per ON under the right action name
+at tier `ask`, nothing changed on denied/timed out/refused/withdrawn, one card
+at a time per switch with the other switch still free, the route's origin and
+token checks and its pass-through, and the wiring itself - the two tier lines in
+the shipped template, the patch sitting in front of `plugin-loader.patch` (which
+stays last) with the loader's own hunk re-anchored onto this one's printed lines,
+and the patch applying, reversing and building the patch stack's own text.
+`backend/test_optin_models.py` (92 checks) keeps the naming, labelling and
+storage rules. Neither suite needs the owner's PC: the checks that would are
+printed as `skip` with the reason, never as a pass.

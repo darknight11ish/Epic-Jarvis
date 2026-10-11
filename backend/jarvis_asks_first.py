@@ -422,6 +422,12 @@ HARD_LIMITS = frozenset({
     "register_approval_key",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
+    # The owner's uncensored opt-ins (jarvis_optin_models.py, the owner's OWN
+    # decision of 2026-10-10, Decision 5): both modules refuse any tier but
+    # "ask", so turning either one on is always ONE card and this page has to
+    # name them. Neither leaves this PC; the module refuses outright if the
+    # model store is not on this PC.
+    "uncensored_models_enable", "fiction_roleplay_enable",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -443,6 +449,10 @@ MUST_ASK = frozenset({
     "register_approval_key", "app_merge_change",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
     "read_web_page",
+    # The owner's uncensored opt-ins (2026-10-10, Decision 5): each module's
+    # request() refuses a tier other than "ask" outright (503, no card), the
+    # same shape phone_notifications_read already has.
+    "uncensored_models_enable", "fiction_roleplay_enable",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -502,6 +512,15 @@ GROUPS = (
                                 "register_approval_key"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
+                                      # The owner's uncensored opt-ins (2026-10-10,
+                                      # Decision 5; jarvis_optin_models.py, JARVIS-API
+                                      # section 125). Both sit here with the other model
+                                      # choices: one offers the abliterated models already
+                                      # on this PC, the other sets one model aside for
+                                      # fiction and role-play. Both are OFF by default,
+                                      # turning either on is ONE card, and neither ever
+                                      # changes the everyday assistant.
+                                      "uncensored_models_enable", "fiction_roleplay_enable",
                                       "second_card_enable", "second_card_browser_enable",
                                       "second_card_combined_enable", "second_card_third_assign",
                                       "chat_card_pin",

@@ -631,42 +631,28 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
 // ARCHITECTURE section 3).
 
 /// Hides the settings window from screenshots, screen recordings and screen
-/// sharing (`on`), or puts it back. No window, or a refusal, is logged and
-/// otherwise ignored: the code is still shown.
+/// sharing (`on`), or puts it back. No window is ignored quietly: the code is
+/// still shown.
+///
+/// The Win32 call itself lives in `lock::set_affinity`, because since
+/// 2026-10-11 the same attribute is used for a second reason - keeping every
+/// Jarvis window out of a capture while App lock is on (the owner's decision;
+/// see `lock.rs`'s own section). Two copies of one Win32 call would be two
+/// things to keep in step, and worse, two things fighting: this guard's "off"
+/// would clear a block the lock still wanted.
+///
+/// So while the app is locked this does nothing at all, in either direction.
+/// The lock's own rule is the stricter one and owns the window then - and the
+/// pairing panel cannot be reached while locked anyway, because Settings is
+/// one of the windows App lock hides and asks Windows Hello for.
 fn guard_capture(app: &AppHandle, on: bool) {
     let Some(window) = app.get_webview_window(crate::windows::SETTINGS_LABEL) else {
         return;
     };
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::UI::WindowsAndMessaging::{
-            SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
-        };
-        let Ok(handle) = window.hwnd() else {
-            eprintln!("[jarvis] could not read the settings window's handle for the capture guard");
-            return;
-        };
-        // SAFETY: `handle` is this app's own settings-window handle, read back
-        // from Tauri. SetWindowDisplayAffinity only sets an attribute on it -
-        // unlike set_content_protected, it cannot rebuild the window.
-        let ok = unsafe {
-            SetWindowDisplayAffinity(
-                handle.0 as _,
-                if on { WDA_EXCLUDEFROMCAPTURE } else { WDA_NONE },
-            )
-        };
-        if ok == 0 {
-            eprintln!(
-                "[jarvis] could not {} the settings window's capture guard: {}",
-                if on { "set" } else { "clear" },
-                std::io::Error::last_os_error()
-            );
-        }
+    if crate::lock::capture_blocked(app) {
+        return;
     }
-    #[cfg(not(windows))]
-    {
-        let _ = (window, on);
-    }
+    crate::lock::set_affinity(&window, on);
 }
 
 // ---------------------------------------------------------------------------

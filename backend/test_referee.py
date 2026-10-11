@@ -685,9 +685,11 @@ def t_the_patch_and_the_lists():
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
              "plugin-loader.patch",
-             # card-prefs.patch (2026-10-10, "cards read short") is appended
-             # last and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED
-             # lines at the end of the install chain. It removes no line and
+             # card-prefs.patch (2026-10-10, "cards read short") sits after
+             # gate-touches.patch and before picture-card.patch (so, before
+             # plugin-loader.patch too) and has exactly ONE hunk, in
+             # jarvis_hud.py: fifteen ADDED lines, an install block straight
+             # after animal.patch's own. It removes no line and
              # does not touch jarvis_gate.py at all, so it rewrites nothing
              # referee.patch's hunks anchor on.
              "card-prefs.patch",
@@ -698,7 +700,24 @@ def t_the_patch_and_the_lists():
              # own rows are further down the same file - so it rewrites nothing
              # referee.patch wrote. test_gate_touches.py's own check confirms no
              # other patch adds or removes the call it replaces.
-             "gate-touches.patch"}
+             "gate-touches.patch",
+             # picture-card.patch (2026-10-11) is the first patch to go
+             # immediately BEFORE plugin-loader.patch, and it has exactly ONE
+             # hunk, in jarvis_hud.py: an install block on the OWNER's own lines
+             # just before the main socket is built. It does not touch
+             # jarvis_gate.py at all, so it adds no tier row and no _RISK row, and
+             # rewrites nothing referee.patch wrote. (It was re-anchored there on
+             # 2026-10-11: it used to sit between progress.patch and topics.patch
+             # with topics.patch's OWN banner as its trailing context, and
+             # topics.patch runs after it. See _stack.py's RATCHET note.)
+             # uncensored-optins.patch (2026-10-11) is appended in front of
+             # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+             # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+             # install block at the end of jarvis_hud.py's chain. It removes no line,
+             # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+             # it cannot rewrite a line this patch wrote.
+             "uncensored-optins.patch",
+             "picture-card.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")
