@@ -87,6 +87,14 @@ pub fn is_tracked(label: &str) -> bool {
 
 /// Puts a freshly built window back where the owner left it.
 ///
+/// **The main thread only.** `restore_state` holds this plugin's global
+/// window-state cache lock while it asks Tauri for the window's geometry, and
+/// those getters block the calling thread until the main thread answers them -
+/// which deadlocks against the plugin's own window-ready hook taking the same
+/// lock (finding, 2026-10-11; `windows.rs::show_restored` posts this call as a
+/// main-thread task for exactly that reason). Never call it from a command's
+/// own thread.
+///
 /// `shown` says whether the caller is about to show it (or already has). A
 /// window that stays hidden gets its size and place now and its maximise
 /// later, from [`finish_showing`]. Never shows a window. Never fails: a

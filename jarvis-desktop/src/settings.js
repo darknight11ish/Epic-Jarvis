@@ -176,9 +176,64 @@ const dom = {
   storePath: $("store-path"),
 };
 
+/* ── Every request this page makes is unbounded by default ────────────
+   `TAURI.core.invoke` has no timeout, and this page asks Rust for a dozen
+   things as it opens. Rust bounds its own work (every backend call it makes
+   has a total timeout except the two chat streams), but if a command never
+   answers at all - a wedged helper, or the app's own main thread busy - the
+   promise never settles, and the row sits on "working…"/"Checking…" for ever
+   with nothing to tell the owner. These are the reads THIS module makes while
+   the window opens: each one either reads the local settings store or makes a
+   single small backend read, so 30 s is above every one of their own limits
+   (the longest is `get_backend_capabilities`, 10 s) and can only fire when a
+   request is never coming back.
+
+   Deliberately NOT here: anything the owner starts with a button - a backup,
+   a voice-training run, an update download, a Windows Hello prompt for a
+   security change. Those take as long as they take, and bounding them would
+   report a failure that never happened. They keep their own waits. */
+const OPEN_READS = new Set([
+  "get_api_settings",
+  "get_theme_prefs",
+  "get_appearance",
+  "get_floating",
+  "get_log_info",
+  "crash_notes",
+  "get_autostart",
+  "get_hotkeys",
+  "update_status",
+  "get_security_settings",
+  "supervisor_status",
+  "get_second_card",
+  "get_big_model",
+  "get_voice_status",
+  "get_backend_capabilities",
+]);
+
+/** How long one of [`OPEN_READS`] is given before the page says so. */
+const OPEN_READ_BUDGET_MS = 30_000;
+
+/** The same failure every other line on this page shows, from a wait. */
+const OPEN_READ_LATE =
+  "Jarvis has not answered yet, so this part of Settings may be out of date. Try again in a moment.";
+
+/**
+ * A request that must answer. `work` keeps running (Rust does not cancel a
+ * command), and its late result is ignored - the race handles both sides, so
+ * a late rejection cannot surface as an unhandled one.
+ */
+function withBudget(work, ms = OPEN_READ_BUDGET_MS) {
+  let bell = 0;
+  const late = new Promise((_, fail) => {
+    bell = setTimeout(() => fail(new Error(OPEN_READ_LATE)), ms);
+  });
+  return Promise.race([work, late]).finally(() => clearTimeout(bell));
+}
+
 async function invoke(command, args = {}) {
   if (!IS_TAURI) throw new Error("no desktop backend");
-  return TAURI.core.invoke(command, args);
+  const sent = TAURI.core.invoke(command, args);
+  return OPEN_READS.has(command) ? withBudget(sent) : sent;
 }
 
 /** Shows a one-line result next to the button that caused it. */

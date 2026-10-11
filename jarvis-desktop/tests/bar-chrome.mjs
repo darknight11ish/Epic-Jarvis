@@ -69,9 +69,14 @@ check("index.html has a settings button on the bar", () => {
 
 check("the gear calls the command this window already holds", () => {
   const block = blockFor(mainJs, "if (dom.openSettings)");
-  assert.match(block, /invoke\("open_fix_place",\s*\{\s*place:\s*"settings"\s*\}\)/,
+  // Either of this file's two callers, and only these two: the plain `invoke`
+  // swallows a rejection and returns null, `invokeStrict` propagates it. The
+  // gear uses the strict one since 2026-10-11 so a request that never comes
+  // back can put words on the bar instead of looking like a frozen app; both
+  // take the same command and the same arguments, which is what this checks.
+  assert.match(block, /invoke(?:Strict)?\("open_fix_place",\s*\{\s*place:\s*"settings"\s*\}\)/,
     "the gear must call open_fix_place with place: settings");
-  assert.doesNotMatch(block, /invoke\("(open_settings|show_settings)"/,
+  assert.doesNotMatch(block, /invoke(?:Strict)?\("(open_settings|show_settings)"/,
     "there is no such command; a new name would be refused by the ACL");
 });
 

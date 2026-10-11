@@ -1891,8 +1891,21 @@ fn open_listener(
     if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
         return Err(TALK_TYPE_HAS_MIC.to_string());
     }
+    // The two microphone locks are ALWAYS taken in one order - the talk
+    // button's capture lock first, then automatic listening's. This used to be
+    // the other way round here (`state` is the listening lock, `manual` the
+    // talk button's), while `start_voice_capture` takes its own two the
+    // opposite way. Two plain `std::sync::Mutex`es taken in opposite orders on
+    // two threads park both of them for ever, and `start_voice_capture` runs
+    // on the thread the window messages come in on - so the whole app stopped
+    // answering, with no timeout anywhere to break it (bug audit 2026-10-05,
+    // R3, which this ordering closes). `manual_busy` is read while both are
+    // held; the capture guard is dropped as soon as it has been, and never
+    // held across the microphone work below.
+    let manual_guard = manual.0.lock().map_err(poisoned)?;
+    let manual_busy = manual_guard.is_some();
     let mut guard = state.0.lock().map_err(poisoned)?;
-    let manual_busy = manual.0.lock().map_err(poisoned)?.is_some();
+    drop(manual_guard);
     if let Some(e) = busy_error(guard.is_some(), manual_busy) {
         return Err(e);
     }
