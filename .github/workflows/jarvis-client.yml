@@ -430,6 +430,11 @@ jobs:
         working-directory: jarvis-client
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          # FULL history, not the default single commit: the release notes list
+          # the commit subjects since the previous published build, and that
+          # needs the commits the previous build was made from (2026-10-11).
+          fetch-depth: 0
 
       - uses: actions/setup-java@dded0888837ed1f317902acf8a20df0ad188d165 # v5.0.0
         with:
@@ -1101,14 +1106,40 @@ jobs:
           version="${base%.*}.$GITHUB_RUN_NUMBER"
           file_sha=$(sha256sum "jarvis-client/artifacts/$apk" | cut -d' ' -f1)
 
+          # The changes since the PREVIOUS published build, as plain `- `
+          # lines (the owner's request of 2026-10-11: the app shows "a simple
+          # changelogg of the changes"). The previous build is named by the
+          # APK currently on the rolling release - its name carries the commit
+          # - so the first publish has nothing to compare with and says so.
+          # Nothing here is derived from the owner's own commits' bodies, only
+          # their subjects, and the app shows them as plain lines.
+          prev=""
+          if gh release view "$TAG" --json assets --jq '.assets[].name' 2>/dev/null \
+               | grep -Eo '^jarvis-client-[0-9a-fA-F]{7,40}\.apk$' \
+               | sed -E 's/^jarvis-client-([0-9a-fA-F]{7,40})\.apk$/\1/' \
+               | head -n 1 > /tmp/prev_sha; then
+            prev=$(cat /tmp/prev_sha)
+          fi
+          if [ -n "$prev" ] && git cat-file -e "${prev}^{commit}" 2>/dev/null; then
+            range="$prev..$GITHUB_SHA"
+          else
+            range="$GITHUB_SHA"
+          fi
+          changes=$(git log --no-merges --pretty=format:'- %s' "$range" 2>/dev/null | head -c 4000 || true)
+          if [ -z "$changes" ]; then
+            changes="(No commit subjects to list for this build.)"
+          fi
+
           # Short and plain. Only main publishes here; the notes still name
           # the branch, so an old release can be told apart.
           notes=$(printf '%s\n' \
             "**Jarvis for Android $version** - from \`$GITHUB_REF_NAME\`, commit [\`$short\`]($commit_url), built $built_at." \
             "" \
-            "**Install:** open this page on the phone and tap \`$apk\` ($size), or from the PC: \`adb install -r $apk\`" \
+            "## What's changed" \
             "" \
-            "**What changed:** see [CHANGELOG.md]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$GITHUB_SHA/CHANGELOG.md)." \
+            "$changes" \
+            "" \
+            "**Install:** open this page on the phone and tap \`$apk\` ($size), or from the PC: \`adb install -r $apk\`" \
             "" \
             "**Checked before publishing:** the tests passed, and this exact file was installed on an Android emulator and started." \
             "" \
