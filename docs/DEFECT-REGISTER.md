@@ -73,5 +73,5 @@ exists: one line in one file, before the work starts.
 
 | id | owner | claimed_at | status | files | evidence | checkout |
 | --- | --- | --- | --- | --- | --- | --- |
-| DEF-001 | unclaimed | (none) | open | `jarvis-backend/jarvis_gate.py` | `check()` scans the approval card's own prompt text for `_PROTECTED` names at line 1352, before any tier branch, so a card that merely names a protected file is refused as `never` at line 1355 even when its tier is `auto` | wt-reg-2026-10-11 @ f8e96ab4 |
+| DEF-001 | lead-session-handover (handing over at 2026-10-11 01:57) | (none) | open | `jarvis-backend/jarvis_gate.py` | `check()` scans the approval card's own prompt text for `_PROTECTED` names at line 1352, before any tier branch, so a card that merely names a protected file is refused as `never` at line 1355 even when its tier is `auto` | wt-reg-2026-10-11 @ f8e96ab4 |
 | DEF-002 | desktop feature-test agent | 2026-10-11 | open | `jarvis-desktop/src-tauri/src/windows.rs`; `jarvis-backend/jarvis_hud.py` | the Settings gear's path (`main.js:5233` -> `plain_errors.rs:312` -> `windows.rs:516`) builds the window on the command thread, and `/api/status` (`jarvis_hud.py:3181`) makes 3-4 live upstream probes while `/api/pending` (`jarvis_hud.py:3160`) is a DB read: measured 4598 ms against 9 ms at app 0.2.129 | wt-reg-2026-10-11 @ f8e96ab4 |
