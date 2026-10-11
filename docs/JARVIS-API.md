@@ -19101,7 +19101,7 @@ Nothing here downloads anything, and nothing leaves this PC.
   server on port 11434 did not know the model** (`POST /api/show` answered
   404), so the mode's own both-cards server is what will see it.
 
-## 126. Work setups: five model combinations for a kind of work (added 2026-10-10)
+## 128. Work setups: five model combinations for a kind of work (added 2026-10-10)
 
 The owner asked (2026-10-10):
 
@@ -19121,7 +19121,7 @@ The design note and every measurement are
 PC and not in this repository; `tools/check_work_claims.py` fails if a number or
 a quoted phrase in the module cannot be traced back to them.
 
-### 126.1 The three routes
+### 128.1 The three routes
 
     GET  /api/work                 the five setups for THIS PC's cards: names,
                                    what each is for, which model goes on which
@@ -19148,7 +19148,7 @@ anything and names **no** install route.
 The answer is model names, card names and measured numbers. It never carries a
 token, a prompt, an answer or anything the owner said.
 
-### 126.2 Nothing here changes a model
+### 128.2 Nothing here changes a model
 
 - **`/api/work/choose` only remembers.** It writes one preference
   (`work-setup-choice.json`, beside the other settings files) and returns the
@@ -19166,7 +19166,7 @@ A crisis turn offers nothing, a turn where the owner is already talking about
 models says nothing, and one loose word is never enough - each of those is a
 case in `jarvis-client/app/src/test/resources/contract/work-setups-cases.json`.
 
-### 126.3 What is built, and the one half that is not
+### 128.3 What is built, and the one half that is not
 
 **Built and reachable:** `GET /api/work` and `POST /api/work/choose`, and the
 phone's **Work setups** section under Brain → Hardware
@@ -19207,7 +19207,7 @@ The desktop's own section is still to build (`docs/WORK-SETUPS.md`, "Still to
 build"); it is not part of the same task, because `jarvis-desktop/` was another
 conversation's surface.
 
-### 126.4 Why the routes are `planned`, and not `ported`
+### 128.4 Why the routes are `planned`, and not `ported`
 
 `tools/check_parity.py` classifies all three as `planned`: on the backend, in
 the phone's screen, and in **no** desktop build yet. That is what makes CI name
