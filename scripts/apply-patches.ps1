@@ -1623,8 +1623,6 @@ $SHIPPED = @(
     'jarvis_notify_prefs.py'  # This PC's own notification choices - which of ITS toasts fire and the quiet hours around them - in the OWNER'S SETTINGS FILE instead of one webview's localStorage, so the phone can change them too (the owner's decision, 2026-10-08). Owns the [notifications] table: five switches and two clock times, refused in plain words, written one line at a time and atomically, never logged. jarvis_limits.py rides the same seven values as rows and calls its check_time for the two times - no patch and no route of its own
     # --- Drop-in modules (feat/plug-and-play-modules) ---
     'jarvis_plugins.py'          # plugin-loader.patch adds the ONE startup call; after that a feature whose only wiring was such a call is a folder in jarvis_plugins\ beside jarvis_hud.py - added, removed or switched off without touching the core. Calls each module's own install(); approves nothing, reaches nothing, writes nothing. plugins/README.md has the list
-    # --- The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5) ---
-    'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
     'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
 )
@@ -3559,6 +3557,11 @@ try {
                     Say "Rehearsing again: take those off, newest first, then put all" Cyan
                     Say "$($PATCHES.Count) back on in order. Still on the copy." Cyan
                     $again = @()
+                    # The patches this strip took off this copy, by name - read
+                    # once, because the loop below asks about every patch in the
+                    # list. See the note under the apply for what asking it about
+                    # one of these cost.
+                    $stripped = @($found | ForEach-Object { $_.Name })
                     foreach ($name in $PATCHES) {
                         $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
                         if (-not (Test-Path -LiteralPath $full)) {
@@ -3570,6 +3573,47 @@ try {
                         # on either. The real run leaves it alone for the same
                         # reason (see Test-PatchOnBackend).
                         if (@($alreadyOn | ForEach-Object { $_.Name }) -contains $name) { continue }
+                        # A PATCH THE STRIP TOOK OFF THIS COPY IS NOT ON THIS
+                        # COPY ANY MORE, so putting it back on IS this loop's
+                        # job for it (2026-10-10).
+                        #
+                        # Why the question below must not be asked about one of
+                        # those. Test-PatchOnBackend reads the REAL backend
+                        # folder. Every patch the strip took off came off that
+                        # folder, so the answer there is "yes, already on" for
+                        # all of them - correctly. Skipping them on that answer
+                        # leaves the rehearsal copy WITHOUT their work, and the
+                        # copy is then not the tree the real run builds: the real
+                        # run keeps only the patches it could not take off, and
+                        # puts every one of these back.
+                        #
+                        # What that cost, measured. The owner's run of
+                        # 2026-10-10 16:22 (the log this branch was opened for)
+                        # stripped 134, skipped 101 of them here, and named 16
+                        # "will not apply" - and all 16 are patches whose context
+                        # lines are other patches' own output, so they cannot
+                        # apply to a copy missing those 101:
+                        # schedule.patch's hunk wants wiki.patch's comment,
+                        # token-store.patch's wants bind-wildcard.patch's
+                        # `_binds_every_interface`, docker.patch's wants
+                        # tutorials.patch's block, and so on. Measured on a copy
+                        # of that same backend (2026-10-10): strip what reverses
+                        # and put ALL 135 back on, and 135 of 135 apply, and the
+                        # copy comes out byte for byte the owner's own files plus
+                        # docker.patch's install block - the one patch that was
+                        # genuinely not on them. Nothing about those 16 patches
+                        # was wrong.
+                        #
+                        # And the question cannot be moved earlier to avoid this:
+                        # asked of the 34 the strip would otherwise re-apply,
+                        # while the 101 above them are still on the files, NONE
+                        # of the 34 reverses at all, and 33 of the 34 then cannot
+                        # be applied either (measured 2026-10-10) - they are only
+                        # reversible from the top of the stack down. So the strip
+                        # takes the whole stack off, and this loop puts the whole
+                        # stack back on; the one question left is about a patch
+                        # the strip did NOT take off, which is what it was built
+                        # for.
                         # (docs/UPDATER-REDESIGN.md section 5, build step 5.)
                         #
                         # THE "LEFT ALONE" VERDICT IS OBTAINED HERE, BEFORE THE
@@ -3602,19 +3646,66 @@ try {
                         # -- is now answered from the file instead of from
                         # whichever way the text happened to land on it.
                         if (Test-PatchOnBackend -File $full) {
-                            # On the backend already, and this rehearsal is the
-                            # thing that cannot put it back on without changing
-                            # the state it is asked to build (see
-                            # Test-PatchOnBackend). It leaves the copy alone from
-                            # here, and the real run leaves the real files alone
-                            # too - $todo below drops it. Round 2, the same round
-                            # the strip records it in: this is what was FOUND on
-                            # the files, which outranks round 0's "it went on a
-                            # clean copy".
-                            $alreadyOn += @{ Name = $name; File = $full }
-                            Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
-                            Say "  already on   $name  (left as it is - not put on this run)" Cyan
-                            continue
+                            # ... AND A PATCH THE STRIP TOOK OFF THIS COPY IS ONE
+                            # THIS LOOP HAS TO PUT BACK ON IT (2026-10-10).
+                            #
+                            # Test-PatchOnBackend reads the REAL backend folder,
+                            # and every patch the strip took off came off that
+                            # folder - so the answer above is "yes, already on"
+                            # for all of them, correctly. Leaving them there
+                            # leaves the rehearsal COPY without their work, and
+                            # the copy is then not the tree the real run builds:
+                            # the real run keeps only the patches it could not
+                            # take off, and puts every one of these back.
+                            #
+                            # What that cost, measured. The owner's run of
+                            # 2026-10-10 16:22 (the log this branch answers)
+                            # stripped 134, left 101 of them here, and named 16
+                            # "will not apply" - and all 16 are patches whose
+                            # CONTEXT LINES ARE OTHER PATCHES' OWN OUTPUT, so
+                            # they cannot apply to a copy those 101 are missing
+                            # from: schedule.patch's hunk wants wiki.patch's
+                            # comment, token-store.patch's wants bind-wildcard's
+                            # `_binds_every_interface`, docker.patch's wants
+                            # tutorials.patch's own block, and so on. Measured on
+                            # a copy of that backend: strip what reverses and put
+                            # ALL 135 back on, and 135 of 135 apply, and the copy
+                            # comes out byte for byte the owner's files PLUS
+                            # docker.patch's install block - the one patch
+                            # genuinely not on them. Nothing about those 16 was
+                            # wrong.
+                            #
+                            # And the answer above cannot simply be ignored: a
+                            # patch the strip took off can still be one this copy
+                            # cannot carry. The miniature state in
+                            # backend/test_apply_outcomes.py's
+                            # t_a_patch_answered_already_on_is_never_reversed_off
+                            # is exactly that - another patch that is NOT on the
+                            # files has to go on first, and its line breaks the
+                            # older patch's own context. So the COPY is asked
+                            # whether it will take it, with `--check`, which
+                            # changes nothing: yes -> it goes on below like any
+                            # other patch, and the copy is left whole; no -> it is
+                            # what "left alone" was built for, and the verdict is
+                            # still reached from a question asked before the
+                            # apply, never from an apply that failed.
+                            $copyTakesIt = ($stripped -contains $name) -and
+                                           (Invoke-Patch -File $full -Check).Ok
+                            if (-not $copyTakesIt) {
+                                # On the backend already, and this rehearsal is
+                                # the thing that cannot put it back on without
+                                # changing the state it is asked to build (see
+                                # Test-PatchOnBackend). It leaves the copy alone
+                                # from here, and the real run leaves the real
+                                # files alone too - $todo below drops it. Round 2,
+                                # the round the strip records in: this is what was
+                                # FOUND on the files, which outranks round 0's
+                                # "it went on a clean copy".
+                                $alreadyOn += @{ Name = $name; File = $full }
+                                Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
+                                Say "  already on   $name  (left as it is - not put on this run)" Cyan
+                                continue
+                            }
                         }
                         $r = Invoke-Patch -File $full
                         if ($r.Ok) {

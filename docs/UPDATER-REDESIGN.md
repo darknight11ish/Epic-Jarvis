@@ -1208,5 +1208,119 @@ refusal is the gate §8 forbids relaxing before step 5, and step 5 is now built 
 but relaxing it is a separate decision with a separate risk, and it is not taken
 here.
 
+---
+
+## 15. The 16 patches of 2026-10-10 were not stale: the copy was incomplete
+
+**What the owner saw.** His run of 2026-10-10 16:22
+(`_jarvis-logs/apply-patches-2026-10-10-162207.txt`) ended:
+
+```
+134 of these are already on your backend from an earlier run.
+Rehearsing again: take those off, newest first, then put all
+135 back on in order. Still on the copy.
+  ...
+  FAIL  16 patch(es) will not apply. NOTHING HAS BEEN CHANGED.
+```
+
+and named 16: `speed-record`, `chat-stream`, `token-store`, `chat-history`,
+`auto-learn`, `memory-profile`, `temporary-chat`, `log-scrub`, `schedule`,
+`briefing`, `web-search`, `games-temporary`, `second-card-suggest`, `animal`,
+`screen`, `docker`.
+
+Reading each failure's own block, every one of the 16 is searching for a block
+that **another patch of the same list wrote**: `schedule.patch` wants
+`wiki.patch`'s comment, `token-store.patch` wants `bind-wildcard.patch`'s
+`_binds_every_interface`, `docker.patch` wants `tutorials.patch`'s block,
+`animal.patch` wants `sky.patch`'s banner line, `log-scrub.patch` wants
+`_refuse_every_interface`, and so on. That is the shape of the defect, and it is
+not the shape of a stale anchor: a stale anchor searches for a line that has
+been **edited**, not for a neighbouring patch's block.
+
+**The measurement that settles it.** On a copy of his backend, take off every
+patch that reverses, newest first (134 of them), then put all 135 back on in
+order. **135 of 135 apply**, and the copy comes out **byte for byte his own
+`jarvis_hud.py` plus `docker.patch`'s 20-line install block** - the one patch
+genuinely not on his files (measured 2026-10-10; `jarvis_docker` appears nowhere
+in his `jarvis_hud.py`, and the other 201 `.py` files come out identical). So
+not one of the 16 was wrong, and nothing needed re-anchoring.
+
+**What actually happened, in the script's own terms.** The strip takes all 134
+off the rehearsal copy. The re-apply loop then asked `Test-PatchOnBackend` -
+which by design reads **the real backend folder** - about every patch in the
+list, and every patch the strip took off came off that folder, so the answer
+there is "yes, already on" for all 134, correctly. **101 of them were left at
+that answer and never put back on the copy.** The copy was then missing 101
+patches' work, and the 16 are exactly the patches that need it: they are the
+patches whose context lines are other patches' output. Step 5 (§13) did not
+create this - it is the reason the pre-apply question is asked first - but it is
+what made the answer binding for patches the strip had already removed.
+
+**Why neither obvious simplification works.**
+
+* The question cannot simply be dropped for a patch the strip took off. A patch
+  that came off the copy can still be one that copy cannot carry: the miniature
+  state in `backend/test_apply_outcomes.py`
+  (`t_a_patch_answered_already_on_is_never_reversed_off`) is exactly that, where
+  another patch not on the files has to go on first and its line breaks the
+  older patch's own context. Leave that one out of "left alone" and the run
+  refuses over it instead.
+* The question cannot be asked **earlier** either, of the patches the strip
+  would otherwise re-apply, while the 101 above them are still on the files.
+  Measured 2026-10-10 on a copy of the owner's backend: of those 34, **none
+  reverses at all** in that order, and 33 of the 34 then cannot be applied
+  either. They are only reversible from the top of the stack down, which is why
+  the strip takes the whole stack off - and so the re-apply has to put the whole
+  stack back on.
+
+**What changed.** One condition, in the re-apply loop. A patch the strip took
+off this copy is asked about again, but the copy itself answers, with
+`Invoke-Patch -Check` - a dry run that changes nothing:
+
+```powershell
+if (Test-PatchOnBackend -File $full) {
+    $copyTakesIt = ($stripped -contains $name) -and (Invoke-Patch -File $full -Check).Ok
+    if (-not $copyTakesIt) { ... 'already on ... left as it is' ...; continue }
+}
+$r = Invoke-Patch -File $full
+```
+
+The verdict is still reached from a question asked **before** the apply, never
+from an apply that failed, which is what step 5 requires; and a patch the strip
+did not take off is asked exactly what it was asked before. What changes is that
+a patch the strip **did** take off now goes back on whenever the copy will take
+it, so the copy ends up as the tree the real run builds instead of 101 patches
+short of it.
+
+**What did not change.** No patch text at all - no `.patch` file and no
+`patch-history` entry moved, because none of the 16 was wrong. `$todo`,
+`$undoFirst`, the result gate, the refusal and the exit codes are untouched.
+
+**How it was verified (2026-10-10, all on copies of the owner's own folder).**
+
+* The real script, unmodified list, against a fresh copy:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1
+  -BackendPath <copy> -SkipTests -SkipPackages` ends **exit 0**, prints
+  `Taking off 134 patch(es) an earlier run applied, newest first.` and
+  `ok    Checked again on the real files: all 135 patches are on.`
+  `-StateJson` classifies all 135 `taken-off`, 0 `on-but-unstrippable`,
+  0 `not-recognised`. The copy is his `jarvis_hud.py` plus `docker.patch`'s
+  block, byte for byte, and the other 201 `.py` files are unchanged.
+* `backend/test_apply_outcomes.py` - 168 passed, 0 failed, including §13's own
+  checks unchanged. The new check,
+  `t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about`, builds the
+  owner's case in miniature (X, Y and W on the backend, Z not; W rewrites the
+  line Y adds, so Y cannot prove itself, while Y's hunk prints X's line). On the
+  script as it was it ends exactly as his run did -
+  `1 patch(es) will not apply to your files as they are: Y.patch` - and on this
+  change it ends clean with all four on.
+* `backend/test_patch_history.py` 24 passed, 0 failed;
+  `tools/check_claims.py` exit 0; `tools/check_stale_twins.py` exit 0 (186/186
+  modules).
+
+**Nothing of the owner's was touched by any of this.** Every run above was
+against a copy; his folder was only read.
+
+
 
 
