@@ -128,7 +128,16 @@ def t_the_patch_is_registered_last():
              # at the end of the install chain. It removes no line and does not
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # gate-touches.patch (2026-10-10) is the one name here that DOES
+             # touch jarvis_gate.py: two hunks, its own PROTECTED block (what an
+             # action TOUCHES, rather than the words printed on its card) and
+             # the comment above `check()`'s protected-file call. Neither goes
+             # near `_RISK`: its own suite, test_gate_touches.py, checks that no
+             # line it adds or removes mentions `_PROTECTED` or the refusal
+             # sentence - so it cannot rewrite the two stale rows this patch
+             # removes.
+             "gate-touches.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

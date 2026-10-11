@@ -381,16 +381,22 @@ private fun CapturedRow() {
     }
 }
 
+/**
+ * "Alerts and reminders on this phone": what the phone's own alerts are, the
+ * one button that opens Android's own screen for them, and nothing else.
+ *
+ * "SEND TEST" MOVED OUT OF HERE (2026-10-10). It was a second copy of the
+ * Test button the desktop's Notifications card has, and the parity audit
+ * (GAP 1-6) asked for that card on the phone; the button now lives there, in
+ * [PcNotifySection], under the desktop's own words ("Send test notification"),
+ * with the same honest post-and-report it always had. Duplicating it here would
+ * have left Settings with two buttons that do the same thing. The line it
+ * writes when nothing was posted still names THIS button, which is above it.
+ */
 @Composable
 private fun NotificationPreferencesRow() {
     val chrome = LocalChrome.current
     val context = LocalContext.current
-    // What actually happened last time "Send test" was pressed: null before
-    // it is ever pressed, then whether the notification was really posted.
-    // It used to be a flag set to true by the tap itself, so the green line
-    // appeared even with notifications switched off - the one state where
-    // nothing is announced at all (Android audit 2026-10-08).
-    var testPosted by remember { mutableStateOf<Boolean?>(null) }
 
     Gap(16)
     Text(
@@ -409,43 +415,15 @@ private fun NotificationPreferencesRow() {
         color = chrome.textMid,
     )
     Gap(10)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Secondary(
-            "Android notification settings",
-            modifier = Modifier.weight(1f),
-            onClick = {
-                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                runCatching { context.startActivity(intent) }
-            },
-        )
-        Secondary(
-            "Send test",
-            modifier = Modifier.weight(1f),
-            onClick = {
-                testPosted = com.jarvis.client.service.ScheduleNotifier.post(
-                    context,
-                    jobId = "test-job",
-                    kind = "reminder",
-                    title = "Jarvis test notification",
-                    text = "This is a test notification from Jarvis. Reminders and channels are working.",
-                    lockScreen = "Jarvis: test notification",
-                )
-            },
-        )
-    }
-    testPosted?.let { posted ->
-        Gap(4)
-        Text(
-            PhoneNotifications.testWords(posted),
-            style = MaterialTheme.typography.labelSmall,
-            // Green only for a notification that was really posted; a refusal
-            // is never dressed as success (the app's own rule for every other
-            // write: see PlainErrors and this plate's own lines above).
-            color = if (posted) chrome.okInk else chrome.badInk,
-            modifier = Modifier.liveStatus(),
-        )
-    }
+    Secondary(
+        "Android notification settings",
+        modifier = Modifier.fillMaxWidth(),
+        onClick = {
+            val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            runCatching { context.startActivity(intent) }
+        },
+    )
 }
 
 /**

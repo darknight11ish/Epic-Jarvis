@@ -32,10 +32,17 @@ re-taken", and nothing else:
 Everything is written with LF line endings, which is this repository's rule
 (`.gitattributes`), and read with UTF-8. `jarvis-backend/README.md` and
 `jarvis-backend/.gitignore` are left exactly as they are: they are about the
-folder, not part of the copy. `jarvis-backend/_where.py` is left as it is too -
-it is a resource file this repository owns, not a copy of anything on the
-owner's PC, and the two copies are deliberately different (the base's one
-knows it is a base).
+folder, not part of the copy.
+
+`jarvis-backend/_where.py` IS written, and it is not a copy of anything on the
+owner's PC: it is DERIVED from `backend/_where.py` - that file, plus
+`BASE_WHERE_TRAILER` below, which says what the base's copy is and in words.
+That is what stops the two drifting (they had: measured 2026-10-10, the base's
+copy was 77 lines of `SHIPPED` entries behind this repository's, with nothing
+to notice), and it keeps the one thing the base needs it for - `BACKEND` and
+`explain`, which `import_history.py` imports so the base runs from a cloned
+folder with no repository around it. `backend/test_base_regeneration.py` is
+what says the two files differ by that trailer and nothing else.
 
 THE ONE EXCEPTION, and why it is here rather than left to a reader
 
@@ -71,6 +78,22 @@ a half-patched folder is a faithful copy of a half-patched folder, and
 copies disagree with it. It does not delete a file the committed base has and
 the source folder does not (a module removed from the program is a repository
 decision, not a copy): it names every such file instead.
+
+AND A RE-TAKE IS NOT FREE, which is the thing to know before running this.
+`jarvis-backend/jarvis_hud.py` is the state the stack leaves AT THE MOMENT IT
+WAS TAKEN, and four things in this repository need it to be the state BEFORE
+the newest patches: `tools/gen_tasks_patch.py` builds `backend/tasks.patch` out
+of that file's own context lines, and `backend/test_tasks.py`,
+`backend/test_retrieve_count.py` and `backend/test_limits_settings_route.py`
+each rehearse their patch by applying it to that file. Measured 2026-10-10, by
+re-taking the folder and following the rule to the letter: 9 checks fail across
+those three suites, and `gen_tasks_patch.py` then builds a `tasks.patch` that
+cannot apply on a fresh backend - its second hunk anchors on
+`code, out = jarvis_prompt_coach.handle_post(body)`, a line
+`prompt-coach.patch` adds at position 128 of apply-patches.ps1's list while
+`tasks.patch` runs at 124. `jarvis-backend/README.md`'s "What a re-take costs
+today, measured (2026-10-10)" has the numbers and what the four need instead.
+Take this folder again only with those four in hand.
 
 Standard library only. Runs anywhere; `--source` needs the owner's folder.
 """
@@ -111,17 +134,66 @@ BESIDE = (
 )
 
 #: Files the base folder carries that are NOT part of the copy: the folder's
-#: own documents, and the one resource this repository owns.
+#: own documents. (`_where.py` used to be listed here and is not any more - see
+#: DERIVED_FROM_REPO.)
 NOT_PART_OF_THE_COPY = (
     ("README.md", "about the folder"),
     (".gitignore", "the second line of defence against his private files"),
-    ("_where.py", "a resource this repository owns; the base's copy knows it is a base"),
 )
+
+#: The base's `_where.py` is the one file built from this repository's own copy
+#: rather than copied from the owner's folder verbatim: (name in the base,
+#: where it comes from, what is added).
+DERIVED_FROM_REPO = (
+    ("_where.py", "{repo}/backend/_where.py", "BASE_WHERE_TRAILER"),
+)
+
+#: What the base's `_where.py` adds to this repository's copy. Every line of it
+#: is a comment, so everything above stays exactly `backend/_where.py`, and both
+#: `--check` and the suite compare the two files with this string. It is ASCII
+#: on purpose: `t_the_tool_is_ascii_only` in backend/test_base_regeneration.py
+#: reads this file's bytes, and a PowerShell 5.1 script reads it by the system
+#: code page.
+BASE_WHERE_TRAILER = """
+
+# ===== the published base ==================================================
+#
+# THIS IS jarvis-backend/'s COPY, AND IT IS NOT THIS REPOSITORY'S. Everything
+# above this line is backend/_where.py, word for word. These last lines are the
+# whole of the difference, and backend/test_base_regeneration.py fails if the
+# two files differ by anything else.
+#
+# It is in the base at all because import_history.py - which the base carries,
+# and which must run from a cloned folder with no repository around it - imports
+# BACKEND and explain from this file. Nothing else in jarvis-backend/ imports
+# it: the SHIPPED tuple above and require_shipped() below belong to the
+# repository's own test runner, and the base carries none of those tests.
+#
+# It was kept by hand until 2026-10-10, and by then it had gone stale: 77 lines
+# of SHIPPED entries this repository's copy had gained and this one had not,
+# with nothing to notice. tools/gen_base_from_backend.py now DERIVES this file
+# from backend/_where.py, so re-taking the base refreshes it too, and
+# backend/test_base_regeneration.py is what says the two have not drifted apart
+# again.
+"""
 
 
 def read_text(path: Path) -> str:
     """The file as text with LF endings, which is the only form compared."""
     return path.read_bytes().decode("utf-8").replace("\r\n", "\n")
+
+
+def base_where_text(repo: Path) -> str:
+    """The base's `_where.py`: this repository's copy plus BASE_WHERE_TRAILER.
+
+    DERIVED, not copied, and not left alone either. The repository's copy is the
+    one that must be current - it is what `require_shipped()` and every suite
+    import - and the base needs the same file so that `import_history.py` runs
+    from a cloned folder. Taking it from `backend/_where.py` every time is what
+    keeps the SHIPPED list above from going stale here, which it had: measured
+    2026-10-10, the base's copy was 77 lines behind.
+    """
+    return read_text(repo / "backend" / "_where.py") + BASE_WHERE_TRAILER
 
 
 def dropped_duplicate_keys(text: str) -> tuple:
@@ -203,6 +275,14 @@ def planned(source: Path, repo: Path) -> tuple:
             problems.append(f"{name}: not found at {src} ({why})")
             continue
         want[name] = read_text(src)
+
+    for name, where, why in DERIVED_FROM_REPO:
+        src = Path(where.format(repo=repo.as_posix(), source=source.as_posix()))
+        if not src.is_file():
+            problems.append(f"{name}: not found at {src} (the base's copy is derived from it, "
+                            f"plus {why})")
+            continue
+        want[name] = base_where_text(repo) if name == "_where.py" else read_text(src)
     return want, problems
 
 
@@ -248,7 +328,10 @@ def main(argv=None) -> int:
     print(f"Source  : {source}")
     print(f"Base    : {base}")
     print(f"Rule    : every top-level *.py except the tests, patch_openjarvis.py and "
-          f"spike_sandbox.py, plus {len(BESIDE)} files this repository owns")
+          f"spike_sandbox.py, plus {len(BESIDE)} files this repository owns"
+          + (f" and {len(DERIVED_FROM_REPO)} it derives"
+             f" ({', '.join(n for n, _w, _y in DERIVED_FROM_REPO)})"
+             if DERIVED_FROM_REPO else ""))
     print(f"Planned : {len(want)} file(s)")
     for p in problems:
         print(f"        {p}")

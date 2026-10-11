@@ -1339,6 +1339,21 @@ $PATCHES = @(
     # is changed - the safe failure this script already has. A tree that
     # differs on purpose can skip the patch and paste the four lines by hand;
     # plugins/loader/README.md prints them.
+    # gate-touches.patch (2026-10-10). THE GATE READ THE CARD, NOT THE ACTION.
+    # Its first rule - the one above the tier table, that stops anything
+    # rewriting the policy or the gate itself - searched the whole PROMPT it
+    # was handed for its own _PROTECTED file names. For a card raised by a
+    # route, that prompt IS the card's own text, so a card that merely
+    # DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier
+    # "never" before any card existed: no card, no Windows Hello, nobody
+    # asked, for anybody, ever. The owner's own log holds 45 of them
+    # (2026-10-03 .. 2026-10-10) - enable_reading_tool 21,
+    # loosen_what_asks_first 21, restore_backup 3 - and three features had
+    # never once worked. It now reads what the action TOUCHES: the
+    # parameters it was handed, and the model's own tool call (the JSON
+    # object inside the prompt). Card prose is not a target. ONE hunk pair,
+    # in jarvis_gate.py alone; see backend/README.md's own section.
+    'gate-touches.patch'
     'plugin-loader.patch'
 )
 

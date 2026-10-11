@@ -402,6 +402,39 @@ a picture the owner attaches to a chat is cleaned the same way before any model 
 owner's "Yes, clean them too"), and one that cannot be checked is withheld;
 like the others, a pattern list never recognises everything.
 
+**The protected-file rule reads what an action TOUCHES, not the words on its
+card** (2026-10-10, `gate-touches.patch`; `backend/README.md`, "The gate reads
+what an action touches"). `check()`'s first rule - the one above the tier
+table, holding *"if the policy and the gate are writable by an action the gate
+itself approves, there is no gate"* - searches for `_PROTECTED`'s nine names
+(`jarvis-framework.toml`, `jarvis_gate.py`, `jarvis_framework.py`,
+`patch_openjarvis.py`, `jarvis_hud.py`, `jarvis_router.py`, `approvals.db`,
+`hud-budget.json`, `.openjarvis-patch.json`). It used to search the whole
+PROMPT it was handed, and **for a card raised by a route the prompt is the
+card's own text** - so a card that merely *described* a protected file was
+refused at tier `never` before any card existed: no card, no Windows Hello,
+nobody asked, for anybody, ever. The owner's own log holds 45 of them
+(2026-10-03 .. 2026-10-10): `enable_reading_tool` 21,
+`loosen_what_asks_first` 21, `restore_backup` 3, the redaction lengths naming
+jarvis-framework.toml (21 characters) and jarvis_hud.py (13). **What is
+narrowed: only free-prose prompts.** The rule now reads the action's
+`detail` (the parameters it was handed, minus the keys `_PROSE_KEYS` names -
+`text`, `prompt`, `card` - which hold the card's own words) and the model's
+own tool call (the JSON object inside the prompt; a prompt with no parseable
+JSON in it is prose, and prose is not a target). **What is unchanged:**
+everything that protects the tier table. An action whose **target** is a
+protected file is still refused at `never`, before any card, with the same
+plain reason, on every path a real caller uses - a path or command in
+`detail`, OpenJarvis's confirm prompt quoting the tool call, jarvis_agent's
+`tool <name> {json}`, a plan step, a tool name made from it, and even an
+auto-tier action. Tiers, `Verdict.outcome`, the approval stamp, Windows
+Hello, `notice_for` and the refusal wording are not touched at all. The
+lesson worth keeping: **a rule that decides from free text decides from the
+wrong thing** - it cannot tell a description from a target, and its false
+positives are cards nobody can ever be shown. `backend/test_gate_touches.py`
+holds both halves, including the three real cards raised end to end through
+the real gate.
+
 ### The approval gap: what a program already on the PC can and cannot do
 
 **State of it, 2026-10-08** (the heading above used to read "A known limit: a
