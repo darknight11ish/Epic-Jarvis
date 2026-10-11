@@ -45,6 +45,30 @@ Defender toast in the same store (notification id 1753, handler
 the same system action, with the word written out. Nothing in Windows invents
 it.
 
+**And here is the real one, stored by Windows itself.** On 2026-10-11 at 08:05 I
+fired a real alarm through the running PC (job `s7623a9a982`) and Windows kept
+exactly what the app asked it to show (notification id 1761, group
+`jarvis-schedule`):
+
+```xml
+<toast scenario="alarm" activationType="foreground" launch="jarvis-open">
+  <visual>
+    <binding template="ToastGeneric">
+      <text>Alarm</text>
+      <text>phone alarm audit</text>
+    </binding>
+  </visual>
+  <audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>
+  <actions>
+    <action content="Snooze 10 minutes" arguments="jarvis-snooze:s7623a9a982" activationType="foreground"/>
+    <action activationType="system" arguments="dismiss" content=""/>
+  </actions>
+</toast>
+```
+
+Two buttons: "Snooze 10 minutes", and one with `content=""` - no word on it.
+That is the owner's screenshot, in XML.
+
 ### 1b. A timer's toast could only be snoozed
 
 `try_notify_fired` built one action, Snooze. Windows' own notification store on
@@ -218,6 +242,12 @@ person can act without opening an app.
   as the settings-freeze pass did), firing a timer, screenshotting the two
   buttons, pressing Stop, and restoring the original exe. Not done: it needs the
   running app stopped and restarted, which is the lead's call.
+
+  What HAS been done instead: the exact XML this branch now builds for a timer
+  toast (Snooze + labelled Stop) was handed to Windows under Jarvis's own AUMID,
+  and **Windows parsed and accepted it** - it is in the store as notification id
+  1763, `tag=observe-fixed`, with both actions stored verbatim. So the shape is
+  valid to the toast parser; what is missing is only the sight of it on screen.
 - **The desktop's late/quiet path was not fired.** The app owns its backend
   process, so closing the app to age an event past ten minutes also stops the
   thing that would replay it. The advice is the same in code (`is_late` ->
