@@ -615,6 +615,12 @@ section is the transparency half; §14 is the cancel half, §15 the model.
 - **Unverified:** that an always-on-top badge is not hidden by Android over a
   permission dialog, a secure (`FLAG_SECURE`) screen or the lock screen. The
   badge is therefore the primary marker, not the only one - see §14.
+- **The permission it needs is GRANTED (owner, 2026-10-11).** *"Draw over other
+  apps"* is approved, so the badge floats above whatever is being driven - the
+  transparency promise as designed, and the notification (which needs no
+  permission) is the alternative he **declined**. **The grant is his to give
+  once, at the point the badge is first needed** - it is not to be asked for
+  now, and the build must not assume it is already on.
 
 ### After it runs: the log, in plain words, kept locally
 
@@ -716,7 +722,13 @@ mechanism and three ways to reach it, not three mechanisms.
 **Two honest costs to state before building it.** The badge needs Android's
 **"draw over other apps"** permission, which is a real Settings grant the owner
 gives once - the honest alternative is the notification, which needs no such
-permission and cannot be covered by an app, only missed. And a plan that runs
+permission and cannot be covered by an app, only missed. **DECIDED by the owner
+(2026-10-11): the grant is APPROVED**, the badge floats above whatever is being
+driven, and the notification is the alternative he **declined**. **How and when
+it is asked for:** the grant is **his to give once, at the point the badge is
+first needed** - do not ask for it now, and do not let the build assume it is
+already on; if it is not granted at that moment, the badge is absent and the
+notification is the fallback the design already describes. And a plan that runs
 while the phone is **locked** does not need either: the lock screen is a
 different app in front, so §2's existing guard stops the plan by itself.
 
@@ -800,17 +812,40 @@ are exactly three sensible ways to give"*
 | **B** | a **second, specialist grounding model** on the 12 GB card, with the chat unloaded before a plan and warmed back after | a few seconds of chat reload per plan; the long conversation is kept |
 | **C** | a small grounding model on the 8 GB card, chat untouched | the weakest grounder, but the everyday chat never moves |
 
-**Recommended: B, behind its own switch, off until *this feature* is
-measured** - the project's own rule (`CLAUDE.md`: a feature that uses the
-second card keeps its own switch, off until that feature is measured), and the
-same shape picture-card already ships (three ways, each its own switch,
-`docs/PICTURE-CARDS-DESIGN.md:16-26`). Two hard constraints carried over from
-that work, because they have already produced wrong measurements here: a
-model is pinned by the card's **UUID, never a number**, because
-`CUDA_VISIBLE_DEVICES` alone falls back to Vulkan and lands on the other card
-(`docs/PICTURE-CARDS-DESIGN.md:42-54`); and **one GPU-heavy thing at a time** -
-the measurement refuses to run while a model it did not expect is resident
-(`:70-71`).
+**DECIDED by the owner (2026-10-11): BOTH, as two options.** His words:
+*"I would like both as options."* So this is not a choice between A and B - it is
+**two paths, each behind its own switch, each off until its own measurement
+clears**:
+
+- **(a) A small purpose-built grounder beside the existing chat model** -
+  **Holo2-4B** (Apache-2.0, ~2.95 GB with mmproj) or **GUI-Owl-1.5-2B** (MIT,
+  ~1.44 GB). The chat lane **stays available**, because the grounder is small
+  enough to sit beside it.
+- **(b) `AutoGLM-Phone-9B`** (MIT, ~6.65 GB Q4, converted by the llama.cpp team,
+  remote adb) **on the 12 GB card with the everyday chat stepping aside** - and
+  **its switch's own card must say plainly that Jarvis is offline while it is
+  loaded.** That is the price, and he is choosing it **per use**, on that card,
+  not once in a setting.
+
+**What that costs in the gates: each path needs its own grounding measurement,
+and neither one replaces the other's evidence.** A number measured on (a) says
+nothing about (b), and the other way round.
+
+**And the honest shape of the two, so neither is sold as more than it is:** (b)
+is the purpose-built **phone agent**, while the research says **grounding is the
+bottleneck** - so (a) is the **cheaper path to a working grounder**, and (b) is
+the **stronger one where grounding and planning both matter**. Neither is a
+stand-in for measuring either.
+
+Two hard constraints carried over from the picture-card work, because they have
+already produced wrong measurements here: a model is pinned by the card's
+**UUID, never a number**, because `CUDA_VISIBLE_DEVICES` alone falls back to
+Vulkan and lands on the other card (`docs/PICTURE-CARDS-DESIGN.md:42-54`); and
+**one GPU-heavy thing at a time** - the measurement refuses to run while a model
+it did not expect is resident (`:70-71`). Each path also keeps the project's own
+rule (`CLAUDE.md`: a feature that uses the second card keeps its own switch, off
+until that feature is measured), the shape picture-card already ships
+(`docs/PICTURE-CARDS-DESIGN.md:16-26`).
 
 ### The research, landed (2026-10-11): size is not the bottleneck, grounding is
 
@@ -1287,7 +1322,10 @@ not discovered later.
    `tools/tool_eval`, clearing the >= 90% bar with **zero** taps on a password
    field, a permission dialog, a "Never look at" app or the Jarvis app, on the
    model that will actually drive this. Until then, nothing here runs. The
-   model research has landed (§15) and names a driver and a grounder.
+   model research has landed (§15) and the owner has chosen **both** paths - a
+   small grounder beside the chat model, and AutoGLM-Phone-9B on the 12 GB card.
+   **Each path needs its OWN measurement, and neither replaces the other's
+   evidence.**
 6. **The delete toggle's limits are accepted as written** (§16): it is a strong
    guard, not an airtight one; off is the default; and the card that turns it
    on carries the sentence that says an action that cannot be undone may happen
@@ -1295,10 +1333,12 @@ not discovered later.
    toggle itself** (closed question, below), as a preference rather than a
    loosening (§18).
 
-## Questions: what is decided, and what is still open
+## Questions: decided, and NOTHING open
 
-**Everything below is settled except two items at the end.** Each entry says who
-decided it, so a later reader can tell the owner's calls from the design's.
+**Every question this design raised has been decided - there are no open
+items.** The blocks below say who decided each one, so a later reader can tell
+the owner's calls from the design's, and the last block is where the two
+late answers landed.
 
 ### Decided by the OWNER (2026-10-11)
 
@@ -1366,12 +1406,24 @@ extending that refusal to the array path is required first.** That is a
 *stricter* change, so it is a code change to design and test rather than a rule
 to loosen, and it would have to land before any such feature is switched on.
 
-### Still open - the owner is being asked now
+### Decided by the OWNER - the last two (2026-10-11)
 
-- **Q7, the driving model's card** (§15): may a second, specialist grounding
-  model take the 12 GB card with the chat stepping aside (option B,
-  recommended), or must it share whatever is already resident?
-- **The badge's "draw over other apps" grant** (§13, §14): Android needs a
-  one-time Settings permission for the always-on-top badge. The alternative
-  needs no permission at all - the ongoing notification - but it cannot be drawn
-  over the app in front and has to be found in the shade.
+- **Q7, the driving model: BOTH, as two options.** *"I would like both as
+  options."* Not a choice between them - **two paths, each behind its own
+  switch, each off until its own measurement clears** (§15): **(a)** a small
+  purpose-built grounder beside the existing chat model (Holo2-4B, Apache-2.0,
+  ~2.95 GB with mmproj, or GUI-Owl-1.5-2B, MIT, ~1.44 GB), with the chat lane
+  still available; and **(b)** `AutoGLM-Phone-9B` (MIT, ~6.65 GB Q4, the
+  llama.cpp team's conversion, remote adb) on the 12 GB card with the everyday
+  chat stepping aside, **whose switch's own card says plainly that Jarvis is
+  offline while it is loaded**, because that is the price and he is choosing it
+  per use. **Each path needs its own grounding measurement and neither replaces
+  the other's evidence.** (b) is the purpose-built phone agent; (a) is the
+  cheaper path to a working grounder, since grounding is the bottleneck.
+- **The badge's "draw over other apps" grant: GRANTED.** The badge floats above
+  whatever is being driven - the transparency promise as designed (§13, §14),
+  with the notification named as the alternative he **declined**. **The grant is
+  his to give once, at the point the badge is first needed** - not to be asked
+  for now, and not something the build may assume is already on.
+
+**Nothing is open. This design has no questions left for the owner.**
