@@ -18,6 +18,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
@@ -81,6 +83,20 @@ internal fun ThinkingSection(canAct: Boolean) {
         }
     }
 
+    fun chooseWhen(mode: String) {
+        if (busy) return
+        busy = true
+        said = null
+        scope.launch {
+            try {
+                said = JarvisRuntime.setThinkingWhen(mode)
+            } finally {
+                busy = false
+                reads += 1
+            }
+        }
+    }
+
     val v = view
     Section(Thinking.TITLE, trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
@@ -100,6 +116,63 @@ internal fun ThinkingSection(canAct: Boolean) {
                     color = chrome.warnInk,
                 )
                 v != null -> {
+                    // WHEN Jarvis thinks (the owner's decision of 2026-10-11):
+                    // the two plain choices, above the per-model levels. It is
+                    // drawn from the PC's own answer, and - on a PC too old to
+                    // send one - from Thinking's own two rows, so the owner is
+                    // never shown an empty panel or a choice he did not make.
+                    Text(
+                        v.whenTitle,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = chrome.textHi,
+                    )
+                    Gap(2)
+                    Text(
+                        v.whenDetail,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
+                    Gap(6)
+                    v.whenChoices.forEach { choice ->
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    choice.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (choice.selected) chrome.textHi else chrome.textMid,
+                                )
+                                Text(
+                                    choice.why,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textLo,
+                                )
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            Quiet(
+                                if (choice.selected) "On" else "Choose",
+                                enabled = canAct && !busy && !choice.selected,
+                                color = if (choice.selected) chrome.okInk else chrome.textLo,
+                                modifier = Modifier.semantics {
+                                    contentDescription =
+                                        "Jarvis thinks: ${choice.label}. ${choice.why}"
+                                },
+                                onClick = { chooseWhen(choice.id) },
+                            )
+                        }
+                        Gap(6)
+                    }
+                    Gap(4)
+                    Rule()
+                    Gap(8)
+                    Text(
+                        "How hard each model may think",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = chrome.textHi,
+                    )
+                    Gap(6)
                     if (v.models.isEmpty()) {
                         Text(
                             "No models currently running.",

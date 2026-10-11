@@ -414,6 +414,48 @@ def t_no_patch_edits_a_shipped_file():
         check(f"{path.relative_to(HERE)} edits no shipped file", not hit, f"{sorted(hit)}")
 
 
+def t_a_superseded_patch_is_dropped_whole_only_when_nothing_survives():
+    """The silent half of the swap (2026-10-11).
+
+    `scripts/apply-patches.ps1` replaces a superseded patch with its
+    `rebuilt-patches/` half, and when there is NO half the whole patch is
+    "simply left out" - which is right only while every file that patch edits
+    is one the rebuilt modules replace. Nothing asserted that: the loop in
+    `t_no_patch_edits_a_shipped_file` above `continue`s when a half is missing,
+    so a superseded patch that started touching a surviving file would have
+    that half drop out of the stack with no message from the script and no
+    failure here. This is the assertion.
+
+    The rebuilt names come from `$SHIPPED`'s own `rebuilt/` entries - the same
+    list the script copies from - not from prose in `$REBUILT_SUPERSEDES`'s
+    values ("jarvis_memory.py, already in the rebuild" is written for a person,
+    not for a parser).
+    """
+    superseded = ps1_superseded()
+    shipped = ps1_list("SHIPPED")
+    rebuilt_leaves = {p.rsplit("/", 1)[-1] for p in shipped if p.startswith("rebuilt/")}
+    check("the rebuilt modules $SHIPPED names can be read", len(rebuilt_leaves) >= 1,
+          f"{sorted(rebuilt_leaves)}")
+    check("the superseded table names patches that are really in $PATCHES",
+          superseded and superseded <= set(ps1_list("PATCHES")), f"{sorted(superseded)}")
+    dropped, halves = [], []
+    for name in sorted(superseded):
+        if (HERE / "rebuilt-patches" / name).is_file():
+            halves.append(name)
+            continue
+        dropped.append(name)
+        targets = patch_targets(HERE / name)
+        survivors = sorted(t for t in targets if t not in rebuilt_leaves)
+        check(f"{name} has no rebuilt half, so every file it edits must be one the "
+              f"rebuilt modules replace",
+              bool(targets) and not survivors,
+              f"it edits {sorted(targets)}; {survivors} would have no half to go on")
+    check("some superseded patch still has a half, so the loop above is not all skips",
+          halves, f"with a half: {halves}; dropped whole: {dropped}")
+    print(f"        [{len(halves)} superseded patch(es) have a rebuilt half; "
+          f"{len(dropped)} are left out whole: {dropped}]")
+
+
 def t_the_settings_file_search_matches_the_backend():
     # The script decides "you have a settings file" by looking where
     # rebuilt/jarvis_framework.py looks. Read that module's own source, so a
@@ -540,7 +582,9 @@ if __name__ == "__main__":
     for fn in (t_the_two_lists_are_one_list, t_every_entry_exists, t_every_module_here_is_shipped,
                t_every_import_is_accounted_for, t_repo_only_imports_are_guarded,
                t_the_exemptions_are_real,
-               t_no_patch_edits_a_shipped_file, t_the_settings_file_search_matches_the_backend,
+               t_no_patch_edits_a_shipped_file,
+               t_a_superseded_patch_is_dropped_whole_only_when_nothing_survives,
+               t_the_settings_file_search_matches_the_backend,
                t_the_settings_diff_reports_what_differs, t_check_backend_knows_what_will_be_copied_in,
                t_the_packages_are_pinned_with_hashes):
         print(f"\n--- {fn.__name__} ---")

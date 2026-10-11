@@ -18,12 +18,15 @@
  *   --voice-scale  1 .. 1.035, a positional push (spec `scale`)
  *   --voice-lift   0 .. 0.18, a brightness lift (spec `brightness_lift`)
  *
- * A surface opts in by using them; nothing is forced on anyone. The reactor in
- * `style.css` and the widget's dot both do.
+ * A surface opts in by using them; nothing is forced on anyone. The bar's
+ * miniature of the owner's face and the widget's dot both do. (Before
+ * 2026-10-10 the bar's reactor - two SVG rings round a core - was the third
+ * consumer; the face replaced it, and `--voice-lift` now brightens that
+ * picture rather than the halo and the core.)
  *
  * On the flash limits. `limits.flash` calls itself a hard limit because the
- * Android face "fills well over a quarter of the visual field". The desktop
- * reactor is a 34px glyph in a title bar, so a 0.18 lift confined to it moves
+ * Android face "fills well over a quarter of the visual field". The desktop's
+ * mark is a 40px picture in a title bar, so a 0.18 lift confined to it moves
  * the surface's relative luminance by far less than the `min_luma_delta` of
  * 0.10 below which a transition is not counted at all — no transition here is
  * countable, at any syllable rate. The scale push is positional and is exempt

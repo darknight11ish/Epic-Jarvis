@@ -3316,12 +3316,18 @@ class JarvisApi(
         live: Boolean = false,
         /** The look at the phone's own screen this question carries ([ScreenLook]). */
         screen: ScreenLook.Attach? = null,
+        /**
+         * The owner asked Jarvis to think about THIS one question
+         * ([Thinking.ONE_SHOT]). Sent as `"think": true` on this request and
+         * no other; see [ChatHistory.requestBody]'s own doc on the field.
+         */
+        think: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
             interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
-            screen = screen,
+            screen = screen, think = think,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

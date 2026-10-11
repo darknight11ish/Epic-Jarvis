@@ -163,7 +163,11 @@ def t_the_patch_is_registered_last():
              # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
-             "picture-card.patch"}
+             "picture-card.patch",
+             # big-coder.patch (2026-10-11) is appended after it, before
+             # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
+             # gate list, no tier row and no _RISK row.
+             "big-coder.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

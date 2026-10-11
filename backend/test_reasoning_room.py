@@ -17,6 +17,16 @@ jarvis_agent.run_local_turn - the one function every local turn goes through.
      untouched, so the owner's chosen thinking level still applies to every
      turn that has the room for it.
 
+     WHEN thinking happens at all is the owner's own separate choice, added
+     2026-10-11 (jarvis_thinking.WHEN_ASKED / ALWAYS - the setting behind the
+     phone's "Think" key). These checks are about the level and the room, so
+     they set that choice to ALWAYS ("always think", the owner's own words for
+     it) through the real set_when() the settings screen calls, and leave the
+     WHEN behaviour itself to test_thinking_when.py. The one thing it must
+     never do is undo the floor above: a question the owner asked for thinking
+     about, on a turn whose allowance cannot hold both, still answers directly
+     rather than coming back blank.
+
   2. THE START OF A LONG CONVERSATION WAS DELETED SILENTLY. Ollama removes
      the FRONT of an over-long prompt and answers anyway - no error, no note.
      Measured on Ollama 0.40.2 here: eight prompts of growing length, and
@@ -121,15 +131,25 @@ class FakeOllama:
         return self.requests[-1]
 
 
-def _thinking_on(level=JT.QUICK):
+def _thinking_on(level=JT.QUICK, when=JT.ALWAYS):
     """The owner's own thinking setting, ON, for the everyday model - written
     into this suite's own config folder, never the owner's, and through the
-    real set_level() the settings screen calls."""
+    real set_level()/set_when() the settings screen calls.
+
+    `when` is WHEN thinking happens at all (the owner's own two-choice
+    setting, 2026-10-11). It defaults to ALWAYS here, because these checks are
+    about the level and the room: with WHEN_ASKED, the setting this project
+    falls back to, a level is used on the questions the owner asks for
+    thinking about and nowhere else - and that is what
+    test_thinking_when.py checks."""
     JT.reset_for_tests()
     JT._CAP_OVERRIDE[(URL, MODEL)] = ["completion", "tools", "thinking"]
     code, out = JT.set_level("everyday", level, model_name=MODEL, ollama_url=URL)
     if code != 200:
         raise RuntimeError(f"could not set the thinking level for this suite: {out}")
+    code, out = JT.set_when(when)
+    if code != 200:
+        raise RuntimeError(f"could not set when Jarvis thinks for this suite: {out}")
 
 
 def _thinking_off_again():
@@ -165,6 +185,11 @@ def t_a_short_allowance_leaves_thinking_off():
         _thinking_off_again()
     check("a 128-token allowance is not shared with thinking - reasoning is off",
           short.get("reasoning_effort") == "none", repr(short))
+    check("a question asking for thinking does not get it through the floor "
+          "either: the answer's own room comes first",
+          AG.chat_body(MODEL, [{"role": "user", "content": "hi"}], {"max_tokens": 128},
+                       ollama_url=URL, role="everyday",
+                       per_turn=True).get("reasoning_effort") == "none")
     check("the everyday allowance (1,024) still gets the level the owner chose",
           long.get("reasoning_effort") == "low", repr(long))
     check("the floor sits between the two, so neither read of it is a guess",

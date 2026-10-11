@@ -262,6 +262,34 @@ class ChatSession(
      */
     val temporary: StateFlow<Boolean> = _temporary.asStateFlow()
 
+    private val _thinkOnce = MutableStateFlow(false)
+
+    /**
+     * "Think about this one": the owner asked Jarvis to think about the NEXT
+     * question before answering it (the owner's decision, 2026-10-11;
+     * [Thinking.ONE_SHOT]).
+     *
+     * ONE question, and then it is gone: [send] turns it off before it builds
+     * the request, so the question after it is an ordinary one whether this
+     * one succeeded, failed or was interrupted. It is never written down
+     * anywhere, it never changes the PC's own WHEN setting, and it is never
+     * the reason a message fails to send - the field it adds is one the PC
+     * either understands or ignores.
+     *
+     * A question the owner asked for thinking about is the only thing that can
+     * set it, and only when the PC says it has the feature
+     * ([Thinking.offered]: `/api/version`'s `capabilities.think_per_question`)
+     * - so the key is never offered against a PC that would ignore it and
+     * leave the owner thinking he had asked for something.
+     */
+    val thinkOnce: StateFlow<Boolean> = _thinkOnce.asStateFlow()
+
+    /** Turn "Think about this one" on or off for the NEXT question. Memory
+     *  only, no request, no card: it changes one field of one question. */
+    fun setThinkOnce(on: Boolean) {
+        _thinkOnce.value = on
+    }
+
     private val _usedIds = MutableStateFlow<List<Long>>(emptyList())
 
     /**
@@ -613,10 +641,18 @@ class ChatSession(
         // for this question only - the PC tells its model, and takes the
         // field off before any model or the relay sees the conversation.
         val interrupted = cutOff.take(SystemClock.elapsedRealtime())
+        // "Think about this one" (2026-10-11): taken here - BEFORE the request
+        // is built - and cleared in the same breath, so it belongs to this
+        // question and to no other. A send that fails, is interrupted or is
+        // retried leaves the next question ordinary: the field is one the PC
+        // either understands or ignores, so it can never be why a message
+        // failed to send or an answer came back blank.
+        val asThought = _thinkOnce.value
+        _thinkOnce.value = false
         val c = api.chatCall(
             asking, earlier, sentPicture, conversationId,
             interrupted = interrupted, temporary = asTemporary, cloudYes = cloudYes, live = live,
-            screen = screen,
+            screen = screen, think = asThought,
         )
         if (c == null) {
             // No address to send to: none saved, or a saved one off the
