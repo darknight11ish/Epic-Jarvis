@@ -88,6 +88,7 @@ function Used-On($card) {
 
 # --------------------------------------------------- is a foreign model on? -
 $script:MyPorts = @()
+$script:OwnerPorts = @(11435, 11436)
 function Get-Resident {
   $resident = @()
   foreach ($port in 11430..11460) {
@@ -117,7 +118,10 @@ function Show-Resident($label) {
   else { Row 'state' "${label}: nvidia-smi compute apps" 'none of ours' 'no llama/ollama/python process on a card' }
 }
 function Assert-Quiet {
-  $busy = Get-Resident | Where-Object { $script:MyPorts -notcontains $_.port }
+  # The owner's own lane ports are not "foreign": 11435 is the second lane and
+  # 11436 the everyday/third lane. Whatever else is holding a model is somebody
+  # else's measurement, and a number taken beside one is worse than no number.
+  $busy = Get-Resident | Where-Object { $script:MyPorts -notcontains $_.port -and $script:OwnerPorts -notcontains $_.port }
   if ($busy) {
     Write-Host ""
     Write-Host "  REFUSING TO MEASURE: a foreign model is resident on a card." -ForegroundColor Red
@@ -125,6 +129,46 @@ function Assert-Quiet {
     return $false
   }
   return $true
+}
+
+# --- the owner's own lanes: looked at, stepped aside, put back -------------
+function Lane-Snapshot($port) {
+  try {
+    $ps = Invoke-RestMethod -Uri "http://127.0.0.1:$port/api/ps" -TimeoutSec 3 -ErrorAction Stop
+    $m = $ps.models | Select-Object -First 1
+    if ($m) {
+      return @{ port = $port; name = $m.name; ctx = $m.context_length
+                size = $m.size; vram = $m.size_vram; expires = $m.expires_at }
+    }
+  } catch { }
+  return $null
+}
+function Lane-Unload($snap) {
+  if (-not $snap) { return }
+  try {
+    Invoke-RestMethod -Uri "http://127.0.0.1:$($snap.port)/api/generate" -Method Post -TimeoutSec 300 `
+      -Body (@{ model = $snap.name; prompt = ''; keep_alive = 0 } | ConvertTo-Json) `
+      -ContentType 'application/json' | Out-Null
+  } catch { }
+  for ($i = 0; $i -lt 120; $i++) {
+    Start-Sleep -Milliseconds 500
+    if (-not (Lane-Snapshot $snap.port)) { return }
+  }
+}
+function Lane-Restore($snap) {
+  if (-not $snap) { return $null }
+  try {
+    Invoke-RestMethod -Uri "http://127.0.0.1:$($snap.port)/api/generate" -Method Post -TimeoutSec 900 `
+      -Body (@{ model = $snap.name; prompt = 'hi'; stream = $false; keep_alive = '30m'
+                 options = @{ num_ctx = [int]$snap.ctx; num_predict = 1 } } | ConvertTo-Json -Depth 5) `
+      -ContentType 'application/json' | Out-Null
+  } catch { }
+  for ($i = 0; $i -lt 60; $i++) {
+    Start-Sleep -Milliseconds 500
+    $now = Lane-Snapshot $snap.port
+    if ($now -and $now.vram -gt 0) { return $now }
+  }
+  return (Lane-Snapshot $snap.port)
 }
 
 # ------------------------------------------------------- private ollama -----
@@ -496,14 +540,64 @@ jarvis_ai_models:
     } else { Row 'pictures' 'B: the chat could not be put on the 8 GB card' 'no' 'the picture numbers below are then option A numbers' }
   }
 
+  # The owner's own lane that sits on this card must step aside for the picture
+  # model - that IS option A, and it is also what C needs on the 8 GB card,
+  # where the coding lane lives. Its model is unloaded through its own HTTP API
+  # (no server is stopped or reconfigured) and put back exactly as found.
+  $lanePort = if ($card.uuid -eq $big.uuid) { 11436 } else { 11435 }
+  $laneBefore = Lane-Snapshot $lanePort
+  if ($laneBefore) {
+    Row 'lane' "before the draw: port $lanePort held" $laneBefore.name ("ctx $($laneBefore.ctx); vram $($laneBefore.vram) of size $($laneBefore.size); expires $($laneBefore.expires)")
+    Lane-Unload $laneBefore
+    Row 'lane' "port $lanePort after the unload" $(if (Lane-Snapshot $lanePort) { 'STILL RESIDENT - not measured' } else { 'gone from the card' }) 'through the API only; the server was not stopped'
+    if (Lane-Snapshot $lanePort) { Row 'pictures' "cannot draw on $($card.name)" 'NO' "port $lanePort would not let go"; return }
+  } else {
+    Row 'lane' "port $lanePort before the draw" 'nothing resident' 'nothing had to step aside'
+  }
+
+  # PINNING, AND THE TRAP THAT COST THIS PROJECT NUMBERS ALREADY.
+  # ComfyUI's own main.py (line 107) does os.environ['CUDA_VISIBLE_DEVICES'] =
+  # str(args.cuda_device) - it OVERWRITES whatever this script set, so a UUID
+  # pin is thrown away and the number wins. And without CUDA_DEVICE_ORDER, CUDA
+  # numbers the cards fastest-first: index 0 is the 2080 SUPER, not nvidia-smi's
+  # device 0 (the 2060). Measured here, three ways, before this line was written:
+  #   CUDA_VISIBLE_DEVICES=0                     -> RTX 2080 SUPER  (WRONG card)
+  #   CUDA_VISIBLE_DEVICES=<2060 uuid>           -> RTX 2060        (right)
+  #   CUDA_VISIBLE_DEVICES=0, ORDER=PCI_BUS_ID   -> RTX 2060        (right)
+  # So the index is nvidia-smi's own index, the order is pinned to PCI_BUS_ID,
+  # the UUID is kept as belt and braces, and the card that really loaded is read
+  # back out of ComfyUI's own log below and checked.
+  # Which node carries the seed for each recipe, so each of the three runs is a
+  # real draw. With one fixed seed ComfyUI answers runs 2 and 3 out of its own
+  # execution cache in half a second, and the "median of three" becomes 0.5 s -
+  # measured here on option A (315.4, 0.5, 0.5) before this was fixed.
+  if ($option -eq 'C') { $seedNode = '5'; $seedField = 'seed' }
+  else { $seedNode = '9'; $seedField = 'noise_seed' }
+
+  $env:CUDA_DEVICE_ORDER = 'PCI_BUS_ID'
   $env:CUDA_VISIBLE_DEVICES = $card.uuid
   $env:OLLAMA_VULKAN = '0'
   $log = Join-Path $Out "comfy-$option-$stamp.log"
-  $comfyArgs = @('main.py', '--port', '8188', '--listen', '127.0.0.1', '--cuda-device', '0')
+  $errlog = Join-Path $Out "comfy-$option-$stamp.err.log"
+  $comfyArgs = @('main.py', '--port', '8188', '--listen', '127.0.0.1', '--cuda-device', "$($card.index)")
   if ($option -eq 'C') { $comfyArgs += '--lowvram' }
+  Row 'pictures' 'card pinning' "$($card.name) = index $($card.index)" "CUDA_DEVICE_ORDER=PCI_BUS_ID + --cuda-device $($card.index); UUID $($card.uuid) kept as well"
   $proc = Start-Process -FilePath $py -ArgumentList $comfyArgs -WorkingDirectory $comfy -PassThru -WindowStyle Hidden `
-    -RedirectStandardOutput $log -RedirectStandardError (Join-Path $Out "comfy-$option-$stamp.err.log")
-  Row 'pictures' 'ComfyUI started' 'yes' ("pid $($proc.Id); pinned $($card.uuid); log $log")
+    -RedirectStandardOutput $log -RedirectStandardError $errlog
+  Row 'pictures' 'ComfyUI started' 'yes' ("pid $($proc.Id); log $log")
+  # If anything else already answers on 8188, every later number would be read
+  # off THAT process, not this one - which already happened once here (an
+  # orphaned ComfyUI from an earlier run held the port and reported the other
+  # card). So the port is checked before anything is queued.
+  Start-Sleep -Seconds 5
+  if ($proc.HasExited) {
+    Row 'pictures' 'the ComfyUI just started' 'EXITED at once' ((Get-Content $errlog -Tail 3 -ErrorAction SilentlyContinue) -join ' | ')
+  }
+  $holders = @(Get-NetTCPConnection -LocalPort 8188 -State Listen -ErrorAction SilentlyContinue)
+  if ($holders.Count -gt 0 -and ($holders | Where-Object { $_.OwningProcess -ne $proc.Id })) {
+    Row 'pictures' 'REFUSING: port 8188 is held by another process' (($holders | ForEach-Object { $_.OwningProcess }) -join ',') "this run's ComfyUI is pid $($proc.Id); stop the other one first"
+    return
+  }
   try {
     $up = $false
     for ($i = 0; $i -lt 180; $i++) {
@@ -516,13 +610,27 @@ jarvis_ai_models:
       return
     }
     $st = Invoke-RestMethod -Uri 'http://127.0.0.1:8188/system_stats' -TimeoutSec 10
-    Row 'pictures' 'ComfyUI device it thinks it has' $st.devices[0].name ("vram total {0:N0} MB, free {1:N0} MB" -f ($st.devices[0].vram_total/1MB), ($st.devices[0].vram_free/1MB))
+    Row 'pictures' 'ComfyUI reports its primary device' $st.devices[0].name ("vram total {0:N0} MB, free {1:N0} MB" -f ($st.devices[0].vram_total/1MB), ($st.devices[0].vram_free/1MB))
+    # ComfyUI's own log is the one that cannot be faked by a listing: "Device:
+    # cuda:0 NVIDIA GeForce RTX ...". If it is not the card this run is meant
+    # to measure, stop - a number from the other card is worse than no number.
+    $devLine = (Select-String -Path $errlog -Pattern 'Device: cuda' -ErrorAction SilentlyContinue | Select-Object -First 1).Line
+    $onRightCard = ($devLine -and $devLine -match [regex]::Escape($card.name))
+    Row 'pictures' 'ComfyUI log says it loaded' $(if ($devLine) { $devLine.Trim() } else { '(no Device: line)' }) ("the card this run is for: $($card.name) -> $onRightCard")
+    if (-not $onRightCard) {
+      Row 'pictures' 'REFUSING to measure option ' $option "ComfyUI is on the wrong card - see $errlog"
+      return
+    }
     $apps = nvidia-smi --query-compute-apps=pid,used_memory,gpu_uuid --format=csv,noheader | Where-Object { $_ -match "^$($proc.Id)," }
     Row 'pictures' 'nvidia-smi says the work is on' $(if ($apps) { ($apps -split ',')[2].Trim() } else { 'NOT FOUND' }) "expected $($card.uuid)"
 
     $times = @()
+    $seeds = @()
     for ($run = 1; $run -le $Runs; $run++) {
       $peak = 0
+      $runSeed = $Seed + $run - 1
+      $seeds += $runSeed
+      $wf[$seedNode].inputs[$seedField] = $runSeed
       $body = @{ prompt = $wf; client_id = 'jarvis-measure' } | ConvertTo-Json -Depth 12 -Compress
       $sw = [System.Diagnostics.Stopwatch]::StartNew()
       try { $q = Invoke-RestMethod -Uri 'http://127.0.0.1:8188/prompt' -Method Post -Body $body -ContentType 'application/json' -TimeoutSec 60 }
@@ -546,13 +654,17 @@ jarvis_ai_models:
       }
       $secs = [math]::Round($sw.Elapsed.TotalSeconds, 1)
       $times += $secs
-      Row 'pictures' "run $run at ${Width}x${Height}, seed $Seed" ("{0:N1} s" -f $secs) ("peak on $($card.name): $peak MiB of $($card.total_mb); output: $(($files -join ', '))")
+      Row 'pictures' "run $run at ${Width}x${Height}, seed $runSeed" ("{0:N1} s" -f $secs) ("peak on $($card.name): $peak MiB of $($card.total_mb); output: $(($files -join ', '))")
       if ($bad) { Row 'pictures' "run ${run}: ComfyUI said" 'FAILED' $bad }
     }
     if ($times.Count -ge 1) {
       $sorted = $times | Sort-Object
-      $median = if ($sorted.Count % 2 -eq 1) { $sorted[[int]($sorted.Count/2)] } else { ($sorted[$sorted.Count/2 - 1] + $sorted[$sorted.Count/2]) / 2 }
-      Row 'pictures' "median of $($times.Count) runs" ("{0:N1} s per picture" -f $median) ("runs: {0}" -f (($times | ForEach-Object { '{0:N1}' -f $_ }) -join ', '))
+      # [int](3/2) is 2, not 1: PowerShell rounds .5 to even. That put the
+      # "median" of three runs on the largest one (316.3 instead of 274.4 on
+      # option A). Floor, not a cast.
+      $median = if ($sorted.Count % 2 -eq 1) { $sorted[[math]::Floor($sorted.Count / 2)] }
+                else { ($sorted[$sorted.Count / 2 - 1] + $sorted[$sorted.Count / 2]) / 2 }
+      Row 'pictures' "median of $($times.Count) runs" ("{0:N1} s per picture" -f $median) ("runs: {0}; seeds: {1}" -f (($times | ForEach-Object { '{0:N1}' -f $_ }) -join ', '), ($seeds -join ', '))
       $outs = Get-ChildItem (Join-Path $comfy 'output') -Filter "jarvis-option$option*" -File -ErrorAction SilentlyContinue |
         Sort-Object LastWriteTime -Descending | Select-Object -First 6
       foreach ($o in $outs) { Row 'pictures' 'picture saved' $o.Name ("{0}; {1:N0} bytes; {2}" -f $o.FullName, $o.Length, $o.LastWriteTime) }
@@ -569,6 +681,14 @@ jarvis_ai_models:
     Remove-Item Env:\CUDA_VISIBLE_DEVICES -ErrorAction SilentlyContinue
     Write-Host "  (the measuring ComfyUI was stopped)" -ForegroundColor Gray
     if ($procChat) { Stop-Private $procChat $SmallPort }
+    if ($laneBefore) {
+      $laneAfter = Lane-Restore $laneBefore
+      if ($laneAfter) {
+        Row 'lane' "port $lanePort put back EXACTLY as found" $laneAfter.name ("ctx $($laneAfter.ctx) (was $($laneBefore.ctx)); vram $($laneAfter.vram); size $($laneAfter.size)")
+      } else {
+        Row 'lane' "port $lanePort" 'DID NOT COME BACK' "it held $($laneBefore.name) at ctx $($laneBefore.ctx) before the draw"
+      }
+    }
     Show-Resident "option $option at the end"
   }
 }
