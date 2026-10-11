@@ -66,8 +66,10 @@ const HIDDEN_WORDS: &str = "Hidden while memory lists and chat history are hidde
 /// here too so an over-long prompt is refused before anything is sent.
 pub(crate) const MAX_PROMPT: usize = 2000;
 
-/// The longest picture name this app will ask the PC for. The PC's own names
-/// are far shorter; the bound is here so a page cannot ask for anything long.
+/// The shortest and longest picture name this app will ask the PC for. A PC
+/// name is `YYYY-MM-DD-HHMMSS-<slug>` - 20 characters at the very least - and
+/// the bound above is here so a page cannot ask for anything long.
+const MIN_ID: usize = 17;
 const MAX_ID: usize = 96;
 
 fn parsed(body: &str) -> Option<serde_json::Value> {
@@ -133,7 +135,7 @@ pub(crate) fn file_answer(status: u16, body: &str) -> Result<serde_json::Value, 
 /// `..`. A page cannot make the PC read another path.
 pub(crate) fn valid_id(id: &str) -> bool {
     let bytes = id.as_bytes();
-    if bytes.len() < 20 || bytes.len() > MAX_ID {
+    if bytes.len() < MIN_ID || bytes.len() > MAX_ID {
         return false;
     }
     if !id.starts_with(|c: char| c.is_ascii_digit()) {
@@ -202,7 +204,10 @@ fn words_hidden(app: &AppHandle) -> bool {
 }
 
 /// The gallery with the owner's own words taken out: nothing but the PC's own
-/// "hidden" sentence stays, and not one prompt, seed, path or picture id.
+/// "hidden" sentence stays - and not one prompt, seed, path, picture id, count,
+/// size, folder or program name. There is deliberately no `count`, `bytes`,
+/// `folder` or `pictures` key at all, so a page cannot draw a number or a path
+/// out of a hidden answer even by accident.
 pub(crate) fn hidden_answer(answer: &serde_json::Value) -> serde_json::Value {
     let words = answer
         .get("words")
@@ -216,10 +221,6 @@ pub(crate) fn hidden_answer(answer: &serde_json::Value) -> serde_json::Value {
         "keep_on_screen": true,
         "title": "Pictures",
         "hidden_words": words,
-        "folder": "",
-        "count": 0,
-        "bytes": 0,
-        "size_words": "",
     })
 }
 
@@ -522,7 +523,18 @@ mod tests {
         assert_eq!(out["hidden"], true);
         assert_eq!(out["keep_on_screen"], true);
         assert_eq!(out["hidden_words"], "2 pictures, 900 KB on disk.");
-        for gone in ["pictures", "folder", "bytes", "size_words", "enabled"] {
+        for gone in [
+            "pictures",
+            "folder",
+            "count",
+            "bytes",
+            "size_words",
+            "enabled",
+            "runtime",
+            "runtimes",
+            "words",
+            "keep",
+        ] {
             assert!(out.get(gone).is_none(), "{gone} survived");
         }
         let text = out.to_string().to_lowercase();

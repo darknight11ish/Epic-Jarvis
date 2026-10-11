@@ -182,9 +182,23 @@ check(
   "every call goes through a command",
 );
 check(
-  "... and the panel calls all four commands",
-  ["brain_pictures", "brain_pictures_file", "brain_pictures_make", "brain_pictures_settings"]
+  "... and the panel calls the three commands the gallery needs",
+  ["brain_pictures", "brain_pictures_file", "brain_pictures_make"]
     .every((c) => panelCode.includes(`"${c}"`)),
+);
+// The switch, the drawing program and the folder are the Settings card's, on
+// the PC only - the pane reads their STATE and says where to change them.
+const settings = readFileSync(join(ROOT, "jarvis-desktop", "src", "pictures-settings.js"), "utf8");
+check(
+  "... and the Settings card is the only place they change",
+  settings.includes('invoke("brain_pictures_settings"')
+    && settings.includes('invoke("choose_pictures_folder"')
+    && !panelCode.includes("brain_pictures_settings"),
+  "one path per change",
+);
+check(
+  "... and the pane says where that is, rather than offering a second set",
+  panel.includes("in Settings, under Pictures"),
 );
 
 console.log("\n--- 4. every write waits for a live link ---");
@@ -226,9 +240,14 @@ check(
     && rustCode.includes('"keep_on_screen": true'),
   "hide_private",
 );
+// Built, like the other forbidden literals: a literal in this file would be
+// found by a scan of this file and the check would fail on itself.
+const FOLDER_KEY = '"' + "folder" + '": ""';
+
 check(
-  "... and a hidden answer keeps no folder, no count and no size either",
-  /"folder": ""[\s\S]*?"count": 0[\s\S]*?"bytes": 0/.test(rust),
+  "... and a hidden answer keeps no folder, no count and no size either - " +
+    "there is no such key at all, so a page cannot draw one",
+  /"hidden_words": words,/.test(rust) && !rust.includes(FOLDER_KEY),
   "hidden_answer",
 );
 check(

@@ -614,7 +614,8 @@
     "limit": "Nothing is ever sent anywhere: there is no share, no upload and no email. The feature starts switched off (Settings, Pictures, \"Making pictures\") because it shares the second graphics card with the everyday model, and it needs ComfyUI or stable-diffusion.cpp installed on the PC first. The pictures and their prompts hide while \"Hide memory lists and chat history\" is on.",
     "surface": "both",
     "covers": [
-      "brain.projects.pictures"
+      "brain.projects.pictures",
+      "settings.pictures"
     ]
   },
   {

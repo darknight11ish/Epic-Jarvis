@@ -197,8 +197,8 @@ class PicturesTest {
         if (!source.isFile) return  // run from somewhere else: the checks below still hold
         val text = source.readText()
         assertFalse(text.contains("pictures/settings"))
-        for (action in listOf("\"enabled\"", "\"runtime\"", "\"folder\"")) {
-            assertFalse("the phone must not send $action", text.contains(action))
+        listOf("\"enabled\"", "\"runtime\"", "\"folder\"").forEach {
+            assertFalse("the phone must not send $it", text.contains(it))
         }
         assertTrue(text.contains("const val PATH = \"/api/pictures\""))
         assertTrue(text.contains("const val FILE_PATH = \"/api/pictures/file\""))
@@ -210,11 +210,11 @@ class PicturesTest {
     fun theBodyHoldsTheOwnersWordsAndNothingElse() {
         val body = Pictures.makeBody("  a red panda in a library  ")
         assertNotNull(body)
-        assertEquals("""{"prompt":"a red panda in a library"}""", body)
+        assertEquals("{\"prompt\":\"a red panda in a library\"}", body)
         // Not a seed, not a model, not a size, not a step count: the phone
         // cannot pick a drawing program's knobs.
-        for forbidden in listOf("seed", "model", "steps", "width", "height", "settings") {
-            assertFalse(body!!.contains(forbidden))
+        listOf("seed", "model", "steps", "width", "height", "settings").forEach {
+            assertFalse("the body must not hold $it", body!!.contains(it))
         }
         // A prompt of spaces, or one over the PC's own cap, is refused HERE
         // rather than sent to be refused a second time.
@@ -229,13 +229,19 @@ class PicturesTest {
         val good = "2026-10-11-140509-a-red-panda"
         assertNotNull(Pictures.filePath(good))
         assertEquals("/api/pictures/file?id=$good", Pictures.filePath(good))
-        for bad in listOf(
-            "", "..", "../pictures.json", "/etc/passwd", "C:\\Windows\\win.ini",
-            "2026-10-11-140509-a/b", "2026-10-11-140509-a\\b",
-            "2026-10-11-140509-..", "not-a-date-at-all", "9".repeat(97),
-        ) {
-            assertNull("the id $bad must be refused", Pictures.filePath(bad))
-        }
+        val bad = listOf(
+            "",
+            "..",
+            "../pictures.json",
+            "/etc/passwd",
+            "C:\\Windows\\win.ini",
+            "2026-10-11-140509-a/b",
+            "2026-10-11-140509-a\\b",
+            "2026-10-11-140509-..",
+            "not-a-date-at-all",
+            "9".repeat(97),
+        )
+        bad.forEach { id -> assertNull("the id $id must be refused", Pictures.filePath(id)) }
     }
 
     @Test

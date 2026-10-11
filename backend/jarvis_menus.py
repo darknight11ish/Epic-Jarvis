@@ -218,6 +218,18 @@ MENUS: tuple = (
     _m("settings.browser-engine", "Browser without a window",
        "Which browser Jarvis uses for plain reading.",
        names=("browser without a window", "headless browser", "browser settings")),
+    # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 124): the switch ("Making pictures"), which program on
+    # this PC draws them (ComfyUI or stable-diffusion.cpp - a setting with
+    # named supported values, never guessed at), and the folder they are kept
+    # in. The gallery itself is Brain -> Projects -> Pictures
+    # (`brain.projects.pictures`), which is where the owner asks for one and
+    # sees the ones they kept; this card is the PC's own setup for it.
+    _m("settings.pictures", "Pictures",
+       "Making pictures, which program draws them, and where they are kept.",
+       (DESKTOP,),
+       names=("pictures", "making pictures", "the pictures", "my pictures",
+              "the picture gallery", "drawing pictures")),
     # "When the phone does not answer" (the owner's decision of 2026-10-08:
     # "make this a setting for both options with 1 as the default"): how long
     # the captcha hand-off - a live picture of one of the owner's browser

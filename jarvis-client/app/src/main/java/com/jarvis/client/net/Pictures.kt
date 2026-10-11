@@ -1,7 +1,6 @@
 package com.jarvis.client.net
 
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -12,6 +11,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
+import java.util.Locale
 
 /**
  * "Ask for a picture, and keep it" — the owner's decision of 2026-09-27
@@ -167,6 +167,14 @@ object Pictures {
         body?.get("id")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
 
     /**
+     * The PC's own sentence for a picture it just drew - "Drawn in 41.2
+     * seconds and saved as 2026-10-11-140509-a-red-panda.png." Shown word for
+     * word; nothing on the phone rebuilds it.
+     */
+    fun madeWords(body: JsonObject?): String =
+        body?.get("words")?.jsonPrimitive?.contentOrNull.orEmpty()
+
+    /**
      * The body of `POST /api/pictures`. The prompt is trimmed, and a prompt of
      * spaces is refused here rather than sent: the PC would refuse it too, and
      * a round trip to be told "say what the picture should show" is one more
@@ -279,8 +287,9 @@ object Pictures {
     fun sizedWords(bytes: Long): String = when {
         bytes < 1024 -> "$bytes B"
         bytes < 1024L * 1024 -> "${bytes / 1024} KB"
-        bytes < 1024L * 1024 * 1024 -> String.format("%.1f MB", bytes / 1024.0 / 1024.0)
-        else -> String.format("%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0)
+        bytes < 1024L * 1024 * 1024 ->
+            String.format(Locale.US, "%.1f MB", bytes / 1024.0 / 1024.0)
+        else -> String.format(Locale.US, "%.2f GB", bytes / 1024.0 / 1024.0 / 1024.0)
     }
 }
 

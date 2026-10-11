@@ -737,6 +737,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "settings.pictures",
+    "title": "Pictures",
+    "about": "Making pictures, which program draws them, and where they are kept.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "pictures",
+      "making pictures",
+      "the pictures",
+      "my pictures",
+      "the picture gallery",
+      "drawing pictures"
+    ]
+  },
+  {
     "id": "settings.handoff",
     "title": "When the phone does not answer",
     "about": "How long the captcha hand-off stays on offer.",
@@ -2595,6 +2619,7 @@ export const ALIASES = {
   "deep questions": "brain.memory.deep",
   "devices": "settings.devices",
   "does the browser window come to the front": "settings.handoff-front",
+  "drawing pictures": "settings.pictures",
   "email sending": "settings.email-sending",
   "everyday chat runs on": "settings.second-card.chat-card",
   "faces": "settings.appearance-card",
@@ -2649,7 +2674,7 @@ export const ALIASES = {
   "limits and frequency": "settings.limits",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
-  "making pictures": "brain.projects.pictures",
+  "making pictures": "settings.pictures",
   "manner": "settings.manner",
   "memory": "brain.tab.memory",
   "memory (model view)": "brain.model.memory",
@@ -2674,8 +2699,8 @@ export const ALIASES = {
   "people": "brain.memory.people-things",
   "people and things": "brain.memory.people-things",
   "phone notifications": "settings.phone-notify",
-  "picture gallery": "brain.projects.pictures",
-  "pictures": "brain.projects.pictures",
+  "picture gallery": "settings.pictures",
+  "pictures": "settings.pictures",
   "pin everyday chat": "settings.second-card.chat-card",
   "pinned facts": "brain.memory.profile",
   "progress": "brain.projects.progress",

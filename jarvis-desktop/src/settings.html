@@ -188,6 +188,7 @@
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Where things are kept</span>
+            <a href="#pictures">Pictures</a>
             <a href="#backup">Backups</a>
           </div>
           <div class="settings-jump-place">
@@ -2273,6 +2274,53 @@
         <p class="state" id="hf-state" role="status">Asking Jarvis…</p>
       </section>
 
+      <!-- ── Pictures ───────────────────────────────────────────────────────
+           "Ask for a picture, and keep it" (the owner's decision of
+           2026-09-27: "12 GB card: longer conversations with picture
+           understanding first, and making pictures too (swapped in when asked,
+           since both cannot sit on the card at once)"; pictures.patch,
+           JARVIS-API.md section 124, pictures-settings.js).
+
+           THE SWITCH, THE PROGRAM AND THE FOLDER ONLY. The gallery itself is
+           Brain -> Projects -> Pictures, where the owner asks for one and sees
+           the ones they kept (pictures-panel.js). This card is the PC's own
+           setup for it, and the backend refuses all three changes from
+           anywhere but this PC (403 pc_only), so no phone has a control for
+           any of them.
+
+           The switch starts OFF: the 12 GB card is shared with the everyday
+           model, so only one of the two can be on it at a time. NO approval
+           card for any of it: nothing here leaves the PC. With nothing chosen,
+           this card shows the PC's OWN one plain sentence naming both programs
+           to install - never an error and never a blank. -->
+      <section class="card" id="pictures">
+        <h2 id="pc-title">Pictures</h2>
+        <p class="note" id="pc-subtitle">Ask for a picture in your own words, and Jarvis draws it on this PC and keeps it.</p>
+        <p class="state" id="pc-state" role="status">Asking Jarvis…</p>
+        <div id="pc-body" hidden>
+          <p class="note" id="pc-detail"></p>
+          <label class="toggle">
+            <input id="pc-switch" type="checkbox" />
+            <span id="pc-switch-label">Making pictures</span>
+          </label>
+          <div class="row">
+            <label for="pc-runtime">The program that draws</label>
+            <select id="pc-runtime"></select>
+          </div>
+          <p class="note" id="pc-install"></p>
+          <div class="row">
+            <label for="pc-folder">Kept in</label>
+            <input id="pc-folder" type="text" readonly autocomplete="off" spellcheck="false"
+                   aria-label="The folder pictures are kept in" />
+            <button class="btn small" id="pc-choose" type="button">Choose a folder</button>
+          </div>
+          <p class="note" id="pc-size"></p>
+          <p class="note" id="pc-keep"></p>
+          <p class="note" id="pc-gallery-note"></p>
+          <span class="status" id="pc-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Backups ────────────────────────────────────────────────────────
            The owner's decision of 2026-09-27: "one locked backup file into
            a folder the owner picks ... locked with a recovery code only
@@ -2745,5 +2793,6 @@
     <script type="module" src="thinking-settings.js"></script>
     <script type="module" src="menu-visibility-settings.js"></script>
     <script type="module" src="hud-window-settings.js"></script>
+<script type="module" src="pictures-settings.js"></script>
   </body>
 </html>

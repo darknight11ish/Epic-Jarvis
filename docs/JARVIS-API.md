@@ -18857,13 +18857,26 @@ switch is on, and shows one line saying so
 
 ### 124.7 The two surfaces
 
-- **Desktop.** Settings -> **Pictures**: the switch, the chosen program (the
-  two supported values, each with what to install), the folder and its size,
-  and the gallery - each picture with its prompt, its seed and when it was
-  made, a **Make another** button, and a box to ask for a new one. The reads go
-  through `jarvis-desktop/src-tauri/src/brain/pictures.rs`; the switch is a
-  Settings row in `jarvis-desktop/src/pictures-settings.js`. There is no
-  "save to my phone" on the PC: the picture is already on it.
+Both draw the same feature and both are hidden by their own menu entry -
+`brain.projects.pictures` for the gallery, `settings.pictures` for the PC's
+setup (JARVIS-API section 109).
+
+- **Desktop.** Two places, and each says where the other is. The SETUP is
+  Settings -> **Pictures** (`jarvis-desktop/src/pictures-settings.js`):
+  "Making pictures", the program that draws (the two supported values, each
+  with what to install), and the folder with its size. The GALLERY is Brain ->
+  **Projects** -> **Pictures**
+  (`jarvis-desktop/src/pictures-panel.js`, its own pane `#pictures-root`,
+  beside the Progress pictures): the box to ask for a new one, and every
+  picture with its prompt, its seed, its model and when it was made, a **Make
+  another** on each. The four commands are in
+  `jarvis-desktop/src-tauri/src/brain/pictures.rs`:
+  `brain_pictures`, `brain_pictures_file`, `brain_pictures_make`,
+  `brain_pictures_settings` and `choose_pictures_folder` (the same Windows
+  "Select folder" dialog "Folders Jarvis may look in" uses). A picture's bytes
+  are drawn as a `data:` image, which the packaged CSP already allows
+  (`img-src data:`), fetched one at a time as each picture scrolls into view.
+  There is no "save to my phone" on the PC: the picture is already on it.
 - **Phone.** Brain -> **Pictures**, in `ui/screens/PicturesPlate.kt`, reading
   through `net/Pictures.kt`. Each picture shows with its prompt and when it was
   made, a **Make another** button, and **Save to my phone**, which reads

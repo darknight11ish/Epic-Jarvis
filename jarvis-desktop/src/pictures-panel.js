@@ -212,24 +212,6 @@ async function makePicture(prompt) {
   }
 }
 
-async function changeSetting(args) {
-  try {
-    const out = await invoke("brain_pictures_settings", args);
-    if (unavailable(out)) {
-      say(WORDS.missing);
-    } else {
-      state.loaded.clear();
-      say("");
-    }
-    return out;
-  } catch (error) {
-    say(errorText(error));
-    return null;
-  } finally {
-    await refreshPictures();
-  }
-}
-
 /** Fetches ONE picture's bytes, once, and hands back a data URL. */
 async function loadBytes(id) {
   if (state.loaded.has(id)) return state.loaded.get(id);
@@ -291,8 +273,12 @@ function askBlock(d, canAct) {
     isLive: true,
     fkey: "make",
   });
-  make.disabled = make.disabled || state.making;
-  if (state.making) make.textContent = "Drawing…";
+  // `syncLive` above already greyed it when the link is stale; this adds the
+  // one thing it cannot know - a drawing is already running.
+  if (state.making) {
+    make.disabled = true;
+    make.textContent = "Drawing…";
+  }
   row.append(label, box, make);
   const wrap = el("div", "pg-block");
   wrap.append(row);
@@ -302,68 +288,30 @@ function askBlock(d, canAct) {
 }
 
 function settingsBlock(d) {
+  // Read-only on this page: the switch, the drawing program and the folder are
+  // "Making pictures" in Settings -> Pictures, which the backend accepts only
+  // from this PC. What the owner needs here is the STATE, and one line telling
+  // them where to change it - not a second set of controls that could disagree
+  // with the first.
   const block = el("div", "pg-block pg-pictures-settings");
-  const row = el("div", "row");
-  const toggle = el("button", "btn small", d.enabled ? "Turn off" : "Turn on");
-  toggle.type = "button";
-  toggle.addEventListener("click", () =>
-    changeSetting({ action: "enabled", on: !d.enabled }),
-  );
-  row.append(el("span", "pg-words", `${WORDS.on}: ${d.enabled ? "on" : "off"}`));
-  row.append(toggle);
-  block.append(row);
-
-  const pick = el("select");
-  pick.setAttribute("aria-label", WORDS.program);
-  const none = el("option", "", WORDS.none);
-  none.value = "";
-  pick.append(none);
-  for (const r of d.runtimes || []) {
-    const option = el("option", "", `${r.plain} — ${r.address}`);
-    option.value = r.id;
-    pick.append(option);
-  }
-  pick.value = d.runtime || "";
-  pick.addEventListener("change", () => {
-    const chosen = (d.runtimes || []).find((r) => r.id === pick.value);
-    changeSetting({ action: "runtime", runtime: pick.value || null });
-    if (chosen) say(`Jarvis will use ${chosen.plain}. Install it with: ${chosen.install}`);
-  });
-  const progRow = el("div", "row");
-  progRow.append(el("label", "", WORDS.program), pick);
-  block.append(progRow);
-
-  const folderRow = el("div", "row");
-  folderRow.append(el("span", "pg-words", `${WORDS.folder}: ${d.folder || ""}`));
-  folderRow.append(
-    button(
-      WORDS.choose,
-      async () => {
-        try {
-          const out = await invoke("choose_pictures_folder", {});
-          if (out && out.cancelled) return;
-          state.loaded.clear();
-          say("");
-        } catch (error) {
-          say(errorText(error));
-        }
-        await refreshPictures();
-      },
-      { title: "The same Windows folder dialog Folders Jarvis may look in uses", isLive: true, fkey: "folder" },
-    ),
-  );
-  block.append(folderRow);
-
-  // The folder and its size, in the PC's own words.
+  const line = el("p", "note");
+  line.textContent = [
+    `${WORDS.on}: ${d.enabled ? "on" : "off"}`,
+    d.runtime_plain ? `${WORDS.program}: ${d.runtime_plain}` : `${WORDS.program}: ${WORDS.none}`,
+    `${WORDS.folder}: ${d.folder || ""}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  block.append(line);
   const size = el("p", "note");
   size.textContent = [
     `${d.count} ${d.count === 1 ? "picture" : "pictures"}`,
     d.size_words,
-    d.folder,
   ]
     .filter(Boolean)
     .join(" · ");
   block.append(size);
+  block.append(el("p", "note", "Turn it on, choose the program and pick the folder in Settings, under Pictures."));
   block.append(el("p", "note", d.keep || ""));
   return block;
 }
@@ -419,7 +367,6 @@ function pictureRow(p, canAct) {
       { title: "Ask for this one again", isLive: true, fkey: `again:${p.id}` },
     ),
   );
-  caption.querySelector("button").disabled = caption.querySelector("button").disabled || !canAct;
   card.append(caption);
   return card;
 }

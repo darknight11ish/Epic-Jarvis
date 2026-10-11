@@ -968,7 +968,7 @@ object JarvisRuntime {
      * the scrubbed technical detail are kept in [problem] for Home's notice.
      * [handshake]: `GET /api/version`, where a 404 means "not Jarvis at all".
      */
-    private fun describe(e: ApiError, handshake: Boolean = false): String {
+    internal fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
         val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
         // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
@@ -7797,9 +7797,10 @@ object JarvisRuntime {
         actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
         return when (val r = api.makePicture(body)) {
             is ApiResult.Ok -> {
-                val words = r.value["words"]?.let { element ->
-                    runCatching { element.jsonPrimitive.contentOrNull }.getOrNull()
-                }.orEmpty()
+                // The PC's own sentence ("Drawn in 41.2 seconds and saved as
+                // ..."), shown word for word. Read as a plain string, never
+                // rebuilt here.
+                val words = com.jarvis.client.net.Pictures.madeWords(r.value)
                 com.jarvis.client.net.PicturesMake(
                     true, words.ifBlank { "Drawn and kept on your PC." },
                     com.jarvis.client.net.Pictures.madeId(r.value),
