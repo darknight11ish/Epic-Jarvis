@@ -840,6 +840,27 @@ fn main() {
             // and never pictures the paused browser window, which this PC's
             // windows have no route to.
             "handoff_front",
+            // "Ask for a picture, and keep it" (pictures.rs; backend
+            // jarvis_pictures.py, JARVIS-API section 129; the owner's decision
+            // of 2026-09-27). Five commands, and NO APPROVAL CARD anywhere:
+            // a picture is a new file in a folder on THIS PC, drawn by a
+            // program on THIS PC, from the owner's own words - the same shape
+            // as a timer or a note, and there is no route that sends a picture
+            // anywhere. Reading the gallery and one picture's bytes is a read;
+            // drawing one and changing the switch, the drawing program or the
+            // folder all write, so all four are held while the event stream is
+            // stale (rule 4). The prompts are the owner's own words, so the
+            // gallery goes out with the private lists and the bytes are never
+            // fetched while they are hidden. The Brain holds the gallery and
+            // Settings holds the three controls; the folder picker runs in
+            // Rust, the same Windows "Select folder" dialog "Folders Jarvis
+            // may look in" uses, so the page only ever sees the path the owner
+            // chose.
+            "brain_pictures",
+            "brain_pictures_file",
+            "brain_pictures_make",
+            "brain_pictures_settings",
+            "choose_pictures_folder",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

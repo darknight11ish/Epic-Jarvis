@@ -174,8 +174,15 @@ class FindAnythingTest {
             // `entry.voices`. It is here so that a regeneration which drops the
             // `names` field, or a catalogue that comes back a different size,
             // is noticed rather than quietly searched.
+            //
+            // 116 -> 118 (2026-10-11): the picture feature's two menus joined
+            // the registry - `settings.pictures` (the PC's own setup card) and
+            // `brain.projects.pictures` (the gallery) - so the catalogue really
+            // is two bigger. Moved with that reason, not to make a red check
+            // green: the check above still proves every one of the 118 menus has
+            // all of its names searched for.
             "the catalogue must still carry the names at all",
-            116,
+            118,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

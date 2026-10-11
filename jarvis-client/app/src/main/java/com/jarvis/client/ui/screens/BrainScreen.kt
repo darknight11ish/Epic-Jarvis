@@ -982,6 +982,23 @@ fun BrainScreen(
                     }
                 }
 
+                // "Ask for a picture, and keep it" (the owner's decision of
+                // 2026-09-27; JARVIS-API section 129; PicturesPlate.kt). The
+                // owner types what the picture should show, the PC draws it and
+                // keeps it, and "Save to my phone" copies it into THIS phone's
+                // own Pictures collection. No card: it is a new file on the PC,
+                // from the owner's own words. The prompts hide with the private
+                // lists, so while they are hidden this plate fetches nothing at
+                // all. It sits beside Progress, both of them under Projects.
+                if (menus.shows("brain.projects.pictures")) plate("pictures") {
+                    MenuFrame(menus, "brain.projects.pictures") {
+                        PicturesSection(
+                            hidden = privateHidden,
+                            canAct = canAct,
+                        )
+                    }
+                }
+
                 // "Projects" (the owner's decision of 2026-09-28): projects,
                 // their notes and benchmarks with a chart (ProjectsPlate.kt) -
                 // the desktop's Brain -> Projects. It reads and acts through

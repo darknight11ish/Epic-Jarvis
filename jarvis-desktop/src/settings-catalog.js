@@ -6,12 +6,12 @@
 
 export const SCHEMA = 1;
 export const COUNTS = {
-  "all": 29,
-  "desktop": 27,
+  "all": 30,
+  "desktop": 28,
   "phone": 2,
   "fallback": 10,
-  "setting": 28,
-  "desktop_setting": 26
+  "setting": 29,
+  "desktop_setting": 27
 };
 export const MARKERS = {
   "begin": "<!-- settings-toggles:begin (tools/gen_settings_cases.py writes these; do not edit) -->",
@@ -603,6 +603,28 @@ export const ROWS = [
     "label_span": null,
     "detail_span": null,
     "label": "Start Jarvis Desktop when Windows starts",
+    "detail": "",
+    "fallback": false,
+    "checked": false,
+    "hidden": false,
+    "data_live": false,
+    "setting_row": true,
+    "phone_key": null,
+    "source": null
+  },
+  {
+    "id": "pc-switch",
+    "setting": "pictures",
+    "owner": "desktop",
+    "section": "pictures",
+    "order": 28,
+    "indent": 10,
+    "input": "pc-switch",
+    "input_open": null,
+    "row_id": null,
+    "label_span": "pc-switch-label",
+    "detail_span": null,
+    "label": "Making pictures",
     "detail": "",
     "fallback": false,
     "checked": false,

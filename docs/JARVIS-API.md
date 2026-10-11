@@ -19220,3 +19220,219 @@ phone's source is not a call. The old line, "the phone calls it", came from a
 string match and was never true. `backend/test_parity_callgraph.py` still pins
 the direction that matters for shipping - one real call site and the checker
 fails instead.
+---
+
+## 129. Ask for a picture, and keep it (added 2026-10-11)
+
+`backend/jarvis_pictures.py` (shipped whole), `backend/pictures.patch` (one
+`install()` call in `jarvis_hud.py`), `backend/test_pictures.py`. The owner's
+decision of 2026-09-27: *"12 GB card: longer conversations with picture
+understanding first, and **making pictures too (swapped in when asked, since
+both cannot sit on the card at once)**"* (CLAUDE.md).
+
+### 129.1 What it is, in plain words
+
+You ask Jarvis for a picture, in your own words. A picture-making program on
+this PC draws it, the picture is saved in a folder on this PC, and both apps
+show it to you again with the words that made it. **Nothing leaves the PC**
+(CLAUDE.md rule 1): the drawing program is a program on this machine, and the
+only address this module ever opens a socket to is the one the owner
+configured. The sidecar beside each picture holds the prompt, the seed, the
+model and the settings, so the owner can read what a picture was and make it
+again.
+
+### 129.2 The routes
+
+    GET  /api/pictures           the folder, how many pictures are in it, how
+                                 big it is, the switch, the chosen program and
+                                 every picture with its own prompt, seed,
+                                 model and when it was made. A read.
+    GET  /api/pictures/file      ?id=<id> - ONE picture, as base64 in JSON
+                                 with the token header, exactly as the captcha
+                                 hand-off sends its own frame
+                                 (jarvis_handoff.py). This is how the phone
+                                 saves one to itself.
+    POST /api/pictures           {"prompt": "...", "seed"?: n,
+                                  "settings"?: {"steps","width","height",
+                                                "model","negative"}}
+                                 Draw one and keep it.
+    POST /api/pictures/settings  ONE named change, and the PC REFUSES all of it
+                                 from anywhere but the PC (403 pc_only):
+
+      {"action": "enabled", "on": true}
+      {"action": "runtime", "runtime": "comfyui" | "sd_cpp" | null,
+       "address"?: "http://127.0.0.1:8188"}
+      {"action": "folder", "folder": "D:\\Jarvis pictures"}
+
+The successful `POST` answers with where the picture went and how long it took:
+
+    {"ok": true, "available": true, "name": "2026-10-11-140509-a-red-panda.png",
+     "id": "2026-10-11-140509-a-red-panda", "path": "<the folder>\\<the name>",
+     "folder": "<the folder>", "prompt": "a red panda", "seed": 1234,
+     "model": "sd_xl_base_1.0.safetensors", "runtime": "comfyui",
+     "settings": {"steps": 28, "width": 768, "height": 512},
+     "seconds": 41.2, "bytes": 812345, "made_at_words": "11 Oct 2026, 14:05",
+     "words": "Drawn in 41.2 seconds and saved as 2026-10-11-140509-a-red-panda.png."}
+
+`prompt` is required and is capped at 2000 characters; `settings` are the
+**drawing program's own knobs**, not Jarvis settings, and the two names are
+kept apart on purpose. Every refusal is `{"ok": false, "error": "<one plain
+sentence>"}` - never a traceback, never an empty 200.
+
+### 129.3 Where pictures are kept, and what is beside them
+
+- **The folder** is `folder` in `pictures.json` in the config folder (the same
+  place `folders.json` and `asks_first.json` live), defaulting to
+  `%USERPROFILE%\Pictures\Jarvis`. It is chosen **on the PC only**, the same
+  shape `jarvis_backup.py` uses for its backup folder.
+- **The name** is `YYYY-MM-DD-HHMMSS-<slug>.png`, where `<slug>` is the first
+  six words of the prompt with everything that is not a letter or a digit
+  turned into a dash (48 characters at most, `picture` if that leaves
+  nothing). **The date AND the time are both in the name**, and a name already
+  on disk gets `-2`, `-3` and so on, so two pictures asked for in the same
+  second cannot collide and **nothing is ever overwritten**.
+- **The sidecar** is `<same name>.json` beside the picture:
+  `{"jarvis_pictures": 1, "picture", "prompt", "seed", "runtime", "model",
+  "settings", "made_at", "made_at_words", "seconds"}`.
+- **Nothing is deleted on a timer.** Unlike `jarvis_backup.py`'s five kept
+  files, the owner's own pictures are never tidied away by Jarvis; the list
+  route reports the folder and its total size so the owner can see what it
+  costs. A picture whose sidecar is lost is **still listed**, with `prompt`
+  empty and `record: false`, rather than disappearing.
+
+A sidecar that cannot be written costs the record, never the picture: the PNG
+is written first and the JSON second, so a crash between them leaves a picture
+that is merely unexplained.
+
+### 129.4 The switch, and the two things the owner has to do
+
+Both cards are Turing and the everyday model already holds the 12 GB one, so
+the drawing program has to be swapped in and only one of the two can be on the
+card at a time. The owner's standing rule is that a feature using the second
+card keeps **its own switch, off until that feature is measured**; the switch
+is:
+
+    Settings > Pictures > "Making pictures"     default OFF
+
+`pictures.json` holds four keys, each read with its own fallback so a
+hand-edited or half-written file can never crash a route and can never turn
+the feature on:
+
+    {"enabled": false, "runtime": null, "address": null, "folder": null}
+
+`runtime` is **a setting with named supported values, never guessed at**,
+because two different programs are plausible and the owner may install either:
+
+| `runtime` | the program | its own default address |
+|---|---|---|
+| `comfyui` | ComfyUI (`/prompt`, `/history`, `/view`) | `http://127.0.0.1:8188` |
+| `sd_cpp` | stable-diffusion.cpp's `sd-server` (`/sdapi/v1/txt2img`) | `http://127.0.0.1:1234` |
+
+`address` overrides that runtime's own default for an owner who runs it on
+another port. Nothing here installs, starts, stops or reconfigures the drawing
+program, and nothing here chooses or downloads a model: whatever the program is
+configured with is what draws, and its model name is written into the sidecar.
+
+**What the owner sees when it is not set up is one plain sentence, never an
+error and never a silent nothing:**
+
+- with no `runtime` chosen: *"Jarvis has no picture-making program set up yet,
+  so it cannot draw one. Install ComfyUI (https://github.com/comfyanonymous/ComfyUI)
+  or stable-diffusion.cpp's server (https://github.com/leejet/stable-diffusion.cpp),
+  then choose which one you installed in Settings, under Pictures."* - `503`,
+  `available: false`.
+- with `runtime` chosen but the program not answering: *"Jarvis is set to use
+  ComfyUI, but it is not answering. Start it on this PC, then ask again."* -
+  `503`, `available: false`.
+- with the switch off: *"Making pictures is switched off. Turn on \"Making
+  pictures\" in Settings, under Pictures, when you want Jarvis to use the
+  second card for this."* - `503`, `off: true`.
+
+### 129.5 No approval card, and why that is not a loophole
+
+**Making a picture needs no approval card.** The gate exists for things that
+leave the PC, change the owner's accounts, or cannot be undone
+(`docs/ARCHITECTURE.md` section 4). A picture is none of those: it is a new
+file in a folder on this PC, drawn by a program on this PC, from words the
+owner typed. It is the same shape as a timer or a note, both of which need no
+card.
+
+**Sending that picture to anyone else would be a new named way out of the PC,
+and this is deliberately not built.** There is no email, no upload, no chat
+attachment and no web search here. The phone's own **"Save to my phone"** reads
+the picture over Tailscale or NordMesh - a way to the owner's own device, not a
+way out of the PC - exactly as the captcha hand-off's one frame does.
+
+**Where the prompt came from still matters, and is not invented here.** The
+prompt is whatever the owner typed in the box. `jarvis_pictures.py` is not a
+tool in `jarvis_agent.py`, is not imported by it, and is reachable from no
+model turn, so a prompt can never be filled in from email, a web page or a
+file by the model. `test_pictures.py` fails if any model path starts importing
+it.
+
+### 129.6 Hidden with the private things, on both apps
+
+The prompts are the owner's own words, so the gallery and the prompt text
+**hide under "Hide memory lists and chat history" like every other private
+surface** - added to that rule rather than beside it. On the desktop the answer
+is replaced in Rust (the same shape `brain/progress.rs` uses) so a page script
+cannot read round it; on the phone the plate fetches nothing at all while the
+switch is on, and shows one line saying so
+(`WORDS["hidden_short"]` = *"Turn off Hide memory lists to see your pictures."*).
+
+### 129.7 The two surfaces
+
+Both draw the same feature and both are hidden by their own menu entry -
+`brain.projects.pictures` for the gallery, `settings.pictures` for the PC's
+setup (JARVIS-API section 109).
+
+- **Desktop.** Two places, and each says where the other is. The SETUP is
+  Settings -> **Pictures** (`jarvis-desktop/src/pictures-settings.js`):
+  "Making pictures", the program that draws (the two supported values, each
+  with what to install), and the folder with its size. The GALLERY is Brain ->
+  **Projects** -> **Pictures**
+  (`jarvis-desktop/src/pictures-panel.js`, its own pane `#pictures-root`,
+  beside the Progress pictures): the box to ask for a new one, and every
+  picture with its prompt, its seed, its model and when it was made, a **Make
+  another** on each. The four commands are in
+  `jarvis-desktop/src-tauri/src/brain/pictures.rs`:
+  `brain_pictures`, `brain_pictures_file`, `brain_pictures_make`,
+  `brain_pictures_settings` and `choose_pictures_folder` (the same Windows
+  "Select folder" dialog "Folders Jarvis may look in" uses). A picture's bytes
+  are drawn as a `data:` image, which the packaged CSP already allows
+  (`img-src data:`), fetched one at a time as each picture scrolls into view.
+  There is no "save to my phone" on the PC: the picture is already on it.
+- **Phone.** Brain -> **Pictures**, in `ui/screens/PicturesPlate.kt`, reading
+  through `net/Pictures.kt`. Each picture shows with its prompt and when it was
+  made, a **Make another** button, and **Save to my phone**, which reads
+  `/api/pictures/file` and writes the PNG into the phone's own Pictures
+  collection through MediaStore. Nothing about a model, a catalogue or a
+  drawing program is on the phone: it sends a prompt and reads a picture.
+
+### 129.8 Tests, and what is honestly not proved
+
+`python3 backend/test_pictures.py` (with `JARVIS_BACKEND` set the way every
+suite here is run). **There is no graphics card, no drawing program and no
+model anywhere in it, and there must not be.** Every route is exercised with a
+**stub runtime** put in the module's own registry (`register_runtime`), so the
+suite proves the routes, the storage, the words and the switch - and proves
+**nothing** about whether ComfyUI or stable-diffusion.cpp draws a good picture.
+That split is written into the suite's own docstring rather than implied.
+
+What it covers: the route with a stub (200, where it went, how long it took);
+the storage round-trip (write, read back, the sidecar intact - prompt, seed,
+model and settings all survive); the file name and its slug; **a collision** -
+the same prompt in the same second makes two files and overwrites neither; the
+"runtime not installed" sentence; the "configured but not answering" sentence;
+the mode being **off by default** and off being refused in words that name the
+switch; the listing route (newest first, the folder and its size, a lost
+sidecar handled); the picture itself as bytes and a refusal for anything that
+is not one of our ids; `install()` and its origin/token refusals; and that no
+other backend module imports this one.
+
+Desktop: the Rust reading functions are plain functions of `(status, body)` and
+are tested without a Tauri app or a network
+(`jarvis-desktop/tests/pictures.mjs`). Phone:
+`jarvis-client/app/src/test/java/com/jarvis/client/PicturesTest.kt`.
+
+`tools/check_parity.py` carries all three routes.

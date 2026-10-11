@@ -146,18 +146,20 @@ await check("the catalogue is the fixture, row for row and in order", async () =
   }
 });
 
-await check("the fixture says how many rows there are, and it is 27 desktop toggles", async () => {
-  assert.equal(FIX.counts.desktop, 27);
-  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 27);
+await check("the fixture says how many rows there are, and it is 28 desktop toggles", async () => {
+  assert.equal(FIX.counts.desktop, 28);
+  assert.equal(FIX.rows.filter((r) => r.owner === "desktop").length, 28);
   assert.equal(FIX.counts.phone, 2);
-  assert.equal(FIX.counts.all, 29);
+  assert.equal(FIX.counts.all, 30);
   // The number this whole feature was briefed with was wrong once already
   // ("all 19"): the 19 is the count of rows with a BARE `<label class="toggle">`,
   // and the seven rows that also carry a label id were left out of it.
   // "Click through to what is behind" (2026-10-10) is a bare one, so both
   // numbers moved by one together.
+  // "Making pictures" (2026-10-11, JARVIS-API section 124) is a bare one too,
+  // so both moved by one again - 20 to 21, 27 to 28.
   const bare = (HTML.match(/^[ \t]*<label class="toggle">[ \t]*$/gm) || []).length;
-  assert.equal(bare, 20, "the bare-label count moved - re-read the 27 claim");
+  assert.equal(bare, 21, "the bare-label count moved - re-read the 28 claim");
   assert.equal(FIX.counts.desktop, bare + 7);
 });
 
