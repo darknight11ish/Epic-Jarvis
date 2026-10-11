@@ -619,9 +619,17 @@ pub async fn open_features(app: AppHandle) -> Result<(), String> {
 ///
 /// The 2026-10-05 walkthrough added two screens ON THE END (how to talk to
 /// it, and where the settings are) and left the memory screen at version 2's
-/// number and wording, so this stays 2 on purpose: the owner's rule is that
-/// the walkthrough is shown once and never again, and a new owner gets all
-/// five screens because they have no marker at all.
+/// number and wording, so this stays 2 on purpose: the walkthrough still
+/// opens BY ITSELF once, and a new owner gets all five screens because they
+/// have no marker at all.
+///
+/// "Once by itself" is no longer the whole story (the owner, 2026-10-10). It
+/// was "shown once, never again", which left an owner who skipped it by
+/// accident with no way back. It is now "shown once by itself, and replayable
+/// on demand" - see [`replay_onboarding`] below, which opens the same window
+/// again and deliberately does NOT touch this marker or the store at all. So
+/// this constant still means exactly one thing: the version `lib.rs` compares
+/// against to decide whether the walkthrough appears unprompted.
 pub const ONBOARDING_VERSION: u64 = 2;
 
 /// The store key holding the version of the walkthrough the owner last
@@ -659,6 +667,9 @@ pub fn onboarding_seen(app: &AppHandle) -> bool {
 /// not open again until [`ONBOARDING_VERSION`] is raised, and closes it — one
 /// command rather than two, since the page has no reason to do either
 /// without the other.
+///
+/// This is the ONLY writer of the marker. [`replay_onboarding`] is the other
+/// half of the owner's decision of 2026-10-10 and never comes near it.
 #[tauri::command]
 pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     use tauri_plugin_store::StoreExt;
@@ -680,6 +691,44 @@ pub fn finish_onboarding(app: AppHandle) -> Result<(), String> {
     window
         .close()
         .map_err(|e| format!("unable to close the walkthrough: {e}"))
+}
+
+/// Opens the first-run walkthrough again, on demand, from the Settings
+/// window's "Show the intro again" button.
+///
+/// The owner's request of 2026-10-10: the walkthrough is interactive and
+/// skippable, but it was not REDOABLE — one Escape and it was gone for good.
+/// He asked for it to be replayable if it was skipped by accident. This is
+/// that, and nothing more.
+///
+/// What it deliberately does NOT do, because that is the boundary that
+/// matters:
+///
+///   * It does not read, write or clear the versioned marker. [`finish_onboarding`]
+///     is the only writer, and `lib.rs`'s auto-show is still gated on
+///     [`onboarding_seen`] exactly as before. Clearing the marker here would
+///     make the walkthrough open by itself on the next launch — the one
+///     behaviour the owner did not ask to change. Pressing this button is
+///     therefore invisible to the next start.
+///   * It does not build a window. It reuses [`crate::windows::show_onboarding`],
+///     so the replay is the same fixed-size, non-resizable window with the
+///     same `ONBOARDING_LABEL` — and therefore the same narrow capability
+///     (`onboarding-surface`: mark seen, close). That function is already
+///     idempotent: while the walkthrough is open it does nothing, so a second
+///     press cannot open a second copy.
+///
+/// What finishing the replay does is what finishing a first-run walkthrough
+/// always did — writes the marker for this version, which it already holds.
+/// So the marker's meaning is unchanged: "the owner has closed this version
+/// at least once".
+///
+/// `async` for the same reason [`open_faces`] is: `show_onboarding` builds a
+/// window the first time it runs, and building a window inside a plain
+/// command deadlocks on Windows (bug audit 2026-09-27, desktop-rust
+/// finding #3).
+#[tauri::command]
+pub async fn replay_onboarding(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_onboarding(&app)
 }
 
 /// Reports the base and whether a token is configured — never the token
@@ -6204,6 +6253,105 @@ mod onboarding_tests {
         assert!(!walkthrough_is_current(Some(&json!(true))));
         assert!(!walkthrough_is_current(Some(&json!("2"))));
         assert!(!walkthrough_is_current(Some(&json!(-1))));
+    }
+
+    /// Closing the current walkthrough once still means it never opens by
+    /// itself again until the version is raised. This is the half of the
+    /// owner's decision of 2026-10-10 that did NOT change: replaying it on
+    /// demand is a separate door, not a second automatic show.
+    #[test]
+    fn finishing_once_still_means_it_does_not_return_by_itself() {
+        let closed = json!(ONBOARDING_VERSION);
+        assert!(walkthrough_is_current(Some(&closed)));
+        // Raising the version stays the ONE way it comes back unprompted.
+        assert!(!walkthrough_is_current(Some(&json!(
+            ONBOARDING_VERSION - 1
+        ))));
+    }
+
+    /// The body of one function in this file, from its `fn` line to the
+    /// closing brace at column zero. `commands.rs` is compiled in and read
+    /// back, the same source guard `brain/progress.rs` uses: there is no
+    /// `AppHandle` in `cargo test`, and the store write that must NOT happen is
+    /// exactly the thing worth checking.
+    fn fn_body<'a>(src: &'a str, name: &str) -> &'a str {
+        let needle = format!("fn {name}(");
+        let at = src
+            .find(&needle)
+            .unwrap_or_else(|| panic!("commands.rs has no `{needle}`"));
+        let end = src[at..]
+            .find("\n}\n")
+            .unwrap_or_else(|| panic!("`{name}` is never closed"));
+        &src[at..at + end + 3]
+    }
+
+    /// The replay path of 2026-10-10 can never change when the walkthrough
+    /// appears by itself.
+    ///
+    /// `lib.rs` decides that from the versioned marker alone, so the rule that
+    /// keeps the two halves apart is: `finish_onboarding` is the only writer,
+    /// and `replay_onboarding` writes nothing at all. If someone later clears
+    /// the marker from the replay path, the walkthrough would open by itself
+    /// on the next start - the one behaviour the owner did not ask to change -
+    /// and this test is what says so before it ships.
+    #[test]
+    fn the_replay_path_can_never_change_the_seen_marker() {
+        let src = include_str!("commands.rs");
+
+        let replay = fn_body(src, "replay_onboarding");
+        assert!(
+            replay.contains("crate::windows::show_onboarding(&app)"),
+            "the replay no longer opens the walkthrough's own window: {replay}"
+        );
+        assert!(
+            !replay.contains("WebviewWindowBuilder"),
+            "the replay builds its own window instead of reusing the walkthrough's"
+        );
+        for forbidden in [
+            "ONBOARDING_VERSION_KEY",
+            "ONBOARDING_VERSION",
+            "onboarding_seen",
+            ".store(",
+            "store.set",
+            "store.save",
+        ] {
+            assert!(
+                !replay.contains(forbidden),
+                "the replay path touches {forbidden} - playing the intro again must not \
+                 change when it appears on its own"
+            );
+        }
+
+        // And the marker really does still have exactly one writer.
+        let finish = fn_body(src, "finish_onboarding");
+        assert!(
+            finish.contains("store.set(") && finish.contains("ONBOARDING_VERSION_KEY"),
+            "finish_onboarding no longer writes the versioned marker"
+        );
+        // `onboarding_seen` is still the read `lib.rs`'s gate is built on.
+        let seen = fn_body(src, "onboarding_seen");
+        assert!(
+            seen.contains("store.get(ONBOARDING_VERSION_KEY)"),
+            "onboarding_seen no longer reads the marker the gate depends on"
+        );
+    }
+
+    /// Least privilege: the walkthrough's own window is not handed the power
+    /// to open itself. Replay belongs to Settings' button, not to the page
+    /// being replayed.
+    #[test]
+    fn the_walkthrough_window_cannot_reopen_itself() {
+        let capability = include_str!("../capabilities/onboarding.json");
+        assert!(capability.contains("onboarding-surface"));
+        assert!(
+            !capability.contains("onboarding-replay"),
+            "the walkthrough's own page was handed the power to open itself"
+        );
+        let settings = include_str!("../capabilities/settings.json");
+        assert!(
+            settings.contains("onboarding-replay"),
+            "the Settings window's replay button has no grant, so it would do nothing"
+        );
     }
 }
 

@@ -428,7 +428,14 @@ fun SettingsScreen(
                                 color = chrome.textMid,
                             )
                             val voiceCheck = onVoiceCheck?.takeIf { menus.shows("entry.voice-check") }
-                            val voices = onVoices?.takeIf { menus.shows("entry.voices") }
+                            // "Jarvis's voice" (the parity audit of 2026-10-10):
+                            // ONE id for ONE feature. This row used to be
+                            // `entry.voices` while the desktop's card for the
+                            // same feature was `settings.voices` - two ids for
+                            // one feature, against backend/jarvis_menus.py's own
+                            // rule. The duplicate id is gone; this row now hides
+                            // under the one id both apps use.
+                            val voices = onVoices?.takeIf { menus.shows("settings.voices") }
                             val any = onTrainVoice != null || voiceCheck != null || voices != null
                             if (any) Gap(10)
                             onTrainVoice?.let {
@@ -578,6 +585,20 @@ fun SettingsScreen(
             // without the guard (found during the rebase, 2026-10-09).
             if (drawn("jarvis-notify")) item(key = "jarvis-notify") {
                 NotificationsFromJarvisSection(onOpen = onOpenNotificationSettings)
+                // The PC's own Notifications card, right under the paragraph
+                // that ends "Which kinds your PC sends at all is the PC's own
+                // Notifications card." (2026-10-10, the parity audit's GAP 1-6):
+                // seven rows, read and written through the same limits route the
+                // desktop's card now uses, in the PC's own words - every one of
+                // which says "(on your PC)" so the two halves of this row can
+                // never be mistaken for each other.
+                //
+                // Inside THIS item rather than a new row of its own, because the
+                // value rows themselves already exist in the limits table (and
+                // in "Limits and how often Jarvis does things"): this card is
+                // where they belong on the phone, and giving it a new item key
+                // would move every index below it for no gain.
+                PcNotifySection(canAct = canAct)
             }
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's

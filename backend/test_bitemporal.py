@@ -20,8 +20,13 @@ sys.path.insert(0, str(HERE))
 # in the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, missing, explain, require_rebuilt
 
+# The ten modules this repository ships WHOLE (`backend/rebuilt/`) are put on
+# sys.path by _where.py. Without that they are nowhere in a clone, and this
+# import died as `ModuleNotFoundError: No module named 'jarvis_memory'` before
+# one check could run - which is what the guard below says in one line.
+require_rebuilt("jarvis_memory")
 import jarvis_memory as M
 
 HUD = BACKEND / "jarvis_hud.py"
@@ -32,6 +37,7 @@ SURFACES = (REPO / "jarvis-desktop" / "src-tauri" / "permissions"
             / "surfaces.toml")
 
 FAILED, PASSED = [], []
+SKIPPED = []
 DAY = 86400.0
 
 
@@ -39,6 +45,14 @@ def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this run cannot make, printed as `skip` and counted on its own -
+    never as a pass. `run_suites.py` counts these lines, and the summary below
+    prints the number, so a skip can never be read as a check that ran."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def fresh():
@@ -216,7 +230,15 @@ def t_reopening_does_not_re_migrate():
 def t_it_is_reachable():
     """A column nobody reads is not a feature. Check every hop."""
     if not HUD.is_file():
-        check("the route exposes known_at", False, f"no {HUD}")
+        # NOT a failure and NOT a pass. jarvis_hud.py is one of the five files
+        # only the owner's PC has - the patcher edits it in place rather than
+        # copying it (scripts/apply-patches.ps1), so a clone does not hold it
+        # and run_suites.py skips this whole suite by name for that reason.
+        # Run the file directly and the four checks below have nothing to read:
+        # they used to fail as "no <path>", which reads as a broken patch rather
+        # than as the one file this machine was never given.
+        skip(f"the four route checks need jarvis_hud.py, which is not in "
+             f"{BACKEND} - only the owner's PC has it. {explain()}")
         return
     src = HUD.read_text(encoding="utf-8")
     check("the facts route accepts ?known_at",
@@ -266,7 +288,7 @@ def main():
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     return 1 if FAILED else 0

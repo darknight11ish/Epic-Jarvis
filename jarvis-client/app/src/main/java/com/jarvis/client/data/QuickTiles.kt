@@ -105,7 +105,8 @@ object QuickTiles {
     const val HINT =
         "Up to three Jarvis tiles for the panel you pull down from the top of the " +
             "screen. Choose what each one does here, then add it: pull the panel down, " +
-            "tap Edit (often a pencil), and drag \"Jarvis tile 1\", \"2\" or \"3\" into place."
+            "tap Edit (often a pencil), and drag one of the three \"Tap to choose\" " +
+            "tiles into place. Each one then says what it does."
 
     const val SAFETY =
         "Only small things are offered, all one tap in the app already. A tile can " +
@@ -126,7 +127,34 @@ object QuickTiles {
     const val SUB_STALE = "Catching up"
     const val SUB_UNPAIRED = "Not paired"
     const val SUB_CHOOSE = "Tap to choose"
-    const val UNASSIGNED_LABEL = "Jarvis tile"
+
+    /**
+     * What a slot with NO action chosen draws, and what the manifest names all
+     * three of them (`res/values/strings.xml`'s `tile_slot_1` to `tile_slot_3`,
+     * which the manifest gives to the three services, so Android's tile editor
+     * and the shade agree).
+     *
+     * IT NAMES THE ONE THING THAT TAP DOES (corrected 2026-10-11). These three
+     * were "Jarvis tile 1" to "Jarvis tile 3" - the only phone label the owner
+     * ever saw that could not be tested, because it said nothing to test. A
+     * person choosing a tile in Android's editor could not tell what any of
+     * them did, and neither could the shade, because a shape and a number are
+     * not an action.
+     *
+     * The action cannot be named here: Android's editor reads the MANIFEST
+     * label, the manifest is fixed when the app is built, and which of the five
+     * actions a slot gets is the owner's choice made later, in Settings. So the
+     * label names the thing that is true of every unchosen slot and the thing
+     * the tap really does - [Decision.OpenChooser] - and that is the same words
+     * as the second line ([subtitle]), deliberately: one is the label and one is
+     * the state, and for an empty slot they are the same truth.
+     *
+     * Once a slot HAS an action, the tile draws that action's own name
+     * ([tileLabel]): "Focus session", "10-min timer", "Open briefing", "Stop
+     * everything", "Play/pause PC". Nothing here promises an action the tap
+     * does not do - the trap [OPEN_BRIEFING] was fixed for.
+     */
+    const val UNASSIGNED_LABEL = SUB_CHOOSE
 
     /**
      * What the briefing slot draws, because the shared word would lie: tapping
@@ -145,9 +173,15 @@ object QuickTiles {
      * (`contract/widget-cases.json`) - so a tile whose shared word would
      * promise something the tap does not do is corrected HERE, on this
      * surface, and the shared list is left alone.
+     *
+     * [slot] is unused since 2026-10-11 and kept on purpose: the three slots are
+     * interchangeable, so an unchosen one is named for what its tap does
+     * ([UNASSIGNED_LABEL]) and not the label plus its slot number, as it was. Any
+     * later rule that DOES depend on the slot has the argument already.
      */
+    @Suppress("UNUSED_PARAMETER")
     fun tileLabel(action: TileAction?, slot: Int): String = when (action) {
-        null -> "$UNASSIGNED_LABEL ${slot + 1}"
+        null -> UNASSIGNED_LABEL
         TileAction.BRIEF_ME -> OPEN_BRIEFING
         else -> action.tileLabel
     }

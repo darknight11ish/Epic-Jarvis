@@ -218,7 +218,7 @@ await check("CONTROL: the Rust reads the list, asks for merge cards, and hides t
   assert.match(read("src/brain.js"), /memory: \["memory_facts", "memory_pending", "memory_entities"\]/);
 });
 
-await check("CONTROL: the phone asks for no merge cards and draws no graph (its plain People and things list, owner 2026-09-30, a list, no picture)", async () => {
+await check("CONTROL: the phone draws the Galaxy read-only and still asks for no merge cards (owner 2026-10-11: he asked to see it on his phone, so 2026-09-30's plain-list-only rule is superseded for this one screen)", async () => {
   const root = join(HERE, "..", "..", "jarvis-client", "app", "src", "main", "java");
   const all = [];
   const walk = (d) => {
@@ -230,9 +230,17 @@ await check("CONTROL: the phone asks for no merge cards and draws no graph (its 
   };
   walk(root);
   const kt = all.join("\n");
-  // Owner 2026-09-30 (docs/GALAXY-PANEL-DESIGN.md option B): the phone reads the
+  // Owner 2026-09-30 (docs/GALAXY-PANEL-DESIGN.md option B): the phone read the
   // list for a plain "People and things" list - and no picture.
-  assert.ok(!kt.includes("buildEntityGraph") && !kt.includes("RuntimeShader(\"galaxy"), "the phone draws a graph");
+  // Owner 2026-10-11: "can i see the galaxy on the android phone? I should be
+  // able to see it" - offered a choice, he picked a light, read-only Galaxy for
+  // this one screen. So the phone DRAWS the map now. What has not changed, and
+  // is the half that matters here: it asks for no merge cards, and the map is
+  // read-only - `PhoneGalaxyTest.nothingInThisPlateWrites` holds that on the
+  // phone side (no Forget, Erase, Pin, merge, rename or drag, and no route that
+  // could carry one), so this CONTROL keeps the safety rule and drops the
+  // superseded picture rule.
+  assert.ok(kt.includes("buildEntityGraph"), "the phone no longer draws the Galaxy");
   assert.ok(!kt.includes("merge_cards"), "the phone asks for merge cards");
   assert.match(readRepo("docs/ARCHITECTURE.md"), /About <name>/);
 });

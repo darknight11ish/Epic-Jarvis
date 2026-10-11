@@ -154,6 +154,21 @@ fun ApprovalsScreen(
                 item(key = "notice") { Notice(notice, onDismissNotice) }
             }
 
+            // The desktop's Content risk card, FIRST - the same place the
+            // desktop puts its rush strip ("at the top of every view",
+            // brain.js:1259), and for the same reason: outside text that tried
+            // to hurry a decision changes how everything under it should be
+            // read. Read-only like the rest of this screen, and hidden with the
+            // list below under "Hide memory lists and chat history", because it
+            // is a record of the owner's own instructions (ContentRiskPlate.kt).
+            item(key = "content-risk") {
+                ContentRiskSection(
+                    hidden = privateHidden,
+                    busy = showPrivateBusy,
+                    onShow = onShowPrivate,
+                )
+            }
+
             item(key = "lead") {
                 Plate {
                     Text(

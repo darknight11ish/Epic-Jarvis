@@ -2793,6 +2793,29 @@ class MainActivity : FragmentActivity() {
                         modifier = root,
                     )
 
+                    // "Find anything" (ui/screens/FindScreen.kt; the parity
+                    // audit of 2026-10-10, gap 8): the typed search over every
+                    // place in the app, opened from the Find button on Home's
+                    // status line. It navigates and does nothing else.
+                    Screen.FIND -> com.jarvis.client.ui.screens.FindScreen(
+                        // The two hiding rules, read the same way the screens
+                        // read them: what "Show or hide menus" hides, and the
+                        // memory lists and chat history while that switch is on.
+                        menus = com.jarvis.client.JarvisRuntime.menus.view.collectAsState().value,
+                        privateHidden = privateHidden,
+                        onOpen = { row ->
+                            // The same one-time scroll "open <a place>" by voice
+                            // uses (OpenPlace, above). Deliberately NOT
+                            // `menus.showForVisit`: a hidden menu is never in a
+                            // result, so finding something can never un-hide it.
+                            pendingSection = row.section
+                            pendingSectionScreen = row.screen.name
+                            nav.go(row.screen)
+                        },
+                        onBack = { nav.back() },
+                        modifier = root,
+                    )
+
                     Screen.SECURITY -> {
                         // Asked again on every visit and every change, so the
                         // "no screen lock" warning follows the phone's own
@@ -3168,6 +3191,10 @@ class MainActivity : FragmentActivity() {
                                 onStartPhoneWatch = { startPhoneWatch() },
                                 onStopPhoneWatch = { com.jarvis.client.net.ScreenWatch.requestStop() },
                                 onOpenUsageAccess = { openUsageAccess() },
+                                // "Find anything" (ui/screens/FindScreen.kt):
+                                // the typed search over every place in the app,
+                                // from the Find button on the status line.
+                                onOpenFind = { nav.go(Screen.FIND) },
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value

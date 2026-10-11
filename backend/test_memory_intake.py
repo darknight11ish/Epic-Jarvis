@@ -438,6 +438,50 @@ def t_annotate_marks_the_card_and_drops_nothing():
     check("a Remember card says it is verbatim", out[2]["verbatim"] is True and out[0]["verbatim"] is False)
 
 
+def t_a_denials_proposal_is_marked_as_a_guess_on_the_card():
+    """The owner's decision of 2026-10-10: a Reject click may be written down
+    only as Jarvis's guess, marked as one WHERE THE OWNER REVIEWS IT.
+
+    The proposal text says it in its own words (test_gate_denial_rule.py), and
+    this is the other half: `guessed`, plus the same words in `auto_reason` -
+    the one field both apps' review cards already read, so no surface can show
+    the card without the marking. Nothing is dropped: the row is still there to
+    Keep or Discard.
+    """
+    rows = [{"id": 1, "text": "Jarvis's GUESS, marked as a guess: ...",
+             "replaces_id": None, "source": I.GUESS_SOURCE},
+            {"id": 2, "text": "Mario drives a Tesla", "replaces_id": None,
+             "source": "conversation"},
+            {"id": 3, "text": "my own words", "replaces_id": None, "source": "remember"}]
+    out = I.annotate([dict(r) for r in rows])
+    check("every row is still there - nothing is dropped for being a guess",
+          [r["id"] for r in out] == [1, 2, 3])
+    check("the denial's proposal is marked guessed", out[0].get("guessed") is True)
+    check("... and no other card is", out[1].get("guessed") is not True
+          and out[2].get("guessed") is not True)
+    check("the marking reaches the line the review card shows",
+          I.GUESS_REASON in str(out[0].get("auto_reason") or ""), out[0].get("auto_reason"))
+    check("... and it says in words that this is not something the owner said",
+          "not something you said" in I.GUESS_REASON, I.GUESS_REASON)
+    check("... and that no reason was given, nor made up",
+          "no reason given" in I.GUESS_REASON and "none made up" in I.GUESS_REASON,
+          I.GUESS_REASON)
+    check("the other cards keep their own reason lines untouched",
+          out[1].get("auto_reason") in (None, "")
+          and out[2].get("auto_reason") in (None, ""),
+          repr([out[1].get("auto_reason"), out[2].get("auto_reason")]))
+    # An EMPTY auto_reason must come out as the marking alone - not ". <text>"
+    # with a leading separator. (A reason jarvis_auto_learn has already set for
+    # this row is kept ahead of the marking, because the marking runs after it.)
+    check("a guessed card with no other reason reads as the marking alone",
+          I.annotate([{"id": 4, "text": "x", "source": I.GUESS_SOURCE,
+                       "auto_reason": ""}])[0]["auto_reason"] == I.GUESS_REASON,
+          I.annotate([{"id": 4, "text": "x", "source": I.GUESS_SOURCE,
+                       "auto_reason": ""}])[0]["auto_reason"])
+    check("the guessed marking is the source the gate actually tags",
+          I.GUESS_SOURCE == "gate_denial")
+
+
 # ==========================================================================
 #   B. Through jarvis_extract (needs memory-intake.patch applied)
 # ==========================================================================
@@ -656,20 +700,25 @@ def t_remember_queues_your_own_words():
 
 
 def t_the_gate_denial_rule_still_reaches_the_queue():
-    """gate-outcome.patch: a real "no" proposes a standing rule through
-    propose() directly, in the backend's own words. None of the new checks
-    may stop it: it is not a learner turn, not a Remember command, and not a
-    planted instruction."""
+    """gate-outcome.patch: a real "no" proposes a GUESSED rule through
+    propose() directly. None of the checks here may stop it: it is not a
+    learner turn, not a Remember command, and not a planted instruction. The
+    wording is the gate's own since the owner's decision of 2026-10-10 - a
+    guess in Jarvis's words, marked as one, with no reason invented."""
     if not _needs_x("the 'your no becomes a proposed rule' path"):
         return
     fresh(SameEmbedder())
     turn = {"role": "user", "content":
-            "Remember this: I do not want Jarvis to email send without asking me first. "
-            "I just said no when it asked."}
+            "Jarvis noticed a \"no\" when it asked to send email. This is Jarvis's "
+            "GUESS, marked as a guess: it is not a record of your words. No reason "
+            "was given, just the action turned down - and none was made up to fill "
+            "the gap. Jarvis is guessing the owner may want it to ask first before "
+            "it send email again: a guess for the owner to keep or discard."}
     keep = X._local_llm
     # The gate calls propose() with no llm, so propose() uses _local_llm.
     X._local_llm = lambda p, model=None, timeout=60: json.dumps({"facts": [
-        {"text": "I do not want Jarvis to send email without asking me first", "confidence": 0.9}]})
+        {"text": "Jarvis is guessing the owner wants it to ask first before sending email",
+         "confidence": 0.9}]})
     try:
         X.propose([turn], source="gate_denial")
     finally:
@@ -678,6 +727,9 @@ def t_the_gate_denial_rule_still_reaches_the_queue():
     check("the rule is proposed", len(rows) == 1 and rows[0]["source"] == "gate_denial", repr(rows))
     check("with no warning on it", rows and rows[0]["flags"] == [], repr(rows))
     check("and the gate's wording is not a Remember command", I.remember_command(turn["content"]) is None)
+    check("and the card says it is a guess, where the owner reviews it",
+          rows and rows[0].get("guessed") is True and I.GUESS_REASON in rows[0]["auto_reason"],
+          repr(rows))
 
 
 def t_an_imported_conversation_is_dated_to_when_it_happened():
@@ -907,6 +959,7 @@ if __name__ == "__main__":
                t_near_duplicate_waits_for_the_real_embedder,
                t_planted_instructions_get_a_warning,
                t_annotate_marks_the_card_and_drops_nothing,
+    t_a_denials_proposal_is_marked_as_a_guess_on_the_card,
                t_propose_anchors_dates_and_drops_near_duplicates,
                t_a_chat_that_runs_into_the_next_day_is_not_re_asked,
                t_numbered_correction_end_to_end,

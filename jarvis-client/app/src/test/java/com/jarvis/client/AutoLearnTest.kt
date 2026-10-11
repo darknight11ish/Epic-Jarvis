@@ -631,7 +631,10 @@ class AutoLearnTest {
         val section = body(plate, "internal fun SavedAutomaticallySection(")
         assertTrue(section.contains("if (privateHidden) {\n        HiddenSection(AutoLearn.TITLE"))
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
-        val item = body(brain, "item(key = \"memory-auto\")")
+        // Drawn through `plate("...")` since 2026-10-10 (BrainSections.kt): the
+        // plate's own line names it, and the item's key carries the plates'
+        // namespace. Read to the end of that line, which is the item's body.
+        val item = body(brain, "plate(\"memory-auto\")")
         assertTrue(item, item.contains("SavedAutomaticallySection(") && item.contains("privateHidden = privateHidden,"))
         // Forget and switching ON are greyed on a stale link as well as refused.
         assertTrue(plate.contains("enabled = canAct && busyId == null"))

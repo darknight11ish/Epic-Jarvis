@@ -53,6 +53,17 @@
 # PowerShell 5.1 runs this file (the logon tasks use 5.1), so nothing here may
 # use a PowerShell 7-only spelling: no `??`, and no `try` used as an expression.
 # Inside a double-quoted string, write ${name} and never $name: - see CLAUDE.md.
+#
+# EXIT CODES (a non-zero code is the loud half of this script)
+#   0  the move finished and the lanes are answering again
+#   2  bad arguments, or a plan that cannot be trusted
+#   3  a lane still has a model loaded (or the C: copies do not match)
+#   4  robocopy failed while copying
+#   5  the copy does not match the original, so nothing was deleted
+#   6  an Ollama process would not stop, so files could still be locked
+#   7  the move finished but THE LANES DID NOT COME BACK - a person must start
+#      them; the exact commands are printed. Added 2026-10-11: on 2026-10-10
+#      both lanes were left down by this script and it still exited 0.
 
 [CmdletBinding()]
 param(
@@ -207,6 +218,53 @@ function Get-OllamaState {
         $result += $entry
     }
     return $result
+}
+
+# --- reading a lane's real settings out of its OWN scheduled task ------------
+#
+# Section 8h used to carry the two task names and the two ports as strings
+# typed in by hand, and one of them was wrong - see the long note there. These
+# four read everything from the task the PC actually has, so a renamed task or
+# a changed port cannot make this script quietly wrong again.
+
+function Get-LanePort([string]$CommandLine) {
+    # The port a lane task really uses, taken from its own command line.
+    $m = [regex]::Match($CommandLine, '-Port\s+(\d+)')
+    if ($m.Success) { return [int]$m.Groups[1].Value }
+    return 0
+}
+
+function Get-LaneTaskPort($Task) {
+    foreach ($action in @($Task.Actions)) {
+        if ($null -eq $action) { continue }
+        $port = Get-LanePort ([string]$action.Arguments)
+        if ($port -gt 0) { return $port }
+    }
+    return 0
+}
+
+function Get-LaneCommand($Task) {
+    # The exact command line the task would run, copied out of the task itself.
+    # Printed in the failure message instead of a command written from memory,
+    # so the recovery line can never drift away from the real task.
+    foreach ($action in @($Task.Actions)) {
+        if ($null -eq $action) { continue }
+        if ($action.Execute) { return (("{0} {1}" -f $action.Execute, $action.Arguments).Trim()) }
+    }
+    return ''
+}
+
+function Test-LaneAnswers([int]$Port) {
+    if ($Port -le 0) { return $false }
+    try {
+        # ${Port}, not $Port: inside a double-quoted string PowerShell would
+        # read `$Port/api/version` as the property `Port/api/version` and ask
+        # the wrong URL - health.ps1 lost an hour to that exact bug.
+        $null = Invoke-RestMethod "http://127.0.0.1:${Port}/api/version" -TimeoutSec 5
+        return $true
+    } catch {
+        return $false
+    }
 }
 
 function Test-QuietWindow {
@@ -517,15 +575,116 @@ foreach ($p in $plan) {
 }
 
 # 8h. Start the lanes again, from their own script, so they come up pointed at D:.
+#
+# ASK FOR THE PATTERN, NEVER FOR A NAME TYPED FROM MEMORY, AND NEVER SWALLOW
+# THE ANSWER.
+#
+# WHAT THIS COST ON 2026-10-10. This step used to ask for the two tasks by the
+# names 'Jarvis Ollama - Everyday model' and 'Jarvis Ollama - Coding model'.
+# The tasks on this PC are really named 'Jarvis Ollama - Everyday model
+# (RTX 2060)' and 'Jarvis Ollama - Coding model (RTX 2080 Super)'. So
+# Start-ScheduledTask matched NOTHING, `-ErrorAction SilentlyContinue` threw
+# that failure away, and step 8b had just force-stopped every `ollama`/
+# `llama-server` process on the machine. Both lanes stayed down from 22:10
+# until a person started them by hand (22:58 for 11436, 23:09 for 11435) - and
+# the log line this step printed was a cheerful 'Starting both logon tasks
+# now.' That is the whole bug: a restart that cannot fail is a restart that
+# cannot tell you it failed.
+#
+# The fix is the two rules below: find the tasks by the part of the name that
+# a rename does not touch, and then judge the restart by the only answer that
+# counts - a lane's port answering /api/version. A task that started and died,
+# a task that never existed, and a task that was never asked for all look
+# identical until a port is asked.
 Say 'starting the two Ollama lanes again'
 $startLane = Join-Path $LaneDir 'start-lane.ps1'
+$laneTasks = @()
+$lanesDown = @()
+
 if (Test-Path -LiteralPath $startLane) {
-    Say 'Starting both logon tasks now.'
-    Start-ScheduledTask -TaskName 'Jarvis Ollama - Everyday model' -ErrorAction SilentlyContinue
-    Start-ScheduledTask -TaskName 'Jarvis Ollama - Coding model' -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 12
+    $laneTasks = @(Get-ScheduledTask -TaskName 'Jarvis Ollama*' -ErrorAction SilentlyContinue |
+                   Where-Object { $null -ne $_ -and $_.TaskName -like 'Jarvis Ollama*' })
+    if (@($laneTasks).Count -eq 0) {
+        Bad 'no scheduled task whose name starts with "Jarvis Ollama" exists on this PC.'
+        Bad 'Nothing was started, and step 8b already stopped the lanes: THEY ARE DOWN RIGHT NOW.'
+        # Recorded as a failure on purpose. This is the branch that would
+        # otherwise be the 2026-10-10 bug all over again: Bad lines printed,
+        # nothing started, and an exit 0 that says the move was fine.
+        $lanesDown += 'no scheduled task named "Jarvis Ollama..." exists, so nothing was started'
+    } else {
+        foreach ($task in $laneTasks) {
+            Say ("asking the logon task to start: {0}" -f $task.TaskName)
+            Start-ScheduledTask -TaskName $task.TaskName -ErrorAction SilentlyContinue
+        }
+        # Report what the scheduler itself said, so a task the scheduler
+        # REFUSED (disabled, already running, no longer registered) is visible
+        # here rather than 90 seconds later as a bare "still down".
+        foreach ($task in $laneTasks) {
+            $now = Get-ScheduledTask -TaskName $task.TaskName -ErrorAction SilentlyContinue
+            if ($null -eq $now) {
+                Warn ("{0} could not be read back after being started" -f $task.TaskName)
+            } else {
+                Say ("  {0} is now {1}" -f $now.TaskName, $now.State)
+            }
+        }
+    }
 } else {
-    Warn "- $startLane was not found, so the lanes were not started. Run the two logon tasks by hand."
+    Bad "- $startLane was not found, so the lanes were NOT started by this script."
+    Bad 'Step 8b already stopped every Ollama process: THE LANES ARE DOWN RIGHT NOW.'
+    $lanesDown += ("{0} does not exist, so nothing could be started" -f $startLane)
+}
+
+# Wait for the lanes, and judge them by a port that answers. 90 seconds is
+# generous on purpose: start-lane.ps1 loads the model before it binds, and the
+# 12 GB lane takes about 20 seconds to come up on a quiet PC.
+if (@($laneTasks).Count -gt 0) {
+    Say 'waiting up to 90 seconds for every lane to answer /api/version...'
+    $deadline = (Get-Date).AddSeconds(90)
+    while ($true) {
+        $lanesDown = @()
+        foreach ($task in $laneTasks) {
+            $port = Get-LaneTaskPort $task
+            if ($port -le 0) {
+                $lanesDown += ("{0}: its own command line has no -Port, so this script cannot check it" -f $task.TaskName)
+            } elseif (-not (Test-LaneAnswers $port)) {
+                $lanesDown += ("{0}: port {1} does not answer" -f $task.TaskName, $port)
+            }
+        }
+        if (@($lanesDown).Count -eq 0) { break }
+        if ((Get-Date) -ge $deadline) { break }
+        Start-Sleep -Seconds 5
+    }
+    if (@($lanesDown).Count -eq 0) {
+        foreach ($task in $laneTasks) {
+            Ok ("{0} is back, answering on port {1}" -f $task.TaskName, (Get-LaneTaskPort $task))
+        }
+    }
+}
+
+if (@($lanesDown).Count -gt 0) {
+    Bad 'THE LANES DID NOT COME BACK. A person has to start them; nothing here can.'
+    foreach ($line in $lanesDown) { Bad ("  still down -> {0}" -f $line) }
+    Bad 'Run exactly one of these, and the lane it names comes back:'
+    foreach ($task in $laneTasks) {
+        $port = Get-LaneTaskPort $task
+        $text = ("{0}   # port {1}" -f (Get-LaneCommand $task), $port)
+        Bad ("  {0}" -f $text)
+        Bad ("  Start-ScheduledTask -TaskName '{0}'" -f $task.TaskName)
+    }
+    if (@($laneTasks).Count -eq 0 -and (Test-Path -LiteralPath $startLane)) {
+        Bad '  Neither logon task was found, so start the lane by hand, pointing it at its own card:'
+        # No backtick-quoted words in these strings: `nvidia-smi` inside a
+        # double-quoted string is a NEWLINE followed by "vidia-smi", because the
+        # backtick is PowerShell's escape character. That printed a broken line.
+        Bad ("  powershell -NoProfile -File `"{0}`" -Lane main   -Port 11436 -GpuUuid <the RTX 2060 UUID from nvidia-smi -L> -ContextLength 196608" -f $startLane)
+        Bad ("  powershell -NoProfile -File `"{0}`" -Lane coding -Port 11435 -GpuUuid <the RTX 2080 Super UUID from nvidia-smi -L> -ContextLength 16384" -f $startLane)
+        Bad ("  {0} will say which card and which context each lane really has." -f (Join-Path $LaneDir 'health.ps1'))
+    } elseif (@($laneTasks).Count -eq 0) {
+        # No task to name AND no start-lane.ps1 to run: there is no command left
+        # to hand out, and inventing one would be the same lie again.
+        Bad ("  {0} has no logon task and no start-lane.ps1, so there is no one command to give." -f $LaneDir)
+        Bad '  Restore the two logon tasks (or start-lane.ps1) before the next run.'
+    }
 }
 
 # ===========================================================================
@@ -570,6 +729,16 @@ if (Test-Path -LiteralPath $health) {
 }
 
 Say ''
+if (@($lanesDown).Count -gt 0) {
+    # NOT a happy ending, and not exit 0. The move itself may be perfect and
+    # the PC can still be in the one state a person must fix by hand: the
+    # model files are on D:, and nothing is answering on the lanes. A green
+    # exit code here is how that went unnoticed on 2026-10-10 for 48 minutes.
+    Say 'Move finished, but THE LANES ARE STILL DOWN - see the STOP lines above.'
+    Say 'The recovery commands printed above bring each lane back.'
+    Say 'Next: run health.ps1 and check both lanes say "up".'
+    exit 7
+}
 Say 'Move finished. Everything else Jarvis needs is unchanged.'
 Say 'Next, if the owner wants: load one model and ask it a question, to prove it answers from D:.'
 exit 0

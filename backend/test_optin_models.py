@@ -12,10 +12,9 @@ separate opt-ins:
 
 ...and the measured cost must be printed on the label, in plain words.
 
-No model, no network, no Ollama and no gate. Ollama is handed in as a
-stand-in listing, and the folders are ones this test makes itself, so the
-suite runs identically on a PC that has the four models and on one that has
-never seen them.
+No model, no network and no Ollama. Ollama is handed in as a stand-in listing,
+and the folders are ones this test makes itself, so the suite runs identically
+on a PC that has the four models and on one that has never seen them.
 
 What it proves, and the check that would fail without the change:
 
@@ -43,6 +42,10 @@ What it proves, and the check that would fail without the change:
      different names, and the same weights in two quants get one name.
   H. TWO OPT-INS, NOT ONE: the two switches are stored under two keys and
      either can be set without the other.
+  I. RULE 1, IN CODE: the module refuses to offer anything, or to hand back an
+     import body, when the model store is not on this PC. The switch, the card
+     it raises and the route it answers at are `test_uncensored_optins.py`'s
+     own subject - this file keeps the naming, labelling and storage rules.
 """
 from __future__ import annotations
 
@@ -51,6 +54,7 @@ import os
 import re
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -399,8 +403,14 @@ check("this module writes no model-state file of its own",
       _imports_state_file is None, str(_imports_state_file))
 check("it calls the EXISTING switch, and invents no second one",
       "switch_to(" not in _SRC and "def switch" not in _SRC)
-check("no public route is added by this module",
-      not re.search(r'"/api/', _SRC))
+#: ONE route now, added by uncensored-optins.patch (install() wraps the running
+#: server's handler): the two switches and the labelled list, with the way IN
+#: gated. The check is the same in spirit as the "no route at all" one it
+#: replaces - it lists every `/api/` path the module names, so a SECOND one
+#: appearing fails it, which is what "no second door" means here.
+_routes = sorted(set(re.findall(r'"(/api/[^"]*)"', _SRC)))
+check("exactly one route is named, and it is the one the patch installs",
+      _routes == ["/api/models/uncensored"], str(_routes))
 check("it writes no TOML: the only writes are its own JSON state file",
       "write_text" in _SRC and ".toml" not in _SRC.replace("jarvis-framework.toml", ""))
 check("the state file is written atomically, so a crash cannot lose a choice",
@@ -551,6 +561,52 @@ check("...and says the weights are copied, which uses the space",
       "copies" in _cost["words"], _cost["words"])
 check("...and refuses in plain words when the drive is too full",
       _cost["fits"] is True, str(_cost))
+
+# --------------------------------------------------------------------------
+#   I. Rule 1, in code: nothing is offered off this PC
+# --------------------------------------------------------------------------
+
+print("\n-- I. rule 1: the model store has to be on this PC --")
+
+#: `local_only()` reads the address jarvis_models itself reaches Ollama on.
+#: With jarvis_models absent - CI's staged backend, and this checkout - there
+#: is no address to read, and it must say nothing rather than invent a
+#: refusal. A stand-in module whose address is the only thing under test is
+#: how both directions are checked without a live install.
+check("with nothing to read, it says nothing rather than guessing",
+      O.local_only() == "", O.local_only())
+
+_saved_present = "jarvis_models" in sys.modules
+_saved = sys.modules.get("jarvis_models")
+_remote = types.ModuleType("jarvis_models")
+_remote.OLLAMA = "http://192.168.1.9:11434"
+sys.modules["jarvis_models"] = _remote
+try:
+    _why = O.local_only()
+    check("a model store that is NOT on this PC is refused, in plain words",
+          bool(_why) and "not served from this PC" in _why, _why)
+    O._set("uncensored_choices_offered", True)
+    check("...nothing is offered from it",
+          O.choices(roots=[_d], names=[]) == [])
+    check("...the fiction lane refuses for the same reason",
+          O.ensure_fiction_allowed()["ok"] is False
+          and "not served from this PC" in O.ensure_fiction_allowed()["message"])
+    _code, _body = O.request({"on": True})
+    check("...and it refuses BEFORE any card, so there is nothing to approve",
+          _code == 503 and "not served from this PC" in _body.get("error", ""),
+          (_code, _body))
+    O._remote_probe = True
+    for _ok in ("http://127.0.0.1:11434", "http://localhost:11434", "http://[::1]:11434"):
+        _remote.OLLAMA = _ok
+        check(f"on this PC ({_ok}) it says nothing", O.local_only() == "")
+    _remote.OLLAMA = "https://ollama.example.com"
+    check("a name on the open internet is refused too", bool(O.local_only()))
+finally:
+    if _saved_present:
+        sys.modules["jarvis_models"] = _saved
+    else:
+        sys.modules.pop("jarvis_models", None)
+check("put back, the check says nothing again", O.local_only() == "")
 
 # --------------------------------------------------------------------------
 #   Summary

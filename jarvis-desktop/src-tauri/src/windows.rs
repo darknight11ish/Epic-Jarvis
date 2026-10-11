@@ -765,13 +765,19 @@ pub const ONBOARDING_LABEL: &str = "onboarding";
 /// first (`docs/UI-AUDIT-2026-10-05.md` section 5 and its "what I would
 /// change" row 3).
 ///
-/// Called at most once per install, from the end of `setup()` in `lib.rs`,
-/// gated on `commands::onboarding_seen`. Fixed size and not resizable: five
-/// short screens of plain text do not need a resize handle, and giving it one
-/// invites a half-width window that wraps mid-sentence.
+/// Called at most once per install BY ITSELF, from the end of `setup()` in
+/// `lib.rs`, gated on `commands::onboarding_seen`. Since 2026-10-10 it is also
+/// called on demand by `commands::replay_onboarding` (Settings' "Show the
+/// intro again"); that path neither reads nor writes the marker, so which of
+/// the two called it is invisible to the next start, and the walkthrough
+/// appears by itself exactly as often as it did before. Fixed size and not
+/// resizable: five short screens of plain text do not need a resize handle,
+/// and giving it one invites a half-width window that wraps mid-sentence.
 pub fn show_onboarding(app: &AppHandle) -> Result<(), String> {
     if app.get_webview_window(ONBOARDING_LABEL).is_some() {
-        return Ok(()); // already open — a second setup pass must not open two
+        // Already open — a second setup pass, or a replay pressed while the
+        // walkthrough is up, must not open two.
+        return Ok(());
     }
 
     tauri::WebviewWindowBuilder::new(
@@ -1402,6 +1408,13 @@ pub fn show_floating(app: &AppHandle) -> Result<(), String> {
     }
 
     attach_floating_listeners(app, &window);
+
+    // The floating face is off by default but can be switched on from the tray
+    // or Settings at any moment - including while the app is locked, when it
+    // stays visible (it is the face, not Jarvis's words). It must therefore
+    // never be exposed for even the few seconds before the watch's next look
+    // (`lock::sweep`, which knows which windows a capture must not show).
+    crate::lock::sweep(app);
 
     // Clicks pass through this window except over the animal, if the owner
     // has asked for that (windows.rs's own note above explains the hit test).
