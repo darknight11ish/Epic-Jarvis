@@ -150,6 +150,26 @@ impl Security {
         self.app_lock || self.private_answers || self.approvals == ApprovalCheck::Every
     }
 
+    /// Whether a screen capture of Jarvis's windows must not show their
+    /// content: the desktop's half of the phone's
+    /// `SecurityRules.blockScreenCapture`, which is
+    /// `s.appLock || s.privateLists` (`jarvis-client/.../data/Security.kt`).
+    ///
+    /// `owner_here` is whether the owner is at the PC - the same "would App lock
+    /// ask for Windows Hello now" test the app lock itself uses
+    /// (`lock::app_locked`). Unlocked, the owner is looking at their own screen
+    /// and there is nothing to keep from a capture they asked for.
+    ///
+    /// The owner decided this for the desktop on 2026-10-11. What it can and
+    /// cannot do is written out in `lock.rs`'s own section and in
+    /// `docs/ARCHITECTURE.md`.
+    pub fn blocks_capture(&self, owner_here: bool) -> bool {
+        if owner_here {
+            return false;
+        }
+        self.app_lock || self.private_answers
+    }
+
     /// "Lock again after", never shorter than [`GRACE`].
     pub fn relock(&self) -> Duration {
         Duration::from_secs(u64::from(self.relock_after_secs)).max(GRACE)

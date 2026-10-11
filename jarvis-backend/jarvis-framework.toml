@@ -325,6 +325,21 @@ rollback_model            = "auto"
 # PC; nothing downloads. Must stay "ask": anything else and it refuses. A
 # file without this line asks too (unknown_action_tier).
 models_create             = "ask"
+# The owner's uncensored opt-ins, BOTH halves (jarvis_optin_models.py; the
+# owner's OWN decision of 2026-10-10, Decision 5 -
+# ".dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md": "Uncensored: both of
+# these - (a) one clearly-labelled opt-in model for fiction/role-play, never
+# the everyday assistant and never a default, and (b) make the abliterated
+# models already on disk usable as opt-in choices rather than downloading
+# anything new"). TWO separate switches, both OFF on a machine that has never
+# run the module, and both raise ONE approval card when turned ON; turning
+# either off is instant. Usually there is no comparison to make: both actions
+# act only on tier "ask", so anything else here and the switch refuses
+# outright rather than acting. Neither one leaves this PC - nothing is
+# downloaded (the import names a local .gguf PATH) and the module refuses if
+# the model store is not on this PC.
+uncensored_models_enable  = "ask"
+fiction_roleplay_enable   = "ask"
 
 # --- Timers, alarms and reminders (jarvis_schedule.py) ------------------
 # A timer, an alarm or a reminder that goes off ONCE needs no card - the

@@ -5928,6 +5928,21 @@ def _chat_model_now() -> Optional[str]:
     return got or (os.environ.get("JARVIS_MODEL") or "").strip() or None
 
 
+def _lane_context(url: str, model: str) -> Optional[int]:
+    """The context `model` must be loaded at on this lane, for a preload that
+    names one, or None when nothing can say - and then no preload is sent.
+
+    jarvis_power_switch.lane_context() owns the answer (what GET /api/ps says
+    the model is loaded at now, else what this lane was last seen at, else the
+    model's own Modelfile num_ctx), so this preload and the wake-up preload in
+    jarvis_power_switch can never disagree about the size. Never raises."""
+    try:
+        import jarvis_power_switch
+        return jarvis_power_switch.lane_context(url, model)
+    except Exception:
+        return None
+
+
 def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None) -> bool:
     """Loads the everyday model into the graphics card now (Ollama's own
     "load with an empty prompt"), so Jarvis Live's first answer does not wait
@@ -5940,13 +5955,31 @@ def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None)
     would load a second model onto a card with room for one (effectiveness
     audit 2026-09-28, 3.2). No keep_alive is sent, so Ollama's own setting
     (OLLAMA_KEEP_ALIVE=-1, MODEL-TOPOLOGY) is left alone - the preload
-    jarvis_power_switch.warm_up already does the same."""
+    jarvis_power_switch.warm_up already does the same.
+
+    THE CONTEXT IS NAMED, ALWAYS (2026-10-11). A `POST /api/generate` that
+    carries a model and no `options.num_ctx` loads a model that is not already
+    loaded at Ollama's OWN default - 2,048 on the owner's install - NOT at the
+    lane's `OLLAMA_CONTEXT_LENGTH`/`-ContextLength`. This call used to send
+    exactly that, and the owner's everyday lane (127.0.0.1:11436, qwen3.5:9b,
+    -ContextLength 196608) was reloaded at `-c 2048` twice on 2026-10-10/11
+    (its own llama log; once 6 minutes before the lane read
+    `context_length: 2048`), silently shrinking a 196,608-token window 96x.
+    So the body now carries the lane's own context, from
+    `_lane_context`/jarvis_power_switch.lane_context. When nothing can say
+    which context the lane is set to, NOTHING is sent and this returns False:
+    leaving the model as it is, so the first question loads it at the lane's
+    own setting, beats preloading it at a smaller one."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
     name = model or _chat_model_now() or "jarvis-primary"
     try:
         if not _is_this_machine(url) or local_model_refusal(url, name):
             return False
-        _get_json(f"{url}/api/generate", {"model": name}, timeout=120.0)
+        ctx = _lane_context(url, name)
+        if not ctx or int(ctx) <= 0:
+            return False
+        _get_json(f"{url}/api/generate",
+                  {"model": name, "options": {"num_ctx": int(ctx)}}, timeout=120.0)
         return True
     except Exception:
         return False

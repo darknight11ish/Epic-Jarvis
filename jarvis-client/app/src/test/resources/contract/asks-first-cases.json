@@ -758,6 +758,24 @@
        "title": "Make a tuned copy of an AI model"
       },
       {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
+      },
+      {
        "action": "second_card_enable",
        "fixed": false,
        "id": "second_card_enable",
@@ -1960,6 +1978,24 @@
        "title": "Make a tuned copy of an AI model"
       },
       {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
+      },
+      {
        "action": "second_card_enable",
        "fixed": false,
        "id": "second_card_enable",
@@ -3157,6 +3193,24 @@
        "title": "Make a tuned copy of an AI model"
       },
       {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
+      },
+      {
        "action": "second_card_enable",
        "fixed": false,
        "id": "second_card_enable",
@@ -4349,6 +4403,24 @@
        "title": "Make a tuned copy of an AI model"
       },
       {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
+      },
+      {
        "action": "second_card_enable",
        "fixed": false,
        "id": "second_card_enable",
@@ -5539,6 +5611,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Make a tuned copy of an AI model"
+      },
+      {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
       },
       {
        "action": "second_card_enable",
@@ -6747,6 +6837,24 @@
        "title": "Make a tuned copy of an AI model"
       },
       {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
+      },
+      {
        "action": "second_card_enable",
        "fixed": false,
        "id": "second_card_enable",
@@ -7942,6 +8050,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Make a tuned copy of an AI model"
+      },
+      {
+       "action": "uncensored_models_enable",
+       "fixed": false,
+       "id": "uncensored_models_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Offer the uncensored AI models already on this PC"
+      },
+      {
+       "action": "fiction_roleplay_enable",
+       "fixed": false,
+       "id": "fiction_roleplay_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn on a separate lane for fiction and role-play"
       },
       {
        "action": "second_card_enable",

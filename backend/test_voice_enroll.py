@@ -60,6 +60,7 @@ import jarvis_voice_enroll as E  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import _skeleton  # noqa: E402
 from _voice_test import semantic_voice  # noqa: E402
+from _voice_test import no_voice_models  # noqa: E402
 
 SRC = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
@@ -486,38 +487,58 @@ def t_nothing_logs_audio_or_tokens():
 def t_the_real_enrolment_path():
     """E._enroll, the default: the same embedder choice hear() makes, a real
     profile, and it still works with a jarvis_voice.py from before
-    `sample_rate` existed (the PC may hold that one)."""
-    tmp = Path(tempfile.mkdtemp(prefix="jarvis-enrol-real-")) / "owner.json"
-    keep = V.PROFILE_PATH
-    V.PROFILE_PATH = tmp
-    try:
-        pcm = [E._read_clip(i + 1, c)[0] for i, c in enumerate(five())]
-        prof = E._enroll(pcm)
-        check("the default enrolment writes a profile hear() can use",
-              tmp.is_file() and V.load_profile(tmp) is not None and prof.samples == 5, f"{prof}")
-        expected = "spectral-v1"
-        try:
-            expected = V.EcapaEmbedder().name
-        except Exception:
-            pass
-        check("made with the same embedder hear() would pick", prof.embedder == expected,
-              f"{prof.embedder} vs {expected}")
+    `sample_rate` existed (the PC may hold that one).
 
-        real = V.enroll
-        seen = {}
-
-        def old_enroll(clips, embedder=None, path=None):     # no sample_rate
-            seen["n"] = len(clips)
-            return real(clips, embedder=embedder, path=path)
-        V.enroll = old_enroll
+    THE STATE IS BUILT, NOT ASSUMED. Every number below is about a PC whose
+    voice check is the basic (spectral) one, and `_embedder()` decides that by
+    BUILDING `jarvis_voice.EcapaEmbedder`, whose own __init__ reads
+    `~/.openjarvis/voice-models/speaker/model.onnx`. The owner's PC has it, so
+    this test measured the owner's install instead: with the sherpa-onnx model,
+    enrolling the suite's five synthetic tones drops one as an outlier (measured
+    2026-10-10 - 5 clips in, `samples=4`, `outliers=[0]`, with AND without
+    `sample_rate`, so it is the model's own outlier rule and not a defect in the
+    older-signature path). `prof.samples == 5` is a claim about the basic check,
+    which is the state this test is about. It is green on a CI runner only
+    because a runner has no `~/.openjarvis`. `no_voice_models` builds the state
+    (_voice_test.py) and the premise check below pins it, so the pair can no
+    longer pass or fail for a reason the test did not choose."""
+    with no_voice_models(V):
+        check("this run looks like a PC with no voice-ID model - the state the "
+              "two checks below (and the older-signature call) are about",
+              E._model_missing() != "",
+              f"_model_missing() says {E._model_missing()!r}, so the real speaker "
+              f"model is visible and this test would measure the owner's install")
+        tmp = Path(tempfile.mkdtemp(prefix="jarvis-enrol-real-")) / "owner.json"
+        keep = V.PROFILE_PATH
+        V.PROFILE_PATH = tmp
         try:
+            pcm = [E._read_clip(i + 1, c)[0] for i, c in enumerate(five())]
             prof = E._enroll(pcm)
+            check("the default enrolment writes a profile hear() can use",
+                  tmp.is_file() and V.load_profile(tmp) is not None and prof.samples == 5, f"{prof}")
+            expected = "spectral-v1"
+            try:
+                expected = V.EcapaEmbedder().name
+            except Exception:
+                pass
+            check("made with the same embedder hear() would pick", prof.embedder == expected,
+                  f"{prof.embedder} vs {expected}")
+
+            real = V.enroll
+            seen = {}
+
+            def old_enroll(clips, embedder=None, path=None):     # no sample_rate
+                seen["n"] = len(clips)
+                return real(clips, embedder=embedder, path=path)
+            V.enroll = old_enroll
+            try:
+                prof = E._enroll(pcm)
+            finally:
+                V.enroll = real
+            check("an older jarvis_voice.enroll (no sample_rate) still works", seen.get("n") == 5
+                  and prof.samples == 5)
         finally:
-            V.enroll = real
-        check("an older jarvis_voice.enroll (no sample_rate) still works", seen.get("n") == 5
-              and prof.samples == 5)
-    finally:
-        V.PROFILE_PATH = keep
+            V.PROFILE_PATH = keep
 
 
 def t_with_the_better_model():

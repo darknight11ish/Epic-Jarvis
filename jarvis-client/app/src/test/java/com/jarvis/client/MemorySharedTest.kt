@@ -129,7 +129,9 @@ class MemorySharedTest {
         assertTrue(api.contains("suspend fun setShared(id: Long, shared: Boolean): ApiResult<MemoryShared.Reply>"))
         assertTrue(api.contains("suspend fun memoryShared(): ApiResult<JsonObject> = probe(MemoryShared.PATH)"))
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
-        assertTrue(brain.indexOf("item(key = \"memory-profile\")") in 0 until brain.indexOf("item(key = \"memory-shared\")"))
+        // Drawn through `plate("...")` since 2026-10-10 (BrainSections.kt): the
+        // plate's own name, with the item's key carrying the plates' namespace.
+        assertTrue(brain.indexOf("plate(\"memory-profile\")") in 0 until brain.indexOf("plate(\"memory-shared\")"))
     }
 
     private fun repoFile(rel: String): File {

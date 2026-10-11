@@ -673,6 +673,7 @@ jobs:
             'test_obsidian_notes.py',
             'test_ollama_direct.py',
             'test_open_chat.py',
+            'test_optin_models.py',
             'test_ort_quiet.py',
             'test_own_network_cases.py',
             'test_pairing_cases.py',
@@ -755,6 +756,7 @@ jobs:
             'test_topics_leaks.py',
             'test_turn.py',
             'test_ui_control.py',
+            'test_uncensored_optins.py',
             'test_version.py',
             'test_voice_contract.py',
             'test_voice_enroll.py',
@@ -1463,6 +1465,17 @@ jobs:
       # register rots exactly like the prose it replaced.
       - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
         run: python3 ../../tools/check_claims.py
+      # docs/DEFECT-REGISTER.md and docs/defect-register.tsv are the board the
+      # agents claim a defect on, so that the same real bug is not repaired
+      # twice overnight. A register nobody checks drifts, and a drifted one is
+      # worse than none: it names an owner for work that is already done, or
+      # sends an agent at a file another one is holding. This fails on two open
+      # rows claiming the same file, on a row naming a file that is not in the
+      # checkout, on a malformed row, and on the two files disagreeing about
+      # which defects are open. Standard library only, two files read, no
+      # network.
+      - name: The defect register is well-formed and names only real files
+        run: python3 ../../tools/check_defect_register.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility

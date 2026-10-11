@@ -197,6 +197,13 @@ TITLES = {
     # the owner's decision of 2026-10-09): bringing that one stuck window to
     # the front instead of leaving it exactly where it is.
     "handoff_bring_to_front": "bring the stuck browser window to the front",
+    # --- the owner's uncensored opt-ins, BOTH halves (jarvis_optin_models.py,
+    # the owner's OWN decision of 2026-10-10, Decision 5): one clearly-labelled
+    # choice for fiction and role-play, and the abliterated models already on
+    # this PC offered as choices with no new download. Two separate switches,
+    # both off by default, and turning either one ON is ONE card.
+    "uncensored_models_enable": "offer the uncensored AI models already on this PC",
+    "fiction_roleplay_enable": "turn on a separate lane for fiction and role-play",
     # --- Docker (jarvis_docker.py, the owner's request of 2026-10-09,
     # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list,
     # and start/stop for one. The words are the module's own: `card_text()` asks

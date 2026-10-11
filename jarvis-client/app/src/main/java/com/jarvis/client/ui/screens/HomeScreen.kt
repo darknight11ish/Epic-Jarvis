@@ -681,6 +681,12 @@ data class HomeActions(
     /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
     val onOpenLive: () -> Unit = {},
     /**
+     * "Find anything" (ui/screens/FindScreen.kt): the typed search over every
+     * place in the app, opened from the Find button on the status line. It
+     * searches and navigates; nothing here changes a setting.
+     */
+    val onOpenFind: () -> Unit = {},
+    /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
      * nothing while the link is stale.
@@ -1616,6 +1622,17 @@ private fun StatusLine(
                 }
             }
         }
+
+        // "Find anything" (ui/screens/FindScreen.kt; the parity audit of
+        // 2026-10-10, gap 8): the typed search over every place in the app.
+        // Here rather than in the navigation row below, for a reason that
+        // shows on a narrow phone: that row weights six destinations equally,
+        // and a seventh would ellipsize "Appearance" on most screens. This
+        // line is always on screen - even when the owner has the navigation
+        // row set to "Hidden until swiped" - so the way in is a control the
+        // owner can see, never a gesture. Word for word the label the
+        // desktop's own bar puts on its palette button.
+        Quiet(com.jarvis.client.ui.FindWords.BUTTON, color = chrome.textMid, onClick = actions.onOpenFind)
 
         // Shown only while there is something to retry: offline, and also
         // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
