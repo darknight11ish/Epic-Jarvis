@@ -152,7 +152,9 @@ as a card each time it runs. **Second version, and only after A works** - it
 is not a standing grant *provided* the card is shown every run, which is the
 only version of it this design would accept. Its cost is the drift: an app
 that updates its layout makes a recipe wrong in a way the owner cannot see,
-which is what §2 exists for.
+which is what §2 exists for. **DECIDED 2026-10-11: not in v1 - deferred, not
+refused.** What would have to be true to revisit it: A in use and measured
+first, and a card on **every** replay listing every command.
 
 **The one thing all three share, and the reason this design is safe at all:
 reading the phone's screen to VERIFY is fine; reading it to PROPOSE is not, in
@@ -174,6 +176,26 @@ machinery** (its own plan/verify loop, built and reviewed on its own terms), or
 **it cannot look-then-act** - it runs the owner's words with per-step
 verification, which is what this design is. The first draft claimed the second
 while implying it had the first; it does not.
+
+**DECIDED by the owner (2026-10-11), and this is the shape of the whole
+feature: the steps come from HIS OWN WORDS ONLY.** Jarvis may **not** read the
+phone's screen to suggest taps. He was offered the other path - option B above,
+read the screen and propose the sequence - and **declined it**. So:
+
+- the taint rule above stays **exactly where it is**: no rule change, nothing to
+  loosen, screen-proposed steps still refused;
+- **this is the difference between what this feature is and the Gemini-style
+  thing he originally asked about** (the status at the top of this document
+  quotes his own words, "similar to how Gemini on the Pixel 11 can take agentic
+  control"). He asked for that, was shown the two ways it could go, and chose
+  **the narrower one**: every tap comes from something he said himself, checked
+  against the screen rather than chosen from it. A later reader should not have
+  to reconstruct that - **the narrowing was deliberate, not a limitation that
+  went unnoticed**, and it is recorded in two places: here, and in the closing
+  questions section under "Decided by the OWNER";
+- and the one thing that followed from it - whether the taint rule would even
+  cover the array path if the screen were ever allowed to propose - is settled
+  in the closing section, and is **moot while this decision stands**.
 
 ## 2. What if the screen changed between planning and running?
 
@@ -263,6 +285,12 @@ Two hard edges, both reused rather than invented:
   "ask" (`backend/rebuilt/jarvis-framework.toml:248`) and its risk row stays
   as written: irreversible, outbound, *"tapping the phone can send a message
   or complete a purchase"* (`jarvis-backend/jarvis_gate.py:300`).
+
+**DECIDED by the owner (2026-10-11): a send may be the LAST STEP ONLY, on its
+own card, showing the exact message and the exact recipient** - and **nothing
+before it in the run may run without him seeing that card.** If the card cannot
+be raised, the run does not happen (which is what §2 already does when a step
+cannot be shown: it stops).
 
 ## 5. Locks, doors and alarms
 
@@ -1267,42 +1295,83 @@ not discovered later.
    toggle itself** (closed question, below), as a preference rather than a
    loosening (§18).
 
-## Open questions only the owner can answer
+## Questions: what is decided, and what is still open
 
-**Two were closed by him on 2026-10-11** and are recorded at the end so the open
-list stays short: the delete toggle (**kept**) and the offline window (**12
-seconds, kept**).
+**Everything below is settled except two items at the end.** Each entry says who
+decided it, so a later reader can tell the owner's calls from the design's.
 
-1. **Who names the steps?** May Jarvis read the phone's screen to *suggest* a
-   sequence (option B in §1), or do the steps always come from the owner's own
-   words? **Unchanged by his floor decision**: the taint rule that refuses
-   screen-proposed plans is untouched (§18).
-2. **Sending inside a plan**: is it enough that a send is the last step and
-   always gets its own card, or should a plan refuse to contain a send at all?
-3. **The cap**: keep the existing 8 steps, or a smaller number for the phone?
-4. **The pause**: when the screen no longer matches the plan, stop the whole
-   plan (recommended, §2), or pause and ask?
-5. **Saved recipes**: wanted at all, and if so, is a card on every replay
-   enough for him?
-6. **The delete verdicts** (§16): Archive and Clear cache sit under the toggle;
-   Clear history, Clear data, Uninstall and Empty trash keep their own card.
-   Does he agree, or does he want one of those moved?
-7. **The driving model's card** (§15): may a second, specialist grounding model
-   take the 12 GB card with the chat stepping aside (option B, recommended), or
-   must it share whatever is already resident?
+### Decided by the OWNER (2026-10-11)
 
-### Closed by the owner (2026-10-11)
-
-8. **The delete toggle - KEEP IT.** Off by default; with it off a deletion
-   always gets its own card; with it on, recoverable deletions may happen inside
-   the run; **permanent deletions and anything that closes or erases an account
-   always get their own card, whatever the toggle says.** Recorded as a
-   **preference, not a rule entry** - it relaxes no repository rule, and its
-   "What asks first" row must not imply one exists. He was offered the stricter
-   alternative (drop the toggle; every deletion always asks) and **chose to keep
-   it** (§16, §18).
-9. **The offline window - KEEP 12 SECONDS.** The project's own
+1. **The steps come from HIS OWN WORDS ONLY.** Jarvis may **not** read the
+   phone's screen to suggest taps. He was offered the other path (option B in
+   §1: read the screen and propose the sequence) and **declined it**. So the
+   taint rule stays **exactly where it is** - no rule change - and
+   screen-proposed steps remain refused. **This is the difference between what
+   this feature is and the Gemini-style thing he originally asked about:** he
+   asked for an agent like the one on the Pixel, and then chose the narrower
+   version, where every tap comes from something he said himself. Later readers:
+   the narrower choice was deliberate and is recorded here, in §1 and in
+   correction item 7.
+2. **A send may be the LAST STEP ONLY, on its own card** (§4), showing the exact
+   message and the exact recipient - and **nothing before it in the run may run
+   without him seeing that card**. If the card is not shown, the run does not
+   happen.
+5. **Saved recipes are NOT IN v1** (§1, option C) - **deferred, not refused**.
+   What would have to be true to revisit it: a stored sequence may be replayed
+   **only** with a card shown on **every** replay, listing every command, and
+   only once A (his own words) has been in use and measured.
+8. **The delete toggle - KEEP IT** (§16, §18). Off by default; with it off a
+   deletion always gets its own card; with it on, recoverable deletions may
+   happen inside the run; **permanent deletions and anything that closes or
+   erases an account always get their own card, whatever the toggle says.**
+   Recorded as a **preference, not a rule entry** - it relaxes no repository
+   rule, and its "What asks first" row must not imply one exists. He was offered
+   the stricter alternative (drop the toggle; every deletion always asks) and
+   **chose to keep it**.
+9. **The offline window - KEEP 12 SECONDS** (§6). The project's own
    `OFFLINE_GRACE_MS`, unchanged, for this path as for the others. He was offered
    a tighter session-only window and **chose the project's number**, with the
    cost he accepted stated plainly and kept: **up to 12 seconds of taps can
-   still go out after the link really drops** (§6).
+   still go out after the link really drops** (not to be softened).
+
+### Decided by the DESIGN, and accepted by the owner as recommended
+
+3. **The cap stays 8** (§8) - and note it is **newly imposed** on
+   `control_phone`'s array, which has no cap today.
+4. **When the screen no longer matches, the whole run STOPS** rather than
+   pausing to ask (§2). A mid-run card could not show him the screen it was
+   about.
+6. **The delete verdict list stands as written** (§16): Archive and Clear cache
+   sit under the toggle; Clear history, Clear data, Uninstall, Empty trash,
+   Delete for everyone, Erase and Forget this device always ask; deleting or
+   closing an account is refused outright.
+
+### Settled by the design - and moot while item 1 stands
+
+**Does the taint rule cover `control_phone`'s array path?** Settled here so no
+one is left in suspense, and **flagged as the design's question, not his**:
+**it does not.** In the code as it stands, the refusal that stops a plan from
+being shaped by outside text is enforced on the **plan** route
+(`backend/jarvis_agent.py:1489-1490`, with `jarvis_plan.propose()`), and each
+other taint-sensitive tool carries its own gate (notes `:4422-4426`, spending
+`:972-974`, browser `:586-587`). The phone tool has **no** such gate: its
+definition (`:1545-1567`) and its prepare hook (`:403-411`) check nothing about
+taint, while calling it still *marks* the turn as reading, because it is not in
+`_NOT_READING` (`:3984`, `:4295-4296`).
+
+**Because of item 1, this is moot for now** - the screen is not allowed to
+propose anything, so there is no screen-shaped plan to refuse. It is written
+down for whoever revisits item 1: **if the screen is ever allowed to propose,
+extending that refusal to the array path is required first.** That is a
+*stricter* change, so it is a code change to design and test rather than a rule
+to loosen, and it would have to land before any such feature is switched on.
+
+### Still open - the owner is being asked now
+
+- **Q7, the driving model's card** (§15): may a second, specialist grounding
+  model take the 12 GB card with the chat stepping aside (option B,
+  recommended), or must it share whatever is already resident?
+- **The badge's "draw over other apps" grant** (§13, §14): Android needs a
+  one-time Settings permission for the always-on-top badge. The alternative
+  needs no permission at all - the ongoing notification - but it cannot be drawn
+  over the app in front and has to be found in the shade.
