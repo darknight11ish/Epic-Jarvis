@@ -161,6 +161,32 @@ object MenuPlaces {
         // it arrives" block inside that plate (BriefingPlate.kt), which is why
         // it lives here rather than under the plate's own item key.
         "settings.briefing-settings" to "BriefingPlate: the When it arrives block inside the Morning briefing plate",
+        // The other six of the eight ids the parity audit of 2026-10-10 turned
+        // from desktop-only into features both apps have (`settings.voices` and
+        // `settings.briefing-settings` are the two above). Every one of the
+        // eight really is on the phone - that is what the correction says - and
+        // none of them is drawn under an `item(key = ...)` of its own, so this
+        // is where they belong. They are NOT hideable (`hide = false` in
+        // backend/jarvis_menus.py, each with its own written reason), which is
+        // why no screen reads `menus.shows(...)` for them and why
+        // MenuVisibilityTest never asked for a place.
+        //
+        // `FindAnythingTest` reads this map too, and that is the point: the
+        // phone's "Find anything" box lists what it can take the owner to, and
+        // a menu drawn inside another card has no such place. A new phone menu
+        // that is neither findable nor listed here fails that test by name, so
+        // this map cannot quietly grow.
+        //
+        // Careful with the prose: `tools/check_feature_list.py` scans this file
+        // for quoted menu ids, so a sentence that quotes one id and then
+        // another as if it were a map entry is read as a menu id of its own and
+        // fails that check. Naming ids in backticks, as above, is safe.
+        "settings.animal-options" to "SettingsScreen: the animal options inside the Appearance item, which SETTINGS_ALIAS already opens for it",
+        "settings.updates" to "ReadinessScreen: the Check for new versions row inside the This app card on Platform checks",
+        "settings.about" to "FaqScreen: the About card at the end of Help",
+        "brain.history.tags" to "HistoryScreen: the tag chips and the tag editor, which take that screen over",
+        "brain.work.undo" to "InboxScreen: the undo shelf, above the Activity row",
+        "brain.work.activity" to "InboxScreen: the Activity row, which opens Past approvals",
         "entry.voice-check" to "SettingsScreen: the Voice check button in the Voice item",
         "brain.history.tag-suggestions" to "HistoryTags: the last row, Suggest tags overnight",
         "settings.second-card.study-helper" to "SecondCardPlate: the Study helper switch",
