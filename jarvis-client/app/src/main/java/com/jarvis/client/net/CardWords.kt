@@ -86,4 +86,23 @@ object CardWords {
             .trim()
         return if (words.isEmpty()) NO_ACTION else "Jarvis wants your OK for \"$words\""
     }
+
+    /**
+     * The short summary for a row whose PC sent none - a backend older than the
+     * "Explain more" work (2026-10-09, backend/jarvis_card_words.py
+     * `summary_for`): the card's own FIRST WHOLE SENTENCE, never cut mid-word,
+     * falling back to [fallbackTitle] so it can never be blank.
+     *
+     * This is the phone's copy of the PC's own fallback rule, letter for letter:
+     * the PC sends `notice.summary` on every row from a backend that has this
+     * feature, so this only runs against an older one - and then it must still
+     * be a readable line rather than the raw action id.
+     */
+    fun summaryFallback(full: String?, title: String = NO_ACTION): String {
+        val flat = (full ?: "").replace(Regex("\\s+"), " ").trim()
+        val stop = flat.indexOfFirst { it == '.' || it == '!' || it == '?' }
+        val line = if (stop >= 0) flat.take(stop + 1).trim() else flat
+        if (line.isEmpty()) return title
+        return if (line.endsWith(".") || line.endsWith("!") || line.endsWith("?")) line else "$line."
+    }
 }

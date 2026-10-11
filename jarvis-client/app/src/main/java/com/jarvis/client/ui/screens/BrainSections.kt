@@ -281,6 +281,7 @@ internal object BrainSections {
             hint = "",
             plates = listOf(
                 Plate("progress", guard = "brain.projects.progress"),
+                Plate("pictures", guard = "brain.projects.pictures"),
                 Plate("projects", guard = "brain.tab.projects"),
                 Plate("goals", guard = "brain.work.goals"),
             ),

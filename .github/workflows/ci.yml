@@ -1382,6 +1382,18 @@ jobs:
       # CSP is fixed; this is what keeps it fixed.
       - name: Media sources are permitted by the app CSP
         run: python3 ../../tools/check_media_csp.py
+
+      # The plug-in catalogue must match the patch stack. It drifted and nothing
+      # caught it: plugins/registry.json held 134 entries against the stack's 136,
+      # so scripts/list-plugins.ps1 and add-plugin.ps1 - which read that file -
+      # never offered the Docker drop-in and every position number after 128 was
+      # wrong. After adding a patch to $PATCHES, re-run
+      #   py -3 tools/gen_plugin_catalogue.py
+      # and commit what it writes. These two checks are what keep it honest.
+      - name: The plug-in catalogue matches the patch stack
+        run: python3 ../../tools/check_plugins.py
+      - name: The plug-in catalogue is up to date
+        run: python3 ../../tools/gen_plugin_catalogue.py --check
       # The shell hands the event stream to the HUD by dispatching each frame
       # with its KIND as the EventSource event type, while the page reads those
       # kinds inside `onmessage` - which only ever sees type `message`. Five

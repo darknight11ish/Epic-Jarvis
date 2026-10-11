@@ -684,6 +684,15 @@ def t_the_patch_and_the_lists():
              # at the end of the install chain. It removes no line and does not
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
+             "plugin-loader.patch",
+             # card-prefs.patch (2026-10-10, "cards read short") sits after
+             # gate-touches.patch and before picture-card.patch (so, before
+             # plugin-loader.patch too) and has exactly ONE hunk, in
+             # jarvis_hud.py: fifteen ADDED lines, an install block straight
+             # after animal.patch's own. It removes no line and
+             # does not touch jarvis_gate.py at all, so it rewrites nothing
+             # referee.patch's hunks anchor on.
+             "card-prefs.patch",
              # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
              # hunks, both in jarvis_gate.py: under `_PROTECTED`/`_PROTECTED_RE` and
              # at check()'s own `hit = _touches_protected(prompt, detail)` call. It
@@ -692,7 +701,6 @@ def t_the_patch_and_the_lists():
              # referee.patch wrote. test_gate_touches.py's own check confirms no
              # other patch adds or removes the call it replaces.
              "gate-touches.patch",
-             "plugin-loader.patch",
              # picture-card.patch (2026-10-11) is the first patch to go
              # immediately BEFORE plugin-loader.patch, and it has exactly ONE
              # hunk, in jarvis_hud.py: an install block on the OWNER's own lines
@@ -710,6 +718,11 @@ def t_the_patch_and_the_lists():
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
              "picture-card.patch",
+             # pictures.patch (2026-10-11) is appended last and has exactly ONE
+             # hunk, in jarvis_hud.py: an install block at the end of the install
+             # chain. It removes no line and does not touch jarvis_gate.py at all,
+             # so it rewrites nothing referee.patch wrote.
+             "pictures.patch",
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.

@@ -308,6 +308,12 @@ SHIPPED = (
     "jarvis_owner_check.py",
     "jarvis_manner.py",
     "jarvis_card_words.py",
+    # The approval card's short summary and the "Start short" / "Always show
+    # everything" choice (the owner's request of 2026-10-09, card-prefs.patch):
+    # GET/POST /api/card-prefs, kept in card-prefs.json so BOTH apps read the
+    # one setting, and the "what one card shows" rule they both follow.
+    # Cosmetic, so no card either way.
+    "jarvis_card_summary.py",
     # the tools jarvis_agent.py offers
     "jarvis_research.py", "jarvis_ui_control.py", "jarvis_android_control.py",
     "jarvis_browser_control.py", "jarvis_calendar.py", "jarvis_email.py",
@@ -729,6 +735,17 @@ SHIPPED = (
     # starts nothing, downloads nothing; the work setups use it rather than
     # building a second chooser.
     "jarvis_storage.py",
+    # "Ask for a picture, and keep it" (2026-10-11, the owner's decision of
+    # 2026-09-27; pictures.patch, docs/JARVIS-API.md section 129). A prompt the
+    # owner typed, drawn by a program ON THIS PC (ComfyUI or
+    # stable-diffusion.cpp - a setting with named values, never guessed at),
+    # saved in a folder on this PC with a sidecar holding the prompt, the seed,
+    # the model and the settings. Nothing leaves the PC and no route sends a
+    # picture anywhere, so making one needs NO approval card - the same shape as
+    # a timer or a note. The switch ("Making pictures") is OFF by default, and
+    # with nothing configured the owner gets ONE plain sentence naming both
+    # programs. Not a tool in jarvis_agent.py.
+    "jarvis_pictures.py",
     # The 30B coder: both cards, with Jarvis paused (2026-10-11, the owner asked
     # for it by name). One model that needs BOTH cards - so it is an OPT-IN mode,
     # off by default, that pauses the two live lanes (proved from /api/ps), loads

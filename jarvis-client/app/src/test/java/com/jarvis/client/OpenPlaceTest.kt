@@ -30,6 +30,12 @@ class OpenPlaceTest {
         for ((id, key) in listOf(
             "briefing-settings" to "briefing",
             "spending" to "spending",
+            // The Galaxy (2026-10-11): the phone's Galaxy is the Brain's
+            // "people-and-things" plate, so "open the galaxy" goes there
+            // instead of answering "only in Jarvis on your PC". The plate
+            // carries the hidden-lists guard itself.
+            "galaxy" to "people-and-things",
+            "brain.tab.galaxy" to "people-and-things",
         )) {
             assertEquals(id, OpenPlace.Where.Go(Screen.BRAIN, key), OpenPlace.whereFor(id))
         }

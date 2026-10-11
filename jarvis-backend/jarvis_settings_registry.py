@@ -175,6 +175,28 @@ SECTIONS: tuple = (
     # for "open the faq" to name. The questions BOTH apps answer were never
     # this card - the backend serves those at GET /api/faq, exactly as before.
     Section("appearance-card", ("appearance", "the theme", "how jarvis looks", "the face")),
+    # "Approval cards" (the owner's request of 2026-10-09): how much of an
+    # approval card is shown at first - "Start short" with an "Explain more"
+    # control, or "Always show everything".
+    #
+    # PHONE ONLY, and that is not an oversight. The section's app must match
+    # where the row really is, or "open approval cards" names a place the app
+    # does not have: this repository's own jarvis-desktop/ and src-tauri/ are
+    # the other conversation's surface. So the phone's Settings row
+    # (SettingsScreen.kt, item(key = "approval-cards")) is what this names
+    # today, and the setting itself is the PC's (GET/POST /api/card-prefs,
+    # card-prefs.patch) so the desktop's own switch reads the same value.
+    # `backend/test_settings_registry.py` is what caught the first version of
+    # this row claiming "both": it refused to let a section say the desktop has
+    # a settings.html card (id="approval-cards") which is not on that page.
+    # WHEN THE DESKTOP'S CARD LANDS (docs/DESKTOP-APPROVAL-CARD-PREF.md says
+    # which file, which control and which field), this becomes
+    # `app="both"` - one word - and the row in jarvis_menus.py becomes
+    # (DESKTOP, PHONE) with it.
+    Section("approval-cards", ("approval cards", "the approval cards",
+                               "how much of a card is shown", "explain more",
+                               "the explain more button", "cards read short",
+                               "the short summary"), app="phone"),
     # "Animal options" (2026-09-28): every animal-face option in one place.
     # Desktop: its own card in settings.html. Phone: inside Appearance, so
     # the phone's Settings scrolls to its Appearance row (SettingsScreen.kt
@@ -318,6 +340,16 @@ SECTIONS: tuple = (
     # uses, and the install line.
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
+    # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 129): "Making pictures", which program on this PC draws
+    # them (ComfyUI or stable-diffusion.cpp - a setting with named supported
+    # values, never guessed at), the folder the pictures are kept in and its
+    # size, and the gallery. Desktop-only as a Settings CARD: the phone reaches
+    # the same gallery through the Brain's Pictures plate, and it has no drawing
+    # program of its own to configure.
+    Section("pictures", ("pictures", "making pictures", "the pictures",
+                         "my pictures", "the picture gallery", "drawing pictures"),
+            app="desktop"),
     # "When the phone does not answer" (2026-10-08): how long the captcha
     # hand-off stays on offer (jarvis_handoff_mode.py; the owner's own decision
     # of that day, "make this a setting for both options with 1 as the default").
@@ -578,6 +610,40 @@ def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
         return _missing("the headless browser")
     code, out = BE.request(bool(on), BE.set_obscura)
     return _say(code, out)
+
+
+# --- making pictures (jarvis_pictures.py, JARVIS-API section 129) ----------
+
+def set_pictures(on: bool, *, peer=None, local=None) -> Outcome:
+    """The one switch the picture feature has. BOTH directions happen at once
+    and neither asks for a card.
+
+    Said plainly, because it is the kind of thing that gets "fixed" wrongly
+    later: this is NOT one of the switches that must ask. It opens no way out
+    of the PC (a picture is drawn by a program on this PC and saved in a
+    folder on this PC), changes no account, and loosens no rule - it is the
+    same shape as "web search" or "prompt coach", which both flip at once.
+    Turning it ON does mean the drawing program will take the second card when
+    the owner asks for a picture, which is exactly why it starts OFF and why
+    the owner has to say so once (CLAUDE.md: a feature using the second card
+    keeps its own switch, off until that feature is measured).
+
+    A Jarvis without jarvis_pictures.py answers in words, never silently.
+    """
+    try:
+        import jarvis_pictures as P
+    except Exception:
+        return _missing("making pictures")
+    path = P.settings_path()
+    values = P.load_settings(path)
+    values["enabled"] = bool(on)
+    P.save_settings(values, path)
+    if on and not values.get("runtime"):
+        # Switched on, but there is nothing to draw with yet. Say both things:
+        # the switch moved, AND nothing can be drawn until a program is named.
+        return Outcome(True, "Making pictures is on. " + P.NOT_CONFIGURED)
+    return Outcome(True, "Making pictures is on." if on
+                   else "Making pictures is off.")
 
 
 # --- topic controls: a topic's mode (jarvis_topics.py) ---------------------
@@ -1274,6 +1340,29 @@ SETTINGS_ROWS: tuple = (
         "more-options",
         "desktop",
         indent=10),
+    # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 129). The one switch that belongs to the Pictures card
+    # and, with the record button above it, the one row on the page whose
+    # subject is a whole feature rather than a behaviour. It is linked to its
+    # BoolSetting (`pictures`), so "turn on making pictures" and this row are
+    # the same switch through the same function.
+    #
+    # The words are NOT a fallback: `set_pictures` answers in its own sentence
+    # and the paragraph above the row carries the PC's own state line, but the
+    # row's own label is this page's, always.
+    SettingRow(
+        "pc-switch",
+        "pictures",
+        "",
+        "pc-switch-label",
+        "",
+        'Making pictures',
+        "",
+        28,
+        "pictures",
+        "desktop",
+        indent=10,
+        label_span_is_wrapper=True),
     # ------------------------------------------------------------------
     #   The phone's own two rows. There is no desktop toggle for
     #   either, so they are never spliced into settings.html; the
@@ -1392,6 +1481,16 @@ BOOL_SETTINGS: tuple = (
                ("the headless browser", "headless browser", "obscura", "the obscura browser",
                 "the browser with no window"),
                "browser-engine", set_browser_engine),
+    # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 129). Its own switch, OFF by default: the second card
+    # is shared with the everyday model, and CLAUDE.md's rule is that a feature
+    # using the second card stays off until THAT feature is measured. Both
+    # directions happen at once - see set_pictures above for why that is not a
+    # loosening.
+    BoolSetting("pictures",
+               ("making pictures", "making pictures on the pc", "the picture maker",
+                "drawing pictures", "asking for a picture"),
+               "pictures", set_pictures),
     BoolSetting("briefing_senders",
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),
@@ -1411,6 +1510,45 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   Approval cards read short (the owner's request of 2026-10-09): "a more
+#   simple summary, with an explain more button ... and approval card
+#   preferences such as this should be changeable in the settings".
+#
+#   A CHOICE of two, not an on/off, so it is NOT a BoolSetting: "Start short"
+#   (the default) or "Always show everything". Both are cosmetic and both are
+#   at once, with no card - this changes which words a card draws and nothing
+#   else: it approves nothing, starts nothing and reaches nothing. So there is
+#   no direction that asks, and the PC-only rule for loosenings does not apply.
+#
+#   THE SAME FUNCTION THE APP'S OWN SWITCH CALLS (jarvis_card_summary.set_mode),
+#   through the one route, so a spoken change and a tap cannot take two
+#   different paths. words -> mode is jarvis_card_summary.spoken, which never
+#   guesses: an unrecognised phrase answers None and the caller says so.
+# --------------------------------------------------------------------------
+
+
+def find_card_mode(words: str) -> Optional[str]:
+    """The display mode `words` names exactly (jarvis_card_summary's own list -
+    never typed twice here), or None."""
+    try:
+        import jarvis_card_summary as CS
+    except Exception:
+        return None
+    return CS.spoken(words)
+
+
+def set_card_mode(mode: str, *, peer=None, local=None) -> Outcome:
+    """At once, from either app or by asking - cosmetic, so no card either way.
+    The same jarvis_card_summary.set_mode POST /api/card-prefs calls."""
+    try:
+        import jarvis_card_summary as CS
+    except Exception:
+        return _missing("the approval card setting")
+    code, out = CS.set_mode(mode)
+    return _say(code, out)
 
 
 # --------------------------------------------------------------------------

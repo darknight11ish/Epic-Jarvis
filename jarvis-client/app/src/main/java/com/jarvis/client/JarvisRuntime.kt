@@ -484,6 +484,73 @@ object JarvisRuntime {
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
     /**
+     * How much of an approval card is shown at first (the owner's request of
+     * 2026-10-09; [com.jarvis.client.net.CardSummary], backend
+     * `jarvis_card_summary.py`).
+     *
+     * THE SETTING IS THE PC'S, kept in card-prefs.json beside appearance.json,
+     * and read over `GET /api/card-prefs` - read again on every refresh of the
+     * approval queue, so a change made on the PC (or by asking Jarvis) is
+     * picked up here without a restart, and a click that arrives from the PC's
+     * own event stream is honoured too.
+     *
+     * The default until a read answers is "start short": nothing is guessed
+     * about the owner's choice, and a PC with no such route draws cards as it
+     * always did.
+     */
+    private val _cardMode = MutableStateFlow(com.jarvis.client.net.CardSummary.DEFAULT)
+    val cardMode: StateFlow<String> = _cardMode.asStateFlow()
+
+    /** The control's own words, as the PC last sent them. */
+    private val _cardMoreLabel = MutableStateFlow(com.jarvis.client.net.CardSummary.MORE_LABEL)
+    val cardMoreLabel: StateFlow<String> = _cardMoreLabel.asStateFlow()
+
+    /** True when the PC says a real choice is saved, rather than the default in use. */
+    private val _cardModeStored = MutableStateFlow(false)
+    val cardModeStored: StateFlow<Boolean> = _cardModeStored.asStateFlow()
+
+    /**
+     * Reads the PC's card setting. A failure leaves the last value alone and is
+     * never fatal: this only decides which words a card draws, so a PC that
+     * cannot answer must not stop a card from being decided.
+     */
+    suspend fun refreshCardPrefs() {
+        when (val r = api.cardPrefs()) {
+            is ApiResult.Ok -> {
+                val view = com.jarvis.client.net.CardSummary.parse(r.value) ?: return
+                _cardMode.value = view.mode
+                _cardMoreLabel.value = view.moreLabel
+                _cardModeStored.value = view.stored
+            }
+            is ApiResult.Failed -> Log.w(TAG, "could not read the card setting: ${r.error}")
+        }
+    }
+
+    /**
+     * `GET /api/card-prefs` for the Settings row, which draws the two choices
+     * itself (ui/screens/ApprovalCardsPlate.kt). A read; 404 is an older PC.
+     */
+    suspend fun cardPrefsRead(): ApiResult<JsonObject> = api.cardPrefs()
+
+    /**
+     * Choose how much of a card is shown at first. COSMETIC, so it is at once
+     * in both directions with no approval card and no `actionBlocker` - it
+     * approves nothing, starts nothing and reaches nothing, which is the same
+     * rule the animal options and "How Jarvis talks" follow.
+     *
+     * @return the sentence to show, which is the PC's own ([CardSummary.said]).
+     */
+    suspend fun setCardMode(mode: String): String {
+        val body = com.jarvis.client.net.CardSummary.modeBody(mode)
+            ?: return "That is not one of the two choices."
+        val said = com.jarvis.client.net.CardSummary.said(api.cardPrefsPost(body))
+        // Read back rather than assume: the lines on the screen then say what
+        // the PC really holds, and a refusal changes nothing here.
+        refreshCardPrefs()
+        return said
+    }
+
+    /**
      * The ids whose approve or deny is in flight right now.
      *
      * Two taps on Approve about 100ms apart both got past [decisionBlocker] and
@@ -968,7 +1035,7 @@ object JarvisRuntime {
      * the scrubbed technical detail are kept in [problem] for Home's notice.
      * [handshake]: `GET /api/version`, where a 404 means "not Jarvis at all".
      */
-    private fun describe(e: ApiError, handshake: Boolean = false): String {
+    internal fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
         val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
         // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
@@ -3236,6 +3303,13 @@ object JarvisRuntime {
                     }
                 }
                 _absent.value = _absent.value - "approvals"
+                // The PC's own card setting (the owner's request of
+                // 2026-10-09): read again only while a card is actually
+                // waiting, so an idle phone makes no extra request for a
+                // preference nothing is drawn with - and a change made on the
+                // PC lands with the next refresh of the queue, without a
+                // restart.
+                if (items.isNotEmpty()) refreshCardPrefs()
                 // What is on screen is now what the desktop holds. This is the
                 // only thing that earns the gate the right to open.
                 refreshedSinceOpen = true
@@ -7845,6 +7919,86 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Progress.saved(r.value)
             is ApiResult.Failed -> com.jarvis.client.net.Progress.Outcome(
                 false, "Not changed. " + describe(r.error), null,
+            )
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+    // docs/JARVIS-API.md section 129; [com.jarvis.client.net.Pictures] and
+    // ui/screens/PicturesPlate.kt).
+    //
+    // NOTHING LEAVES THE OWNER'S OWN MACHINES. The prompt is typed on this
+    // phone and drawn by a program on the PC; "Save to my phone" writes the
+    // picture into THIS phone's own Pictures collection over Tailscale or
+    // Meshnet, which is the owner's own device and not a way out of the PC.
+    //
+    // MAKING ONE NEEDS NO APPROVAL CARD: a picture is a new file in a folder
+    // on the PC, from words the owner typed - the same shape as a timer or a
+    // note. Drawing one is still held on a stale link (rule 4), because it
+    // does write a file.
+    //
+    // THE SWITCH, THE DRAWING PROGRAM AND THE FOLDER ARE THE PC'S. There is no
+    // call from here for any of them, and the backend refuses them from
+    // anywhere but the PC.
+    // ---------------------------------------------------------------------
+
+    /**
+     * The gallery: the folder, its size, the switch and every picture with its
+     * own prompt, seed and when it was made. A read; never held, never spoken,
+     * never put in a notification.
+     */
+    suspend fun pictures(): ApiResult<com.jarvis.client.net.Pictures.Reply> = api.pictures()
+
+    /**
+     * ONE picture's PNG bytes, for "Save to my phone". Refused while "Hide
+     * memory lists and chat history" is on, and the id is checked before
+     * anything is sent, so the phone can never ask the PC for another path.
+     */
+    suspend fun pictureBytes(id: String): ApiResult<ByteArray> {
+        com.jarvis.client.net.Pictures.filePath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("unreadable")))
+        if (privateListsHidden) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short")),
+            )
+        }
+        return api.pictureBytes(id)
+    }
+
+    /**
+     * Draws ONE picture from the owner's own words and keeps it on the PC.
+     *
+     * NO CARD. Held on a stale link, and refused while the private lists are
+     * hidden (the gallery's own words are not on screen then, so there is
+     * nothing to ask "another" of). The PC's own sentence comes back as sent:
+     * a plain "start it on this PC", "nothing is set up yet" or "the switch is
+     * off" - never a code, never a blank.
+     */
+    suspend fun makePicture(prompt: String): com.jarvis.client.net.PicturesMake {
+        val body = com.jarvis.client.net.Pictures.makeBody(prompt)
+            ?: return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("no_words"), null,
+            )
+        if (privateListsHidden) {
+            return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short"), null,
+            )
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
+        return when (val r = api.makePicture(body)) {
+            is ApiResult.Ok -> {
+                // The PC's own sentence ("Drawn in 41.2 seconds and saved as
+                // ..."), shown word for word. Read as a plain string, never
+                // rebuilt here.
+                val words = com.jarvis.client.net.Pictures.madeWords(r.value)
+                com.jarvis.client.net.PicturesMake(
+                    true, words.ifBlank { "Drawn and kept on your PC." },
+                    com.jarvis.client.net.Pictures.madeId(r.value),
+                )
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.PicturesMake(
+                false, describe(r.error), null,
             )
         }
     }

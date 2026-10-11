@@ -385,16 +385,17 @@ class LimitsTest {
         assertTrue("the jump list has no limits entry", jump.contains("Entry(\"Limits and how often Jarvis does things\", \"limits\")"))
         val map = screen.substringAfter("SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(")
             .substringBefore("\n)")
-        // 25, not 21: four insertions above it have moved it four times on
+        // 26, not 21: five insertions above it have moved it five times on
         // 2026-10-09 - the phone's search box (position 0, above the jump list,
         // so every section below it moved down by one), "Notifications from
-        // Jarvis" (the owner's decision of that day, at position 17), what a
-        // captcha does about the window it blocks (position 21, directly under
-        // the hand-off row) and the phone's own "Screen refresh rate" (position
-        // 24, immediately above this row). Each carries the same +1 through the
-        // map below them, and `SettingsJumpTest` holds every number there to the
-        // row the screen really draws.
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 25"))
+        // Jarvis" (the owner's decision of that day, at position 18), what a
+        // captcha does about the window it blocks (position 22, directly under
+        // the hand-off row), the phone's own "Screen refresh rate" (position
+        // 25, immediately above this row) and "Approval cards" (the owner's
+        // request of that day, position 6, under Appearance). Each carries the
+        // same +1 through the map below them, and `SettingsJumpTest` holds
+        // every number there to the row the screen really draws.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 26"))
     }
 
     // ------------------------------------------- a time of day, and the PC's
