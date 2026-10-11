@@ -1305,14 +1305,49 @@ $PATCHES = @(
     # own picture and input routes are untouched, and the desktop still names
     # none of them (tests/handoff.mjs and tests/handoff-front.mjs).
     'handoff-front.patch'
+    # --- the owner's uncensored opt-ins, BOTH halves -------------------------
+    # jarvis_optin_models.py, the owner's OWN decision of 2026-10-10 (Decision
+    # 5): (a) one clearly-labelled opt-in for fiction and role-play, never the
+    # everyday assistant and never a default, and (b) the abliterated models
+    # already on disk offered as opt-in choices with no new download. TWO hunks
+    # in jarvis_gate.py - each switch's action joins the "acts only on tier
+    # ask" list and gets its _RISK line, both right after handoff-front.patch's
+    # own last entry in those two tables, so it goes after that patch - and ONE
+    # hunk in jarvis_hud.py, whose context is screen-attach.patch's own last
+    # printed line, calling jarvis_optin_models.install().
+    #
+    # It sits HERE, immediately BEFORE plugin-loader.patch, and that position
+    # is load-bearing in both directions: plugin-loader.patch must stay the
+    # LAST entry in this list (the repository's own rule for the loader -
+    # everything after it must be a drop-in folder, never another core patch,
+    # and tools/check_plugins.py fails if it is not last), so a new CORE patch
+    # goes in front of it and the loader's own hunk is re-anchored onto this
+    # block's last two printed lines. That re-anchor is exactly what
+    # tools/check_plugins.py derives and checks.
+    #
+    # Why it is a patch and not a drop-in folder: it needs a line in the core
+    # it does not own - the gate's tier tables, where "turning it on raises an
+    # approval card" is actually expressed. Its two [autonomy.tiers] lines are
+    # in backend/rebuilt/jarvis-framework.toml, which this script merges into
+    # the owner's own file ONLY when the line is missing, so a value they set
+    # themselves is never overwritten.
+    #
+    # Nothing here leaves the PC. Nothing is downloaded: the import names a
+    # local .gguf PATH through the EXISTING models_create route, and the module
+    # itself refuses to offer - or to import anything into - a model store that
+    # is not on this PC (rule 1). OFF, for either switch, is instant and needs
+    # no card, and the everyday assistant is never changed by either one.
+    'uncensored-optins.patch'
     # --- drop-in modules (feat/plug-and-play-modules) ------------------------
-    # Last, like every new patch, and its context is tutorials.patch's own
-    # install block - the last one in the file. It adds ONE more block of the
-    # same shape, calling jarvis_plugins.install(), which loads every folder
-    # in jarvis_plugins\ beside jarvis_hud.py and calls that folder's module's
-    # own install(). Nothing else about the core changes, and nothing about
-    # the 18 features it can carry changes: each still ships its own module
-    # and each module still wraps the Handler itself.
+    # Last, like every new patch, and its context is uncensored-optins.patch's
+    # own last two printed lines - the last install block before
+    # `_loopback_companion` (it was screen-attach.patch's printed lines until
+    # that block landed in front of it, in the same change). It adds ONE more
+    # block of the same shape, calling jarvis_plugins.install(), which loads
+    # every folder in jarvis_plugins\ beside jarvis_hud.py and calls that
+    # folder's module's own install(). Nothing else about the core changes, and
+    # nothing about the 18 features it can carry changes: each still ships its
+    # own module and each module still wraps the Handler itself.
     #
     # This patch is applied ONCE, and it is the only core change the whole
     # plug-in system needs. After it, adding or removing one of those features

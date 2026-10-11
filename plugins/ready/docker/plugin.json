@@ -1,0 +1,8 @@
+{
+  "name": "docker",
+  "summary": "the containers on Jarvis's OWN list, and start/stop for them.",
+  "module": "jarvis_docker",
+  "install": "handler",
+  "replaces_patch": "docker.patch",
+  "stack_order": 129
+}

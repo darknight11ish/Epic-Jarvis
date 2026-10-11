@@ -18744,3 +18744,96 @@ are `jarvis_second_card.py`'s.
 
 The module is not reachable from any model turn, is not a tool, and owns no route under
 `/api/pictures`; `test_picture_card.py` fails if either changes.
+## 125. The owner's uncensored opt-ins: `GET`/`POST /api/models/uncensored` (added 2026-10-10; the backend half built and shipped, the app controls not yet)
+
+The owner's own decision (2026-10-10, Decision 5, in
+`.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md`): "Uncensored: both of these -
+(a) one clearly-labelled opt-in model for fiction/role-play, never the everyday
+assistant and never a default, and (b) make the abliterated models already on
+disk usable as opt-in choices rather than downloading anything new." The
+measured cost goes on every label, in plain words: TruthfulQA drops 5.8 to 6.9
+points on this model family, MMLU is about noise, and the only fitting build is
+7 months old against a 5-day-old official one. The module is
+`jarvis_optin_models.py` (shipped whole); the wiring is
+`uncensored-optins.patch`.
+
+    GET  /api/models/uncensored
+
+`200`:
+
+    {"on": false,                // opt-in (b): the on-disk models are offered
+     "fiction": {"title": "Fiction and role-play", "detail": "...", "on": false},
+     "choices": [],              // one entry per model file, each labelled
+     "off": "Uncensored models are off. ...",
+     "never_default": "These are never the everyday assistant and never a default. ...",
+     "measured_cost": "Measured cost, from what was measured on 2026-10-10: ...",
+     "waiting": {"uncensored_models_enable": false,
+                 "fiction_roleplay_enable": false},
+     "last": {},                 // per action: {"outcome", "why", "at", "message"}
+     "local_only": true}
+
+Each entry of `choices[]` is
+
+    {"file": "D:\\Jarvis Models\\AI-Models\\...gguf",   // the local file it came from
+     "name": "jarvis-uncensored-qwen2.5-14b",          // the Ollama name it imports under
+     "label": "...",                                   // the model's name, the file, the measured cost
+     "detail": "...",                                  // the longer line, for "Explain more"
+     "size_gb": 8.37,
+     "already_imported": false,
+     "create": {"model": "jarvis-uncensored-qwen2.5-14b",
+                "from": "D:\\Jarvis Models\\AI-Models\\...gguf",
+                "stream": false}}                      // the EXACT body /api/hardware/create takes
+
+`choices[]` is **empty while the switch is off** (that is the opt-in, in one
+line) and empty when the model store is not on this PC (`local_only` false, with
+`off` saying so in words). A file whose name carries `abliterated` or
+`uncensored` is a choice; a file whose name carries neither is not one, however
+it is stored. A file under 512 MB is not offered either.
+
+    POST /api/models/uncensored   {"on": true|false}
+    POST /api/models/uncensored   {"fiction": true|false}
+
+**Exactly one of the two keys, with a real `true`/`false`.** Anything else - both
+keys, neither, or a value that is not a boolean - is `400` in plain words.
+
+`false` turns that switch off at once: `200` `{"ok": true, "waiting": false,
+"message": "Done - ..."}`. **Off never asks**, and it withdraws a card of that
+switch still waiting, so approving that stale card afterwards changes nothing.
+
+`true` is a **loosening**, so it raises ONE approval card and changes nothing
+until a person approves it:
+
+    202 {"ok": true, "waiting": true, "uncensored_choices_offered": false,
+         "message": "Waiting for your approval. ..."}
+
+The card's action is `uncensored_models_enable` for `on` and
+`fiction_roleplay_enable` for `fiction`; both are tier `ask` in
+`jarvis-framework.toml`, and both are `("yes", "local")` in `jarvis_gate.py`'s
+`_RISK` table - reversible in one tap, and nothing leaves this PC, which is why
+the card is not a risky one. A build whose settings file says anything but `ask`
+answers `503` in plain words and raises no card at all. A second `true` while a
+card waits answers `202` with "A card to change this is already waiting for your
+approval" and raises no second card; the two switches never block each other.
+
+The card is decided on its own thread; only tier `ask` with outcome `approved`
+turns anything on. Denied, timed out, refused, or turned off while it waited:
+nothing changes, and `last[<action>]["outcome"]` says which happened (`enabled`,
+`denied`, `timed_out`, `refused`, `withdrawn`, `failed`).
+
+**Nothing is downloaded and nothing leaves the PC.** Importing a choice is
+Ollama's own `POST /api/create` with `from` set to a local `.gguf` path (the body
+under `create` above) through the EXISTING `/api/hardware/create` route, whose
+`models_create` card is unchanged; making one the model in use is the EXISTING
+`POST /api/models/switch` (`switch_model`). Neither is a new way out of the PC
+(ARCHITECTURE section 4), and `local_only()` refuses both switches outright -
+before any card - when the address the models are served on is not this PC
+(rule 1). Neither switch ever changes the everyday assistant.
+
+Both routes are wrapped round the server's handler by
+`jarvis_optin_models.install()`, after the server's own origin and token checks,
+like `/api/notifications/phone`; every other path goes straight through. There is
+**no app control for either switch yet** - the route is the backend half, and the
+desktop's Brain → Model screen is where the controls belong (the phone does not
+browse models, per the standing rule). `tools/check_parity.py` reports no drift
+until a client calls it.
+
