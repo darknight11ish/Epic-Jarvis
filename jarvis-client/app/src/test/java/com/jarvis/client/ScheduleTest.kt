@@ -445,4 +445,69 @@ class ScheduleTest {
         assertEquals("card review", Schedule.tag("review"))
         assertEquals("Card review", Schedule.titleOf(job))
     }
+
+    // ---------------- a "went off" notification whose job is gone ----
+    // The owner's report of 2026-10-11: the jobs were deleted on the PC while
+    // the phone still showed both notifications, and nothing cancelled them,
+    // because the PC's `changed` event is the only cancellation this app had -
+    // and a job that no longer exists sends none.
+
+    @Test
+    fun theJobIdComesOutOfANotificationKey() {
+        // A timer's or alarm's key IS the job id.
+        assertEquals("s0000000001", Schedule.jobIdFromTag("s0000000001"))
+        // A "tell me when" MATCH's key is `id#match@…`.
+        assertEquals("s0000000002", Schedule.jobIdFromTag("s0000000002#match@ev3"))
+        assertEquals("s0000000002", Schedule.jobIdFromTag("s0000000002#match@1700000000"))
+        // An ordinary key is left alone, and a separator with no id before it
+        // is not treated as one.
+        assertEquals("s0000000003#broken@8", Schedule.jobIdFromTag("s0000000003#broken@8"))
+        assertEquals("#match@9", Schedule.jobIdFromTag("#match@9"))
+    }
+
+    @Test
+    fun aWentOffJobThePcStillListsIsKeptAndOneItNoLongerListsIsNot() {
+        // The two tags that were still ringing on the owner's phone, and a
+        // third that is still a real job.
+        val posted = listOf(
+            "s7623a9a982" to "s7623a9a982",
+            "sf50b6d4930" to "sf50b6d4930",
+            "s0000000009" to "s0000000009",
+        )
+        val alive = setOf("s0000000009")
+        assertEquals(
+            listOf("s7623a9a982" to "s7623a9a982", "sf50b6d4930" to "sf50b6d4930"),
+            Schedule.stopsWhenJobGone(posted, alive),
+        )
+        // Nothing is touched when every job is still there.
+        assertEquals(
+            emptyList<Pair<String, String>>(),
+            Schedule.stopsWhenJobGone(posted, setOf("s7623a9a982", "sf50b6d4930", "s0000000009")),
+        )
+        // The MOTOR of the pairing: the job id is what is asked about, and a
+        // match's composed tag still resolves to its own job.
+        assertEquals(
+            listOf("s0000000002#match@ev3" to "s0000000002"),
+            Schedule.stopsWhenJobGone(listOf("s0000000002#match@ev3" to "s0000000002"), emptySet()),
+        )
+    }
+
+    @Test
+    fun theKnownIdsAreTheJobsTheTodoItemsAndTheOnesThatWentOff() {
+        val body = obj(
+            """{"available":true,
+                "jobs":[{"id":"s0000000001","kind":"timer","text":"pasta","state":"active"}],
+                "todo":[{"id":"s0000000005","kind":"todo","text":"buy milk","state":"active"}],
+                "went_off":[{"id":"s0000000007","kind":"alarm","text":"","state":"fired"}]}""",
+        )
+        val view = Schedule.parse(body)!!
+        assertEquals(
+            setOf("s0000000001", "s0000000005", "s0000000007"),
+            Schedule.knownIds(view),
+        )
+        // A list with nothing in it knows nothing - and the caller only asks
+        // after a read that SUCCEEDED, so this is "the PC says it has no
+        // jobs", never "the PC could not be asked".
+        assertEquals(emptySet<String>(), Schedule.knownIds(Schedule.parse(obj("""{"available":true,"jobs":[],"todo":[]}"""))!!))
+    }
 }

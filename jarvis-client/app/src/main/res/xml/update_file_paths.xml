@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The only thing this app ever shares by URI: the one APK it downloaded
+     into its own cache, whose signing certificate was read out of it and
+     matched against the digest pinned in the app before it was offered
+     (platform/UpdateChecker.kt). `cache-path` is app-private storage, so no
+     other app can write there and swap the bytes between the check and the
+     install. Read-only, granted per intent, for that one file. -->
+<paths>
+    <cache-path name="updates" path="updates/" />
+</paths>
