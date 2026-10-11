@@ -302,6 +302,18 @@ MENUS: tuple = (
     _m("settings.browser-engine", "Browser without a window",
        "Which browser Jarvis uses for plain reading.",
        names=("browser without a window", "headless browser", "browser settings")),
+    # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 129): the switch ("Making pictures"), which program on
+    # this PC draws them (ComfyUI or stable-diffusion.cpp - a setting with
+    # named supported values, never guessed at), and the folder they are kept
+    # in. The gallery itself is Brain -> Projects -> Pictures
+    # (`brain.projects.pictures`), which is where the owner asks for one and
+    # sees the ones they kept; this card is the PC's own setup for it.
+    _m("settings.pictures", "Pictures",
+       "Making pictures, which program draws them, and where they are kept.",
+       (DESKTOP,),
+       names=("pictures", "making pictures", "the pictures", "my pictures",
+              "the picture gallery", "drawing pictures")),
     # "When the phone does not answer" (the owner's decision of 2026-10-08:
     # "make this a setting for both options with 1 as the default"): how long
     # the captcha hand-off - a live picture of one of the owner's browser
@@ -625,6 +637,19 @@ MENUS: tuple = (
     # ---- Brain: Projects -----------------------------------------------
     _m("brain.projects.progress", "Progress", "The activity heatmap and balance chart.",
        area="brain", view="projects", group="goals-projects", names=("progress", "heatmap")),
+    # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+    # pictures.patch, JARVIS-API section 129). The id is the SAME in both apps
+    # even though the phone draws it in Brain -> Pictures and the PC draws it
+    # above the project list (the module's own rule: one id means one feature).
+    # Both draw the gallery, the prompts and "Make another"; the PC also has
+    # the switch, the drawing program and the folder, which are the PC's own
+    # business. The prompts are the owner's own words, so it hides with the
+    # private lists.
+    _m("brain.projects.pictures", "Pictures",
+       "Ask for a picture in your own words, and see the ones you kept.",
+       area="brain", view="projects", group="goals-projects",
+       names=("pictures", "the pictures", "my pictures", "the picture gallery",
+              "making pictures")),
 
     # ---- Brain: Now, Trust, Watch --------------------------------------
     _m("brain.now.right-now", "Right now", "What Jarvis is doing and its power state.",

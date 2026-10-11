@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-pictures-file"
+description = "Enables the brain_pictures_file command without any pre-configured scope."
+commands.allow = ["brain_pictures_file"]
+
+[[permission]]
+identifier = "deny-brain-pictures-file"
+description = "Denies the brain_pictures_file command without any pre-configured scope."
+commands.deny = ["brain_pictures_file"]

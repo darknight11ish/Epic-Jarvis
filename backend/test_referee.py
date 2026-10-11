@@ -718,6 +718,11 @@ def t_the_patch_and_the_lists():
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
              "picture-card.patch",
+             # pictures.patch (2026-10-11) is appended last and has exactly ONE
+             # hunk, in jarvis_hud.py: an install block at the end of the install
+             # chain. It removes no line and does not touch jarvis_gate.py at all,
+             # so it rewrites nothing referee.patch wrote.
+             "pictures.patch",
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.

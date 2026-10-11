@@ -517,6 +517,11 @@ def t_hygiene():
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
              "picture-card.patch",
+             # pictures.patch (2026-10-11): ONE install block at the end of
+             # jarvis_hud.py's chain - nowhere near the POST /api/screen route this
+             # patch's wrapper takes over - so the request body is still read once,
+             # and still by this wrapper.
+             "pictures.patch",
              # big-coder.patch (2026-10-11) is appended after it, before
              # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
              # gate list, no tier row and no _RISK row.

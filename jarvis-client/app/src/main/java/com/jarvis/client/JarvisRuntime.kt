@@ -1035,7 +1035,7 @@ object JarvisRuntime {
      * the scrubbed technical detail are kept in [problem] for Home's notice.
      * [handshake]: `GET /api/version`, where a 404 means "not Jarvis at all".
      */
-    private fun describe(e: ApiError, handshake: Boolean = false): String {
+    internal fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
         val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
         // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
@@ -5302,11 +5302,56 @@ object JarvisRuntime {
             ring = true,
             key = tag,
             timeoutMs = com.jarvis.client.net.FindPhone.ringMillis(ring),
+            // A job on the same schedule: if the PC stops listing it, the ring
+            // goes with it rather than ringing on for ever.
+            scheduleKind = com.jarvis.client.net.FindPhone.EVENT,
         )
     }
 
     /** `GET /api/schedule`. A read: never held. */
-    suspend fun schedule(): ApiResult<JsonObject> = api.schedule()
+    suspend fun schedule(): ApiResult<JsonObject> {
+        val r = api.schedule()
+        // A read that SUCCEEDED is the only thing that may take a "went off"
+        // notification away for a job the PC no longer lists - never a read
+        // that failed, which would make a still-true notice vanish because the
+        // link blipped (the owner's report of 2026-10-11).
+        if (r is ApiResult.Ok) reconcileScheduleNotifications(r.value)
+        return r
+    }
+
+    /**
+     * Takes away every "went off" notification whose job the PC no longer
+     * lists AT ALL (the owner's report of 2026-10-11, in its worst form: a job
+     * deleted on the PC while the phone still showed it kept ringing for
+     * ever, because the PC's `changed` event - the only cancellation this app
+     * had - is never sent for a job that no longer exists).
+     *
+     * Called only with the body of a `GET /api/schedule` that SUCCEEDED. The
+     * job ids come from the active jobs, the open to-do items and the ones
+     * that went off in the last hour: a job in none of those lists is gone.
+     * A read that failed never calls this, so "the job is gone" and "I could
+     * not ask" can never be confused.
+     *
+     * It can only ever touch a schedule notification: [ScheduleNotifier.posted]
+     * hands back just the notifications this app posted on its own id that
+     * carry a schedule kind, so an approval card, the Jarvis link, "Live
+     * ended" and a morning briefing's notice are never cancelled. A job
+     * merely snoozed, deleted or done while its notification was up is
+     * already handled by the `changed` event and by [scheduleAct] - this adds
+     * the one case those cannot reach.
+     */
+    private fun reconcileScheduleNotifications(body: JsonObject) {
+        val context = appContext ?: return
+        val view = com.jarvis.client.net.Schedule.parse(body) ?: return
+        val known = com.jarvis.client.net.Schedule.knownIds(view)
+        val gone = com.jarvis.client.net.Schedule.stopsWhenJobGone(
+            com.jarvis.client.service.ScheduleNotifier.posted(context), known,
+        )
+        for ((tag, jobId) in gone) {
+            Log.i(TAG, "a schedule notification for $jobId is still up, but the PC no longer lists that job: taking it away")
+            runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(context, jobId, tag) }
+        }
+    }
 
     /**
      * ONE job: pause, resume, delete or done. No card - none of them can make
@@ -6317,6 +6362,9 @@ object JarvisRuntime {
                 // An alarm keeps ringing until seen (2026-09-25).
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
                 quiet = late,
+                // A job "going off": a notification whose job the PC no longer
+                // lists at all is taken away by the reconcile pass.
+                scheduleKind = kind,
             )
         }
     }
@@ -6357,6 +6405,7 @@ object JarvisRuntime {
                 ring = if (late) false else com.jarvis.client.net.Schedule.rings(kind, urgent),
                 key = key,
                 quiet = late,
+                scheduleKind = kind,
             )
         }
     }
@@ -7870,6 +7919,86 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Progress.saved(r.value)
             is ApiResult.Failed -> com.jarvis.client.net.Progress.Outcome(
                 false, "Not changed. " + describe(r.error), null,
+            )
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+    // docs/JARVIS-API.md section 129; [com.jarvis.client.net.Pictures] and
+    // ui/screens/PicturesPlate.kt).
+    //
+    // NOTHING LEAVES THE OWNER'S OWN MACHINES. The prompt is typed on this
+    // phone and drawn by a program on the PC; "Save to my phone" writes the
+    // picture into THIS phone's own Pictures collection over Tailscale or
+    // Meshnet, which is the owner's own device and not a way out of the PC.
+    //
+    // MAKING ONE NEEDS NO APPROVAL CARD: a picture is a new file in a folder
+    // on the PC, from words the owner typed - the same shape as a timer or a
+    // note. Drawing one is still held on a stale link (rule 4), because it
+    // does write a file.
+    //
+    // THE SWITCH, THE DRAWING PROGRAM AND THE FOLDER ARE THE PC'S. There is no
+    // call from here for any of them, and the backend refuses them from
+    // anywhere but the PC.
+    // ---------------------------------------------------------------------
+
+    /**
+     * The gallery: the folder, its size, the switch and every picture with its
+     * own prompt, seed and when it was made. A read; never held, never spoken,
+     * never put in a notification.
+     */
+    suspend fun pictures(): ApiResult<com.jarvis.client.net.Pictures.Reply> = api.pictures()
+
+    /**
+     * ONE picture's PNG bytes, for "Save to my phone". Refused while "Hide
+     * memory lists and chat history" is on, and the id is checked before
+     * anything is sent, so the phone can never ask the PC for another path.
+     */
+    suspend fun pictureBytes(id: String): ApiResult<ByteArray> {
+        com.jarvis.client.net.Pictures.filePath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("unreadable")))
+        if (privateListsHidden) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short")),
+            )
+        }
+        return api.pictureBytes(id)
+    }
+
+    /**
+     * Draws ONE picture from the owner's own words and keeps it on the PC.
+     *
+     * NO CARD. Held on a stale link, and refused while the private lists are
+     * hidden (the gallery's own words are not on screen then, so there is
+     * nothing to ask "another" of). The PC's own sentence comes back as sent:
+     * a plain "start it on this PC", "nothing is set up yet" or "the switch is
+     * off" - never a code, never a blank.
+     */
+    suspend fun makePicture(prompt: String): com.jarvis.client.net.PicturesMake {
+        val body = com.jarvis.client.net.Pictures.makeBody(prompt)
+            ?: return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("no_words"), null,
+            )
+        if (privateListsHidden) {
+            return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short"), null,
+            )
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
+        return when (val r = api.makePicture(body)) {
+            is ApiResult.Ok -> {
+                // The PC's own sentence ("Drawn in 41.2 seconds and saved as
+                // ..."), shown word for word. Read as a plain string, never
+                // rebuilt here.
+                val words = com.jarvis.client.net.Pictures.madeWords(r.value)
+                com.jarvis.client.net.PicturesMake(
+                    true, words.ifBlank { "Drawn and kept on your PC." },
+                    com.jarvis.client.net.Pictures.madeId(r.value),
+                )
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.PicturesMake(
+                false, describe(r.error), null,
             )
         }
     }

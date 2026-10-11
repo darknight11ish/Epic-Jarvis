@@ -78,12 +78,14 @@ export const GROUPS = [
       "desktop": [
         "brain.tab.projects",
         "brain.work.goals",
-        "brain.projects.progress"
+        "brain.projects.progress",
+        "brain.projects.pictures"
       ],
       "phone": [
         "brain.tab.projects",
         "brain.work.goals",
-        "brain.projects.progress"
+        "brain.projects.progress",
+        "brain.projects.pictures"
       ]
     },
     "listed": {
@@ -780,6 +782,30 @@ export const MENUS = [
       "browser without a window",
       "headless browser",
       "browser settings"
+    ]
+  },
+  {
+    "id": "settings.pictures",
+    "title": "Pictures",
+    "about": "Making pictures, which program draws them, and where they are kept.",
+    "apps": [
+      "desktop"
+    ],
+    "area": "settings",
+    "view": "",
+    "kind": "card",
+    "group": null,
+    "parent": null,
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "pictures",
+      "making pictures",
+      "the pictures",
+      "my pictures",
+      "the picture gallery",
+      "drawing pictures"
     ]
   },
   {
@@ -2211,6 +2237,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "brain.projects.pictures",
+    "title": "Pictures",
+    "about": "Ask for a picture in your own words, and see the ones you kept.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "brain",
+    "view": "projects",
+    "kind": "card",
+    "group": "group.goals-projects",
+    "parent": "brain.tab.projects",
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "pictures",
+      "the pictures",
+      "my pictures",
+      "the picture gallery",
+      "making pictures"
+    ]
+  },
+  {
     "id": "brain.now.right-now",
     "title": "Right now",
     "about": "What Jarvis is doing and its power state.",
@@ -2677,6 +2727,7 @@ export const ALIASES = {
   "desktop notifications": "settings.notifications",
   "devices": "settings.devices",
   "does the browser window come to the front": "settings.handoff-front",
+  "drawing pictures": "settings.pictures",
   "email sending": "settings.email-sending",
   "everyday chat runs on": "settings.second-card.chat-card",
   "explain more": "settings.approval-cards",
@@ -2736,6 +2787,7 @@ export const ALIASES = {
   "limits and frequency": "settings.limits",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
+  "making pictures": "settings.pictures",
   "manner": "settings.manner",
   "memory": "brain.tab.memory",
   "memory (model view)": "brain.model.memory",
@@ -2762,6 +2814,8 @@ export const ALIASES = {
   "people": "brain.memory.people-things",
   "people and things": "brain.memory.people-things",
   "phone notifications": "settings.phone-notify",
+  "picture gallery": "settings.pictures",
+  "pictures": "settings.pictures",
   "pin everyday chat": "settings.second-card.chat-card",
   "pinned facts": "brain.memory.profile",
   "progress": "brain.projects.progress",

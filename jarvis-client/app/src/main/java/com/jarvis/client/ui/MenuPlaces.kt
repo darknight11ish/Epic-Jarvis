@@ -111,6 +111,13 @@ object MenuPlaces {
         // with no place at all.
         "briefing" to "brain.work.briefing",
         "progress" to "brain.projects.progress",
+        // "Ask for a picture, and keep it" (the owner's decision of
+        // 2026-09-27; JARVIS-API section 129; PicturesPlate.kt). It sits in
+        // Brain -> Projects beside the Progress pictures, and its own item key
+        // lets the menu hide it on its own. The prompts are the owner's own
+        // words, so hiding it - or "Hide memory lists and chat history" -
+        // takes the pictures off this screen and stops the fetch entirely.
+        "pictures" to "brain.projects.pictures",
         "projects" to "brain.tab.projects",
         "attention" to "brain.now.budget",
         "jobs" to "brain.work.jobs",

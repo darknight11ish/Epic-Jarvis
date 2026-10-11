@@ -156,6 +156,16 @@ fun ReadinessScreen(
     /** Opens the release page in the browser. */
     onOpenRelease: () -> Unit = {},
     /**
+     * What the Download button is doing (`platform/UpdateChecker.kt`): idle,
+     * fetching a newer build, ready to install, or refused. Null hides the
+     * download line entirely (an older caller, or a screen with no updater).
+     */
+    updateDownload: UpdateCheck.Download? = null,
+    /** The owner pressed Download. Nothing is fetched before this. */
+    onDownloadUpdate: () -> Unit = {},
+    /** The owner pressed Install on a VERIFIED download. */
+    onInstallUpdate: () -> Unit = {},
+    /**
      * Opens the phone's own Settings screen (ease-of-use audit 2026-09-27,
      * row 16), where "How Jarvis talks", web search and the other settings
      * that used to sit under Brain's "Settings" group now live, alongside
@@ -260,7 +270,9 @@ fun ReadinessScreen(
             items(others, key = { it.title }) { ReadinessCard(it, fixFor(it)) }
             item(key = "frame-rate") { FrameRateCard() }
             if (update != null) {
-                item(key = "this-app") { ThisAppCard(update, updateChecks, onUpdateChecks, onOpenRelease) }
+                item(key = "this-app") {
+                    ThisAppCard(update, updateChecks, onUpdateChecks, onOpenRelease, updateDownload, onDownloadUpdate, onInstallUpdate)
+                }
             }
         }
     }
@@ -823,6 +835,11 @@ private fun SecurityCard(summary: String, onOpen: () -> Unit) {
  *
  * The one place a failed check is mentioned: Home stays quiet about it.
  * The switch turns the request to GitHub off entirely.
+ *
+ * Since 2026-10-11 (the owner's request) it also carries the simple changelog
+ * the release names, a Download button, and - once the download's signing
+ * certificate has been checked against the digest pinned in the app - an
+ * Install button that hands the file to Android's own installer.
  */
 @Composable
 private fun ThisAppCard(
@@ -830,6 +847,9 @@ private fun ThisAppCard(
     checks: Boolean,
     onChecks: (Boolean) -> Unit,
     onOpenRelease: () -> Unit,
+    download: UpdateCheck.Download?,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     val now = rememberTickingNow(update.lastTryMs, periodMs = 60_000L)
@@ -841,8 +861,8 @@ private fun ThisAppCard(
         SwitchRow(
             title = "Check for new versions",
             detail = "At most every six hours, this phone asks GitHub whether a newer build of this app is " +
-                "on its release page. Nothing about you or Jarvis is sent, and nothing is " +
-                "downloaded or installed.",
+                "on its release page. Nothing about you or Jarvis is sent. When one is found you can " +
+                "download it here; nothing is downloaded until you press Download.",
             checked = checks,
             onChange = onChecks,
         )
@@ -863,7 +883,53 @@ private fun ThisAppCard(
             update.problem?.let {
                 Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
             }
+            update.published?.changes?.takeIf { it.isNotEmpty() }?.let { changes ->
+                Gap(8)
+                Text("What's new", style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                Gap(4)
+                changes.forEach { line ->
+                    Text(
+                        "• $line",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
+                }
+            }
             if (newer != null) {
+                Gap(8)
+                when (download) {
+                    is UpdateCheck.Download.Fetching -> Text(
+                        "Downloading… " + UpdateCheck.progress(download.bytes, download.total),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
+                    is UpdateCheck.Download.Ready -> {
+                        // Only a certificate-matched file ever gets here.
+                        Primary(
+                            text = "Install update",
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = onInstall,
+                        )
+                        Gap(4)
+                        Text(
+                            "Android will ask once to allow installs from Jarvis. Then it shows its own " +
+                                "screen with Install on it.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo,
+                        )
+                    }
+                    is UpdateCheck.Download.Refused -> Text(
+                        download.why,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.warnInk,
+                    )
+                    else -> Secondary(
+                        text = "Download update",
+                        color = chrome.textHi,
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = onDownload,
+                    )
+                }
                 Gap(8)
                 Secondary(
                     text = "Open release page",

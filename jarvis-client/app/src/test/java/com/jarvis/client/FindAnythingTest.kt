@@ -176,12 +176,22 @@ class FindAnythingTest {
             // (`Approval cards` in `backend/jarvis_menus.py`, drawn by
             // `SettingsScreen.kt`'s `ApprovalCardsSection` under Appearance) -
             // the catalogue is one larger because a place really was added, not
-            // because a regeneration went wrong. It is here so that a
-            // regeneration which drops the `names` field, or a catalogue that
-            // comes back a different size, is noticed rather than quietly
-            // searched.
+            // because a regeneration went wrong.
+            //
+            // 116 -> 118 (2026-10-11) on main: the picture feature's two menus
+            // joined the registry - `settings.pictures` (the PC's own setup
+            // card) and `brain.projects.pictures` (the gallery) - so the
+            // catalogue really is two bigger. With both landed, this branch's
+            // 117 and main's 118 are ONE catalogue of 119 - which is why the
+            // number here is 119 and not either side's own; both reasons are
+            // above rather than one replacing the other.
+            //
+            // It is here so that a regeneration which drops the `names` field,
+            // or a catalogue that comes back a different size, is noticed rather
+            // than quietly searched: the check above still proves that every one
+            // of the 119 menus has all of its names searched for.
             "the catalogue must still carry the names at all",
-            117,
+            119,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
