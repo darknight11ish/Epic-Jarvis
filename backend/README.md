@@ -19014,7 +19014,7 @@ OFF waits for an approved card's own write rather than racing it.
 It is wrapped round the running server's handler by `install()`, after the
 server's own origin and token checks, like `jarvis_watch_notify.install()` and
 `jarvis_phone_notifications.install()`; every other path goes straight through.
-`docs/JARVIS-API.md` section 124 has the full shape.
+`docs/JARVIS-API.md` section 125 has the full shape.
 
 **Nothing is downloaded, and nothing leaves this PC.** Adding one of these models
 is Ollama's own `POST /api/create` with `from` set to a LOCAL `.gguf` path - a

@@ -514,7 +514,7 @@ GROUPS = (
                                       "switch_model", "rollback_model", "models_create",
                                       # The owner's uncensored opt-ins (2026-10-10,
                                       # Decision 5; jarvis_optin_models.py, JARVIS-API
-                                      # section 124). Both sit here with the other model
+                                      # section 125). Both sit here with the other model
                                       # choices: one offers the abliterated models already
                                       # on this PC, the other sets one model aside for
                                       # fiction and role-play. Both are OFF by default,
