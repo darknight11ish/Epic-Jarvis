@@ -159,6 +159,55 @@ class ScrollToKeyTest {
         assertEquals(30, found)
     }
 
+    @Test
+    fun `a walk that misses on the first pass finds the item on the second`() {
+        // The device's own shape, on a list this test controls: the first pass
+        // runs while the holder is still SHUT, so it walks to the bottom and
+        // misses. `ScrollToKeyOnce` then opens the holder once more, goes back
+        // to the top and walks again - and only that second pass has the plate
+        // in it. This is the half a green suite could not see: "opened" and
+        // "laid out" are different frames (2026-10-11).
+        val keys = ArrayList(listOf("head-a", "head-b", "tail"))
+        val list = FakeList(keys, total = 3, window = 0..2)
+
+        val first = walk(list, "brain-plate:people-and-things")
+        assertTrue("the first pass was expected to miss: $first", first.third)
+        assertEquals(null, first.first)
+
+        // The retry: the holder opens, the plate is added, the list is walked
+        // again from the top.
+        @Suppress("UNCHECKED_CAST")
+        (list.keys as ArrayList<String>).add("brain-plate:people-and-things")
+        list.total = 4
+        list.window = 0..2
+        val second = walk(list, "brain-plate:people-and-things")
+        assertFalse("the retry did not find the plate: $second", second.third)
+        assertEquals(3, second.first)
+        assertEquals("brain-plate:people-and-things", list.keys[second.first!!])
+    }
+
+    @Test
+    fun `a plate the screen never draws lands the jump on its heading instead of the bottom`() {
+        // The other half of the device's question: when the plate is genuinely
+        // not in the list - its menu hidden by the owner, or the other of a
+        // pair - no amount of walking puts it there. The walk for the plate
+        // ends at the bottom, and the HEADING, which is drawn either way, is
+        // what the jump must land on. Without it the screen was left on the
+        // attention budget, the last item in Brain's list.
+        val keys = listOf("brain-heading:waiting", "brain-plate:memory", "brain-heading:knows", "brain-plate:attention", "brain-plate:tail")
+        val list = FakeList(keys, total = keys.size, window = 0..2)
+
+        // The plate is nowhere in this list, so its own walk misses.
+        val miss = walk(list, "brain-plate:people-and-things")
+        assertTrue("the plate's walk was expected to miss: $miss", miss.third)
+
+        // The fallback: walk the heading that holds it, from the top.
+        val (found, _, gaveUp) = walk(list, "brain-heading:knows")
+        assertFalse("the heading was not found either: $gaveUp", gaveUp)
+        assertEquals(2, found)
+        assertEquals("brain-heading:knows", list.keys[found!!])
+    }
+
     // ------------------- the jump really names the plate ----------------
     // The assertion whose absence let the device defect through: the tests
     // before this one proved the BUTTON existed and that the Brain draws the

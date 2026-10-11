@@ -96,12 +96,32 @@ internal fun walkStep(
  * list, where tapping "Voice" again after scrolling away must scroll again. The
  * effect keys on [key] and [tick] together, so a new tick re-runs it while
  * [key] stays the plain `item(key = ...)` it looks up.
+ *
+ * [holderKey] is the fallback for an item the screen is NOT drawing at all - a
+ * plate behind a menu the owner has hidden, or the other half of a pair. Those
+ * never reach the list, so the item's own walk ends at the bottom; the heading
+ * that holds it does not, so the jump lands there instead of somewhere the
+ * owner did not ask for. It is tried only AFTER the item has really been
+ * searched for twice, so a jump that can reach its item always does.
  */
 @Composable
 fun ScrollToKeyOnce(
     state: LazyListState,
     key: String?,
     tick: Int = 0,
+    /**
+     * The `item(key = ...)` of whatever HOLDS [key] - a heading that is drawn
+     * whether or not the item inside it is. Null when nothing holds it.
+     *
+     * It is the jump's fallback, and it exists because a key being absent from
+     * the list is not always a timing problem: a plate whose menu the owner has
+     * hidden, or one drawn only in the other of a pair, is NEVER laid out, so a
+     * walk for it runs to the bottom of the list and stops there. Landing on
+     * the heading instead is the difference between "the screen has taken me to
+     * the thing I asked for" and "the screen has taken me somewhere I did not
+     * ask for" (the Galaxy button on the device, 2026-10-11).
+     */
+    holderKey: (String) -> String? = { null },
     onOpen: (String) -> Unit = {},
     onDone: () -> Unit,
 ) {
@@ -109,11 +129,14 @@ fun ScrollToKeyOnce(
     val opened by rememberUpdatedState(onOpen)
     LaunchedEffect(key, tick) {
         val target = key ?: return@LaunchedEffect
-        // Already on screen (or nothing laid out yet, which only happens on the
-        // very first frames): judge it instead of opening its holder and moving
-        // the list under the owner's finger. A list with nothing laid out yet
-        // waits below rather than opening anything.
+        // The heading that holds the item, when the screen knows of one - the
+        // one item a jump can still land on when the item itself is not drawn
+        // (a menu the owner has hidden, a plate drawn only in the other of a
+        // pair). The screen passes it in; see [ScrollToKeyOnce]'s note.
+        val holder = holderKey(target)
         var openAsked = false
+        var attemptedHold = false
+        var retried = false
         var waited = 0
         while (waited < WAIT_FRAMES) {
             val info = state.layoutInfo
@@ -136,10 +159,36 @@ fun ScrollToKeyOnce(
                 withFrameNanos { }
                 continue
             }
-            // Open (or nothing to open): walk down a screenful at a time.
-            if (scrollToKey(state, target, fromTop = false)) {
-                val hit = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == target }
-                if (hit != null) state.animateScrollToItem(hit.index)
+            if (!attemptedHold) {
+                // Walk down a screenful at a time for the item itself.
+                attemptedHold = true
+                if (scrollToKey(state, target, fromTop = false)) {
+                    val hit = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == target }
+                    if (hit != null) state.animateScrollToItem(hit.index)
+                    done()
+                    return@LaunchedEffect
+                }
+                if (holder != null && !retried) {
+                    // It was not in the list while that walk ran. Opening the
+                    // holder is a STATE WRITE and its items are added by the
+                    // composition AFTER it, so ask once more and walk the list
+                    // that has them - from the top, because the failed walk ran
+                    // to the bottom and a walk only ever moves down.
+                    retried = true
+                    attemptedHold = false
+                    opened(target)
+                    state.scrollToItem(0)
+                    withFrameNanos { }
+                    continue
+                }
+                if (holder == null) break
+                // Second miss WITH a holder known: the screen is really not
+                // drawing the item, so land on the heading that holds it rather
+                // than on the bottom of a failed search.
+                if (scrollToKey(state, holder, fromTop = true)) {
+                    val hit = state.layoutInfo.visibleItemsInfo.firstOrNull { it.key == holder }
+                    if (hit != null) state.animateScrollToItem(hit.index)
+                }
                 done()
                 return@LaunchedEffect
             }

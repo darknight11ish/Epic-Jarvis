@@ -427,9 +427,32 @@ fun BrainScreen(
         fun plateDrawn(name: String): Boolean =
             if (name.endsWith("-hidden")) privateHidden else !privateHidden
 
+        // One diagnosable line per jump (the Galaxy button defect of
+        // 2026-10-11): what was asked for, which key the walk looks up, which
+        // heading should hold it, and the heading that starts open. A green
+        // suite could not see the device, so this is what a device dump reads
+        // afterwards - `adb logcat -s JarvisBrain`.
+        LaunchedEffect(initialSection) {
+            if (initialSection != null) {
+                val target = plateKeyAt(initialSection)
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "jump asked=${initialSection} key=$target " +
+                        "holder=${BrainSections.sectionOf(target)?.key ?: "none"} " +
+                        "initiallyOpen=${BrainSections.toOpen(initialSection) ?: "none"} " +
+                        "openKey=$openKey",
+                )
+            }
+        }
         ScrollToKeyOnce(
             listState,
             initialSection?.let { plateKeyAt(it) },
+            // The heading that holds the plate, when one does: the fallback for
+            // a plate this screen is not drawing at all (its menu hidden, or
+            // the other half of a pair). Without it a jump to an absent plate
+            // ended at the bottom of Brain's list - the attention budget - which
+            // is what the owner saw on 2026-10-11.
+            holderKey = { key -> BrainSections.sectionOf(key)?.let { BrainSections.headingKey(it) } },
             onOpen = ::openFor,
             onDone = onSectionConsumed,
         )
