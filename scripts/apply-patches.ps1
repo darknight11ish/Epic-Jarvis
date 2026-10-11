@@ -1392,8 +1392,15 @@ $PATCHES = @(
     # loosen_what_asks_first 21, restore_backup 3 - and three features had
     # never once worked. It now reads what the action TOUCHES: the
     # parameters it was handed, and the model's own tool call (the JSON
-    # object inside the prompt). Card prose is not a target. ONE hunk pair,
-    # in jarvis_gate.py alone; see backend/README.md's own section.
+    # object inside the prompt). Card prose is not a target. Widened
+    # 2026-10-11: _gate_prompt cuts the model's arguments at 1500
+    # characters for its audit-log line, and a JSON object cut in half does
+    # not parse, so that argument block used to be dropped entirely - a tool
+    # action whose target was the gate's own file came back as an ordinary
+    # "ask" card. The project's tool-call prompt shapes are now matched end
+    # to end and their raw argument text is read as it stands; anchored at
+    # both ends, so a card's own words still never reach the rule. ONE hunk
+    # pair, in jarvis_gate.py alone; see backend/README.md's own section.
     'gate-touches.patch'
     # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
     # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
@@ -1416,6 +1423,13 @@ $PATCHES = @(
     # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
     # or on any error, the banner says so and the routes are simply not there.
     'picture-card.patch'
+    # The 30B coder: both cards, with Jarvis paused (2026-10-11). It only ADDS two
+    # new route blocks to jarvis_hud.py - GET /api/big-coder and the two POSTs -
+    # anchored on handler lines no other patch here writes, so its position is
+    # order-independent; it sits here, before plugin-loader.patch, because that one
+    # must stay last of all (test_gate_touches.py). It touches no gate list, adds
+    # no tier row and no _RISK row, and wires no startup call.
+    'big-coder.patch'
     'plugin-loader.patch'
 )
 
@@ -1718,6 +1732,8 @@ $SHIPPED = @(
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
     'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
+    # --- The 30B coder, both cards (2026-10-11) ---
+    'jarvis_big_coder.py'        # One model the owner asked for by name (qwen3-coder-30b-a3b-ud-q3-k-xl): the best coder and the fastest writer measured on this PC (10/10 coding, ~101/76.5/76.3 tok/s, no thinking mode), and the only model here that needs BOTH cards - it cannot sit beside anything. An OPT-IN mode, off by default, that pauses the two live lanes, proves from /api/ps that both went, loads at the largest zero-spill context measured (28,672), announces the pause BEFORE it starts, and puts both lanes back exactly as they were, proved again. Turning it on is ONE card (change_own_config, ask); the pause goes through power_manage. Nothing downloads; every call is loopback. big-coder.patch wires its three routes
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -2133,7 +2149,18 @@ if ($UsingRebuilt) {
         if (Test-Path -LiteralPath $half) {
             $swapped += "rebuilt-patches\$name"
         }
-        # else: the whole patch is superseded, so it is simply left out.
+        else {
+            # The whole patch is superseded AND it has no surviving half, so it
+            # is left out. SAID OUT LOUD, not dropped quietly (2026-10-11):
+            # this branch used to be a silent omission, and "a patch that was
+            # never applied and nothing said so" is the shape that has cost
+            # this project several merges. The property that makes leaving it
+            # out safe - that such a patch edits ONLY files a rebuilt module
+            # replaces, so no surviving half is lost - is asserted by
+            # backend/test_shipped_modules.py, which turns a patch that starts
+            # touching a live file into a failure instead of a silence.
+            Warn "$name - left out whole: the rebuilt modules already carry it ($($REBUILT_SUPERSEDES[$name]))"
+        }
     }
     $PATCHES = $swapped
 }

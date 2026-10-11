@@ -516,7 +516,11 @@ def t_hygiene():
              # POST /api/screen wrapper this patch installs. It removes no line and
              # touches jarvis_gate.py not at all, so it cannot rewrite that wrapper.
              "work.patch",
-             "picture-card.patch"}
+             "picture-card.patch",
+             # big-coder.patch (2026-10-11) is appended after it, before
+             # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
+             # gate list, no tier row and no _RISK row.
+             "big-coder.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")

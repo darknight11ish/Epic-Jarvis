@@ -1293,6 +1293,11 @@ class MainActivity : FragmentActivity() {
         // A temporary chat, and the facts the answer on screen used (ids
         // only) - docs/JARVIS-API.md sections 18.1 and 4, 2026-09-25.
         val temporaryChat by chat.temporary.collectAsState()
+        // "Think about this one" (the owner's decision of 2026-10-11): the
+        // owner asked Jarvis to think about the NEXT question. Collected here
+        // so the key beside the chat box lights while it is on, and goes out
+        // by itself as that question goes - ChatSession.send clears it.
+        val thinkOnce by chat.thinkOnce.collectAsState()
         val usedIds by chat.usedIds.collectAsState()
         // Topic controls (2026-09-30): how many facts the owner's topic settings kept out
         // of the answer on screen - a count only ([com.jarvis.client.net.Topics]).
@@ -3138,6 +3143,16 @@ class MainActivity : FragmentActivity() {
                             keepAliveOffer = PlatformReadiness.BACKGROUND_RESTART_NOT_ALLOWED
                                 .takeIf { keepAliveOfferShown },
                             temporary = temporaryChat,
+                            // "Think about this one" (the owner's decision of
+                            // 2026-10-11): the key beside the chat box asks
+                            // Jarvis to think about the next question, and
+                            // nothing else. Memory only, never stored, and it
+                            // goes out by itself as that question is sent
+                            // (ChatSession.send). The key is offered only when
+                            // this PC says it understands the field, so it can
+                            // never be a key that does nothing.
+                            thinkOnce = thinkOnce,
+                            thinkOffered = version?.can(com.jarvis.client.net.Thinking.CAPABILITY) == true,
                             usedIds = usedIds,
                             topicsLeftOut = topicsLeftOut,
                             answerTurnId = answerTurnId,
@@ -3274,6 +3289,11 @@ class MainActivity : FragmentActivity() {
                                         ?.takeIf { it == com.jarvis.client.net.TemporaryChat.UNAVAILABLE }
                                         ?.let { JarvisRuntime.setNotice(it) }
                                 },
+                                // "Think about this one" (2026-10-11): one
+                                // question at a time, and nothing sent - it
+                                // only lights the key, and the question that
+                                // follows carries `"think": true` to the PC.
+                                onToggleThinkOnce = { chat.setThinkOnce(!chat.thinkOnce.value) },
                                 // "Used 2 memories": the words read by id, Forget
                                 // on one fact after the confirm, held on a stale link.
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },

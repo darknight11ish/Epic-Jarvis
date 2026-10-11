@@ -2557,6 +2557,37 @@ object JarvisRuntime {
         return com.jarvis.client.net.Thinking.replyLine(api.thinkingPost(body), level)
     }
 
+    /**
+     * Changes WHEN Jarvis thinks - "Only when I ask" or "Always" (the owner's
+     * decision of 2026-10-11; [com.jarvis.client.net.Thinking.WHEN_MODES]).
+     * One small object, no approval card either way, and it opens no new way
+     * out of this PC: it changes how much of one answer's conversation room
+     * may be spent on a model already loaded here.
+     *
+     * Held on a stale link like every other change sent to the PC
+     * ([actionBlocker], rule 4).
+     */
+    suspend fun setThinkingWhen(mode: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.Thinking.whenBodyString(mode)
+        return com.jarvis.client.net.Thinking.whenReplyLine(api.thinkingPost(body), mode)
+    }
+
+    /**
+     * "Think about this one" - ask Jarvis to think about the NEXT question,
+     * then forget it (the owner's decision of 2026-10-11). It sends NOTHING,
+     * holds no card and is never written down: it lights the key beside the
+     * chat box, and the question that follows carries `"think": true` to the
+     * PC exactly once ([com.jarvis.client.net.ChatSession.setThinkOnce]).
+     */
+    fun setThinkOnce(on: Boolean) {
+        chat.setThinkOnce(on)
+    }
+
+    /** Is the one-question "Think" key offered by the PC now connected
+     *  (`capabilities.think_per_question`, never a version number)? */
+    fun canThinkOnce(): Boolean = can(com.jarvis.client.net.Thinking.CAPABILITY)
+
     // ------------------------------------------ limits and frequencies ----
 
     /**

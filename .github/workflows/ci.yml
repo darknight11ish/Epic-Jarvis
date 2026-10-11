@@ -38,7 +38,12 @@ on:
 # two of them to begin with.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # main must NOT cancel itself. Without this, every merge kills the previous
+  # merge's verification run, so main can never be confirmed green: measured
+  # 2026-10-11, 11 of the last 12 CI runs on main were cancelled and only one
+  # succeeded. A pull request still cancels its own superseded runs, which is
+  # what this group was for.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 # Nothing here writes to the repository.
 permissions:

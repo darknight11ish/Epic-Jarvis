@@ -84,6 +84,10 @@ REAL_PS1 = Path(os.environ.get("JARVIS_TEST_APPLY_PS1") or HERE.parent / "script
 MINI_PATCHES = ["approval-expiry.patch", "brain-reads.patch"]
 MINI_TARGETS = ["jarvis_gate.py", "jarvis_hud.py"]
 
+# One extra .patch file, written into a miniature backend WITHOUT being named in
+# the script's $PATCHES: what the script's own `$unlisted` guard has to refuse.
+UNLISTED_PATCH = "--- a/jarvis_hud.py\n+++ b/jarvis_hud.py\n@@ -1,1 +1,2 @@\n x = 1\n+y = 2\n"
+
 
 def md5(p: Path) -> str:
     return hashlib.md5(Path(p).read_bytes()).hexdigest()
@@ -1898,11 +1902,52 @@ def t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about():
           "touched was lost", "W_LINE" in after and "X_LINE" in after, repr(after))
 
 
+def t_a_patch_file_that_is_not_in_the_list_is_refused():
+    """The script's own `$unlisted` guard, driven for real (2026-10-11).
+
+    That guard is the check that caught the original incident:
+    `event-allowlist.patch` was written, documented in backend/README.md and
+    never added to `$PATCHES`, so it silently never applied - and a missing
+    patch produces no error anywhere, it just is not there. CI CAN NEVER FIRE
+    IT: the powershell-5 job deletes `backend\\*.patch` and empties `$PATCHES`
+    (ci.yml, "Run apply-patches.ps1 in 5.1 against a stand-in backend"), so
+    the folder it scans is empty and 0 - 0 = 0. Nothing else drove its FAIL
+    path either, which is what this test is for: one patch file named in the
+    list, one that is not, on a miniature repository.
+
+    It is the same rule `t_the_list_and_the_folder_agree` checks in Python
+    (backend/test_patch_wellformed.py), asked of the script itself - so a
+    change that makes the guard stop refusing is caught here rather than by
+    another silent non-application on the owner's PC.
+    """
+    tmp = tmpdir()
+    root = mini_repo(tmp / "r", patches=["approval-expiry.patch"],
+                     patch_files={"not-in-the-list.patch": UNLISTED_PATCH})
+    be = tmp / "be"
+    build_backend(be)
+    before = {n: md5(be / n) for n in MINI_TARGETS}
+    code, out = run(root / "scripts" / "apply-patches.ps1", be, "-SkipTests", "-SkipPackages")
+    check("a .patch file that is not in $PATCHES stops the run (exit 1)", code == 1, out[-700:])
+    check("... and the file is NAMED, in the script's own words",
+          "are not in this script's list" in out and "not-in-the-list.patch" in out,
+          out[-900:])
+    check("... and it says what to do about it, so the fix is not guesswork",
+          "Add them to $PATCHES" in out and "dependency order" in out, out[-900:])
+    check("... and NOTHING of the owner's was touched first (it stops before any work)",
+          {n: md5(be / n) for n in MINI_TARGETS} == before
+          and not list(be.glob("_jarvis-backup-*")), out[-900:])
+    check("... and the same run with the file in the list does NOT stop there",
+          "not in this script's list" not in (
+              run(mini_repo(tmp / "ok", patches=["approval-expiry.patch"]), be,
+                  "-SkipTests", "-SkipPackages")[1]), "the control run used the same backend")
+
+
 def main():
     if not PWSH:
         print("SKIP  no PowerShell 7 (pwsh) here")
         return 0
     for fn in (t_real_script_crlf_missing_files, t_real_script_rehearsal_fails,
+               t_a_patch_file_that_is_not_in_the_list_is_refused,
                t_mini_success_and_endings, t_mini_fixendings_success, t_mini_locked_file,
                t_mini_midway_failure_restore, t_mini_running_jarvis, t_mini_inside_outer_repo,
                t_an_unrelated_python_is_not_jarvis, t_the_live_jarvis_is_named_and_a_copy_is_not,
