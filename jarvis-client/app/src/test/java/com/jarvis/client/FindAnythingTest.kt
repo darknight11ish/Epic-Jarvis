@@ -12,6 +12,7 @@ import com.jarvis.client.ui.SettingsJump
 import com.jarvis.client.ui.SettingsSearch
 import com.jarvis.client.ui.SettingsSearchWords
 import com.jarvis.client.ui.screens.BrainSections
+import com.jarvis.client.ui.screens.PlateList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -40,7 +41,12 @@ import java.io.File
  *     the stricter of the two apps' rules, on purpose.
  *  3. **A row opens what it says.** Every row's screen and `item(key = ...)`
  *     is checked against the screen's own rows, so a row can never send the
- *     owner to a card that is not there.
+ *     owner to a card that is not there - and the key it is checked against is
+ *     the one the row really LANDS ON, in the spelling the list holds
+ *     (`brain-plate:<name>` on Brain), not the bare name the row is written
+ *     with. A row into Brain is also checked to reach its card: the heading
+ *     holding it must be one the screen's own lookup finds, or the walk would
+ *     never open it and the owner would land at the top of the screen.
  *  4. **It says something when there is nothing** - an empty box explains
  *     what it searches, and a search that matches nothing says so in words.
  *  5. **It only navigates.** No screen or object in the feature may touch the
@@ -379,11 +385,55 @@ class FindAnythingTest {
                     "screen's rows - name it here or the check is not being made",
                 keys,
             )
+            // The key the row really LANDS ON, not the bare name it is written
+            // with: the walk brings an item into view by exact equality with
+            // `item(key = ...)`, so a row naming a plate only reaches it if the
+            // plate is drawn under the namespaced key (`PlateList.PLATE_PREFIX`).
+            // Checking the bare name against a set that held bare names is what
+            // let "Attention budget" land at the top of Brain while this test
+            // stayed green (2026-10-11).
+            val key = itemKeyOf(row)
             assertTrue(
-                "${row.id} sends the owner to ${row.screen} at \"$section\", and no " +
-                    "item(key = \"$section\") is on that screen",
-                section in keys!!,
+                "${row.id} sends the owner to ${row.screen} at \"$section\", and the walk that " +
+                    "takes them there looks up item(key = \"$key\") - which is not on that screen",
+                key in keys!!,
             )
+        }
+    }
+
+    @Test
+    fun `a row that lands inside a shut heading can open it`() {
+        // Second half of "a row opens what it says", and the half no set of keys
+        // can answer: Brain draws a heading's plates only while the heading is
+        // open, so the walk (BrainScreen's ScrollToKeyOnce) hands `onOpen` the
+        // item key it is looking for BEFORE it walks, and the screen opens the
+        // heading holding it. It hands it the ITEM KEY - the same namespaced
+        // string the list holds - and until 2026-10-11 the lookup only knew the
+        // bare plate NAME, so it answered null for every row, no heading opened,
+        // and every Find row into Brain landed at the top of a shut screen.
+        val brainRows = FindAnything.ROWS.filter { it.screen == Screen.BRAIN && it.section != null }
+        assertTrue("no Find row opens Brain at all - this check is not being made", brainRows.size > 20)
+        val outside = alwaysDrawnItemKeys()
+        for (row in brainRows) {
+            val key = itemKeyOf(row)
+            val heading = BrainSections.sectionOf(key)
+            if (key in outside) {
+                // Drawn outside every heading (the attention budget): it belongs
+                // to no heading and must stay out of one, so the walk has nothing
+                // to open - it scrolls straight to it. `attention`'s menu can
+                // never be folded, and a heading can be shut.
+                assertNull(
+                    "${row.id}: $key is drawn outside every heading, so nothing may open a " +
+                        "heading for it - it is a line that can never be folded away",
+                    heading,
+                )
+            } else {
+                assertNotNull(
+                    "${row.id} lands on $key, which a heading holds, and no heading is found for " +
+                        "that key - so the walk never opens it and the row does not reach its card",
+                    heading,
+                )
+            }
         }
     }
 
@@ -704,6 +754,80 @@ class FindAnythingTest {
     )
 
     /**
+     * The `item(key = ...)` a row really lands on, in the spelling the list
+     * holds.
+     *
+     * Every other screen spells its own item key out, so the row's `section` IS
+     * the key. Brain's do not: a plate's item key carries the plates' namespace
+     * (BrainScreen's `plateKeyAt`, `PlateList.PLATE_PREFIX`), so a row that names
+     * the plate "attention" or "briefing" lands on `brain-plate:attention` and
+     * `brain-plate:briefing`. `section` stays the bare plate NAME everywhere else
+     * (it is `MenuPlaces`' own vocabulary, and what the screen's heading lookup
+     * is handed), which is why the namespace is added here rather than written
+     * into every row.
+     */
+    private fun itemKeyOf(row: FindAnything.Row): String {
+        val section = row.section!!
+        return if (row.screen == Screen.BRAIN) PlateList.PLATE_PREFIX + section else section
+    }
+
+    /**
+     * The keys of the lines Brain draws OUTSIDE every heading
+     * (`item(key = plateKeyAt("attention"))` and its five neighbours), read from
+     * BrainScreen.kt itself.
+     *
+     * Read from the screen, never from `BrainSections.ALWAYS_DRAWN`: that list is
+     * the declaration the screen is held TO (`BrainSectionsTest` and
+     * `BrainListTest` compare the two), and reading it here would make this
+     * check agree with the label instead of with the screen. It did exactly
+     * that - the declaration and this test were both written in the bare names
+     * the screen really drew, so a row pointing at "attention" passed while the
+     * walk, which looks up `brain-plate:attention`, found nothing.
+     */
+    private fun alwaysDrawnItemKeys(): Set<String> {
+        // The screen's own CODE, not its notes: BrainScreen explains this very
+        // defect and quotes the key spellings in backticks, and a key quoted in
+        // a note is not a key the list holds. Blanking comments is the project's
+        // `code()` habit (BrainListTest, AttentionSettingsTest).
+        val src = code(repoFile(CLIENT + "ui/screens/BrainScreen.kt").readText())
+        val keys = Regex("item\\(key = plateKeyAt\\(\"([\\w-]+)\"\\)\\)")
+            .findAll(src)
+            .map { PlateList.PLATE_PREFIX + it.groupValues[1] }
+            .toSet()
+        assertTrue(
+            "BrainScreen.kt draws no `item(key = plateKeyAt(\"...\"))` line at all, so this " +
+                "test's own reading of the screen has broken and every check above is vacuous",
+            keys.isNotEmpty(),
+        )
+        return keys
+    }
+
+    /** [src] with whole-line `//` comments and block comments blanked, not dropped. */
+    private fun code(src: String): String {
+        val out = ArrayList<String>()
+        var inBlock = false
+        for (line in src.lines()) {
+            val t = line.trimStart()
+            if (inBlock) {
+                if (t.contains("*/")) inBlock = false
+                out.add("")
+                continue
+            }
+            if (t.startsWith("/*")) {
+                if (!t.contains("*/")) inBlock = true
+                out.add("")
+                continue
+            }
+            if (t.startsWith("//")) {
+                out.add("")
+                continue
+            }
+            out.add(line)
+        }
+        return out.joinToString("\n")
+    }
+
+    /**
      * The `item(key = ...)` rows a screen really draws, by the [Screen] the
      * rows open. A screen with no rows of its own is absent on purpose: a row
      * that names one then fails the check rather than passing it by default.
@@ -718,8 +842,16 @@ class FindAnythingTest {
         // BrainSectionsTest holds it to the real `plate("...")` lines one for
         // one - so reading it here keeps the same teeth this check always had,
         // and the seam is checked twice rather than not at all.
+        //
+        // Both halves are returned in the spelling the list HOLDS, which is the
+        // half that decides whether a row can be found: a plate's emitted key is
+        // `brain-plate:<name>` (BrainSections' recorder), and the lines outside
+        // every heading are drawn under the same namespace by the screen's own
+        // `plateKeyAt`. Nothing bare is accepted here, because nothing bare is
+        // on the list: the walk looks a key up by exact equality.
         if (screen == Screen.BRAIN) {
-            return BrainSections.allPlateKeys().toSet() + BrainSections.ALWAYS_DRAWN
+            val plates = BrainSections.allPlateKeys().map { PlateList.PLATE_PREFIX + it }
+            return (plates + alwaysDrawnItemKeys()).toSet()
         }
         val file = when (screen) {
             Screen.SETTINGS -> "ui/screens/SettingsScreen.kt"

@@ -344,9 +344,13 @@ class BrainListTest {
             }
             // The attention budget, named: the one that was inside "What Jarvis
             // is doing" - one of the two headings that crashed - and so was both
-            // missing from the shut screen and unreachable.
-            assertTrue("the attention budget is gone from Brain", "attention" in keys)
-            assertEquals("the attention budget is drawn twice", 1, keys.count { it == "attention" })
+            // missing from the shut screen and unreachable. Its key carries the
+            // plates' namespace, like every line outside a heading since
+            // 2026-10-11, because the walk a link into Brain runs looks a key up
+            // by exact equality and cannot find a bare one.
+            val attention = PlateList.PLATE_PREFIX + "attention"
+            assertTrue("the attention budget is gone from Brain", attention in keys)
+            assertEquals("the attention budget is drawn twice", 1, keys.count { it == attention })
         }
         // It has no menu check, which is why it cannot be put behind one.
         val screen = code(source(BRAIN))
@@ -377,16 +381,23 @@ class BrainListTest {
         val calls = sectionCalls(screen)
         assertEquals("BrainScreen's heading calls moved", BrainSections.SECTIONS.size, calls.size)
         for (key in BrainSections.ALWAYS_DRAWN) {
+            // The key is the FULL item key (`brain-plate:<name>`), and this is
+            // the line the owner's defect came from: while the screen drew a bare
+            // `item(key = "attention")` and the walk looked up
+            // `brain-plate:attention`, "Attention budget" in Find anything found
+            // nothing. A bare key is therefore not accepted here.
+            val name = key.removePrefix(PlateList.PLATE_PREFIX)
             assertTrue(
-                "no item(key = \"$key\") of its own in BrainScreen.kt",
-                screen.contains("item(key = \"$key\")"),
+                "no item(key = plateKeyAt(\"$name\")) of its own in BrainScreen.kt, so nothing " +
+                    "can find the line the list holds as \"$key\"",
+                screen.contains("item(key = plateKeyAt(\"$name\"))"),
             )
             assertFalse(
-                "the plate \"$key\" was put under a heading: always-drawn ids may not be inside a " +
+                "the plate \"$name\" was put under a heading: always-drawn ids may not be inside a " +
                     "brainSection( call, because a heading can be shut. attention was inside " +
                     "\"What Jarvis is doing\" on 2026-10-10, and that heading was one of the two " +
                     "that crashed when tapped.",
-                calls.any { call -> screen.substring(call.first, call.last).contains("plate(\"$key\")") },
+                calls.any { call -> screen.substring(call.first, call.last).contains("plate(\"$name\")") },
             )
         }
         // The other way: every plate really is inside a heading's call, so no
