@@ -8,9 +8,9 @@
  *
  * WHAT THIS FILE DOES NOT DO
  *
- * It invents no setting and writes none by hand. Every control calls a Rust
- * command that already existed, and all five choices already live elsewhere in
- * this same window:
+ * It invents no setting and writes none by hand. Every control for a SETTING
+ * calls a Rust command that already existed, and all five choices already live
+ * elsewhere in this same window:
  *
  *   which card runs your everyday chat -> get_second_card / set_chat_card
  *     (the same pair the "Everyday chat runs on" radios use; pinning raises
@@ -49,6 +49,19 @@
  * chose, and it lives in the settings window because that is where all five
  * settings already live and where the ACL already grants them - so no second
  * page, no second window and no new Tauri command.
+ *
+ * THE ONE COMMAND THAT DID COME LATER, AND WHY IT IS NOT A CONTRADICTION
+ *
+ * The owner asked on 2026-10-10 for the intro to be replayable if it was
+ * skipped by accident. Re-opening a window is not one of the five settings,
+ * and no command that already existed opens that window, so
+ * `replay_onboarding` is genuinely new: one command, Settings only,
+ * `onboarding-replay` in `surfaces.toml`. It carries no setting and writes
+ * nothing at all - not even the marker - so the paragraph above still holds
+ * where it was written: this card gathers the five settings and invents none.
+ * The button lives in `settings.html`, OUTSIDE the checklist rows, because
+ * those rows are hidden once the card is marked done, which is the exact
+ * state the owner is in when he wants the intro back.
  *
  * HOW "SEEN" IS RECORDED
  *
@@ -134,6 +147,8 @@ const dom = {
   done: $("fr-done"),
   again: $("fr-again"),
   againLine: $("fr-again-line"),
+  intro: $("fr-intro"),
+  introStatus: $("fr-intro-status"),
 };
 
 /* ── A very small DOM helper, the shape every panel here uses ─────────────── */
@@ -632,12 +647,57 @@ function reopen() {
   void paint();
 }
 
+/* ── "Show the intro again": the walkthrough, on demand ──────────────────── */
+
+/**
+ * Opens `onboarding.html` again from Settings.
+ *
+ * The owner's request of 2026-10-10: the intro is interactive and skippable,
+ * but it was not redoable, so an accidental Escape left no way back. The
+ * command behind this button (`commands.rs`'s `replay_onboarding`) opens the
+ * same window the first run does and reads and writes NO marker - so the
+ * intro still appears by itself exactly once, which is the whole point of
+ * putting "on demand" and "by itself" in the same product. That is why
+ * nothing here touches `SETUP_SEEN_KEY` or any Rust store key either.
+ *
+ * The button is disabled while the call is in flight so a second press cannot
+ * race the first; the command is a no-op when the window is already open, so
+ * even a successful double press opens one window, never two.
+ */
+async function showIntro() {
+  if (!dom.intro) return;
+  dom.intro.disabled = true;
+  const status = dom.introStatus;
+  if (status) {
+    delete status.dataset.tone;
+    status.textContent = "Opening the intro…";
+  }
+  try {
+    await invoke("replay_onboarding");
+    if (status) {
+      status.dataset.tone = "ok";
+      status.textContent =
+        "The intro is open in its own window. Closing it, or pressing Esc, leaves it alone — it still will not open again by itself.";
+    }
+  } catch (error) {
+    // Rule 4's shape, applied to a button that changes nothing: say the real
+    // reason, never a stack trace, and never claim the window opened.
+    if (status) {
+      status.dataset.tone = "bad";
+      status.textContent = `${problemWords(error)} The intro was not opened.`;
+    }
+  } finally {
+    dom.intro.disabled = false;
+  }
+}
+
 /* ── Boot ────────────────────────────────────────────────────────────────── */
 
 export function initFirstRunSettings() {
   if (!dom.section) return;
   if (dom.done) dom.done.addEventListener("click", finish);
   if (dom.again) dom.again.addEventListener("click", reopen);
+  if (dom.intro) dom.intro.addEventListener("click", showIntro);
   void paint();
 }
 

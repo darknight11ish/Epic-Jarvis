@@ -68,8 +68,11 @@ class FirstAuditLeftoversTest {
         val brain = code(repoFile(BRAIN).readText())
         assertFalse("the by-index arithmetic is back", brain.contains("animateScrollToItem(here + 1)"))
         assertTrue(
+            // The key carries the plates' namespace since 2026-10-10: a plate's
+            // item key is "brain-plate:<name>" (BrainSections.kt, PlateList), and
+            // the walk looks a key up by equality.
             "the row is no longer scrolled to by key",
-            brain.contains("scrollToKey(listState, \"memory-auto\")"),
+            brain.contains("scrollToKey(listState, plateKeyAt(\"memory-auto\"))"),
         )
         assertTrue(
             "a hidden row must be shown for the visit, or the key is not there at all",

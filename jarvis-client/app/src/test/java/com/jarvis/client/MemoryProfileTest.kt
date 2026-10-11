@@ -131,7 +131,9 @@ class MemoryProfileTest {
         assertTrue(api.contains("suspend fun pinFact(id: Long, pinned: Boolean): ApiResult<MemoryProfile.Reply>"))
         assertTrue(api.contains("suspend fun memoryProfile(): ApiResult<JsonObject> = probe(MemoryProfile.PATH)"))
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
-        assertTrue(brain.indexOf("item(key = \"memory-auto\")") in 0 until brain.indexOf("item(key = \"memory-profile\")"))
+        // Drawn through `plate("...")` since 2026-10-10 (BrainSections.kt): the
+        // plate's own name, with the item's key carrying the plates' namespace.
+        assertTrue(brain.indexOf("plate(\"memory-auto\")") in 0 until brain.indexOf("plate(\"memory-profile\")"))
     }
 
     private fun repoFile(rel: String): File {

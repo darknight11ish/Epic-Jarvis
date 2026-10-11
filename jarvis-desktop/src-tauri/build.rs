@@ -187,6 +187,11 @@ fn main() {
             "mark_answer",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
+            // Re-opening that same walkthrough on demand (the owner's request
+            // of 2026-10-10), from Settings' "Show the intro again" button.
+            // Settings window only: it is the only surface with the button,
+            // and it opens the same narrow window `finish_onboarding` closes.
+            "replay_onboarding",
             // Windows Hello (lock.rs). The Security settings are read and
             // changed from the settings window only; loosening one asks
             // Windows Hello first. Show, for the Brain's private lists, is

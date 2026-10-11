@@ -277,12 +277,14 @@
              nowhere to say that, and a tile that appeared to switch Jarvis to
              Quiet and silently did not would be worse than no tile. This one
              carries the link's real state and mutes spoken interruptions, which
-             /api/attention/mute supports. -->
+             /api/attention/mute supports. Its label names that tap
+             (@string/link_tile_label, "Mute Jarvis"): it used to be
+             @string/app_name, so a tile labelled "Jarvis" silently muted Jarvis. -->
         <service
             android:name=".service.LinkTileService"
             android:exported="true"
             android:icon="@drawable/ic_notification"
-            android:label="@string/app_name"
+            android:label="@string/link_tile_label"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE" />

@@ -1340,10 +1340,21 @@ def t_cards_carry_their_reason():
         card = w.card(pid)
         check("the /api/memory/pending row carries auto_reason in words",
               card["auto_reason"] == "from pasted text", card)
-        other = w.queue("an untouched card", source="gate_denial")
+        # A card automatic learning did not look at carries no reason of its
+        # own. (This used `source="gate_denial"` until 2026-10-10, when a
+        # denial's proposal started carrying the reason "Jarvis's guess, ..."
+        # - see the check below, and test_memory_intake.py's.)
+        other = w.queue("an untouched card", source="conversation")
         card = w.card(other["id"])
         check("a card automatic learning never looked at: auto_reason is ''",
               card["auto_reason"] == "", card)
+        # A denial's proposal is Jarvis's guess, and the row has to say so
+        # (the owner's decision of 2026-10-10) - here, through the real route.
+        guess = w.queue("a guessed card", source="gate_denial")
+        card = w.card(guess["id"])
+        check("a denial's proposal is marked as a guess on the row",
+              card.get("guessed") is True
+              and "Jarvis's guess, not something you said" in card["auto_reason"], card)
     finally:
         w.done()
 

@@ -1351,6 +1351,79 @@ def find_bool_setting(words: str):
 
 
 # --------------------------------------------------------------------------
+#   "What can I change?" (the owner's decision, 2026-10-10)
+# --------------------------------------------------------------------------
+#
+# The owner asked to change every setting by talking to Jarvis. Most of the
+# machinery was already here: BOOL_SETTINGS above is what "turn off web
+# search" and ten more phrases act through, and each setting's own setter
+# decides whether it needs a card. What was missing is that Jarvis could not
+# TELL him what he may change - "what can I change?" reached the AI model and
+# came back with an invention rather than this answer.
+#
+# This list is DERIVED from the table above, never typed out again: a switch
+# added to BOOL_SETTINGS appears here by itself, and one removed stops being
+# offered. A second, hand-written list would drift from the real switches and
+# nobody would notice - the exact trap this project keeps fixing.
+#
+# Deliberately NOT promised here:
+#   * anything that would LOOSEN a rule. Those still raise their card and ask
+#     for Windows Hello on the PC; "change any setting by voice" must not
+#     become a way round the gate (rule 4).
+#   * the pick-one settings (web search provider, weather source), which have
+#     their own phrasings today ("switch to Brave for search"). Naming them
+#     here would promise a phrasing that does not match yet.
+
+#: Plain short words for what a section is about, so the answer reads like a
+#: person talking rather than the Settings screen being read out. Only the
+#: sections that can appear below need an entry.
+SECTION_PLAIN = {
+    "web-search": "the web search",
+    "asks-first": "what asks first",
+    "voice": "the voice",
+    "animals": "the animal faces",
+    "screen-look": "looking at the screen",
+    "briefing-settings": "the morning briefing",
+    "browser-engine": "the browser",
+    "phone-notify": "phone notifications",
+    "watch-notify": "watch notifications",
+    "prompt-coach": "the prompt coach",
+}
+
+
+def changeable_settings() -> dict:
+    """Everything the owner can change by talking, in plain words.
+
+    {"switches": [(name, section_plain), ...], "count": n, "words": "..."}
+    Each name is that setting's own first alias, so what is offered is exactly
+    what a phrase can actually reach.
+    """
+    rows = []
+    for b in BOOL_SETTINGS:
+        name = b.names[0] if b.names else b.key
+        where = SECTION_PLAIN.get(b.section or "", "")
+        rows.append((name, where))
+    return {"switches": rows, "count": len(rows), "words": changeable_words(rows)}
+
+
+def changeable_words(rows=None) -> str:
+    """The answer to "what can I change?", as one thing to say.
+
+    Written as a spoken sentence - semicolons between items, no bullet list
+    and no markdown - because this reply may be read aloud.
+    """
+    if rows is None:
+        rows = changeable_settings()["switches"]
+    if not rows:
+        return ("Nothing can be changed by talking on this PC yet. Everything "
+                "lives in Settings in the app.")
+    names = [f"{name} ({where})" if where else name for name, where in rows]
+    return ("You can change these by asking: " + "; ".join(names) +
+            ". Anything that loosens a rule still shows you a card first, and "
+            "say \"undo\" in the same chat if you change your mind.")
+
+
+# --------------------------------------------------------------------------
 #   Animal options (2026-09-28): the shared switches, the sun and moon and
 #   the weather source - each through the function its own switch calls.
 #   jarvis_quick._animal is the grammar; this is the one place it acts.
