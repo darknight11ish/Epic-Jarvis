@@ -28,6 +28,7 @@ apply-patches.ps1 asks for the same variables with `--state-env DIR`.
 The skip list is explicit, not guessed from a failure: a suite that is not in
 it and fails is a failure, and a suite in it whose files ARE present runs.
 """
+import json
 import os
 import re
 import shutil
@@ -111,6 +112,74 @@ OWNER_FILES = {"jarvis_hud.py", "jarvis_gate.py", "jarvis_extract.py", "jarvis_m
 
 
 CONFIG_NAME = "jarvis-framework.toml"
+
+# --- where a run's own folders live, and how they are taken away ------------
+#
+# WHY THIS IS NOT JUST mkdtemp AND A rmtree AT THE END (2026-10-11). A run used
+# to leave TWO folders under %TEMP% - `jarvis-staged-backend-<random>` (a copy
+# of every shipped module, measured at 10 MB) and `jarvis-suite-state-<random>`
+# (the config folder and audit log the suites write, 64 MB in one measured
+# case) - and both rmtree calls sat at the END of main(), outside any
+# try/finally. A run that was killed, Ctrl-C'd, cancelled by CI, or wedged
+# until the 900-second suite timeout skipped both. Twenty thousand of them
+# reached 123.6 GB and took C: from 165 GB free down to 34 GB. A 131 GB hand
+# cleanup followed; the mechanism did not change.
+#
+# It was worse than those two folders. EVERY suite in this folder makes its own
+# `jarvis-<suite>-<random>` at import time with `tempfile.mkdtemp` (296 of them
+# do today - `jarvis-enrol-`, `jarvis-big-model-`, `jarvis-referee-`, ...) and
+# most never remove it, which is one folder per suite per run: the bulk of the
+# twenty thousand. Fixing only the runner's own two folders would have left
+# that in place, so the sweep root below owns the suites' scratch as well.
+#
+# Four things hold now:
+#
+#   1. ONE FOLDER PER RUN. The staged backend, the config/audit state and the
+#      suites' own scratch all live inside a single `jarvis-sweep-<random>`
+#      root, removed in a `finally` however main() leaves - a normal return, a
+#      failed suite, or an exception.
+#
+#   2. THE SUITES' SCRATCH GOES THERE TOO. The children are given TMPDIR, TEMP
+#      and TMP pointing into the sweep root; `tempfile.gettempdir()` reads
+#      exactly those, so every `mkdtemp` a suite makes lands inside the root
+#      and goes with it.
+#
+#   3. A REAPER FOR WHAT A KILL LEAVES. A terminated process runs no `finally`
+#      at all, so a killed run's root stays. Each root carries an `_owner.json`
+#      marker (pid, start time, kind) and the run that made it holds an
+#      exclusive LOCK on that file for its whole life - the operating system
+#      drops the lock when the process ends, however it ends. The start of
+#      every run reaps roots whose lock can be taken (so no run is using them)
+#      and which are older than REAP_AFTER.
+#
+#   4. A LIVE FOLDER IS NEVER TOUCHED. A folder whose lock is still held
+#      belongs to a running sweep, and deleting its staging underneath it is a
+#      worse bug than the litter. Two sweeps really were running when this was
+#      written (both on the old code, both holding a staged-backend and a
+#      suite-state folder), which is why the lock, and not the pid, is what
+#      answers "is the owner still alive".
+SWEEP_PREFIX = "jarvis-sweep-"
+STAGE_PREFIX = "jarvis-staged-backend-"
+BACKEND_NAME = "backend"
+STATE_NAME = "state"
+SUITE_TEMP_NAME = "tmp"
+OWNER_MARKER = "_owner.json"
+#: A marked folder - one this runner made - may be reaped once its owner is
+#: gone and it is at least this old.
+REAP_AFTER = 3600.0
+#: A folder with NO marker (an older run's, from before markers existed) cannot
+#: be asked about its owner at all, so age is the only proof available and it
+#: has to be long: a suite is killed at 900 s and this is far beyond any sweep,
+#: so nothing can still be writing into a folder this old.
+REAP_AFTER_UNMARKED = 86400.0
+#: What is even a candidate: a folder under the system temp folder whose name
+#: this runner or a suite built. Deliberately a SHAPE and not a list of suite
+#: names - suites are added and removed constantly, and a fixed list would stop
+#: protecting the day after it was written.
+REAPABLE = re.compile(r"^jarvis-[A-Za-z0-9][A-Za-z0-9._-]*$")
+#: This process's own wall-clock start, written into every marker so a reader
+#: can tell one run's folder from the next run's.
+_STARTED = time.time()
 
 #: "N passed" / "N skipped" / "N failed" as a suite prints them at the end.
 #: Looked up by the word, not by position: every harness in this folder prints
@@ -288,11 +357,190 @@ def private_state(env: dict, backend: Path, where: Path) -> dict:
     return out
 
 
-def stage() -> Path:
-    d = Path(tempfile.mkdtemp(prefix="jarvis-staged-backend-"))
+def stage(root: Path = None) -> Path:
+    """A folder holding every module apply-patches.ps1 ships, flattened.
+
+    With `root`, it is made INSIDE that folder, so it goes when the run's own
+    folder goes (see SWEEP_PREFIX above). With no root it is its own %TEMP%
+    folder, which is what the suites that stage a backend for themselves ask
+    for - `test_suite_state.py` calls `stage()` twice and removes each one
+    itself, so it must keep working exactly as it did."""
+    if root is None:
+        d = Path(tempfile.mkdtemp(prefix=STAGE_PREFIX))
+    else:
+        d = root / BACKEND_NAME
+        d.mkdir(parents=True, exist_ok=True)
     for rel in _where.SHIPPED:
         shutil.copy2(HERE / rel, d / rel.rsplit("/", 1)[-1])
     return d
+
+
+def _lock_nb(fd: int) -> bool:
+    """An exclusive, non-blocking lock on an open file: True if we got it.
+
+    `msvcrt` on Windows and `fcntl` everywhere else, both standard library.
+    This is what makes "is the owner of this folder still running?" answerable.
+    The owner holds the lock for its whole life and the operating system drops
+    it when that process ends - returned, raised, or killed outright - so the
+    answer survives every way a run can die, and cannot be fooled by a pid
+    being reused (which is why a pid alone is not enough).
+
+    If neither module is importable the answer is False, "still owned", so a
+    folder is never removed on a guess."""
+    try:
+        import msvcrt
+    except ImportError:
+        pass
+    else:
+        try:
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+            return True
+        except OSError:
+            return False
+    try:
+        import fcntl
+    except ImportError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return True
+    except OSError:
+        return False
+
+
+def claim(root: Path, kind: str):
+    """Write `root`'s owner marker and lock it; the descriptor is returned.
+
+    THE DESCRIPTOR MUST STAY OPEN for as long as the folder is to count as
+    live, and must be CLOSED before the folder is removed - on Windows a file
+    this process still holds open cannot be deleted, so removing the folder
+    first would silently leave the marker (and the folder) behind. Returns None
+    if the lock could not be taken, which means someone else owns it."""
+    info = {"pid": os.getpid(), "started": _STARTED, "kind": kind, "folder": root.name}
+    marker = root / OWNER_MARKER
+    marker.write_text(json.dumps(info, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    fd = os.open(str(marker), os.O_RDWR)
+    if not _lock_nb(fd):
+        os.close(fd)
+        return None
+    return fd
+
+
+def _owner_gone(folder: Path) -> bool:
+    """True only when `folder` carries a marker whose lock can be taken, which
+    means the run that made it has ended. A folder with no marker, or one whose
+    marker cannot be opened, is NOT gone - never a reason to delete."""
+    marker = folder / OWNER_MARKER
+    if not marker.is_file():
+        return False
+    try:
+        fd = os.open(str(marker), os.O_RDWR)
+    except OSError:
+        return False
+    try:
+        return _lock_nb(fd)
+    finally:
+        os.close(fd)            # releases the lock we just took, if we took one
+
+
+def _older_than(folder: Path, seconds: float) -> bool:
+    """True when nothing has changed in `folder` for `seconds`.
+
+    THE MODIFICATION TIME, AND NOT THE CREATION TIME TOO (measured 2026-10-11).
+    `st_ctime` reads as the creation time on Windows and as the inode-change
+    time on Linux, and on both it is set to NOW by `os.utime` - so a rule
+    demanding BOTH timestamps be old is a rule no test can set up, which makes
+    it a guard that is never exercised and fails silently the day it matters.
+    mtime is also the better question: "has anything touched this folder
+    recently?" is exactly what says whether a run might still be using it, and
+    it is the one timestamp a person with `touch -t` can reproduce.
+
+    The lock, not this, is what protects a LIVE run's folder (see
+    `_owner_gone`); this is the second gate, and the only one available for a
+    folder from a run old enough to have no marker."""
+    try:
+        return (time.time() - folder.stat().st_mtime) > seconds
+    except OSError:
+        return False
+
+
+def reap_orphans(temp=None, keep=()) -> list:
+    """Remove staging folders an ended run left under the temp folder, and name
+    the ones removed.
+
+    Only a DIRECTORY directly under the temp folder, whose name is the shape
+    this runner or a suite builds (REAPABLE), is ever considered - never a
+    symlink, never anything else's folder. A marked folder goes only when its
+    lock can be taken (no run is using it) AND it is older than REAP_AFTER; a
+    folder with no marker, left by an older run, must be older than
+    REAP_AFTER_UNMARKED, because there is nothing to ask about its owner. The
+    current run's own folder is passed in `keep` and is never a candidate.
+
+    Nothing here raises. A folder that cannot be listed or removed is left
+    alone, because the only thing at stake is litter."""
+    temp = Path(temp) if temp is not None else Path(tempfile.gettempdir())
+    keep = {str(Path(k)) for k in keep}
+    gone = []
+    try:
+        entries = sorted(temp.iterdir())
+    except OSError:
+        return gone
+    for d in entries:
+        try:
+            if not d.is_dir() or d.is_symlink() or not REAPABLE.match(d.name):
+                continue
+            if str(d) in keep:
+                continue
+            marked = (d / OWNER_MARKER).is_file()
+            if not _older_than(d, REAP_AFTER if marked else REAP_AFTER_UNMARKED):
+                continue
+            if marked and not _owner_gone(d):
+                continue                     # a live run: never touched
+            shutil.rmtree(d, ignore_errors=True)
+            if not d.exists():
+                gone.append(d.name)
+        except OSError:
+            continue
+    return gone
+
+
+def suite_temp_env(env: dict, root: Path) -> dict:
+    """`env` with the suites' OWN scratch pointed inside this run's folder.
+
+    Every suite here makes `jarvis-<suite>-<random>` at import time with
+    `tempfile.mkdtemp` and most never remove it. `tempfile.gettempdir()` reads
+    TMPDIR, then TEMP, then TMP, so pointing all three into the sweep root is
+    what keeps those out of the machine's real temp folder - and so out of the
+    count that reached 20,633. The folder is made here because Python falls
+    back to the WORKING DIRECTORY for a temp directory it cannot write to,
+    which would put a suite's scratch inside the checkout instead."""
+    tmp = root / SUITE_TEMP_NAME
+    tmp.mkdir(parents=True, exist_ok=True)
+    out = dict(env)
+    for name in ("TMPDIR", "TEMP", "TMP"):
+        out[name] = str(tmp)
+    return out
+
+
+def remove_tree(path: Path, what: str) -> None:
+    """Remove `path`, and SAY SO if anything is left behind.
+
+    `shutil.rmtree(..., ignore_errors=True)` is how 123.6 GB went unnoticed: a
+    folder a killed child still holds open is not removed and nothing says so.
+    One retry first (the handle is usually gone a moment later), then a plain
+    line naming what stayed, so a leak can never again be silent."""
+    for _ in range(2):
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return
+        time.sleep(0.2)
+    try:
+        left = sorted(p.name for p in path.iterdir())
+    except OSError:
+        left = []
+    print(f"NOTE  {what} could not be fully removed: {path}"
+          + (f" (still holds: {', '.join(left[:5])})" if left else "")
+          + ". A later run's reaper removes it once nothing holds it open.")
 
 
 def suite_result(name: str, took: str, code, stdout, stderr, why="") -> tuple:
@@ -364,9 +612,37 @@ def main(only=()) -> int:
     an empty run: a sweep that prints "0 passed, 0 skipped, 0 failed" and exits
     0 for a mistyped name is the same lie one level up from the suites this
     runner exists to distrust (`backend/test_jobs.py` is named in the docs but
-    lives only on the owner's PC, so a typo there was easy to make)."""
+    lives only on the owner's PC, so a typo there was easy to make).
+
+    THIS IS THE FOLDER THAT MUST NOT BE LEFT BEHIND. Everything the run makes
+    lives inside `root`, and `root` is removed in a `finally` - so an exception
+    (a suite's output that will not decode, a KeyboardInterrupt) cleans up
+    exactly as a normal end does. A kill cannot run a `finally` at all, which
+    is what the reaper at the start of `_sweep` is for: next time it finds this
+    folder by its `_owner.json` marker, whose lock this process no longer
+    holds, and removes it."""
+    root = Path(tempfile.mkdtemp(prefix=SWEEP_PREFIX))
+    lock = claim(root, "sweep")
+    try:
+        return _sweep(root, only)
+    finally:
+        # The lock goes FIRST: on Windows a file this process still holds open
+        # cannot be deleted, so the marker would keep the whole folder alive -
+        # the exact silent leak this change exists to end.
+        if lock is not None:
+            os.close(lock)
+        remove_tree(root, "this run's own staging folder")
+
+
+def _sweep(root: Path, only=()) -> int:
+    """One run, inside `root`: reap what a dead run left, stage, run each
+    suite, report. Never called except from `main`, which owns `root`."""
+    reaped = reap_orphans(keep=(root,))
+    if reaped:
+        print(f"reaped {len(reaped)} staging folder(s) an earlier run left behind: "
+              + ", ".join(reaped))
     real = os.environ.get("JARVIS_BACKEND")
-    backend = Path(real).resolve() if real else stage()
+    backend = Path(real).resolve() if real else stage(root)
     print(f"backend: {backend}" + ("" if real else "  (staged: every shipped module, flattened)"))
     known = sorted(HERE.glob("test_*.py"))
     suites = [s for s in known if s.name in only] if only else known
@@ -388,9 +664,10 @@ def main(only=()) -> int:
     if no_owner:
         print(f"FAIL  run_suites.py skips suites that need nothing from the owner's PC: {no_owner}")
         failed += no_owner
-    state = Path(tempfile.mkdtemp(prefix="jarvis-suite-state-"))
+    state = root / STATE_NAME
     env = private_state(dict(os.environ, JARVIS_BACKEND=str(backend),
                              PYTHONDONTWRITEBYTECODE="1"), backend, state)
+    env = suite_temp_env(env, root)
     print(f"state: {state}  (config folder and audit log for this run, not yours)")
     for s in suites:
         need = NEEDS_OWNER.get(s.name, ())
@@ -439,9 +716,9 @@ def main(only=()) -> int:
             print(el)
         tail = ((got_out or "") + (got_err or "")).strip().splitlines()[-40:]
         print("\n".join("      " + l for l in tail))
-    if not real:
-        shutil.rmtree(backend, ignore_errors=True)
-    shutil.rmtree(state, ignore_errors=True)
+    # No rmtree here any more: `root` - which holds the staged backend (unless
+    # JARVIS_BACKEND named a real one), the state folder and the suites' own
+    # scratch - is removed by main()'s `finally`, on every path out of here.
     print(f"\n{ran['passed']} passed, {ran['skipped']} skipped, {ran['failed']} failed")
     if ran["skipped"] or skipped:
         print(f"      (a skip is a check that could not run here: {ran['skipped']} inside the "
