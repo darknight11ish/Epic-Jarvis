@@ -5320,11 +5320,56 @@ object JarvisRuntime {
             ring = true,
             key = tag,
             timeoutMs = com.jarvis.client.net.FindPhone.ringMillis(ring),
+            // A job on the same schedule: if the PC stops listing it, the ring
+            // goes with it rather than ringing on for ever.
+            scheduleKind = com.jarvis.client.net.FindPhone.EVENT,
         )
     }
 
     /** `GET /api/schedule`. A read: never held. */
-    suspend fun schedule(): ApiResult<JsonObject> = api.schedule()
+    suspend fun schedule(): ApiResult<JsonObject> {
+        val r = api.schedule()
+        // A read that SUCCEEDED is the only thing that may take a "went off"
+        // notification away for a job the PC no longer lists - never a read
+        // that failed, which would make a still-true notice vanish because the
+        // link blipped (the owner's report of 2026-10-11).
+        if (r is ApiResult.Ok) reconcileScheduleNotifications(r.value)
+        return r
+    }
+
+    /**
+     * Takes away every "went off" notification whose job the PC no longer
+     * lists AT ALL (the owner's report of 2026-10-11, in its worst form: a job
+     * deleted on the PC while the phone still showed it kept ringing for
+     * ever, because the PC's `changed` event - the only cancellation this app
+     * had - is never sent for a job that no longer exists).
+     *
+     * Called only with the body of a `GET /api/schedule` that SUCCEEDED. The
+     * job ids come from the active jobs, the open to-do items and the ones
+     * that went off in the last hour: a job in none of those lists is gone.
+     * A read that failed never calls this, so "the job is gone" and "I could
+     * not ask" can never be confused.
+     *
+     * It can only ever touch a schedule notification: [ScheduleNotifier.posted]
+     * hands back just the notifications this app posted on its own id that
+     * carry a schedule kind, so an approval card, the Jarvis link, "Live
+     * ended" and a morning briefing's notice are never cancelled. A job
+     * merely snoozed, deleted or done while its notification was up is
+     * already handled by the `changed` event and by [scheduleAct] - this adds
+     * the one case those cannot reach.
+     */
+    private fun reconcileScheduleNotifications(body: JsonObject) {
+        val context = appContext ?: return
+        val view = com.jarvis.client.net.Schedule.parse(body) ?: return
+        val known = com.jarvis.client.net.Schedule.knownIds(view)
+        val gone = com.jarvis.client.net.Schedule.stopsWhenJobGone(
+            com.jarvis.client.service.ScheduleNotifier.posted(context), known,
+        )
+        for ((tag, jobId) in gone) {
+            Log.i(TAG, "a schedule notification for $jobId is still up, but the PC no longer lists that job: taking it away")
+            runCatching { com.jarvis.client.service.ScheduleNotifier.cancel(context, jobId, tag) }
+        }
+    }
 
     /**
      * ONE job: pause, resume, delete or done. No card - none of them can make
@@ -6335,6 +6380,9 @@ object JarvisRuntime {
                 // An alarm keeps ringing until seen (2026-09-25).
                 ring = com.jarvis.client.net.Schedule.rings(kind, urgent = false),
                 quiet = late,
+                // A job "going off": a notification whose job the PC no longer
+                // lists at all is taken away by the reconcile pass.
+                scheduleKind = kind,
             )
         }
     }
@@ -6375,6 +6423,7 @@ object JarvisRuntime {
                 ring = if (late) false else com.jarvis.client.net.Schedule.rings(kind, urgent),
                 key = key,
                 quiet = late,
+                scheduleKind = kind,
             )
         }
     }

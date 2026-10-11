@@ -1122,6 +1122,9 @@ class MainActivity : FragmentActivity() {
         // every six hours) and once a day while it stays open. Never while
         // "Check for new versions" is off. See UpdateCheck.
         val updateState by JarvisRuntime.updates.state.collectAsState()
+        // The Download button's own state (2026-10-11).
+        val updateDownload by JarvisRuntime.updates.download.collectAsState()
+        val updateScope = rememberCoroutineScope()
         val updateChecks by JarvisRuntime.settings.updateChecks.collectAsState()
         LaunchedEffect(updateChecks) {
             if (!updateChecks) return@LaunchedEffect
@@ -2289,6 +2292,25 @@ class MainActivity : FragmentActivity() {
                                 if (!on) JarvisRuntime.updates.cleared()
                             },
                             onOpenRelease = ::openReleasePage,
+                            // The update download and install (the owner's
+                            // request of 2026-10-11). Download fetches the
+                            // published APK and checks its certificate;
+                            // Install hands a VERIFIED file to Android's own
+                            // installer, which asks the owner once to allow
+                            // installs from Jarvis.
+                            updateDownload = updateDownload,
+                            onDownloadUpdate = {
+                                updateScope.launch {
+                                    JarvisRuntime.updates.download(this@MainActivity)
+                                }
+                            },
+                            onInstallUpdate = {
+                                if (!JarvisRuntime.updates.install(this@MainActivity)) {
+                                    JarvisRuntime.setNotice(
+                                        "There is nothing verified to install yet. Download it first.",
+                                    )
+                                }
+                            },
                             // The phone's own Settings screen (ease-of-use
                             // audit row 16, 2026-09-27).
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
@@ -3374,6 +3396,19 @@ class MainActivity : FragmentActivity() {
                                 onOpenChecks = { nav.go(Screen.CHECKS) },
                                 onOpenInbox = { nav.go(Screen.INBOX) },
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
+                                // The Galaxy, one tap from Home (the owner's
+                                // request of 2026-10-11). It opens the Brain's
+                                // own "people-and-things" plate - the phone's
+                                // Galaxy - exactly the way "open the galaxy"
+                                // does, so the plate's own "Hide memory lists
+                                // and chat history" guard decides what is
+                                // shown. Nothing new is read and no route is
+                                // added.
+                                onOpenGalaxy = {
+                                    pendingSection = "people-and-things"
+                                    pendingSectionScreen = Screen.BRAIN.name
+                                    nav.go(Screen.BRAIN)
+                                },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
                                 // Settings from Home's own row (2026-10-08).
                                 onOpenSettings = { nav.go(Screen.SETTINGS) },

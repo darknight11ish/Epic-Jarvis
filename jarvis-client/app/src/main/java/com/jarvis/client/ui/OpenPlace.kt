@@ -143,6 +143,17 @@ object OpenPlace {
         // "Switch off my work topic" (2026-09-30): not a settings section - the place
         // named by the answer's `open_brain` (net/Topics.kt, ChatSession).
         com.jarvis.client.net.Topics.PLACE to Where.Go(Screen.BRAIN, "topics"),
+        // The Galaxy (the owner's request of 2026-10-11: "the galaxy on the
+        // android app should be a direct button thr main screen if the app").
+        // Its phone home is the Brain's own "people-and-things" plate
+        // (`PeopleAndThingsSection`, EntitiesPlate.kt), so "open the galaxy"
+        // goes there rather than answering "only in Jarvis on your PC" - the
+        // same defect the "spending" line above was added to fix. The plate
+        // itself carries the "Hide memory lists and chat history" guard, so
+        // this opens the prompt while the lists are hidden and never shows a
+        // name.
+        "galaxy" to Where.Go(Screen.BRAIN, "people-and-things"),
+        "brain.tab.galaxy" to Where.Go(Screen.BRAIN, "people-and-things"),
     )
 
     /**
