@@ -130,6 +130,20 @@ def t_the_page_lists_every_action():
           and rows["fixed:lights"]["says"] == AF.SAYS["ask"])
     check("plain repeats: 'Does it without asking' (2026-09-26)",
           rows["fixed:repeats"]["says"] == "Does it without asking")
+    # The Reject-click row (the owner's decision of 2026-10-10; entry 003 of
+    # docs/RULE-FLEXIBILITY.md, whose step 3 asks for it here). It is the third
+    # step of a relaxation that HAS no gate action of its own - a "no" is the
+    # decision - so this row is the only place on the page the owner can find
+    # it, and its words must not claim Jarvis does it without asking.
+    check("the Reject-click row is on the page, worded as a guess",
+          rows["fixed:playbook_rejection"]["title"] == "Learn a rule from a Reject click"
+          and rows["fixed:playbook_rejection"]["says"]
+          == "Writes a guessed rule for you to Keep or Discard",
+          rows.get("fixed:playbook_rejection"))
+    check("... and its note says nothing is applied without your Keep",
+          "Keep" in rows["fixed:playbook_rejection"]["note"]
+          and "never a saved fact" in rows["fixed:playbook_rejection"]["note"],
+          rows["fixed:playbook_rejection"]["note"])
     check("the wiki says why it cannot be loosened", rows["wiki_update"]["note"] == AF.NOTE_WIKI)
     check("from the phone, a switch cannot loosen",
           all(r["switch"]["can_loosen"] is False for r in rows.values() if r.get("switch")))

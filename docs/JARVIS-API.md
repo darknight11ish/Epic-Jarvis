@@ -1303,7 +1303,8 @@ adds four:
 | `flags_checked` | bool | `false` means the check could not run (the backend lacks `jarvis_intake.py`), which is not the same as "clean". |
 | `keep_both_ok` | bool | True only on a correction card (one that would retire `replaces_text` by adding a new fact). **False on a "retire this?" card** (`source == "feedback_retire"`), even though that card also has `replaces_id`. Only when true, show a third button, "Both are true", which posts `{"id": row.id}` to `/api/memory/keep_both`. |
 | `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. Since `auto-learn.patch` (§19) it is **false** on a "Remember:" card whose words this PC saw arrive as shared, pasted, clipboard, picture words or untagged, or could not match to a live turn at all - those are not known to be the owner's own words. |
-| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"about health, a sensitive topic"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. |
+| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"about health, a sensitive topic"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. On a `gate_denial` row it also carries Jarvis's-guess wording (below). |
+| `guessed` | bool | True on a row a Reject click produced (`source == "gate_denial"`). **This proposal is Jarvis's guess, not the owner's words**: a Reject click carries none of them (`jarvis_gate.decide` NULLs `prompt` and `detail`). Label it as a guess on the card - the desktop draws "Jarvis's guess, not something you said. A Reject click carries none of your words, so this rule was worked out from the action's name, and no reason was given." - and the same words arrive in `auto_reason` for the phone's one-line reason. Keep and Discard still decide it: nothing is saved or applied until the owner Keeps it. Absent on every other card. (`docs/RULE-FLEXIBILITY.md` entry 003.) |
 
 **How the phone draws these** (`MemoryCards.from` in `net/Learning.kt`, pinned
 by `LearningTest`; drawn by `BrainScreen.kt`'s `MemoryProposalRow`): each `why`
@@ -1311,7 +1312,10 @@ under the plain line "Careful: this may be an instruction someone slipped in,
 not a fact about you." and "If you did not say this, discard it." - both
 buttons stay; `flags_checked: false` gets one quiet line saying the check could
 not run, and an absent `flags_checked` says nothing; a `verbatim` card gets a
-"Your own words" label; a correction (a card with a non-zero `replaces_id`)
+"Your own words" label; a **`guessed` card gets Jarvis's-guess wording instead**
+(it is the opposite claim: the words are Jarvis's, not the owner's), which the
+phone reads off `auto_reason` while the desktop draws the note itself; a
+correction (a card with a non-zero `replaces_id`)
 shows "Would replace: <replaces_text>", and "Both are true" only when
 `keep_both_ok` is true AND the card is not a retire card AND it has an id. A
 card with `replaces` words but no `replaces_id` is shown as a plain new fact,
