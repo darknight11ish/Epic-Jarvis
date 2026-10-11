@@ -49,13 +49,42 @@ import _where  # noqa: E402
 # also uses are listed for completeness. test_embedding_guard.py is NOT here:
 # it needs only jarvis_memory.py, the staged rebuilt copy satisfies it, and
 # it passes against that copy - so it runs.
+#
+# A SUITE THAT CAN BUILD WHAT IT NEEDS DOES NOT BELONG HERE. test_appearance.py
+# was on this list until 2026-10-10 for `jarvis_hud.py`, and it did not need
+# the whole file - only the block `appearance.patch` writes, which the patch
+# stack's own stand-in carries (`backend/_stack.py`). Sitting here meant its 14
+# checks were skipped in CI and ran only on the owner's PC. It now reads the
+# real file when there is one and the stand-in when there is not, so it is not
+# listed. The three suites that could run PART of themselves were taken off the
+# same day, for the same reason, and each one names as a skip whatever still
+# needs the owner's whole file:
+#
+#   * test_voice_503.py - 11 of its 20 checks execute `_no_speech()` and read
+#     `_SAY_FALLBACK`, both written whole by voice-503.patch, so the stand-in
+#     has them. The other 9 read whole-file route statements with ast.
+#   * test_memory_pane.py - 13 of its 49 checks (the learning switch and the
+#     query-string reader) come out of the stand-in the same way. The other 36
+#     read whole-file route statements.
+#   * test_documents_honesty.py - 1 of its 19. MEASURED, not assumed: the two
+#     checks that EXECUTE `_has_table` cannot be lifted, because it calls
+#     `_ro_sqlite`, which the owner wrote and no patch does - the stand-in has
+#     that function's `def` line and the first line of its docstring and none
+#     of its body (`mode=ro` and `as_uri` appear nowhere in it), so `_has_table`
+#     run from the stand-in raises NameError instead of answering. Passing in a
+#     helper of our own would be a paraphrase of the code under test. What is
+#     left in CI is the check that a failed documents read is REPORTED - both
+#     sentences are written by the patch - which is one real guard where there
+#     were none.
+#
+# Naming the skips, rather than leaving the whole suite listed, is the point:
+# the runner prints "N passed, M skipped" beside each of them, so a reader sees
+# how much of the suite actually ran.
 NEEDS_OWNER = {
-    "test_appearance.py": ("jarvis_hud.py",),
     "test_approval_notice.py": ("jarvis_gate.py", "jarvis_events.py"),
     "test_bitemporal.py": ("jarvis_hud.py", "jarvis_memory.py"),
     "test_decide_once.py": ("jarvis_extract.py", "jarvis_hud.py", "jarvis_memory.py"),
     "test_degrade_filter.py": ("jarvis_hud.py",),
-    "test_documents_honesty.py": ("jarvis_hud.py",),
     "test_events_pump.py": ("jarvis_hud.py", "jarvis_events.py"),
     "test_extraction_wiring.py": ("jarvis_hud.py", "jarvis_events.py"),
     "test_gate_egress.py": ("jarvis_gate.py", "jarvis_hud.py", "jarvis_events.py"),
@@ -64,7 +93,6 @@ NEEDS_OWNER = {
     "test_gpu_offload.py": ("jarvis_hud.py", "jarvis_models.py"),
     "test_import_history.py": ("jarvis_extract.py", "jarvis_memory.py"),
     "test_memory_noise.py": ("jarvis_extract.py", "jarvis_hud.py", "jarvis_memory.py"),
-    "test_memory_pane.py": ("jarvis_hud.py",),
     "test_memory_prefix.py": ("jarvis_hud.py",),
     "test_memory_safety.py": ("jarvis_extract.py", "jarvis_memory.py"),
     # It lifts the real `_completions_url` and `_auth_headers` out of
@@ -74,7 +102,6 @@ NEEDS_OWNER = {
     # fails and every cloud check would read as "no lane".
     "test_ollama_direct.py": ("jarvis_hud.py",),
     "test_token_file.py": ("jarvis_hud.py",),
-    "test_voice_503.py": ("jarvis_hud.py",),
 }
 
 # The files only the owner's PC has. Checked below: every NEEDS_OWNER entry

@@ -173,6 +173,11 @@ SHIPPED = (
     "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
     "jarvis_scrub.py",
+    # The one connection class that CLOSES when its `with` block ends, shared
+    # by jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py
+    # (2026-10-08: the WinError 32 "schedule.json is being used by another
+    # process" failure, fixed by hand three times before it was shared).
+    "jarvis_sqlite.py",
     "jarvis_schedule.py", "jarvis_quick.py",
     # "open"/"adjust" any setting by voice or chat (2026-09-27): jarvis_quick.py
     # (already SHIPPED, above) is the only importer - no patch of its own.
@@ -413,6 +418,20 @@ SHIPPED = (
     # 15 minutes). No patch: jarvis_chatbot_routes.py answers its one route,
     # and jarvis_handoff.py reads it.
     "jarvis_handoff_mode.py",
+    # what a captcha does about its browser window (the owner's setting of
+    # 2026-10-09: "1 by default with the option for 2 in the settings of
+    # Jarvis": leave it exactly where it is, or bring it to the front). No
+    # patch: jarvis_chatbot_routes.py answers its one route, and
+    # jarvis_handoff.py reads it.
+    "jarvis_handoff_front.py",
+    # The first Docker integration (the owner's request of 2026-10-09,
+    # docs/DOCKER-INTEGRATION-DESIGN.md): the containers on Jarvis's OWN list
+    # (today SearXNG, the default search provider) and start/stop for one. It
+    # deliberately cannot create or pull - a start is refused unless the pinned
+    # image is already on this PC - and it never touches a container that is
+    # not ours (wrong image, a port beyond loopback, or privileged). Start is
+    # one card, stop is instant; docker.patch installs its routes.
+    "jarvis_docker.py",
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
@@ -465,6 +484,11 @@ SHIPPED = (
     # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
     # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
     "jarvis_menus.py",
+    # "open Notion", "open settings", "open Jarvis settings" (2026-10-10, the
+    # owner's request): which app, Windows panel or Jarvis Settings section the
+    # owner's own words name. jarvis_quick.py calls it. No patch, no route, NO
+    # card and no model tool - the same shape as jarvis_media.py.
+    "jarvis_open.py",
     # Per-model thinking levels (2026-10-01, Section 5.5): setting per model,
     # capabilities check, voice fast override, plain words (no card).
     "jarvis_thinking.py",
@@ -523,8 +547,61 @@ SHIPPED = (
     #
     # Long Fuse: work that outlives the conversation.
     "jarvis_jobs.py",
+    # The limits and frequencies the owner can change: one table, one route.
+    "jarvis_limits.py",
     # One pipeline for text that arrived from outside.
     "jarvis_content_risk.py",
+    # The job list (2026-10-08, tasks.patch, JARVIS-API section 118): work that
+    # outlives one chat turn - a task is a named job with steps, each step still
+    # goes through the one gate, and the list remembers where it got to through a
+    # restart. Copied in shape from OpenMuse's task worker
+    # (docs/COMPETITORS-OPENMUSE-2026-10-08.md, including a correction: the report
+    # first called the address check a gap, and Jarvis already had it).
+    # A lease so a crashed job is picked up again and never run twice at once, a
+    # checkpoint after every step, `outcome_unknown` for an interrupted send, an
+    # idempotency key so one request makes one action, and a card whose decision
+    # must carry the hash of the words that were shown. Local SQLite only,
+    # standard library only, no network, no child process, approves nothing.
+    "jarvis_tasks.py",
+    # The prompt coach (2026-10-08, prompt-coach.patch, JARVIS-API section
+    # 119): checks ONE prompt the owner is about to send and returns what is
+    # missing - a score, up to four gaps and a rewritten version. Advice only:
+    # it sends nothing, runs no tool, raises no card, keeps nothing, and the
+    # address it sends to is checked with jarvis_auto_learn.check_local_model
+    # before the request is built. Off until the owner turns it on.
+    "jarvis_prompt_coach.py",
+    # This PC's own notification choices - which of its toasts fire and the
+    # quiet hours around them - in the OWNER'S SETTINGS FILE instead of one
+    # webview's localStorage, so the phone can change them too (the owner's
+    # decision of 2026-10-08). jarvis_limits.py rides the same seven values as
+    # rows and calls this module's check_time for the two clock times, which is
+    # why it is shipped whole. No patch, no route of its own.
+    "jarvis_notify_prefs.py",
+    # Drop-in modules (feat/plug-and-play-modules): the loader that replaces a
+    # feature's one startup patch by calling each module's own install() from
+    # a folder. plugins/loader/plugin-loader.patch adds the single call;
+    # plugins/registry.json says which features fit and why the rest do not.
+    # Standard library only, no network, no child process, writes nothing.
+    "jarvis_plugins.py",
+    # The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5):
+    # ONE clearly-labelled opt-in for fiction and role-play that is never the
+    # everyday assistant and never a default, AND the abliterated models
+    # already on disk offered as opt-in choices with no new download, each
+    # carrying the measured cost on its label. Two switches, off on a machine
+    # that has never run it, in their own JSON beside hardware-choice.json.
+    # Uses Ollama's own import of a local .gguf path and the existing switch;
+    # no route, no tool, and it never writes jarvis-framework.toml.
+    "jarvis_optin_models.py",
+    # What this machine can hold, and what may be offered on it (2026-10-10,
+    # the owner's Decision 6): free space on the drive models live on, card
+    # count and video memory, then the Lean / Comfortable / Generous tiers with
+    # their size on disk, what each is for, which card it uses and what it
+    # leaves free. may_download() is the one gate every download passes: never
+    # a silent download, and never one leaving under MIN_FREE_AFTER_DOWNLOAD -
+    # the night C: hit 5.7 GB free and every build broke. Reads no network,
+    # starts nothing, downloads nothing; the work setups use it rather than
+    # building a second chooser.
+    "jarvis_storage.py",
 )
 
 
@@ -569,3 +646,24 @@ def require_shipped(*names: str) -> None:
         print("\nNot run: this suite would have tested this repository's copy "
               "instead of the one your backend uses.")
         sys.exit(1)
+
+
+# ===== the published base ==================================================
+#
+# THIS IS jarvis-backend/'s COPY, AND IT IS NOT THIS REPOSITORY'S. Everything
+# above this line is backend/_where.py, word for word. These last lines are the
+# whole of the difference, and backend/test_base_regeneration.py fails if the
+# two files differ by anything else.
+#
+# It is in the base at all because import_history.py - which the base carries,
+# and which must run from a cloned folder with no repository around it - imports
+# BACKEND and explain from this file. Nothing else in jarvis-backend/ imports
+# it: the SHIPPED tuple above and require_shipped() below belong to the
+# repository's own test runner, and the base carries none of those tests.
+#
+# It was kept by hand until 2026-10-10, and by then it had gone stale: 77 lines
+# of SHIPPED entries this repository's copy had gained and this one had not,
+# with nothing to notice. tools/gen_base_from_backend.py now DERIVES this file
+# from backend/_where.py, so re-taking the base refreshes it too, and
+# backend/test_base_regeneration.py is what says the two have not drifted apart
+# again.
