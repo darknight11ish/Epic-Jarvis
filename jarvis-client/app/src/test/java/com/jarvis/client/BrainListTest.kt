@@ -234,31 +234,46 @@ class BrainListTest {
     @Test
     fun `a heading's N inside is the number of plates it really emits`() {
         // The screen's own count: what brainSection returns is the size of the
-        // `drawn` list it filled, and the heading is handed that same number.
-        val screen = code(source(BRAIN_SECTIONS))
+        // `drawn` list it filled, and the heading is handed the count the
+        // recorder holds - never a declared list's length.
+        val drawing = code(source(BRAIN_SECTIONS))
         assertTrue(
             "the heading is no longer given the count of what was emitted",
-            screen.contains("inside = measured.size"),
+            drawing.contains("inside = plateList.keys.size"),
         )
-        assertFalse(
-            "a declared list's length is back on the heading - that is the number that lied",
-            screen.contains("section.plates.size"),
-        )
-        // And the number is the one the plates add up to, per heading.
+        for (banned in listOf("inside = measured.size", "inside = section.plates.size")) {
+            assertFalse(
+                "the heading is drawn with $banned again: a declared list, or a count taken " +
+                    "before the plates were written, is the number that lied",
+                drawing.contains(banned),
+            )
+        }
+        // And the number is the one the plates add up to, per heading - and it is
+        // the SAME number whether the heading is open or shut, which is what the
+        // count is for: a shut heading draws no plates, so a count taken only
+        // while it was open would be zero on the very screen it exists for.
         for (section in BrainSections.SECTIONS) {
-            val drawn = ArrayList<String>()
-            FakeList().scope.brainSection(
+            val open = ArrayList<String>()
+            val counted = FakeList().scope.brainSection(
                 section = section,
                 open = true,
                 onToggle = {},
                 plates = { declaredPlates(section.key) },
-                drawn = drawn,
+                drawn = open,
             )
-            assertEquals(
-                "${section.key}: what it counted is not what it drew",
-                BrainSections.platesOf(section.key).map { it.key },
-                drawn,
+            val plates = BrainSections.platesOf(section.key).map { it.key }
+            assertEquals("${section.key}: what it counted is not what it drew", plates, open)
+            assertEquals("${section.key}: the count and the drawn plates disagree", plates.size, counted)
+            val shut = ArrayList<String>()
+            val countedShut = FakeList().scope.brainSection(
+                section = section,
+                open = false,
+                onToggle = {},
+                plates = { declaredPlates(section.key) },
+                drawn = shut,
             )
+            assertEquals("${section.key}: a shut heading drew something", emptyList<String>(), shut)
+            assertEquals("${section.key}: a shut heading returned a count of what it drew", 0, countedShut)
         }
         // The heading that lied on the phone: "6 inside" over five plates. Its
         // declared list is still six - the screen's items are unchanged - but the
@@ -268,6 +283,45 @@ class BrainListTest {
             "Money and time's plates changed; the count must still be measured, not declared",
             6, BrainSections.platesOf("money-time").size,
         )
+        // The count is worked out whether the heading is OPEN or SHUT, and this
+        // is the second half of the rule - it was added because the PHONE caught
+        // the first version of this fix: it measured the plates only while the
+        // heading was open, so every shut heading drew a count of ZERO, which is
+        // the one number the count exists for. A heading that is shut draws no
+        // plates, so the measure pass may not be behind `if (open)`.
+        assertTrue(
+            "the plates are no longer written before the heading's own row, so a shut heading " +
+                "cannot know its count and will draw \"0 inside\"",
+            drawing.contains("plateList.write(plates)"),
+        )
+        assertFalse(
+            "the count is worked out behind a condition again: a shut heading draws no plates, " +
+                "so it would show \"0 inside\" - which is what the phone caught",
+            Regex("if \\(open\\)[^\\n]*plateList\\.write").containsMatchIn(drawing) ||
+                Regex("plateList\\.write\\(plates\\)[^\\n]*else").containsMatchIn(drawing),
+        )
+        assertTrue(
+            "the heading is not handed the recorder's own count",
+            drawing.contains("inside = plateList.keys.size"),
+        )
+        // And the number a shut heading shows is the number its plates add up to,
+        // which is the same number its open state draws - checked by writing the
+        // screen's own plates and reading the recorder back.
+        for (section in BrainSections.SECTIONS) {
+            val open = ArrayList<String>()
+            FakeList().scope.brainSection(
+                section = section,
+                open = true,
+                onToggle = {},
+                plates = { declaredPlates(section.key) },
+                drawn = open,
+            )
+            assertEquals(
+                "${section.key}: what the screen writes for it is not what it declares",
+                section.plateKeys, open,
+            )
+            assertTrue("${section.key} would draw no count", section.plateKeys.isNotEmpty())
+        }
     }
 
     // ------------------------------------------- 4. outside every heading, always ---
@@ -316,7 +370,10 @@ class BrainListTest {
      */
     @Test
     fun `the screen emits the always-drawn ids outside its heading calls`() {
-        val screen = source(BRAIN)
+        // CODE, not the raw text: a plate name quoted in a comment - the pair
+        // spelling in BrainScreen's own notes - would otherwise read as a plate
+        // drawn inside a heading.
+        val screen = code(source(BRAIN))
         val calls = sectionCalls(screen)
         assertEquals("BrainScreen's heading calls moved", BrainSections.SECTIONS.size, calls.size)
         for (key in BrainSections.ALWAYS_DRAWN) {
@@ -336,7 +393,10 @@ class BrainListTest {
         // plate can fall out of one and float at the top of the list either.
         for (section in BrainSections.SECTIONS) {
             for (plate in section.plateKeys) {
-                val at = screen.indexOf("plate(\"$plate\")")
+                // A pair is written as one plate that names both halves, so the
+                // half that is not named first may not appear as `plate("...")`.
+                val at = listOf("plate(\"$plate\")", "plateDrawn(\"$plate\")", "\"$plate\"")
+                    .map { screen.indexOf(it) }.firstOrNull { it > 0 } ?: -1
                 assertTrue("$plate is not drawn", at > 0)
                 assertTrue(
                     "$plate is drawn outside every heading's call",
@@ -348,12 +408,82 @@ class BrainListTest {
 
     // ------------------------------------------ the screen's lines and the spec ---
 
+    /**
+     * Every `plate(...)` written in [body], in source order: the plate names it
+     * covers, and the text that decides it (its own line, and the line before it,
+     * where an `if (menus.shows("id"))` lives).
+     *
+     * The names are read from the plate's OWN block - from its `plate(` to the
+     * brace that closes its body - so the three PAIRS come out as the two names
+     * they are. `wiki` and `wiki-hidden` (and `memory`, and `memory-as-of`) are
+     * ONE plate with two names, because exactly one of them is ever drawn:
+     *
+     * ```
+     * plate("wiki") {
+     *     if (privateHidden) { the hidden line } else { the wiki }
+     * }
+     * ```
+     *
+     * and it names the other half through `plateDrawn`, the same rule the heading
+     * is handed - so a shut heading's count can never promise a plate the open
+     * state does not draw.
+     */
+    private fun plateLines(body: String): List<Pair<Set<String>, String>> {
+        val lines = body.lines()
+        val out = ArrayList<Pair<Set<String>, String>>()
+        var i = 0
+        while (i < lines.size) {
+            // A lone plate is `plate("name")`; the three PAIRS are one plate that
+            // names both halves, `plate(if (plateDrawn("wiki")) "wiki" else
+            // "wiki-hidden")`, so both spellings start a plate.
+            val direct = Regex("\\bplate\\(\"([\\w-]+)\"\\)").find(lines[i])
+            val paired = Regex("\\bplate\\(if \\(plateDrawn\\(\"([\\w-]+)\"\\)\\) \"([\\w-]+)\" else \"([\\w-]+)\"\\)")
+                .find(lines[i])
+            if (direct == null && paired == null) {
+                i++
+                continue
+            }
+            // The plate's own block, by brace depth, so the pair's `plateDrawn`
+            // and its hidden name are read and the NEXT plate's are not.
+            val block = StringBuilder(lines[i])
+            var depth = lines[i].count { it == '{' } - lines[i].count { it == '}' }
+            var j = i
+            while (depth > 0 && j + 1 < lines.size) {
+                j++
+                block.append('\n').append(lines[j])
+                depth += lines[j].count { it == '{' } - lines[j].count { it == '}' }
+            }
+            val text = block.toString()
+            val names = linkedSetOf<String>()
+            if (paired != null) {
+                names.add(paired.groupValues[2])
+                names.add(paired.groupValues[3])
+            } else {
+                names.add(direct!!.groupValues[1])
+            }
+            // The other half of a pair, where the plate names it inside its body.
+            Regex("\"([\\w-]+)-hidden\"").findAll(text).forEach { names.add("${it.groupValues[1]}-hidden") }
+            Regex("plateDrawn\\(\"([\\w-]+)\"\\)").findAll(text).forEach { names.add(it.groupValues[1]) }
+            val guard = (if (i > 0) lines[i - 1] + "\n" else "") + lines[i]
+            out.add(names to guard)
+            i = j + 1
+        }
+        return out
+    }
+
     @Test
     fun `the screen draws exactly the plates each heading declares, in order`() {
-        val screen = source(BRAIN)
+        // CODE, not the raw text: the pair spelling is quoted in the screen's own
+        // comments, and reading those as code counted each pair twice.
+        val screen = code(source(BRAIN))
         for (section in BrainSections.SECTIONS) {
             val body = sectionBody(screen, section)
-            val drawn = Regex("\\bplate\\(\"([\\w-]+)\"\\)").findAll(body).map { it.groupValues[1] }.toList()
+            // One plate per NAME, in the order the names are written: a pair is two
+            // names carried by one plate, and both are declared, so both appear in
+            // the order the spec has them.
+            val drawn = plateLines(body).flatMap { (names, _) ->
+                names.filter { it in section.plateKeys }.sortedBy { section.plateKeys.indexOf(it) }
+            }
             assertEquals(
                 "${section.key}: the plates the screen draws are not the ones declared for it",
                 section.plateKeys, drawn,
@@ -364,28 +494,68 @@ class BrainListTest {
     @Test
     fun `every declared plate is drawn only when the menu it names is shown`() {
         // A declared guard is a promise about the screen: the plate is behind
-        // exactly that `menus.shows(...)`. The pairs (wiki/wiki-hidden and the
-        // rest) are why a heading's real count is not the declared length.
-        val screen = source(BRAIN)
+        // exactly that `menus.shows(...)`. The pairs are the exception: their two
+        // halves share ONE guard, which sits on the plate that names them both.
+        val screen = code(source(BRAIN))
         for (section in BrainSections.SECTIONS) {
             val body = sectionBody(screen, section)
+            val written = plateLines(body)
             for (plate in section.plates) {
-                val call = Regex("(?m)^.*\\bplate\\(\"${Regex.escape(plate.key)}\"\\).*$")
-                    .findAll(body).map { it.value.trim() }.toList()
+                val call = written.filter { plate.key in it.first }
                 assertEquals("${plate.key} is drawn more than once", 1, call.size)
-                if (plate.guard != null) {
+                val text = call.single().second
+                val paired = PAIRS.any { (a, b) -> a in call.single().first && b in call.single().first }
+                if (plate.guard != null && !paired) {
                     assertTrue(
                         "${plate.key} is no longer behind menus.shows(\"${plate.guard}\")",
-                        call.single().contains("menus.shows(\"${plate.guard}\")"),
+                        text.contains("menus.shows(\"${plate.guard}\")"),
                     )
-                } else {
+                }
+                if (plate.guard == null && !paired) {
                     assertFalse(
                         "${plate.key} declares no menu, but the screen hides it behind one",
-                        call.single().contains("menus.shows("),
+                        text.contains("menus.shows("),
                     )
                 }
             }
         }
+    }
+
+    @Test
+    fun `the screen says which of a pair it draws, so a count can be right`() {
+        // The three pairs, and the reason this test exists: the phone read
+        // "10 inside" over a heading that draws 7, because a shut heading counted
+        // BOTH of every pair. A pair is ONE plate that names both of its names and
+        // chooses with `plateDrawn` - the same rule the heading is handed.
+        val screen = code(source(BRAIN))
+        for ((a, b) in PAIRS) {
+            val pairs = plateLines(screen).filter { a in it.first && b in it.first }
+            assertEquals("$a and $b are not one plate that names both halves", 1, pairs.size)
+            assertEquals(
+                "$a's plate does not name both halves, so a count cannot know which is drawn",
+                setOf(a, b), pairs.single().first,
+            )
+            assertTrue(
+                "$a no longer asks plateDrawn, so nothing decides which half is drawn",
+                pairs.single().second.contains("plateDrawn("),
+            )
+            assertTrue(
+                "$a and $b must be one heading's two plates",
+                BrainSections.SECTIONS.any { a in it.plateKeys && b in it.plateKeys },
+            )
+        }
+        // EVERY heading hands the pair rule in - including the ones with no pair,
+        // so there is one rule on the screen and not a special case per heading.
+        assertEquals(
+            "not every heading is given the pair rule",
+            BrainSections.SECTIONS.size,
+            Regex("visible = ::plateDrawn").findAll(screen).count(),
+        )
+        // And `plateDrawn` answers for a pair: the hidden half is drawn exactly
+        // when the lists are hidden.
+        val rule = screen.substringAfter("fun plateDrawn(").take(200)
+        assertTrue("plateDrawn no longer answers from the hidden state", rule.contains("privateHidden"))
+        assertTrue("plateDrawn no longer tells the halves apart", rule.contains("-hidden"))
     }
     // ------------------------------------------------------------------ helpers ---
 
@@ -517,5 +687,12 @@ class BrainListTest {
 
         /** `brainSection(\n BrainSections.SECTIONS[3]` - the heading a call draws. */
         val SECTION_INDEX = Regex("BrainSections\\.SECTIONS\\[(\\d+)]")
+
+        /**
+         * The plates that come in two halves, of which exactly one is drawn. Read
+         * from the declaration itself (`Plate.drawnWith`), so this list cannot
+         * drift from what the screen is told to draw.
+         */
+        val PAIRS: List<Pair<String, String>> get() = BrainSections.PAIRS
     }
 }

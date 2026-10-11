@@ -392,6 +392,21 @@ fun BrainScreen(
          */
         fun plateKeyAt(name: String): String = PlateList.PLATE_PREFIX + name
 
+        /**
+         * Which of a PAIR of plates is drawn. Three pairs exist -
+         * `memory`/`memory-hidden`, `wiki`/`wiki-hidden` and
+         * `memory-as-of`/`memory-as-of-hidden` - and exactly one of each is drawn,
+         * so each of those headings writes
+         * `plate(if (plateDrawn("wiki")) "wiki" else "wiki-hidden")`.
+         *
+         * A shut heading asks this before it shows "N inside". It used to count
+         * both of every pair: the phone read "10 inside" over "What Jarvis knows
+         * about you", which draws 7, and "2 inside" over "Waiting for you", which
+         * draws 1.
+         */
+        fun plateDrawn(name: String): Boolean =
+            if (name.endsWith("-hidden")) privateHidden else !privateHidden
+
         ScrollToKeyOnce(
             listState,
             initialSection?.let { plateKeyAt(it) },
@@ -477,12 +492,14 @@ fun BrainScreen(
                 BrainSections.SECTIONS[0],
                 open = openKey == "waiting",
                 onToggle = { toggle("waiting") },
+                visible = ::plateDrawn,
             plates = {
-    if (privateHidden) {
-        plate("memory-hidden") {
+    // ONE of this pair is drawn, and the heading says which before it counts it:
+    // the hidden line can bring the queue back, the queue is the queue.
+    plate(if (plateDrawn("memory")) "memory" else "memory-hidden") {
+        if (privateHidden) {
             HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)
-        }
-    } else plate("memory") {
+        } else {
         // The QUEUE, not the corpus. /api/graph is desktop-only by the
         // contract's own instruction, and a memory graph is not a thing
         // to read on a phone; what belongs here is the short list of
@@ -503,6 +520,7 @@ fun BrainScreen(
             onSleepTimeAction = onSleepTimeAction,
             onDismissSleepOffer = onDismissSleepOffer,
         )
+        }
     }
             },
         )
@@ -512,6 +530,7 @@ fun BrainScreen(
                 BrainSections.SECTIONS[1],
                 open = openKey == "knows",
                 onToggle = { toggle("knows") },
+                visible = ::plateDrawn,
             plates = {
 
                 // How much Jarvis remembers, and whether it is learning - the
@@ -648,23 +667,26 @@ fun BrainScreen(
 
                 // backend/wiki.patch - its own plate, reading and acting through
                 // JarvisRuntime directly (WikiPlate.kt), so this is its only line.
-                if (privateHidden) {
-                    if (menus.shows("brain.memory.wiki")) plate("wiki-hidden") { HiddenSection("Wiki", busy = showPrivateBusy, onShow = onShowPrivate) }
-                } else {
-                    if (menus.shows("brain.memory.wiki")) plate("wiki") { MenuFrame(menus, "brain.memory.wiki") { WikiSection(canAct = canAct) } }
-                }
-                if (privateHidden) {
-                    if (menus.shows("brain.memory.as-of")) plate("memory-as-of-hidden") {
-                        HiddenSection("What did I believe on this date?", busy = showPrivateBusy, onShow = onShowPrivate)
+                // ONE of the pair is drawn, and the heading counts that one.
+                if (menus.shows("brain.memory.wiki")) plate(if (plateDrawn("wiki")) "wiki" else "wiki-hidden") {
+                    if (privateHidden) {
+                        HiddenSection("Wiki", busy = showPrivateBusy, onShow = onShowPrivate)
+                    } else {
+                        MenuFrame(menus, "brain.memory.wiki") { WikiSection(canAct = canAct) }
                     }
-                } else if (menus.shows("brain.memory.as-of")) plate("memory-as-of") {
-                    MenuFrame(menus, "brain.memory.as-of") {
-                        Section("What did I believe on this date?") {
-                            MemoryAsOfPlate(
-                                busy = memoryAsOfBusy,
-                                result = memoryAsOf,
-                                onQuery = onQueryMemoryAsOf,
-                            )
+                }
+                if (menus.shows("brain.memory.as-of")) plate(if (plateDrawn("memory-as-of")) "memory-as-of" else "memory-as-of-hidden") {
+                    if (privateHidden) {
+                        HiddenSection("What did I believe on this date?", busy = showPrivateBusy, onShow = onShowPrivate)
+                    } else {
+                        MenuFrame(menus, "brain.memory.as-of") {
+                            Section("What did I believe on this date?") {
+                                MemoryAsOfPlate(
+                                    busy = memoryAsOfBusy,
+                                    result = memoryAsOf,
+                                    onQuery = onQueryMemoryAsOf,
+                                )
+                            }
                         }
                     }
                 }
@@ -677,6 +699,7 @@ fun BrainScreen(
                 BrainSections.SECTIONS[2],
                 open = openKey == "doing",
                 onToggle = { toggle("doing") },
+                visible = ::plateDrawn,
             plates = {
                 if (menus.shows("brain.now.right-now")) plate("doing") {
                     MenuFrame(menus, "brain.now.right-now") {
@@ -826,6 +849,7 @@ fun BrainScreen(
             brainSection(
                 BrainSections.SECTIONS[3],
                 open = openKey == "money-time",
+                visible = ::plateDrawn,
                 onToggle = { toggle("money-time") },
             plates = {
                 // "Morning briefing" (the owner's decisions of 2026-09-25): the
@@ -917,6 +941,7 @@ fun BrainScreen(
             brainSection(
                 BrainSections.SECTIONS[4],
                 open = openKey == "projects",
+                visible = ::plateDrawn,
                 onToggle = { toggle("projects") },
             plates = {
                 // "Progress" (the owner's tick of 2026-09-30, JARVIS-API section
@@ -970,6 +995,7 @@ fun BrainScreen(
             brainSection(
                 BrainSections.SECTIONS[5],
                 open = openKey == "learning",
+                visible = ::plateDrawn,
                 onToggle = { toggle("learning") },
             plates = {
                 // "Quiz me on a text" (docs/STUDY-FROM-TEXT-DESIGN.md, Slice A,
@@ -1008,6 +1034,7 @@ fun BrainScreen(
             brainSection(
                 BrainSections.SECTIONS[6],
                 open = openKey == "pc",
+                visible = ::plateDrawn,
                 onToggle = { toggle("pc") },
             plates = {
 

@@ -324,9 +324,12 @@ class MenuVisibilityTest {
             // Brain's plates are drawn through `plate("...")` since 2026-10-10
             // (BrainSections.kt): ONE recorder writes their item keys, so the
             // screen's own line names the plate rather than spelling the key out.
+            // A plate that comes in two halves names BOTH through `plateDrawn`,
+            // which is the other spelling to accept here.
             assertTrue(
-                "BrainScreen has no plate(\"$key\") and no item(key = \"$key\")",
-                brain.contains("plate(\"$key\")") || brain.contains("item(key = \"$key\")"),
+                "BrainScreen has no plate(\"$key\"), no plateDrawn(\"$key\") and no item(key = \"$key\")",
+                brain.contains("plate(\"$key\")") || brain.contains("item(key = \"$key\")") ||
+                    brain.contains("plateDrawn(\"$key\")"),
             )
         }
         // The other way: no item on either screen is a menu without a place (a plate added to

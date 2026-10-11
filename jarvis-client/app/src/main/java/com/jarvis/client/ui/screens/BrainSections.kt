@@ -150,12 +150,36 @@ internal object BrainSections {
      * whether it is drawn at all (null for one that is always drawn), and [note]
      * any other condition, in words, for the test to hold.
      *
-     * This is the declaration the drift test holds the screen's own
-     * `plate("...")` lines to, in order and one for one. It exists so that "N
-     * inside" is a measured fact about this screen rather than a number living
-     * in a file that nothing checks.
+     * [drawnWith] is the OTHER name of a plate that comes in two halves, of which
+     * exactly one is ever drawn - `wiki` and `wiki-hidden`, and two more. The
+     * screen writes them as one plate that names both and chooses with
+     * `plateDrawn`, which is the same rule the heading is handed, so a shut
+     * heading's count can never promise the half its open state does not draw.
+     * Both names stay declared here, in this order, because both are real plates
+     * with real words; only one of them is on screen at a time.
+     *
+     * This is the declaration the drift test holds the screen's own `plate(...)`
+     * lines to, in order and one for one. It exists so that "N inside" is a
+     * measured fact about this screen rather than a number living in a file that
+     * nothing checks.
      */
-    data class Plate(val key: String, val guard: String? = null, val note: String = "")
+    data class Plate(
+        val key: String,
+        val guard: String? = null,
+        val note: String = "",
+        val drawnWith: String? = null,
+    )
+
+    /** The two halves of one plate, as [Plate.drawnWith] pairs them. */
+    val PAIRS: List<Pair<String, String>> by lazy {
+        SECTIONS.flatMap { it.plates }.mapNotNull { p ->
+            p.drawnWith?.let { if (p.key < it) p.key to it else it to p.key }
+        }.distinct()
+    }
+
+    /** The other name of [key]'s half, or null when it is drawn on its own. */
+    fun twinOf(key: String): String? =
+        SECTIONS.flatMap { it.plates }.firstOrNull { it.key == key }?.drawnWith
 
     /** One heading: [key] is its own stable id, [title] is what is drawn. */
     data class Section(
@@ -195,8 +219,8 @@ internal object BrainSections {
             // One of this pair is always drawn, never both: the review queue, or
             // the line that can bring it back out of "Hide memory lists".
             plates = listOf(
-                Plate("memory-hidden", note = "drawn instead of memory when memory lists are hidden"),
-                Plate("memory", note = "drawn instead of memory-hidden when lists are not hidden"),
+                Plate("memory-hidden", note = "drawn instead of memory when memory lists are hidden", drawnWith = "memory"),
+                Plate("memory", note = "drawn instead of memory-hidden when lists are not hidden", drawnWith = "memory-hidden"),
             ),
         ),
         Section(
@@ -214,10 +238,10 @@ internal object BrainSections {
                 Plate("forget-range", guard = "brain.history.forget-range"),
                 // The wiki and "what did I believe on this date?" are pairs too,
                 // for the same reason as the review queue above.
-                Plate("wiki-hidden", guard = "brain.memory.wiki", note = "drawn instead of wiki when lists are hidden"),
-                Plate("wiki", guard = "brain.memory.wiki", note = "drawn instead of wiki-hidden when lists are not hidden"),
-                Plate("memory-as-of-hidden", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of when lists are hidden"),
-                Plate("memory-as-of", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of-hidden when lists are not hidden"),
+                Plate("wiki-hidden", guard = "brain.memory.wiki", note = "drawn instead of wiki when lists are hidden", drawnWith = "wiki"),
+                Plate("wiki", guard = "brain.memory.wiki", note = "drawn instead of wiki-hidden when lists are not hidden", drawnWith = "wiki-hidden"),
+                Plate("memory-as-of-hidden", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of when lists are hidden", drawnWith = "memory-as-of"),
+                Plate("memory-as-of", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of-hidden when lists are not hidden", drawnWith = "memory-as-of-hidden"),
             ),
         ),
         Section(
@@ -507,8 +531,27 @@ sealed class PlateList {
         const val PLATE_PREFIX = "brain-plate:"
     }
 
-/** The plate keys emitted so far, in the order the list draws them. */
+    /** The plate keys emitted so far, in the order the list draws them. */
     abstract val keys: List<String>
+
+    /**
+     * Whether a plate is drawn at all, given its name. True everywhere except
+     * where `BrainScreen` says otherwise.
+     *
+     * The screen sets this to its own "Hide memory lists and chat history" test,
+     * and the PLATES THAT COME IN PAIRS - `wiki`/`wiki-hidden`,
+     * `memory`/`memory-hidden` and the rest, of which exactly one is drawn - ask
+     * it which of the two to write:
+     *
+     * ```
+     * plate(if (visible("wiki")) "wiki" else "wiki-hidden") { ... }
+     * ```
+     *
+     * Without it, a shut heading counted BOTH of every pair: the phone read
+     * "10 inside" over a heading that draws 7, which is the same lie in the other
+     * direction - a count that is not what the tap will show.
+     */
+    open val visible: (String) -> Boolean = { true }
 
     /**
      * Emits the plate named [key] into Brain's list. The name is the plate's own
@@ -531,22 +574,35 @@ sealed class PlateList {
  * front also means the plates are placed by this one method, in the order they
  * were written, rather than by whatever receiver happened to be in reach.
  */
-internal class LazyPlateList(private val list: LazyListScope) : PlateList() {
+internal class LazyPlateList(
+    private val list: LazyListScope,
+    override val visible: (String) -> Boolean = { true },
+) : PlateList() {
     private val emitted = ArrayList<String>()
     private val bound = ArrayList<Pair<String, @Composable () -> Unit>>()
 
-    override val keys: List<String> get() = emitted
+    /**
+     * The plate keys this recorder is holding, in the order they were written.
+     * This is the count a heading shows: while it is OPEN, the plates written for
+     * it in this pass; while it is SHUT, the ones its last open wrote.
+     */
+    override val keys: List<String> get() = if (emitting) emitted else bound.map { it.first }
+
+    private var emitting = false
 
     override fun plate(key: String, content: @Composable () -> Unit) {
         checkName(key)
+        // A plate the screen says is not drawn is not written down either: the
+        // count a shut heading shows has to be the number of plates the tap will
+        // really reveal.
+        if (!visible(key)) return
         bound.add(key to content)
     }
 
-    /** The names of one heading's plates, as written, without emitting them. */
-    internal fun measure(plates: PlateList.() -> Unit): List<String> {
+    /** Writes the plates of one heading down, without emitting them: the count. */
+    internal fun write(plates: PlateList.() -> Unit) {
         bound.clear()
         plates()
-        return bound.map { it.first }
     }
 
     /**
@@ -557,51 +613,53 @@ internal class LazyPlateList(private val list: LazyListScope) : PlateList() {
      */
     internal fun emit(plates: PlateList.() -> Unit, out: MutableList<String>) {
         bound.clear()
+        emitting = true
         plates()
         for ((key, content) in bound) {
             out.add(key)
             list.item(key = PLATE_PREFIX + key) { content() }
         }
+        emitting = false
     }
 }
 
 /**
- * One heading on Brain, and the plates under it while it is open.
+ * Writes the plates of one heading and returns the count its heading shows.
  *
- * A shut heading draws its title alone, so the whole screen is seven rows. The
- * heading is one item and each of its plates is another, emitted immediately
- * after it - which is what "opens in place" means: the plates of an open heading
- * sit between its own row and the next heading's, never at the end of the list.
- * The list's own `verticalArrangement` gives the heading and every plate the same
- * 16dp gap, so the plates read as one group under their heading.
+ * The plates are written TWICE, deliberately: once so the count is known before
+ * the heading row's own item is emitted (it has to be - the heading comes first),
+ * and once to place them. Nothing runs twice that has an effect: a plate body is
+ * a lambda the list itself calls when that row comes into view.
  *
- * [drawn] is filled with the name of every plate this call really emitted, in
- * order, and it is the ONLY source of the count drawn on the heading - so "N
- * inside" is what the tap will show, never a number declared somewhere else.
- * `section.plates` is the list of what *may* be drawn, and the two differ
- * whenever a menu is hidden, a pair of plates draws only one of itself, or a
- * list is empty.
+ * A SHUT heading measures its plates too, and this is the whole reason for the
+ * two-pass shape: a heading that is shut draws no plates, so a count taken only
+ * while it was open would be zero on the very screen the count exists for. The
+ * number shown on a shut heading is therefore "what it held the last time it was
+ * written", which is also the number the tap will reveal.
  *
- * The plates are written TWICE, deliberately, and only while the heading is
- * open: once to be counted, before the heading's own item is emitted, and once
- * to be placed, after it. Nothing runs twice that has an effect - a plate body
- * is a lambda the list itself calls when that row comes into view - and the
- * count is the only thing the first pass is for.
+ * [draw] is handed the keys really emitted, in order, and its return value - the
+ * count - is used for nothing else. The count a heading is DRAWN with is
+ * `plateList.keys.size` at that moment, which is never a number declared
+ * somewhere else: `section.plates` is what *may* be drawn, and the two differ
+ * whenever a menu is hidden, a pair of plates draws only one of itself, or a list
+ * is empty.
  */
 internal fun LazyListScope.brainSection(
     section: BrainSections.Section,
     open: Boolean,
     onToggle: () -> Unit,
     plates: PlateList.() -> Unit,
-    /** Filled with the plates really emitted, in order; the heading's count is `drawn.size`. */
+    /** Whether a plate is drawn at all, given its name; true everywhere by default. */
+    visible: (String) -> Boolean = { true },
+    /** Filled with the plates really emitted, in order; empty while shut. */
     drawn: MutableList<String> = ArrayList(),
 ): Int {
-    val plateList = LazyPlateList(this)
-    val measured = if (open) plateList.measure(plates) else emptyList()
+    val plateList = LazyPlateList(this, visible)
+    plateList.write(plates)
     // The heading's own key, in its own namespace: a plate's key can never be
     // this (PlateList refuses one that is), so the two items cannot collide.
     item(key = BrainSections.headingKey(section)) {
-        BrainGroupHeading(section, open = open, inside = measured.size, onToggle = onToggle)
+        BrainGroupHeading(section, open = open, inside = plateList.keys.size, onToggle = onToggle)
     }
     if (!open) {
         drawn.clear()

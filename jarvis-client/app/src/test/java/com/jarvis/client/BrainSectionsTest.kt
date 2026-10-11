@@ -43,9 +43,18 @@ class BrainSectionsTest {
     private val itemKeys: Set<String> =
         Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(screen).map { it.groupValues[1] }.toSet()
 
-    /** Every `plate("...")` the screen draws inside a heading. */
-    private val plateNames: Set<String> =
-        Regex("\\bplate\\(\"([\\w-]+)\"\\)").findAll(screen).map { it.groupValues[1] }.toSet()
+    /**
+     * Every plate name the screen writes inside a heading, read from the
+     * DECLARATION rather than by matching the screen's text.
+     *
+     * The declaration is where the names come from, and `BrainListTest` holds the
+     * screen's own `plate(...)` lines to it one for one - including the three
+     * PAIRS, which are ONE plate that names both halves
+     * (`plate(if (plateDrawn("wiki")) "wiki" else "wiki-hidden")`) because exactly
+     * one of the two is ever drawn. Matching text here as well would only be a
+     * second, weaker copy of that check.
+     */
+    private val plateNames: Set<String> = BrainSections.allPlateKeys().toSet()
 
     // ------------------------------------------------------- the headings ---
 
@@ -273,6 +282,19 @@ class BrainSectionsTest {
         val rest = src.substring(at)
         val end = rest.indexOf("\n}\n")
         return if (end > 0) rest.substring(0, end) else rest
+    }
+
+    private companion object {
+        /**
+         * The two ways a plate is written in `BrainScreen.kt`. Most are
+         * `plate("name")`; a plate that comes in two halves names both of them in
+         * ONE call - `plate(if (plateDrawn("wiki")) "wiki" else "wiki-hidden")` -
+         * because exactly one of the two is ever drawn.
+         */
+        val PATTERNS = listOf(
+            "\\bplate\\(\"([\\w-]+)\"\\)",
+            "\\bplateDrawn\\(\"([\\w-]+)\"\\)",
+        )
     }
 
     private fun repoFile(rel: String): File {
