@@ -311,6 +311,15 @@ object ChatHistory {
         cloudYes: Boolean = false,
         live: Boolean = false,
         screen: ScreenLook.Attach? = null,
+        /**
+         * `true` only when the owner asked Jarvis to think about THIS one
+         * question ([Thinking.ONE_SHOT], the "Think" key beside the chat box).
+         * Never sent as `false`, like [temporary] and [cloudYes], so an
+         * ordinary question is exactly the request it always was. It is ONE
+         * turn's field and nothing else: it is not a setting, it is not kept,
+         * and it never changes the PC's own WHEN choice.
+         */
+        think: Boolean = false,
     ): String =
         buildJsonObject {
             put("messages", messages(window, asking, picture, interrupted, live, screen))
@@ -323,6 +332,7 @@ object ChatHistory {
             put("device", DEVICE)
             if (temporary) put(TemporaryChat.FIELD, true)
             if (cloudYes) put("cloud_yes", true)
+            if (think) put(Thinking.ONE_SHOT, true)
         }.toString()
 
     // ------------------------------------------- the chat audit (2026-09-28) ---

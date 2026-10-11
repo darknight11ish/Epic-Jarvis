@@ -6,7 +6,7 @@
   `backend/jarvis_research.py` grades a repository ADOPT / FORK AND EXTEND /
   BUILD CUSTOM. It has never been run on real data for one reason: the
   container these sessions run in cannot reach `api.github.com` or
-  `github.com` — both answer 403, and only `raw.githubusercontent.com` gets
+  `github.com` - both answer 403, and only `raw.githubusercontent.com` gets
   through.
 
   Two attempts to get the numbers out of a second model produced no star
@@ -18,7 +18,7 @@
 
   Your machine can. That is the entire gap, and this closes it.
 
-  Writes `backend/peer-stats.json` — the raw API response per repo, no
+  Writes `backend/peer-stats.json` - the raw API response per repo, no
   interpretation, so the grader can read the exact fields it expects
   (`stargazers_count`, `license.spdx_id`, `pushed_at`, `archived`).
 
@@ -26,7 +26,7 @@
   Optional GitHub personal access token. Not needed: unauthenticated is 60
   requests an hour and this makes twenty. Pass one only if you hit the limit
   because something else on your machine already used it up. It needs NO
-  scopes — every repo here is public — so create it with everything unticked.
+  scopes - every repo here is public - so create it with everything unticked.
 
 .PARAMETER OutFile
   Where to write. Defaults to backend/peer-stats.json in this repository.
@@ -159,7 +159,7 @@ foreach ($repo in $REPOS) {
         $code = $null
         if ($_.Exception.Response) { $code = [int]$_.Exception.Response.StatusCode }
         # A 404 on a PUBLIC repo means it was renamed, deleted, or the name in
-        # the list is wrong — all three are findings, not errors to hide.
+        # the list is wrong - all three are findings, not errors to hide.
         $why = if ($code) { "HTTP $code" } else { $_.Exception.Message }
         $failed += "$repo - $why"
         Write-Host ("  {0,-34} {1}" -f $repo, $why) -ForegroundColor Red

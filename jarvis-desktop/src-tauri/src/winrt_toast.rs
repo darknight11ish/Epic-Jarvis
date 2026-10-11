@@ -82,6 +82,19 @@ const SNOOZE_PREFIX: &str = "jarvis-snooze:";
 /// own.
 const DENY_PREFIX: &str = "jarvis-deny:";
 
+/// The argv marker the Stop button on a ringing toast carries - a timer,
+/// alarm or reminder that went off (the owner's report of 2026-10-11: "theres
+/// not turn off alarm, only a snooze in the notifcation"). Pressing it takes
+/// that one toast away and does nothing else: it is the same job-scoped
+/// silence the phone's own Stop button does, and it never reaches the backend
+/// (which still shows the job under "Just went off" in the Brain's Coming up,
+/// so a stopped alarm is not a lost one).
+const STOP_PREFIX: &str = "jarvis-stop:";
+
+/// The words on that button, both apps' - the phone's `ScheduleNotifier.STOP`
+/// is the same word, and the two read as one control rather than two.
+pub(crate) const STOP_LABEL: &str = "Stop";
+
 /// True when this exe is sitting in a cargo output directory rather than
 /// where an installer put it - `…\target\debug\jarvis-desktop.exe` or
 /// `…\target\release\…`.
@@ -292,12 +305,40 @@ pub(crate) const ALREADY_DECIDED: &str = "Already decided.";
 /// "alarms that keep ringing"). `scenario="alarm"` keeps it on screen
 /// until it is dismissed, and its sound loops until then
 /// (`Notification.Looping.Alarm`, `loop="true"`). Windows requires an
-/// alarm toast to carry a button; its last button is Windows' own Dismiss
-/// (`activationType="system"`), which stops the sound and starts nothing.
+/// alarm toast to carry a button, and its own Dismiss
+/// (`activationType="system"`) is kept LAST - it stops the sound and starts
+/// nothing.
+///
+/// **Its label is written out (2026-10-11).** It used to be `content=""`,
+/// on this file's own unverified claim that Windows renders its own word for
+/// a system action. Nothing Windows stored agrees: Microsoft's own toasts in
+/// the same store carry `arguments="dismiss" content="Dismiss"`, and every
+/// "went off" toast this app had ever shown - 22 of them in the owner's own
+/// store - carried no dismiss action at all. The owner, seeing exactly that,
+/// reported "theres not turn off alarm, only a snooze in the notifcation".
+/// So the button the owner presses is [`STOP_LABEL`], a labelled
+/// `activationType="system"` action that removes this one toast and nothing
+/// else; the ringing is unchanged (still `scenario="alarm"`, still the
+/// looping alarm sound, still until dismissed or snoozed).
+///
 /// A timer, alarm or reminder going off also gets Snooze (`snooze`: the job
 /// id and the button's words), the same button as [`notify_fired`]'s - it
 /// carries the id only. There is no Approve here.
 pub(crate) fn alarm_xml(title: &str, body: &str, snooze: Option<(&str, &str)>) -> String {
+    // With no job id (an urgent "tell me when" carries one too, so this is
+    // the belt-and-braces case) there is still a way out: the job-scoped Stop
+    // falls back to Windows' own dismiss, which stops the sound.
+    let stop = snooze
+        .map(|(id, _)| {
+            format!(
+                r#"<action content="{label}" arguments="{prefix}{id}" activationType="system"/>
+    "#,
+                label = STOP_LABEL,
+                prefix = STOP_PREFIX,
+                id = escape_xml(id),
+            )
+        })
+        .unwrap_or_default();
     let snooze = snooze
         .map(|(id, label)| {
             format!(
@@ -319,7 +360,7 @@ pub(crate) fn alarm_xml(title: &str, body: &str, snooze: Option<(&str, &str)>) -
   </visual>
   <audio src="ms-winsoundevent:Notification.Looping.Alarm" loop="true"/>
   <actions>
-    {snooze}<action activationType="system" arguments="dismiss" content=""/>
+    {snooze}{stop}<action activationType="system" arguments="dismiss" content="Dismiss"/>
   </actions>
 </toast>"#,
         title = escape_xml(title),
@@ -538,16 +579,17 @@ pub fn decide_denied_at_startup(app: &AppHandle) {
 }
 
 /// A timer, alarm or reminder that went off, with a "Snooze 10 minutes"
-/// button (2026-09-25; `brain/schedule.rs` `toast_fired`). The same
-/// foreground activation as Deny, so the same caveat: the button's relaunch
-/// has not been watched on a real Windows PC. Anything failing here - or an
-/// uninstalled build, which has no shortcut for the AUMID - falls back to
-/// the plain toast without a button, the one shown before this existed;
-/// Snooze is then in the Brain's Coming up, under "Just went off".
+/// button and, since 2026-10-11, a "Stop" one (`brain/schedule.rs`
+/// `toast_fired`; both in [`fired_xml`]). The same foreground activation as
+/// Deny. Anything failing here - or an uninstalled build, which has no
+/// shortcut for the AUMID - falls back to the plain toast without a button,
+/// the one shown before this existed; Snooze is then in the Brain's Coming
+/// up, under "Just went off".
 ///
 /// A snooze is not an approval: it only sets the same thing to go off once
-/// more, later, and needs no card (the owner's rule for a one-off). The
-/// button carries the job id only, never the words.
+/// more, later, and needs no card (the owner's rule for a one-off). A stop is
+/// not one either: it answers nothing and changes nothing, taking this one
+/// notification away. Both buttons carry the job id only, never the words.
 pub fn notify_fired(app: &AppHandle, title: &str, body: &str, id: &str, label: &str) {
     if is_uninstalled_build() {
         crate::commands::notify(app, title, body);
@@ -561,8 +603,17 @@ pub fn notify_fired(app: &AppHandle, title: &str, body: &str, id: &str, label: &
     }
 }
 
-fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::core::Result<()> {
-    let xml = format!(
+/// The XML of a toast that rang once and is over: a timer, alarm or reminder
+/// that went off (`brain/schedule.rs` `toast_fired`), with the two buttons
+/// the phone's own timer offers - Snooze ([`SNOOZE_PREFIX`]) and Stop
+/// ([`STOP_PREFIX`]). Both carry the job id only, never the owner's words.
+///
+/// Stop is the owner's report of 2026-10-11: with Snooze alone, a timer that
+/// had gone off could only be snoozed or clicked through into the app, and
+/// **22 of the 22 "went off" toasts in the owner's own Windows store carried
+/// Snooze and no other action** - no dismiss, nothing to take it away.
+fn fired_xml(title: &str, body: &str, id: &str, label: &str) -> String {
+    format!(
         r#"<toast activationType="foreground" launch="jarvis-open">
   <visual>
     <binding template="ToastGeneric">
@@ -572,6 +623,7 @@ fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::
   </visual>
   <actions>
     <action content="{label}" arguments="{prefix}{id}" activationType="foreground"/>
+    <action content="{stop_label}" arguments="{stop_prefix}{id}" activationType="foreground"/>
   </actions>
 </toast>"#,
         title = escape_xml(title),
@@ -579,7 +631,13 @@ fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::
         label = escape_xml(label),
         prefix = SNOOZE_PREFIX,
         id = escape_xml(id),
-    );
+        stop_label = STOP_LABEL,
+        stop_prefix = STOP_PREFIX,
+    )
+}
+
+fn try_notify_fired(title: &str, body: &str, id: &str, label: &str) -> windows::core::Result<()> {
+    let xml = fired_xml(title, body, id, label);
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
     let toast = ToastNotification::CreateToastNotification(&doc)?;
@@ -652,6 +710,38 @@ pub fn snooze_at_startup(app: &AppHandle) {
     };
     crate::logfile::log(&format!("[jarvis] Snooze reached from a cold start: {id}"));
     snooze_detached(app, id);
+}
+
+/// A Stop click's job id out of a launch's argv - `None` for every other
+/// launch. The same `s`-and-ten-hex-digits id [`snooze_id_from_argv`] takes,
+/// and the same "the prefix must lead the argument" rule.
+pub fn stop_id_from_argv(argv: &[String]) -> Option<&str> {
+    argv.iter()
+        .find_map(|a| a.strip_prefix(STOP_PREFIX))
+        .filter(|id| crate::brain::schedule::valid_id(id))
+}
+
+/// Stops ONE ringing "went off" toast: the toast with this job id goes, and
+/// nothing else happens - no route, no card, no state change, exactly what
+/// the phone's own Stop button does ([`ScheduleNotifier.stopRinging`]). This
+/// is why it can run without waiting for the event stream: it answers
+/// nothing, so a stale link cannot make it silently do the wrong thing.
+pub fn stop_detached(id: &str) {
+    remove_fired(id);
+    crate::logfile::log(&format!("[jarvis] Stop pressed on {id}'s toast"));
+}
+
+/// A Stop clicked on a toast while Jarvis was CLOSED. The single-instance
+/// callback above only fires with a process already running, so a cold start
+/// is the only place this launch can be seen - and, like Snooze, it must not
+/// leave a window up for a click that asks for nothing.
+pub fn stop_at_startup(app: &AppHandle) {
+    let argv: Vec<String> = std::env::args().collect();
+    let Some(id) = stop_id_from_argv(&argv) else {
+        return;
+    };
+    let _ = app;
+    stop_detached(id);
 }
 
 #[cfg(test)]
@@ -742,7 +832,34 @@ mod tests {
         assert!(xml.contains(r#"activationType="system" arguments="dismiss""#));
         assert!(xml.contains("An email from &lt;Alex&gt; &amp; co arrived."));
         assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
+        // Windows' own dismiss, and nothing else: an id-less ring has no job
+        // to stop, and a labelled Stop with no id would stop the wrong thing.
         assert_eq!(xml.matches("<action ").count(), 1);
+        assert!(!xml.contains(STOP_PREFIX));
+    }
+
+    /// The owner's report of 2026-10-11, as a test: the toast that keeps
+    /// ringing must carry a button whose word a person can read. It used to
+    /// carry `content=""`, which is a button with no label at all.
+    #[test]
+    fn a_ringing_alarm_s_way_out_is_a_labelled_stop_and_windows_dismiss() {
+        let xml = alarm_xml(
+            "Alarm",
+            "Wake up",
+            Some(("s0123456789", "Snooze 10 minutes")),
+        );
+        assert!(xml.contains(r#"scenario="alarm""#));
+        assert!(xml.contains(r#"<action content="Stop" arguments="jarvis-stop:s0123456789" activationType="system"/>"#));
+        assert!(xml.contains(
+            r#"<action activationType="system" arguments="dismiss" content="Dismiss"/>"#
+        ));
+        assert_eq!(xml.matches("<action ").count(), 3);
+        // The old shape, exactly: no action may be left without a word.
+        assert!(
+            !xml.contains(r#"content="""#),
+            "an action still has no label:\n{xml}"
+        );
+        assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
     }
 
     #[test]
@@ -751,8 +868,54 @@ mod tests {
         assert!(xml.contains(r#"scenario="alarm""#));
         assert!(xml.contains(&format!(r#"arguments="{SNOOZE_PREFIX}s0123456789""#)));
         assert!(xml.contains(r#"activationType="system" arguments="dismiss""#));
-        assert_eq!(xml.matches("<action ").count(), 2);
+        // Snooze, Stop and Windows' dismiss.
+        assert_eq!(xml.matches("<action ").count(), 3);
         assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
+    }
+
+    /// CONTROL: a one-off timer's toast offers BOTH things a person needs -
+    /// Snooze to be reminded again, Stop to be rid of it - and neither can
+    /// ever approve anything.
+    #[test]
+    fn a_timer_that_went_off_offers_snooze_and_stop() {
+        let xml = fired_xml(
+            "Timer done",
+            "Jarvis: your timer is done.",
+            "s0123456789",
+            "Snooze 10 minutes",
+        );
+        assert!(xml.contains(r#"<action content="Snooze 10 minutes" arguments="jarvis-snooze:s0123456789" activationType="foreground"/>"#));
+        assert!(xml.contains(r#"<action content="Stop" arguments="jarvis-stop:s0123456789" activationType="foreground"/>"#));
+        assert_eq!(xml.matches("<action ").count(), 2);
+        assert!(!xml.contains(r#"content="""#));
+        assert!(!xml.contains(DENY_PREFIX) && !xml.to_lowercase().contains("approve"));
+        // Still no sound of its own and no alarm scenario: this one has
+        // already rung once and must not start ringing now.
+        assert!(!xml.contains("scenario="));
+        assert!(!xml.contains("Looping"));
+    }
+
+    #[test]
+    fn a_stop_click_yields_one_job_id_and_nothing_else_does() {
+        let argv = vec![
+            "jarvis-desktop.exe".to_string(),
+            "jarvis-stop:s0123456789".to_string(),
+        ];
+        assert_eq!(stop_id_from_argv(&argv), Some("s0123456789"));
+        for bad in [
+            "jarvis-stop:",
+            "jarvis-stop:all",
+            "jarvis-stop:s0123",
+            "jarvis-deny:s0123456789",
+            "jarvis-snooze:s0123456789",
+            "x-jarvis-stop:s0123456789",
+        ] {
+            assert_eq!(stop_id_from_argv(&[bad.to_string()]), None, "{bad}");
+        }
+        // The two other buttons' readers must not answer a Stop, and this one
+        // must not answer theirs - one argv, exactly one meaning.
+        assert_eq!(snooze_id_from_argv(&argv), None);
+        assert_eq!(deny_id_from_argv(&argv), None);
     }
 
     #[test]

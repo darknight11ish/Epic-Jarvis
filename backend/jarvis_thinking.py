@@ -42,6 +42,65 @@ WHY = {
     AUTO: "Automatic. Decides whether to think based on the question (simple questions stay fast, complex questions think deeply).",
 }
 
+# --------------------------------------------------------------------------
+#   WHEN Jarvis thinks: the owner's choice, in two plain words (2026-10-11)
+# --------------------------------------------------------------------------
+#
+# The level above says HOW HARD a model may think. It never said WHEN, and the
+# everyday model is becoming one that thinks before it answers by default
+# (`qwen3.5:9b`; `qwen3:8b` and `ornith:9b` behave the same way). Measured on
+# this PC today: thinking left on with a normal answer allowance spent every
+# token reasoning and returned an EMPTY answer on all three test questions
+# (`done_reason: "length"`, `content: ""`); with thinking off the same
+# questions were answered correctly in 0.29 s. So "when" is the owner's
+# choice, not a default this file picked for them:
+#
+#   WHEN_ASKED - ordinary answers are written straight away; thinking happens
+#                on the questions the owner asks for it (the "Think" key on
+#                the phone, the same flag from the desktop, or a level the
+#                owner set by hand being asked for).
+#   ALWAYS     - every answer may think first, as a model that thinks by
+#                default would. The owner is choosing the wait and the
+#                conversation room it costs, and that is said in plain words
+#                beside the choice.
+#
+# THE SAFE ONE IS THE ONE THAT IS ASSUMED. A `thinking.json` that is missing,
+# empty, truncated or unreadable must never be what makes an answer come back
+# blank, so every failure to read this setting falls to WHEN_ASKED: the turn
+# answers directly, with thinking off. Falling back to ALWAYS would be falling
+# back to the exact fault this setting exists to prevent - and the owner would
+# have no way to tell a wrong answer from no answer at all. For the same
+# reason WHEN_ASKED is what an ordinary turn gets when nothing was ever
+# chosen: a fresh backend answers everything, and a model that would have
+# thought first only does so when asked.
+WHEN_ASKED = "when_asked"
+ALWAYS = "always"
+WHEN_MODES = (WHEN_ASKED, ALWAYS)
+WHEN_DEFAULT = WHEN_ASKED
+WHEN_KEY = "when"
+
+#: Where jarvis_thinking remembers that a role's level is the OWNER'S pick
+#: rather than this file's starting value - only ever needed for "off", which
+#: is both. A short list of role or model names, in the same small file. Keys
+#: are ALWAYS stored, so it can never be mistaken for a model's level.
+_CHOSEN_KEY = "chosen"
+
+WHEN_LABELS = {
+    WHEN_ASKED: "Only when I ask",
+    ALWAYS: "Always",
+}
+
+WHEN_WHY = {
+    WHEN_ASKED: ("Ordinary answers are written straight away. Jarvis thinks "
+                 "only on the questions you ask him to think about."),
+    ALWAYS: ("Jarvis may think before every answer. Answers can take longer, "
+             "and thinking uses part of your conversation room."),
+}
+
+WHEN_TITLE = "When Jarvis thinks"
+WHEN_DETAIL = ("Thinking is the extra step some models take before answering. "
+               "It spends part of your conversation room.")
+
 # Mapping to OpenAI-compatible reasoning_effort supported by Ollama
 REASONING_MAP = {
     OFF: {"reasoning_effort": "none"},
@@ -77,16 +136,67 @@ def settings_path() -> Path:
     return _config_dir() / "thinking.json"
 
 
+def _default_settings() -> dict:
+    return {"everyday": DEFAULT, "second": DEFAULT, "third": DEFAULT}
+
+
 def _read_settings() -> dict:
+    """The setting file as a dict, or the defaults. `when` (WHEN_KEY) is kept
+    here with the model levels - one small file the owner can read, not a
+    second store - and is always present in what is returned. A file that is
+    missing, empty, truncated or unreadable gives the defaults, which include
+    WHEN_ASKED; see the WHEN_ASKED block above for why that is the safe one."""
     try:
         p = settings_path()
         if p.exists():
             data = json.loads(p.read_text(encoding="utf-8"))
             if isinstance(data, dict):
+                if data.get(WHEN_KEY) not in WHEN_MODES:
+                    data[WHEN_KEY] = WHEN_DEFAULT
                 return data
     except Exception:
         pass
-    return {"everyday": DEFAULT, "second": DEFAULT, "third": DEFAULT}
+    return dict(_default_settings(), **{WHEN_KEY: WHEN_DEFAULT})
+
+
+def _levels_only(data: dict) -> dict:
+    """`data` without the two bookkeeping keys: the per-model levels, and
+    nothing else. `get_level` walks this, so neither the owner's WHEN choice
+    ("when_asked" is not a level) nor the list of levels he picked by hand can
+    ever be read as a model name with a level of its own."""
+    return {k: v for k, v in data.items() if k not in (WHEN_KEY, _CHOSEN_KEY)}
+
+
+#: The level stored for a model nobody has chosen anything for. "off" is both
+#: a real choice and this starting value, and the two are told apart in
+#: _saved_levels() below - see its own note.
+_UNSET = DEFAULT
+
+
+def _saved_levels() -> dict:
+    """Only the levels the owner really CHOSE - never the starting values.
+
+    The difference matters in exactly one place: "off" is both a level the
+    owner can pick and what a model nobody has picked anything for answers
+    with, and the two must not be confused. (_read_settings fills a missing
+    file with "off" for each role, so "off" being written down is not evidence
+    that anybody chose it.) A level the owner actively set to "off" through
+    set_level() is remembered by that function in `chosen`, and counts as a
+    choice; an "off" that is only this project's starting value does not, so
+    it cannot block a question the owner asks for thinking about. A missing or
+    unreadable file has no choices in it at all."""
+    try:
+        p = settings_path()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                picked = data.get(_CHOSEN_KEY)
+                picked = picked if isinstance(picked, list) else []
+                return {k: v for k, v in _levels_only(data).items()
+                        if v in LEVELS and (v != _UNSET or k in picked)}
+    except Exception:
+        pass
+    return {}
 
 
 def _write_settings(data: dict) -> None:
@@ -152,7 +262,7 @@ def get_level(role_or_model: str) -> str:
     """Returns the configured thinking level for a role ('everyday', 'second', 'third')
     or specific model name. Defaults to 'off'.
     """
-    settings = _read_settings()
+    settings = _levels_only(_read_settings())
     # Check exact key, then role aliases
     if role_or_model in settings:
         val = settings[role_or_model]
@@ -160,6 +270,49 @@ def get_level(role_or_model: str) -> str:
             return val
     # Fallback to everyday if not found
     return DEFAULT
+
+
+def get_when() -> str:
+    """WHEN Jarvis thinks - WHEN_ASKED or ALWAYS. Never raises, and never
+    returns anything but one of the two: a missing, damaged or unreadable
+    setting reads as WHEN_ASKED, the one that cannot make an answer come back
+    blank. See the WHEN_ASKED block above."""
+    try:
+        when = _read_settings().get(WHEN_KEY)
+        if when in WHEN_MODES:
+            return when
+    except Exception:
+        pass
+    return WHEN_DEFAULT
+
+
+def set_when(when: str) -> Tuple[int, dict]:
+    """Changes WHEN Jarvis thinks. Needs no approval card, like a level: it
+    changes how much of one answer's conversation room may be spent, on a
+    model already loaded on this PC, and it opens no new way out of it."""
+    when = str(when or "").lower().strip()
+    if when not in WHEN_MODES:
+        return 400, {"error": f"'when' must be one of {', '.join(WHEN_MODES)}."}
+    try:
+        settings = _read_settings()
+        settings[WHEN_KEY] = when
+        _write_settings(settings)
+    except Exception as exc:
+        return 503, {"error": f"Could not save that just now ({type(exc).__name__})."}
+    return 200, {"ok": True, "when": when, "label": WHEN_LABELS.get(when, when),
+                 "message": f"Jarvis thinks {WHEN_LABELS.get(when, when).lower()}.",
+                 "why": WHEN_WHY.get(when, "")}
+
+
+def asked_for_this_turn(request: Any) -> bool:
+    """Did the app ask for thinking on THIS question alone? `think: true` on
+    the chat request, and nothing else turns it on: never "yes", never 1,
+    never a string - the same rule the chat route's own flags follow
+    (`temporary` is read the same way). Anything that is not the app's own
+    request (None, a list, a string) is not a request to think."""
+    if not isinstance(request, dict):
+        return False
+    return request.get("think") is True
 
 
 def set_level(role_or_model: str, level: str, model_name: Optional[str] = None,
@@ -182,6 +335,14 @@ def set_level(role_or_model: str, level: str, model_name: Optional[str] = None,
 
     settings = _read_settings()
     settings[role_or_model] = level
+    # A level written here is a level the OWNER picked - including "off", which
+    # is otherwise indistinguishable from this file's own starting value (see
+    # _saved_levels). Remembered by name, in the same small file.
+    picked = settings.get(_CHOSEN_KEY)
+    picked = list(picked) if isinstance(picked, list) else []
+    if role_or_model not in picked:
+        picked.append(role_or_model)
+    settings[_CHOSEN_KEY] = picked
     _write_settings(settings)
     return 200, {
         "ok": True,
@@ -233,26 +394,76 @@ def decide_auto(question: str) -> str:
 def reasoning_parameters(model: str, question: str = "", *,
                          spoken: bool = False,
                          ollama_url: Optional[str] = None,
-                         role: str = "everyday") -> dict:
+                         role: str = "everyday",
+                         per_turn: bool = False) -> dict:
     """Computes the reasoning_effort parameters to pass to Ollama chat.
     Voice answers (spoken=True) are always fast (forced to 'none').
     Defaults to 'none' when off or when model does not think.
+
+    `per_turn` is the owner asking for thinking on THIS question only
+    (`think: true` on the chat request; jarvis_agent passes
+    asked_for_this_turn(request)). It decides one thing and one thing only:
+    whether a turn the owner did NOT ask about may think. The three rules
+    above it are untouched by it - a spoken answer, a model that cannot
+    think, and a level the owner set to "off" all answer directly whether or
+    not this question was asked for. Asked for, a role with no level of its
+    own thinks quickly rather than not at all, so "Think" on the phone does
+    something on a PC where no level was ever picked.
     """
     if spoken:
-        # Voice answers are always fast
+        # Voice answers are always fast. First, so nothing below can undo it.
         return {"reasoning_effort": "none"}
 
     if not supports_thinking(model, ollama_url):
         return {"reasoning_effort": "none"}
 
-    lvl = get_level(role)
-    if role != model and model in _read_settings():
-        lvl = get_level(model)
+    # The level this turn would use, and whether the owner really set one. The
+    # role is what the settings screen writes; a level stored under the model's
+    # own name wins when the two differ, exactly as before.
+    #
+    # "off" is also what a model nobody has chosen anything for answers with.
+    # That is NOT a choice, so it never blocks a turn that may think: what
+    # stands in its place is a brief pass, not "off" (which would make a
+    # question the owner asked for - and, on "Always", every question - do
+    # nothing at all) and not "deep" (which would spend far more room than was
+    # asked for).
+    levels = _saved_levels()
+
+    def set_for(key: str) -> bool:
+        return key in levels and levels[key] in LEVELS
+
+    if role != model and set_for(model):
+        lvl, chosen = get_level(model), True
+    elif set_for(role):
+        lvl, chosen = get_level(role), True
+    else:
+        lvl, chosen = QUICK, False
+
+    if lvl == OFF and chosen:
+        # The owner set this model to answer directly. Never overridden - not
+        # even by a question that asked for thinking.
+        return {"reasoning_effort": "none"}
+
+    # WHEN. The one place the per-question flag is read.
+    if not per_turn and get_when() != ALWAYS:
+        return {"reasoning_effort": "none"}
 
     if lvl == AUTO:
         lvl = decide_auto(question)
 
     return REASONING_MAP.get(lvl, {"reasoning_effort": "none"})
+
+
+def _why_for(level: str) -> str:
+    """One row's plain words. A level the owner picked that will not be used
+    yet says so, rather than promising thinking the next answer will not do:
+    the two lines below are the only place this is worked out, so the row and
+    the setting can never disagree."""
+    why = WHY.get(level, WHY[OFF])
+    if level != OFF and get_when() != ALWAYS:
+        return (why + " Jarvis will think like this only on the questions you "
+                       "ask him to think about.")
+    return why
 
 
 def running_models(ollama_url: Optional[str] = None) -> List[dict]:
@@ -277,7 +488,7 @@ def running_models(ollama_url: Optional[str] = None) -> List[dict]:
         "model": everyday_model,
         "level": everyday_lvl,
         "supported": list(everyday_supp),
-        "why": WHY.get(everyday_lvl, WHY[OFF]),
+        "why": _why_for(everyday_lvl),
     })
 
     # 2. Second card lane
@@ -319,11 +530,25 @@ def running_models(ollama_url: Optional[str] = None) -> List[dict]:
 
 
 def status(ollama_url: Optional[str] = None) -> dict:
-    """GET /api/thinking: returns status and running models list."""
+    """GET /api/thinking: returns status and running models list.
+
+    `when` is WHEN thinking happens at all (the owner's two-choice setting,
+    2026-10-11) and `when_choices` the two choices with their plain words, so
+    both apps can draw the same row. A PC whose backend is older than this
+    answers neither field, and the apps show the per-model rows only."""
+    when = get_when()
     return {
         "title": TITLE,
         "detail": DETAIL,
         "notice": NOTICE,
+        "when": when,
+        "when_title": WHEN_TITLE,
+        "when_detail": WHEN_DETAIL,
+        "when_choices": [
+            {"id": mode, "label": WHEN_LABELS[mode], "why": WHEN_WHY[mode],
+             "selected": mode == when}
+            for mode in WHEN_MODES
+        ],
         "models": running_models(ollama_url),
     }
 
@@ -333,11 +558,18 @@ def handle_get(ollama_url: Optional[str] = None) -> Tuple[int, dict]:
 
 
 def handle_set(body: Any, ollama_url: Optional[str] = None) -> Tuple[int, dict]:
-    """POST /api/thinking: {"role": "everyday"|"second"|"third", "level": "off"|"quick"|"deep"|"auto"}
-    or {"model": "...", "level": "..."}.
-    """
+    """POST /api/thinking:
+      {"when": "when_asked"|"always"} - WHEN Jarvis thinks (the owner's
+        two-choice setting), or
+      {"role": "everyday"|"second"|"third", "level": "off"|"quick"|"deep"|"auto"}
+      or {"model": "...", "level": "..."} - how hard one model may think.
+    One of the two per request. A body carrying `when` never changes a level,
+    and one carrying a level never changes `when`."""
     if not isinstance(body, dict):
-        return 400, {"error": "Expected JSON object with 'level' and 'role' or 'model'."}
+        return 400, {"error": "Expected JSON object with 'level' and 'role' or 'model', or with 'when'."}
+
+    if "when" in body:
+        return set_when(body.get("when"))
 
     level = body.get("level")
     if not level:

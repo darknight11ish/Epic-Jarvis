@@ -86,6 +86,11 @@ class TestThinkingUnits(unittest.TestCase):
         JT.set_level("everyday", "deep")
         self.assertEqual(JT.reasoning_parameters("smart-model", spoken=True), {"reasoning_effort": "none"})
 
+        # A level is WHEN-gated (2026-10-11): on the default - "only when I
+        # ask" - it is used on the questions the owner asks for thinking about
+        # and nowhere else, so these checks put the model on "always" first.
+        JT.set_when(JT.ALWAYS)
+
         # Text answers follow configured level
         JT.set_level("everyday", "off")
         self.assertEqual(JT.reasoning_parameters("smart-model", spoken=False), {"reasoning_effort": "none"})
@@ -103,6 +108,59 @@ class TestThinkingUnits(unittest.TestCase):
 
         params_math = JT.reasoning_parameters("smart-model", question="solve the complex integral proof", spoken=False)
         self.assertEqual(params_math, {"reasoning_effort": "high"})
+
+    def test_when_thinking_happens(self):
+        """"Only when I ask" and "Always" (2026-10-11), and the safe default."""
+        JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "smart-model")] = ["thinking"]
+
+        # Nothing chosen: answering directly, and an asked-for question thinks
+        # briefly rather than not at all.
+        self.assertEqual(JT.get_when(), JT.WHEN_ASKED)
+        self.assertEqual(JT.reasoning_parameters("smart-model"), {"reasoning_effort": "none"})
+        self.assertEqual(JT.reasoning_parameters("smart-model", per_turn=True),
+                         {"reasoning_effort": "low"})
+
+        # Always: an ordinary question thinks at the level that is set.
+        JT.set_level("everyday", "deep")
+        code, _out = JT.set_when(JT.ALWAYS)
+        self.assertEqual(code, 200)
+        self.assertEqual(JT.reasoning_parameters("smart-model"), {"reasoning_effort": "high"})
+
+        # Back to only-when-asked: the level is kept, and used when asked for.
+        code, _out = JT.set_when(JT.WHEN_ASKED)
+        self.assertEqual(code, 200)
+        self.assertEqual(JT.reasoning_parameters("smart-model"), {"reasoning_effort": "none"})
+        self.assertEqual(JT.reasoning_parameters("smart-model", per_turn=True),
+                         {"reasoning_effort": "high"})
+
+        # A bad choice is refused in plain words and changes nothing.
+        code, out = JT.set_when("sometimes")
+        self.assertEqual(code, 400)
+        self.assertIn("must be one of", out["error"])
+        self.assertEqual(JT.get_when(), JT.WHEN_ASKED)
+
+        # A model the owner set to answer directly is never overridden - not
+        # even by a question that asked for thinking.
+        JT.set_level("everyday", "off")
+        self.assertEqual(JT.reasoning_parameters("smart-model", per_turn=True),
+                         {"reasoning_effort": "none"})
+
+    def test_a_damaged_setting_cannot_make_an_answer_blank(self):
+        """A missing, empty or unreadable thinking.json reads as "only when I
+        ask" - never as "always", which is the fault this setting exists to
+        prevent (2026-10-11)."""
+        self.assertEqual(JT.get_when(), JT.WHEN_ASKED)
+        for damaged in ("", "{not json", '["a list, not an object"]',
+                        '{"when": "sometimes"}'):
+            JT.settings_path().write_text(damaged, encoding="utf-8")
+            self.assertEqual(JT.get_when(), JT.WHEN_ASKED, repr(damaged))
+            self.assertEqual(JT.get_level("everyday"), JT.OFF, repr(damaged))
+
+    def test_asked_flag_is_the_apps_own_true_and_nothing_else(self):
+        self.assertTrue(JT.asked_for_this_turn({"think": True}))
+        for other in ({}, {"think": False}, {"think": "true"}, {"think": 1},
+                      {"think": "yes"}, None, [], "think", True):
+            self.assertFalse(JT.asked_for_this_turn(other), repr(other))
 
     def test_handle_get_and_set(self):
         code, data = JT.handle_get()
@@ -177,6 +235,46 @@ class TestThinkingQuickCommands(unittest.TestCase):
         self.assertIn("thinking deeply", res.reply.lower())
         self.assertEqual(JT.get_level("everyday"), "deep")
 
+    def test_quick_words_for_when_thinking_happens(self):
+        """"Always think" / "only think when I ask" (2026-10-11) - and the
+        level commands saying which of the two they are on, so "from now on"
+        never promises something the next answer will not do."""
+        # A level set while on the default: used when asked for, and said so.
+        JT.set_level("everyday", "quick")
+        turn = _own_words("think harder")
+        res = JQ.answer_turn(turn)
+        self.assertIsNotNone(res)
+        self.assertIn("thinking deeply", res.reply.lower())
+        self.assertIn("questions you ask", res.reply)
+        self.assertIn("always think", res.reply)
+        self.assertEqual(JT.get_when(), JT.WHEN_ASKED)
+        self.assertEqual(JT.get_level("everyday"), "deep")
+
+        # The status line says the same thing.
+        res = JQ.answer_turn(_own_words("thinking status"))
+        self.assertIsNotNone(res)
+        self.assertIn("only on the questions you ask", res.reply)
+
+        # "always think": every answer may think first, said plainly.
+        res = JQ.answer_turn(_own_words("always think"))
+        self.assertIsNotNone(res)
+        self.assertIn("every answer", res.reply.lower())
+        self.assertIn("conversation room", res.reply)
+        self.assertEqual(JT.get_when(), JT.ALWAYS)
+        # On "always" the level command no longer warns.
+        res = JQ.answer_turn(_own_words("think harder"))
+        self.assertIsNotNone(res)
+        self.assertNotIn("always think", res.reply)
+
+        # ...and back, in the owner's own words for it.
+        res = JQ.answer_turn(_own_words("only think when I ask"))
+        self.assertIsNotNone(res)
+        self.assertIn("only on the questions you ask", res.reply)
+        self.assertEqual(JT.get_when(), JT.WHEN_ASKED)
+
+        # A sentence that is none of these is not a command at all.
+        self.assertFalse(JQ.is_command("think about whether I should buy a van"))
+
 
 class TestThinkingAgentIntegration(unittest.TestCase):
     def setUp(self):
@@ -190,8 +288,10 @@ class TestThinkingAgentIntegration(unittest.TestCase):
         JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "test-think-model")] = ["thinking"]
         JT._CAP_OVERRIDE[("http://127.0.0.1:11434", "test-no-think-model")] = []
 
-        # Model with thinking, level deep
+        # Model with thinking, level deep, on "always" - so this is the level
+        # talking and not the WHEN setting (2026-10-11).
         JT.set_level("everyday", "deep")
+        JT.set_when(JT.ALWAYS)
         body = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
         self.assertEqual(body.get("reasoning_effort"), "high")
 
@@ -202,6 +302,14 @@ class TestThinkingAgentIntegration(unittest.TestCase):
         # Model without thinking gets reasoning_effort none (thinking off)
         body_no_think = jarvis_agent.chat_body("test-no-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
         self.assertEqual(body_no_think.get("reasoning_effort"), "none")
+
+        # The owner's own question, on the default "only when I ask": the flag
+        # chat_body is handed is what thinking follows.
+        JT.set_when(JT.WHEN_ASKED)
+        ordinary = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434")
+        self.assertEqual(ordinary.get("reasoning_effort"), "none")
+        asked = jarvis_agent.chat_body("test-think-model", [{"role": "user", "content": "hello"}], {}, spoken=False, ollama_url="http://127.0.0.1:11434", per_turn=True)
+        self.assertEqual(asked.get("reasoning_effort"), "high")
 
 
 if __name__ == "__main__":

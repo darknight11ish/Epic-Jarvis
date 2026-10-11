@@ -1,0 +1,8 @@
+{
+  "name": "picture-card",
+  "summary": "\"which card draws the pictures, and what the chat does about it\".",
+  "module": "jarvis_picture_card",
+  "install": "handler",
+  "replaces_patch": "picture-card.patch",
+  "stack_order": 136
+}
