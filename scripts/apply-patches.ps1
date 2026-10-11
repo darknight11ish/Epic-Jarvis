@@ -1343,6 +1343,27 @@ $PATCHES = @(
     # object inside the prompt). Card prose is not a target. ONE hunk pair,
     # in jarvis_gate.py alone; see backend/README.md's own section.
     'gate-touches.patch'
+    # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
+    # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
+    # on the OWNER's own lines just before the main socket is built, NOT inside the chain of install
+    # blocks above it. That chain ends at the owner's `# Before the main socket` line and every block in
+    # it anchors on the block the patch before wrote, so a block inserted in the middle of the chain
+    # leaves the next patch's hunk without its context. This one was first written between progress.patch
+    # and topics.patch, on progress.patch's block with topics.patch's OWN banner as its trailing context -
+    # a patch that runs AFTER it - so it applied to the finished file and not to the file as it stands at
+    # its own turn (measured 2026-10-11: the stack's walk had to invent its pre-image, 51 hunks against a
+    # pin of 50, and this script's own strip-and-re-apply rehearsal would have refused the whole run with
+    # "will not apply"). It sits immediately before plugin-loader.patch, which MUST be last of all (see
+    # backend/test_gate_touches.py), as well as after devices.patch.
+    # The three ways of running a picture-maker
+    # beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card
+    # with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched), each
+    # its own switch, ALL OFF until the owner turns one on. It draws nothing (asking for a picture is
+    # jarvis_pictures.py's route, section 123), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
+    # that, reading these settings) and needs no gate line and no card: it only chooses a card for a local
+    # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
+    # or on any error, the banner says so and the routes are simply not there.
+    'picture-card.patch'
     'plugin-loader.patch'
 )
 
@@ -1591,6 +1612,8 @@ $SHIPPED = @(
     'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
     # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Which card draws the pictures" (2026-10-10, picture-card.patch) ---
+    'jarvis_picture_card.py'     # picture-card.patch: the three ways of running a picture-maker beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched) - each its own switch, ALL OFF until the owner turns one on; it draws nothing, starts nothing and is not a model tool; the card is pinned by UUID from nvidia-smi and never by index
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)

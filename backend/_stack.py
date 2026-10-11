@@ -172,6 +172,24 @@ RATCHET = {
     # 50 with this one. A ratchet: it may still only go down, and the pin has
     # to move with a LOWERING too - test_retrieve_count.py asserts this number
     # EQUALS what the walk measures.
+    # 2026-10-11, and this pin did NOT move: `picture-card.patch`'s one hunk made
+    # the walk read 51, and it was DRIFT rather than an honest pre-image, so the
+    # patch was re-anchored instead. Its hunk sat between `progress.patch` and
+    # `topics.patch`, on `progress.patch`'s block, with `topics.patch`'s own banner
+    # as its trailing context - and `topics.patch` runs AFTER it in `order()`. The
+    # finished file holds both blocks, so the hunk applied to the after-image; the
+    # file as it stands at that patch's own turn does not, which is the state
+    # `apply-patches.ps1` rebuilds by stripping its rehearsal copy and putting the
+    # whole list back on in order. There it would have been one more "will not
+    # apply", refusing the run with NOTHING HAS BEEN CHANGED. Measured, not argued:
+    # `materialised("jarvis_hud.py")` reads 51 with the patch in its old place and
+    # 50 with it moved to just BEFORE `plugin-loader.patch` - the one patch that
+    # must stay last of all (see `backend/test_gate_touches.py`) - anchored on the
+    # OWNER's own lines under `_loopback_companion`, which no patch writes, instead
+    # of on an install block; `by_patch` names `picture-card.patch` in the first
+    # case and not in the second, and `backend/test_picture_card.py` now checks
+    # exactly that, so the drift cannot come back silently. The pin stays 50. A
+    # ratchet: it may still only go down.
     "jarvis_hud.py": 50,
     #: 23, raised from 22 on 2026-10-06. PR #80's `gate-risk-rows.patch` is the
     #: one new patch this walk adds for this file, and its single hunk's context
