@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Briefing
+import com.jarvis.client.net.MenuView
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -57,6 +58,14 @@ import kotlinx.coroutines.launch
  * `schedule` event about a briefing ([JarvisRuntime.briefingTick]). Nothing
  * of it is kept on the phone. "Hide memory lists and chat history" hides its
  * lines; the counts stay, and Show brings them back.
+ *
+ * SETTINGS AND THE BRIEFING ITSELF ARE TWO MENUS. The plate holds both, and
+ * "Show or hide menus" can hide either on its own: `brain.work.briefing`
+ * hides the whole plate (BrainScreen.kt), and `settings.briefing-settings` -
+ * the desktop's own Settings card for the same feature - hides only the
+ * "When it arrives" half below. That is why [menus] is a parameter here at
+ * all: without it the two apps would need two ids for one feature, which
+ * `backend/jarvis_menus.py` forbids.
  */
 @Composable
 internal fun BriefingSection(
@@ -64,6 +73,14 @@ internal fun BriefingSection(
     privateHidden: Boolean,
     showPrivateBusy: Boolean,
     onShowPrivate: () -> Unit,
+    /**
+     * "Show or hide menus" (backend/jarvis_menus.py `settings.briefing-settings`).
+     * The card is one feature on both apps - the desktop has it as its own
+     * Settings card, and on the phone it is the "When it arrives" half of this
+     * plate - so it is hidden through this check rather than by a second,
+     * phone-only mechanism. Default: visible (a caller with no menu state).
+     */
+    menus: MenuView = MenuView(),
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -220,125 +237,131 @@ internal fun BriefingSection(
                     }
 
                     // ---- When it arrives (the desktop's Settings) ----
-                    Gap(14)
-                    Text(Briefing.SETUP_TITLE, style = MaterialTheme.typography.labelMedium,
-                        color = chrome.textMid)
-                    Text(Briefing.SETUP_DETAIL, style = MaterialTheme.typography.labelSmall,
-                        color = chrome.textLo)
-                    if (shown.setups.isEmpty()) {
-                        Text(Briefing.SETUP_NONE, style = MaterialTheme.typography.bodySmall,
+                    // One feature, two layouts: this is the phone's form of the
+                    // desktop's "Morning briefing settings" card, so
+                    // `settings.briefing-settings` hides exactly this half and
+                    // leaves the briefing itself (above) alone.
+                    if (menus.shows("settings.briefing-settings")) {
+                        Gap(14)
+                        Text(Briefing.SETUP_TITLE, style = MaterialTheme.typography.labelMedium,
                             color = chrome.textMid)
-                    }
-                    shown.setups.forEach { job ->
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(Briefing.setupLine(job), style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textHi, modifier = Modifier.weight(1f))
-                            Quiet(
-                                Briefing.STOP_LABEL,
-                                color = chrome.badInk,
-                                enabled = canAct && !busy,
-                                onClick = {
-                                    busy = true
-                                    said = null
+                        Text(Briefing.SETUP_DETAIL, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textLo)
+                        if (shown.setups.isEmpty()) {
+                            Text(Briefing.SETUP_NONE, style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid)
+                        }
+                        shown.setups.forEach { job ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(Briefing.setupLine(job), style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textHi, modifier = Modifier.weight(1f))
+                                Quiet(
+                                    Briefing.STOP_LABEL,
+                                    color = chrome.badInk,
+                                    enabled = canAct && !busy,
+                                    onClick = {
+                                        busy = true
+                                        said = null
+                                        scope.launch {
+                                            try {
+                                                said = JarvisRuntime.stopBriefing(job.id).second
+                                            } finally {
+                                                busy = false
+                                                reads += 1
+                                            }
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        Gap(8)
+                        // One per line: "Weekdays (Monday to Friday)" does not fit
+                        // beside the others on a narrow phone.
+                        Column(Modifier.fillMaxWidth()) {
+                            Briefing.EVERY.forEach { (id, label) ->
+                                Quiet(if (every == id) "$label (chosen)" else label,
+                                    color = if (every == id) chrome.okInk else chrome.textMid,
+                                    onClick = { every = id })
+                            }
+                        }
+                        if (every == "week") {
+                            Column(Modifier.fillMaxWidth()) {
+                                Briefing.DAY_NAMES.chunked(2).forEachIndexed { row, names ->
+                                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        names.forEachIndexed { i, name ->
+                                            val day = row * 2 + i
+                                            val on = day in days
+                                            // "(on)" as well as the colour: not by colour alone.
+                                            Quiet(if (on) "$name (on)" else name,
+                                                color = if (on) chrome.okInk else chrome.textLo,
+                                                onClick = { days = if (on) days - day else days + day })
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        TextInput(
+                            value = at,
+                            onValueChange = { at = it.take(5) },
+                            label = "Time (24-hour, like 07:00 or 0700)",
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        )
+                        Quiet(
+                            if (busy) "Asking…" else Briefing.SET_LABEL,
+                            enabled = canAct && !busy,
+                            onClick = {
+                                busy = true
+                                said = null
+                                scope.launch {
+                                    try {
+                                        said = JarvisRuntime.setBriefing(every, at, days).second
+                                    } finally {
+                                        busy = false
+                                        reads += 1
+                                    }
+                                }
+                            },
+                        )
+                        Gap(10)
+                        Text(Briefing.READS_TITLE, style = MaterialTheme.typography.labelMedium,
+                            color = chrome.textMid)
+                        shown.sources.forEach {
+                            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                        }
+                        // "Show who new emails are from": OFF at once, never held;
+                        // ON is ONE approval card on the PC, held on a stale link.
+                        val senders = Briefing.sendersView(shown.senders, canAct)
+                        if (senders.show) {
+                            Gap(6)
+                            SwitchRow(
+                                title = Briefing.SENDERS_LABEL,
+                                detail = Briefing.SENDERS_DETAIL,
+                                checked = senders.checked,
+                                enabled = !sendersBusy && senders.canChange,
+                                onChange = { want ->
+                                    sendersBusy = true
+                                    sendersSaid = null
                                     scope.launch {
                                         try {
-                                            said = JarvisRuntime.stopBriefing(job.id).second
+                                            sendersSaid = JarvisRuntime.setBriefingSenders(want)
                                         } finally {
-                                            busy = false
+                                            sendersBusy = false
                                             reads += 1
                                         }
                                     }
                                 },
                             )
                         }
-                    }
-                    Gap(8)
-                    // One per line: "Weekdays (Monday to Friday)" does not fit
-                    // beside the others on a narrow phone.
-                    Column(Modifier.fillMaxWidth()) {
-                        Briefing.EVERY.forEach { (id, label) ->
-                            Quiet(if (every == id) "$label (chosen)" else label,
-                                color = if (every == id) chrome.okInk else chrome.textMid,
-                                onClick = { every = id })
+                        senders.lines.forEach {
+                            Text(it, style = MaterialTheme.typography.labelSmall,
+                                color = if (it == Briefing.SENDERS_WAITING) chrome.warnInk else chrome.textMid)
                         }
-                    }
-                    if (every == "week") {
-                        Column(Modifier.fillMaxWidth()) {
-                            Briefing.DAY_NAMES.chunked(2).forEachIndexed { row, names ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                                    names.forEachIndexed { i, name ->
-                                        val day = row * 2 + i
-                                        val on = day in days
-                                        // "(on)" as well as the colour: not by colour alone.
-                                        Quiet(if (on) "$name (on)" else name,
-                                            color = if (on) chrome.okInk else chrome.textLo,
-                                            onClick = { days = if (on) days - day else days + day })
-                                    }
-                                }
-                            }
+                        (if (sendersBusy) "Asking your PC…" else sendersSaid)?.let {
+                            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                                modifier = Modifier.liveStatus())
                         }
+                        Text(Briefing.SPOKEN, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                     }
-                    TextInput(
-                        value = at,
-                        onValueChange = { at = it.take(5) },
-                        label = "Time (24-hour, like 07:00 or 0700)",
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    )
-                    Quiet(
-                        if (busy) "Asking…" else Briefing.SET_LABEL,
-                        enabled = canAct && !busy,
-                        onClick = {
-                            busy = true
-                            said = null
-                            scope.launch {
-                                try {
-                                    said = JarvisRuntime.setBriefing(every, at, days).second
-                                } finally {
-                                    busy = false
-                                    reads += 1
-                                }
-                            }
-                        },
-                    )
-                    Gap(10)
-                    Text(Briefing.READS_TITLE, style = MaterialTheme.typography.labelMedium,
-                        color = chrome.textMid)
-                    shown.sources.forEach {
-                        Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-                    }
-                    // "Show who new emails are from": OFF at once, never held;
-                    // ON is ONE approval card on the PC, held on a stale link.
-                    val senders = Briefing.sendersView(shown.senders, canAct)
-                    if (senders.show) {
-                        Gap(6)
-                        SwitchRow(
-                            title = Briefing.SENDERS_LABEL,
-                            detail = Briefing.SENDERS_DETAIL,
-                            checked = senders.checked,
-                            enabled = !sendersBusy && senders.canChange,
-                            onChange = { want ->
-                                sendersBusy = true
-                                sendersSaid = null
-                                scope.launch {
-                                    try {
-                                        sendersSaid = JarvisRuntime.setBriefingSenders(want)
-                                    } finally {
-                                        sendersBusy = false
-                                        reads += 1
-                                    }
-                                }
-                            },
-                        )
-                    }
-                    senders.lines.forEach {
-                        Text(it, style = MaterialTheme.typography.labelSmall,
-                            color = if (it == Briefing.SENDERS_WAITING) chrome.warnInk else chrome.textMid)
-                    }
-                    (if (sendersBusy) "Asking your PC…" else sendersSaid)?.let {
-                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
-                            modifier = Modifier.liveStatus())
-                    }
-                    Text(Briefing.SPOKEN, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                 }
             }
             said?.let {

@@ -24,7 +24,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from _where import BACKEND, REPO, missing, explain  # noqa: E402
+from _where import BACKEND, REPO, missing, explain, require_rebuilt  # noqa: E402
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-import-"))
 fw = types.ModuleType("jarvis_framework")
@@ -34,17 +34,57 @@ fw.load_framework = lambda: {}
 fw.audit_log = lambda *a, **k: None
 sys.modules.setdefault("jarvis_framework", fw)
 
+# jarvis_memory is one of the ten modules this repository ships WHOLE
+# (`backend/rebuilt/`), and _where.py is what puts them on sys.path. Without
+# that line this import died as `ModuleNotFoundError: No module named
+# 'jarvis_memory'` before one check could run - which is what the guard below
+# says in one line.
+require_rebuilt("jarvis_memory")
 import jarvis_memory as M
-import jarvis_extract as X
+
+# jarvis_extract.py needs a different answer. It is one of the five files only
+# the owner's PC has, because the patcher edits it in place rather than copying
+# it (scripts/apply-patches.ps1), so a clone does not hold it and run_suites.py
+# skips this whole suite by name for that reason.
+#
+# UNLIKE test_decide_once.py, not every check here drives it: the parser checks
+# read import_history.py alone, and this repository does ship that. So the
+# checks that need jarvis_extract skip - with the reason - and the rest run.
+# Before this, the module-level import below was one traceback for the whole
+# file (`ModuleNotFoundError: No module named 'jarvis_extract'`), and six
+# checks that could have run never got the chance.
+try:
+    import jarvis_extract as X
+except ModuleNotFoundError:                              # pragma: no cover
+    X = None
 import import_history as I
 
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this run cannot make, printed as `skip` and counted on its own -
+    never as a pass. `run_suites.py` counts these lines, and the summary below
+    prints the number, so a skip can never be read as a check that ran."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
+
+
+def have_extract():
+    """True when this check can run; a printed skip and False when
+    jarvis_extract.py is not here."""
+    if X is not None:
+        return True
+    skip(f"this check drives jarvis_extract.py, which is not in {BACKEND} - "
+         f"only the owner's PC has it. {explain()}")
+    return False
 
 
 def fresh():
@@ -152,6 +192,8 @@ def t_an_unrecognised_shape_reports_zero_rather_than_raising():
 # --------------------------------------------------------------------------
 
 def t_importing_only_ever_proposes_never_writes_a_fact():
+    if not have_extract():
+        return
     s = fresh()
     calls = {"n": 0}
 
@@ -169,6 +211,8 @@ def t_importing_only_ever_proposes_never_writes_a_fact():
 
 
 def t_proposals_are_tagged_with_where_they_came_from():
+    if not have_extract():
+        return
     s = fresh()
     X._local_llm = _stub_llm()
     I.run([("claude", _two_conversation_export())])
@@ -178,6 +222,8 @@ def t_proposals_are_tagged_with_where_they_came_from():
 
 
 def t_a_full_queue_stops_the_run_rather_than_dropping_silently():
+    if not have_extract():
+        return
     s = fresh()
     X._local_llm = _stub_llm()
     keep = X._cfg
@@ -198,6 +244,8 @@ def t_a_full_queue_stops_the_run_rather_than_dropping_silently():
 
 
 def t_resuming_does_not_re_offer_an_already_seen_conversation():
+    if not have_extract():
+        return
     s = fresh()
     calls = {"n": 0}
 
@@ -217,6 +265,8 @@ def t_resuming_does_not_re_offer_an_already_seen_conversation():
 
 
 def t_resuming_after_a_pause_only_offers_what_was_not_already_offered():
+    if not have_extract():
+        return
     s = fresh()
     calls = {"n": 0}
 
@@ -246,6 +296,8 @@ def t_resuming_after_a_pause_only_offers_what_was_not_already_offered():
 def t_a_chatgpt_export_shows_the_model_only_the_owners_words():
     """2026-09-28: ChatGPT's export, through the REAL propose(). The model's
     prompt holds what the owner wrote and never what the assistant said."""
+    if not have_extract():
+        return
     s = fresh()
     prompts = []
 
@@ -278,7 +330,16 @@ def t_a_chatgpt_export_shows_the_model_only_the_owners_words():
 
 
 def t_a_bad_progress_file_degrades_to_starting_over_rather_than_crashing():
-    fresh()
+    # NOT fresh(). That also builds a MemoryStore, whose meaning model is
+    # fastembed's - and the `fw.CONFIG_DIR = _TMP` stub at the top of this file
+    # moves fastembed's cache into a brand-new temp folder, so the model is
+    # fetched from HuggingFace again on every run (measured 2026-10-10: 5 files,
+    # 38 s, on every run). This check drives `_load_progress()` alone and needs
+    # only the progress path, so the store - and the download - is left out. The
+    # checks that DO need a store are the ones that skip without
+    # jarvis_extract.py; on a machine that has it they still pay that cost.
+    I.PROGRESS_FILE = (Path(tempfile.mkdtemp(prefix="jarvis-import-prog-"))
+                       / "progress.json")
     I.PROGRESS_FILE.parent.mkdir(parents=True, exist_ok=True)
     I.PROGRESS_FILE.write_text("{not json", encoding="utf-8")
     try:
@@ -309,7 +370,7 @@ def main():
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     return 1 if FAILED else 0

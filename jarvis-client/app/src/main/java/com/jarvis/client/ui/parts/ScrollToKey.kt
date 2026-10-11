@@ -26,16 +26,35 @@ private const val MAX_STEPS = 60
  * owner has hidden - just ends at the bottom rather than settling on whatever
  * happens to sit at a remembered position.
  *
+ * [onOpen] is for a screen whose items are inside something that can be shut
+ * (Brain's headings, BrainScreen.kt and BrainSections.kt): an item inside a
+ * shut heading is not in the list at all, so the walk would never find it. It
+ * is called before the walk, with the key being looked for, and the caller
+ * opens whatever holds that key. A screen with nothing to open leaves it out.
+ *
  * [tick] is for a caller that can ask for the SAME key twice - Settings' jump
  * list, where tapping "Voice" again after scrolling away must scroll again.
  * The effect keys on [key] and [tick] together, so a new tick re-runs it while
  * [key] stays the plain `item(key = ...)` it looks up.
  */
 @Composable
-fun ScrollToKeyOnce(state: LazyListState, key: String?, tick: Int = 0, onDone: () -> Unit) {
+fun ScrollToKeyOnce(
+    state: LazyListState,
+    key: String?,
+    tick: Int = 0,
+    onOpen: (String) -> Unit = {},
+    onDone: () -> Unit,
+) {
     val done by rememberUpdatedState(onDone)
+    val opened by rememberUpdatedState(onOpen)
     LaunchedEffect(key, tick) {
         val target = key ?: return@LaunchedEffect
+        // An item already on screen needs nothing opened: if the walk can see
+        // it, opening its holder would only move the list under the owner's
+        // finger. This is the common case for a jump inside a heading that is
+        // already open.
+        val visible = state.layoutInfo.visibleItemsInfo.any { it.key == target }
+        if (!visible) opened(target)
         scrollToKey(state, target)
         done()
     }

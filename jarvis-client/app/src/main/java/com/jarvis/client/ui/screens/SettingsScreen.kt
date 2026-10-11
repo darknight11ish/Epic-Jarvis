@@ -428,7 +428,14 @@ fun SettingsScreen(
                                 color = chrome.textMid,
                             )
                             val voiceCheck = onVoiceCheck?.takeIf { menus.shows("entry.voice-check") }
-                            val voices = onVoices?.takeIf { menus.shows("entry.voices") }
+                            // "Jarvis's voice" (the parity audit of 2026-10-10):
+                            // ONE id for ONE feature. This row used to be
+                            // `entry.voices` while the desktop's card for the
+                            // same feature was `settings.voices` - two ids for
+                            // one feature, against backend/jarvis_menus.py's own
+                            // rule. The duplicate id is gone; this row now hides
+                            // under the one id both apps use.
+                            val voices = onVoices?.takeIf { menus.shows("settings.voices") }
                             val any = onTrainVoice != null || voiceCheck != null || voices != null
                             if (any) Gap(10)
                             onTrainVoice?.let {

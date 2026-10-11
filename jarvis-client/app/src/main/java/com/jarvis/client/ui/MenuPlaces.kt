@@ -16,6 +16,20 @@ object MenuPlaces {
 
     /** SettingsScreen.kt `item(key = ...)` -> menu id. */
     val SETTINGS: Map<String, String> = mapOf(
+        // The Voice item (SettingsScreen.kt, `item(key = "voice")`) holds TWO
+        // hideable menus, and this map holds ONE id per item key. This line is
+        // the item itself - the Voice section, `settings.voice`. The button
+        // drawn INSIDE it, "Jarvis's voice" (`settings.voices`, read at
+        // SettingsScreen.kt's `menus.shows("settings.voices")`), is in INSIDE
+        // below, which is the place the phone-only `entry.voices` used to have
+        // - now under the one id both apps use.
+        //
+        // Do NOT add a second `"voice" to ...` line here. `mapOf` takes a
+        // duplicate key silently and keeps the LAST one, so the branch's
+        // `"voice" to "settings.voices"` (2026-10-10) quietly deleted
+        // `settings.voice` from this map and MenuVisibilityTest failed with
+        // "no place in MenuPlaces for: [settings.voice, brain.work.briefing]".
+        // A test below now fails on the duplicate line itself.
         "voice" to "settings.voice",
         "security" to "settings.security",
         "menu-visibility" to "settings.menu-visibility",
@@ -82,6 +96,13 @@ object MenuPlaces {
         "focus" to "brain.work.focus",
         "chatbot" to "brain.work.chatbot",
         "support" to "brain.work.support",
+        // The Morning briefing plate is `brain.work.briefing` - BrainScreen.kt
+        // guards this item with `menus.shows("brain.work.briefing")` and wraps
+        // it in `MenuFrame(menus, "brain.work.briefing")`. The plate's
+        // "When it arrives" half is a SECOND menu inside it,
+        // `settings.briefing-settings`, and it is in INSIDE below. Pointing
+        // this key at that half (as 2026-10-10 did) left the plate's own id
+        // with no place at all.
         "briefing" to "brain.work.briefing",
         "progress" to "brain.projects.progress",
         "projects" to "brain.tab.projects",
@@ -125,7 +146,47 @@ object MenuPlaces {
      */
     val INSIDE: Map<String, String> = mapOf(
         "entry.appearance" to "HomeScreen: the Appearance button in the home row (six buttons since Settings joined it, 2026-10-08)",
-        "entry.voices" to "SettingsScreen: the Jarvis's voice button in the Voice item",
+        // "entry.voices" was here until 2026-10-10. It was one of TWO ids for
+        // the same feature - this row and the desktop's own `settings.voices`
+        // card - against backend/jarvis_menus.py's rule that one id means one
+        // feature. The duplicate id is gone and the row KEEPS ITS PLACE HERE,
+        // under the one id both apps use. It belongs in INSIDE and not in
+        // SETTINGS: it is a button drawn inside the Voice item, so it has no
+        // `item(key = ...)` of its own, and being in INSIDE is also what
+        // exempts it from the MenuFrame rule (no screen wraps a button in one).
+        "settings.voices" to "SettingsScreen: the Jarvis's voice button in the Voice item",
+        // `settings.briefing-settings` (the parity audit of 2026-10-10): the
+        // BOTH half of the morning briefing. The plate is `brain.work.briefing`
+        // (BrainScreen.kt, item key "briefing"); this id hides only the "When
+        // it arrives" block inside that plate (BriefingPlate.kt), which is why
+        // it lives here rather than under the plate's own item key.
+        "settings.briefing-settings" to "BriefingPlate: the When it arrives block inside the Morning briefing plate",
+        // The other six of the eight ids the parity audit of 2026-10-10 turned
+        // from desktop-only into features both apps have (`settings.voices` and
+        // `settings.briefing-settings` are the two above). Every one of the
+        // eight really is on the phone - that is what the correction says - and
+        // none of them is drawn under an `item(key = ...)` of its own, so this
+        // is where they belong. They are NOT hideable (`hide = false` in
+        // backend/jarvis_menus.py, each with its own written reason), which is
+        // why no screen reads `menus.shows(...)` for them and why
+        // MenuVisibilityTest never asked for a place.
+        //
+        // `FindAnythingTest` reads this map too, and that is the point: the
+        // phone's "Find anything" box lists what it can take the owner to, and
+        // a menu drawn inside another card has no such place. A new phone menu
+        // that is neither findable nor listed here fails that test by name, so
+        // this map cannot quietly grow.
+        //
+        // Careful with the prose: `tools/check_feature_list.py` scans this file
+        // for quoted menu ids, so a sentence that quotes one id and then
+        // another as if it were a map entry is read as a menu id of its own and
+        // fails that check. Naming ids in backticks, as above, is safe.
+        "settings.animal-options" to "SettingsScreen: the animal options inside the Appearance item, which SETTINGS_ALIAS already opens for it",
+        "settings.updates" to "ReadinessScreen: the Check for new versions row inside the This app card on Platform checks",
+        "settings.about" to "FaqScreen: the About card at the end of Help",
+        "brain.history.tags" to "HistoryScreen: the tag chips and the tag editor, which take that screen over",
+        "brain.work.undo" to "InboxScreen: the undo shelf, above the Activity row",
+        "brain.work.activity" to "InboxScreen: the Activity row, which opens Past approvals",
         "entry.voice-check" to "SettingsScreen: the Voice check button in the Voice item",
         "brain.history.tag-suggestions" to "HistoryTags: the last row, Suggest tags overnight",
         "settings.second-card.study-helper" to "SecondCardPlate: the Study helper switch",

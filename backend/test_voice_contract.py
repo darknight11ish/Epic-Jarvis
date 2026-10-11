@@ -476,6 +476,30 @@ def t_the_desktop_fixture_is_fresh():
     renamed or dropped field fails here rather than as a quiet blank line."""
     sys.path.insert(0, str(REPO / "tools"))
     import gen_voice_status_cases as G
+
+    # THE PREMISE THE THREE CHECKS BELOW STAND ON, named before them.
+    #
+    # A fresh run has to be the SAME RUN ON EVERY MACHINE, or this comparison
+    # compares two PCs. It did not used to be: the producer read whatever
+    # voice-ID model the machine had, so the case that names "with only the
+    # basic voice check installed" got `_model_missing()` answering "" on the
+    # owner's PC - and the producer's own assert tripped before it could
+    # compare anything. Measured 2026-10-10, direct, repo mode: 734 passed, 1
+    # failed (this check), and 737 passed, 0 failed with OPENJARVIS_CONFIG_DIR
+    # pointed at an empty folder; green on a CI runner for the one reason a
+    # runner has no ~/.openjarvis. The producer now BUILDS that state
+    # (tools/gen_voice_status_cases.py: World pins the speaker model's paths
+    # and its class both ways round). If that pin is ever lost, this says so
+    # in one named line instead of the fixture check failing for a state this
+    # run did not choose.
+    with G.World():
+        emb = E._embedder()
+    check("the producer's cases build the no-model state rather than reading this PC's",
+          getattr(emb, "semantic", False) is False,
+          f"jarvis_voice_enroll._embedder() answered {getattr(emb, 'name', emb)!r} "
+          f"inside the producer's own world - so 'with only the basic voice check "
+          f"installed' would be this PC's answer, not the state the case names")
+
     check("voice-status-cases.json equals a fresh run of the producer",
           G.main(["--check"]) == 0, "run python3 tools/gen_voice_status_cases.py")
     # The training and custom-voice screens are tested against their own
