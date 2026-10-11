@@ -23,12 +23,20 @@ this PC's hardware. What this proves:
     context whose size_vram equals its size, and every attempt is kept;
   - the routes answer, unknown routes 404, and this module owns nothing under
     /api/pictures (jarvis_pictures.py's surface);
-  - the module is registered where the repo expects it to be.
+  - the module is registered where the repo expects it to be, and its one hunk
+    applies to the stack AT ITS OWN TURN - not to an invented pre-image of
+    lines a patch that runs after it writes (2026-10-11).
+
+Nothing here reads THIS machine's state: nvidia-smi, the real cards and the
+real model files are all fed canned answers or replaced by this test's own
+files, so the same checks answer the same way on a PC with no GPU and no
+picture model (which is what CI is).
 """
 from __future__ import annotations
 
 import json
 import os
+import shutil
 import socket
 import sys
 import tempfile
@@ -38,6 +46,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from _where import REPO, require_shipped  # noqa: E402
+import _stack  # noqa: E402  (the whole patch stack's jarvis_hud.py, for the anchor check)
 
 require_shipped("jarvis_picture_card.py")
 
@@ -64,6 +73,7 @@ import jarvis_picture_card as PC  # noqa: E402
 
 PASSED = []
 FAILED = []
+SKIPPED = []
 
 
 def check(name: str, ok: bool, detail=None) -> None:
@@ -71,6 +81,13 @@ def check(name: str, ok: bool, detail=None) -> None:
     print(("ok   " if ok else "FAIL ") + name)
     if not ok and detail is not None:
         print(f"       {detail}")
+
+
+def skip(why: str) -> None:
+    """A check this machine cannot run (no git, so the stack walk cannot be
+    built). Printed as `skip`, counted on its own, never as a pass."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 # Two cards, and the 8 GB one listed FIRST: any code that assumed the big card
@@ -164,29 +181,52 @@ def t_fit_is_about_real_memory():
 
 
 def t_a_part_downloaded_file_is_not_ready():
+    """The model's own file is this test's, not the owner's PC's.
+
+    model_files() reads the model's path out of IMAGE_MODELS, so the "big"
+    entry is swapped for one whose path is inside this test's folder - a suite
+    that needed D:\\Jarvis Models\\... to exist answered differently on the
+    owner's PC and in CI (the owner has the 9.2 GB Chroma file; CI never does),
+    which is exactly the kind of check that must not be written.
+    """
     comfy = Path(tempfile.mkdtemp(prefix="fake-comfy-"))
     (comfy / "models" / "text_encoders").mkdir(parents=True)
     (comfy / "models" / "vae").mkdir(parents=True)
-    (comfy / "models" / "text_encoders" / "t5xxl_fp8_e4m3fn_scaled.safetensors").write_bytes(b"0" * 1024)
-    files = PC.model_files("big", str(comfy))
-    check("a 1 KB slice of a 4.8 GB file is NOT ready", files["ready"] is False)
-    check("it is called partial, not present",
-          files["companions"]["t5xxl_fp8_e4m3fn_scaled.safetensors"]["partial"] is True)
-    check("the words say how much is still coming",
-          "still missing" in PC.missing_words("big", str(comfy)))
-    # now make it the full size and add the VAE
-    name = "t5xxl_fp8_e4m3fn_scaled.safetensors"
-    want = dict((c[0], c[2]) for c in PC.IMAGE_MODELS[0]["companions"])[name]
-    with open(comfy / "models" / "text_encoders" / name, "wb") as fh:
-        fh.truncate(want)
-    (comfy / "models" / "vae" / "ae.safetensors").write_bytes(b"0" * 1024)
-    check("still not ready while the VAE is short",
-          PC.model_files("big", str(comfy))["ready"] is False)
+    main = comfy / "Chroma1-HD-int8-convrot-simple.safetensors"
+    real_models = PC.IMAGE_MODELS
+    PC.IMAGE_MODELS = tuple(dict(m, file=str(main), bytes=1024) if m["id"] == "big" else m
+                            for m in real_models)
+    try:
+        check("with no model file at all, the words name the file that is missing",
+              str(main) in PC.missing_words("big", str(comfy))
+              and "is not at" in PC.missing_words("big", str(comfy)),
+              PC.missing_words("big", str(comfy)))
+        with open(main, "wb") as fh:
+            fh.truncate(1024)                       # the model itself, full size
+        (comfy / "models" / "text_encoders" / "t5xxl_fp8_e4m3fn_scaled.safetensors").write_bytes(b"0" * 1024)
+        files = PC.model_files("big", str(comfy))
+        check("a 1 KB slice of a 4.8 GB file is NOT ready", files["ready"] is False)
+        check("it is called partial, not present",
+              files["companions"]["t5xxl_fp8_e4m3fn_scaled.safetensors"]["partial"] is True)
+        check("the words say how much is still coming",
+              "still missing" in PC.missing_words("big", str(comfy)),
+              PC.missing_words("big", str(comfy)))
+        # now make it the full size and add the VAE
+        name = "t5xxl_fp8_e4m3fn_scaled.safetensors"
+        want = dict((c[0], c[2]) for c in PC.IMAGE_MODELS[0]["companions"])[name]
+        with open(comfy / "models" / "text_encoders" / name, "wb") as fh:
+            fh.truncate(want)
+        (comfy / "models" / "vae" / "ae.safetensors").write_bytes(b"0" * 1024)
+        check("still not ready while the VAE is short",
+              PC.model_files("big", str(comfy))["ready"] is False)
+    finally:
+        PC.IMAGE_MODELS = real_models
 
 
 def t_A_unloads_the_chat_and_warms_it_back():
     calls = []
-    real = PC._json
+    real_json = PC._json
+    real_run = PC._run
 
     def fake_json(url, payload=None, timeout=120.0, method="GET"):
         """A lane that really behaves: unloading makes it leave /api/ps, and
@@ -201,6 +241,10 @@ def t_A_unloads_the_chat_and_warms_it_back():
         return {"done": True}
 
     PC._json = fake_json
+    # The two cards are the fixture's, not this machine's: read_cards() shells
+    # out to nvidia-smi, and a PC without one (CI) must answer the same way.
+    PC._run = fake_run
+    PC._CARD_CACHE["cards"] = []
     try:
         values = {"option": "A"}
         before = len(calls)
@@ -218,12 +262,15 @@ def t_A_unloads_the_chat_and_warms_it_back():
               calls[back:])
         check("A's restore says how long it took", "seconds" in rest["steps"][0])
     finally:
-        PC._json = real
+        PC._json = real_json
+        PC._run = real_run
+        PC._CARD_CACHE["cards"] = []
 
 
 def t_B_moves_the_chat_C_touches_nothing():
     calls = []
-    real = PC._json
+    real_json = PC._json
+    real_run = PC._run
 
     def fake_json(url, payload=None, timeout=120.0, method="GET"):
         calls.append((url, payload))
@@ -232,6 +279,8 @@ def t_B_moves_the_chat_C_touches_nothing():
         return {"done": True}
 
     PC._json = fake_json
+    PC._run = fake_run                 # the fixture's cards, never this PC's
+    PC._CARD_CACHE["cards"] = []
     try:
         PC.prepare({"option": "B"})
         check("B loads the chat and never unloads it",
@@ -244,7 +293,9 @@ def t_B_moves_the_chat_C_touches_nothing():
         check("C still reports the card it will use",
               out["card"]["uuid"].startswith("GPU-"), out.get("card"))
     finally:
-        PC._json = real
+        PC._json = real_json
+        PC._run = real_run
+        PC._CARD_CACHE["cards"] = []
 
 
 def t_off_means_off_and_nothing_is_done():
@@ -357,6 +408,40 @@ def t_registered_where_the_repo_expects():
               text.count("import jarvis_picture_card") == 1, text[:200])
 
 
+def t_its_hunk_applies_to_the_stack_at_its_own_turn():
+    """The drift this patch was caught in, on 2026-10-11.
+
+    picture-card.patch's one hunk was anchored on progress.patch's block with
+    topics.patch's OWN banner as its trailing context - and topics.patch runs
+    AFTER it in apply-patches.ps1's list. The finished file holds both, so the
+    patch "applied"; the file as it stands at this patch's own turn does not,
+    so apply-patches.ps1's own strip-and-re-apply rehearsal would have answered
+    "will not apply" and refused the whole run, and _stack.py's walk had to
+    invent the hunk's pre-image (51 materialised against its pin of 50, which
+    is what test_installed_stand_in.py and test_retrieve_count.py failed on).
+
+    A hunk whose context is a LATER patch's lines is the drift that pin exists
+    to catch, so it is fixed rather than pinned: the block now sits on the
+    OWNER's own lines just before the main socket is built, in a patch placed
+    immediately before plugin-loader.patch (the one patch that must stay last of
+    all, which is why an install block cannot simply be appended after it). This
+    check fails if the drift ever comes back.
+    """
+    if not shutil.which("git"):
+        return skip("git is not installed, so the stack walk cannot be built here")
+    stats = _stack.materialised("jarvis_hud.py")
+    if not stats.get("hunks"):
+        return skip("the stack walk could not be built here (no git, or a broken patch)")
+    check("picture-card.patch's hunk applies to the stack at its own turn, "
+          "not to an invented pre-image",
+          "picture-card.patch" not in stats["by_patch"],
+          sorted(stats["by_patch"].items(), key=lambda kv: -kv[1]))
+    check("... and the walk still measures the pin it was measured at "
+          "(jarvis_hud.py, see _stack.RATCHET)",
+          stats["materialised"] == _stack.RATCHET["jarvis_hud.py"],
+          f"measured {stats['materialised']}, pinned {_stack.RATCHET['jarvis_hud.py']}")
+
+
 def main() -> int:
     for name, fn in sorted(globals().items()):
         if name.startswith("t_") and callable(fn):
@@ -368,7 +453,7 @@ def main() -> int:
                 print(f"FAIL {name} raised")
                 traceback.print_exc()
     check("no network was touched", not _NET, _NET)
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     return 1 if FAILED else 0
 
 
