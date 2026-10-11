@@ -505,6 +505,48 @@ pub fn is_quickbar_pinned() -> bool {
 /// Label of the settings window, created on demand.
 pub const SETTINGS_LABEL: &str = "settings";
 
+/// Shows a window that was just built hidden, back where the owner left it.
+///
+/// The restore, the show and the focus all run as ONE closure on the main
+/// thread, and nothing here waits for it.
+///
+/// Why this is not three calls in a row, from the command's own thread
+/// (finding, 2026-10-11 - the owner's "I pressed Settings and Jarvis froze"):
+/// [`crate::window_memory::restore`] calls `tauri-plugin-window-state`'s
+/// `restore_state`, which holds the plugin's global window-state cache lock
+/// while it asks Tauri for the window's geometry. Every one of those getters
+/// (`available_monitors`, `inner_size`, `outer_position`, `is_maximized`) posts
+/// a task to the main thread and BLOCKS the calling thread until it answers
+/// (tauri-runtime-wry `send_user_message` -> `run_threaded` -> `rx.recv()`).
+/// The main thread, meanwhile, is finishing the window creation `build()` had
+/// just posted, and the plugin's own window-ready hook takes that SAME cache
+/// lock (tauri-plugin-window-state `lib.rs:431`). Two threads, one
+/// `std::sync::Mutex`, each waiting on the other - so the Settings window was
+/// created and left invisible on `about:blank`, and the whole app stopped
+/// answering (Windows Application Hang 1002 and WER `AppHangB1`, 2026-10-10
+/// 22:27:08; reproduced on demand twice on 2026-10-11). Posted as a task, this
+/// runs AFTER the creation it is queued behind, and on the main thread those
+/// getters are answered inline - there is no second thread left to wait for.
+///
+/// `what` names the window in the log, which is where a failure lands: a
+/// window that cannot be shown has no page to say so in.
+fn show_restored(window: WebviewWindow, what: &'static str) -> Result<(), String> {
+    let app = window.app_handle().clone();
+    app.run_on_main_thread(move || {
+        crate::window_memory::restore(&window, true);
+        match window.show() {
+            Ok(()) => {
+                let _ = window.set_focus();
+                crate::logfile::log(&format!("[jarvis] {what} shown"));
+            }
+            Err(err) => crate::logfile::log(&format!(
+                "[jarvis] {what} was built but could not be shown: {err}"
+            )),
+        }
+    })
+    .map_err(|e| format!("unable to reach the main thread to open {what}: {e}"))
+}
+
 /// Opens the settings window, or brings it forward if it is already open.
 ///
 /// Built on demand rather than declared in `tauri.conf.json` because it is a
@@ -557,12 +599,7 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     // Win32 function directly instead. See its comment for the whole story.
     .build()
     .map_err(|e| format!("unable to open settings: {e}"))?;
-    crate::window_memory::restore(&window, true);
-    window
-        .show()
-        .map_err(|e| format!("unable to open settings: {e}"))?;
-    let _ = window.set_focus();
-    Ok(())
+    show_restored(window, "Settings")
 }
 
 pub const BRAIN_LABEL: &str = "brain";
@@ -653,12 +690,7 @@ pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
             .theme(Some(tauri::Theme::Dark))
             .build()
             .map_err(|e| format!("unable to open the Brain: {e}"))?;
-    crate::window_memory::restore(&window, true);
-    window
-        .show()
-        .map_err(|e| format!("unable to open the Brain: {e}"))?;
-    let _ = window.set_focus();
-    Ok(())
+    show_restored(window, "the Brain")
 }
 
 /// Label of the faces window.
@@ -704,12 +736,7 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
     .theme(Some(tauri::Theme::Dark))
     .build()
     .map_err(|e| format!("unable to open Faces: {e}"))?;
-    crate::window_memory::restore(&window, true);
-    window
-        .show()
-        .map_err(|e| format!("unable to open Faces: {e}"))?;
-    let _ = window.set_focus();
-    Ok(())
+    show_restored(window, "Faces")
 }
 
 /// Label of "Everything Jarvis can do".
