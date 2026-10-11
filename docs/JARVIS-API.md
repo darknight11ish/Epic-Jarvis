@@ -19022,7 +19022,7 @@ until a client calls it.
 
 ---
 
-## 125. The big coding model: both cards, with Jarvis paused
+## 126. The big coding model: both cards, with Jarvis paused
 
 `qwen3-coder-30b-a3b-ud-q3-k-xl` (UD-Q3_K_XL, 13,806,312,608 B, Apache 2.0) is
 the one model on this PC that needs **both** graphics cards. It is the best
@@ -19039,7 +19039,7 @@ not re-litigate: **OFF by default, never resident beside the two live lanes,
 the pause announced before it starts, and both lanes put back exactly as they
 were - proved from `/api/ps`.**
 
-### 125.1 The three routes
+### 126.1 The three routes
 
 | Route | Method | Body | What it does |
 |---|---|---|---|
@@ -19058,7 +19058,7 @@ the big coding model", a `BoolSetting` in `jarvis_settings_registry.py`). The
 page row needs its own Rust command and JavaScript, like every other switch on
 that page.
 
-### 125.2 The order, which is the contract
+### 126.2 The order, which is the contract
 
 1. The switch must be on, no multi-step task may be running, and the gate must
    allow it. Otherwise **nothing is touched at all**.
@@ -19087,9 +19087,9 @@ that page.
 
 Nothing here downloads anything, and nothing leaves this PC.
 
-### 125.3 What is not built
+### 126.3 What is not built
 
-- The desktop Settings row and any phone control (section 125.1).
+- The desktop Settings row and any phone control (section 126.1).
 - `tools/check_parity.py` does not yet classify these routes: they are the
   backend half, called by no client, and a follow-up lists them there.
 - No real load was run while this was written: the owner's two lanes are live
@@ -19103,7 +19103,7 @@ Nothing here downloads anything, and nothing leaves this PC.
 
 ---
 
-## 126. Approval cards read short: the summary, "Explain more", and the setting (added 2026-10-10)
+## 127. Approval cards read short: the summary, "Explain more", and the setting (added 2026-10-10)
 
 The owner, 2026-10-09, in their own words: *"for approval cards, there should be
 a more simple summary, with an explain more button that expands the approval
@@ -19119,7 +19119,7 @@ and the phone's `net/CardSummary.kt` + `ui/screens/ApprovalCardsPlate.kt` +
 `CardSummaryTest.kt`. **This section exists because the route and the two fields
 were not written down anywhere else.**
 
-### 126.1 One line first, the whole card one tap away
+### 127.1 One line first, the whole card one tap away
 
 Every pending row already carried `notice` (`approval-notice.patch`, §3). It now
 carries **two more fields**, and they are the whole feature:
@@ -19141,7 +19141,7 @@ the card's own FIRST WHOLE SENTENCE ("never cut mid-word"); else the readable
 title `title_for` already guarantees. `backend/test_card_short_words.py` pins all
 three, and fails by name when an action the gate knows has no short row.
 
-### 126.2 The preference, in one file both apps read
+### 127.2 The preference, in one file both apps read
 
     GET  /api/card-prefs     the setting, its two choices and the words to show
     POST /api/card-prefs     {"mode": "start_short" | "always_full"}
@@ -19178,7 +19178,7 @@ style on the owner's behalf. "Show everything" on its own deliberately stays
 `jarvis_menus.ALL_MENUS_PHRASES` (the older "show me every menu"), which
 `jarvis_quick.match` checks first.
 
-### 126.3 Where the control is, in each app
+### 127.3 Where the control is, in each app
 
 - **Phone** (`jarvis-client`): the card's own text (`ApprovalCard.kt`), folded by
   default, with "Explain more" / "Show less" under the summary. The setting is
