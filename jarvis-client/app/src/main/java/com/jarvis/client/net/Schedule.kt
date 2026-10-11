@@ -854,6 +854,47 @@ object Schedule {
      */
     fun isFiredTag(tag: String?, jobId: String): Boolean = tag == jobId
 
+    /**
+     * The job id inside a notification KEY - the value
+     * [ScheduleNotifier.EXTRA_JOB_ID] carries: the job's own id for a timer,
+     * alarm or reminder, and `id#match@<key>` for a "tell me when" match
+     * ([shownKey] with its `#match@` separator). Used to ask the PC's own
+     * `GET /api/schedule` whether the job behind a still-posted notification
+     * exists at all.
+     */
+    fun jobIdFromTag(key: String): String {
+        val cut = key.indexOf("#match@")
+        return if (cut > 0) key.substring(0, cut) else key
+    }
+
+    /**
+     * Every job id the PC's own `GET /api/schedule` still knows about: the
+     * active jobs, the open to-do items and the ones that went off in the last
+     * hour. A "went off" notification whose job is in none of those lists is
+     * for a job the PC no longer has at all.
+     */
+    fun knownIds(view: View): Set<String> =
+        (view.jobs.asSequence() + view.todo.asSequence() + view.wentOff.asSequence())
+            .map { it.id }
+            .toSet()
+
+    /**
+     * The "went off" notifications to take away after a schedule read: those
+     * whose job is not in [known], as (tag, job id).
+     *
+     * This is the owner's report of 2026-10-11 in its worst form - a job
+     * DELETED on the PC while the phone still showed it kept ringing for ever,
+     * because the PC's `changed` event is the only cancellation this app ever
+     * had, and a job that has been deleted sends none.
+     *
+     * [known] comes ONLY from a read that succeeded: a read that failed
+     * returns no set at all (null upstream), and nothing is cancelled then. A
+     * notification that is still true must never vanish because the link
+     * blipped.
+     */
+    fun stopsWhenJobGone(posted: List<Pair<String, String>>, known: Set<String>): List<Pair<String, String>> =
+        posted.filter { (_, jobId) -> jobId !in known }
+
     /** Whether an answer's route header says it was made without the model. */
     fun quickFromRouteHeader(header: String?): Boolean {
         if (header.isNullOrBlank()) return false
