@@ -148,12 +148,19 @@ permissions = [
 # chat box, which chats as HUD and has no Temporary chat, New conversation,
 # "Used in this answer" or crisis panel (reversed 2026-10-06) - `hud_open_bar`,
 # which sends nothing either.
+#
+# The same button hides the bar again when it is already up (the owner's ask of
+# 2026-10-09: one button that toggles, labelled from what the shell says is on
+# screen). `hide_quickbar` is the Jarvis bar's own hide, so the worst this page
+# can do with it is take the bar off screen - less than `hud_open_bar` already
+# lets it do, and it decides nothing, approves nothing and hides nothing else.
 [[set]]
 identifier = "hud-voice"
-description = "Show the quickbar with push-to-talk ready, or with its box ready to type in. Opens no microphone, sends and records nothing."
+description = "Show the quickbar with push-to-talk ready, or with its box ready to type in, and hide it again. Opens no microphone, sends and records nothing."
 permissions = [
   "allow-summon-push-to-talk",
   "allow-hud-open-bar",
+  "allow-hide-quickbar",
 ]
 
 # The HUD page's requests to Jarvis, made in Rust with the token, so the page
@@ -226,6 +233,12 @@ permissions = [
 # whichever window it opens. Bug audit 2026-10-05, R5: it was granted only by
 # quickbar-surface, so the Brain's own button was refused and silently did
 # nothing.
+#
+# The HUD pulls this set in as well since 2026-10-10: the owner asked for the
+# settings gear on the big HUD window too (question 2 of
+# docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md), and the gear is the same
+# navigation-only door the bar's and the widget's gears are. See
+# capabilities/hud.json for the argument; it is the widget's, one window over.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "open-fix-place"
@@ -369,6 +382,15 @@ permissions = [
   "allow-capture-note-status",
   # Which of those note apps this PC is set up for: names only.
   "allow-note-targets",
+  # The gear on the widget's own bar, and the fix buttons on its offline card
+  # ("Reconnect", "Show me where"). Both call the same navigation-only command
+  # the Jarvis bar and the Brain already hold: it opens or focuses the Settings
+  # window (or the Brain) at a named place, changes no setting and approves
+  # nothing (plain_errors.rs `open_fix_place`). The widget's offline card had
+  # been invoking it since it was written, and every one of those taps was
+  # refused at the ACL - the permission was never granted to this surface, so
+  # the one button offered when Jarvis is unreachable did nothing at all.
+  "allow-open-fix-place",
 ]
 
 # ---------------------------------------------------------------------------
@@ -1502,6 +1524,25 @@ identifier = "sky-read"
 description = "Read whether the sun and moon show behind the face, the rough position and the weather now. Cosmetic and read-only."
 permissions = ["allow-get-sky"]
 
+# THE ONE SET A PAGE WRITES THROUGH, and it is one command with one window
+# holding it (2026-10-10, the integration evaluation). With "click through to
+# what is behind" on, the floating face has to tell Rust where its own picture
+# is drawn before Rust can decide which clicks to let past the window
+# (`windows.rs`'s pointer watcher). The shorter road would have been an event
+# from the page, and that road is closed on purpose: `core:event:allow-emit`
+# is forbidden to every window (apps security audit M1), because the quickbar
+# trusts what it hears and a page that could emit could fake the owner's
+# checked voice or an approval card. So it is a granted command, and the
+# floating window is the only one granted it.
+# What it carries: 1,024 characters of geometry - "1" where the face's own
+# drawing is, "0" where the background is. No words, no picture, nothing about
+# the owner, nothing written down; a grid that is not exactly one clears it,
+# and a window with no grid keeps every click (the animal stays clickable).
+[[set]]
+identifier = "floating-hit-mask"
+description = "Tell Rust where the floating face's own picture is drawn, so clicks pass through everywhere else. Geometry only; cosmetic."
+permissions = ["allow-note-floating-hit-mask"]
+
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.
 [[set]]
 identifier = "faces-open"
@@ -1531,12 +1572,33 @@ permissions = ["allow-open-features"]
 #
 # It does not read `onboarding_seen` — `lib.rs` decides whether to build this
 # window at all from that flag, before the page exists. The one thing the page
-# itself can do is say "seen" and close, once, so it never reopens.
+# itself can do is say "seen" and close, once, so it never reopens by itself.
+#
+# "By itself" is the precise word, and it is the owner's decision of
+# 2026-10-10: the walkthrough still opens unprompted exactly once, and the
+# owner can now also REPLAY it from Settings (see `onboarding-replay` below).
+# The set below is the page's own power and is unchanged by that.
 # ---------------------------------------------------------------------------
 [[set]]
 identifier = "onboarding-surface"
-description = "Mark the first-run walkthrough as seen and close it. Opens at most once."
+description = "Mark the first-run walkthrough as seen and close it. Opens at most once on its own."
 permissions = ["allow-finish-onboarding"]
+
+# Settings' "Show the intro again" button (the owner's request of 2026-10-10:
+# the walkthrough is interactive and skippable, but a skip should not be
+# final). It re-opens that same window through the same
+# `windows::show_onboarding` the first run uses.
+#
+# Settings only, and deliberately here rather than in `onboarding-surface`:
+# that set belongs to the walkthrough PAGE, and a window that can open itself
+# is a different power from one that can close itself. This carries no state
+# at all — it takes no argument, reads and writes no marker, and cannot make
+# the walkthrough appear by itself on the next start. The marker stays
+# `finish_onboarding`'s alone.
+[[set]]
+identifier = "onboarding-replay"
+description = "Open the first-run walkthrough again on demand. Reads and writes no marker; changes nothing about when it appears by itself."
+permissions = ["allow-replay-onboarding"]
 
 
 # Tutorials and the FAQ (the owner's request of 2026-10-05; src/tutorials.rs,

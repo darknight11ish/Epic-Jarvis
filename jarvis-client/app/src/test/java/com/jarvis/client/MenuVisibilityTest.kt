@@ -9,6 +9,7 @@ import com.jarvis.client.net.MenuState
 import com.jarvis.client.net.MenuView
 import com.jarvis.client.net.MenuWords
 import com.jarvis.client.ui.MenuPlaces
+import com.jarvis.client.ui.screens.PlateList
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -270,6 +271,54 @@ class MenuVisibilityTest {
 
     private val screens = "jarvis-client/app/src/main/java/com/jarvis/client/ui/"
 
+    /**
+     * Every `item(key = ...)` [src] draws, in the spelling the list really holds.
+     *
+     * Two spellings are real on these screens and they are NOT the same key: the
+     * plates go through BrainSections' recorder (the screen writes `plate("...")`,
+     * the recorder writes the item key), and the lines outside every heading spell
+     * their key out through `plateKeyAt` (BrainScreen), which carries the plates'
+     * namespace. A bare `item(key = "attention")` is a third spelling that finds
+     * nothing, so it is read as the bare key it is rather than quietly namespaced
+     * here.
+     *
+     * Comments are blanked first, the same `code()` habit `BrainListTest` keeps:
+     * BrainScreen's notes quote both spellings in backticks while explaining this
+     * very defect, and a key quoted in a note is not a key the screen draws.
+     */
+    private fun itemKeysIn(src: String): Set<String> =
+        Regex("item\\(key = (?:plateKeyAt\\(\"([\\w-]+)\"\\)|\"([\\w-]+)\")\\)")
+            .findAll(code(src))
+            .map { m ->
+                m.groupValues[2].ifEmpty { PlateList.PLATE_PREFIX + m.groupValues[1] }
+            }
+            .toSet()
+
+    /** [src] with whole-line `//` comments and block comments blanked, not dropped. */
+    private fun code(src: String): String {
+        val out = ArrayList<String>()
+        var inBlock = false
+        for (line in src.lines()) {
+            val t = line.trimStart()
+            if (inBlock) {
+                if (t.contains("*/")) inBlock = false
+                out.add("")
+                continue
+            }
+            if (t.startsWith("/*")) {
+                if (!t.contains("*/")) inBlock = true
+                out.add("")
+                continue
+            }
+            if (t.startsWith("//")) {
+                out.add("")
+                continue
+            }
+            out.add(line)
+        }
+        return out.joinToString("\n")
+    }
+
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null) {
@@ -280,10 +329,19 @@ class MenuVisibilityTest {
         error("$rel not found above ${System.getProperty("user.dir")}")
     }
 
+    /**
+     * Every phone screen file that can carry a `menus.shows(...)` check or a MenuFrame. A file
+     * left out of this list is a hideable menu the test cannot see: `settings.briefing-settings`
+     * lives only in BriefingPlate.kt, so that file joined on 2026-10-10 (the parity audit made
+     * the id a phone menu, and hiding the plate's "When it arrives" half is real phone
+     * behaviour). Adding a file here only ever widens what is checked - every id found in it
+     * must still name a real menu, one this phone has.
+     */
     private fun uiSources(): Map<String, String> =
         listOf(
             "screens/BrainScreen.kt", "screens/SettingsScreen.kt", "screens/HomeScreen.kt",
             "screens/HistoryTags.kt", "screens/SecondCardPlate.kt", "screens/QuizPlate.kt",
+            "screens/BriefingPlate.kt",
         ).associateWith { repoFile(screens + it).readText() }
 
     @Test
@@ -316,21 +374,68 @@ class MenuVisibilityTest {
     @Test
     fun `every item key in MenuPlaces is a real item on its screen`() {
         val settings = repoFile(screens + "screens/SettingsScreen.kt").readText()
-        val brain = repoFile(screens + "screens/BrainScreen.kt").readText()
+        // Brain's own CODE: its notes quote `plate("...")` and both spellings of an
+        // item key while explaining the headings, and a name quoted in a note is
+        // not a name the screen draws.
+        val brain = code(repoFile(screens + "screens/BrainScreen.kt").readText())
         for (key in MenuPlaces.SETTINGS.keys) {
             assertTrue("SettingsScreen has no item(key = \"$key\")", settings.contains("item(key = \"$key\")"))
         }
         for (key in MenuPlaces.BRAIN.keys) {
-            assertTrue("BrainScreen has no item(key = \"$key\")", brain.contains("item(key = \"$key\")"))
+            // Brain's plates are drawn through `plate("...")` since 2026-10-10
+            // (BrainSections.kt): ONE recorder writes their item keys, so the
+            // screen's own line names the plate rather than spelling the key out.
+            // A plate that comes in two halves names BOTH through `plateDrawn`,
+            // which is the other spelling to accept here. The lines drawn OUTSIDE
+            // every heading spell their key out through `plateKeyAt` instead
+            // (2026-10-11), which is the third real spelling - "attention" is one
+            // of those, and it is in this map.
+            assertTrue(
+                "BrainScreen has no plate(\"$key\"), no plateDrawn(\"$key\"), no " +
+                    "item(key = plateKeyAt(\"$key\")) and no item(key = \"$key\")",
+                brain.contains("plate(\"$key\")") || brain.contains("item(key = \"$key\")") ||
+                    brain.contains("plateDrawn(\"$key\")") ||
+                    brain.contains("item(key = plateKeyAt(\"$key\"))"),
+            )
         }
         // The other way: no item on either screen is a menu without a place (a plate added to
         // Brain or Settings must be decided - listed here, or one of the fixed ones below).
+        //
+        // The three `group-*` keys were Brain's own group headings until
+        // 2026-10-10; they are replaced by the headings in BrainSections.kt,
+        // whose item key is `brain-heading:<section key>` - written by
+        // `item(key = BrainSections.headingKey(section))`, which this regex does
+        // not match at all, so no heading needs a menu id.
+        // "features" (the way into "Everything Jarvis can do", drawn by
+        // `onOpenFeatures?.let { item { ... } }`) has no key of its own and so
+        // never appears in `brainKeys` either.
+        // "attention" is in this list as a key, not merely a permission: since
+        // 2026-10-10 it is drawn OUTSIDE every heading (BrainSections.ALWAYS_DRAWN)
+        // by an `item(key = plateKeyAt("attention"))` of its own, so it is a Brain
+        // item with no menu of its own to place - its menu id `brain.now.budget`
+        // can never be hidden, and AttentionSettingsTest holds that separately.
+        // Its key carries the plates' namespace (2026-10-11), which is the KEY
+        // the walk that Find anything's rows run looks up; drawn bare, it was
+        // invisible to that walk and the row landed at the top of Brain.
         val fixed = setOf("rush", "freshness", "notice", "group-now", "group-memory", "group-model-pc",
-            "menus-hidden", "tail", "memory-hidden", "wiki-hidden", "memory-as-of-hidden",
+            "menus-hidden", "tail", "attention", "memory-hidden", "wiki-hidden", "memory-as-of-hidden",
             "deep-questions-hidden")
-        val brainKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(brain).map { it.groupValues[1] }.toSet()
+        // The screen's `item(key = ...)` lines as the list really holds them, and
+        // the plate NAMES they stand for (this map and `fixed` are written in
+        // names) - read from the source so a line that drifts back to the bare
+        // spelling is seen here rather than only by BrainSectionsTest.
+        val brainItemKeys = itemKeysIn(brain)
+        val brainKeys = brainItemKeys.map { it.removePrefix(PlateList.PLATE_PREFIX) }.toSet()
+        val brainPlates = Regex("\\bplate\\(\"([\\w-]+)\"\\)").findAll(brain).map { it.groupValues[1] }.toSet()
         val undecided = brainKeys - MenuPlaces.BRAIN.keys - fixed
         assertTrue("Brain items with no decision in MenuPlaces: $undecided", undecided.isEmpty())
+        val undecidedPlates = brainPlates - MenuPlaces.BRAIN.keys - fixed
+        assertTrue("Brain plates with no decision in MenuPlaces: $undecidedPlates", undecidedPlates.isEmpty())
+        assertTrue(
+            "the attention budget is no longer an item of its own outside the headings, under the " +
+                "key the walk looks up (${PlateList.PLATE_PREFIX}attention)",
+            PlateList.PLATE_PREFIX + "attention" in brainItemKeys,
+        )
         val settingsKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(settings).map { it.groupValues[1] }.toSet()
         // Every Settings row is a menu with a place, or one of these: the rows
         // that are deliberately NOT menus. "limits" joined them on 2026-10-08
@@ -346,6 +451,35 @@ class MenuVisibilityTest {
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
+    }
+
+    @Test
+    fun `no item key is listed twice in MenuPlaces`() {
+        // `mapOf` takes a duplicate key in silence and keeps the LAST value, so a second
+        // `"voice" to ...` line does not add a place - it DELETES the first one. That is exactly
+        // how `settings.voice` lost its place on 2026-10-10: the test above failed with
+        // "no place in MenuPlaces for: [settings.voice, brain.work.briefing]", naming the two
+        // victims and never the duplicate line that caused it. The built map cannot show this
+        // (by the time Kotlin has made it, the duplicate is gone), so the source is read, the
+        // same way the item-key test above reads it.
+        val places = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/MenuPlaces.kt").readText()
+        for (name in listOf("SETTINGS", "BRAIN")) {
+            val body = Regex(
+                "val ${name}\\s*:\\s*Map<String, String>\\s*=\\s*mapOf\\((.*?)\\n    \\)",
+                RegexOption.DOT_MATCHES_ALL,
+            ).find(places)?.groupValues?.get(1)
+                ?: error("MenuPlaces.$name is no longer a mapOf(...) block - this test has drifted")
+            // The comments quote the very lines this test looks for, so they are stripped
+            // first: the rule is about the code Kotlin builds the map from, not the prose.
+            val code = body.lines().joinToString("\n") { it.substringBefore("//") }
+            val keys = Regex("\"([\\w-]+)\"\\s+to\\s+\"").findAll(code).map { it.groupValues[1] }.toList()
+            assertTrue("MenuPlaces.$name lists no item keys - this test has drifted", keys.isNotEmpty())
+            val twice = keys.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+            assertTrue(
+                "MenuPlaces.$name lists $twice twice: mapOf keeps only the last, so the earlier menu loses its place",
+                twice.isEmpty(),
+            )
+        }
     }
 
     @Test

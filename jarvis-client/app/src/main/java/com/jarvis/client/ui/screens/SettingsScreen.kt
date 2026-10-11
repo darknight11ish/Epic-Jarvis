@@ -155,17 +155,26 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "handoff-front" to 21,
     "devices" to 22,
     "quick-tiles" to 23,
+    // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is on
+    // screen (ScreenRatePlate.kt, data/ScreenRate.kt). Its own row, phone-only,
+    // and it sits immediately above "Limits" on the screen - so Limits' own
+    // number moved down by one again when it landed (24 -> 25). Both halves of
+    // that pair are kept true by SettingsJumpTest's `the index map matches the
+    // screen, item by item`, which reads this map against the screen's real row
+    // order - and by backend/test_settings_registry.py, which does the same from
+    // the Python side.
+    "screen-rate" to 24,
     // "Limits and how often Jarvis does things" (the PC's own
     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last
     // but one: it is about how much Jarvis does rather than about one feature.
-    "limits" to 24,
+    "limits" to 25,
     // "A new conversation starts after" (the audit of 2026-10-08): the one
     // timing the owner could not change anywhere. It is added BELOW "limits"
     // rather than beside "How Jarvis talks", on purpose: an insert in the
     // middle moves every index under it, and the limits work in flight owns
     // those numbers and their own test (`LimitsTest`'s "the index map has no
-    // limits row" pins 24). A row added at the end moves nothing.
-    "idle-new" to 25,
+    // limits row" pins 25). A row added at the end moves nothing.
+    "idle-new" to 26,
 )
 
 /**
@@ -226,6 +235,32 @@ fun SettingsScreen(
      */
     idleNewChoice: String = com.jarvis.client.net.ChatHistory.IDLE_NEW_DEFAULT,
     onIdleNewChoiceChange: (String) -> Unit = {},
+    /**
+     * "Screen refresh rate" (2026-10-09) - saved on this phone only, like the
+     * two above, so it needs no `canAct` gate either.
+     *
+     * [screenRate] is the owner's pick or null for "follow the phone";
+     * [screenRates] are the distinct rates this phone's own panel reports,
+     * ascending ([com.jarvis.client.data.ScreenRate.rates]); [screenPanelHz] is
+     * what the panel is running at right now; [screenRateNote] is the readback
+     * sentence, including - when the system refused the rate - that it did not
+     * take effect; [screenRateChecked] is true once that sentence is a real
+     * observation rather than a promise.
+     *
+     * **Not the same as the face editor's Frame rate** (which is [faceTuning]'s
+     * `frameRate`, on the Appearance screen): that one is how often the animal
+     * is drawn, this one is what the panel runs at.
+     * [com.jarvis.client.data.ScreenRate]'s doc says why the two must never be
+     * merged.
+     */
+    screenRate: Float? = null,
+    screenRates: List<Float> = emptyList(),
+    screenPanelHz: Float = 0f,
+    screenRateNote: String = "",
+    screenRateChecked: Boolean = false,
+    onScreenRateChange: (Float?) -> Unit = {},
+    /** Re-reads what the panel settled on - nothing tells the app when the phone's own settings change it. */
+    onScreenRateRecheck: () -> Unit = {},
     /**
      * "Reading phone notifications" (docs/JARVIS-API.md §61): whether
      * Android's own "Notification access" is currently granted
@@ -393,7 +428,14 @@ fun SettingsScreen(
                                 color = chrome.textMid,
                             )
                             val voiceCheck = onVoiceCheck?.takeIf { menus.shows("entry.voice-check") }
-                            val voices = onVoices?.takeIf { menus.shows("entry.voices") }
+                            // "Jarvis's voice" (the parity audit of 2026-10-10):
+                            // ONE id for ONE feature. This row used to be
+                            // `entry.voices` while the desktop's card for the
+                            // same feature was `settings.voices` - two ids for
+                            // one feature, against backend/jarvis_menus.py's own
+                            // rule. The duplicate id is gone; this row now hides
+                            // under the one id both apps use.
+                            val voices = onVoices?.takeIf { menus.shows("settings.voices") }
                             val any = onTrainVoice != null || voiceCheck != null || voices != null
                             if (any) Gap(10)
                             onTrainVoice?.let {
@@ -543,6 +585,20 @@ fun SettingsScreen(
             // without the guard (found during the rebase, 2026-10-09).
             if (drawn("jarvis-notify")) item(key = "jarvis-notify") {
                 NotificationsFromJarvisSection(onOpen = onOpenNotificationSettings)
+                // The PC's own Notifications card, right under the paragraph
+                // that ends "Which kinds your PC sends at all is the PC's own
+                // Notifications card." (2026-10-10, the parity audit's GAP 1-6):
+                // seven rows, read and written through the same limits route the
+                // desktop's card now uses, in the PC's own words - every one of
+                // which says "(on your PC)" so the two halves of this row can
+                // never be mistaken for each other.
+                //
+                // Inside THIS item rather than a new row of its own, because the
+                // value rows themselves already exist in the limits table (and
+                // in "Limits and how often Jarvis does things"): this card is
+                // where they belong on the phone, and giving it a new item key
+                // would move every index below it for no gain.
+                PcNotifySection(canAct = canAct)
             }
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's
@@ -604,6 +660,31 @@ fun SettingsScreen(
             if (menus.shows("settings.quick-tiles")) if (drawn("quick-tiles")) if (menus.shows("settings.quick-tiles")) item(key = "quick-tiles") {
                 MenuFrame(menus, "settings.quick-tiles") {
                     QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
+                }
+            }
+
+            // "Screen refresh rate" (2026-10-09): what the PANEL is asked to run
+            // at while Jarvis is on screen (ScreenRatePlate.kt,
+            // data/ScreenRate.kt). Phone-only and saved on this phone only, like
+            // Floating Jarvis and Quick Settings tiles above it, so it needs no
+            // `canAct` gate - nothing here reaches the PC. It is NOT the animal's
+            // frame rate, which lives in Appearance; ScreenRate.kt's own doc says
+            // why the two must never be merged.
+            //
+            // `drawn` sits OUTSIDE `menus.shows`, like the row below: without it
+            // the search box would hide every other card and leave this one on
+            // screen, which SettingsSearchTest checks row by row (2026-10-09).
+            if (drawn("screen-rate")) if (menus.shows("settings.screen-rate")) item(key = "screen-rate") {
+                MenuFrame(menus, "settings.screen-rate") {
+                    ScreenRateSection(
+                        chosen = screenRate,
+                        rates = screenRates,
+                        panelHz = screenPanelHz,
+                        note = screenRateNote,
+                        checked = screenRateChecked,
+                        onPick = onScreenRateChange,
+                        onRecheck = onScreenRateRecheck,
+                    )
                 }
             }
 

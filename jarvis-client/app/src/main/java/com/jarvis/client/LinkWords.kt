@@ -74,6 +74,25 @@ object LinkWords {
         link == LinkState.CONNECTED && stale && !reason.isNullOrBlank()
 
     /**
+     * The line under the composer's Send while the link is down, or null
+     * while it is up (feature sweep on the owner's phone, 2026-10-10).
+     *
+     * The composer greys Send unless the link is [LinkState.CONNECTED]
+     * (`canSend`), and a greyed button never reaches the runtime's own
+     * blocker - so a typed message simply did nothing, with no sentence
+     * anywhere saying the link was the reason. This is that sentence, and it
+     * is not new prose: it is the one every other plate already shows under a
+     * control it has greyed for the link
+     * ([com.jarvis.client.net.ScreenPlateText.WAITING_LINK], which Home's own
+     * "Watch this phone with me" plate uses). It says the link is not there
+     * yet rather than the "catching up" words a link that is merely behind
+     * gets, because those are two different states and this app keeps them
+     * apart (see [decisionBlocked]).
+     */
+    fun composerHeldLine(link: LinkState): String? =
+        if (link == LinkState.CONNECTED) null else com.jarvis.client.net.ScreenPlateText.WAITING_LINK
+
+    /**
      * The extra line under a link that is down when this phone has no VPN
      * running at all (phone walk-through N1, 2026-09-27). The phone reaches
      * the PC only through Tailscale or NordVPN Meshnet, and both run as a

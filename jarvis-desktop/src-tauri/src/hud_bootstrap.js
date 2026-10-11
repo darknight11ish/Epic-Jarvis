@@ -430,6 +430,7 @@
       if (channel === "event") deliver(payload);
       else if (channel === "link") linkChanged(payload);
       else if (channel === "appearance") appearanceChanged(payload);
+      else if (channel === "bar") barStateChanged(payload);
     } catch (err) {
       console.error("[jarvis] feed failed", err);
     }
@@ -1126,6 +1127,12 @@
    * - it shows a window and sends nothing). The mic button stays: it
    * already opens the bar.
    *
+   * AND IT IS ONE BUTTON THAT TOGGLES (the owner's ask of 2026-10-09, with a
+   * screenshot): its label follows what is on screen - "Open the Jarvis bar"
+   * while the bar is hidden, "Hide the Jarvis bar" while it is shown - and
+   * clicking it again hides the bar. The state reaches this page from the
+   * shell, never from the click: see `barOnScreen` below.
+   *
    * Why the reversal was possible: what was held against the box is now a
    * KNOWN LIMITATION of this window, not a reason to hide it. It is its
    * own conversation, with its own id, and it is filed in History as HUD
@@ -1159,10 +1166,24 @@
    * and fails unless the two agree - value by value, by running this code.
    * ---------------------------------------------------------------- */
   var OPEN_BAR = "Open the Jarvis bar";
-  var OPEN_BAR_SAID = "Chat with Jarvis in the Jarvis bar - it opens now.";
+  var HIDE_BAR = "Hide the Jarvis bar";
 
   /* The localStorage key src/hud-window.js exports as OPEN_BAR_KEY. */
   var OPEN_BAR_KEY = "jarvis.hud.openBar";
+
+  /* Whether the Jarvis bar is on screen. NOT guessed and NOT remembered from
+   * a click: the shell knows (src-tauri/src/windows.rs `publish_bar_state`)
+   * and pushes it on the feed's own "bar" channel, because the bar can also
+   * go away by itself - losing focus, its X, an open-a-chat call from another
+   * window - and a label that only followed this button's own clicks would go
+   * on saying "Hide the Jarvis bar" with nothing on screen to hide.
+   *
+   * A page that has just loaded has heard nothing yet, and a bar summoned
+   * before it loaded is already up, so the shell pushes the state again on
+   * every page load (lib.rs, `on_page_load`), exactly as it does the link and
+   * the appearance document. Until then: hidden, which is how the bar
+   * starts. */
+  var barOnScreen = false;
 
   /* Whether the button shows: ON unless this computer saved it off, and ON
    * when storage cannot be read at all - the reading notifications-prefs.js's
@@ -1178,19 +1199,55 @@
     }
   }
 
+  /* The words the button carries, given what is on screen (the owner's ask of
+   * 2026-10-09: it said "Open the Jarvis bar" whether the bar was open or
+   * not). The same shape as the wording that was already there - an imperative
+   * and the bar's name - and the SAME string is the tooltip and the accessible
+   * name, so a screen reader is never told something the sighted label
+   * contradicts. `title` is set from this, never from a fixed line. */
+  function barLabel(on) {
+    return on ? HIDE_BAR : OPEN_BAR;
+  }
+
+  function paintOpenBarLabel() {
+    var drawn = document.getElementById("hud-open-bar");
+    if (!drawn) return;
+    var words = barLabel(barOnScreen);
+    if (drawn.textContent !== words) drawn.textContent = words;
+    if (drawn.title !== words) drawn.title = words;
+  }
+
+  /* The shell's push: the bar came on screen, or went. Repaints the label and
+   * nothing else - it decides nothing, and it is the only writer of
+   * `barOnScreen`. */
+  function barStateChanged(visible) {
+    barOnScreen = visible === true;
+    paintOpenBarLabel();
+  }
+
   function openBarFromHud() {
     var tauri = window.__TAURI__;
     var invoke = tauri && tauri.core && tauri.core.invoke;
     if (typeof invoke !== "function") return;
+    /* One button, both directions (the owner's ask of 2026-10-09: clicking it
+     * again hides the bar). Which command to send follows the state the shell
+     * pushed, because the button is labelled from that same state - so the
+     * words on it and what a click does can never disagree. The shell answers
+     * a push of its own, which is what flips the label back. */
+    var command = barOnScreen ? "hide_quickbar" : "hud_open_bar";
     Promise.resolve()
       .then(function () {
-        return invoke("hud_open_bar");
+        return invoke(command);
       })
       .catch(function (err) {
         hudMicNote(
-          "Could not open the Jarvis bar: " +
+          "Could not " +
+            (command === "hide_quickbar" ? "hide" : "open") +
+            " the Jarvis bar: " +
             String((err && err.message) || err) +
-            ". Open it with its shortcut (Alt+Space unless you changed it)."
+            (command === "hide_quickbar"
+              ? ". Press Escape in it, or close it with its X."
+              : ". Open it with its shortcut (Alt+Space unless you changed it).")
         );
       });
   }
@@ -1204,13 +1261,15 @@
     open.type = "button";
     open.id = "hud-open-bar";
     open.className = "act primary hud-open-bar";
-    open.textContent = OPEN_BAR;
+    open.textContent = barLabel(barOnScreen);
     // The page's `.act` is a square icon button; this one carries words.
     // hud-link.css could not be used for it: that file has rules for the
     // mark and the link line only, and no width rule for this id.
     open.style.width = "auto";
     open.style.padding = "0 14px";
-    open.title = OPEN_BAR_SAID;
+    // The tooltip and the accessible name are the visible label, so the two
+    // can never contradict each other in a screen reader.
+    open.title = barLabel(barOnScreen);
     open.addEventListener("click", openBarFromHud);
     input.parentNode.insertBefore(open, input);
   }
@@ -1250,5 +1309,114 @@
     document.addEventListener("DOMContentLoaded", hudChatBox, { once: true });
   } else {
     hudChatBox();
+  }
+
+  /* ---------------------------------------------------------------- *
+   * The HUD's settings gear
+   *
+   * THE OWNER'S DECISION (2026-10-10, question 2 of
+   * docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the big HUD window gets a
+   * settings gear too. The audit had left it off - this window's capability
+   * file was the one that said, in so many words, that it holds "no approve,
+   * deny, memory-write, recording or settings command" - and the owner chose
+   * otherwise, so that sentence has been corrected in
+   * capabilities/hud.json rather than left to contradict the code.
+   *
+   * WHERE IT SITS, AND WHAT IT CALLS. The HUD has no title bar of its own
+   * (it is an ordinary decorated window, so the OS draws one); its own
+   * controls live on the stage bar at the top of the conversation view. The
+   * gear goes there, immediately before the page's own "Telemetry" button,
+   * so it reads as part of the window's chrome rather than of the
+   * conversation. It calls exactly what the Jarvis bar's gear and the
+   * widget's gear call - plain_errors.rs's `open_fix_place {place:
+   * "settings"}`, navigation only, through the app lock like every other way
+   * in - so there is NO new Tauri command and no new Rust code. It carries
+   * the same gear glyph and the same "Jarvis settings" name for a screen
+   * reader, so all three gears look and read alike.
+   *
+   * WHY IT IS ADDED HERE rather than in the page: jarvis_hud.html is
+   * vendored byte-identical from the backend folder, and section 2b below
+   * says why that matters (a new copy from the backend must need no
+   * re-patching). This script is how the shell adapts the page without
+   * forking it, and it adds no buttons on its own - the one control it
+   * already adds is beside the chat box.
+   *
+   * THE ACL CHANGE THIS NEEDED, deliberately: `open-fix-place` (the set that
+   * holds `allow-open-fix-place`) is now granted to this window in
+   * capabilities/hud.json. It was the widget that needed it last, for the
+   * same reason and with the same argument: a visible control wired to a
+   * command the window does not hold fails silently, which is exactly how
+   * the widget's offline card stayed dead. tests/bar-chrome.mjs holds both
+   * halves.
+   * ---------------------------------------------------------------- */
+  var GEAR_SAID = "Jarvis settings";
+
+  function settingsFromHud() {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") return;
+    Promise.resolve()
+      .then(function () {
+        return invoke("open_fix_place", { place: "settings" });
+      })
+      .catch(function (err) {
+        hudMicNote(
+          "Could not open Jarvis settings: " +
+            String((err && err.message) || err) +
+            ". Open them from the Jarvis tray icon."
+        );
+      });
+  }
+  window.__jarvisOpenSettings = settingsFromHud;
+
+  /* Adds the gear, once, onto the stage bar. Silent if the page has no stage
+   * bar (an older or newer copy of the vendored page). */
+  function addSettingsGear() {
+    var bar = document.querySelector(".stage-bar");
+    if (!bar || document.getElementById("hud-settings")) return;
+    var gear = document.createElement("button");
+    gear.type = "button";
+    gear.id = "hud-settings";
+    gear.className = "ghost hud-settings";
+    gear.title = GEAR_SAID;
+    // The page's `.ghost` pads for a word; this one is a square icon button,
+    // so it is sized here. 26px matches the page's own small controls (the
+    // Telemetry toggle beside it), not the 44px composer buttons.
+    gear.style.width = "26px";
+    gear.style.height = "26px";
+    gear.style.padding = "0";
+    gear.style.display = "flex";
+    gear.style.alignItems = "center";
+    gear.style.justifyContent = "center";
+    gear.setAttribute("aria-label", GEAR_SAID);
+    // The SAME gear glyph the Jarvis bar's gear and the widget's gear draw
+    // (index.html #open-settings, widget.html #btn-settings), so the three
+    // are recognisably one control. inline SVG, so neither CSP objects.
+    gear.innerHTML =
+      '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false">' +
+      '<path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />' +
+      '<path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />' +
+      "</svg>";
+    gear.addEventListener("click", settingsFromHud);
+    // Before "Telemetry", which the media query above only shows on a narrow
+    // window - so on a wide one the gear is the last thing on the bar.
+    var telemetry = document.getElementById("rail-toggle");
+    if (telemetry && telemetry.parentNode === bar) bar.insertBefore(gear, telemetry);
+    else bar.appendChild(gear);
+  }
+
+  /* Only with the shell (window.__TAURI__): the page served on its own, in a
+   * plain browser, has no Settings window to open and no `open_fix_place` to
+   * call - there the gear is not added at all, exactly as the "Open the
+   * Jarvis bar" button is not. */
+  function hudSettingsGear() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    addSettingsGear();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", hudSettingsGear, { once: true });
+  } else {
+    hudSettingsGear();
   }
 })();

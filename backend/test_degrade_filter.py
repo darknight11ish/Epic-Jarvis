@@ -130,6 +130,19 @@ def run(*, start_lane, inject_memory, messages, codes, raw=None):
     return seen, ns
 
 
+# THE ONE FILE ONLY THE OWNER'S PC HAS. jarvis_hud.py is the entry point
+# scripts/apply-patches.ps1 edits IN PLACE rather than copying, so a clone does
+# not hold it and run_suites.py skips this whole suite by name for that reason.
+# EVERY check below drives the degrade loop lifted out of it, so run directly in
+# a clone there is nothing here that can be tested. That is one skip with the
+# reason printed - not the FileNotFoundError this used to be, which reads as a
+# broken patch rather than as the one file this machine was never given.
+if not SRC.is_file():
+    print(f"skip  every check here drives the degrade loop in jarvis_hud.py, "
+          f"which is not in {BACKEND} - the patcher edits that file in place, so "
+          f"a clone does not hold it. {explain()}")
+    print("\n0 passed, 1 skipped, 0 failed")
+    sys.exit(0)
 CODE = _loop()
 
 CLOUD_TURN = [

@@ -51,6 +51,8 @@ plus these six files:
     quiz_grader_cases.json   from backend/
     rust-crates.lock         from jarvis-desktop/src-tauri/Cargo.lock
     jarvis-visual-spec.json  the owner's own copy, which is what /api/visual-spec reads
+and one file this repository DERIVES rather than copies:
+    _where.py                backend/_where.py, plus a trailer that says what it is
 ```
 
 `jarvis_hud.html` is the one file that was missing **everywhere**.
@@ -59,6 +61,90 @@ plus these six files:
 never in the backend folder - the desktop app loaded its own bundled copy.
 The copy here is `jarvis-desktop/src/jarvis_hud.html`, so a fresh clone's
 front page works.
+
+`_where.py` is not a copy of anything on the owner's PC. It is here because
+`import_history.py` - which this folder carries, and which has to run from a
+clone with no repository around it - imports `BACKEND` and `explain` from it.
+It was kept here by hand until 2026-10-10, and by then it had gone stale: 77
+lines of `SHIPPED` entries `backend/_where.py` had gained and this folder's
+copy had not, with nothing to notice and nothing that would have said so. It is
+now **derived**: `tools/gen_base_from_backend.py` writes it as
+`backend/_where.py` followed by a trailer naming this folder as the base, and
+`backend/test_base_regeneration.py` fails if the two differ by anything else.
+Re-taking the folder refreshes it, so it cannot drift again.
+
+## Re-taking the folder, and checking it is current (2026-10-11)
+
+The rule above was followed by hand on 2026-10-06. It is now a script, so the
+copy can be re-taken and can be *checked*, which is build step 3 of
+[`docs/UPDATER-REDESIGN.md`](../docs/UPDATER-REDESIGN.md) section 5:
+
+```powershell
+# does this repository's jarvis-backend/ still hold what that folder produces?
+py -3 tools\gen_base_from_backend.py --source "C:\path\to\the backend folder" --check
+
+# re-take it (reads the folder above, writes only inside this repository)
+py -3 tools\gen_base_from_backend.py --source "C:\path\to\the backend folder"
+```
+
+`--check` reads and writes nothing outside its own memory: exit 0 means every
+file here is exactly what that folder produces, and exit 1 names every file
+that is not, in both directions - a copy edited here, and a live file this
+repository has never seen. The source folder is only ever read. On a machine
+without the owner's folder, `backend/test_base_regeneration.py` checks the
+script's *rule* against this README, on folders built for the purpose.
+
+**A re-take is not free. Read "What a re-take costs today" below before taking
+this folder again** - four things in this repository need it to be the state
+*before* the newest patches, not the state after them.
+
+### What a re-take costs today, measured (2026-10-10)
+
+This folder is the state the patch stack leaves **at the moment it was taken**
+(2026-10-06). Four things in this repository need it to be the state *before*
+the newest patches, and cannot use the state after them:
+
+* `tools/gen_tasks_patch.py` builds `backend/tasks.patch` out of this file's own
+  context lines (`REAL` in that script);
+* `backend/test_tasks.py` rehearses `tasks.patch` by applying it to this file;
+* `backend/test_retrieve_count.py` rehearses `retrieve-count.patch` the same way;
+* `backend/test_limits_settings_route.py` rehearses `limits-settings.patch` the
+  same way.
+
+Measured on 2026-10-10, by re-taking this folder from the owner's live folder
+and then following the rule to the letter:
+
+* **9 checks fail** across those three suites (`test_limits_settings_route.py` 5,
+  `test_retrieve_count.py` 3, `test_tasks.py` 1). Every one is "the patch applies
+  to this file", and a re-taken file already carries the patch.
+* `tools/gen_tasks_patch.py` then writes a `tasks.patch` whose second hunk
+  anchors on `code, out = jarvis_prompt_coach.handle_post(body)` - a line
+  `prompt-coach.patch` **adds**, and that patch runs at position 128 of
+  `scripts/apply-patches.ps1`'s list while `tasks.patch` runs at 124. On a fresh
+  backend the line is not there yet and the patch does not apply
+  (`error: patch failed: jarvis_hud.py:3684`); applied to the re-taken file it
+  "succeeds" at an offset and puts a **second copy of both `/api/tasks` blocks**
+  in the file (+58 lines, `Hunk #2 succeeded at 3703 (offset 19 lines)`).
+
+So a re-take comes with a companion change: each of those four needs the text
+*before* its patch, and the honest way to get it from a re-taken base is to
+**reverse the patch out of the base** (a reverse that applies is itself the
+proof that the base holds exactly that patch's lines) rather than to apply the
+patch to it. `gen_tasks_patch.py` additionally needs its anchors chosen from the
+text the stack has *at its own position*, not from the final text.
+
+Until that is done, this folder stays the 2026-10-06 snapshot and `--check` stays
+red on a machine with the owner's folder. That is why the newest routes
+(`/api/attention/settings`, `/api/limits/settings`, 2026-10-08) are not in
+`jarvis_hud.py` here: they reach a fresh install through the patches, which is
+what this folder is for.
+
+The one deliberate difference below is applied by the script rather than
+described to it: inside one dict literal, a key written more than once keeps
+its last line (which is the line CPython already keeps) and the dead earlier
+lines are dropped. Every drop is printed, with its line number. That is how
+this folder's `jarvis_gate.py` was made, generalised so it is not four line
+numbers that mean nothing once the file has moved.
 
 ## What is NOT here, and why
 
@@ -205,7 +291,20 @@ both are in this folder's `.gitignore`, which is why they are.)
    smaller than the copy in `backend/`.
 8. **The base is not regenerated by a script.** The rule is in "The exact rule,
    so it can be re-taken" above and was followed by hand; one script that
-   re-takes it and fails on a difference would be the next step.
+   re-takes it and fails on a difference would be the next step. **Built
+   2026-10-11: `tools/gen_base_from_backend.py` and `backend/test_base_regeneration.py`.**
+   The rule above is now the script's own rule, checked against this README by
+   the suite, and `--check` re-derives the folder and fails naming every file
+   that differs - see "Re-taking the folder" above. **A re-take is not free,
+   though:** "What a re-take costs today, measured (2026-10-10)" above names the
+   four things that need this folder to be the state *before* the newest
+   patches, and the 9 failing checks and one unusable `tasks.patch` a re-take
+   produces until they are updated with it.
+9. **`_where.py` is derived, not copied (fixed 2026-10-10).** It was kept here by
+   hand, and by then it was 77 lines of `SHIPPED` entries behind
+   `backend/_where.py` with nothing to notice. `tools/gen_base_from_backend.py`
+   now writes it as that file plus a trailer naming this folder as the base, and
+   `backend/test_base_regeneration.py` fails if the two differ by anything else.
 
 ## Licence
 

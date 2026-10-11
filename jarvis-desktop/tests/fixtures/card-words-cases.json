@@ -119,6 +119,14 @@
       "title": "Jarvis wants to delete a page in Logseq"
     },
     {
+      "action": "docker_service_start",
+      "title": "Jarvis wants to start one of the containers it uses on this PC"
+    },
+    {
+      "action": "docker_service_stop",
+      "title": "Jarvis wants to stop one of the containers it uses on this PC"
+    },
+    {
       "action": "download_model",
       "title": "Jarvis wants to download an AI model"
     },
@@ -149,6 +157,10 @@
     {
       "action": "execute_pending_actions",
       "title": "Jarvis wants to run actions it has lined up"
+    },
+    {
+      "action": "fiction_roleplay_enable",
+      "title": "Jarvis wants to turn on a separate lane for fiction and role-play"
     },
     {
       "action": "github_read",
@@ -373,6 +385,10 @@
     {
       "action": "topic_loosen",
       "title": "Jarvis wants to turn a private topic back on, or let it learn or be used again"
+    },
+    {
+      "action": "uncensored_models_enable",
+      "title": "Jarvis wants to offer the uncensored AI models already on this PC"
     },
     {
       "action": "unclassified_tool",

@@ -103,6 +103,18 @@ enum class Screen {
      * stack from an older build restores by name.
      */
     FEATURES,
+
+    /**
+     * "Find anything" (ui/screens/FindScreen.kt, ui/FindAnything.kt): the typed
+     * search over every place in the app - the phone's half of the desktop's
+     * command palette (Alt+Space), built for the last of the parity audit's
+     * eight gaps (`.dsh-scratch/android-verify/PARITY-AUDIT-2026-10-10.md`,
+     * row 244). Opened from the "Find" button on Home's status line - always
+     * on screen, whether or not the owner has the navigation row showing.
+     * Last, for the same reason as the others above: a saved back stack from
+     * an older build restores by name.
+     */
+    FIND,
 }
 
 /**

@@ -1,0 +1,8 @@
+{
+  "name": "projects",
+  "summary": "Projects, steps 1 and 2.",
+  "module": "jarvis_projects",
+  "install": "handler",
+  "replaces_patch": "projects.patch",
+  "stack_order": 91
+}

@@ -26,7 +26,7 @@ sys.path.insert(0, str(HERE))
 # in the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, missing, explain, require_rebuilt
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-noise-"))
 fw = types.ModuleType("jarvis_framework")
@@ -36,17 +36,51 @@ fw.load_framework = lambda: {}
 fw.audit_log = lambda *a, **k: None
 sys.modules.setdefault("jarvis_framework", fw)
 
+# jarvis_memory is one of the ten modules this repository ships WHOLE
+# (`backend/rebuilt/`), and _where.py is what puts them on sys.path. Without
+# that line this import died as `ModuleNotFoundError: No module named
+# 'jarvis_memory'` before one check could run - which is what the guard below
+# says in one line.
+require_rebuilt("jarvis_memory")
 import jarvis_memory as M
+
+# TWO different owner files, and every check here needs one of them:
+#
+#   jarvis_extract.py  the first three checks drive X.propose()/X.decide()
+#   jarvis_hud.py      the fourth reads the installed module's source
+#
+# Both are patched IN PLACE rather than copied (scripts/apply-patches.ps1), so
+# a clone holds neither and run_suites.py skips this whole suite by name for
+# that reason. Run directly in a clone there is nothing here that can be tested:
+# it used to be `ModuleNotFoundError: No module named 'jarvis_extract'` for the
+# first three, and a FAIL ("the helper exists: no <path>") for the fourth -
+# neither of which says what is actually wrong. One skip, with the reason.
+_ABSENT = missing("jarvis_extract.py", "jarvis_hud.py")
+if _ABSENT:
+    print(f"skip  every check here needs {', '.join(_ABSENT)}, which this "
+          f"backend does not have - only the owner's PC has them, because the "
+          f"patcher edits each in place rather than copying it. {explain()}")
+    print("\n0 passed, 1 skipped, 0 failed")
+    sys.exit(0)
 import jarvis_extract as X
 
 HUD = BACKEND / "jarvis_hud.py"
 FAILED, PASSED = [], []
+SKIPPED = []
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}"
           + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(why):
+    """A check this run cannot make, printed as `skip` and counted on its own -
+    never as a pass. `run_suites.py` counts these lines, and the summary below
+    prints the number, so a skip can never be read as a check that ran."""
+    SKIPPED.append(why)
+    print(f"skip  {why}")
 
 
 def fresh():
@@ -133,7 +167,12 @@ def t_an_accepted_fact_is_not_suppressed_forever():
 
 def t_recalled_facts_carry_a_date():
     if not HUD.is_file():
-        check("the helper exists", False, f"no {HUD}")
+        # Reached when the backend has jarvis_extract.py but not jarvis_hud.py
+        # (JARVIS_BACKEND set to a folder holding one and not the other). It
+        # used to be a FAILURE - "the helper exists: no <path>" - which reads as
+        # a broken patch rather than as one file this machine was never given.
+        skip(f"reading the installed module's source needs jarvis_hud.py, which "
+             f"is not in {BACKEND}. {explain()}")
         return
     src = HUD.read_text(encoding="utf-8")
     tree = ast.parse(src)
@@ -209,7 +248,7 @@ def main():
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     return 1 if FAILED else 0

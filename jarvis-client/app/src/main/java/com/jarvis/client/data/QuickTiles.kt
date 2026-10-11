@@ -13,8 +13,8 @@ package com.jarvis.client.data
  * already do from the app with one tap and no approval card:
  *  - start a focus session (Brain -> Focus session's Start, 25 minutes),
  *  - a 10-minute timer (a plain timer needs no card, CLAUDE.md 2026-09-25),
- *  - "Brief me" - only OPENS the app on the briefing; it never shows a word
- *    of it on the tile or the lock screen,
+ *  - "Open briefing" - only OPENS the app on the briefing; it never shows a
+ *    word of it on the tile or the lock screen,
  *  - Stop everything (Home's button; it only makes Jarvis do less),
  *  - play or pause whatever is playing on the PC (no card, 2026-09-27).
  *
@@ -29,20 +29,42 @@ package com.jarvis.client.data
 enum class TileAction(
     /** Saved on this phone ([ClientSettings.quickTiles]); never sent anywhere. */
     val wire: String,
-    /** The tile's own label, short enough for a tile. */
+    /**
+     * This action's own words, from the PC's one list of the five safe
+     * buttons (`jarvis_widgets.ACTIONS`). The home-screen widget's buttons on
+     * BOTH apps draw exactly these, and `contract/widget-cases.json` holds the
+     * two byte for byte ([JarvisWidgetsTest]) - so this string may not be
+     * changed here alone.
+     *
+     * WHAT THE QUICK SETTINGS TILE DRAWS IS [QuickTiles.tileLabel], which is
+     * this except where the shared word would promise something the tap does
+     * not do ("Brief me").
+     */
     val tileLabel: String,
-    /** The choice's words in Settings. */
+    /** The choice's words in Settings - what this tile will do. */
     val choiceLabel: String,
     /**
      * Held while the link is stale or down (rule 4) - it asks the PC to DO
      * something. Stop everything is never held (it only stops things), and
-     * "Brief me" only opens the app.
+     * "Open briefing" only opens the app.
      */
     val heldWhenStale: Boolean,
 ) {
     FOCUS("focus", "Focus session", "Focus session", heldWhenStale = true),
     TIMER("timer", "10-min timer", "10-min timer", heldWhenStale = true),
-    BRIEF_ME("brief_me", "Brief me", "Brief me", heldWhenStale = false),
+    // THE SHARED WORD STAYS "Brief me" AND THE TILE SAYS SOMETHING ELSE
+    // (corrected 2026-10-10). A tile labelled "Brief me" that only opens the
+    // app on the Briefing screen promises a briefing it never starts - the
+    // owner tapped it and waited. It is NOT made to start one instead: the
+    // briefing carries new senders' names, and a tile draws on a locked
+    // screen, so starting one from here would put that on the lock screen.
+    // The label is the smaller, honest change - and it has to be the TILE's
+    // label, not this one: `tileLabel` is the PC's shared word for the
+    // home-screen widget's buttons too (`jarvis_widgets.ACTIONS`,
+    // contract/widget-cases.json), so changing it here alone would break that
+    // contract - and changing it everywhere means the PC's own module, both
+    // golden files and the desktop's widget-board.js. See [QuickTiles.tileLabel].
+    BRIEF_ME("brief_me", "Brief me", "Open briefing", heldWhenStale = false),
     STOP_EVERYTHING("stop_everything", "Stop everything", "Stop everything", heldWhenStale = false),
     PC_PLAY_PAUSE("pc_play_pause", "Play/pause PC", "Play/pause PC", heldWhenStale = true),
     ;
@@ -65,10 +87,26 @@ object QuickTiles {
 
     const val TITLE = "Quick Settings tiles"
 
+    /**
+     * The link tile's own label ([com.jarvis.client.service.LinkTileService],
+     * which draws it, and `res/values/strings.xml`'s `link_tile_label`, which
+     * the manifest gives the same service so Android's tile editor and the
+     * shade agree).
+     *
+     * IT NAMES THE TAP (corrected 2026-10-10). This tile used to be labelled
+     * "Jarvis" - the app's own name - while its one tap mutes or unmutes
+     * Jarvis's spoken interruptions ([muteCommand]). A tile labelled "Jarvis"
+     * that silently mutes notifications is a trap: the owner taps the tile
+     * with their name on it and Jarvis stops speaking to them. The subtitle
+     * already says "Muted", so the label says what the tap does.
+     */
+    const val LINK_TILE_LABEL = "Mute Jarvis"
+
     const val HINT =
         "Up to three Jarvis tiles for the panel you pull down from the top of the " +
             "screen. Choose what each one does here, then add it: pull the panel down, " +
-            "tap Edit (often a pencil), and drag \"Jarvis tile 1\", \"2\" or \"3\" into place."
+            "tap Edit (often a pencil), and drag one of the three \"Tap to choose\" " +
+            "tiles into place. Each one then says what it does."
 
     const val SAFETY =
         "Only small things are offered, all one tap in the app already. A tile can " +
@@ -77,7 +115,7 @@ object QuickTiles {
             "Stop everything always works."
 
     const val LOCK_NOTE =
-        "With App lock on: \"Brief me\" opens Jarvis, which asks for your fingerprint " +
+        "With App lock on: \"Open briefing\" opens Jarvis, which asks for your fingerprint " +
             "first. The timer, focus and play/pause tiles ask you to unlock the phone " +
             "first when it is locked. Stop everything never asks."
 
@@ -89,7 +127,64 @@ object QuickTiles {
     const val SUB_STALE = "Catching up"
     const val SUB_UNPAIRED = "Not paired"
     const val SUB_CHOOSE = "Tap to choose"
-    const val UNASSIGNED_LABEL = "Jarvis tile"
+
+    /**
+     * What a slot with NO action chosen draws, and what the manifest names all
+     * three of them (`res/values/strings.xml`'s `tile_slot_1` to `tile_slot_3`,
+     * which the manifest gives to the three services, so Android's tile editor
+     * and the shade agree).
+     *
+     * IT NAMES THE ONE THING THAT TAP DOES (corrected 2026-10-11). These three
+     * were "Jarvis tile 1" to "Jarvis tile 3" - the only phone label the owner
+     * ever saw that could not be tested, because it said nothing to test. A
+     * person choosing a tile in Android's editor could not tell what any of
+     * them did, and neither could the shade, because a shape and a number are
+     * not an action.
+     *
+     * The action cannot be named here: Android's editor reads the MANIFEST
+     * label, the manifest is fixed when the app is built, and which of the five
+     * actions a slot gets is the owner's choice made later, in Settings. So the
+     * label names the thing that is true of every unchosen slot and the thing
+     * the tap really does - [Decision.OpenChooser] - and that is the same words
+     * as the second line ([subtitle]), deliberately: one is the label and one is
+     * the state, and for an empty slot they are the same truth.
+     *
+     * Once a slot HAS an action, the tile draws that action's own name
+     * ([tileLabel]): "Focus session", "10-min timer", "Open briefing", "Stop
+     * everything", "Play/pause PC". Nothing here promises an action the tap
+     * does not do - the trap [OPEN_BRIEFING] was fixed for.
+     */
+    const val UNASSIGNED_LABEL = SUB_CHOOSE
+
+    /**
+     * What the briefing slot draws, because the shared word would lie: tapping
+     * it opens the app on the Briefing screen and does not start one
+     * ([Decision.OpenBriefing], [TileAction.BRIEF_ME]). A tile is read in a
+     * pulled-down shade on a locked screen, so the label is the only thing
+     * telling the owner what the tap will do - "Brief me" reads as "start one
+     * now", and the owner waits for a briefing that is not coming.
+     */
+    const val OPEN_BRIEFING = "Open briefing"
+
+    /**
+     * What one tile draws as its label. [TileAction.tileLabel] is the PC's own
+     * shared word for the five safe buttons - the home-screen widget's buttons
+     * draw those, byte for byte the same on both apps
+     * (`contract/widget-cases.json`) - so a tile whose shared word would
+     * promise something the tap does not do is corrected HERE, on this
+     * surface, and the shared list is left alone.
+     *
+     * [slot] is unused since 2026-10-11 and kept on purpose: the three slots are
+     * interchangeable, so an unchosen one is named for what its tap does
+     * ([UNASSIGNED_LABEL]) and not the label plus its slot number, as it was. Any
+     * later rule that DOES depend on the slot has the argument already.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    fun tileLabel(action: TileAction?, slot: Int): String = when (action) {
+        null -> UNASSIGNED_LABEL
+        TileAction.BRIEF_ME -> OPEN_BRIEFING
+        else -> action.tileLabel
+    }
 
     /** What a tap does - [decide]'s answer. */
     sealed interface Decision {
@@ -117,10 +212,11 @@ object QuickTiles {
      * use for a link that is catching up (PlainErrors "link_stale").
      *
      * Order matters: an unchosen slot opens the chooser whatever the link
-     * says; "Brief me" always just opens the app; Stop everything always runs
-     * (it stops this phone's own speech even with no link at all, and asking
-     * the PC to stop is never held); everything else needs a live, fresh link
-     * (rule 4) and, with App lock on and the phone locked, a phone unlock.
+     * says; "Open briefing" always just opens the app; Stop everything always
+     * runs (it stops this phone's own speech even with no link at all, and
+     * asking the PC to stop is never held); everything else needs a live,
+     * fresh link (rule 4) and, with App lock on and the phone locked, a phone
+     * unlock.
      */
     fun decide(
         action: TileAction?,
@@ -148,7 +244,7 @@ object QuickTiles {
      * - which asks for the unlock - instead of doing anything: App lock is
      * on (or cannot be read: [appLock] null fails closed). Stop everything is
      * the one exception, as everywhere else here: it only makes Jarvis do
-     * less, so it is never put behind an unlock. "Brief me" already only
+     * less, so it is never put behind an unlock. "Open briefing" already only
      * opens the app. Tiles keep [decide]'s own rule (they can ask Android for
      * the phone's unlock; a widget cannot).
      */

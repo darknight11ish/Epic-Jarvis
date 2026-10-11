@@ -1303,7 +1303,8 @@ adds four:
 | `flags_checked` | bool | `false` means the check could not run (the backend lacks `jarvis_intake.py`), which is not the same as "clean". |
 | `keep_both_ok` | bool | True only on a correction card (one that would retire `replaces_text` by adding a new fact). **False on a "retire this?" card** (`source == "feedback_retire"`), even though that card also has `replaces_id`. Only when true, show a third button, "Both are true", which posts `{"id": row.id}` to `/api/memory/keep_both`. |
 | `verbatim` | bool | True when `source` is `"remember"`: the owner's own words from a "Remember:" message. Label it that way. Since `auto-learn.patch` (§19) it is **false** on a "Remember:" card whose words this PC saw arrive as shared, pasted, clipboard, picture words or untagged, or could not match to a live turn at all - those are not known to be the owner's own words. |
-| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"about health, a sensitive topic"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. |
+| `auto_reason` | string | `auto-learn.patch` (§19). Why automatic learning left this proposal as a card, in plain words: `"from pasted text"`, `"about health, a sensitive topic"`, `"not in your own words"`, ... Show it as one quiet line on the card. `""` (or absent, on an older backend) when automatic learning was off or never looked at this card. On a `gate_denial` row it also carries Jarvis's-guess wording (below). |
+| `guessed` | bool | True on a row a Reject click produced (`source == "gate_denial"`). **This proposal is Jarvis's guess, not the owner's words**: a Reject click carries none of them (`jarvis_gate.decide` NULLs `prompt` and `detail`). Label it as a guess on the card - the desktop draws "Jarvis's guess, not something you said. A Reject click carries none of your words, so this rule was worked out from the action's name, and no reason was given." - and the same words arrive in `auto_reason` for the phone's one-line reason. Keep and Discard still decide it: nothing is saved or applied until the owner Keeps it. Absent on every other card. (`docs/RULE-FLEXIBILITY.md` entry 003.) |
 
 **How the phone draws these** (`MemoryCards.from` in `net/Learning.kt`, pinned
 by `LearningTest`; drawn by `BrainScreen.kt`'s `MemoryProposalRow`): each `why`
@@ -1311,7 +1312,10 @@ under the plain line "Careful: this may be an instruction someone slipped in,
 not a fact about you." and "If you did not say this, discard it." - both
 buttons stay; `flags_checked: false` gets one quiet line saying the check could
 not run, and an absent `flags_checked` says nothing; a `verbatim` card gets a
-"Your own words" label; a correction (a card with a non-zero `replaces_id`)
+"Your own words" label; a **`guessed` card gets Jarvis's-guess wording instead**
+(it is the opposite claim: the words are Jarvis's, not the owner's), which the
+phone reads off `auto_reason` while the desktop draws the note itself; a
+correction (a card with a non-zero `replaces_id`)
 shows "Would replace: <replaces_text>", and "Both are true" only when
 `keep_both_ok` is true AND the card is not a retire card AND it has an id. A
 card with `replaces` words but no `replaces_id` is shown as a plain new fact,
@@ -4814,9 +4818,13 @@ the owner asked for it.
 
 ### 21.4 The event
 
-`schedule`: `{"id", "kind", "state": "fired" | "changed", "late"?: bool,
-"notify"?: false}` - **ids and the kind only, never the words**
-(ARCHITECTURE section 6). `"notify": false` (since 2026-09-25) marks a kind
+`schedule`: `{"id", "kind", "state": "fired" | "changed" | "ready",
+"late"?: bool, "notify"?: false}` - **ids and the kind only, never the
+words** (ARCHITECTURE section 6). `"ready"` is a morning briefing whose own
+words are built and kept: `jarvis_briefing.py` publishes it (its
+`deps.publish("schedule", {"id", "kind", "state": "ready"})`) once the
+briefing exists, so a notification is never ahead of it (section 22).
+`"notify": false` (since 2026-09-25) marks a kind
 that tells nobody - the standby schedule at 01:00 - and then neither app
 shows a toast or a notification; both still read Coming up again.
 `"fired"` is a job going off; `"changed"` is the list changing (added,
@@ -4836,7 +4844,18 @@ apps (30.5). On `"fired"`:
   desktop app restarts: the last event id is written at once on every
   `schedule` event and when the app exits, and a job that could not be read
   is remembered by its event id.
-- **Phone**: the same words as a notification on the approval channel. Its
+- **Phone**: the same words, as a notification on its OWN channel -
+  **`jarvis_schedule`**, "Reminders and timers" (`ScheduleNotifier.SCHEDULE_CHANNEL_ID`,
+  created by `JarvisApp`), never the approval channel (`jarvis_approval`,
+  `ApprovalNotifier.CHANNEL_ID`; the dedicated channel is the owner's decision
+  of 2026-09-30, so silencing reminders does not silence approvals or the other
+  way round). The title is the kind's own word - "Timer done", "Alarm",
+  "Reminder", "To-do" (`Schedule.title`, the same words as the desktop's toast
+  title), and a timer, alarm or reminder carries one action,
+  "Snooze 10 minutes" (`Schedule.SNOOZE`), which is not an approval. An alarm -
+  and an urgent "tell me when" - goes on **`jarvis_alarm`** instead
+  ("Alarms and urgent alerts", `ScheduleNotifier.ALARM_CHANNEL_ID`), where it
+  keeps ringing until it is seen and carries Stop as well. Its
   lock-screen version is always only the kind's words ("Jarvis: a reminder
   is due."); while App lock or "Hide memory lists and chat history" is on,
   the notification itself says only that too. Each job's notification is
@@ -7007,8 +7026,8 @@ the row's note names it.
 Let Jarvis read your calendar without asking you first?
 
 From now on Jarvis will read your calendar without an approval card. This
-changes one line of your settings file on this PC (jarvis-framework.toml):
-calendar_read = "auto". Nothing else in it changes.
+changes one line of your settings file on this PC: calendar_read = "auto".
+Nothing else in it changes.
 
 A chat where it reads something still counts as having read outside text,
 so a later web search or note in that chat still asks.
@@ -7031,6 +7050,23 @@ PC whether it is risky or not; no Windows Hello, no approval. The phone
 shows the card with Deny only and "Approve this one on the PC - it needs
 Windows Hello there. Deny still works here." A "no" proposes no standing
 rule (`_NO_RULE_FROM_DENIAL`).
+
+**Why the card does not name the settings file (fixed 2026-10-10).** The card
+text above IS the `prompt` handed to `jarvis_gate.check()`, and the gate's
+first rule - before it looks at the tier table, before any card is raised -
+searches that prompt for the names in its own `_PROTECTED` list
+(jarvis-framework.toml, jarvis_gate.py, jarvis_hud.py and six more). A prompt
+that names one is refused at tier `never`, so no card is shown and no Windows
+Hello prompt ever comes. This card used to say "(jarvis-framework.toml)"; the
+owner's audit log holds 21 `gate.refused_protected` lines for
+`loosen_what_asks_first`, each followed by
+`asks_first.loosen.card {"outcome": "refused"}` (2026-10-03 to 2026-10-10), so
+loosening anything from the app had never worked. `backend/test_asks_first.py`
+holds the card and the `detail` beside it against the gate's own list, read
+out of `jarvis-backend/jarvis_gate.py` with `ast`. The same bug and the same
+fix apply to the reading-tool card (section 43.2) and to the restore card
+(section 45.3; `jarvis_backup.restore_card()` used to say "the .py files
+beside jarvis_hud.py").
 
 ### 32.4 The short safe list, and the settings file
 
@@ -8353,9 +8389,8 @@ does not read this key.
 Offer "read your calendar" to the AI model?
 
 From now on the AI model may use this tool when it decides to - it can read
-your calendar. This changes one line of your settings file on this PC
-(jarvis-framework.toml): "calendar_read" is added to [tools].enabled.
-Nothing else in it changes.
+your calendar. This changes one line of your settings file on this PC:
+"calendar_read" is added to [tools].enabled. Nothing else in it changes.
 
 This is separate from whether it asks you first: that is set above, in "Ask
 me first", and is unchanged by this card.
@@ -8374,6 +8409,15 @@ Its title: "Jarvis wants to offer a reading tool to the AI model"
 shipped `jarvis-framework.toml`, in `jarvis_asks_first.HARD_LIMITS` and
 `MUST_ASK` like `loosen_what_asks_first` (§32.3) - it always asks, and it is
 never itself on the switchable list.
+
+**Why this card does not name the settings file either (fixed 2026-10-10).**
+It had the same bug as §32.3's: the card IS the `prompt` the gate reads for
+its own `_PROTECTED` names, so naming `jarvis-framework.toml` got it refused
+at tier `never` and no card was ever shown - 21 `gate.refused_protected` lines
+for `enable_reading_tool` in the owner's audit log, each followed by
+`asks_first.tools.card {"outcome": "refused"}`. Offering a reading tool to the
+model from the app had therefore never worked. Both cards are now held against
+the gate's own list by `backend/test_asks_first.py`.
 
 ### 43.3 Writing `[tools].enabled`
 
@@ -8624,7 +8668,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
 | `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
-| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
+| `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). From anything but this PC it is refused **up front, before the body is read** - **403** `{"ok": false, "pc_only": true, "error": "Restoring has to be done in Jarvis on your PC, so nothing was restored. Open Jarvis there, then Settings, Backups."}` - and never with the 202 above, which promises a Windows Hello card that such a caller can never approve (2026-10-10; the same words are on `/api/backup/restore/preview`). **Its card must not NAME a file `jarvis_gate.py` protects** (`jarvis_hud.py` among them): the card is what the gate is handed as its prompt, and a prompt naming one is refused at tier `never` before any card exists, so nobody is ever asked - the card says "the .py files in the folder Jarvis runs from", not the file's name, and `backend/test_backup.py` holds it against the gate's own `_PROTECTED` list. A refusal is recorded in `last_restore` with `outcome: "refused"`, the next step in plain words in `message` (the desktop's Settings, Backups shows that), and the technical reason - which tier, and the gate's own sentence - in `why`, for a bug report. On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. From 2026-10-05 it also writes the archive's `source/*.py` back into the folder the module runs from, so the CODE comes back with the data - and the card says plainly that restoring an OLDER backup therefore puts back the older program and undoes updates applied since, naming `apply-patches.ps1`. |
 
 `[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
 every other PC-only-with-Windows-Hello action); `jarvis_card_words.TITLES`
@@ -8670,7 +8714,8 @@ listing need no card; restoring is held on a stale link, like setting the
 folder.
 
 Phone: read-only (`net/Backup.kt`, `ui/screens/BackupPlate.kt`, in
-Settings): "Last backup: 3 days ago." or "No backup has been made yet." -
+Settings): "Last backup: 3 days ago." or, when the PC's memory holds none,
+"Your PC's Jarvis has not made one since it last started." -
 nothing else the PC's answer carries (the folder's path, a waiting card, a
 one-time recovery code) is shown. Choosing a folder, backing up and
 restoring are the PC's alone: the folder picker is Windows', the recovery
@@ -8678,6 +8723,20 @@ code is typed on the PC, and restoring needs Windows Hello there.
 `tools/check_parity.py`: `/api/backup` is `ported` (both read it, at
 different depths); every other backup route is `deliberate`
 (`docs/ARCHITECTURE.md` section 8).
+
+**No "Back up now" on the phone (settled 2026-10-10).** The owner asked for
+one; the phone cannot have one that works. `POST /api/backup/now` is refused
+for every caller that is not this PC (`jarvis_backup.request_backup_now` ->
+`jarvis_owner_check.from_this_pc`, 403 `pc_only`), and a phone reaching the
+PC by its Tailscale or NordVPN Meshnet name is not this PC - measured on the
+owner's own install that morning, where the phone's own saved address
+(`shared_prefs/jarvis_client.xml`, `host`) is a `.nord` name. So the phone
+draws the PC's rule in words instead of a control that could only fail
+(`Backup.PC_ONLY`), and says the recovery-code warning
+(`Backup.CODE_WARNING`) before the owner walks to the PC. The three keys a
+non-PC caller never receives (`pending_delete_older_card`, `last_delete_older`,
+`erase_limit`) are no longer parsed or drawn there at all: a branch that can
+never run reads as a live one.
 
 ### 45.6 Known gaps, said plainly
 
@@ -12944,8 +13003,7 @@ only, no code.
 ### 81.2 Quick Settings tiles you choose
 
 Android cannot add a tile while an app runs, so the app ships **three tile
-slots** ("Jarvis tile 1" to "3" in Android's tile editor;
-`service/QuickTileService.kt`) and the owner gives each one action in
+slots** (`service/QuickTileService.kt`) and the owner gives each one action in
 Settings -> Quick Settings tiles (`ui/screens/QuickTilesPlate.kt`,
 `data/QuickTiles.kt`). Saved on the phone only. The pattern (fixed tile
 services plus an assignment screen) is Home Assistant Android's (Apache);
@@ -12955,9 +13013,41 @@ no code copied.
 |---|---|---|---|
 | Focus session | `POST /api/focus/start` for 25 minutes (§31), like the Focus session plate's Start | yes | unlock the phone first |
 | 10-min timer | `POST /api/schedule/add {"kind": "timer", "seconds": 600}` (§21.2) - a plain timer, no card | yes | unlock the phone first |
-| Brief me | opens Jarvis on Brain's briefing (the same intent as the "Brief me" app-icon shortcut, §52); shows nothing itself | - | App lock asks, as for any opening |
+| Open briefing | opens Jarvis on Brain's briefing (the same intent as the "Brief me now" app-icon shortcut, §52); shows nothing itself | - | App lock asks, as for any opening |
 | Stop everything | `POST /api/stop_all` (§28), after stopping the phone's own speech | **never** (it only stops things) | runs straight away |
 | Play/pause PC | `GET /api/media` to see whether something is playing ("Playing: ..." -> pause, else play), then ONE `POST /api/media/control` (§74.2) | yes | unlock the phone first |
+
+**An unchosen slot is named for what its tap does (2026-10-11).** The owner
+read the panel on his own phone: "Jarvis Live", then three tiles called
+"Jarvis tile 1", "Jarvis tile 2", "Jarvis tile 3". A number is not an action,
+so a person picking a tile could not tell what any of them did - and no test
+could fail on it, because a shape and a number say nothing to test. Android's
+tile **editor** reads the MANIFEST `android:label` (`res/values/strings.xml`,
+`tile_slot_1` to `tile_slot_3`), which is fixed when the app is built and
+cannot know which of the five actions the owner will give a slot later, so all
+three now say `QuickTiles.UNASSIGNED_LABEL` - "Tap to choose", the same words
+as the empty slot's second line, because for an empty slot the label and the
+state are the same truth. It names the tap's real answer,
+`Decision.OpenChooser`. Once a slot HAS an action, the tile in the shade draws
+that action's own name (`QuickTiles.tileLabel`), and the tile also sets
+`contentDescription` to "<label>, <subtitle>" so a screen reader hears what the
+Live tile already said. `QuickTilesTest` fails on any `tile \d+` label and
+holds all five actions to their own names; the Settings hint and the plate's
+rows were corrected with it (the rows now say "Tile 1 - <what it does>", named
+by position, since the three manifest labels are identical on purpose).
+
+**The tile's label says what its tap does (2026-10-10).** The briefing slot
+used to DRAW the shared word "Brief me" while only opening the app, so the
+owner tapped a tile that promised a briefing and waited for one that was
+never coming. Starting one from the tile instead is not the fix - a briefing
+names new senders and a tile draws on a locked screen - so the tile draws
+`QuickTiles.OPEN_BRIEFING` ("Open briefing") and the Settings chooser says
+the same. The shared word itself stays exactly as the PC has it
+(`jarvis_widgets.ACTIONS`, `tileLabel`): the home-screen widget's buttons on
+both apps draw it, and `contract/widget-cases.json` holds the two byte for
+byte, so changing it means the PC's own module, both golden files and
+`jarvis-desktop/src/widget-board.js`. `QuickTiles.tileLabel(action, slot)` is
+what each tile draws.
 
 The timer tile is the first time the phone adds a timer through
 `/api/schedule/add` (§21.2 said both apps add only to-do items and
@@ -12979,12 +13069,18 @@ toast and the app's notice; with App lock on, or the phone locked, the
 focus session's and Stop everything's own sentences are replaced by fixed
 words ("Stop everything sent. Open Jarvis to see what stopped."), since the
 PC's sentence can say what was stopped. The existing link tile
-(`LinkTileService`, Mute) is unchanged; none of the five is Mute.
+(`LinkTileService`, Mute) is unchanged apart from its LABEL: it draws "Mute
+Jarvis" (`QuickTiles.LINK_TILE_LABEL`, `res/values/strings.xml`'s
+`link_tile_label`, which the manifest gives the same service so Android's
+tile editor and the shade agree). It used to draw "Jarvis" - the app's own
+name - so a tile with Jarvis's name on it silently muted Jarvis (found in the
+sweep of 2026-10-10). None of the five is Mute.
 
 **Why these App lock rules.** A Quick Settings tile works from the lock
 screen. Stop everything only makes Jarvis do less, so it always works, as
 the PC's hotkey does - the tile is the one way to reach it on the phone
-without passing App lock (Home's button stays behind it, §28). "Brief me" shows private words, so it only opens the
+without passing App lock (Home's button stays behind it, §28). "Open
+briefing" shows private words, so it only opens the
 app, which App lock guards. The other three change something small on the
 PC and show nothing private, so with App lock on they ask for the phone's
 own unlock first (Android's `unlockAndRun`), not Jarvis's fingerprint.
@@ -18574,6 +18670,19 @@ be raised at all is `503`.
 | `409` `{"ok": false, "error": "You said no, so nothing was changed."}` | the card was denied (`"timed_out"` and `"That was not approved, so nothing was changed."` are its siblings) |
 | `503` `{"ok": false, "error": "Your PC's Jarvis cannot ask you about that yet, so nothing was changed."}` | the gate action's tier is not `"ask"` |
 
+**A save that did not happen says so on the phone, under its own row
+(2026-10-10).** `Limits.classifyPost` reads a `404` FIRST, before the branch
+that keeps the PC's own sentence in `error`: a `404` means the ROUTE is not
+there at all, and its body carries the server's words ("not found"), not the
+PC's answer about the change. Read as an answer, that made a save that never
+happened look like one that had (`changed` came out `true`, so nothing reached
+the shared notice, and the time picker closed as if it had worked). A `404` is
+now `ApiResult.Failed(NotFound)`, which is exactly what `Limits.MISSING` is
+for. `LimitsPlate` draws that sentence (or the PC's refusal) UNDER the row the
+change was asked for, in the warning colour, because the list is longer than
+one screen: a sentence drawn once for the whole card is off the screen for some
+row whatever place it is given.
+
 ### 123.4 The interruption budget: `POST /api/attention/settings`
 
     GET  /api/attention          the budget: how many times Jarvis may speak up
@@ -18603,3 +18712,128 @@ Both routes are reached by tapping on either app's own screen (the PC's
 Settings → "Limits and frequency" and its Brain Attention card; the phone's
 Settings → Limits, and its Brain card for the budget) and by asking in words.
 `tools/check_parity.py` carries both.
+
+## 124. Which card draws the pictures, and what the chat does about it
+
+`jarvis_picture_card.py` (the owner's decision of 2026-10-10; the design is in
+`docs/PICTURE-CARDS-DESIGN.md`). This is the *card* half of making pictures. Asking
+for one, saving it and listing it are `jarvis_pictures.py`'s own job and are
+deliberately not repeated here.
+
+`GET /api/picture-card` answers with the three ways, each read as its own switch; both
+cards, found by asking `nvidia-smi` and ranked by their own memory; the chat lanes as
+they really are; and one plain sentence. `POST /api/picture-card` turns one on with
+`{"option":"A"}`, `{"option":"B"}` or `{"option":"C"}`, or all of them off with
+`{"option":null}`. Turning one on turns the other two off and says so, because they are
+three answers to one question. `GET /api/picture-card/ready` answers the one question
+that matters before a draw - is everything this way needs actually on this PC - and
+names every missing file with its size.
+
+**All three start OFF**, which is the project's own rule for anything that uses the
+second card: a feature keeps its own switch, off until *that feature* is measured. The
+chosen way is kept in `picture-card.json` in the config folder; nobody edits it by hand
+(`Start-Pictures.ps1 -Option A|B|C` writes it, and so does the route). There is no
+approval card: nothing leaves the PC and nothing is undone - these routes only choose
+which card a program on this PC runs on, and unload or reload the owner's own chat.
+
+The card is pinned by **UUID, never by index**, and where this module starts the
+picture-maker it passes the card twice over - `CUDA_VISIBLE_DEVICES` *and* ComfyUI's own
+`--cuda-device 0`. `CUDA_VISIBLE_DEVICES` alone is not enough for Ollama (it falls back
+to Vulkan onto the other card), which is why nothing here pins Ollama at all: the lanes
+are `jarvis_second_card.py`'s.
+
+The module is not reachable from any model turn, is not a tool, and owns no route under
+`/api/pictures`; `test_picture_card.py` fails if either changes.
+## 125. The owner's uncensored opt-ins: `GET`/`POST /api/models/uncensored` (added 2026-10-10; the backend half built and shipped, the app controls not yet)
+
+The owner's own decision (2026-10-10, Decision 5, in
+`.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md`): "Uncensored: both of these -
+(a) one clearly-labelled opt-in model for fiction/role-play, never the everyday
+assistant and never a default, and (b) make the abliterated models already on
+disk usable as opt-in choices rather than downloading anything new." The
+measured cost goes on every label, in plain words: TruthfulQA drops 5.8 to 6.9
+points on this model family, MMLU is about noise, and the only fitting build is
+7 months old against a 5-day-old official one. The module is
+`jarvis_optin_models.py` (shipped whole); the wiring is
+`uncensored-optins.patch`.
+
+    GET  /api/models/uncensored
+
+`200`:
+
+    {"on": false,                // opt-in (b): the on-disk models are offered
+     "fiction": {"title": "Fiction and role-play", "detail": "...", "on": false},
+     "choices": [],              // one entry per model file, each labelled
+     "off": "Uncensored models are off. ...",
+     "never_default": "These are never the everyday assistant and never a default. ...",
+     "measured_cost": "Measured cost, from what was measured on 2026-10-10: ...",
+     "waiting": {"uncensored_models_enable": false,
+                 "fiction_roleplay_enable": false},
+     "last": {},                 // per action: {"outcome", "why", "at", "message"}
+     "local_only": true}
+
+Each entry of `choices[]` is
+
+    {"file": "D:\\Jarvis Models\\AI-Models\\...gguf",   // the local file it came from
+     "name": "jarvis-uncensored-qwen2.5-14b",          // the Ollama name it imports under
+     "label": "...",                                   // the model's name, the file, the measured cost
+     "detail": "...",                                  // the longer line, for "Explain more"
+     "size_gb": 8.37,
+     "already_imported": false,
+     "create": {"model": "jarvis-uncensored-qwen2.5-14b",
+                "from": "D:\\Jarvis Models\\AI-Models\\...gguf",
+                "stream": false}}                      // the EXACT body /api/hardware/create takes
+
+`choices[]` is **empty while the switch is off** (that is the opt-in, in one
+line) and empty when the model store is not on this PC (`local_only` false, with
+`off` saying so in words). A file whose name carries `abliterated` or
+`uncensored` is a choice; a file whose name carries neither is not one, however
+it is stored. A file under 512 MB is not offered either.
+
+    POST /api/models/uncensored   {"on": true|false}
+    POST /api/models/uncensored   {"fiction": true|false}
+
+**Exactly one of the two keys, with a real `true`/`false`.** Anything else - both
+keys, neither, or a value that is not a boolean - is `400` in plain words.
+
+`false` turns that switch off at once: `200` `{"ok": true, "waiting": false,
+"message": "Done - ..."}`. **Off never asks**, and it withdraws a card of that
+switch still waiting, so approving that stale card afterwards changes nothing.
+
+`true` is a **loosening**, so it raises ONE approval card and changes nothing
+until a person approves it:
+
+    202 {"ok": true, "waiting": true, "uncensored_choices_offered": false,
+         "message": "Waiting for your approval. ..."}
+
+The card's action is `uncensored_models_enable` for `on` and
+`fiction_roleplay_enable` for `fiction`; both are tier `ask` in
+`jarvis-framework.toml`, and both are `("yes", "local")` in `jarvis_gate.py`'s
+`_RISK` table - reversible in one tap, and nothing leaves this PC, which is why
+the card is not a risky one. A build whose settings file says anything but `ask`
+answers `503` in plain words and raises no card at all. A second `true` while a
+card waits answers `202` with "A card to change this is already waiting for your
+approval" and raises no second card; the two switches never block each other.
+
+The card is decided on its own thread; only tier `ask` with outcome `approved`
+turns anything on. Denied, timed out, refused, or turned off while it waited:
+nothing changes, and `last[<action>]["outcome"]` says which happened (`enabled`,
+`denied`, `timed_out`, `refused`, `withdrawn`, `failed`).
+
+**Nothing is downloaded and nothing leaves the PC.** Importing a choice is
+Ollama's own `POST /api/create` with `from` set to a local `.gguf` path (the body
+under `create` above) through the EXISTING `/api/hardware/create` route, whose
+`models_create` card is unchanged; making one the model in use is the EXISTING
+`POST /api/models/switch` (`switch_model`). Neither is a new way out of the PC
+(ARCHITECTURE section 4), and `local_only()` refuses both switches outright -
+before any card - when the address the models are served on is not this PC
+(rule 1). Neither switch ever changes the everyday assistant.
+
+Both routes are wrapped round the server's handler by
+`jarvis_optin_models.install()`, after the server's own origin and token checks,
+like `/api/notifications/phone`; every other path goes straight through. There is
+**no app control for either switch yet** - the route is the backend half, and the
+desktop's Brain → Model screen is where the controls belong (the phone does not
+browse models, per the standing rule). `tools/check_parity.py` reports no drift
+until a client calls it.
+

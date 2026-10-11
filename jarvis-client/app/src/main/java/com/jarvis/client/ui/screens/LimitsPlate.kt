@@ -68,9 +68,25 @@ import kotlinx.serialization.json.JsonPrimitive
  * bar asks when it goes DOWN, so the line above the rows promises nothing about
  * direction and each row's own note (the PC's words) says which. So the plate
  * says that once, plainly, and every change re-reads the rows afterwards: a 2xx
- * can mean "a card is waiting", never "it is done". The sentence under the list
- * is always the PC's own ([JarvisRuntime.setLimit]), and a refusal goes into the
- * shared notice too.
+ * can mean "a card is waiting", never "it is done". The sentence is always the
+ * PC's own ([JarvisRuntime.setLimit]), and a refusal goes into the shared notice
+ * too.
+ *
+ * A SAVE THAT DID NOT HAPPEN SAYS SO, IN PLAIN WORDS, WHERE THE OWNER IS
+ * LOOKING (fixed 2026-10-10). This screen's clock control is the one that
+ * showed the bug item 9 found: choosing a new time and tapping "Use this time"
+ * closed the picker and the screen looked exactly as it had, because the PC's
+ * own limits write route is not there on that install (404, measured on the
+ * owner's PC) and a 404 was read as the PC's own sentence ([Limits.classifyPost]).
+ * Two things are fixed here, not one: the sentence is now the plain "this PC
+ * has no such setting" line, and it is drawn UNDER THE ROW the change was made
+ * on - the PC's sentence is only useful beside the control that produced it,
+ * and this list is longer than one screen, so any single fixed place is off the
+ * screen for some row. Measured on the owner's phone: with the answer drawn at
+ * the top of the card, tapping "Use this time" on Quiet hours start STILL
+ * looked like nothing had happened. A sentence that changed nothing is drawn in
+ * the warning colour; one that went through (or that is now waiting on the PC)
+ * keeps the ordinary one.
  *
  * [Limits.offered] is what is drawn, so a row the PC marks `pc_only` cannot
  * appear here even if a PC sends one.
@@ -85,6 +101,18 @@ internal fun LimitsSection(canAct: Boolean) {
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    /**
+     * The row [said] belongs to ([Limits.Row.key]). The sentence is drawn UNDER
+     * that row, which is where the owner is looking: this list is longer than
+     * one screen, so a sentence at the top of the card is off the screen for a
+     * change made near the bottom (the quiet-hours clock) exactly as one at the
+     * bottom was for a change near the top. Measured on the owner's phone
+     * 2026-10-10: with the answer at the top of the card, tapping "Use this
+     * time" on Quiet hours start still looked like nothing had happened.
+     */
+    var saidFor by remember { mutableStateOf<String?>(null) }
+    /** Nothing was written: [said] is a refusal, or the PC has no such route. */
+    var saidFailed by remember { mutableStateOf(false) }
     /** The key of the clock row whose picker is open, if any. */
     var picking by remember { mutableStateOf<String?>(null) }
 
@@ -109,9 +137,17 @@ internal fun LimitsSection(canAct: Boolean) {
         if (busy) return
         busy = true
         said = null
+        saidFor = null
+        saidFailed = false
         scope.launch {
             try {
-                said = JarvisRuntime.setLimit(key, value)
+                // Both halves: the PC's sentence, and whether anything was
+                // written. A save that did not happen must not close as if it
+                // had (item 9, the quiet-hours clock).
+                val a = JarvisRuntime.setLimit(key, value)
+                said = a.sentence
+                saidFor = key
+                saidFailed = !a.changed
             } finally {
                 busy = false
                 // Re-read whatever the answer was: a raise that was approved on
@@ -145,15 +181,15 @@ internal fun LimitsSection(canAct: Boolean) {
                     LimitRow(
                         row = r,
                         enabled = canAct && !busy,
+                        // The answer belongs to the row it was asked for, and is
+                        // drawn under that row's own control - the one place the
+                        // owner is certainly looking at, whatever the scroll.
+                        said = if (saidFor == r.key) said else null,
+                        saidFailed = saidFailed,
                         onChange = { value -> change(r.key, value) },
                         onPickTime = { picking = r.key },
                     )
                 }
-            }
-            said?.let {
-                Gap(6)
-                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
-                    modifier = Modifier.liveStatus())
             }
         }
     }
@@ -174,11 +210,25 @@ internal fun LimitsSection(canAct: Boolean) {
     }
 }
 
-/** ONE limit: the PC's title, the value in the PC's words, and its control. */
+/**
+ * ONE limit: the PC's title, the value in the PC's words, and its control.
+ *
+ * `internal` rather than private since 2026-10-10: the PC's own notification
+ * rows are drawn by a second card ([PcNotifySection], the desktop's
+ * "Notifications" card on the phone), and the two must not grow separate
+ * copies of the same switch, step and clock. Every control here is the same
+ * one, wired to the same `Limits.Row` and the same write.
+ *
+ * [said] is the PC's sentence for the change just made TO THIS ROW, drawn under
+ * the row's own control so it cannot be missed whatever the scroll position;
+ * [saidFailed] says nothing was written, and draws it in the warning colour.
+ */
 @Composable
-private fun LimitRow(
+internal fun LimitRow(
     row: Limits.Row,
     enabled: Boolean,
+    said: String?,
+    saidFailed: Boolean,
     onChange: (JsonElement) -> Unit,
     onPickTime: () -> Unit,
 ) {
@@ -278,6 +328,19 @@ private fun LimitRow(
                 )
             }
         }
+        // The answer to the change made on THIS row, under this row's control.
+        // A save that did not happen says so here, in the PC's plain words (or
+        // this app's own "your PC does not have these settings yet"), instead
+        // of the screen closing as if it had worked.
+        said?.let {
+            Gap(4)
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (saidFailed) chrome.warnInk else chrome.textMid,
+                modifier = Modifier.liveStatus(),
+            )
+        }
     }
 }
 
@@ -289,10 +352,13 @@ private fun LimitRow(
  * The dialog hands back the same shape the PC takes, "HH:MM", through
  * [Limits.validTime] - so a time can never leave this phone in a shape the PC
  * would refuse, and it is never turned into a number of minutes anywhere.
+ *
+ * `internal` beside [LimitRow], for the same reason: the quiet-hours times on
+ * the PC's Notifications card are these two rows, and one picker serves both.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TimeRowDialog(
+internal fun TimeRowDialog(
     row: Limits.Row,
     onDismiss: () -> Unit,
     onChosen: (String) -> Unit,

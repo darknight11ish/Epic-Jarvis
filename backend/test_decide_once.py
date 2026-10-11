@@ -30,7 +30,7 @@ sys.path.insert(0, str(HERE))
 # in the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
+from _where import BACKEND, REPO, missing, explain, require_rebuilt
 
 _TMP = Path(tempfile.mkdtemp(prefix="jarvis-decide-"))
 fw = types.ModuleType("jarvis_framework")
@@ -40,7 +40,29 @@ fw.load_framework = lambda: {}
 fw.audit_log = lambda *a, **k: None
 sys.modules.setdefault("jarvis_framework", fw)
 
+# jarvis_memory is one of the ten modules this repository ships WHOLE
+# (`backend/rebuilt/`), and _where.py is what puts them on sys.path. Without
+# that line this import died as `ModuleNotFoundError: No module named
+# 'jarvis_memory'` before one check could run - which is what the guard below
+# says in one line.
+require_rebuilt("jarvis_memory")
 import jarvis_memory as M
+
+# jarvis_extract.py is a DIFFERENT matter and needs a different answer. It is
+# one of the five files only the owner's PC has, because the patcher edits it in
+# place rather than copying it (scripts/apply-patches.ps1). A clone does not
+# hold it, run_suites.py skips this whole suite by name for exactly that reason,
+# and EVERY check in this file drives X - so run directly in a clone there is
+# nothing here that can be tested. That is a skip with the reason printed, not
+# the traceback it used to be (`ModuleNotFoundError: No module named
+# 'jarvis_extract'`, which reads as a broken patch rather than as the one file
+# this machine was never given).
+_ABSENT = missing("jarvis_extract.py")
+if _ABSENT:
+    print(f"skip  every check here drives jarvis_extract.py, which is not in "
+          f"{BACKEND} - only the owner's PC has it. {explain()}")
+    print("\n0 passed, 1 skipped, 0 failed")
+    sys.exit(0)
 import jarvis_extract as X
 
 HUD = BACKEND / "jarvis_hud.py"

@@ -21,7 +21,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** What went wrong, in terms the UI can say out loud rather than a stack trace. */
@@ -663,13 +662,18 @@ class JarvisApi(
     suspend fun devices(): ApiResult<JsonObject> = probe(Devices.PATH)
 
     /**
-     * `POST /api/devices/remove` or `/api/devices/shared`: the status and the
-     * body come back together ([Devices.removeSaid], [Devices.retireSaid]),
-     * so the PC's reason is shown. A 401 is a refused key.
+     * `POST /api/devices/remove`, `/api/devices/label` or `/api/devices/shared`:
+     * the status and the body come back together ([Devices.removeSaid],
+     * [Devices.labelSaid], [Devices.retireSaid]), so the PC's reason is shown.
+     * A 401 is a refused key.
+     *
+     * The allowed routes are [Devices.POST_PATHS] and nothing else, so a route
+     * that is added to the app cannot be forgotten here - which is exactly what
+     * happened to the label route, and what this check reads (see that list).
      */
     suspend fun devicesPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {
-            if (path != Devices.REMOVE_PATH && path != Devices.SHARED_PATH) {
+            if (path !in Devices.POST_PATHS) {
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a devices route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
@@ -3420,7 +3424,15 @@ class JarvisApi(
     }
 }
 
-private fun Throwable.readableMessage(): String = when (this) {
-    is IOException -> message ?: this::class.java.simpleName
-    else -> message ?: this::class.java.simpleName
-}
+/**
+ * A transport failure's own sentence, never the platform's
+ * ([PlainErrors.networkSays]). Every call above hands this to
+ * [ApiError.Unreachable] as its `detail`, so it is what sits behind the
+ * notice's "Details" - and OkHttp's own message, which names the address it
+ * dialled and both ports ("failed to connect to <host>/100.75.21.228 (port
+ * 4719) from /100.124.30.77 (port 42892) after 10000ms"), never reaches a
+ * screen at all. The failure's kind still travels beside it
+ * ([PlainErrors.networkKind], the second argument every call passes), which is
+ * what a bug report actually needs.
+ */
+private fun Throwable.readableMessage(): String = PlainErrors.networkSays(this)

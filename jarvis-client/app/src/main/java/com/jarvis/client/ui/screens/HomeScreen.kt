@@ -665,6 +665,12 @@ data class HomeActions(
     /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
     val onOpenLive: () -> Unit = {},
     /**
+     * "Find anything" (ui/screens/FindScreen.kt): the typed search over every
+     * place in the app, opened from the Find button on the status line. It
+     * searches and navigates; nothing here changes a setting.
+     */
+    val onOpenFind: () -> Unit = {},
+    /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
      * nothing while the link is stale.
@@ -1593,6 +1599,17 @@ private fun StatusLine(
                 }
             }
         }
+
+        // "Find anything" (ui/screens/FindScreen.kt; the parity audit of
+        // 2026-10-10, gap 8): the typed search over every place in the app.
+        // Here rather than in the navigation row below, for a reason that
+        // shows on a narrow phone: that row weights six destinations equally,
+        // and a seventh would ellipsize "Appearance" on most screens. This
+        // line is always on screen - even when the owner has the navigation
+        // row set to "Hidden until swiped" - so the way in is a control the
+        // owner can see, never a gesture. Word for word the label the
+        // desktop's own bar puts on its palette button.
+        Quiet(com.jarvis.client.ui.FindWords.BUTTON, color = chrome.textMid, onClick = actions.onOpenFind)
 
         // Shown only while there is something to retry: offline, and also
         // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
@@ -3436,6 +3453,22 @@ private fun Composer(
                 onCancel = actions.onVoiceCancel,
             )
         }
+    }
+    // Why Send is greyed, while the link is down (feature sweep on the
+    // owner's phone, 2026-10-10). It said nothing at all before: the owner
+    // typed a message, pressed Send and nothing happened, with no sentence
+    // anywhere naming the link as the reason. The runtime's own blocker cannot
+    // cover this one - a disabled button never reaches it. It is the line
+    // every other plate already shows under a control it has greyed for the
+    // link (this screen's own PhoneWatchStartPlate, just above), and only
+    // while the link is down: an empty box on a live link is not a fault.
+    com.jarvis.client.LinkWords.composerHeldLine(state.link)?.let { waiting ->
+        Text(
+            waiting,
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+            modifier = Modifier.padding(top = 6.dp).liveStatus(),
+        )
     }
     }
 }

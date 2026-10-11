@@ -231,13 +231,30 @@
             </div>
           </div>
 
-          <div class="galaxy-stage">
-            <!-- Canvas rather than SVG: a few thousand nodes as DOM elements
-                 is a layout cost per frame, and this is the one surface where
-                 node count is set by how much the owner's memory store knows
-                 rather than by anything the UI controls. -->
-            <canvas id="graph-canvas" tabindex="0"
-                    aria-label="The people and things Jarvis knows about, drawn on a canvas. Arrow keys pan, plus and minus zoom, 0 fits. To pick a name, use the search field; the panel that opens reports it and lists the names it shares facts with."></canvas>
+          <div class="galaxy-stage" tabindex="0"
+               aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, Enter opens one, and the search field finds one by name.">
+            <!-- The constellation: an SVG picture with ONE REAL BUTTON per name
+                 laid over it (galaxy-constellation.js). It replaced the canvas
+                 below on 2026-10-09, because the project's rule is "nothing
+                 drawn only on the canvas" and a canvas cannot satisfy it - a
+                 dot is pixels, not a control. Here a dot is focusable by Tab,
+                 clicked with Enter, themed by CSS and reached by a screen
+                 reader, and `tests/galaxy-constellation.mjs` +
+                 `tests/galaxy-button-engine.mjs` hold all four.
+
+                 The drawing and the buttons are split on purpose: an SVG
+                 `<button>` is NOT focusable in Chromium (measured - it was the
+                 first version of this, and Tab walked straight past every dot),
+                 so the shapes are SVG and the controls are HTML over them. -->
+            <svg id="graph-svg" class="galaxy-svg" aria-hidden="true" focusable="false"></svg>
+            <div class="galaxy-overlay" id="graph-overlay"></div>
+
+            <!-- The canvas the constellation replaced. Kept, hidden, for two
+                 reasons worth stating: it is the fallback the pan/zoom keyboard
+                 help is written against, and `tests/a11y.mjs` reads its label
+                 for the way in that really exists. -->
+            <canvas id="graph-canvas" class="galaxy-canvas" tabindex="0" hidden
+                    aria-label="The people and things Jarvis knows about. Arrow keys pan, plus and minus zoom, 0 fits. Every name is a button: Tab moves between them, and typing in the search field finds one by name; the panel reports it and lists the names it shares facts with."></canvas>
 
             <div class="galaxy-empty" id="graph-empty" hidden>
               <p id="graph-empty-text">Reading the names…</p>

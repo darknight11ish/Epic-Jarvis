@@ -270,6 +270,41 @@
           <button class="btn ghost small" id="fr-again" type="button" hidden>Set up again</button>
         </div>
         <span class="status" id="fr-status" role="status"></span>
+
+        <!-- ── The intro, replayable on demand ────────────────────────────────
+             The owner's request of 2026-10-10: "make the desktop intro
+             replayable if it was accidentally skipped." The walkthrough
+             (`onboarding.html`) was interactive and skippable but NOT
+             redoable - one Escape and it was gone.
+
+             This is a BUTTON, not a row in the checklist above, for two
+             reasons: it is not a setting (first-run-settings.js's own header
+             says that card gathers settings and writes nothing by hand), and
+             the checklist rows are hidden once the card is marked done
+             (`fr-rows`), which is exactly the state the owner is in when he
+             wants the intro back. So this sits outside both states and is
+             visible either way.
+
+             It also does not go through `backend/jarvis_settings_registry.py`
+             (PR #163): that registry generates the TOGGLE rows of Settings,
+             and a button is not one. Nothing generated needs regenerating for
+             it - `py -3 tools/gen_menu_cases.py --check` still matches, and no
+             new jump-list entry is created.
+
+             What it calls: `replay_onboarding`, granted to this window alone
+             by `capabilities/settings.json`'s `onboarding-replay` set. The
+             command opens the same window the first run uses and never
+             touches the marker, so the intro still appears by itself exactly
+             once. -->
+        <p class="note" id="fr-intro-line">
+          The five-screen welcome Jarvis shows by itself once on a new PC. If
+          you skipped it, or want to read it again, open it from here — this
+          does not change when it appears on its own.
+        </p>
+        <div class="row">
+          <button class="btn ghost small" id="fr-intro" type="button">Show the intro again</button>
+          <span class="status" id="fr-intro-status" role="status"></span>
+        </div>
       </section>
 
       <section class="card" id="connection">
@@ -525,6 +560,22 @@
               no text box. Drag it anywhere. Say "open a chat", or press
               Alt+Space, to bring up the real Jarvis bar. Alt+Shift+F shows
               or hides this face (see Shortcuts below to change either key).
+            </span>
+          </span>
+        </label>
+
+        <!-- Click-through (2026-10-10, the integration evaluation): clicks on
+             the floating face go to whatever is behind it, except on the
+             animal itself. Off by default, and it does nothing until the
+             floating face is on. -->
+        <label class="toggle">
+          <input id="floating-click-through" type="checkbox" />
+          <span>
+            <span id="floating-click-through-label">Click through to what is behind</span>
+            <span class="toggle-detail" id="floating-click-through-detail">
+              Clicks on the floating face go to whatever is behind it, except on
+              the animal itself - so it can still be dragged, and the face stops
+              getting in the way of whatever is underneath. Off to start.
             </span>
           </span>
         </label>

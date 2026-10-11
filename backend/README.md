@@ -180,6 +180,106 @@ on a throwaway copy instead.
 | `tag-suggest.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Suggest tags overnight"** (the owner's decision of 2026-09-30; `docs/JARVIS-API.md` section 104, `docs/OVERNIGHT-TAGS-DESIGN.md`; up to 3 cards a night). TWO gate hunks: `chat_tags_suggest_on` and `chat_tag_suggest` join the "acts only on tier ask" set and get their `_RISK` lines (right after `referee.patch`'s own, so it goes after it); ONE `jarvis_hud.py` block right after `referee.patch`'s that keeps the quiet hourly `tag_suggest` look on the one scheduler in step with the switch. It adds no tool; the routes `GET`/`POST /api/history/tags/suggest` and `POST /api/history/mark` are named in `chat-history.patch` and answered by `jarvis_chat_log.py`. Needs `jarvis_tag_suggest.py` (and the rebuilt `jarvis-framework.toml`'s two `ask` lines). Off by default; turning it on is one card; each suggested tag is one more card and is filed only on a tap. The local model reads only the owner's own first six messages of an untagged, ordinary chat that never read outside text (ARCHITECTURE section 5). Tests: `test_tag_suggest.py`, `test_chat_marks.py` (the "New section here" divider, JARVIS-API section 106, is in `jarvis_chat_log.py` and `chat-history.patch`). |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `readpage.patch` | `jarvis_gate.py` | **"Read one web page out loud"** (the owner's request of 2026-10-05: "does jarvis have the ability for me to post a webpage into jarvis and it can read the content out loud?"; `docs/JARVIS-API.md` section 115). THREE hunks in `jarvis_gate.py` only - no route and no `jarvis_hud.py` block at all, because the door is a MODEL TOOL (`read_web_page`), not a route: `read_web_page` joins the "acts only on tier ask" set, gets its `_RISK` line (`"no", "outbound"` - the PC contacts that one website and the request cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and its `_TOOL_ACTIONS` line (the third hunk, added 2026-10-06 - without it `action_for_tool()` fell through to `unclassified_tool`, so the card the owner was shown was never the one this tool raises; found on the owner's own PC, see below). Its context is `quiz-cloud.patch`'s own added lines and `inbox-tidy.patch`'s own `_TOOL_ACTIONS` line, so it goes after both - last, like every new patch. Needs `jarvis_readpage.py` and `jarvis_agent.py` copied in (both are in `apply-patches.ps1`'s shipped list); without them the tool is simply not offered to the model and the gate row is never used. The tool is **off until `"read_web_page"` is added to `[tools].enabled`** in `jarvis-framework.toml`, like every tool but `web_search`. Tests: `backend/test_readpage.py`. See "Read one web page out loud", at the very end. |
+| `gate-touches.patch` | `jarvis_gate.py` | **The gate read the card, not the action** (2026-10-10). `jarvis_gate.check()`'s one rule above the tier table - nothing may edit the policy or the gate itself - searched the whole PROMPT it was handed for its own `_PROTECTED` file names, BEFORE the tier branches. For a card raised by a route the prompt IS the card's text, so a card that merely DESCRIBED jarvis-framework.toml or jarvis_hud.py was refused at tier `never` before any card existed: no card, no Windows Hello, nobody asked, for anybody, ever. The owner's own log holds **45** of them (2026-10-03 .. 2026-10-10) - `enable_reading_tool` 21, `loosen_what_asks_first` 21, `restore_backup` 3 - and the redaction lengths name the files exactly (21 characters is jarvis-framework.toml, 13 is jarvis_hud.py). The rule now reads what the action **TOUCHES**: the parameters it was handed (`detail`, minus the keys that hold the card's own text) and the model's own tool call (the JSON object inside the prompt). Card prose is not a target. TWO hunks, `jarvis_gate.py` only, appended last: `_JSON_OBJECT_RE`/`_PROSE_KEYS`/`_target_blobs()`/`_touches_protected()`'s docstring, and the comment above `check()`'s call. No tier, stamp, Windows Hello or refusal-wording change - the refusal sentence and the "never" tier are identical. Its own suite is `backend/test_gate_touches.py`, which raises the three REAL cards through the real gate; see "The gate reads what an action touches" below. |
+| `uncensored-optins.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The owner's uncensored opt-ins, BOTH halves** (the owner's OWN decision of 2026-10-10, Decision 5 - `.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md`: "Uncensored: both of these - (a) one clearly-labelled opt-in model for fiction/role-play, never the everyday assistant and never a default, and (b) make the abliterated models already on disk usable as opt-in choices rather than downloading anything new"). TWO hunks in `jarvis_gate.py`, both right after `handoff-front.patch`'s own last entry in those two tables, so it goes after that patch: `uncensored_models_enable` and `fiction_roleplay_enable` join the "acts only on tier ask" set and get their `_RISK` lines (`"yes", "local"` - neither leaves this PC, and turning either off again is instant). ONE hunk in `jarvis_hud.py`, whose context is `screen-attach.patch`'s own last printed line: `jarvis_optin_models.install(Handler, ...)`, which answers `GET`/`POST /api/models/uncensored`. **It sits immediately BEFORE `plugin-loader.patch`**, and that position is load-bearing - the loader must stay the LAST entry in the list (everything after the loader must be a drop-in folder, never another core patch, and `tools/check_plugins.py` fails if it is not last), so the loader's own hunk was re-anchored onto this block's last two printed lines in the same change. **Every switch here is off by default and turning either one ON is ONE approval card; OFF is instant** - the project's standing rule for anything that loosens a limit. Both `[autonomy.tiers]` lines are `"ask"` in `backend/rebuilt/jarvis-framework.toml`, which the script merges into the owner's own file only when the line is missing. Needs `jarvis_optin_models.py` (shipped whole since PR #231); without it, or on any error, the banner says "optin NOT ON" and the route is not there. **Nothing is downloaded** (the import names a local `.gguf` PATH through the EXISTING `models_create` route) and the module refuses outright if the model store is not on this PC (rule 1). Tests: `backend/test_uncensored_optins.py` (the switch, the card and the route) and `backend/test_optin_models.py` (the naming, the label and the storage rules). See "The owner's uncensored opt-ins", at the very end. |
+
+## The gate reads what an action touches, not the words on its card
+
+**`gate-touches.patch`, 2026-10-10.** One refusal rule, narrowed. Nothing else
+about the gate changed.
+
+**What was wrong.** `jarvis_gate.check()` has one rule above the tier table:
+nothing an approved action can reach may rewrite the policy or the gate
+itself, because *"if the policy and the gate are writable by an action the
+gate itself approves, there is no gate - just a longer path to the off
+switch"*. It searched for its `_PROTECTED` names in the whole PROMPT it was
+handed, before the tier branches. For a card raised by a route, the prompt IS
+the card's own text:
+
+    jarvis_backup._decide_restore  -> gate(RESTORE_ACTION, detail, restore_card(...))
+    jarvis_asks_first              -> gate(LOOSEN_ACTION, detail, loosen_card(...))
+    jarvis_asks_first              -> gate(ENABLE_TOOL_ACTION, detail, tool_enable_card(...))
+    jarvis_mcp / jarvis_task_control / jarvis_schedule ... -> the same shape
+
+So a card that merely *described* a protected file was refused at tier `never`
+**before any card existed**: no card, no Windows Hello prompt, nothing for
+either app to show, and nothing anybody could do about it.
+
+**Measured, in the owner's own log** (`.openjarvis/logs/*.jsonl`,
+2026-10-03 .. 2026-10-10): **45** `gate.refused_protected` events -
+`enable_reading_tool` 21, `loosen_what_asks_first` 21, `restore_backup` 3. The
+redaction lengths identify the files exactly: 21 characters is
+`jarvis-framework.toml`, 13 is `jarvis_hud.py` (the gate's `_redact` writes
+`<redacted N chars>`). Each was followed by that module's own record of the
+outcome - `asks_first.loosen.card {"outcome": "refused"}`,
+`backup.restore.card {"outcome": "refused"}`. Three features had never once
+worked for anybody.
+
+**What "touches" means now, and the evidence for each half.** The rule reads
+the action's TARGET:
+
+- **the `detail`** the gate was handed - the action's own parameters. Every
+  module that raises a card builds it (`{"what": ..., "path": ..., "settings":
+  ..., "to": ...}`), and it is the same dict `_redact`'s own docstring calls
+  "the recipient of the email, the path of the file, the body of the shell
+  command". The keys in `_PROSE_KEYS` (`text`, `prompt`, `card`) hold the
+  CARD's words rather than a parameter, so they are dropped before the
+  search; every other key is searched, so a parameter added tomorrow is
+  covered by default and what has to be argued for is prose, not protection.
+- **the model's own tool call** - the JSON object inside the prompt. Both
+  shapes a real caller uses carry it: OpenJarvis's confirm callback
+  (`Allow execution of tool '<name>' with args {json}?`) and `jarvis_agent`'s
+  own `_gate_prompt` (`tool <name> {json}`, and the plan-step form
+  `plan step <tool> {json}`). A prompt with no parseable JSON is prose.
+- **the action name**, because the two terminal actions `jarvis_agent` makes
+  for itself are built from the tool name (`unclassified_tool:file_write`).
+
+**What is narrowed, said plainly.** Only free-prose prompts. A card's own
+wording can no longer reach this rule, so a future card that happens to
+mention a filename is raisable - which is the point: three cards had to be
+reworded by hand (PR #225, PR #227) before this patch existed, and rewording
+is not a fix, because the next card to mention a file is refused again.
+
+**What is unchanged, and it is the whole protection.** An action whose target
+IS a protected file is still refused at tier `never`, before any card, with
+the same sentence - `this touches <file>, which no tool may modify; edit it by
+hand` - and the same `gate.refused_protected` audit line. That holds on every
+path: a path or command in `detail`, an argument in the prompt
+(`{"path": "C:/x/jarvis_gate.py"}`), a tool name made from it, and even an
+auto-tier action (the rule still runs above the tier branches). Tiers,
+`Verdict.outcome`, the approval stamp, Windows Hello, `notice_for` and the
+refusal wording are untouched, and no new protected list or reason was added.
+
+**What it does not do.** It does not make a route card that legitimately
+writes `jarvis-framework.toml` - `loosen_what_asks_first`,
+`enable_reading_tool` - special-case anything: those cards carry no protected
+name in `detail` in the first place. It also does not read `jarvis_hud.py`,
+`jarvis_agent.py` or any other module; if a caller starts passing a protected
+name in some THIRD place, this rule will not see it, and that caller needs a
+line in `_target_blobs`, not a wider scan.
+
+**Tests that fail without it** (`backend/test_gate_touches.py`, 69 checks):
+
+- a card whose text names a protected file is raisable, and a row reaches the
+  queue with that text on it - the case that has bitten three times;
+- an action whose target is a protected file is refused at `never` with the
+  same plain reason, on all seven shapes above, and no row reaches the queue;
+- the three REAL cards (`restore_backup`, `enable_reading_tool`,
+  `loosen_what_asks_first`) are raised end to end through the REAL gate with
+  the SHIPPED tier table, on a scratch approvals database and a scratch audit
+  directory - never the owner's, and never by importing his live module;
+- everything else the gate refuses today it still refuses: a `never`-tier
+  action, an unreadable policy, `UNKNOWN_TIER` for an unclassified action, the
+  shell escalations, and `Verdict`'s own fail-closed rules;
+- the patch is registered in `apply-patches.ps1`, applies to the published
+  gate and reverses back out of it.
+
+**The three cards' text is deliberately still used as it is.** The cards in
+`jarvis_asks_first.py` and `jarvis_backup.py` were reworded on `main` (and
+`restore_backup`'s earlier) so they do not name a file - that stays, because
+it is plainer to read. This patch is the cause being fixed, not the wording:
+the suite's first check uses a card that DOES name one, so a reworded card
+cannot make the check vacuous.
 
 ## All but two of the patches apply, and that is correct
 
@@ -1879,7 +1979,7 @@ to the **model** as the tool result, and "denied" tells it to find another way
 — which, for a tool the owner would have approved, means routing around a gate
 nobody answered.
 
-## Added since: a denial can teach a standing rule — but only as a proposal
+## Added since: a denial can teach a standing rule — but only as a marked guess
 
 A prior audit found the gap and the raw material for closing it in the same
 pass: every `check()`/`decide()` branch already calls `_audit(...)`, so a
@@ -1892,10 +1992,26 @@ a line in a log.
 detail)` — added to both places a denial is returned (the on-time path and the
 late-poll path; `timed_out` calls it from neither, on purpose: nobody decided
 anything there, and seeding a rule from silence would teach Jarvis something
-that never happened). It builds one plain-language sentence — *"Remember
-this: I do not want Jarvis to `<action>` without asking me first. I just said
-no when it asked."* — and hands it to `jarvis_extract.propose()` tagged
-`source="gate_denial"`.
+that never happened). It builds one plain-language sentence that says in its own
+words that it is **Jarvis's guess** — *"Jarvis noticed a "no" when it asked to
+`<action>`. This is Jarvis's GUESS, marked as a guess: it is not a record of
+your words. No reason was given, just the action turned down - and none was made
+up to fill the gap. Jarvis is guessing the owner may want it to ask first before
+it `<action>` again: a guess for the owner to keep or discard."* — and hands it
+to `jarvis_extract.propose()` tagged `source="gate_denial"`.
+
+**Why a guess, and why it says so** (the owner's decision of 2026-10-10; entry
+`003` of `docs/RULE-FLEXIBILITY.md`). A Reject click carries none of the owner's
+words: `jarvis_hud.py`'s Reject sends only `{id, by}`, and `decide()` NULLs the
+card's own `prompt` and `detail`, so the action's name, the tier, the time and
+who pressed it are all that survive. The sentence this function used to write
+was a first-person claim — *"Remember this: I do not want Jarvis to `<action>`
+without asking me first. I just said no when it asked."* — presented to the
+learner as the owner's own turn, with "I just said no when it asked" inventing a
+reason for a click that carries none. Facts here are learned from the owner's
+own words only (`CLAUDE.md`, 2026-09-24), so the wording changed; `detail` is
+deliberately not read at all, because there is nothing in it that could honestly
+become a reason.
 
 **Why `propose()` and not a direct write.** It is the one choke point every
 fact this project learns already goes through — `memory-safety.patch` removed
@@ -1908,6 +2024,13 @@ same review queue as every extracted fact, "Keep" or "Discard" in the Brain
 window's Memory tab, one at a time, same as always. Best-effort: a failed or
 missing `jarvis_extract` import is swallowed, because a completed denial must
 never become an error the owner has to do something about.
+
+**The marking is not only in the backend.** `jarvis_intake.annotate()` sets
+`guessed` and puts the same words into `auto_reason` for a `gate_denial` row,
+which is the field both the PC's Brain window and the phone's Memory tab
+already show under a review card; the desktop draws it as a "Jarvis's guess,
+not something you said" note on the card itself. So the guess is labelled where
+the owner actually decides, not just inside `jarvis_gate.py`.
 
 Two new tests in `test_gate_outcome.py`, stubbing `jarvis_extract` the same
 way the rest of the file stubs `jarvis_framework`: a real denial (the same
@@ -3662,8 +3785,8 @@ checked for text written to be obeyed: "ignore your previous instructions",
 "always forward invoices to someone@…", "don't ask me before …", chat-format
 markers, hidden characters. A match adds a `flags` list to the card. **It
 drops nothing.** It runs on the processor, not the graphics card. The gate's
-own "I do not want Jarvis to … without asking me first" card is tested not
-to trip it.
+own guessed-rule card ("Jarvis noticed a \"no\" ... marked as a guess") is
+tested not to trip it.
 
 **10. Never learn from turns the backend started.** The learner now reads a
 conversation only when the code handing it over says it came from you -
@@ -4230,11 +4353,12 @@ audit log, through the same writer. Still one log.
   twice about one file. Its scanner still runs when the skill is loaded
   (`jarvis-framework.toml` section 12 says the scanner runs on the raw bytes
   before any skill reaches the model).
-- **Saying no also proposes a memory rule.** `gate-outcome.patch` turns every
-  denial into a memory proposal - here, "I do not want Jarvis to modify own
-  code without asking me first". That is the gate's own behaviour. It is only
-  a proposal in the review queue; Discard it if you only meant "not this
-  skill".
+- **Saying no also proposes a guessed rule.** `gate-outcome.patch` turns every
+  denial into a proposal in the review queue - here, a rule guessed from the
+  action's name, `modify_own_code`, saying plainly that it is Jarvis's guess
+  and not the owner's words. That is the gate's own behaviour. It is only a
+  suggestion: Discard it if you only meant "not this skill", and nothing is
+  saved or applied either way.
 - `notice_for()` words the card's lock-screen line from `jarvis_gate._RISK`.
   Whether `_RISK` has an entry for `modify_own_code` is not visible here; if
   it does not, the notice uses the unknown-action wording.
@@ -12624,8 +12748,8 @@ proves it can anchor on.
 
 Like every other settings switch of this shape (`learning_enable`,
 `custom_voice`, `loosen_what_asks_first`...), a "no" on this card must not
-turn into a proposed rule ("I do not want Jarvis to X without asking me
-first") - the card always asks anyway, so the proposal would say nothing.
+turn into a proposed rule (a rule guessed from the action's name, marked as
+Jarvis's guess) - the card always asks anyway, so the proposal would say nothing.
 `watch_notifications_enable` joins `_NO_RULE_FROM_DENIAL`, and its own
 `_RISK` entry says the card stays on this PC, as its own hunk in
 `watch-notifications.patch`, positioned after `asks-first.patch`'s own
@@ -13099,16 +13223,50 @@ counts and the backup's own date, read from its `manifest.json`, before
 anything is decided), then raises ONE approval card under `restore_backup`
 - added to `jarvis_owner_check.PC_ONLY_ACTIONS`, so it always needs
 Windows Hello and is always refused from any device but this PC, whatever
-`jarvis_gate.py`'s own risk table says. On approval, Jarvis backs up the
-CURRENT state first, automatically, with a fresh one-time recovery code
-(carried in the outcome exactly once, then gone on the next read), so the
-restore itself can be undone - then writes the backup's files back.
+`jarvis_gate.py`'s own risk table says. That refusal comes FIRST, before
+the body is read, in words that say where a restore is done ("Restoring
+has to be done in Jarvis on your PC, so nothing was restored...", both
+restore routes): a caller that can never approve the card is never told to
+wait for it (2026-10-10 - an API caller used to be answered "waiting for
+your approval, with Windows Hello" and the restore was refused a
+millisecond later, with no card and no prompt). On approval, Jarvis backs
+up the CURRENT state first, automatically, with a fresh one-time recovery
+code (carried in the outcome exactly once, then gone on the next read), so
+the restore itself can be undone - then writes the backup's files back.
 Restore only adds and overwrites; it never deletes a file that is not in
 the backup. Since 2026-10-05 it also writes the archive's `source/*.py`
 back into the folder the module runs from, so the CODE comes back with the
 data; the card says plainly that restoring an OLDER backup therefore puts
 back the older program and undoes updates applied since, naming
 `apply-patches.ps1`.
+
+**The restore card must not name a file `jarvis_gate.py` protects.** The
+card is what `jarvis_gate.check()` is handed as its `prompt`, and the gate
+reads the prompt for the names in its own `_PROTECTED` list
+(`jarvis-framework.toml`, `jarvis_gate.py`, `jarvis_hud.py`, ...) before it
+raises anything: a prompt naming one is refused at tier `never`, no card is
+ever shown and no Windows Hello prompt ever comes. Measured on the owner's
+PC, 2026-10-10 16:36:12Z: `gate.refused_protected {"action":
+"restore_backup", "file": "<redacted 13 chars>"}` and then
+`backup.restore.card {"outcome": "refused"}` - "jarvis_hud.py" was in the
+card's own sentence about the program files, so a restore could never be
+approved by anybody. The card now says "the .py files in the folder Jarvis
+runs from", and `backend/test_backup.py` holds the card and the detail
+handed to the gate against the gate's own list, read from
+`jarvis-backend/jarvis_gate.py`. **The same trap is open for any other card
+whose text names a protected file**: the owner's audit log to 2026-10-10
+holds `gate.refused_protected` 21 times for `enable_reading_tool` and 21
+times for `loosen_what_asks_first` (both are in
+`jarvis_owner_check.PC_ONLY_ACTIONS`, and both cards say which line of
+`jarvis-framework.toml` they change). Whether those two should be reworded
+or the gate should stop reading a route's own card for protected names is
+the owner's call, not this module's.
+
+**What the owner reads when a restore is refused** is `last_restore.message`
+(the desktop's Settings, Backups shows it): plain words with the next step
+in them. The technical reason - which tier the gate answered at, and the
+gate's own sentence - stays in `last_restore.why`, which `GET /api/backup`
+returns and neither app shows.
 
 ## `jarvis_gate.py`: a denial proposes no standing rule
 
@@ -18814,3 +18972,83 @@ copy of the owner's own `jarvis_gate.py` is present under `dshwork/` - that ever
 line the hunk needs is in that file verbatim. What no test in a checkout can prove is
 the apply itself: **`scripts/apply-patches.ps1`'s dry run is what proves it**, as for
 every patch here.
+
+---
+
+# The owner's uncensored opt-ins: `uncensored-optins.patch`, `jarvis_optin_models.py`
+
+**What they are, in the owner's own words** (2026-10-10, Decision 5, in
+`.dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md`): "Uncensored: both of these -
+(a) one clearly-labelled opt-in model for fiction/role-play, never the everyday
+assistant and never a default, and (b) make the abliterated models already on
+disk usable as opt-in choices rather than downloading anything new." The
+measured cost goes on every label: TruthfulQA drops 5.8 to 6.9 points on this
+model family, MMLU is about noise, and the only fitting build is 7 months old
+against a 5-day-old official one.
+
+**Two switches, both off on a machine that has never run the module**, in their
+own `optin-models.json` beside `hardware-choice.json` and `model-state.json`:
+
+| `body` | what it turns on | gate action | tier |
+|---|---|---|---|
+| `{"on": true}` | `jarvis-uncensored-*`: the abliterated and uncensored `.gguf` files already on this PC, offered as choices, each labelled | `uncensored_models_enable` | `ask` |
+| `{"fiction": true}` | one model set aside for stories and role-play, with its own instructions | `fiction_roleplay_enable` | `ask` |
+
+**Turning either one ON is ONE approval card, and OFF is instant.** That is the
+project's standing rule for anything that loosens a limit, and it is expressed
+in `jarvis_gate.py`'s `_RISK` table and its "acts only on tier ask" set - which
+is the whole reason this is a patch and not a drop-in folder. A card that is
+denied, times out, is refused, or whose switch is turned back off while it waits
+changes nothing. `jarvis_optin_models.request()` is the shape
+`jarvis_phone_notifications.request()` already proves, including the rule that
+OFF waits for an approved card's own write rather than racing it.
+
+**The route.**
+
+    GET  /api/models/uncensored   -> {on, fiction, choices[], off, never_default,
+                                      measured_cost, waiting, last, local_only}
+    POST /api/models/uncensored   -> {"on": true|false}      (opt-in b)
+                                     {"fiction": true|false}   (opt-in a)
+                                     202 waiting on ON; 200 instantly on OFF
+
+It is wrapped round the running server's handler by `install()`, after the
+server's own origin and token checks, like `jarvis_watch_notify.install()` and
+`jarvis_phone_notifications.install()`; every other path goes straight through.
+`docs/JARVIS-API.md` section 125 has the full shape.
+
+**Nothing is downloaded, and nothing leaves this PC.** Adding one of these models
+is Ollama's own `POST /api/create` with `from` set to a LOCAL `.gguf` path - a
+path, not a registry reference - handed to the EXISTING `models_create` route
+(`jarvis_hardware.py`); each entry in `choices[]` carries that exact body under
+`create`, so a screen can offer "add this one" without a second import path.
+Making one the model in use goes through the EXISTING `/api/models/switch`
+(`switch_model`, tier `ask`). The module writes no TOML and adds no tool.
+
+**Rule 1 in code, not only in prose.** `jarvis_optin_models.local_only()` reads
+the address `jarvis_models` itself reaches Ollama on and refuses - with plain
+words, before any card is raised - when that is not this PC. Nothing is offered,
+nothing is imported, and the fiction lane refuses too. That check will not invent
+a refusal when `jarvis_models` is absent (a staged test backend), and it does
+**not** read `OLLAMA_HOST`, which is Ollama's own BIND address and would turn a
+safe install off for no reason.
+
+**Never the everyday assistant**, in code and not just in prose: with both
+switches ON the everyday lane's model is byte-for-byte what it was, which
+`test_optin_models.py` proves, and no path in the module calls `switch_to`.
+
+**Every action that can raise a card has plain words on it**:
+`uncensored_models_enable` and `fiction_roleplay_enable` are rows in
+`jarvis_card_words.TITLES`, and `tools/gen_card_words_cases.py` was re-run so
+both apps' fixtures are what the producer makes today.
+
+**Tests.** `backend/test_uncensored_optins.py` is the switch, the card and the
+route (112 checks): off by default, ONE card per ON under the right action name
+at tier `ask`, nothing changed on denied/timed out/refused/withdrawn, one card
+at a time per switch with the other switch still free, the route's origin and
+token checks and its pass-through, and the wiring itself - the two tier lines in
+the shipped template, the patch sitting in front of `plugin-loader.patch` (which
+stays last) with the loader's own hunk re-anchored onto this one's printed lines,
+and the patch applying, reversing and building the patch stack's own text.
+`backend/test_optin_models.py` (92 checks) keeps the naming, labelling and
+storage rules. Neither suite needs the owner's PC: the checks that would are
+printed as `skip` with the reason, never as a pass.

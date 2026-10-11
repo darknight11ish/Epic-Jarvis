@@ -1261,10 +1261,15 @@ class _PlanStepVerdict:
     audit trail (outcome, tier, request_id) is the exact same one every
     other tool call already gets, never a stand-in for it."""
 
-    def __init__(self, allowed: bool, reason: str = "", outcome: str = ""):
+    def __init__(self, allowed: bool, reason: str = "", outcome: str = "",
+                 gate: str = ""):
         self.allowed = allowed
         self.reason = reason
         self.outcome = outcome or ("approved" if allowed else "refused")
+        #: The technical reason, when there is one, for a bug report: which tier
+        #: answered and which setting to change. Never shown to the owner; the
+        #: plan's own words about why a step did not run are `reason`.
+        self.gate = gate
 
 
 def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
@@ -1391,11 +1396,9 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
                           else "writes a note after Jarvis read outside text")
             verdict = _PlanStepVerdict(
                 False, outcome=str(getattr(verdict, "outcome", None) or "unknown"),
-                reason=(f"{step.tool} {why_person}, so it only runs after "
-                        f"the owner approves it on a card - but the approval gate let it "
-                        f"through at tier {vtier!r} without asking anyone. Nothing ran. "
-                        f"To use it, set {action_name} to \"ask\" in "
-                        f"jarvis-framework.toml's [autonomy.tiers]."))
+                reason=NOBODY_ASKED_WORDS.format(name=step.tool, why=why_person,
+                                                 action=action_name),
+                gate=NOBODY_ASKED_WHY.format(tier=vtier, action=action_name))
         cache[key] = (tool, state, checked_args, verdict)
         return cache[key]
 
@@ -2197,6 +2200,42 @@ NEEDS_A_PERSON = {
 #: program someone else wrote, running as the owner. Such a tool carries
 #: `outside_program = True`; its name is not known until the program says.
 OUTSIDE_PROGRAM_WHY = "is a tool from a plug-in program on this PC"
+
+#: WHAT THE OWNER READS WHEN A TOOL THAT MUST ASK WAS LET THROUGH WITHOUT
+#: ASKING ANYBODY (2026-10-10). The gate's verdict came back at a tier that is
+#: not "ask": a looser tier (auto/notify) lets the call run with nobody asked,
+#: and "never" refuses it outright. Either way the tool did not run, and the
+#: old words said it as `"the approval gate let it through at tier 'auto'
+#: without asking anyone ... set X to "ask" in jarvis-framework.toml's
+#: [autonomy.tiers]"` - accurate, and written for a programmer.
+#:
+#: These three sentences are what a person reads. They say what happened
+#: (nothing ran), that the settings file is the thing letting it through, and
+#: the one concrete thing to do. The tier, the gate's own action name and the
+#: setting to change are kept in the same tool result under `gate`, which is
+#: fed to the model with the rest of the JSON (so the model can still explain
+#: it) and which no owner-facing sentence quotes. The `refused: ` prefix the
+#: tool result carries stays: it is how the model reading a tool result knows
+#: the call did not happen, and it is put on in front of these sentences.
+NOBODY_ASKED_WORDS = (
+    "{name} {why}, so it only runs after you say yes on a card - and this time "
+    "nobody was asked, so nothing was run. Your settings file is letting it through without "
+    "asking: open jarvis-framework.toml, put {action} back to \"ask\", then try again from "
+    "Jarvis on the PC.")
+NOBODY_ASKED_NOTE_WORDS = (
+    "{name} writes to your notes, and this turn had read something from outside, so "
+    "it only runs after you say yes on a card - and this time nobody was asked, so nothing "
+    "was written. Your settings file is letting it through without asking: open "
+    "jarvis-framework.toml, put {action} back to \"ask\", then try again from Jarvis on the PC.")
+NOBODY_ASKED_SEARCH_WORDS = (
+    "this search asks you first ({card}), and this time nobody was asked, so nothing "
+    "was sent. Your settings file is letting it through without asking: open "
+    "jarvis-framework.toml, put {action} back to \"ask\", then try again from Jarvis on the PC.")
+#: The technical half of those refusals, for a bug report: the tier the gate
+#: answered at, and the setting and section to change. Kept in the record's
+#: `gate`; never in a sentence a person reads.
+NOBODY_ASKED_WHY = ("the approval gate let it through at tier {tier!r} without asking anyone; "
+                    "set {action} to \"ask\" in jarvis-framework.toml's [autonomy.tiers]")
 
 
 #: LIGHTS_WITHOUT_CARD - the owner's decision of 2026-09-26, after the
@@ -3127,6 +3166,20 @@ def _heartbeat(out: _Out, stop: threading.Event, every: float, delay: float) -> 
 REASONING_OFF = {"reasoning_effort": "none"}
 _reasoning_field_refused = False
 
+#: The room an answer needs before thinking may have any of the same budget
+#: (2026-10-09). Reasoning and the answer are ONE allowance on this endpoint:
+#: Ollama stops the reply - reasoning included - at `max_tokens`, so a short
+#: turn that thinks first can spend the whole allowance before it writes a
+#: single word of answer. Measured on this PC with qwen3:8b: a one-line
+#: factual question at max_tokens 128 spent all 128 tokens thinking (561
+#: characters of reasoning) and came back EMPTY in 3.5 s; the same question
+#: with thinking off answered correctly in 0.29 s. Below this floor,
+#: thinking is switched off for the turn and the model answers directly - a
+#: turn that was going to be cut off mid-thought loses nothing it could have
+#: used. 192 leaves room for a couple of sentences, which is what a turn
+#: this short was going to get anyway.
+REASONING_MIN_ANSWER_TOKENS = 192
+
 # --------------------------------------------------------------------------
 #   How much of each prompt Ollama reused (feasibility audit I03, 2026-09-26)
 # --------------------------------------------------------------------------
@@ -3143,6 +3196,68 @@ _reasoning_field_refused = False
 # that does not know the field ignores it (unknown JSON fields are skipped)
 # and nothing is recorded.
 PROMPT_USAGE = {"stream_options": {"include_usage": True}}
+
+# --------------------------------------------------------------------------
+#   When the model was not given the whole conversation (2026-10-09)
+# --------------------------------------------------------------------------
+#
+# Ollama deletes the FRONT of a prompt that is too long and answers anyway:
+# no error, no note, and the reply comes back naming the smaller prompt it
+# read instead. Measured on this PC (Ollama 0.40.2, qwen3:8b): eight prompts
+# of growing length, and every one past the limit reported a prompt of
+# EXACTLY 8,194 tokens - the same figure to the token, whatever was sent,
+# where the two prompts that still fitted reported what they really were.
+# (The owner's own benchmark saw the same shape at 16384, everything cut to
+# 16,382.) The beginning of the conversation is what the model cannot see,
+# while both apps show the whole thing as sent.
+#
+# So the answer's own request is measured against the answer that came back.
+# `prompt_tokens` is Ollama's count of what it really read; what Jarvis sent
+# is estimated the same way the prompt's own trimming is (estimate_tokens).
+# That estimator is deliberately pessimistic - 3 characters a token where
+# English is nearer 4 - so its number is not the model's number, and only a
+# gap too big for that margin to explain is treated as a loss. Measured here
+# with qwen3:8b: the two prompts that fitted reported 2.55x the estimate
+# (this content was word-heavy, which the estimator UNDER-counts) and the
+# six that were cut reported 0.18-0.67 of it. So the ratio alone separates
+# them, well clear of either band.
+#
+# Hence a shortfall is called material only when the model read less than
+# DROPPED_PROMPT_RATIO of what was sent, and only once the prompt is long
+# enough (DROPPED_PROMPT_MIN_TOKENS) for that gap to be a passage of text
+# rather than an artefact of the estimate. Under-reporting this is the safe
+# way to be wrong: a missed warning leaves today's silent behaviour, while a
+# false one would teach the owner to distrust the line.
+DROPPED_PROMPT_RATIO = 0.6
+DROPPED_PROMPT_MIN_TOKENS = 1200
+
+#: Said in the same place as every other "what Jarvis is doing" line - the
+#: activity line both apps already show for a link or a model that is in
+#: trouble (jarvis_hud.py's announce -> jarvis_events.set_activity). No
+#: address, no port, no token: what was lost and what to do about it.
+DROPPED_PROMPT_NOTE = (
+    "The model was not given the whole conversation - it reads only the end of "
+    "a prompt that is too long, so the earliest part of this chat was dropped "
+    "before it answered. Anything it says about earlier messages may be wrong. "
+    "Start a new conversation, or ask again in a shorter message.")
+
+
+def dropped_prompt_note(sent_tokens: Optional[int],
+                        read_tokens: Optional[int]) -> Optional[str]:
+    """DROPPED_PROMPT_NOTE when the model read materially less than was sent,
+    else None.
+
+    `sent_tokens` is this turn's own estimate of its biggest prompt,
+    `read_tokens` what Ollama said it read. Either being absent means the
+    question cannot be asked - an Ollama that reports no count says nothing
+    about what it read, and a guess must not become an accusation."""
+    if not sent_tokens or not read_tokens:
+        return None
+    if sent_tokens < DROPPED_PROMPT_MIN_TOKENS:
+        return None
+    if read_tokens >= sent_tokens * DROPPED_PROMPT_RATIO:
+        return None
+    return DROPPED_PROMPT_NOTE
 
 
 def _note_prompt_use(prompt_tokens: Optional[int], cached_tokens: Optional[int],
@@ -5789,6 +5904,21 @@ def _chat_model_now() -> Optional[str]:
     return got or (os.environ.get("JARVIS_MODEL") or "").strip() or None
 
 
+def _lane_context(url: str, model: str) -> Optional[int]:
+    """The context `model` must be loaded at on this lane, for a preload that
+    names one, or None when nothing can say - and then no preload is sent.
+
+    jarvis_power_switch.lane_context() owns the answer (what GET /api/ps says
+    the model is loaded at now, else what this lane was last seen at, else the
+    model's own Modelfile num_ctx), so this preload and the wake-up preload in
+    jarvis_power_switch can never disagree about the size. Never raises."""
+    try:
+        import jarvis_power_switch
+        return jarvis_power_switch.lane_context(url, model)
+    except Exception:
+        return None
+
+
 def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None) -> bool:
     """Loads the everyday model into the graphics card now (Ollama's own
     "load with an empty prompt"), so Jarvis Live's first answer does not wait
@@ -5801,13 +5931,31 @@ def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None)
     would load a second model onto a card with room for one (effectiveness
     audit 2026-09-28, 3.2). No keep_alive is sent, so Ollama's own setting
     (OLLAMA_KEEP_ALIVE=-1, MODEL-TOPOLOGY) is left alone - the preload
-    jarvis_power_switch.warm_up already does the same."""
+    jarvis_power_switch.warm_up already does the same.
+
+    THE CONTEXT IS NAMED, ALWAYS (2026-10-11). A `POST /api/generate` that
+    carries a model and no `options.num_ctx` loads a model that is not already
+    loaded at Ollama's OWN default - 2,048 on the owner's install - NOT at the
+    lane's `OLLAMA_CONTEXT_LENGTH`/`-ContextLength`. This call used to send
+    exactly that, and the owner's everyday lane (127.0.0.1:11436, qwen3.5:9b,
+    -ContextLength 196608) was reloaded at `-c 2048` twice on 2026-10-10/11
+    (its own llama log; once 6 minutes before the lane read
+    `context_length: 2048`), silently shrinking a 196,608-token window 96x.
+    So the body now carries the lane's own context, from
+    `_lane_context`/jarvis_power_switch.lane_context. When nothing can say
+    which context the lane is set to, NOTHING is sent and this returns False:
+    leaving the model as it is, so the first question loads it at the lane's
+    own setting, beats preloading it at a smaller one."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
     name = model or _chat_model_now() or "jarvis-primary"
     try:
         if not _is_this_machine(url) or local_model_refusal(url, name):
             return False
-        _get_json(f"{url}/api/generate", {"model": name}, timeout=120.0)
+        ctx = _lane_context(url, name)
+        if not ctx or int(ctx) <= 0:
+            return False
+        _get_json(f"{url}/api/generate",
+                  {"model": name, "options": {"num_ctx": int(ctx)}}, timeout=120.0)
         return True
     except Exception:
         return False
@@ -6296,16 +6444,25 @@ def chat_body(model: str, messages: list, opts: dict, tools=None, *,
     app's temperature/top_p and max_tokens (`opts`), reasoning_effort
     (from jarvis_thinking unless this Ollama refused it once), tools. No `options`,
     no num_ctx, no keep_alive: the model's own settings decide those
-    (jarvis-primary.Modelfile says why)."""
+    (jarvis-primary.Modelfile says why).
+
+    Thinking is left off when the answer's own allowance is too small to
+    share with it (REASONING_MIN_ANSWER_TOKENS): both come out of `max_tokens`,
+    so a turn that thinks first can lose the whole answer - see that constant.
+    Every other turn keeps whatever level the owner chose."""
     body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
     if not _reasoning_field_refused:
         reasoning = None
         try:
-            import jarvis_thinking
-            reasoning = jarvis_thinking.reasoning_parameters(
-                model, question=question, spoken=spoken,
-                ollama_url=ollama_url, role=role
-            )
+            room = opts.get("max_tokens")
+            too_little_room = (isinstance(room, int) and not isinstance(room, bool)
+                               and room < REASONING_MIN_ANSWER_TOKENS)
+            if not too_little_room:
+                import jarvis_thinking
+                reasoning = jarvis_thinking.reasoning_parameters(
+                    model, question=question, spoken=spoken,
+                    ollama_url=ollama_url, role=role
+                )
         except Exception:
             pass
         if reasoning:
@@ -6861,6 +7018,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     rounds = 0
     # Ollama's prompt counts, summed over this turn's rounds (PROMPT_USAGE).
     prompt_use: dict = {"prompt": None, "cached": None}
+    # This turn's biggest prompt and what the model said it read of it - see
+    # dropped_prompt_note. `tokens` is Jarvis's own estimate of what it sent.
+    sent_use: dict = {"tokens": 0, "read": None}
 
     def say_step(phase: str, tool: Optional[str] = None, **kw) -> None:
         try:
@@ -6921,13 +7081,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     question_text = c
                     break
         base_url = chat_url().rsplit("/v1", 1)[0] if "/v1" in chat_url() else chat_url()
-        body = chat_body(cur["model"],
-                         dress_messages(fit_messages(clear_old_tool_results(msgs, room), room),
-                                        manner=manner,
-                                        focus=focus_brief, next_time=next_time["note"],
-                                        spoken=watch.spoken, live=watch.live,
-                                        cut_off=watch.cut_off, crisis=watch.crisis),
-                         opts, offer["schemas"] if offer_tools else None,
+        # Held out of the call so that what this round really sends can be
+        # measured against what the model says it read - see sent_use.
+        sent_messages = dress_messages(
+            fit_messages(clear_old_tool_results(msgs, room), room),
+            manner=manner, focus=focus_brief, next_time=next_time["note"],
+            spoken=watch.spoken, live=watch.live,
+            cut_off=watch.cut_off, crisis=watch.crisis)
+        body = chat_body(cur["model"], sent_messages, opts,
+                         offer["schemas"] if offer_tools else None,
                          spoken=watch.spoken, question=question_text, role="everyday",
                          ollama_url=base_url)
         stripper = _ThinkStripper()
@@ -7042,6 +7204,13 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
             if got is not None:
                 prompt_use[key] = (prompt_use[key] or 0) + got
+        # What this round SENT, against what the model said it read (see
+        # "When the model was not given the whole conversation"). Kept per
+        # round: the longest prompt is the one with the most to lose, and a
+        # tool round's own results are in neither figure.
+        seen = estimate_tokens(sent_messages)
+        if seen > sent_use["tokens"]:
+            sent_use.update(tokens=seen, read=rnd.prompt_tokens)
         return rnd
 
     def deliver_table(text: str) -> None:
@@ -7322,6 +7491,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             # The last round asked for a tool anyway, after tools were taken
             # away (max_rounds). Nothing ran; to the app the answer is over.
             finish = "stop"
+        # The model read less of the prompt than was sent (see "When the model
+        # was not given the whole conversation"): said in the activity line,
+        # the same place as any other link or model trouble. After the answer,
+        # so the owner is never kept waiting for a warning about it, and
+        # through `announce` because a backend without an activity line must
+        # still answer - this is a note, never a failure.
+        dropped = dropped_prompt_note(sent_use["tokens"], sent_use["read"])
+        if dropped and announce is not None:
+            try:
+                announce(dropped)
+            except Exception:
+                pass
         if out.sse:
             if last is not None and (last.ended or last.finish):
                 out.send(_sse(_chunk(cid, created, cur["model"], {}, finish or "stop")))
@@ -7820,25 +8001,18 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         vaction = getattr(verdict, "action", None) or action_name
         why = NEEDS_A_PERSON.get(name) or OUTSIDE_PROGRAM_WHY
         result = {"ok": False,
-                  "error": (f"refused: {name} {why}, so it "
-                            f"only runs after the owner approves it on a "
-                            f"card - but the approval gate let it through "
-                            f"at tier {vtier!r} without asking anyone. "
-                            f"Nothing was run. To use it, set "
-                            f"{vaction} to \"ask\" in "
-                            f"jarvis-framework.toml's [autonomy.tiers].")}
+                  "error": "refused: " + NOBODY_ASKED_WORDS.format(
+                      name=name, why=why, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
     elif note_why and not _a_person_said_yes(verdict):
         # Allowed, but nobody was asked - after outside text. See NOTE_WRITES.
         say_step("tool_refused", name)
         vtier = getattr(verdict, "tier", None) or "unknown"
         vaction = getattr(verdict, "action", None) or action_name
         result = {"ok": False,
-                  "error": (f"refused: {name} writes to the owner's notes, and outside "
-                            f"text shaped this turn, so it only runs after the owner "
-                            f"approves it on a card - but the approval gate let it "
-                            f"through at tier {vtier!r} without asking anyone. "
-                            f"Nothing was written. To use it, set {vaction} to "
-                            f"\"ask\" in jarvis-framework.toml's [autonomy.tiers].")}
+                  "error": "refused: " + NOBODY_ASKED_NOTE_WORDS.format(
+                      name=name, action=vaction),
+                  "gate": NOBODY_ASKED_WHY.format(tier=vtier, action=vaction)}
     elif out.gone:
         # Approved - but the app that asked has gone, so nobody would see
         # what it did or the answer that followed. Not run; the owner is told
@@ -8047,11 +8221,11 @@ def _web_search_call(args: dict, call: dict, convo: list, steps: list, checker,
             steps.append(step)
             say_step("tool_refused", name)
             vtier = getattr(verdict, "tier", None) or "unknown"
-            return reply({"ok": False, "error": (
-                f"refused: this search asks the owner first ({lines[0]}) - but the "
-                f"approval gate let it through at tier {vtier!r} without asking anyone. "
-                f"Nothing was sent. To use it, set {WS.ACTION_SEARCH} to \"ask\" in "
-                f"jarvis-framework.toml's [autonomy.tiers].")})
+            return reply({"ok": False,
+                          "error": "refused: " + NOBODY_ASKED_SEARCH_WORDS.format(
+                              card=lines[0], action=WS.ACTION_SEARCH),
+                          "gate": NOBODY_ASKED_WHY.format(tier=vtier,
+                                                          action=WS.ACTION_SEARCH)})
     if out.gone:
         steps.append(step)
         say_step("tool_refused", name)

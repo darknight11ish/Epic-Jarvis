@@ -1,0 +1,8 @@
+{
+  "name": "chatbot-routes",
+  "summary": "the routes both apps use to have Jarvis talk to an AI chatbot for the owner.",
+  "module": "jarvis_chatbot_routes",
+  "install": "handler",
+  "replaces_patch": "chatbot-routes.patch",
+  "stack_order": 93
+}

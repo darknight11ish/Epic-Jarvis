@@ -1,0 +1,1456 @@
+diff --git a/backend/jarvis_menus.py b/backend/jarvis_menus.py
+index d0c0b078..8f070af5 100644
+--- a/backend/jarvis_menus.py
++++ b/backend/jarvis_menus.py
+@@ -209,6 +209,16 @@ MENUS: tuple = (
+     _m("settings.browser-engine", "Browser without a window",
+        "Which browser Jarvis uses for plain reading.",
+        names=("browser without a window", "headless browser", "browser settings")),
++    # "Docker" (the owner's request of 2026-10-09: "add more docker integration
++    # into jarvis that can be toggled with settings inside both the android app
++    # and desktop program"; docs/DOCKER-INTEGRATION-DESIGN.md). The containers
++    # Jarvis itself uses on this PC - today SearXNG, its default web-search
++    # provider (jarvis_search.py:121-122) - and a start/stop for each, behind
++    # the same gate as every other action. Same id in both apps, like every
++    # other settings row. Nothing here pulls an image or creates a container.
++    _m("settings.docker", "Docker",
++       "The containers Jarvis uses on this PC, and starting or stopping one.",
++       names=("docker", "docker settings", "the containers", "containers")),
+     # "When the phone does not answer" (the owner's decision of 2026-10-08:
+     # "make this a setting for both options with 1 as the default"): how long
+     # the captcha hand-off - a live picture of one of the owner's browser
+diff --git a/backend/jarvis_settings_registry.py b/backend/jarvis_settings_registry.py
+index 2c682c1c..170373ea 100644
+--- a/backend/jarvis_settings_registry.py
++++ b/backend/jarvis_settings_registry.py
+@@ -256,6 +256,16 @@ SECTIONS: tuple = (
+     # its own Settings row for picture mode).
+     Section("screen-look", ("look at this and watch with me", "look at this", "watch with me", "looking at my screen",
+                             "watch with me settings", "the screen settings")),
++    # "Docker" (the owner's request of 2026-10-09: "add more docker integration
++    # into jarvis that can be toggled with settings inside both the android app
++    # and desktop program"; docs/DOCKER-INTEGRATION-DESIGN.md). Docker is used
++    # for exactly one thing today - SearXNG, the default web-search provider
++    # (jarvis_search.py:121-122, needs_docker at :1303) - and it is started by
++    # hand. This is the section for managing that: the containers on Jarvis's
++    # own list (jarvis_docker.py's SERVICES), their state, and a start or stop
++    # for one. A card on the desktop and a Settings row on the phone, both fed
++    # by the same words from the PC - `jarvis_docker.WORDS`, one table.
++    Section("docker", ("docker", "docker settings", "the containers", "containers")),
+     # The headless browser, Obscura (2026-09-29): its own card on the desktop
+     # and its own Settings row on the phone - the switch, which browser Jarvis
+     # uses, and the install line.
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt b/jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt
+index a71fb331..8ae84570 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt
+@@ -4273,6 +4273,42 @@ object JarvisRuntime {
+     /** `GET /api/chatbot/handoff_mode`. */
+     suspend fun handoffModeSettings(): ApiResult<JsonObject> = api.handoffModeSettings()
+ 
++    /**
++     * `GET /api/docker/containers` - the containers on Jarvis's OWN list on the
++     * PC, their state, and the PC's own sentences for the screen
++     * (`backend/jarvis_docker.py`; docs/DOCKER-INTEGRATION-DESIGN.md). A read:
++     * it starts nothing and changes nothing.
++     */
++    suspend fun dockerContainers(): ApiResult<JsonObject> = api.dockerContainers()
++
++    /**
++     * One start or stop of a container Jarvis itself uses on the PC.
++     *
++     * A START is held on a stale link (rule 4) and raises ONE approval card on
++     * the PC - nothing is started until a person approves it. A STOP is NEVER
++     * held: it only makes Jarvis do less.
++     *
++     * @return the sentence to show under the row.
++     */
++    suspend fun dockerService(service: String, action: String): String {
++        val body = com.jarvis.client.net.Docker.body(service, action)
++            ?: return "That is not a start or a stop."
++        if (action == com.jarvis.client.net.Docker.START) {
++            actionBlocker()?.let { return it }
++        }
++        return when (val r = writeNoticingCards { api.setDockerService(body) }) {
++            is ApiResult.Ok -> when (val o = r.value) {
++                is com.jarvis.client.net.DesktopWrite.Outcome.Refused ->
++                    "Not changed. " + o.why
++                is com.jarvis.client.net.DesktopWrite.Outcome.Done -> o.said
++                    ?: com.jarvis.client.net.Docker.ASKING
++                is com.jarvis.client.net.DesktopWrite.Outcome.Waiting ->
++                    o.said ?: com.jarvis.client.net.Docker.WAITING
++            }
++            is ApiResult.Failed -> "Not changed. " + describe(r.error)
++        }
++    }
++
+     /**
+      * The choice. "Keep offering it" is held on a stale link (rule 4) and
+      * raises an approval card on the PC; "Stop early" is NEVER held - it only
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/net/Docker.kt b/jarvis-client/app/src/main/java/com/jarvis/client/net/Docker.kt
+new file mode 100644
+index 00000000..b85dc8cf
+--- /dev/null
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/net/Docker.kt
+@@ -0,0 +1,201 @@
++package com.jarvis.client.net
++
++import kotlinx.serialization.json.JsonArray
++import kotlinx.serialization.json.JsonObject
++import kotlinx.serialization.json.JsonPrimitive
++import kotlinx.serialization.json.booleanOrNull
++
++/**
++ * Docker: the containers Jarvis itself uses on this PC, and a start or stop for
++ * one (backend/jarvis_docker.py; the owner's request of 2026-10-09, "add more
++ * docker integration into jarvis that can be toggled with settings inside both
++ * the android app and desktop program"; docs/DOCKER-INTEGRATION-DESIGN.md).
++ *
++ * Docker is used for exactly ONE thing in Jarvis today: SearXNG, the default
++ * web-search provider (`jarvis_search.py:121-122`, `needs_docker` at `:1303`).
++ * Until now it was started by hand from `docker/searxng/docker-compose.yml`.
++ *
++ * WHAT THE PC WILL AND WILL NOT DO, said here because the phone must not
++ * suggest otherwise:
++ *
++ *  * it lists only the containers on ITS OWN list ([Service.ours]), never every
++ *    container on the machine - a container it did not create is shown as not
++ *    its own and no button touches it;
++ *  * it never downloads an image. A start whose image is not already on the PC
++ *    comes back refused ([Service.canStart] false, and the PC's own sentence in
++ *    [Service.why]) rather than pulling one;
++ *  * a start raises ONE approval card and changes nothing until it is approved;
++ *    a stop only ever makes Jarvis do less, so it is instant;
++ *  * a container published beyond this PC's own loopback, or running
++ *    privileged, is never touched.
++ *
++ * THE WORDS ARE THE PC'S OWN. `GET /api/docker/containers` carries the whole
++ * `WORDS` table from `backend/jarvis_docker.py` under `words`, and [View.said]
++ * reads a sentence out of it - so both apps show the same thing, word for word,
++ * instead of this file keeping a second copy that could drift. The constants
++ * below are only fallbacks for a PC whose backend is older than this screen.
++ *
++ * Pure Kotlin (no Android), so a JVM test can run it against the PC's real
++ * answer shape.
++ */
++object Docker {
++    /** The list, read-only. */
++    const val PATH_LIST = "/api/docker/containers"
++
++    /** One start or stop. */
++    const val PATH_SERVICE = "/api/docker/service"
++
++    const val START = "start"
++    const val STOP = "stop"
++
++    // --- fallbacks only: the PC sends these in `words` ---------------------
++    const val TITLE = "Docker"
++    const val DETAIL =
++        "Jarvis can start and stop the containers it uses on this PC. They answer on this PC " +
++            "only, never the home network and never the internet."
++    const val UNREAD = "Could not read this from your PC."
++    const val ASKING = "Asking your PC…"
++    const val WAITING = "Waiting for your approval."
++    const val RUNNING = "Running"
++    const val STOPPED = "Stopped"
++    const val NOT_HERE = "Not on this PC yet"
++    const val NOT_OURS = "Not one of Jarvis's"
++    const val WAITING_LINK = "Waiting for the connection to your PC."
++
++    /** The sentence shown while a start waits for its approval card. */
++    const val OPENS_A_CARD = "Starting a service asks for your approval on the PC."
++
++    private fun JsonObject?.text(key: String): String? =
++        (this?.get(key) as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
++            ?.takeIf { it.isNotEmpty() }
++
++    /** A real JSON true only - the string "true" is not one. */
++    private fun JsonObject?.flag(key: String): Boolean? =
++        (this?.get(key) as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
++
++    /** One container on Jarvis's own list. */
++    data class Service(
++        val key: String,
++        /** The container's name on this PC. */
++        val container: String,
++        /** One plain line: what breaks if this is down. */
++        val provides: String,
++        /** Where it answers - always this PC's own loopback. */
++        val url: String,
++        val published: String,
++        /** The image and tag Jarvis's list expects. */
++        val pinnedImage: String,
++        /** True only when the live container matches that list exactly. */
++        val ours: Boolean,
++        val present: Boolean,
++        val running: Boolean,
++        val status: String,
++        /** True only when the image is already on the PC (never a download). */
++        val canStart: Boolean,
++        val canStop: Boolean,
++        /** The PC's own sentence about anything wrong here, or "". */
++        val why: String,
++    ) {
++        /** What the row says in one word. */
++        val stateWord: String
++            get() = when {
++                !present -> NOT_HERE
++                !ours -> NOT_OURS
++                running -> RUNNING
++                else -> STOPPED
++            }
++    }
++
++    /**
++     * `GET /api/docker/containers`, as the row reads it - the reference is
++     * `view()` in backend/jarvis_docker.py. [available] is false for anything
++     * that is not the PC's exact shape: never a guess.
++     */
++    data class View(
++        /** True when the Docker engine on the PC answered at all. */
++        val docker: Boolean,
++        val services: List<Service>,
++        /** The PC's own sentences, exactly as jarvis_docker.WORDS holds them. */
++        val words: Map<String, String>,
++        /** The PC's plain reason when Docker is not answering, or "". */
++        val why: String,
++        val available: Boolean,
++    ) {
++        /** The title, in the PC's own words when it sent any. */
++        val title: String get() = words["title"] ?: TITLE
++
++        /** The line under the title, in the PC's own words when it sent any. */
++        val detail: String get() = words["detail"] ?: DETAIL
++
++        /** One of the PC's sentences, with `{name}` filled in. */
++        fun said(key: String, name: String = ""): String =
++            (words[key] ?: "").replace("{name}", name).replace("{container}", name)
++
++        /** What the row shows when the list itself could not be read. */
++        val line: String
++            get() = when {
++                !available -> UNREAD
++                !docker -> why.ifEmpty { UNREAD }
++                services.isEmpty() -> UNREAD
++                else -> ""
++            }
++    }
++
++    private fun service(el: JsonObject): Service? {
++        val key = el.text("service") ?: return null
++        return Service(
++            key = key,
++            container = el.text("container").orEmpty(),
++            provides = el.text("provides").orEmpty(),
++            url = el.text("url").orEmpty(),
++            published = el.text("published").orEmpty(),
++            pinnedImage = el.text("pinned_image").orEmpty(),
++            ours = el.flag("ours") == true,
++            present = el.flag("present") == true,
++            running = el.flag("running") == true,
++            status = el.text("status").orEmpty(),
++            canStart = el.flag("can_start") == true,
++            canStop = el.flag("can_stop") == true,
++            why = el.text("why").orEmpty(),
++        )
++    }
++
++    /** The `words` object the PC sends, or an empty map for an older backend. */
++    private fun words(el: JsonObject?): Map<String, String> {
++        val o = el ?: return emptyMap()
++        val out = LinkedHashMap<String, String>()
++        for ((k, v) in o) {
++            (v as? JsonPrimitive)?.takeIf { it.isString }?.content?.trim()
++                ?.takeIf { it.isNotEmpty() }?.let { out[k] = it }
++        }
++        return out
++    }
++
++    /**
++     * Parses the answer. A body that is not the PC's shape reads as NOT
++     * available rather than as an empty, healthy list - the difference matters,
++     * because an empty list would look like "nothing to start".
++     */
++    fun view(status: JsonObject?): View {
++        if (status == null || status["docker"] == null) {
++            return View(false, emptyList(), words(status?.get("words") as? JsonObject), "", false)
++        }
++        val list = (status["services"] as? JsonArray)
++            ?.mapNotNull { service(it as? JsonObject ?: return@mapNotNull null) }
++            .orEmpty()
++        return View(
++            docker = status.flag("docker") == true,
++            services = list,
++            words = words(status["words"] as? JsonObject),
++            why = status.text("why").orEmpty(),
++            available = true,
++        )
++    }
++
++    /** The body for one start or stop, or null when it is not one of the two. */
++    fun body(service: String, action: String): String? {
++        if (service.isBlank() || action !in listOf(START, STOP)) return null
++        if (service.any { !(it.isLetterOrDigit() || it == '-' || it == '_' || it == '.') }) return null
++        return "{\"service\":\"$service\",\"action\":\"$action\"}"
++    }
++}
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt b/jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt
+index 9782d694..809e8cd5 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt
+@@ -2145,6 +2145,22 @@ class JarvisApi(
+     suspend fun setHandoffMode(body: String): ApiResult<DesktopWrite.Outcome> =
+         postWrite(HandoffMode.PATH, body)
+ 
++    /**
++     * `GET /api/docker/containers`: `{"docker", "services", "words", "why"}` -
++     * the containers on Jarvis's OWN list (`backend/jarvis_docker.py`'s
++     * `SERVICES`), their state, and the PC's own sentences for the screen. A
++     * read: it starts nothing and changes nothing (docs/DOCKER-INTEGRATION-DESIGN.md).
++     */
++    suspend fun dockerContainers(): ApiResult<JsonObject> = probe(Docker.PATH_LIST)
++
++    /**
++     * One start or stop. A start answers 202 waiting while its approval card is
++     * up; a stop only ever makes Jarvis do less, so it is immediate. Nothing but
++     * a body [Docker.body] made is sent.
++     */
++    suspend fun setDockerService(body: String): ApiResult<DesktopWrite.Outcome> =
++        postWrite(Docker.PATH_SERVICE, body)
++
+     /**
+      * `GET /api/form-review/picture?id=` - the screenshot of a web form Jarvis
+      * filled in, for the card that asks to submit it (FormReview). A read: not
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt b/jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt
+index dbc00cec..efd4fac6 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/net/MenuCatalog.kt
+@@ -65,6 +65,7 @@ object MenuCatalog {
+         Menu("settings.spending", "Spending", "Spending summaries from a bank file you drop in.", true, true, "settings", "", "card", "group.finance", null, true, true, ""),
+         Menu("settings.screen-look", "Look at this and Watch with me", "The screen feature's lists and picture mode.", true, true, "settings", "", "card", null, null, true, true, ""),
+         Menu("settings.browser-engine", "Browser without a window", "Which browser Jarvis uses for plain reading.", true, true, "settings", "", "card", null, null, true, true, ""),
++        Menu("settings.docker", "Docker", "The containers Jarvis uses on this PC, and starting or stopping one.", true, true, "settings", "", "card", null, null, true, true, ""),
+         Menu("settings.handoff", "When the phone does not answer", "How long the captcha hand-off stays on offer.", true, true, "settings", "", "card", null, null, true, true, ""),
+         Menu("settings.backup", "Backups", "One locked backup file into a folder you pick.", true, true, "settings", "", "card", null, null, true, true, ""),
+         Menu("settings.updates", "Updates", "New versions of this app.", true, false, "settings", "", "card", null, null, true, true, ""),
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/MenuPlaces.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/MenuPlaces.kt
+index 0f14d6cf..bc94aa01 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/MenuPlaces.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/MenuPlaces.kt
+@@ -47,6 +47,12 @@ object MenuPlaces {
+         "handoff" to "settings.handoff",
+         "devices" to "settings.devices",
+         "quick-tiles" to "settings.quick-tiles",
++        // Docker (the owner's request of 2026-10-09,
++        // docs/DOCKER-INTEGRATION-DESIGN.md): the containers Jarvis itself uses
++        // on this PC - today SearXNG, its default web-search provider - and a
++        // start or stop for one. Without this line the row would have no PLACE
++        // and MenuVisibilityTest would say so.
++        "docker" to "settings.docker",
+     )
+ 
+     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt
+index db8b2c36..9dde433b 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt
+@@ -89,6 +89,12 @@ object OpenPlace {
+         // phone (SettingsScreen.kt, item "limits"; LimitsPlate.kt). So "open
+         // limits" lands on it instead of the top of Settings.
+         "limits" to Where.Go(Screen.SETTINGS, "limits"),
++        // Docker (the owner's request of 2026-10-09,
++        // docs/DOCKER-INTEGRATION-DESIGN.md): the containers Jarvis itself uses
++        // on this PC, and a start or stop for one. An ordinary Settings row on
++        // the phone (SettingsScreen.kt, item "docker"; DockerPlate.kt), so
++        // "open docker" lands on it.
++        "docker" to Where.Go(Screen.SETTINGS, "docker"),
+         // "Platform checks": its Connection card, and "This app" with the
+         // phone's own "Check for new versions" (the desktop's "updates" card
+         // is the desktop app's; this is the nearest thing the phone has).
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt
+index cc032f7f..65ea7b9d 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/SettingsJump.kt
+@@ -54,5 +54,9 @@ object SettingsJump {
+         // screen, so it is the last entry here too. The desktop has no jump
+         // entry for these yet, so the words are this section's own title.
+         Entry("Limits and how often Jarvis does things", "limits"),
++        // Docker (the owner's request of 2026-10-09, docs/DOCKER-INTEGRATION-DESIGN.md):
++        // the containers Jarvis itself uses on this PC, and a start or stop for
++        // one. Appended last, after Limits, so no row above it moved.
++        Entry("Docker", "docker"),
+     )
+ }
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/DockerPlate.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/DockerPlate.kt
+new file mode 100644
+index 00000000..35145849
+--- /dev/null
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/DockerPlate.kt
+@@ -0,0 +1,240 @@
++package com.jarvis.client.ui.screens
++
++import androidx.compose.foundation.layout.Row
++import androidx.compose.material3.MaterialTheme
++import androidx.compose.material3.Text
++import androidx.compose.runtime.Composable
++import androidx.compose.runtime.LaunchedEffect
++import androidx.compose.runtime.collectAsState
++import androidx.compose.runtime.getValue
++import androidx.compose.runtime.mutableIntStateOf
++import androidx.compose.runtime.mutableStateOf
++import androidx.compose.runtime.remember
++import androidx.compose.runtime.rememberCoroutineScope
++import androidx.compose.runtime.setValue
++import androidx.compose.ui.Alignment
++import androidx.compose.ui.Modifier
++import com.jarvis.client.JarvisRuntime
++import com.jarvis.client.net.ApiResult
++import com.jarvis.client.net.Docker
++import com.jarvis.client.ui.parts.Gap
++import com.jarvis.client.ui.parts.Plate
++import com.jarvis.client.ui.parts.Quiet
++import com.jarvis.client.ui.parts.Section
++import com.jarvis.client.ui.parts.liveStatus
++import com.jarvis.client.ui.theme.LocalChrome
++import kotlinx.coroutines.launch
++
++/**
++ * Docker ([Docker], backend/jarvis_docker.py; the owner's request of
++ * 2026-10-09: "add more docker integration into jarvis that can be toggled
++ * with settings inside both the android app and desktop program";
++ * docs/DOCKER-INTEGRATION-DESIGN.md).
++ *
++ * Docker does exactly one thing in Jarvis today: it runs SearXNG, the default
++ * web-search provider. This is the phone's half of being able to see that and
++ * start or stop it, instead of typing `docker compose up -d` on the PC.
++ *
++ * WHAT THIS SCREEN WILL NOT OFFER, on purpose - each one is a rule in the
++ * design note, and the PC refuses them whether or not the phone asks:
++ *
++ *  * no way to create a container and no way to download an image. A start
++ *    whose image is not already on the PC comes back refused by the PC
++ *    ([Docker.Service.canStart] false), because a download is a way out of the
++ *    PC and needs its own card naming the exact image and registry;
++ *  * no button on a container that is not Jarvis's own ([Docker.Service.ours]).
++ *    One it did not create is listed as "Not one of Jarvis's" with no buttons,
++ *    so silence never reads as ownership;
++ *  * no restart, no logs, no delete - none of them is built yet, and the row
++ *    says what each service is for instead of pretending to more.
++ *
++ * A START asks first: it is held while the link is stale (rule 4) and raises
++ * ONE approval card on the PC. A STOP only ever makes Jarvis do less, so it is
++ * never held and never asks.
++ *
++ * @param canAct the link is up and fresh.
++ */
++@Composable
++internal fun DockerSection(canAct: Boolean = false) {
++    val chrome = LocalChrome.current
++    val scope = rememberCoroutineScope()
++    var reads by remember { mutableIntStateOf(0) }
++    var panel by remember { mutableStateOf<Docker.View?>(null) }
++    var readError by remember { mutableStateOf<String?>(null) }
++    var busy by remember { mutableStateOf(false) }
++    var said by remember { mutableStateOf<String?>(null) }
++
++    // A card leaving the queue (approved, denied or expired) re-reads the list,
++    // so a row says what really happened rather than what was asked for.
++    val queue by JarvisRuntime.pending.collectAsState()
++    val startAction = "docker_service_start"
++    var seen by remember { mutableStateOf(false) }
++    LaunchedEffect(queue.any { it.action == startAction }) {
++        val waiting = queue.any { it.action == startAction }
++        val left = seen && !waiting
++        seen = waiting
++        if (left) reads += 1
++    }
++
++    LaunchedEffect(reads) {
++        when (val r = JarvisRuntime.dockerContainers()) {
++            is ApiResult.Ok -> {
++                panel = Docker.view(r.value)
++                readError = null
++            }
++            is ApiResult.Failed -> readError = JarvisRuntime.noticeFor(r.error)
++        }
++    }
++
++    val p = panel
++    Section(
++        p?.title ?: Docker.TITLE,
++        trailing = { Quiet("Refresh", onClick = { reads += 1 }) },
++    ) {
++        Plate {
++            Text(
++                p?.detail ?: Docker.DETAIL,
++                style = MaterialTheme.typography.bodySmall,
++                color = chrome.textMid,
++            )
++            Gap(6)
++            when {
++                p == null && readError != null -> Text(
++                    "Couldn't read it: ${readError.orEmpty()}",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = chrome.warnInk,
++                )
++                p == null -> Text(
++                    "Reading…",
++                    style = MaterialTheme.typography.bodySmall,
++                    color = chrome.textLo,
++                )
++                p.line.isNotEmpty() -> Text(
++                    p.line,
++                    style = MaterialTheme.typography.bodySmall,
++                    color = chrome.warnInk,
++                )
++                else -> {
++                    p.services.forEach { s ->
++                        Gap(8)
++                        Row(verticalAlignment = Alignment.CenterVertically) {
++                            Text(
++                                s.key.replaceFirstChar { it.uppercase() },
++                                style = MaterialTheme.typography.titleSmall,
++                                color = if (s.running) chrome.okInk else chrome.textHi,
++                                modifier = Modifier.weight(1f),
++                            )
++                            // The state in words, never by colour alone.
++                            Text(
++                                s.stateWord,
++                                style = MaterialTheme.typography.labelSmall,
++                                color = chrome.textMid,
++                            )
++                        }
++                        if (s.provides.isNotEmpty()) {
++                            Text(
++                                s.provides,
++                                style = MaterialTheme.typography.bodySmall,
++                                color = chrome.textMid,
++                            )
++                        }
++                        // Where it answers, so "this PC only" is visible rather
++                        // than merely claimed.
++                        if (s.ours && s.published.isNotEmpty()) {
++                            Text(
++                                "${s.published} - this PC only",
++                                style = MaterialTheme.typography.labelSmall,
++                                color = chrome.textLo,
++                            )
++                        }
++                        Gap(4)
++                        when {
++                            // Not one of Jarvis's: say so, offer nothing. The PC
++                            // would refuse anyway; showing no button is the
++                            // honest version of that.
++                            !s.present || !s.ours -> Text(
++                                s.why.ifEmpty { Docker.NOT_OURS },
++                                style = MaterialTheme.typography.labelSmall,
++                                color = chrome.warnInk,
++                            )
++                            else -> Row {
++                                Quiet(
++                                    "Start",
++                                    // Starting asks on the PC and is held while
++                                    // the link is stale (rule 4), so it needs a
++                                    // fresh link as well as an image already here.
++                                    enabled = !busy && s.canStart && !s.running && canAct,
++                                    onClick = {
++                                        busy = true
++                                        said = null
++                                        go(scope, s.key, Docker.START) { said = it; busy = false; reads += 1 }
++                                    },
++                                )
++                                Gap(10)
++                                Quiet(
++                                    "Stop",
++                                    // Stopping is never held on a stale link: it
++                                    // only makes Jarvis do less.
++                                    enabled = !busy && s.canStop && s.running,
++                                    onClick = {
++                                        busy = true
++                                        said = null
++                                        go(scope, s.key, Docker.STOP) { said = it; busy = false; reads += 1 }
++                                    },
++                                )
++                            }
++                        }
++                        // A start whose image is not here is refused by the PC,
++                        // and this is the PC's own sentence saying why.
++                        if (s.ours && !s.canStart && s.why.isNotEmpty()) {
++                            Text(
++                                s.why,
++                                style = MaterialTheme.typography.labelSmall,
++                                color = chrome.warnInk,
++                            )
++                        }
++                    }
++                    Gap(6)
++                    Text(
++                        if (busy) Docker.ASKING else Docker.OPENS_A_CARD,
++                        style = MaterialTheme.typography.labelSmall,
++                        color = chrome.textLo,
++                    )
++                    if (!canAct) {
++                        Text(
++                            Docker.WAITING_LINK,
++                            style = MaterialTheme.typography.labelSmall,
++                            color = chrome.warnInk,
++                        )
++                    }
++                }
++            }
++            said?.let {
++                Gap(4)
++                Text(
++                    it,
++                    style = MaterialTheme.typography.labelSmall,
++                    color = chrome.textMid,
++                    modifier = Modifier.liveStatus(),
++                )
++            }
++        }
++    }
++}
++
++/** One start or stop, with the sentence the PC answered shown under the row. */
++private fun go(
++    scope: kotlinx.coroutines.CoroutineScope,
++    service: String,
++    action: String,
++    done: (String) -> Unit,
++) {
++    scope.launch {
++        val said = try {
++            JarvisRuntime.dockerService(service, action)
++        } catch (e: Exception) {
++            "Not changed."
++        }
++        done(said)
++    }
++}
+diff --git a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt
+index 9834b4ca..6f5a155e 100644
+--- a/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt
++++ b/jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/SettingsScreen.kt
+@@ -126,6 +126,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
+     // backend/jarvis_limits.py table, 2026-10-08; LimitsPlate.kt) sits last:
+     // it is about how much Jarvis does rather than about one feature.
+     "limits" to 21,
++    // Docker (the owner's request of 2026-10-09, docs/DOCKER-INTEGRATION-DESIGN.md;
++    // DockerPlate.kt) is drawn last, after Limits, so no index above it moved.
++    "docker" to 22,
+ )
+ 
+ /**
+@@ -488,6 +491,19 @@ fun SettingsScreen(
+                 MenuFrame(menus, "settings.limits") { LimitsSection(canAct = canAct) }
+             }
+ 
++            // Docker (the owner's request of 2026-10-09: "add more docker
++            // integration into jarvis that can be toggled with settings inside
++            // both the android app and desktop program";
++            // docs/DOCKER-INTEGRATION-DESIGN.md). The containers Jarvis itself
++            // uses on this PC - today SearXNG, its default web-search provider
++            // - and a start or stop for one. The words come from the PC
++            // (jarvis_docker.WORDS), so both apps say the same thing. Appended
++            // LAST on purpose: it is the newest row, and putting it beside Web
++            // search would shift every index above it in SETTINGS_ITEM_INDEX.
++            if (menus.shows("settings.docker")) item(key = "docker") {
++                MenuFrame(menus, "settings.docker") { DockerSection(canAct = canAct) }
++            }
++
+             item(key = "tail") { Gap(24) }
+         }
+     }
+diff --git a/jarvis-client/app/src/test/resources/contract/menu-cases.json b/jarvis-client/app/src/test/resources/contract/menu-cases.json
+index 30d6f80f..c1c2f77e 100644
+--- a/jarvis-client/app/src/test/resources/contract/menu-cases.json
++++ b/jarvis-client/app/src/test/resources/contract/menu-cases.json
+@@ -582,6 +582,29 @@
+         "browser settings"
+       ]
+     },
++    {
++      "id": "settings.docker",
++      "title": "Docker",
++      "about": "The containers Jarvis uses on this PC, and starting or stopping one.",
++      "apps": [
++        "desktop",
++        "phone"
++      ],
++      "area": "settings",
++      "view": "",
++      "kind": "card",
++      "group": null,
++      "parent": null,
++      "hide": true,
++      "collapse": true,
++      "why": "",
++      "names": [
++        "docker",
++        "docker settings",
++        "the containers",
++        "containers"
++      ]
++    },
+     {
+       "id": "settings.handoff",
+       "title": "When the phone does not answer",
+@@ -2566,6 +2589,7 @@
+     "connection": "settings.connection",
+     "connection settings": "settings.connection",
+     "connection status line": "entry.checks",
++    "containers": "settings.docker",
+     "content risk": "brain.trust.content-risk",
+     "conversations": "brain.history.conversations",
+     "credentials": "settings.account-secrets",
+@@ -2575,6 +2599,8 @@
+     "decks": "brain.work.decks",
+     "deep questions": "brain.memory.deep",
+     "devices": "settings.devices",
++    "docker": "settings.docker",
++    "docker settings": "settings.docker",
+     "email sending": "settings.email-sending",
+     "everyday chat runs on": "settings.second-card.chat-card",
+     "faces": "settings.appearance-card",
+@@ -2846,6 +2872,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -2936,6 +2963,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3028,6 +3056,7 @@
+         "settings.spending": true,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -3106,6 +3135,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -3200,6 +3230,7 @@
+         "settings.spending": true,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -3278,6 +3309,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -3368,6 +3400,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -3446,6 +3479,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -3546,6 +3580,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3636,6 +3671,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3749,6 +3785,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3839,6 +3876,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3943,6 +3981,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4033,6 +4072,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4144,6 +4184,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4234,6 +4275,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4340,6 +4382,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4430,6 +4473,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4526,6 +4570,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4616,6 +4661,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4718,6 +4764,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -4796,6 +4843,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -4899,6 +4947,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4989,6 +5038,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5088,6 +5138,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5178,6 +5229,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5280,6 +5332,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5370,6 +5423,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5465,6 +5519,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -5543,6 +5598,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -5632,6 +5688,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -5710,6 +5767,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -5803,6 +5861,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5893,6 +5952,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5985,6 +6045,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -6063,6 +6124,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -6152,6 +6214,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -6230,6 +6293,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -6325,6 +6389,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -6403,6 +6468,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+diff --git a/jarvis-desktop/src/menu-catalog.js b/jarvis-desktop/src/menu-catalog.js
+index d9b356c7..f96b778c 100644
+--- a/jarvis-desktop/src/menu-catalog.js
++++ b/jarvis-desktop/src/menu-catalog.js
+@@ -712,6 +712,29 @@ export const MENUS = [
+       "browser settings"
+     ]
+   },
++  {
++    "id": "settings.docker",
++    "title": "Docker",
++    "about": "The containers Jarvis uses on this PC, and starting or stopping one.",
++    "apps": [
++      "desktop",
++      "phone"
++    ],
++    "area": "settings",
++    "view": "",
++    "kind": "card",
++    "group": null,
++    "parent": null,
++    "hide": true,
++    "collapse": true,
++    "why": "",
++    "names": [
++      "docker",
++      "docker settings",
++      "the containers",
++      "containers"
++    ]
++  },
+   {
+     "id": "settings.handoff",
+     "title": "When the phone does not answer",
+@@ -2489,6 +2512,7 @@ export const ALIASES = {
+   "connection": "settings.connection",
+   "connection settings": "settings.connection",
+   "connection status line": "entry.checks",
++  "containers": "settings.docker",
+   "content risk": "brain.trust.content-risk",
+   "conversations": "brain.history.conversations",
+   "credentials": "settings.account-secrets",
+@@ -2498,6 +2522,8 @@ export const ALIASES = {
+   "decks": "brain.work.decks",
+   "deep questions": "brain.memory.deep",
+   "devices": "settings.devices",
++  "docker": "settings.docker",
++  "docker settings": "settings.docker",
+   "email sending": "settings.email-sending",
+   "everyday chat runs on": "settings.second-card.chat-card",
+   "faces": "settings.appearance-card",
+diff --git a/jarvis-desktop/tests/fixtures/menu-cases.json b/jarvis-desktop/tests/fixtures/menu-cases.json
+index 30d6f80f..c1c2f77e 100644
+--- a/jarvis-desktop/tests/fixtures/menu-cases.json
++++ b/jarvis-desktop/tests/fixtures/menu-cases.json
+@@ -582,6 +582,29 @@
+         "browser settings"
+       ]
+     },
++    {
++      "id": "settings.docker",
++      "title": "Docker",
++      "about": "The containers Jarvis uses on this PC, and starting or stopping one.",
++      "apps": [
++        "desktop",
++        "phone"
++      ],
++      "area": "settings",
++      "view": "",
++      "kind": "card",
++      "group": null,
++      "parent": null,
++      "hide": true,
++      "collapse": true,
++      "why": "",
++      "names": [
++        "docker",
++        "docker settings",
++        "the containers",
++        "containers"
++      ]
++    },
+     {
+       "id": "settings.handoff",
+       "title": "When the phone does not answer",
+@@ -2566,6 +2589,7 @@
+     "connection": "settings.connection",
+     "connection settings": "settings.connection",
+     "connection status line": "entry.checks",
++    "containers": "settings.docker",
+     "content risk": "brain.trust.content-risk",
+     "conversations": "brain.history.conversations",
+     "credentials": "settings.account-secrets",
+@@ -2575,6 +2599,8 @@
+     "decks": "brain.work.decks",
+     "deep questions": "brain.memory.deep",
+     "devices": "settings.devices",
++    "docker": "settings.docker",
++    "docker settings": "settings.docker",
+     "email sending": "settings.email-sending",
+     "everyday chat runs on": "settings.second-card.chat-card",
+     "faces": "settings.appearance-card",
+@@ -2846,6 +2872,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -2936,6 +2963,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3028,6 +3056,7 @@
+         "settings.spending": true,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -3106,6 +3135,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -3200,6 +3230,7 @@
+         "settings.spending": true,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -3278,6 +3309,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -3368,6 +3400,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -3446,6 +3479,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -3546,6 +3580,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3636,6 +3671,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3749,6 +3785,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3839,6 +3876,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -3943,6 +3981,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4033,6 +4072,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4144,6 +4184,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4234,6 +4275,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4340,6 +4382,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4430,6 +4473,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4526,6 +4570,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4616,6 +4661,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4718,6 +4764,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -4796,6 +4843,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -4899,6 +4947,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -4989,6 +5038,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5088,6 +5138,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5178,6 +5229,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5280,6 +5332,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5370,6 +5423,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5465,6 +5519,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -5543,6 +5598,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -5632,6 +5688,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -5710,6 +5767,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -5803,6 +5861,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5893,6 +5952,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.updates": false,
+@@ -5985,6 +6045,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -6063,6 +6124,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -6152,6 +6214,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -6230,6 +6293,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,
+@@ -6325,6 +6389,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.asks-first": false,
+@@ -6403,6 +6468,7 @@
+         "settings.spending": false,
+         "settings.screen-look": false,
+         "settings.browser-engine": false,
++        "settings.docker": false,
+         "settings.handoff": false,
+         "settings.backup": false,
+         "settings.reach": false,

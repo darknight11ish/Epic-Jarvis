@@ -16,6 +16,19 @@ Four properties are worth pinning and are pinned here:
   * the learning switch has a floor: JARVIS_EXTRACT=0 in the environment wins
     over anything the pane sets.
 
+WHERE THE CODE COMES FROM. `jarvis_hud.py` is the owner's file and is not in
+this repository, so in CI this suite used to be skipped BY NAME and every
+check in it ran only on the owner's PC (`backend/run_suites.py`'s
+NEEDS_OWNER list). The two groups that EXECUTE code - the learning switch
+(`learning_enabled`, `set_learning`) and the query-string reader (`_qs_int`)
+- are written whole by patches, so the whole patch stack's text has them:
+`lift()` takes them from the real file when this machine has one and from the
+stand-in built by `backend/_stack.py` when it does not, one function at a time
+(`_stack.function_text`, since the stand-in is fragments ast cannot read). The
+route checks read statements out of the WHOLE file, which the stand-in cannot
+be parsed as, so those are named as skips here and run on the owner's PC
+(2026-10-10).
+
     python3 test_memory_pane.py
 """
 import ast, json, os, sys, tempfile, time, traceback
@@ -28,14 +41,44 @@ sys.path.insert(0, str(HERE))
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
 from _where import BACKEND, REPO, missing, explain
-SRC = BACKEND / "jarvis_hud.py"
+HUD = BACKEND / "jarvis_hud.py"
 
-FAILED, PASSED = [], []
+FAILED, PASSED, SKIPPED = [], [], []
+
+#: Why a check that reads a statement out of the WHOLE file cannot run here.
+_WHOLE_FILE = ("jarvis_hud.py is not on this machine and the patch stack's stand-in "
+               "(backend/_stack.py) cannot be parsed as a file")
 
 
 def check(name, cond, detail=""):
     (PASSED if cond else FAILED).append(name)
     print(f"{'ok   ' if cond else 'FAIL '} {name}" + (f"\n        {detail}" if detail and not cond else ""))
+
+
+def skip(name, why):
+    """A check this machine cannot run. Printed as `skip`, counted on its own,
+    never as a pass; the summary line at the end carries the number into
+    backend/run_suites.py."""
+    SKIPPED.append(name)
+    print(f"skip  {name} - {why}")
+
+
+_STAND_IN = None
+
+
+def _stack_text() -> str:
+    """The whole patch stack's text for jarvis_hud.py, built once ("" when it
+    cannot be built at all)."""
+    global _STAND_IN
+    if _STAND_IN is None:
+        import _stack
+        _STAND_IN = _stack.stand_in("jarvis_hud.py")[0] or ""
+    return _STAND_IN
+
+
+def _whole_file():
+    """The whole file's text, or None when only the owner's PC has it."""
+    return HUD.read_text(encoding="utf-8") if HUD.is_file() else None
 
 
 def _stmt(src, marker):
@@ -111,8 +154,31 @@ def _after(src, branch, guard):
 
 
 def lift(*names, **extra):
-    """Named top-level functions out of jarvis_hud.py, run in isolation."""
-    tree = ast.parse(SRC.read_text(encoding="utf-8"))
+    """Named top-level functions out of jarvis_hud.py, run in isolation.
+
+    The owner's whole file when this machine has one. Otherwise the patch
+    stack's stand-in, one function at a time: it is fragments, so ast cannot
+    read it as a file, but a `def` the stack writes whole is cut out of it by
+    line (`backend/_stack.py`'s `function_text`) and runs on its own. A
+    function the stack does not write whole is an AssertionError here rather
+    than a skip: it is the code these checks are FOR, and a suite that quietly
+    stopped running them would be the vacuous check this repository keeps
+    finding."""
+    if not HUD.is_file():
+        import _stack
+        src = _stack_text()
+        if not src:
+            raise AssertionError("jarvis_hud.py is not here and the patch stack's stand-in "
+                                 "for it could not be built")
+        ns = {"json": json, "time": time, "Path": Path, "os": os}
+        ns.update(extra)
+        for name in names:
+            piece = _stack.function_text(src, name)
+            if piece is None:
+                raise AssertionError(f"missing from the patch stack's jarvis_hud.py: {name}")
+            exec(compile(piece, f"<{name}, lifted from the patch stack>", "exec"), ns)
+        return ns
+    tree = ast.parse(HUD.read_text(encoding="utf-8"))
     want, body = set(names), []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name in want:
@@ -182,8 +248,53 @@ def t_qs_int():
 # shape is found with ast (`_block`) rather than by character offset, so a
 # refactor that moves the route cannot quietly move it out of the assertion.
 
+#: The checks the two route groups below make, in the order they make them.
+#: Named here so the skip path reports exactly what did not run, rather than a
+#: single "the routes" line standing in for eleven checks.
+_ONE_ID_CHECKS = ("the write routes are still there to check",
+                  "the write routes demand an integer id",
+                  "there is no list form anywhere in them",
+                  "an unknown id is 404, not a silent success",
+                  "forget calls retire(), not a delete",
+                  "and says out loud that it is not a delete",
+                  "edit supersedes rather than overwriting",
+                  "an edit that changes nothing is a no-op, not a new row")
+_BACKDATED_CHECKS = ("the write routes are still there to check",
+                     "forget accepts an optional valid_to",
+                     "forget passes it straight through to retire(), not just to now",
+                     "edit accepts the same optional field",
+                     "a non-numeric valid_to is refused, not coerced or ignored",
+                     "the edit branch is still there to check",
+                     "a backdated edit retires the old fact BEFORE superseding it",
+                     "an edit with the same wording but a new valid_to is NOT a no-op")
+_READS_CHECKS = ("the facts list is still there to check",
+                 "the facts list includes retired rows",
+                 "each row is marked current or not",
+                 "the export says nothing was sent anywhere",
+                 "both reads close their connection")
+_SLEEP_CHECKS = ("the pending route is still there to check",
+                 "the pending route carries the daily card",
+                 "the card rides inside setup, not a second top-level key",
+                 "the sleep_time action is still there to check",
+                 "the enable action calls set_enabled",
+                 "the stop-asking action calls set_remind",
+                 "a body with neither key is refused, not silently accepted",
+                 "a write that failed to persist is reported as a failure, not 200",
+                 "sleep_time is in the shared write whitelist")
+_REACHABLE_CHECKS = ("the GET memory whitelist is still there to check",
+                     "GET /api/memory/facts is in the read whitelist",
+                     "GET /api/memory/export is in the read whitelist",
+                     "the three write routes share one guarded branch",
+                     "they check the origin",
+                     "they check the token")
+
+
 def t_one_id_at_a_time():
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for name in _ONE_ID_CHECKS:
+            skip(name, _WHOLE_FILE)
+        return
     block = _block(src, 'if route in ("/api/memory/forget"')
     check("the write routes are still there to check", bool(block),
           "the /api/memory/forget, /edit, /learning branch is gone from jarvis_hud.py")
@@ -210,7 +321,11 @@ def t_backdated_corrections_are_reachable():
     supersede fallback), but nothing ever let a caller supply a date - both
     routes always retired at "now". These pin that a caller finally can.
     """
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for name in _BACKDATED_CHECKS:
+            skip(name, _WHOLE_FILE)
+        return
     block = _block(src, 'if route in ("/api/memory/forget"')
     check("the write routes are still there to check", bool(block))
 
@@ -248,7 +363,11 @@ def t_backdated_corrections_are_reachable():
 
 
 def t_reads_are_honest():
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for name in _READS_CHECKS:
+            skip(name, _WHOLE_FILE)
+        return
     block = _block(src, 'if path == "/api/memory/facts":')
     check("the facts list is still there to check", bool(block))
     check("the facts list includes retired rows",
@@ -263,7 +382,11 @@ def t_reads_are_honest():
 
 def t_sleep_time_offer():
     """The overnight-memory card, and its two backend-facing actions."""
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for name in _SLEEP_CHECKS:
+            skip(name, _WHOLE_FILE)
+        return
     block = _block(src, 'if path == "/api/memory/pending":')
     check("the pending route is still there to check", bool(block))
     check("the pending route carries the daily card",
@@ -295,7 +418,11 @@ def t_sleep_time_offer():
 def t_it_is_reachable():
     """CONTROL. A route nothing can call is the defect this project keeps
     producing, so check both whitelists actually name them."""
-    src = SRC.read_text(encoding="utf-8")
+    src = _whole_file()
+    if src is None:
+        for name in _REACHABLE_CHECKS:
+            skip(name, _WHOLE_FILE)
+        return
     getw = _block(src, 'if path in ("/api/memory/pending"')
     check("the GET memory whitelist is still there to check", bool(getw))
     for r in ("/api/memory/facts", "/api/memory/export"):
@@ -320,7 +447,10 @@ if __name__ == "__main__":
         except Exception:
             FAILED.append(fn.__name__)
             traceback.print_exc()
-    print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
+    print(f"\n{len(PASSED)} passed, {len(SKIPPED)} skipped, {len(FAILED)} failed")
+    if SKIPPED:
+        print(f"      ({len(SKIPPED)} check(s) read the whole of jarvis_hud.py, which only the "
+              f"owner's PC has; they run there)")
     if FAILED:
         print("failed: " + ", ".join(FAILED))
     sys.exit(1 if FAILED else 0)

@@ -46,6 +46,7 @@ pub mod lock;
 pub mod logfile;
 pub mod look;
 pub mod notifications;
+pub mod open_app;
 pub mod plain_errors;
 pub mod proctree;
 pub mod prompt_coach;
@@ -1040,6 +1041,10 @@ pub fn run() {
             // read-only, opened from Settings and the tray.
             commands::open_features,
             commands::mark_answer,
+            // Re-opening the walkthrough on demand, from Settings (the owner,
+            // 2026-10-10). It reads and writes no marker: the automatic
+            // first-run show below is unchanged.
+            commands::replay_onboarding,
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
@@ -1172,6 +1177,11 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::get_floating,
             commands::set_floating,
+            // Where the floating face's own page says its picture is drawn,
+            // so clicks can pass through the window everywhere except on the
+            // animal (2026-10-10). The floating window is the only one
+            // granted it - permissions/surfaces.toml's "floating-hit-mask".
+            commands::note_floating_hit_mask,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -1306,16 +1316,14 @@ pub fn run() {
                     match action {
                         // With Watch with me on, a fresh look is taken first,
                         // while the program the owner is in is still in front
-                        // (look.rs).
+                        // (look.rs). `toggle_quickbar` centres and focuses the
+                        // window AND tells the WebView to put the caret in the
+                        // input itself (windows.rs `focus_quickbar_input`), so
+                        // there is no second emit here any more - the tray
+                        // icon's left click goes through the same function and
+                        // gets the same caret.
                         "toggle_quickbar" => match look::toggle_bar_with_look(app) {
-                            Ok(visible) => {
-                                if visible {
-                                    // `toggle_quickbar` has already centred and
-                                    // focused the window; tell the WebView to
-                                    // put the caret in the input.
-                                    emit_quickbar(app, events::FOCUS_INPUT, ());
-                                }
-                            }
+                            Ok(_) => {}
                             Err(err) => eprintln!("[jarvis] quickbar toggle failed: {err}"),
                         },
                         "ingest_clipboard" => ingest_clipboard(app),
@@ -1392,6 +1400,11 @@ pub fn run() {
         // the first one drawn rather than a swap after the default.
         let appearance = app.state::<appearance::AppearanceState>().snapshot();
         push_to_hud(app, "appearance", &appearance);
+
+        // And same reason again, for the button beside the box: a HUD that
+        // reloads while the Jarvis bar is already up would otherwise offer to
+        // open a bar that is on screen (`windows.rs` `publish_bar_state`).
+        windows::publish_bar_state(app);
     });
 
     let app = builder
@@ -1415,6 +1428,13 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // "open Notion" (jarvis_open.py, the owner's request of 2026-10-10):
+            // read this PC's Start menu shortcuts now, once, rather than on the
+            // first sentence that needs them. It is two shallow folder reads -
+            // milliseconds - and doing it here means the first "open Notion" of
+            // a session opens the app instead of saying "still reading".
+            open_app::warm_up();
 
             // Before anything reads the token (the HUD bootstrap, the backend
             // it may start): a token an older version kept in the settings
@@ -1622,6 +1642,11 @@ pub fn run() {
             // this line is what makes Jarvis actually work, and a walkthrough
             // that opened before the tray icon or the event stream existed
             // would be explaining surfaces that were not there yet.
+            //
+            // ONCE, and only here. `commands::replay_onboarding` opens the
+            // same window on demand from Settings (the owner, 2026-10-10) and
+            // never touches the marker, so this gate still means exactly what
+            // it always did: unprompted, the walkthrough appears one time.
             if !commands::onboarding_seen(&handle) {
                 if let Err(err) = windows::show_onboarding(&handle) {
                     logfile::log(&format!(

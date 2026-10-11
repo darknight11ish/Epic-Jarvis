@@ -75,6 +75,23 @@
             <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" /></svg>
             <span class="sr-only">Expand widget</span>
           </button>
+          <!-- Settings, on the widget's own bar (the owner's request,
+               2026-10-10: "i should be able to access settings on the
+               desktop program easily too, there should be a settings symbol
+               button"). It calls `open_fix_place` - the navigation-only door
+               the widget's own offline card already used, and which this
+               window was never granted until now (capabilities/widget.json,
+               `open-fix-place`), so the fix buttons on that card did nothing.
+               The compact bar is a fixed 320px, and the route pill between the
+               two groups is `flex: 1 1 auto; min-width: 0`, so it gives up the
+               room and the gear is never pushed off the end. -->
+          <button class="icon-btn" id="btn-settings" title="Jarvis settings">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M8 5.6a2.4 2.4 0 1 0 0 4.8 2.4 2.4 0 0 0 0-4.8Zm0 1.5a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8Z" />
+              <path d="M7.2 1.5h1.6l.25 1.55c.28.09.55.21.8.35l1.4-.75 1.13 1.13-.75 1.4c.14.25.26.52.35.8l1.55.25v1.6l-1.55.25c-.09.28-.21.55-.35.8l.75 1.4-1.13 1.13-1.4-.75c-.25.14-.52.26-.8.35l-.25 1.55H7.2l-.25-1.55a4.6 4.6 0 0 1-.8-.35l-1.4.75-1.13-1.13.75-1.4a4.6 4.6 0 0 1-.35-.8L2.47 8.6V7l1.55-.25c.09-.28.21-.55.35-.8l-.75-1.4L4.75 3.42l1.4.75c.25-.14.52-.26.8-.35L7.2 1.5Zm.8 2.6-1.1-.6-.5.5.6 1.1-.5 1.1-1.2.2v.7l1.2.2.5 1.1-.6 1.1.5.5 1.1-.6 1.1.6.5-.5-.6-1.1.5-1.1 1.2-.2v-.7l-1.2-.2-.5-1.1.6-1.1-.5-.5-1.1.6Z" />
+            </svg>
+            <span class="sr-only">Jarvis settings</span>
+          </button>
         </div>
       </header>
 

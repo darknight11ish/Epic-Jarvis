@@ -1,0 +1,8 @@
+{
+  "name": "media",
+  "summary": "\"pause\", \"next song\", \"what's playing\": play, pause, next, previous and now-playing for whatever is playing on this PC (Spotify, a browser tab, or any other app that reports to Windows' own media cont",
+  "module": "jarvis_media",
+  "install": "handler",
+  "replaces_patch": "media.patch",
+  "stack_order": 75
+}

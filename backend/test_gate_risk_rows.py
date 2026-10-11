@@ -111,7 +111,50 @@ def t_the_patch_is_registered_last():
              # handoff-mode.patch: its two hunks join the "acts only on tier ask"
              # list and the _RISK table at the END of each, so it cannot rewrite
              # the two rows this patch removes either.
-             "handoff-front.patch"}
+             "handoff-front.patch",
+             # docker.patch (2026-10-09) is the route half of the first Docker
+             # integration: ONE install block in jarvis_hud.py, between
+             # chatbot-limits-hud.patch's block and tutorials.patch's, and it
+             # touches jarvis_gate.py not at all - no gate list entry, no risk
+             # row, no _TOOL_ACTIONS line - so it cannot rewrite the stale rows
+             # this patch removes either. Its own two actions,
+             # docker_service_start and docker_service_stop, get their rows from
+             # a later slice of docs/DOCKER-INTEGRATION-DESIGN.md (section 9.2);
+             # until they land both take unknown_action_tier, which is "ask" in
+             # the shipped config, so neither direction fails open.
+             "docker.patch",
+             # plugin-loader.patch (2026-10-10, this branch) is appended last
+             # and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED lines
+             # at the end of the install chain. It removes no line and does not
+             # touch jarvis_gate.py at all, so it rewrites nothing this patch
+             # wrote.
+             "plugin-loader.patch",
+             # gate-touches.patch (2026-10-10) is the one name here that DOES
+             # touch jarvis_gate.py: two hunks, its own PROTECTED block (what an
+             # action TOUCHES, rather than the words printed on its card) and
+             # the comment above `check()`'s protected-file call. Neither goes
+             # near `_RISK`: its own suite, test_gate_touches.py, checks that no
+             # line it adds or removes mentions `_PROTECTED` or the refusal
+             # sentence - so it cannot rewrite the two stale rows this patch
+             # removes.
+             "gate-touches.patch",
+             # picture-card.patch (2026-10-11) goes immediately before
+             # plugin-loader.patch and has exactly ONE hunk, in jarvis_hud.py: an
+             # install block on the OWNER's own lines just before the main socket
+             # is built. It removes no line and touches jarvis_gate.py not at all -
+             # no gate list entry, no risk row, no _TOOL_ACTIONS line - so it
+             # cannot rewrite the stale rows this patch removes. (It was
+             # re-anchored there on 2026-10-11: its trailing context used to be
+             # topics.patch's own banner, and topics.patch runs after it. See
+             # _stack.py's RATCHET note.)
+             # uncensored-optins.patch (2026-10-11) is appended in front of
+             # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+             # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+             # install block at the end of jarvis_hud.py's chain. It removes no line,
+             # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+             # it cannot rewrite a line this patch wrote.
+             "uncensored-optins.patch",
+             "picture-card.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)
