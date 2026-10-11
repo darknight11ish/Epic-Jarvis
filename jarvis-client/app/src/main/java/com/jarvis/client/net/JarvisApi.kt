@@ -21,7 +21,6 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /** What went wrong, in terms the UI can say out loud rather than a stack trace. */
@@ -663,13 +662,18 @@ class JarvisApi(
     suspend fun devices(): ApiResult<JsonObject> = probe(Devices.PATH)
 
     /**
-     * `POST /api/devices/remove` or `/api/devices/shared`: the status and the
-     * body come back together ([Devices.removeSaid], [Devices.retireSaid]),
-     * so the PC's reason is shown. A 401 is a refused key.
+     * `POST /api/devices/remove`, `/api/devices/label` or `/api/devices/shared`:
+     * the status and the body come back together ([Devices.removeSaid],
+     * [Devices.labelSaid], [Devices.retireSaid]), so the PC's reason is shown.
+     * A 401 is a refused key.
+     *
+     * The allowed routes are [Devices.POST_PATHS] and nothing else, so a route
+     * that is added to the app cannot be forgotten here - which is exactly what
+     * happened to the label route, and what this check reads (see that list).
      */
     suspend fun devicesPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
         withContext(Dispatchers.IO) {
-            if (path != Devices.REMOVE_PATH && path != Devices.SHARED_PATH) {
+            if (path !in Devices.POST_PATHS) {
                 return@withContext ApiResult.Failed(ApiError.Malformed("not a devices route"))
             }
             val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
@@ -1802,6 +1806,19 @@ class JarvisApi(
         postWrite(PromptCoach.SETTING_PATH, PromptCoach.enabledBody(on))
 
     /**
+     * `POST /api/prompt/coach/setting {"key", "value"}` - ONE of the four
+     * settings beside the switch ([PromptCoach.choiceBody], the owner's answers
+     * of 2026-10-09). The same route and the same rules as the switch: at once,
+     * no card either way, for the same reason - none of the four opens a way
+     * out of the PC, takes an action, or changes what the coach may read.
+     *
+     * A key or a value the PC does not have is its own 409 sentence, which
+     * [com.jarvis.client.net.PromptCoach.saidChoice] shows as it came.
+     */
+    suspend fun setPromptCoachChoice(key: String, value: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PromptCoach.SETTING_PATH, PromptCoach.choiceBody(key, value))
+
+    /**
      * `POST /api/prompt/coach {"text", "history"}` - "Coach this"
      * ([PromptCoach.coachBody]): the words in the box and the last few turns,
      * answered with a critique. This SENDs nothing; the owner still presses
@@ -2146,6 +2163,28 @@ class JarvisApi(
         postWrite(HandoffMode.PATH, body)
 
     /**
+     * What a captcha does about the browser window it is blocking
+     * ([HandoffFront]; the owner's decision of 2026-10-09: "1 by default with
+     * the option for 2 in the settings of Jarvis"). Decided on the PC like every
+     * other approval-card switch here: "Leave it where it is" is the default,
+     * "Bring it to the front" is ONE card on the PC with Windows Hello.
+     */
+
+    /**
+     * `GET /api/chatbot/handoff_front`: `{"mode", "modes", "default", "words",
+     * "brings_to_front", "waiting", "last", ...}`. A read.
+     */
+    suspend fun handoffFrontSettings(): ApiResult<JsonObject> = probe(HandoffFront.PATH)
+
+    /**
+     * The choice. "Bring it to the front" answers 202 waiting while its approval
+     * card is up; "Leave it where it is" is immediate, and withdraws a card
+     * still waiting. Nothing but a body [HandoffFront.body] made is sent.
+     */
+    suspend fun setHandoffFront(body: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(HandoffFront.PATH, body)
+
+    /**
      * `GET /api/form-review/picture?id=` - the screenshot of a web form Jarvis
      * filled in, for the card that asks to submit it (FormReview). A read: not
      * held on a stale link. The token and the base64 are never logged. A 404
@@ -2319,6 +2358,46 @@ class JarvisApi(
                     val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
                         .getOrNull()
                     Limits.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // ---------------------------------------- the interruption budget ----
+
+    /**
+     * `POST /api/attention/settings` with ONE number ([AttentionSettings.body]):
+     * how many times a day Jarvis may speak up unasked, or the hour the morning
+     * brief arrives. The route the PC's own Brain writes through
+     * (`set_attention_limits`), reached here so the phone is not the one surface
+     * that can only read them.
+     *
+     * No direction is sent. The NUMBER decides it on the PC, against the budget
+     * already in force: DOWN and the hour apply at once, UP is a loosening and
+     * the PC puts ONE approval card to the owner first and writes nothing until
+     * it is answered - so a 2xx never means "it is on" and [attention] is read
+     * again afterwards.
+     *
+     * The BODY comes back rather than a bare status, because the PC's own
+     * sentence is the answer: `said` for a change (or for a card now waiting on
+     * the PC), and `error` for a refusal (400 "That has to be a whole number
+     * between 0 and 24.", 409 "You said no, so ...", 503 - all with a 200-shaped
+     * body). [AttentionSettings.answer] reads it; this app never words one of its
+     * own. A 404 means this PC has not run apply-patches.ps1 since the route
+     * arrived.
+     */
+    suspend fun setAttentionLimit(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(AttentionSettings.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    AttentionSettings.classifyPost(resp.code, obj)
                 }
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
@@ -3345,7 +3424,15 @@ class JarvisApi(
     }
 }
 
-private fun Throwable.readableMessage(): String = when (this) {
-    is IOException -> message ?: this::class.java.simpleName
-    else -> message ?: this::class.java.simpleName
-}
+/**
+ * A transport failure's own sentence, never the platform's
+ * ([PlainErrors.networkSays]). Every call above hands this to
+ * [ApiError.Unreachable] as its `detail`, so it is what sits behind the
+ * notice's "Details" - and OkHttp's own message, which names the address it
+ * dialled and both ports ("failed to connect to <host>/100.75.21.228 (port
+ * 4719) from /100.124.30.77 (port 42892) after 10000ms"), never reaches a
+ * screen at all. The failure's kind still travels beside it
+ * ([PlainErrors.networkKind], the second argument every call passes), which is
+ * what a bug report actually needs.
+ */
+private fun Throwable.readableMessage(): String = PlainErrors.networkSays(this)

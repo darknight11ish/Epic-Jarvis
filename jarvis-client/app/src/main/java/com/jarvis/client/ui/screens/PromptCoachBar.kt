@@ -290,8 +290,16 @@ private fun PromptCoachAdvice(
             Gap(6)
             // "This is clear, send it" is a valid, expected answer, and it
             // reads in words as well as in the score's own colour.
+            //
+            // "Only when the prompt is weak" (the owner's answers, 2026-10-09)
+            // produces a DIFFERENT nothing: the coach held its advice back
+            // rather than finding none, and the PC sends its own sentence for
+            // that in `said` (jarvis_prompt_coach.NOTHING_WEAK). The PC's words
+            // win when it sent them, so the two cases never read as one.
             Text(
-                PromptCoach.CLEAR_LINE,
+                if (critique.adviceGiven) PromptCoach.CLEAR_LINE else critique.said.ifEmpty {
+                    PromptCoach.CLEAR_LINE
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.okInk,
             )
@@ -343,6 +351,36 @@ private fun PromptCoachAdvice(
                     .heightIn(max = SUGGESTION_MAX_HEIGHT)
                     .verticalScroll(rememberScrollState()),
             )
+        }
+
+        // WHICH AI THIS WAS COACHED FOR (the owner's words, 2026-10-09: "make
+        // sure it is aware of what model of cloud AI I am using ... and make
+        // sure this can stay up to date"). The PC's own sentence, word for
+        // word - it names the target and, for an old set of notes, says they
+        // may be out of date. When Jarvis does not know the AI, `known` is
+        // false and this line is the PC's own "it does not know this one yet",
+        // which is the whole point: it says so rather than guessing.
+        val target = critique.target
+        if (target != null && target.advice.isNotEmpty()) {
+            Gap(10)
+            Rule()
+            Gap(10)
+            Kicker(if (target.known) PromptCoach.TARGET_TITLE else PromptCoach.UNKNOWN_TITLE)
+            Gap(4)
+            Text(
+                target.advice,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (target.known && !target.stale) chrome.textMid else chrome.warnInk,
+                modifier = Modifier.liveStatus(),
+            )
+            if (target.known && target.source.isNotEmpty()) {
+                Gap(2)
+                Text(
+                    PromptCoach.sourceLine(target.source),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textLo,
+                )
+            }
         }
 
         Gap(12)

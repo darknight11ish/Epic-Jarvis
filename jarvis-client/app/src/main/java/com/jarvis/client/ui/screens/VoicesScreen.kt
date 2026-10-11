@@ -631,7 +631,13 @@ private fun SpeakerPlate(
                             )
                         }
                     }
-                    // The status sits under the voice that was tapped, not below the whole list.
+                    // The status sits under the voice that was tapped, not below
+                    // the whole list. It used to be drawn twice - this block and
+                    // a second one with the same predicate a few lines down,
+                    // which a merge re-added - so a real error read as a
+                    // rendering fault, and a screen reader announced it twice
+                    // (first Android audit, finding 11). Only the copy with
+                    // `liveStatus()` is kept.
                     if (saidFor == c.id && said.isNotBlank()) {
                         Text(
                             said,
@@ -642,11 +648,6 @@ private fun SpeakerPlate(
                     }
                     if (c.detail.isNotBlank()) {
                         Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-                    }
-                    // What happened when THIS voice's button was pressed, right
-                    // under it - not only below a long list.
-                    if (said.isNotBlank() && saidFor == c.id) {
-                        Text(said, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
                     }
                 }
             }

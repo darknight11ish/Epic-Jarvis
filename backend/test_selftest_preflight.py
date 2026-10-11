@@ -456,27 +456,114 @@ def t_patches():
               for _k, st, what, d_ in rows), rows)
 
 
+#: The record's name, as `scripts/apply-patches.ps1` writes it (`-Manifest`,
+#: default `_jarvis-state.json`). Spelled here rather than read from selftest so
+#: that a run against code that has no such constant FAILS on its behaviour
+#: instead of dying on a missing attribute.
+RECORD = "_jarvis-state.json"
+
+
+def _record(d: Path, *, drop=(), written="2026-10-10T21:44:00") -> dict:
+    """Write the installer's record beside a backend copy, the way
+    apply-patches.ps1 does when a run finishes: one hash per *.py file."""
+    files = {}
+    for f in sorted(d.iterdir()):
+        if f.suffix != ".py" or f.name in drop:
+            continue
+        files[f.name] = {"sha256": S._sha(f), "patch": "", "verified": True}
+    (d / RECORD).write_text(json.dumps({
+        "schema": "jarvis-updater-manifest/1", "written": written,
+        "backend": str(d), "run": "baseline", "patches": [], "patchList": [],
+        "unmatched": [], "files": files}), encoding="utf-8")
+    return files
+
+
 def t_modules():
+    """The installed files are judged by the installer's own record, never by
+    whichever checkout the preflight happens to be run from.
+
+    The reference used to be `HERE / rel` - this checkout's copy - so the same
+    install gave 10 FAIL rows from the owner's checkout and 7 from a clean
+    `main` tree on 2026-10-10. Every check below that looks for the record, or
+    for the absence of a FAIL, fails on that older code.
+    """
+    # 1. No record at all - the state the owner's PC is in today. A WARN that
+    #    says what to run, and no verdict about the files.
     d = _backend_copy()
-    (d / "jarvis_stop_all.py").write_text("# an older copy\n", encoding="utf-8")
+    live, _f, _o = _live(backend=d)
+    _p, _fails, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
+    mod = _rows(rows, "modules")
+    check("the check and the patcher agree on what the record is called",
+          getattr(S, "INSTALL_RECORD", None) == RECORD,
+          getattr(S, "INSTALL_RECORD", "(no such constant)"))
+    check("no installer record: WARN naming the record, and no FAIL about the files",
+          any(st == S.WARN and RECORD in f"{what} {_d}" for st, what, _d in mod)
+          and not any(st == S.FAIL for st, _what, _d in mod), mod)
+
+    # 2. THE CASE THE OLD CHECK GOT WRONG. The install matches its own record
+    #    but differs from THIS checkout's copy of the same file. Comparing
+    #    against the checkout called that a failure, so the same install passed
+    #    or failed depending on who ran the check.
+    d = _backend_copy()
+    target = "jarvis_stop_all.py"
+    (d / target).write_text("# the installer's copy, not this checkout's\n", encoding="utf-8")
+    _record(d)
+    live, _f, _o = _live(backend=d)
+    _p, _fails, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
+    mod = _rows(rows, "modules")
+    check("an install that matches its record passes, even where this checkout's copy "
+          "differs from it",
+          not any(st == S.FAIL for st, _what, _d in mod), mod)
+    check("... and says how many recorded files still match",
+          any(st == S.PASS and "files the installer recorded still match it" in what
+              for st, what, _d in mod), mod)
+
+    # 3. A file the record names whose bytes changed since, and one the record
+    #    names that the install no longer has.
+    d = _backend_copy()
+    _record(d)
+    (d / target).write_text("# edited after the recorded run\n", encoding="utf-8")
     (d / "jarvis_reach.py").unlink()
     live, _f, _o = _live(backend=d)
-    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
+    _p, _fails, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
     mod = _rows(rows, "modules")
-    check("a module that differs: FAIL with both short hashes",
-          any(st == S.FAIL and "jarvis_stop_all.py" in what and "there," in what
+    check("a file edited after the recorded run: FAIL with both short hashes",
+          any(st == S.FAIL and target in what and "when recorded" in what
               for st, what, _d in mod), mod)
-    check("a module that is missing: FAIL",
-          any(st == S.FAIL and "jarvis_reach.py is not in" in what for st, what, _d in mod), mod)
+    check("a file the record names but the install lacks: FAIL",
+          any(st == S.FAIL and "jarvis_reach.py is in the installer's record but not in"
+              in what for st, what, _d in mod), mod)
+
+    # 4. A shipped module missing from the install is still a FAIL - its feature
+    #    is off in silence - while a file present but unrecorded is a WARN, and
+    #    never a pass.
+    d = _backend_copy()
+    (d / "jarvis_stop_all.py").unlink()
+    _record(d, drop={"jarvis_reach.py"})
+    live, _f, _o = _live(backend=d)
+    _p, _fails, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
+    mod = _rows(rows, "modules")
+    check("a shipped module missing from the install: FAIL (its feature is off)",
+          any(st == S.FAIL and "jarvis_stop_all.py is not in the backend folder" in what
+              for st, what, _d in mod), mod)
+    check("an installed *.py the record does not speak for: WARN, naming it",
+          any(st == S.WARN and "the record does not speak for" in what
+              and "jarvis_reach.py" in what for st, what, _d in mod), mod)
+    check("... and the shipped file the record can never cover (jarvis_hud.html) is "
+          "not warned about on every run",
+          not any(st == S.WARN and "jarvis_hud.html" in what for st, what, _d in mod), mod)
+
+    # 5. Files edited after the running Jarvis started: WARN, restart it.
     fake = FakeJarvis()
     fake.routes[("GET", "/api/version")] = (200, {"api": 1, "started": time.time() - 3600,
                                                   "capabilities": {"stop_all": True}})
     d3 = _backend_copy()
+    _record(d3)
     now = time.time()
     for f3 in d3.iterdir():   # copy2 keeps the checkout's dates; make them "just edited"
         os.utime(f3, (now, now))
     live, _f, _o = _live(fake, backend=d3)
-    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
+    _p, _fails, _w, _s, rows, _t = _run(live, only={"backend", "handshake", "modules"})
     mod = _rows(rows, "modules")
     check("files newer than the running Jarvis: WARN, restart it",
           any(st == S.WARN and "changed after Jarvis started" in what and "Restart" in d_

@@ -208,7 +208,15 @@ def t_every_real_settings_card_is_listed():
     # The phone's "appearance" row is the registry's "appearance-card"; "tail" is
     # a spacer; "floating-avatar" and "voice-switches"/"jump-list" are rows of
     # the same screen reached through Appearance / Voice / the top.
-    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list"}
+    # "jarvis-notify" (2026-10-09) is the same shape for the same reason: it is a
+    # row that opens Android's OWN per-app notification screen and is
+    # deliberately not a Jarvis setting at all (the owner's decision of
+    # 2026-10-09, docs/SETTINGS-COVERAGE-AUDIT-2026-10-09.md's GAP 1). The
+    # registry's "notifications" Section stays desktop-only, because the four
+    # per-kind switches and quiet hours really are the PC's, and
+    # _check_phone_declines_the_pc_only_cards below still holds the phone to
+    # that.
+    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list", "jarvis-notify"}
     check("every desktop settings card is a SECTION",
           not (desktop_ids - listed), sorted(desktop_ids - listed))
     check("every phone Settings row is a SECTION (bar the named spacers)",
@@ -218,6 +226,35 @@ def t_every_real_settings_card_is_listed():
               R.find_section(sid.replace("-", " ")) is not None)
     check("'devices' is on both apps, 'crash-notes' is desktop only",
           R.section_by_id("devices").app == "both" and R.section_by_id("crash-notes").app == "desktop")
+    _check_phone_declines_the_pc_only_cards()
+
+
+def _check_phone_declines_the_pc_only_cards():
+    """A section this file says the phone has must really be on the phone.
+
+    Settings-coverage audit, 2026-10-09: `notifications` was declared
+    `app="both"` for months while the phone has no notifications screen at
+    all - its controls are Android's own, per channel. Nothing failed,
+    because the phone half of the two checks above is satisfied by an id
+    that is a desktop card (`s.id not in phone_keys and s.id not in
+    desktop_ids`), so one id could be "both" for a reason that only ever
+    held on the PC. `jarvis-client`'s own `ui/OpenPlace.kt` had the right
+    answer all along ("notifications" is in its PC_ONLY set, so the phone
+    answers "only in Jarvis on your PC"); this reads that same file as text
+    and holds the registry to it, the way OpenPlaceTest reads this file."""
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client"
+          / "ui" / "OpenPlace.kt").read_text(encoding="utf-8")
+    block = re.search(r"val PC_ONLY: Set<String> = setOf\((.*?)\n    \)", kt, re.S)
+    pc_only = set(re.findall(r'"([\w-]+)"', block.group(1))) if block else set()
+    check("OpenPlace.kt's own PC_ONLY set was found and parsed", bool(pc_only), sorted(pc_only))
+    lying = sorted(s.id for s in R.SECTIONS
+                   if s.app in ("both", "phone") and s.id in pc_only)
+    check("no section claims the phone has it while the phone says 'only on your PC'",
+          not lying, f"{lying} - set app=\"desktop\" on each, or take it out of OpenPlace.PC_ONLY")
+    check("'notifications' is desktop only, as the phone's own OpenPlace says",
+          R.section_by_id("notifications").app == "desktop"
+          and "notifications" in pc_only
+          and all(s.id != "notifications" for s in R.sections_for("phone")))
 
 
 def t_jump_list_matches_the_page():
@@ -335,10 +372,33 @@ def t_jump_list_matches_the_page():
               re.findall(r'<div class="settings-jump-place">(.*?)</div>', nav, re.S)))
 
 
+#: A row's `item(key = ...)`: either a quoted string or a `SettingsJump`
+#: constant. The search box (2026-10-09) names `SettingsJump.SEARCH_KEY`, and
+#: the jump list's own row names `SettingsJump.LIST_KEY`, so the screen and
+#: the tests that read it cannot disagree about those two keys by spelling
+#: them twice. `SettingsJumpTest` reads the same two shapes
+#: (jarvis-client/app/src/test/java/com/jarvis/client/SettingsJumpTest.kt,
+#: its own ROW_KEY) - this reader mirrors it, because a reader that only
+#: understood quoted keys silently SKIPPED both rows and then reported the
+#: whole map as shifted by two.
+_ROW_KEY = re.compile(r'item\(key\s*=\s*(?:"([\w.-]+)"|SettingsJump\.(\w+))')
+
+#: A declared position is a plain number OR a `SettingsJump` constant
+#: (`"search" to SettingsJump.SEARCH_KEY_INDEX`), so `SEARCH_KEY_INDEX` is
+#: held to the row it names rather than trusted.
+_JUMP_CONST = re.compile(r'const val (\w+) = "([\w.-]+)"')
+_JUMP_INT = re.compile(r'const val (\w+) = (\d+)')
+
+
+def _settings_jump_source() -> str:
+    return (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+            / "client" / "ui" / "SettingsJump.kt").read_text(encoding="utf-8")
+
+
 def _check_settings_item_index(kt: str):
     """`SettingsScreen.kt`'s own `SETTINGS_ITEM_INDEX` claims a `LazyColumn`
     position for each key it lists - checked here against the REAL, current
-    order of `item(key = "...")` calls in the same file, never trusted as
+    order of `item(key = ...)` calls in the same file, never trusted as
     still accurate.
 
     Bug audit 2026-09-27: this map went stale the moment a concurrent piece
@@ -346,12 +406,43 @@ def _check_settings_item_index(kt: str):
     was one item too early, and nothing caught it because the map was never
     checked against the file's real order, only checked (by the test above)
     for which keys it lists at all. A silent, plausible-looking wrong
-    number is exactly what a presence-only check misses."""
-    real_order = re.findall(r'item\(key\s*=\s*"([^"]+)"', kt)
+    number is exactly what a presence-only check misses.
+
+    Settings search, 2026-10-09: the search box became the FIRST row and the
+    jump list's own row started naming `SettingsJump.LIST_KEY`. Both are real
+    `item(key = ...)` rows, but neither spells its key as a quoted string, so
+    the old quoted-only reader counted NEITHER: every declared position then
+    looked two too high. The map itself was right (search 0, jump-list 1,
+    voice 2, ... limits 22) - the reader was the stale half. A row key and a
+    declared position may now both be a `SettingsJump` constant, resolved
+    from `SettingsJump.kt` itself, so the map is still held to every row it
+    names - the two rows the old reader skipped are now counted rather than
+    ignored. This is what SettingsJumpTest's own ROW_KEY already does."""
+    jump_src = _settings_jump_source()
+    keys = dict(_JUMP_CONST.findall(jump_src))
+    numbers = dict(_JUMP_INT.findall(jump_src))
+    real_order = [quoted or keys.get(const) for quoted, const in _ROW_KEY.findall(kt)]
+    unresolved = sorted({c for q, c in _ROW_KEY.findall(kt) if not q and c not in keys})
+    check("every SettingsJump constant a row key names is a real const val",
+          not unresolved, f"{unresolved} - SettingsJump.kt has no such constant")
     real_index = {key: i for i, key in enumerate(real_order)}
     map_block = re.search(r"SETTINGS_ITEM_INDEX[^{(]*\(\s*(.*?)\n\)", kt, re.S)
-    declared = dict(re.findall(r'"([\w-]+)"\s+to\s+(\d+)', map_block.group(1))) if map_block else {}
+    declared, unresolved_numbers = {}, []
+    if map_block:
+        for key, value in re.findall(r'"([\w-]+)"\s+to\s+([\w.]+)', map_block.group(1)):
+            if value.isdigit():
+                declared[key] = value
+            else:
+                name = value.split(".")[-1]
+                if name in numbers:
+                    declared[key] = numbers[name]
+                else:
+                    unresolved_numbers.append(key)
     check("SETTINGS_ITEM_INDEX's own map block was found and parsed", bool(declared))
+    check("every declared position is a number or a real SettingsJump constant",
+          not unresolved_numbers,
+          f"{unresolved_numbers} - SettingsJump.kt has no such const val, so that "
+            "row's position would go unchecked")
     # "appearance-card" is the desktop's own id, deliberately aliased to the
     # phone's own item key "appearance" (docs/JARVIS-API.md section 58.1's
     # own note on this one intentional name mismatch) - checked against
@@ -394,9 +485,23 @@ def t_open_is_pure_navigation():
           <= set(M.menu("brain.tab.tutorials").names),
           M.menu("brain.tab.tutorials").names)
     for phrase in ("open the door", "open the pod bay doors", "show me the money",
-                  "go to sleep"):
+                   "go to sleep"):
         i = Q.match(phrase)
-        check(f"{phrase!r} names no section, so it is not ours", i is None, i)
+        # What this suite is about: none of them names a SECTION, so none of
+        # them is a settings jump. Since 2026-10-10 the two "open ..." ones are
+        # claimed by the other feature that owns those words (jarvis_open.py:
+        # "open the pod bay doors" is a program name this PC will not find, and
+        # it is reported plainly rather than guessed at), so what is checked is
+        # that the answer is NOT a settings jump - never that the phrase is
+        # nobody's.
+        check(f"{phrase!r} names no section, so it is not a settings jump",
+              (i is None) or not i.f.get("id"), i)
+    for phrase in ("open the door", "open the pod bay doors"):
+        got = Q.match(phrase)
+        check(f"{phrase!r} is the app opener's, not this module's",
+              got is not None and got.name == "open_app", got)
+    for phrase in ("show me the money", "go to sleep"):
+        check(f"{phrase!r} is still nobody's", Q.match(phrase) is None, Q.match(phrase))
     r = go("open web search", peer=PHONE)
     check("the reply names the place and carries open_settings, nothing else runs",
           r is not None and r.open_settings == "web-search" and "web search" in r.reply.lower())

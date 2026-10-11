@@ -402,7 +402,18 @@ await check("the manner commands are Settings-only; the fix button has its own n
   // "hidden menus" button calls this too now (bug audit 2026-10-05, R5 - it
   // was granted only by quickbar-surface and did nothing), and a window that
   // only opens a place should not take on the bar's whole surface to get it.
-  assert.deepEqual(holders("open_fix_place"), ["open-fix-place", "quickbar-surface"]);
+  //
+  // `widget-surface` joined the same way on 2026-10-10, and it is the same bug
+  // a second time: the widget's offline card has invoked `open_fix_place` since
+  // it was written ("Show me where"), the permission was never granted to that
+  // surface, and every tap was refused at the ACL - the one button offered when
+  // Jarvis is unreachable did nothing at all, silently. The widget's own
+  // settings gear now calls it too (the owner's ask of 2026-10-10, question 4
+  // of docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md). Still one narrow,
+  // navigation-only command: it opens or focuses the Settings window at a named
+  // place, changes no setting and approves nothing.
+  assert.deepEqual(holders("open_fix_place"),
+    ["open-fix-place", "quickbar-surface", "widget-surface"]);
   const rs = read("src-tauri/src/plain_errors.rs");
   // `async`, not a plain command (bug audit 2026-09-27, desktop-rust
   // finding #3): both windows it opens are built the first time they are

@@ -81,6 +81,89 @@ pub async fn handoff_mode(
     })
 }
 
+// What a captcha does about the browser window it is blocking, for Settings
+// (the owner's own decision of 2026-10-09: "1 by default with the option for 2
+// in the settings of Jarvis"; backend/jarvis_handoff_front.py;
+// docs/CAPTCHA-HANDOFF-DESIGN.md).
+//
+// ONE command, `handoff_front`, Settings only:
+//  * "read" - the choice, its two names, the PC's own lines and whether a card
+//    is waiting. A read: never held on a stale link.
+//  * "set"  - "leave_in_place" is applied at once and is NEVER held (it only
+//    makes Jarvis do less - it touches no window at all); "bring_to_front"
+//    raises ONE approval card on this PC, decided in the Jarvis bar with
+//    Windows Hello, and is held on a stale link.
+//
+// THIS APP NEVER RAISES THAT WINDOW, and never pictures it. The browser window
+// belongs to the hand-off on the PC's backend; this settings window only
+// carries a choice, a card state and fixed words (tests/handoff.mjs checks
+// that the desktop names none of the hand-off's own picture or input routes).
+
+/// The verbs `handoff_front` takes.
+pub(crate) const FRONT_ACTIONS: &[&str] = &["read", "set"];
+/// The two choices. Must match `MODES` in backend/jarvis_handoff_front.py, and
+/// the phone's `HandoffFront.MODES`.
+pub(crate) const FRONT_MODES: &[&str] = &["leave_in_place", "bring_to_front"];
+
+pub(crate) const FRONT_MISSING: &str =
+    "This PC's Jarvis is missing this feature. In PowerShell on \
+     the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
+const FRONT_STALE_HELD: &str =
+    "The connection to Jarvis is catching up, so bringing the window to \
+     the front is held until it does - try again in a moment.";
+const FRONT_PATH: &str = "/api/chatbot/handoff_front";
+
+/// The body of one verb, or why it is not one. Only one of the two choice names
+/// goes in - never a picture, a page, a window title or a tap.
+pub(crate) fn front_body(action: &str, mode: Option<&str>) -> Result<serde_json::Value, String> {
+    if !FRONT_ACTIONS.contains(&action) {
+        return Err(format!("The captcha window setting cannot {action:?}"));
+    }
+    Ok(match action {
+        "set" => {
+            let mode = mode.unwrap_or("");
+            if !FRONT_MODES.contains(&mode) {
+                return Err(
+                    "Choose \"Leave it where it is\" or \"Bring it to the front\".".to_string(),
+                );
+            }
+            serde_json::json!({ "mode": mode })
+        }
+        _ => serde_json::json!({}),
+    })
+}
+
+/// What a captcha does about its browser window, for Settings. "read" gets it;
+/// "set" applies "leave_in_place" at once and never holds it, while
+/// "bring_to_front" raises ONE approval card on this PC and is held on a stale
+/// link.
+#[tauri::command]
+pub async fn handoff_front(
+    app: AppHandle,
+    action: String,
+    mode: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let body = front_body(&action, mode.as_deref())?;
+    // Only the loosening waits for a fresh link: turning the setting back to
+    // "Leave it where it is" only ever makes Jarvis do less.
+    if action == "set" && mode.as_deref() != Some("leave_in_place") && look::stale(&app) {
+        return Err(FRONT_STALE_HELD.to_string());
+    }
+    let out = if action == "read" {
+        look::get(&app, FRONT_PATH).await
+    } else {
+        look::post(&app, FRONT_PATH, body, WRITE_TIMEOUT).await
+    };
+    // A PC without this route answers 404: say which feature is missing.
+    out.map_err(|why| {
+        if why == look::MISSING {
+            FRONT_MISSING.to_string()
+        } else {
+            why
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -144,5 +227,49 @@ mod tests {
         assert!(MISSING.contains("apply-patches.ps1"));
         assert!(STALE_HELD.contains("held"));
         assert!(STALE_HELD.contains("15 minutes"));
+    }
+
+    #[test]
+    fn the_front_verbs_carry_only_a_choice() {
+        assert_eq!(front_body("read", None).unwrap(), json!({}));
+        assert_eq!(
+            front_body("set", Some("leave_in_place")).unwrap(),
+            json!({ "mode": "leave_in_place" })
+        );
+        assert_eq!(
+            front_body("set", Some("bring_to_front")).unwrap(),
+            json!({ "mode": "bring_to_front" })
+        );
+        for bad in [
+            "",
+            "toggle",
+            "on",
+            "stop",
+            "raise",
+            "LEAVE_IN_PLACE",
+            "leave_in_place ",
+        ] {
+            assert!(front_body("set", Some(bad)).is_err(), "{bad:?}");
+        }
+        for verb in FRONT_ACTIONS {
+            if *verb != "set" {
+                assert!(front_body(verb, None).is_ok(), "{verb}");
+            }
+        }
+        for bad in [
+            "", "read ", "READ", "picture", "frame", "input", "end", "raise",
+        ] {
+            assert!(front_body(bad, None).is_err(), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_front_setting_takes_exactly_the_two_choices() {
+        assert_eq!(FRONT_MODES.len(), 2);
+        assert!(FRONT_MODES.contains(&"leave_in_place"));
+        assert!(FRONT_MODES.contains(&"bring_to_front"));
+        assert_eq!(FRONT_PATH, "/api/chatbot/handoff_front");
+        assert!(FRONT_MISSING.contains("apply-patches.ps1"));
+        assert!(FRONT_STALE_HELD.contains("held"));
     }
 }

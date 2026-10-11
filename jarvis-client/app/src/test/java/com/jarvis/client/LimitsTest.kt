@@ -63,6 +63,39 @@ class LimitsTest {
     private fun row(key: String): Limits.Row =
         requireNotNull(Limits.offered(body).firstOrNull { it.key == key }) { "$key is not offered" }
 
+    /**
+     * The seven rows the owner's decision of 2026-10-08 added to the PC's table:
+     * THIS PC's own notification choices, which the phone may change too. Two of
+     * them are the third kind, `time` - the quiet hours' two ends, carried as the
+     * clock STRING the owner reads ("22:00"), never a number of minutes - and
+     * every row carries the PC's additive `quiet_on`.
+     */
+    private val notifyBody: JsonObject = JarvisJson.parseToJsonElement(
+        """
+        {"ok":true,"available":true,"limits":[
+          {"key":"notif_alarms","title":"Speak up when an alarm rings (on your PC)","kind":"bool",
+           "value":true,"words":"Speak up when an alarm rings (on your PC)","choices":[],"low":0,
+           "high":0,"unit":"","note":"An alarm rings until you dismiss it.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_quiet_enabled","title":"Be quiet during quiet hours (on your PC)","kind":"bool",
+           "value":true,"words":"Be quiet during quiet hours (on your PC)","choices":[],"low":0,
+           "high":0,"unit":"","note":"Silences the PC's non-urgent notifications.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_quiet_start","title":"Quiet hours start (on your PC)","kind":"time",
+           "value":"22:00","words":"22:00","choices":[],"low":0,"high":0,"unit":"",
+           "note":"The hour the PC's quiet window begins, on the PC's own clock.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true},
+          {"key":"notif_quiet_end","title":"Quiet hours end (on your PC)","kind":"time",
+           "value":"07:00","words":"07:00","choices":[],"low":0,"high":0,"unit":"",
+           "note":"The hour the PC's quiet window ends, on the PC's own clock.","loosen_up":false,
+           "pc_only":false,"app":"both","quiet_on":true}
+        ]}
+        """.trimIndent(),
+    ) as JsonObject
+
+    private fun notifyRow(key: String): Limits.Row =
+        requireNotNull(Limits.offered(notifyBody).firstOrNull { it.key == key }) { "$key is not offered" }
+
     // ------------------------------------------------------ what is offered --
 
     @Test
@@ -150,12 +183,17 @@ class LimitsTest {
     @Test
     fun `the write path is held on a stale link and reports the PC's own failure`() {
         val rt = source(RUNTIME)
-        val method = rt.substringAfter("suspend fun setLimit(").take(900)
+        val method = rt.substringAfter("suspend fun setLimit(").take(1100)
         assertTrue("the stale-link blocker is checked first, as setManner does:\n$method",
-            method.contains("actionBlocker()?.let { return it }"))
+            method.contains("actionBlocker()?.let { return com.jarvis.client.net.Limits.Answer(it, changed = false) }"))
         assertTrue("the PC's sentence is read, not invented", method.contains("Limits.answer("))
         assertTrue("a refusal goes into the shared notice too",
             method.contains("_notice.value = answer.sentence"))
+        // Both halves of the answer come back, so the plate can say a save did
+        // not happen (item 9, 2026-10-10) - the sentence alone was drawn the
+        // same way whether it worked or not.
+        assertTrue("the whole answer comes back, not just its words",
+            method.contains(": com.jarvis.client.net.Limits.Answer {"))
     }
 
     // ----------------------------------------------------------- the answer --
@@ -205,6 +243,67 @@ class LimitsTest {
         assertTrue(Limits.classifyPost(200, null) is ApiResult.Failed)
     }
 
+    @Test
+    fun `a save that never happened says so instead of closing as if it worked`() {
+        // THE BUG THIS EXISTS FOR (item 9, found on the owner's phone
+        // 2026-10-10). The PC's own `POST /api/limits/settings` is NOT there on
+        // this install - `jarvis_hud.py`'s dispatcher never reaches
+        // `_desktop_action` for that route, so it answers 404 with the
+        // server's own `{"error": "not found"}` (measured on the owner's PC:
+        // 404, that body; `GET /api/limits` answers 200). That body's `error`
+        // matched the branch below that keeps the PC's own sentence, so the
+        // 404 was read as a SUCCESSFUL answer whose sentence was the literal
+        // text "not found" - `changed` came out true, nothing went into the
+        // shared notice, and choosing a new time closed the picker as if it
+        // had saved.
+        val notFound = JarvisJson.parseToJsonElement("""{"error":"not found"}""") as JsonObject
+        val missingRoute = Limits.classifyPost(404, notFound)
+        assertTrue("a 404 is not an answer about the change: $missingRoute",
+            missingRoute is ApiResult.Failed)
+        val answer = Limits.answer(missingRoute)
+        assertEquals("the owner reads the plain sentence, not the server's",
+            Limits.MISSING, answer.sentence)
+        assertFalse("and nothing is pretended to have changed", answer.changed)
+
+        // The PC's own refusals still arrive in the PC's own words, unchanged:
+        // this fix may not swallow a real sentence.
+        val refused = Limits.answer(Limits.classifyPost(403, JarvisJson.parseToJsonElement(
+            """{"ok":false,"pc_only":true,"error":"That can only be changed on the PC."}""") as JsonObject))
+        assertEquals("That can only be changed on the PC.", refused.sentence)
+        assertFalse(refused.changed)
+    }
+
+    @Test
+    fun `the plate says a failed save on the row it was asked for`() {
+        val plate = source(PLATE)
+        // WHERE, not only WHAT. The answer used to be drawn once for the whole
+        // card, under a dozen rows - off the bottom of the screen for a change
+        // made near the top, and off the top for one made near the bottom (the
+        // quiet-hours clock, measured on the owner's phone 2026-10-10). It is
+        // drawn per row now, under that row's own control.
+        val rowCall = plate.substringAfter("else -> v.forEach").take(600)
+        assertTrue("the answer is passed to the row it belongs to:\n$rowCall",
+            rowCall.contains("said = if (saidFor == r.key) said else null"))
+        // ...and the row draws it after its control, never before it.
+        val rowFn = plate.substringAfter("private fun LimitRow(")
+        val control = rowFn.indexOf("Toggle(")
+        val answer = rowFn.indexOf("said?.let")
+        assertTrue("the answer is drawn under the row's control (control=$control, answer=$answer)",
+            control in 0 until answer)
+        assertTrue("a save that changed nothing is drawn as a warning",
+            plate.contains("if (saidFailed) chrome.warnInk"))
+        assertTrue("the plate knows whether anything was written",
+            plate.contains("saidFailed = !a.changed"))
+        assertTrue("and both halves come from the one write",
+            plate.contains("val a = JarvisRuntime.setLimit(key, value)"))
+        assertTrue("the sentence remembers which row asked for it",
+            plate.contains("saidFor = key"))
+        // Cleared before every change, so an old answer can never stand in for
+        // this one's - on the row itself or on any other.
+        assertTrue(plate.contains("saidFor = null"))
+        assertTrue(plate.contains("saidFailed = false"))
+    }
+
     // -------------------------------------------------------- the screen ----
 
     @Test
@@ -213,12 +312,49 @@ class LimitsTest {
         assertTrue("the plate must draw the filtered list",
             plate.contains("rows = Limits.offered(r.value)"))
         assertTrue("every control goes through the runtime's one write",
-            plate.contains("said = JarvisRuntime.setLimit(key, value)"))
+            plate.contains("val a = JarvisRuntime.setLimit(key, value)"))
         assertTrue("the plate never posts to a route itself", !plate.contains("/api/"))
         for (control in listOf("Limits.choiceWords(", "Limits.downWords(", "Limits.upWords(",
                                "Limits.rowWords(", "contentDescription")) {
             assertTrue("$control is missing from LimitsPlate.kt", plate.contains(control))
         }
+    }
+
+    @Test
+    fun `the line above the rows promises no direction`() {
+        // THE BUG THIS EXISTS FOR (found 2026-10-09). `Limits.LOOSEN_NOTE` is
+        // drawn ONCE, above every row, and it used to end "Turning something
+        // down applies at once." That is FALSE for a row whose loosening goes
+        // DOWN - the voice check's bar, where a lower bar means more clips
+        // count as the owner's voice, so going lower is the direction that
+        // raises ONE card on the PC. The plate therefore told the owner the
+        // opposite of what the row immediately under that line does, and the
+        // row's own note said so in the very next line.
+        //
+        // Which direction asks is the ROW's business (the PC sends it in the
+        // row's own `note`), so the general line may not name one. This checks
+        // the constant AND the plate's own doc comment, because the comment is
+        // what a later editor reads before changing the sentence.
+        val claimsDownIsInstant = Regex(
+            """\bdown\s+(?:changes|applies|takes effect|is applied|goes through)\b""" +
+                """|\bdown\s+(?:\w+\s+){0,3}at once\b""",
+            RegexOption.IGNORE_CASE,
+        )
+        assertTrue(
+            "Limits.LOOSEN_NOTE tells the owner a smaller number always applies at once",
+            !claimsDownIsInstant.containsMatchIn(Limits.LOOSEN_NOTE),
+        )
+        assertTrue(
+            "the plate tells the owner a smaller number always applies at once",
+            !claimsDownIsInstant.containsMatchIn(source(PLATE)),
+        )
+        // ...and it still says the thing that IS true of every row under it:
+        // the PC decides, and the row's own sentence says which way this one
+        // goes.
+        assertTrue(
+            "the note no longer says the row's own line carries the direction",
+            Limits.LOOSEN_NOTE.contains("line under each one says which"),
+        )
     }
 
     @Test
@@ -249,7 +385,132 @@ class LimitsTest {
         assertTrue("the jump list has no limits entry", jump.contains("Entry(\"Limits and how often Jarvis does things\", \"limits\")"))
         val map = screen.substringAfter("SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(")
             .substringBefore("\n)")
-        assertTrue("the index map has no limits row", map.contains("\"limits\" to 21"))
+        // 25, not 21: four insertions above it have moved it four times on
+        // 2026-10-09 - the phone's search box (position 0, above the jump list,
+        // so every section below it moved down by one), "Notifications from
+        // Jarvis" (the owner's decision of that day, at position 17), what a
+        // captcha does about the window it blocks (position 21, directly under
+        // the hand-off row) and the phone's own "Screen refresh rate" (position
+        // 24, immediately above this row). Each carries the same +1 through the
+        // map below them, and `SettingsJumpTest` holds every number there to the
+        // row the screen really draws.
+        assertTrue("the index map has no limits row", map.contains("\"limits\" to 25"))
+    }
+
+    // ------------------------------------------- a time of day, and the PC's
+    //                                              own notifications (2026-10-08)
+
+    @Test
+    fun `this PC's own notification rows reach the phone, and say whose they are`() {
+        // Every one of them is offered here, and every title says the setting is
+        // the PC's - the phone's OWN notification settings are a different screen.
+        assertEquals(listOf("notif_alarms", "notif_quiet_enabled", "notif_quiet_start",
+            "notif_quiet_end"), Limits.offered(notifyBody).map { it.key })
+        for (r in Limits.offered(notifyBody)) {
+            assertTrue("${r.key} must say the setting is the PC's own", r.title.contains("(on your PC)"))
+            assertFalse("${r.key} is not a loosening either way", r.loosenUp)
+            assertEquals("both", r.app)
+        }
+    }
+
+    @Test
+    fun `a clock time is a clock string, never a number of minutes`() {
+        val start = notifyRow("notif_quiet_start")
+        assertEquals("time", start.kind)
+        assertTrue(start.isTime)
+        assertEquals("the string the PC sent, unchanged", "22:00", start.clock)
+        assertEquals("the PC's own words for the row", "22:00", start.words)
+        // No step and no shape a number could take.
+        assertNull("a clock has no step up", start.up)
+        assertNull("and none down", start.down)
+        assertEquals("and no range line either", "", Limits.rangeLine(start))
+
+        // What ONE change posts: the clock STRING, quoted on the wire. This is
+        // the assertion that fails if a time is ever sent as 1320 minutes.
+        assertEquals("""{"key":"notif_quiet_start","value":"22:00"}""",
+            Limits.body("notif_quiet_start", Limits.timeJson("22:00")))
+        assertTrue("never a bare number",
+            !Limits.body("notif_quiet_start", Limits.timeJson("22:00")).contains("1320"))
+    }
+
+    @Test
+    fun `the phone checks the clock's shape before anything is sent`() {
+        assertEquals("the PC's own shape, normalised", "07:05", Limits.validTime("7:05"))
+        assertEquals("already normal", "22:00", Limits.validTime(" 22:00 "))
+        for (junk in listOf("1320", "25:00", "22:60", "7:5", "", "half past ten")) {
+            assertNull("$junk is not a time of day", Limits.validTime(junk))
+        }
+        // The picker starts where the value in force is - and a value it cannot
+        // read starts at the PC's own default rather than at midnight.
+        assertEquals(Pair(22, 0), Limits.hourMinute("22:00"))
+        assertEquals(Pair(7, 5), Limits.hourMinute("7:05"))
+        assertEquals(Pair(22, 0), Limits.hourMinute("nonsense"))
+    }
+
+    @Test
+    fun `quiet_on says whether the two hours decide anything`() {
+        assertTrue("quiet hours are on, so the times matter", notifyRow("notif_quiet_start").quietOn)
+        // The PC sends the SAME answer on every row; with quiet hours off the two
+        // clock rows say so and the plate offers no clock.
+        val off = notifyRow("notif_quiet_end").copy(quietOn = false)
+        assertFalse("the PC says quiet hours are off", off.quietOn)
+        assertTrue("the off row's words say the hour decides nothing",
+            Limits.timeWords(off).contains(Limits.TIME_QUIET_OFF))
+        // A PC that does not send the field at all is read as "they do", so an
+        // unknown field never hides a control from the owner.
+        val silent = JarvisJson.parseToJsonElement(
+            """{"limits":[{"key":"t","title":"Quiet hours start (on your PC)","kind":"time",
+                "value":"22:00","words":"22:00","choices":[],"low":0,"high":0,"unit":"","note":""}]}""",
+        ) as JsonObject
+        assertTrue("a row that does not say is drawn", Limits.offered(silent).single().quietOn)
+    }
+
+    @Test
+    fun `a row whose value is not a clock string is not offered at all`() {
+        // A PC sending a number of minutes (the exact mistake this kind exists to
+        // prevent) leaves the row out rather than drawing "1320" as if it were a
+        // time - and a kind this app has no control for is left out as before.
+        val bad = JarvisJson.parseToJsonElement(
+            """{"limits":[
+              {"key":"t1","title":"Quiet hours start (on your PC)","kind":"time","value":1320,
+               "words":"1320","choices":[],"low":0,"high":0,"unit":"","note":""},
+              {"key":"t2","title":"Quiet hours end (on your PC)","kind":"time","value":"07:00",
+               "words":"07:00","choices":[],"low":0,"high":0,"unit":"","note":""}
+            ]}""",
+        ) as JsonObject
+        assertEquals("only the real clock string is drawn", listOf("t2"), Limits.read(bad).map { it.key })
+    }
+
+    @Test
+    fun `the clock row's control carries the owner's words for TalkBack`() {
+        val words = Limits.timeWords(notifyRow("notif_quiet_start"))
+        assertTrue("the button names the row:\n$words", words.contains("Quiet hours start (on your PC)"))
+        assertTrue("and the value in force:\n$words", words.contains("22:00"))
+        assertEquals("Change", Limits.CHANGE_TIME)
+        // With quiet hours off the row says the hour decides nothing instead.
+        val off = Limits.timeWords(notifyRow("notif_quiet_end").copy(quietOn = false))
+        assertTrue("the off row says so:\n$off", off.contains(Limits.TIME_QUIET_OFF))
+    }
+
+    @Test
+    fun `the plate draws the app's own clock, and sends only what it shows`() {
+        val plate = source(PLATE)
+        assertTrue("the plate must draw the app's own time picker",
+            plate.contains("TimePicker(state = state)"))
+        assertTrue("started where the value in force is",
+            plate.contains("Limits.hourMinute(row.clock.orEmpty())"))
+        assertTrue("24-hour, like the value the PC holds",
+            plate.contains("is24Hour = true"))
+        assertTrue("the shape is checked before anything is sent",
+            plate.contains("Limits.validTime(\"%02d:%02d\".format(state.hour, state.minute))"))
+        assertTrue("the picked time is sent as the clock string",
+            plate.contains("change(open.key, Limits.timeJson(text))"))
+        assertTrue("the clock row's own branch exists", plate.contains("row.isTime ->"))
+        assertTrue("and the off row is told apart",
+            plate.contains("if (!row.quietOn)"))
+        assertTrue("TalkBack words on the clock's control",
+            plate.contains("Limits.timeWords(row)"))
+        assertTrue("the plate never posts to a route itself", !plate.contains("/api/"))
     }
 
     // ------------------------------------------------------------- helpers --

@@ -72,10 +72,25 @@ object OpenPlace {
         // "open the captcha hand-off" land on it instead of the top of Settings
         // - OpenPlaceTest's new-section check is what caught it missing.
         "handoff" to Where.Go(Screen.SETTINGS, "handoff"),
+        // "When a captcha stops Jarvis" (2026-10-09): the registry's own Section
+        // for what a captcha does about the browser window it is blocking. An
+        // ordinary Settings row on the phone (SettingsScreen.kt, item
+        // "handoff-front"), which is what makes "open the captcha window
+        // setting" land on it instead of the top of Settings -
+        // OpenPlaceTest's new-section check is what caught it missing for the
+        // row above.
+        "handoff-front" to Where.Go(Screen.SETTINGS, "handoff-front"),
         // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").
         "quick-tiles" to Where.Go(Screen.SETTINGS, "quick-tiles"),
+        // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is
+        // on screen. Phone-only - the registry marks it app="phone" - and an
+        // ordinary Settings row (SettingsScreen.kt, item "screen-rate"), so
+        // "open the screen refresh rate" lands on it rather than the top of
+        // Settings. OpenPlaceTest's new-section check is what would catch it
+        // missing.
+        "screen-rate" to Where.Go(Screen.SETTINGS, "screen-rate"),
         // Floating Jarvis (SettingsScreen.kt, item "floating-avatar", saved on
         // this phone only). It is a registry Section since 2026-10-08 - before
         // that "open Floating Jarvis" answered with the raw id - and

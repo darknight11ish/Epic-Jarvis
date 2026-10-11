@@ -640,14 +640,37 @@ def _pending_rows():
     return cols, I.annotate(rows)
 
 
+def _guessed_rows():
+    """Rows as pending() returns them for the ONE source whose marking is not
+    a column: jarvis_gate's denial proposal (`gate_denial`), which the owner's
+    decision of 2026-10-10 made a marked guess. Separate from `_pending_rows`
+    because the field it reads (`guessed`) exists only where annotate() sets
+    it, and adding a fourth row there would change what the other checks in
+    t_the_review_cards_read_what_pending_sends are counting.
+    """
+    patch = (HERE / "memory-intake.patch").read_text(encoding="utf-8")
+    cols = re.search(r'"SELECT (id,text,[\w,]+)"', patch).group(1).split(",")
+    rows = [dict(zip(cols, [4, "Jarvis's GUESS, marked as a guess: ...", None, None, None,
+                            0.9, "gate_denial", time.time()]))]
+    return cols, I.annotate(rows)
+
+
 def t_the_review_cards_read_what_pending_sends():
     cols, rows = _pending_rows()
-    have = set(rows[0])
+    # Every field a review card may read, over every source pending() serves:
+    # the ordinary rows above, plus the one source whose marking is not a
+    # column (`gate_denial`, whose `guessed` annotate() sets - the owner's
+    # decision of 2026-10-10).
+    gcols, grows = _guessed_rows()
+    have = set(rows[0]) | set(grows[0])
     js = BRAIN_JS.read_text(encoding="utf-8")
     reads = _reads(_js_function(js, "proposalRow"), "p") | \
         _reads(_js_function(js, "renderMemory"), "p")
     check("every field the desktop's review card reads is one pending() sends",
           reads <= have, f"{sorted(reads - have)} not in {sorted(have)}")
+    check("... and `guessed` is one of them, set only for a denial's proposal",
+          "guessed" in have and grows[0]["guessed"] is True,
+          f"guessed in {sorted(have)}: {grows[0].get('guessed')!r}")
     check("the waiting list dates a card by `created`", "created" in reads and "at" not in reads
           and "ts" not in reads, sorted(reads))
     kt = (KT / "net" / "Learning.kt").read_text(encoding="utf-8")
@@ -666,6 +689,12 @@ def t_the_review_cards_read_what_pending_sends():
     check("annotate() offers Both are true only on the card with an id",
           [r["keep_both_ok"] for r in rows] == [True, False, False])
     check("annotate() flags the planted instruction", rows[2]["flags"] != [])
+    # The desktop's guess note (the owner's decision of 2026-10-10) reads a
+    # field no column holds: annotate() sets it for a denial's proposal, and
+    # for nothing else.
+    check("... and only a Reject click's proposal carries `guessed`",
+          grows[0]["guessed"] is True and all("guessed" not in r for r in rows),
+          repr([r.get("guessed") for r in rows] + [grows[0].get("guessed")]))
 
 
 # ---------------------------------------------------- 6. the same date ----

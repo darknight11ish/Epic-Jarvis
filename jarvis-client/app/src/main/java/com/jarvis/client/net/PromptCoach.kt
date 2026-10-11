@@ -1,6 +1,7 @@
 package com.jarvis.client.net
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -90,6 +91,92 @@ object PromptCoach {
     const val MISSING =
         "Your PC's Jarvis cannot show the prompt coach yet - run apply-patches.ps1 on the PC."
 
+    // ---- The four settings (the owner's answers, 2026-10-09) ----------------
+    //
+    // The owner's verdict on the single switch was "make sure it's effective
+    // and has multiple settings, including an enable and disable", and they
+    // then chose four: when it speaks up, how blunt it is, what it coaches on,
+    // and per-platform behaviour.
+    //
+    // THIS OBJECT HOLDS NOT ONE OF THEIR NAMES OR LINES. The PC sends them -
+    // `jarvis_prompt_coach.SETTINGS` through `settings_rows()`, one row each
+    // with every choice and the words that explain it - and the screen draws
+    // exactly what it was sent, the same discipline as [LABEL] and [DETAIL]
+    // above. A new choice appears in both apps by changing one Python tuple,
+    // and an older PC that answers without them simply shows the switch alone:
+    // [View.settings] is empty, and no picker is drawn rather than an invented
+    // one.
+
+    /** One choice of one setting: what it is called and what it does. */
+    data class Choice(val value: String, val name: String, val detail: String)
+
+    /**
+     * One of the four settings as the PC sent it: the row's own key and name,
+     * the value it has now, and every choice.
+     */
+    data class Group(val key: String, val name: String, val value: String, val choices: List<Choice>)
+
+    /**
+     * Every row of `settings` this app can draw, in the PC's own order.
+     *
+     * A row with no key, no choices, or a current value that is not one of its
+     * own choices is DROPPED rather than drawn: half a row is a picker with
+     * nothing selected in it, which looks built and says nothing. Dropping it
+     * leaves the switch alone, exactly as before the four existed.
+     */
+    fun groups(raw: JsonElement?): List<Group> {
+        val out = ArrayList<Group>()
+        for (el in (raw as? JsonArray).orEmpty()) {
+            val o = el as? JsonObject ?: continue
+            val key = o.text("key") ?: continue
+            val choices = ArrayList<Choice>()
+            for (c in (o["choices"] as? JsonArray).orEmpty()) {
+                val co = c as? JsonObject ?: continue
+                val value = co.text("value") ?: continue
+                choices.add(
+                    Choice(
+                        value = value,
+                        name = co.text("name") ?: value,
+                        detail = co.text("detail") ?: "",
+                    ),
+                )
+            }
+            val value = o.text("value") ?: continue
+            if (choices.isEmpty() || choices.none { it.value == value }) continue
+            out.add(Group(key = key, name = o.text("name") ?: key, value = value, choices = choices))
+        }
+        return out
+    }
+
+    /**
+     * ONE change to ONE of the four: `{"key", "value"}` on the same route the
+     * switch uses. Either direction is at once and raises no card - none of the
+     * four opens a way out of the PC, takes an action, or changes what the
+     * coach may read.
+     */
+    fun choiceBody(key: String, value: String): String =
+        JsonObject(mapOf("key" to JsonPrimitive(key), "value" to JsonPrimitive(value))).toString()
+
+    /**
+     * What to tell the owner after one of the four was pressed. The PC sends
+     * the whole state back, so the line is built from the row and the choice
+     * the PC itself named - never a second copy of either here. A PC that
+     * refused (an unknown key or value - its own 409 sentence) says why.
+     */
+    fun saidChoice(key: String, outcome: DesktopWrite.Outcome, view: View?): String = when (outcome) {
+        is DesktopWrite.Outcome.Waiting -> WAITING_CARD
+        is DesktopWrite.Outcome.Refused -> "Not changed. ${outcome.why}"
+        is DesktopWrite.Outcome.Done -> {
+            val group = view?.settings?.find { it.key == key }
+            val picked = group?.choices?.find { it.value == group.value }
+            when {
+                group != null && picked != null -> "${group.name}: ${picked.name}."
+                group != null -> "${group.name} changed."
+                else -> "Changed."
+            }
+        }
+    }
+
     // ---- The critique's own words -------------------------------------------
     //
     // The PC sends the critique as data (`jarvis_prompt_coach.SCHEMA`): a
@@ -112,6 +199,19 @@ object PromptCoach {
 
     /** The heading over the rewrite - shown in full, and never applied by itself. */
     const val SUGGESTION_TITLE = "A rewrite you could send"
+
+    /**
+     * The heading over the line that says which AI the question is headed for
+     * and what Jarvis knows about that one (the owner's words, 2026-10-09).
+     * Ours, not the PC's - the PC sends the SENTENCE; these are the two
+     * headings it can sit under, and which one is used is decided by the PC's
+     * own `known`, never guessed here.
+     */
+    const val TARGET_TITLE = "The AI this is going to"
+    const val UNKNOWN_TITLE = "Jarvis does not know this AI yet"
+
+    /** The line under the target's own sentence, naming where it came from. */
+    fun sourceLine(source: String): String = "What Jarvis knows, from $source"
 
     /**
      * While the model reads the question. The design says plainly that nobody
@@ -192,6 +292,15 @@ object PromptCoach {
         val sendMine: String,
         val sendSuggestion: String,
         /**
+         * The four settings the owner chose on 2026-10-09, exactly as the PC
+         * sent them. EMPTY for a PC that answers without them (an older
+         * backend) - the screen then draws the switch alone, which is what it
+         * had before, rather than a picker with nothing in it.
+         */
+        val settings: List<Group> = emptyList(),
+        /** The AIs Jarvis has notes for, so the card can say what it knows about. */
+        val targets: List<String> = emptyList(),
+        /**
          * The route answered at all. False only when `GET /api/prompt/coach`
          * failed in a way that means this PC has no prompt coach
          * ([missing]), which is the one case the chat bar says [MISSING]
@@ -215,6 +324,9 @@ object PromptCoach {
             button = body.text("button") ?: BUTTON,
             sendMine = body.text("send_mine") ?: SEND_MINE,
             sendSuggestion = body.text("send_suggestion") ?: SEND_SUGGESTION,
+            settings = groups(body["settings"]),
+            targets = (body["targets"] as? JsonArray).orEmpty()
+                .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.contentOrNull },
         )
     }
 
@@ -234,6 +346,8 @@ object PromptCoach {
         button = BUTTON,
         sendMine = SEND_MINE,
         sendSuggestion = SEND_SUGGESTION,
+        settings = emptyList(),
+        targets = emptyList(),
         routeKnown = false,
     )
 
@@ -317,8 +431,33 @@ object PromptCoach {
         ),
     ).toString()
 
-    /** One gap: what is missing, why it matters, and the smallest fix. */
+    /**
+     * One gap: what is missing, why it matters, and the smallest fix.
+     */
     data class Issue(val what: String, val why: String, val fix: String)
+
+    /**
+     * Which AI the question is headed for, and what Jarvis knows about it.
+     *
+     * `known` false is the case the owner asked for in as many words: Jarvis
+     * SAYS SO rather than guessing. [advice] is then the PC's own sentence -
+     * "Jarvis does not know ... yet" - and [quirks] and [style] are empty, so
+     * no screen can show an invented claim about an AI Jarvis has never heard
+     * of. For a known one, [checked] is the date those notes were last
+     * verified, and [stale] says the PC considers them old enough to warn
+     * about.
+     */
+    data class Target(
+        val known: Boolean,
+        val id: String,
+        val name: String,
+        val advice: String,
+        val quirks: List<String>,
+        val style: List<String>,
+        val checked: String,
+        val source: String,
+        val stale: Boolean,
+    )
 
     /**
      * The critique, exactly as the PC's `jarvis_prompt_coach.parse` hands it
@@ -338,6 +477,19 @@ object PromptCoach {
         val missing: List<String>,
         /** The same request, rewritten. Shown in full, never applied. */
         val suggestion: String,
+        /**
+         * Whether the coach had anything to say at all. FALSE is "only when
+         * the prompt is weak" doing its job: the question scored well enough
+         * that the PC held the advice back, and [said] is its own sentence for
+         * that. The screen says so rather than showing an empty list, because
+         * "the coach found nothing" and "the coach chose not to speak" are
+         * different things to the owner.
+         */
+        val adviceGiven: Boolean = true,
+        /** The PC's own line when [adviceGiven] is false; "" otherwise. */
+        val said: String = "",
+        /** Which AI this was coached for, and what Jarvis knows about it. */
+        val target: Target? = null,
     )
 
     /**
@@ -373,6 +525,7 @@ object PromptCoach {
             val s = (el as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
             s?.takeIf { it.isNotEmpty() }
         }
+        val target = coach["target"] as? JsonObject
         return Critique(
             score = clamped,
             // Not "clear unless there are issues": the PC already made that
@@ -382,8 +535,35 @@ object PromptCoach {
             issues = issues,
             missing = missing,
             suggestion = coach.text("suggestion") ?: "",
+            // A field that is absent means what the PC meant by it. A PC that
+            // has never heard of these (an older backend) sent neither, and
+            // "it had advice to give" is the behaviour it had then - so an
+            // absent `advice_given` is true, never false.
+            adviceGiven = coach.flag("advice_given") != false,
+            said = coach.text("said") ?: "",
+            target = target?.let {
+                Target(
+                    known = it.flag("known") == true,
+                    id = it.text("id") ?: "",
+                    name = it.text("name") ?: "",
+                    advice = it.text("advice") ?: "",
+                    quirks = it.strings("quirks"),
+                    style = it.strings("style"),
+                    checked = it.text("checked") ?: "",
+                    source = it.text("source") ?: "",
+                    stale = it.flag("stale") == true,
+                )
+            },
         )
     }
+
+    /** The trimmed, non-empty strings of a JSON array field, or [] - the same
+     *  reading `missing` above gets, for the target's own two lists. */
+    private fun JsonObject.strings(key: String): List<String> =
+        (this[key] as? JsonArray).orEmpty().mapNotNull { el ->
+            (el as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
+                ?.takeIf { it.isNotEmpty() }
+        }
 
     /** What the PC answered a `POST /api/prompt/coach`, kept whole ([classify]). */
     data class Reply(val code: Int, val body: JsonObject?)

@@ -76,6 +76,45 @@
            opens the Jarvis bar on the card; it decides nothing. -->
       <div class="card-link" id="card-link" hidden></div>
 
+      <!-- ── Search ─────────────────────────────────────────────────────────
+           The owner's request of 2026-10-09: "a lot more visually simple,
+           with a search bar in settings. I still want everything adjustable,
+           just easier to find and more efficient." See
+           docs/SETTINGS-UX-DESIGN.md and settings-search.js.
+
+           IT IS A VIEW, NOT A CHANGE. Typing here hides the cards that do not
+           match and shows them again the moment the box is emptied; every
+           switch, id and word on the page is exactly where it was. It calls
+           nothing (`settings-search.js` has no `invoke(` and no `fetch(`), and
+           it writes nothing down. In the DOM it is the FIRST element, so Tab
+           reaches it before anything else; Ctrl+F and Alt+F jump to it from
+           anywhere and Escape clears it.
+
+           `#settings-search-count` is the live region and is written only
+           when the ANSWER changes - a count re-announced on every keystroke
+           would talk over the owner's typing. -->
+      <section class="settings-search" id="settings-search" aria-labelledby="settings-search-title">
+        <h2 class="settings-search-title" id="settings-search-title">Search settings</h2>
+        <div class="settings-search-row">
+          <input
+            id="settings-search-input"
+            class="settings-search-input"
+            type="search"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="Search settings…"
+            aria-describedby="settings-search-status"
+          />
+          <button class="btn ghost small" id="settings-search-clear" type="button" hidden>Clear</button>
+        </div>
+        <p class="settings-search-hint" id="settings-search-status">Type a word to show only the settings that match.</p>
+        <p class="settings-search-none" id="settings-search-none" hidden>
+          <span id="settings-search-none-words"></span>
+          <span class="settings-search-none-back">Clear the box and everything comes back.</span>
+        </p>
+        <span class="sr-only" id="settings-search-count" role="status" aria-live="polite"></span>
+      </section>
+
       <nav class="settings-jump" id="settings-jump" aria-label="Jump to a section">
         <p class="settings-jump-title">Jump to:</p>
         <div class="settings-jump-group">
@@ -145,6 +184,7 @@
             <a href="#screen-look">Look at this and Watch with me</a>
             <a href="#browser-engine">Browser without a window</a>
             <a href="#handoff">When the phone does not answer</a>
+            <a href="#handoff-front">When a captcha stops Jarvis</a>
           </div>
           <div class="settings-jump-place">
             <span class="settings-jump-place-label">Where things are kept</span>
@@ -230,6 +270,41 @@
           <button class="btn ghost small" id="fr-again" type="button" hidden>Set up again</button>
         </div>
         <span class="status" id="fr-status" role="status"></span>
+
+        <!-- ── The intro, replayable on demand ────────────────────────────────
+             The owner's request of 2026-10-10: "make the desktop intro
+             replayable if it was accidentally skipped." The walkthrough
+             (`onboarding.html`) was interactive and skippable but NOT
+             redoable - one Escape and it was gone.
+
+             This is a BUTTON, not a row in the checklist above, for two
+             reasons: it is not a setting (first-run-settings.js's own header
+             says that card gathers settings and writes nothing by hand), and
+             the checklist rows are hidden once the card is marked done
+             (`fr-rows`), which is exactly the state the owner is in when he
+             wants the intro back. So this sits outside both states and is
+             visible either way.
+
+             It also does not go through `backend/jarvis_settings_registry.py`
+             (PR #163): that registry generates the TOGGLE rows of Settings,
+             and a button is not one. Nothing generated needs regenerating for
+             it - `py -3 tools/gen_menu_cases.py --check` still matches, and no
+             new jump-list entry is created.
+
+             What it calls: `replay_onboarding`, granted to this window alone
+             by `capabilities/settings.json`'s `onboarding-replay` set. The
+             command opens the same window the first run uses and never
+             touches the marker, so the intro still appears by itself exactly
+             once. -->
+        <p class="note" id="fr-intro-line">
+          The five-screen welcome Jarvis shows by itself once on a new PC. If
+          you skipped it, or want to read it again, open it from here — this
+          does not change when it appears on its own.
+        </p>
+        <div class="row">
+          <button class="btn ghost small" id="fr-intro" type="button">Show the intro again</button>
+          <span class="status" id="fr-intro-status" role="status"></span>
+        </div>
       </section>
 
       <section class="card" id="connection">
@@ -485,6 +560,22 @@
               no text box. Drag it anywhere. Say "open a chat", or press
               Alt+Space, to bring up the real Jarvis bar. Alt+Shift+F shows
               or hides this face (see Shortcuts below to change either key).
+            </span>
+          </span>
+        </label>
+
+        <!-- Click-through (2026-10-10, the integration evaluation): clicks on
+             the floating face go to whatever is behind it, except on the
+             animal itself. Off by default, and it does nothing until the
+             floating face is on. -->
+        <label class="toggle">
+          <input id="floating-click-through" type="checkbox" />
+          <span>
+            <span id="floating-click-through-label">Click through to what is behind</span>
+            <span class="toggle-detail" id="floating-click-through-detail">
+              Clicks on the floating face go to whatever is behind it, except on
+              the animal itself - so it can still be dragged, and the face stops
+              getting in the way of whatever is underneath. Off to start.
             </span>
           </span>
         </label>
@@ -932,10 +1023,21 @@
            the one setting in this window that is not (see the module's own
            note, and prompt_coach.rs's). The label and the paragraph under the
            switch are the PC's own words, with a byte-identical copy in the
-           module (LABEL, DETAIL) if the read fails. -->
+           module (LABEL, DETAIL) if the read fails.
+
+           THE FOUR SETTINGS BESIDE THE SWITCH (the owner's answers,
+           2026-10-09): when it speaks up, how blunt it is, what it coaches on,
+           and per-platform behaviour. `#coach-groups` is where
+           prompt-coach-settings.js draws them - and it draws NOTHING BY HAND:
+           every row, every choice's name and every word of explanation comes
+           from the PC (`jarvis_prompt_coach.SETTINGS` through
+           `settings_rows()`), so a new choice appears in both apps by changing
+           that one Python tuple. An older backend that answers without them
+           leaves this box empty and hidden, and the switch alone is drawn,
+           exactly as before. -->
       <section class="card" id="prompt-coach">
         <h2>Prompt coach</h2>
-        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one.</p>
+        <p class="note">A "Coach this" button beside the box where you type. Pressing it asks the model on your own PC what is missing from your question - a score, the gaps, and a rewritten version you can send instead of yours. It is advice only: it never sends anything by itself, and it never changes your words unless you pick the rewritten one. It also coaches for the AI you are sending to, using what Jarvis knows about that one.</p>
 
         <p class="state" id="coach-state" role="status">Asking Jarvis…</p>
 
@@ -948,6 +1050,7 @@
             </span>
           </label>
           <p class="sc-line" id="coach-enabled-status" role="status"></p>
+          <div id="coach-groups" hidden></div>
           <div class="row">
             <span class="status" id="coach-status" role="status"></span>
           </div>
@@ -1007,6 +1110,21 @@
         <p class="note">
           Choose what Jarvis notifies you about on this PC. Decisions waiting for your yes
           always notify you and cannot be turned off.
+        </p>
+        <!-- The owner's decision of 2026-10-08: these seven values now live in
+             the owner's own settings file ([notifications] in
+             jarvis-framework.toml, backend/jarvis_notify_prefs.py) and BOTH apps
+             change them through the one limits route - because a phone can never
+             read this window's localStorage, and the phone must be able to change
+             them. This card READS them from the PC when it opens and WRITES every
+             change through it (notifications-prefs.js readFromBackend /
+             writeToBackend); localStorage is only this page's cache of what it
+             last read. The line below says the same thing, plainly, and the
+             matching rows in Limits and frequency say "(on your PC)". -->
+        <p class="sub">
+          These are this PC's notifications. Your phone can change them too, in its own
+          Settings, and it is told there that they are the PC's. Decisions waiting for your
+          yes never go quiet.
         </p>
 
         <h3 class="subhead">What notifies you</h3>
@@ -2129,6 +2247,32 @@
         <p class="state" id="ho-state" role="status">Asking Jarvis…</p>
       </section>
 
+      <!-- ── What a captcha does about that window ──────────────────────────
+           The owner's own decision of 2026-10-09, in his words: "1 by default
+           with the option for 2 in the settings of Jarvis" (handoff-front.js;
+           handoff.rs handoff_front; backend jarvis_handoff_front.py). When a
+           captcha or a sign-in page blocks the browser window Jarvis is
+           driving: "Leave it where it is" is the DEFAULT - the window keeps its
+           size, its place and whatever is in front of it, and the PC says which
+           window Jarvis is stuck on. "Bring it to the front" raises and
+           activates that one window, taking the owner's screen and keyboard, so
+           choosing it is ONE approval card on this PC with Windows Hello;
+           choosing "Leave it where it is" again is instant. Every word comes
+           from the PC. -->
+      <section class="card" id="handoff-front">
+        <h2 id="hf-title">When a captcha stops Jarvis</h2>
+        <div id="hf-body" hidden>
+          <p class="note" id="hf-detail"></p>
+          <div id="hf-choices" role="radiogroup" aria-labelledby="hf-title"></div>
+          <p class="sc-line" id="hf-line" role="status"></p>
+          <p class="note" id="hf-hello"></p>
+          <p class="note" id="hf-waiting-link" hidden></p>
+          <p class="note" id="hf-why" hidden></p>
+          <span class="status" id="hf-status" role="status"></span>
+        </div>
+        <p class="state" id="hf-state" role="status">Asking Jarvis…</p>
+      </section>
+
       <!-- ── Backups ────────────────────────────────────────────────────────
            The owner's decision of 2026-09-27: "one locked backup file into
            a folder the owner picks ... locked with a recovery code only
@@ -2571,6 +2715,7 @@
 
     <script src="sky.js"></script>
     <script type="module" src="first-run-settings.js"></script>
+    <script type="module" src="settings-search.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
@@ -2590,6 +2735,7 @@
     <script type="module" src="look-settings.js"></script>
     <script type="module" src="browser-engine.js"></script>
 <script type="module" src="handoff-mode.js"></script>
+    <script type="module" src="handoff-front.js"></script>
     <script type="module" src="backup-settings.js"></script>
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>

@@ -4,8 +4,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TimePicker
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,6 +25,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Limits
@@ -39,19 +45,48 @@ import kotlinx.serialization.json.JsonPrimitive
  * PC's own limit table (`backend/jarvis_limits.py`, 2026-10-08; [Limits]).
  *
  * ONE row per limit, each with a control that fits its `kind`: the fixed
- * choices as chips, any other number as a step down / value / step up, and a
- * bool as the app's own [Toggle]. Every control carries the owner's words for
- * TalkBack ([Limits.rowWords], [Limits.upWords], [Limits.choiceWords]) - the
- * same deliberate habit the switches on "How Jarvis talks" already have, so a
- * step is never just a "-".
+ * choices as chips, any other number as a step down / value / step up, a bool
+ * as the app's own [Toggle], and a clock time as the app's own [TimePicker]
+ * (Material's clock, 24-hour, started where the value in force is). Every
+ * control carries the owner's words for TalkBack ([Limits.rowWords],
+ * [Limits.upWords], [Limits.choiceWords], [Limits.timeWords]) - the same
+ * deliberate habit the switches on "How Jarvis talks" already have, so a step
+ * is never just a "-" and a clock is never just "Change".
  *
- * WHAT IT WILL NOT PRETEND. A number turned DOWN applies at once; a number
- * turned UP - on a row the PC marks `loosen_up` - is a loosening, and the PC
- * puts ONE approval card to the owner and writes nothing until it is answered
- * THERE. So the plate says that once, plainly, and every change re-reads the
- * rows afterwards: a 2xx can mean "a card is waiting", never "it is done". The
- * sentence under the list is always the PC's own ([JarvisRuntime.setLimit]),
- * and a refusal goes into the shared notice too.
+ * THE PC'S OWN NOTIFICATIONS ARE ROWS HERE TOO (the owner's decision of
+ * 2026-10-08): which of the PC's own toasts fire, and the quiet hours around
+ * them, so the phone can change them. Their titles all say "(on your PC)" - the
+ * phone's OWN notification settings are a different screen and must never be
+ * mistaken for them. While quiet hours are off the PC says so on every row
+ * (`quiet_on`), and the two clock rows then show their value with a line saying
+ * the hour decides nothing rather than a picker that would change nothing.
+ *
+ * WHAT IT WILL NOT PRETEND. A change applies at once, or it is a loosening and
+ * the PC puts ONE approval card to the owner and writes nothing until it is
+ * answered THERE. WHICH ONE IS THE ROW'S OWN BUSINESS, and the plate never says
+ * it in the blanket: most rows ask when a number goes up, and the voice check's
+ * bar asks when it goes DOWN, so the line above the rows promises nothing about
+ * direction and each row's own note (the PC's words) says which. So the plate
+ * says that once, plainly, and every change re-reads the rows afterwards: a 2xx
+ * can mean "a card is waiting", never "it is done". The sentence is always the
+ * PC's own ([JarvisRuntime.setLimit]), and a refusal goes into the shared notice
+ * too.
+ *
+ * A SAVE THAT DID NOT HAPPEN SAYS SO, IN PLAIN WORDS, WHERE THE OWNER IS
+ * LOOKING (fixed 2026-10-10). This screen's clock control is the one that
+ * showed the bug item 9 found: choosing a new time and tapping "Use this time"
+ * closed the picker and the screen looked exactly as it had, because the PC's
+ * own limits write route is not there on that install (404, measured on the
+ * owner's PC) and a 404 was read as the PC's own sentence ([Limits.classifyPost]).
+ * Two things are fixed here, not one: the sentence is now the plain "this PC
+ * has no such setting" line, and it is drawn UNDER THE ROW the change was made
+ * on - the PC's sentence is only useful beside the control that produced it,
+ * and this list is longer than one screen, so any single fixed place is off the
+ * screen for some row. Measured on the owner's phone: with the answer drawn at
+ * the top of the card, tapping "Use this time" on Quiet hours start STILL
+ * looked like nothing had happened. A sentence that changed nothing is drawn in
+ * the warning colour; one that went through (or that is now waiting on the PC)
+ * keeps the ordinary one.
  *
  * [Limits.offered] is what is drawn, so a row the PC marks `pc_only` cannot
  * appear here even if a PC sends one.
@@ -66,6 +101,20 @@ internal fun LimitsSection(canAct: Boolean) {
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    /**
+     * The row [said] belongs to ([Limits.Row.key]). The sentence is drawn UNDER
+     * that row, which is where the owner is looking: this list is longer than
+     * one screen, so a sentence at the top of the card is off the screen for a
+     * change made near the bottom (the quiet-hours clock) exactly as one at the
+     * bottom was for a change near the top. Measured on the owner's phone
+     * 2026-10-10: with the answer at the top of the card, tapping "Use this
+     * time" on Quiet hours start still looked like nothing had happened.
+     */
+    var saidFor by remember { mutableStateOf<String?>(null) }
+    /** Nothing was written: [said] is a refusal, or the PC has no such route. */
+    var saidFailed by remember { mutableStateOf(false) }
+    /** The key of the clock row whose picker is open, if any. */
+    var picking by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(reads) {
         when (val r = JarvisRuntime.limits()) {
@@ -88,9 +137,17 @@ internal fun LimitsSection(canAct: Boolean) {
         if (busy) return
         busy = true
         said = null
+        saidFor = null
+        saidFailed = false
         scope.launch {
             try {
-                said = JarvisRuntime.setLimit(key, value)
+                // Both halves: the PC's sentence, and whether anything was
+                // written. A save that did not happen must not close as if it
+                // had (item 9, the quiet-hours clock).
+                val a = JarvisRuntime.setLimit(key, value)
+                said = a.sentence
+                saidFor = key
+                saidFailed = !a.changed
             } finally {
                 busy = false
                 // Re-read whatever the answer was: a raise that was approved on
@@ -124,22 +181,51 @@ internal fun LimitsSection(canAct: Boolean) {
                     LimitRow(
                         row = r,
                         enabled = canAct && !busy,
+                        // The answer belongs to the row it was asked for, and is
+                        // drawn under that row's own control - the one place the
+                        // owner is certainly looking at, whatever the scroll.
+                        said = if (saidFor == r.key) said else null,
+                        saidFailed = saidFailed,
                         onChange = { value -> change(r.key, value) },
+                        onPickTime = { picking = r.key },
                     )
                 }
             }
-            said?.let {
-                Gap(6)
-                Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
-                    modifier = Modifier.liveStatus())
-            }
         }
+    }
+
+    // The picker is drawn OUTSIDE the card, and only for the row whose button
+    // was tapped: opening a clock is not a change, and nothing is sent until
+    // "Use this time" is tapped.
+    val open = rows?.firstOrNull { it.key == picking }
+    if (open != null && open.isTime) {
+        TimeRowDialog(
+            row = open,
+            onDismiss = { picking = null },
+            onChosen = { text ->
+                picking = null
+                change(open.key, Limits.timeJson(text))
+            },
+        )
     }
 }
 
-/** ONE limit: the PC's title, the value in the PC's words, and its control. */
+/**
+ * ONE limit: the PC's title, the value in the PC's words, and its control.
+ *
+ * [said] is the PC's sentence for the change just made TO THIS ROW, drawn under
+ * the row's own control so it cannot be missed whatever the scroll position;
+ * [saidFailed] says nothing was written, and draws it in the warning colour.
+ */
 @Composable
-private fun LimitRow(row: Limits.Row, enabled: Boolean, onChange: (JsonElement) -> Unit) {
+private fun LimitRow(
+    row: Limits.Row,
+    enabled: Boolean,
+    said: String?,
+    saidFailed: Boolean,
+    onChange: (JsonElement) -> Unit,
+    onPickTime: () -> Unit,
+) {
     val chrome = LocalChrome.current
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
         Text(
@@ -194,6 +280,29 @@ private fun LimitRow(row: Limits.Row, enabled: Boolean, onChange: (JsonElement) 
                     Text(range, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                 }
             }
+            // A clock time: the value is already above, so the control is the
+            // button that opens the app's own picker. While quiet hours are off
+            // the PC says the hour decides nothing, and the button is not
+            // offered - a control that changes nothing is worse than none.
+            row.isTime -> Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (!row.quietOn) {
+                    Text(
+                        Limits.TIME_QUIET_OFF,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                } else {
+                    Quiet(
+                        Limits.CHANGE_TIME,
+                        modifier = Modifier.semantics { contentDescription = Limits.timeWords(row) },
+                        enabled = enabled,
+                        onClick = onPickTime,
+                    )
+                }
+            }
             // On or off: the app's own switch, with its words for TalkBack.
             else -> Row(
                 Modifier.fillMaxWidth(),
@@ -210,6 +319,71 @@ private fun LimitRow(row: Limits.Row, enabled: Boolean, onChange: (JsonElement) 
                     onCheckedChange = { onChange(JsonPrimitive(it)) },
                     enabled = enabled,
                     modifier = Modifier.semantics { contentDescription = Limits.rowWords(row) },
+                )
+            }
+        }
+        // The answer to the change made on THIS row, under this row's control.
+        // A save that did not happen says so here, in the PC's plain words (or
+        // this app's own "your PC does not have these settings yet"), instead
+        // of the screen closing as if it had worked.
+        said?.let {
+            Gap(4)
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (saidFailed) chrome.warnInk else chrome.textMid,
+                modifier = Modifier.liveStatus(),
+            )
+        }
+    }
+}
+
+/**
+ * The app's own time picker for one clock-time row: Material's clock, started
+ * where the value in force is, and a 24-hour face because the value the PC holds
+ * and the owner reads is 24-hour ("22:00").
+ *
+ * The dialog hands back the same shape the PC takes, "HH:MM", through
+ * [Limits.validTime] - so a time can never leave this phone in a shape the PC
+ * would refuse, and it is never turned into a number of minutes anywhere.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TimeRowDialog(
+    row: Limits.Row,
+    onDismiss: () -> Unit,
+    onChosen: (String) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val (hour, minute) = Limits.hourMinute(row.clock.orEmpty())
+    val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
+    Dialog(onDismissRequest = onDismiss) {
+        Plate {
+            Text(row.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+            Gap(8)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                TimePicker(state = state)
+            }
+            Gap(10)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Quiet("Cancel", onClick = onDismiss)
+                Gap(8)
+                Quiet(
+                    "Use this time",
+                    onClick = {
+                        val text = Limits.validTime("%02d:%02d".format(state.hour, state.minute))
+                        if (text != null) onChosen(text)
+                    },
                 )
             }
         }

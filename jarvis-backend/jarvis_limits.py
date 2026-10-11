@@ -57,6 +57,11 @@ try:
 except Exception:                                    # pragma: no cover
     fw = None
 
+try:
+    import jarvis_notify_prefs as NP
+except Exception:                                    # pragma: no cover - shipped beside this file
+    NP = None
+
 #: The gate action a loosening going UP is asked under. ONE name for every such
 #: limit: the card's own words (below) carry which limit and how far, and a name
 #: per limit would mean a name per limit in the card-words table, on the "What
@@ -91,6 +96,33 @@ class SettingsFileError(Exception):
 
 def _words(n) -> str:
     return f"{n:g}"
+
+
+# ---------------------------------------------------------------------------
+#   A time of day - the one kind that is neither a number nor a switch
+# ---------------------------------------------------------------------------
+#: The kind a time-of-day row carries. The two quiet-hours ends were the first
+#: of these (the owner's decision of 2026-10-08, "the quiet hours' two times").
+#: A time of day is NOT a number of minutes: rendering 22:00 as "1320" with no
+#: explanation is worse than not offering the row at all, so the value on the
+#: wire is the string the owner reads and types, "HH:MM", and the CHECK is
+#: `jarvis_notify_prefs.check_time`'s - one home for one rule.
+KIND_TIME = "time"
+
+
+def _time_checked(value) -> str:
+    """`value` as "HH:MM", through the module that owns the rule.
+
+    This is deliberately NOT a second copy of the shape check. The value a
+    quiet-hours row writes lives in `jarvis_notify_prefs.py`, so that module
+    decides what a time is; this call is how the limits table asks."""
+    if NP is None:
+        raise SettingsFileError("The PC's Jarvis does not have the notification "
+                               "settings installed, so nothing was changed")
+    try:
+        return NP.check_time(value)
+    except NP.PrefsError as exc:
+        raise SettingsFileError(str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -134,6 +166,23 @@ class _VoiceBar:
     file, nothing here reads anything from a print but the bar, and nothing here
     logs anything about one.
 
+    WHICH NUMBER ON THE PRINT (2026-10-09). A print can hold TWO bars:
+    `threshold` (the small model's, the field it has always had) and
+    `thresholds[<strong model>]`. Which one is the owner's real bar is not a
+    choice this table gets to make: it is the one belonging to the model whose
+    similarity actually decides, and `jarvis_voice.deciding_model` is the single
+    rule for that - the same rule the "someone else" card writes through and the
+    same field `raw_bar` reads when a clip is judged. Asking for it here is what
+    stops the row showing one number while the check uses another: before this,
+    the row read and wrote `threshold` while the card wrote
+    `thresholds[<strong model>]` whenever the stronger model decided, so a print
+    could hold both with only one of them in force.
+
+    The floor is asked for the same model, for the same reason: a number below
+    THAT model's own floor is refused here, before a card, instead of being
+    refused afterwards by `set_threshold` - which is the one place a refusal is
+    invisible to the owner, because it happens after they have already said yes.
+
     `read` returns jarvis_voice's own clamped value: `load_profile` holds every
     bar inside `MIN_THRESHOLD` (5%) .. 1.0 (100%), so a hand-edited print cannot
     show the owner a number the check itself would never use.
@@ -154,8 +203,47 @@ class _VoiceBar:
             return None
         return jarvis_voice
 
+    def _live(self, v, prof):
+        """(the name of the model whose similarity decides, the bar in force).
+
+        The deciding model is asked of `jarvis_voice.deciding_model`, and it is
+        asked with the name the PRINT recorded (`prof.embedder`) rather than with
+        a freshly built embedder: the print's own name is the one that says
+        whether the stronger model's bar is a second number on this print or the
+        print's one bar, and building a model to answer that would load a file
+        for a question that needs no audio.
+
+        Falls back, on a `jarvis_voice` from before `deciding_model` existed, to
+        exactly what this row did then: the print's own `threshold` and the
+        model it was enrolled with. That keeps an installed backend older than
+        this patch working, and is the ONLY case where the row and the check can
+        still be looking at different fields - a print that has a stronger
+        model's bar at all can only exist on a backend new enough to have both.
+        """
+        try:
+            strong = v.strong_embedder(None)
+        except Exception:                    # pragma: no cover - no stronger model
+            strong = None
+        try:
+            dec, _which = v.deciding_model(prof, prof.embedder, strong, v.BAR_ROLE)
+        except AttributeError:               # pragma: no cover - older jarvis_voice
+            return prof.embedder, float(prof.threshold)
+        # A name, whichever the deciding model came as: `deciding_model` answers
+        # with the `emb` object it was given when the small model decides, and
+        # `emb` here is a name, not a loaded model.
+        model = dec if isinstance(dec, str) else dec.name
+        try:
+            # `own_bar`, not `raw_bar`: the row shows the number the owner SET.
+            # `raw_bar` raises it to the model's measured floor, which is a
+            # different number and would show a value nobody chose - and the
+            # floor is enforced where it belongs, by the card's own check above
+            # and by `set_threshold` behind it.
+            return model, float(v.own_bar(prof, model, v.BAR_ROLE))
+        except AttributeError:               # pragma: no cover - older jarvis_voice
+            return model, float(prof.threshold)
+
     def read(self):
-        """The bar in the print, as a whole percentage."""
+        """The bar in force, as a whole percentage."""
         v = self._voice()
         if v is None:
             return VOICE_BAR_DEFAULT
@@ -165,7 +253,8 @@ class _VoiceBar:
             return VOICE_BAR_DEFAULT
         if prof is None:
             return VOICE_BAR_DEFAULT
-        return _cosine_to_percent(prof.threshold)
+        _model, bar = self._live(v, prof)
+        return _cosine_to_percent(bar)
 
     def check(self, percent) -> None:
         """Refuse, in plain words and BEFORE any card is raised, a number the
@@ -184,7 +273,8 @@ class _VoiceBar:
         if prof is None:
             raise SettingsFileError("No voice has been trained yet, so there is "
                                     "no bar to change")
-        lowest = _cosine_to_percent(v.floor_for(prof.embedder, v.BALANCED))
+        model, _bar = self._live(v, prof)
+        lowest = _cosine_to_percent(v.floor_for(model, v.BALANCED))
         if float(percent) < lowest:
             raise SettingsFileError(f"The lowest this voice check allows is "
                                     f"{lowest}%, so nothing was changed")
@@ -192,14 +282,32 @@ class _VoiceBar:
     def write(self, percent) -> None:
         """Write the bar into the print, through `jarvis_voice.set_threshold`.
 
+        The model is named explicitly, and it is the deciding one: `set_threshold`
+        files a bar under `threshold` for the model the print was enrolled with
+        and under `thresholds[model]` for any other. Without the name, a lowering
+        the owner approved for the bar in force would be written to the OTHER
+        field - the row would read back unchanged and the check would go on
+        judging clips by the number the owner had just asked to change.
+
         jarvis_voice checks its own floor again here, so this is a second gate
         that fails closed rather than the only one."""
         v = self._voice()
         if v is None:
             raise SettingsFileError("The voice check is not installed on this PC, "
                                     "so nothing was changed")
+        prof, _label = v.find_profile("")
+        if prof is None:
+            raise SettingsFileError("No voice has been trained yet, so there is "
+                                    "no bar to change")
+        model, _bar = self._live(v, prof)
         try:
-            v.set_threshold(_percent_to_cosine(percent))
+            v.set_threshold(_percent_to_cosine(percent), model=model)
+        except TypeError:                    # pragma: no cover - older jarvis_voice
+            try:
+                v.set_threshold(_percent_to_cosine(percent))
+            except ValueError as exc:
+                raise SettingsFileError(f"Your voice check would not take that "
+                                        f"({exc}), so nothing was changed")
         except ValueError as exc:
             raise SettingsFileError(f"Your voice check would not take that "
                                     f"({exc}), so nothing was changed")
@@ -254,6 +362,10 @@ class Limit:
             return self.says(value)
         if self.kind == "bool":
             return self.title if value else f"no: {self.title}"
+        if self.kind == KIND_TIME:
+            # A clock time reads as itself. It is never turned into a number of
+            # minutes: "1320" with no explanation is worse than no row at all.
+            return f"{value}"
         return f"{_words(value)}{(' ' + self.unit) if self.unit else ''}"
 
 
@@ -265,6 +377,104 @@ def _ttl_says(v) -> str:
 
 
 
+
+
+# ---------------------------------------------------------------------------
+#   This PC's own notifications - the seven the phone may change too
+# ---------------------------------------------------------------------------
+# THE OWNER'S DECISION, 2026-10-08: the PC's notification choices - which of
+# this PC's own toasts fire (alarms, reminders, the morning briefing, the
+# "Solve it here" hand-off) and the quiet hours around them - MUST be
+# changeable from the phone too, and the phone must say plainly that these are
+# for the PC, not for the phone's own notifications (those are a different
+# feature entirely: `/api/notifications/phone`).
+#
+# They ride THIS table, and this module is the whole reason they can. Before
+# it, the four switches and the quiet-hours window lived ONLY in the desktop
+# app's own `localStorage` (`notifications-prefs.js`) and were pushed to Rust
+# (`jarvis-desktop/src-tauri/src/notifications.rs`), which is what raises a
+# toast. There was no route and no `jarvis-framework.toml` key for any of the
+# seven - a phone cannot reach another app's `localStorage`, so there was
+# nothing for a phone control to read or write.
+#
+# Now `jarvis_notify_prefs.py` owns `[notifications]` in the owner's own
+# settings file, and these rows are how both apps change it. Riding the table
+# means NO new patch, NO new route and no new ordering invariant - a row here
+# costs a line, while a new patch costs its place in `apply-patches.ps1`,
+# three ordering allow-lists and the stand-in ratchet.
+#
+# `loosening="none"` on ALL SEVEN, deliberately and for a reason the owner
+# needs: a limit's card exists to say "this lets Jarvis do more", and NOTHING
+# here does. A bigger `quiet_end`, a switch turned on or the quiet window
+# moved to the middle of the day changes only when this PC shows its owner a
+# toast. Putting a "Jarvis wants to do more" card over "show me the briefing"
+# would be a lie, and - much worse - the ONE thing these rows must never do is
+# stop an alarm from ringing because a card about it was not answered in time.
+# Turning the alarms row off is still the owner's own choice, made on either
+# app, and it takes effect at once, exactly as it does on the desktop today.
+#
+# `app="both"` on all seven, `pc_only=False` on all seven. The four titles
+# carry "(on your PC)" in the owner's own language, because the phone draws
+# these rows in its own Settings screen next to its OWN notification settings
+# (`settings.phone-notify`) and the two must never be confused for each other.
+#
+# `kind="bool"` needs NO client change: the desktop's `limits.js`/`limits-settings.js`
+# and the phone's plate draw any row whose kind they can draw, so a bool row
+# appears on both screens the moment it is in this table. The two times are the
+# new `kind="time"`, drawn as a real clock picker in both apps.
+
+#: The limits key of the quiet-hours switch, so each app can find the row that
+#: decides whether the two times below it matter. The prefix is the same one
+#: `jarvis_notify_prefs.SWITCHES` uses, with `notif_` in front.
+NOTIFY_QUIET_ON = "notif_quiet_enabled"
+
+#: What each of the owner's notification values writes, and what the row says.
+#: The keys are `jarvis_notify_prefs.KEYS`; the titles are the owner's words.
+_NOTIFY_ROWS: tuple = (
+    ("alarms", "bool", "Speak up when an alarm rings (on your PC)",
+     "An alarm, and an urgent \"tell me when\" alert, ring until you dismiss "
+     "them and break through Windows Focus Assist. This is the PC's alarm, not "
+     "your phone's."),
+    ("reminders", "bool", "Chime when a reminder is due (on your PC)",
+     "Timers, reminders and to-do items chime once when they are due, on the "
+     "PC, and offer Snooze."),
+    ("briefing", "bool", "Say when the morning briefing is ready (on your PC)",
+     "Tells you on the PC when your morning briefing is ready to read in the "
+     "Brain. The briefing itself is not sent to your phone."),
+    ("handoff", "bool", "Say when a website needs you (on your PC)",
+     "Tells you on the PC when a website or support chat has paused at a "
+     "captcha or sign-in page and is waiting for you to solve it there."),
+    ("quiet_enabled", "bool", "Be quiet during quiet hours (on your PC)",
+     "Silences the PC's non-urgent notifications during the hours below. It "
+     "never silences an alarm, an urgent alert or a decision waiting for you."),
+    ("quiet_start", KIND_TIME, "Quiet hours start (on your PC)",
+     "The hour the PC's quiet window begins, on the PC's own clock."),
+    ("quiet_end", KIND_TIME, "Quiet hours end (on your PC)",
+     "The hour the PC's quiet window ends, on the PC's own clock."),
+)
+
+
+def _notify_default(pref_key: str):
+    """The default the module that owns the value uses, or a safe stand-in when
+    that module has not reached this backend. Read from `jarvis_notify_prefs`
+    rather than typed twice, so the table and the settings file cannot drift."""
+    if NP is not None:
+        return NP.DEFAULTS[pref_key]
+    return "22:00" if pref_key == "quiet_start" else (
+        "07:00" if pref_key == "quiet_end" else pref_key != "quiet_enabled")
+
+
+def _notify_rows() -> tuple:
+    out = []
+    for pref_key, kind, title, note in _NOTIFY_ROWS:
+        out.append(Limit(
+            key=f"notif_{pref_key}", section=NP.SECTION if NP is not None else "notifications",
+            name=pref_key, title=title, kind=kind,
+            default=_notify_default(pref_key),
+            loosening="none", app="both",
+            note=note,
+        ))
+    return tuple(out)
 
 
 LIMITS: tuple = (
@@ -346,7 +556,7 @@ LIMITS: tuple = (
                "you on the PC first.",
           source=VOICE_BAR_SOURCE, action=LOWER_ACTION,
           card_more="That lets more clips count as your voice."),
-)
+) + _notify_rows()
 
 
 def find(key: str) -> Optional[Limit]:
@@ -388,10 +598,15 @@ def value_of(limit: Limit):
     try:
         if limit.kind == "bool":
             return raw is True or str(raw).strip().lower() in ("true", "1", "on", "yes")
+        if limit.kind == KIND_TIME:
+            # Read through the owning module's own check, so a hand-edited
+            # "quiet_start = maybe" shows the owner the default rather than a
+            # string no screen can draw - the same way a nonsense number does.
+            return _time_checked(raw)
         if limit.kind == "int":
             return int(float(str(raw).strip()))
         return float(str(raw).strip())
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, SettingsFileError):
         return limit.default
 
 
@@ -410,6 +625,10 @@ def _coerced(limit: Limit, value):
         if str(value).strip().lower() in ("false", "0", "off", "no"):
             return False
         raise SettingsFileError("That is not on or off.")
+    if limit.kind == KIND_TIME:
+        # No low/high and no choices: a clock time is checked by SHAPE, by the
+        # module that owns the value. See KIND_TIME.
+        return _time_checked(value)
     try:
         number = int(float(str(value).strip())) if limit.kind == "int" else float(str(value).strip())
     except (TypeError, ValueError):
@@ -436,6 +655,12 @@ def _is_loosening(limit: Limit, now, want) -> bool:
     number IN FORCE, never from anything the caller sends."""
     if limit.loosening == "none":
         return False
+    if limit.kind == KIND_TIME:
+        # Neither direction loosens anything: which hours the PC is quiet in
+        # does not let Jarvis do more, spend more or reach further. `none`
+        # above is the only setting this row may carry, and this is the second
+        # gate in case a later row is written with a direction by mistake.
+        return False
     if limit.kind == "bool":
         up, down = bool(want) and not bool(now), bool(now) and not bool(want)
     else:
@@ -446,6 +671,11 @@ def _is_loosening(limit: Limit, now, want) -> bool:
 def _literal(limit: Limit, value) -> str:
     if limit.kind == "bool":
         return "true" if value else "false"
+    if limit.kind == KIND_TIME:
+        # A QUOTED string, so what the file holds is what the owner reads and
+        # what the owning module parses - never a bare 22:00 TOML would read as
+        # something else.
+        return '"{}"'.format(value)
     return _words(value)
 
 
@@ -611,6 +841,18 @@ def _tier(action: str) -> str:
             return "ask"
 
 
+def _done_words(limit: Limit, value) -> str:
+    """The sentence `change` answers with once it has worked.
+
+    A switch says "on" or "off"; everything else uses the row's own words. The
+    two differ because a switch's `words` in the LIST has to read as a state on
+    its own ("Be quiet during quiet hours (on your PC)" / "no: ..."), while a
+    sentence needs the state after the title ("... is now on"), not repeated."""
+    if limit.kind == "bool":
+        return f"{limit.title}: {'on' if value else 'off'}."
+    return f"{limit.title} is now {limit.words(value)}."
+
+
 def _loosening_card(limit: Limit, old, new) -> tuple:
     """The card for the direction that loosens, and the yes. (None, said) when
     it went through; ((status, body), "") when it did not.
@@ -659,7 +901,16 @@ def view(*, app: Optional[str] = None) -> dict:
     always had for both apps - "a BIGGER value is this row's loosening" - so the
     voice bar's row, whose loosening goes the other way, says `false` and carries
     its direction in its own `note` instead. Nothing new is sent, so neither
-    screen needs a change to draw the new row."""
+    screen needs a change to draw the new row.
+
+    ONE ADDITIVE FIELD, 2026-10-08: `quiet_on`. The two quiet-hours times are
+    the first rows of `kind="time"`, and a time input is worth drawing only
+    while quiet hours are on - so each screen that draws a time row asks the
+    row beside it whether to show it. `quiet_on` is that answer, sent on EVERY
+    row (the same value on each), and it is the only thing this view has ever
+    added: an older screen that ignores it draws the times always, which is what
+    the desktop's card did before this change and is not wrong, only untidier."""
+    quiet_on = bool(value_of(find(NOTIFY_QUIET_ON))) if find(NOTIFY_QUIET_ON) else False
     rows = []
     for limit in (LIMITS if app is None else limits_for(app)):
         now = value_of(limit)
@@ -668,7 +919,7 @@ def view(*, app: Optional[str] = None) -> dict:
                      "choices": list(limit.choices), "low": limit.low,
                      "high": limit.high, "unit": limit.unit, "note": limit.note,
                      "loosen_up": limit.loosen_up, "pc_only": limit.pc_only,
-                     "app": limit.app})
+                     "app": limit.app, "quiet_on": quiet_on})
     return {"ok": True, "available": True, "limits": rows}
 
 
@@ -709,7 +960,7 @@ def change(body, *, peer=None, local=None) -> tuple:
     except SettingsFileError as exc:
         return 400, {"ok": False, "error": str(exc)}
     if not said:
-        said = f"{limit.title} is now {limit.words(out['to'])}."
+        said = _done_words(limit, out["to"])
     return 200, {"ok": True, "key": key, "changed": out.get("changed", True),
                  "loosening": bool(asks), "approved": bool(asks),
                  "from": out.get("from"), "to": out.get("to"), "said": said}

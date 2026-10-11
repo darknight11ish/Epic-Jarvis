@@ -56,6 +56,51 @@ export const LABELS = {
   notStarted: "Not started",
   skipped: "Skipped",
   nothingFound: "Nothing matched that. Try a word from the question.",
+  showMe: "Show me",
+  pointed: "There it is.",
+  otherWindow: "It is in another window",
+  noPoint: "Nothing on this screen to point at for this step.",
+};
+
+/**
+ * The real controls a tutorial may point at, by the name the catalogue uses
+ * (`backend/jarvis_tutorials.py`'s per-step `point.desktop`).
+ *
+ * A tutorial POINTS; it never presses. The pointing below is a highlight and a
+ * scroll - `pointAt` has no other verb available to it, and the suite in
+ * `tests/tutorials.mjs` fails if one is ever added. That is not tidiness: this
+ * app never approves anything by itself (rule 4), and a tutorial that can press
+ * a button can approve.
+ *
+ * Two kinds, because the Brain panel can only reach its OWN document:
+ *
+ *   * `{ selector }` - a control in this window. It is found, scrolled to and
+ *     marked, so the owner sees the real thing rather than a picture of it.
+ *   * `{ file, id, label }` - a control in a different window (Settings, the
+ *     HUD, the Faces window). No script here can highlight it, so the step says
+ *     which window to open instead of pretending. `tests/tutorials.mjs` checks
+ *     that the file really holds that id, so this cannot rot into a lie.
+ *
+ * The name is a registry key and never a raw selector, so the catalogue cannot
+ * name a `div` that merely happens to exist, and a control that moves is fixed
+ * in one place here.
+ */
+export const CONTROL_POINTS = {
+  // This window - the Jarvis bar (index.html), which is where the Brain panel
+  // and this panel both live.
+  "prompt-field": { selector: "#prompt-field" },
+  "approval-card": { selector: "#approval" },
+  "brain-memory": { selector: "#view-memory" },
+  "brain-tutorials": { selector: "#tutorials-root" },
+  "brain-about": { selector: "#memory-about" },
+
+  // Other windows - pointed at by naming the window, which is all that is
+  // honest from here.
+  "hotkeys": { file: "settings.html", id: "hotkey-rows", label: "Settings → Hotkeys" },
+  "asks-first": { file: "settings.html", id: "asks-first", label: "Settings → What asks first" },
+  "faces": { file: "faces.html", id: "face-n", label: "The Faces window" },
+  "hud-talk": { file: "jarvis_hud.html", id: "talk", label: "The HUD's own talk button" },
+  "stop-everything": { file: "settings.html", id: "hotkey-rows", label: "Settings → Hotkeys → Stop everything" },
 };
 
 /** The two sections, in the order the backend sends them. */
@@ -159,6 +204,48 @@ function el(tag, className, text) {
   if (className) n.className = className;
   if (text !== undefined) n.textContent = text;
   return n;
+}
+
+/** The step's target for an app, or null. The catalogue sends both names. */
+export function pointFor(step, app) {
+  const point = (step && step.point) || null;
+  const name = point && point[app];
+  return typeof name === "string" && name.trim() ? name : null;
+}
+
+/** What this window can point at for a step: a registry name, or null. */
+export function pointName(step) {
+  const name = pointFor(step, "desktop");
+  return name && Object.prototype.hasOwnProperty.call(CONTROL_POINTS, name) ? name : null;
+}
+
+/**
+ * Point at the real control a step names, in THIS window. Returns words for the
+ * owner, and never acts.
+ *
+ * This is the whole of "interactive" on the PC: the owner sees the control the
+ * step means, in the app as it is right now, rather than a screenshot of how it
+ * looked the day the picture was taken.
+ *
+ * Every entry that lives in another window is answered in words, because no
+ * script here can reach across windows and pretending otherwise would be the
+ * kind of small lie a tutorial cannot afford.
+ */
+export function pointAt(step, doc = document) {
+  const name = pointFor(step, "desktop");
+  const entry = name ? CONTROL_POINTS[name] : null;
+  if (!entry) return LABELS.noPoint;
+  if (entry.file) return `${LABELS.otherWindow}: ${entry.label}.`;
+
+  const target = doc.querySelector(entry.selector);
+  if (!target) return LABELS.noPoint;
+  // Mark, then unmark: for as long as the owner is looking, and no longer.
+  target.classList.add("tutorial-pointed");
+  if (typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({ block: "center", inline: "nearest" });
+  }
+  globalThis.setTimeout(() => target.classList.remove("tutorial-pointed"), 2400);
+  return LABELS.pointed;
 }
 
 /** An error in words, never a bridge error or JSON. */
@@ -345,6 +432,20 @@ function openTutorial(tutorial, column) {
     box.append(el("h4", null, step.title || ""));
     box.append(el("p", null, step.body || ""));
     if (step.where) box.append(el("p", "where", step.where));
+
+    // "Show me" is the interactive part, and it is offered only when the
+    // catalogue names a control this app actually declares. A step with no
+    // target simply has no button, rather than a button that does nothing.
+    if (pointName(step)) {
+      const show = el("button", "tutorial-show", LABELS.showMe);
+      show.type = "button";
+      const said = el("span", "tutorial-show-said");
+      show.addEventListener("click", () => {
+        said.textContent = pointAt(step);
+      });
+      box.append(show);
+      box.append(said);
+    }
 
     const row = el("div", "tutorial-buttons");
     const back = el("button", null, LABELS.back);

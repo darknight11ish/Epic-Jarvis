@@ -60,6 +60,12 @@ def _reset():
     path = Path(_CFG) / PC.SETTINGS_NAME
     if path.exists():
         path.unlink()
+    # The owner's own target rows too: a suite that leaves them behind would
+    # make the NEXT check pass for the wrong reason (and did, once, before this
+    # line existed).
+    rows = Path(_CFG) / PC.TARGETS_NAME
+    if rows.exists():
+        rows.unlink()
 
 
 # --------------------------------------------------------------------------
@@ -330,6 +336,468 @@ def t_both_paths_end_in_one_writer():
           "off" in PC.DETAIL.lower() and PC.DETAIL.startswith("Off (the default)"))
 
 
+# ==========================================================================
+#   The four settings (the owner's answers, 2026-10-09)
+# ==========================================================================
+#
+# Every check below FAILS on the module as it was before that change: there
+# were no SETTINGS, no choices(), no set_choice() and no settings_rows(), so
+# four settings could not be read, moved or shown. That is the point of them -
+# a test that passes either way proves nothing.
+
+def t_four_settings_exist_and_all_default_to_todays_behaviour():
+    check("exactly the four the owner chose, in their words",
+          tuple(k for k, _n, _d, _v in PC.SETTINGS)
+          == ("speaks_up", "bluntness", "coaches_on", "platform"),
+          tuple(k for k, _n, _d, _v in PC.SETTINGS))
+    check("each carries a name and at least two choices",
+          all(len(r[1]) >= 1 and len(r[3]) >= 2 for r in PC.SETTINGS))
+    check("'when it speaks up' offers both of the owner's options",
+          set(PC.SETTING_CHOICES["speaks_up"]) == {"any", "weak"})
+    check("'how blunt it is' offers a gentle nudge and direct",
+          set(PC.SETTING_CHOICES["bluntness"]) == {"gentle", "direct"})
+    check("'what it coaches on' offers shape and content",
+          set(PC.SETTING_CHOICES["coaches_on"]) == {"shape", "content"})
+    check("'per-platform behaviour' offers same and a quieter phone",
+          set(PC.SETTING_CHOICES["platform"]) == {"same", "quieter_phone"})
+    check("every default is one of its own choices",
+          all(PC.SETTING_DEFAULTS[k] in PC.SETTING_CHOICES[k] for k in PC.SETTING_KEYS))
+    check("...and the defaults are what the coach already did",
+          PC.SETTING_DEFAULTS == {"speaks_up": "any", "bluntness": "gentle",
+                                  "coaches_on": "shape", "platform": "same"},
+          PC.SETTING_DEFAULTS)
+
+
+def t_a_missing_or_damaged_choice_falls_back_to_its_own_default():
+    _reset()
+    path = Path(_CFG) / PC.SETTINGS_NAME
+    check("no file: all four at their defaults", PC.choices() == PC.SETTING_DEFAULTS)
+    path.write_text(json.dumps({"enabled": True, "bluntness": "shouty"}),
+                    encoding="utf-8")
+    got = PC.choices()
+    check("a value that is not one of the choices falls back, never guessed at",
+          got["bluntness"] == "gentle", got)
+    path.write_text(json.dumps({"enabled": True, "coaches_on": 7}),
+                    encoding="utf-8")
+    check("a value that is not even a string falls back",
+          PC.choices()["coaches_on"] == "shape")
+    path.write_text("{not json", encoding="utf-8")
+    check("a damaged file leaves all four at their defaults (and the switch off)",
+          PC.choices() == PC.SETTING_DEFAULTS and PC.enabled() is False)
+    _reset()
+
+
+def t_one_setting_moves_at_a_time_without_losing_the_others():
+    _reset()
+    PC.set_enabled(True)
+    PC.set_choice("bluntness", "direct")
+    PC.set_choice("coaches_on", "content")
+    after = PC.choices()
+    check("each change sticks",
+          after["bluntness"] == "direct" and after["coaches_on"] == "content", after)
+    check("...and the ones not named are untouched",
+          after["speaks_up"] == "any" and after["platform"] == "same")
+    check("...and the master switch is still on - one file, not two",
+          PC.enabled() is True)
+    doc = json.loads((Path(_CFG) / PC.SETTINGS_NAME).read_text(encoding="utf-8"))
+    check("all of it lives in the one settings file the backup already picks up",
+          doc["enabled"] is True and doc["bluntness"] == "direct", doc)
+    PC.set_enabled(False)
+    check("turning the master switch off keeps the four",
+          PC.choices()["bluntness"] == "direct")
+    _reset()
+
+
+def t_a_setting_that_is_not_one_is_refused_in_words():
+    _reset()
+    try:
+        PC.set_choice("bluntness", "shouty")
+        check("a value that is not a choice is refused", False)
+    except PC.Refused as exc:
+        check("...and the refusal names the real choices",
+              "shouty" in str(exc) and "gentle" in str(exc) and "direct" in str(exc),
+              str(exc))
+    try:
+        PC.set_choice("wittiness", "high")
+        check("a key that is not one of the four is refused", False)
+    except PC.Refused as exc:
+        check("...and the refusal lists the four that exist",
+              all(k in str(exc) for k in PC.SETTING_KEYS), str(exc))
+    check("nothing was written by either refusal",
+          not (Path(_CFG) / PC.SETTINGS_NAME).exists())
+    code, body = PC.handle_setting({"key": "bluntness", "value": "shouty"})
+    check("the route says 409, the module's own sentence",
+          code == 409 and body["ok"] is False and "shouty" in body["error"], (code, body))
+    code, body = PC.handle_setting({"key": "bluntness", "value": "direct"})
+    check("a real change through the route is 200 with the whole state back",
+          code == 200 and body["bluntness"] == "direct" and body["ok"] is True,
+          (code, body))
+    check("...and it moved only that one", PC.choices()["coaches_on"] == "shape")
+    _reset()
+
+
+def t_the_master_switch_route_still_works_exactly_as_before():
+    """The four settings were added to a route the PHONE already calls. An
+    older app sends {"enabled": bool} and nothing else, and must keep
+    working - and the two fields it reads must still be there."""
+    _reset()
+    code, body = PC.handle_setting({"enabled": True})
+    check("the old body still moves the switch",
+          code == 200 and body["on"] is True, (code, body))
+    check("...and the answer still carries `on` and `why`",
+          "on" in body and "why" in body, sorted(body))
+    check("...and the words every screen already reads",
+          body["label"] == PC.LABEL and body["detail"] == PC.DETAIL
+          and body["button"] == PC.BUTTON)
+    code, body = PC.handle_setting({"enabled": "yes"})
+    check("a value that is not true/false is still refused, never guessed",
+          code == 400 and body["ok"] is False, (code, body))
+    code, body = PC.handle_setting({})
+    check("an empty body is still 400", code == 400, (code, body))
+    PC.set_enabled(False)
+    _reset()
+
+
+def t_only_when_weak_really_holds_back_a_fine_prompt():
+    """"When it speaks up: only when the prompt is genuinely weak" must change
+    what the owner SEEES, not just what the prompt says. The model is a
+    stand-in, so the gate itself is what is measured."""
+    _reset()
+    PC.set_enabled(True)
+    FINE = {"score": 9, "clear": True, "issues": [], "missing": [],
+            "suggestion": "Put the kettle on at eight."}
+    WEAK = {"score": 3, "clear": False,
+            "issues": [{"what": "no output shape", "why": "y", "fix": "z"}],
+            "missing": ["which file?"], "suggestion": "Summarise C:\\q3.md as three bullets."}
+
+    def run(payload):
+        return _with_gate_stubbed(lambda: PC.coach(
+            "put the kettle on at eight please", ask=lambda *a: json.dumps(payload),
+            url="http://127.0.0.1:11434", model="m"))
+
+    out = run(FINE)
+    check("default (any): a fine prompt is still commented on",
+          out["advice_given"] is True and out["said"] == "")
+
+    PC.set_choice("speaks_up", "weak")
+    out = run(FINE)
+    check("weak: a prompt it scored 9 is passed with no advice at all",
+          out["advice_given"] is False and out["issues"] == [] and out["clear"] is True,
+          out)
+    check("...and it says so, in words, rather than showing an empty list",
+          out["said"] == PC.NOTHING_WEAK, out.get("said"))
+    out = run(WEAK)
+    check("weak: a genuinely weak prompt still gets the whole critique",
+          out["advice_given"] is True and len(out["issues"]) == 1, out)
+    check("...including the questions it would ask",
+          out["missing"] == ["which file?"], out)
+    boundary = dict(FINE, score=PC.WEAK_BELOW, clear=False,
+                    issues=[{"what": "w", "why": "y", "fix": "z"}])
+    out = run(boundary)
+    check(f"the line is the module's own WEAK_BELOW ({PC.WEAK_BELOW})",
+          out["advice_given"] is False, out)
+    PC.set_choice("speaks_up", "any")
+    out = run(FINE)
+    check("back to 'any': the fine prompt is commented on again",
+          out["advice_given"] is True)
+    PC.set_enabled(False)
+    _reset()
+
+
+def t_the_quieter_phone_shows_less_and_says_so_in_the_prompt():
+    _reset()
+    PC.set_enabled(True)
+    MANY = {"score": 4, "clear": False,
+            "issues": [{"what": f"gap {i}", "why": "y", "fix": "z"} for i in range(4)],
+            "missing": ["q1", "q2", "q3", "q4"], "suggestion": "s"}
+    seen = {}
+
+    def fake(url, model, prompt):
+        seen["prompt"] = prompt
+        return json.dumps(MANY)
+
+    def run():
+        return _with_gate_stubbed(lambda: PC.coach(
+            "summarise the quarterly report please", ask=fake,
+            url="http://127.0.0.1:11434", model="m"))
+
+    out = run()
+    check("the PC (default) shows all four gaps and four questions",
+          len(out["issues"]) == 4 and len(out["missing"]) == 4, out)
+    check("...and is not told it is a phone",
+          "being read on a phone" not in seen["prompt"])
+    PC.set_choice("platform", "quieter_phone")
+    out = run()
+    check("the quieter phone shows the two that matter most",
+          len(out["issues"]) == PC.MAX_ISSUES_QUIET == 2, out)
+    check("...and only two questions",
+          len(out["missing"]) == PC.MAX_MISSING_QUIET == 2, out)
+    check("...and the model was told, so it spends its answer on those",
+          "being read on a phone" in seen["prompt"], seen["prompt"][-400:])
+    check("the score is untouched by it: the advice is trimmed, not weakened",
+          out["score"] == 4)
+    PC.set_choice("platform", "same")
+    check("back to same, all four are back",
+          len(run()["issues"]) == 4)
+    PC.set_enabled(False)
+    _reset()
+
+
+def t_bluntness_and_scope_reach_the_model_in_its_own_instructions():
+    """These two cannot be measured from the parsed answer - they change the
+    WORDS the local model is asked with. So that is what is measured."""
+    _reset()
+    PC.set_enabled(True)
+    seen = {}
+
+    def fake(url, model, prompt):
+        seen["prompt"] = prompt
+        return json.dumps({"score": 5, "clear": False, "issues": [], "missing": [],
+                           "suggestion": ""})
+
+    def run():
+        return _with_gate_stubbed(lambda: PC.coach(
+            "summarise the quarterly report please", ask=fake,
+            url="http://127.0.0.1:11434", model="m"))
+
+    run()
+    check("default: the model is told to be a gentle nudge",
+          "gentle nudge" in seen["prompt"], seen["prompt"][-600:])
+    check("default: shape only, and it says which",
+          "SHAPE only" in seen["prompt"] and "CONTENT" not in seen["prompt"])
+    PC.set_choice("bluntness", "direct")
+    PC.set_choice("coaches_on", "content")
+    run()
+    check("direct: the model is told to be direct, in as many words",
+          "Be direct." in seen["prompt"], seen["prompt"][-600:])
+    check("...and no longer told to be a gentle nudge",
+          "gentle nudge" not in seen["prompt"])
+    check("content: the model is told to judge the task and what was left out",
+          "judge the CONTENT" in seen["prompt"])
+    PC.set_choice("speaks_up", "weak")
+    run()
+    check("weak reaches the model too, so it does not waste the answer on a fine prompt",
+          "genuinely weak" in seen["prompt"])
+    PC.set_enabled(False)
+    _reset()
+
+
+def t_the_screens_read_every_choice_from_the_pc():
+    """The words are the PC's ONE copy. A screen that invented a choice's name
+    - or forgot one - is what this makes impossible."""
+    rows = PC.settings_rows()
+    check("one row per setting, in the owner's order",
+          [r["key"] for r in rows] == list(PC.SETTING_KEYS))
+    for row in rows:
+        check(f"{row['key']}: carries its own name and its current value",
+              bool(row["name"]) and row["value"] in PC.SETTING_CHOICES[row["key"]])
+        check(f"{row['key']}: every choice is listed with a name and a detail line",
+              {c["value"] for c in row["choices"]} == set(PC.SETTING_CHOICES[row["key"]])
+              and all(c["name"] and c["detail"] for c in row["choices"]))
+    st = PC.status()
+    check("status() carries them, so both apps get them with the switch",
+          isinstance(st.get("settings"), list) and len(st["settings"]) == 4)
+    check("...and the list of AIs Jarvis knows, for the same reason",
+          isinstance(st.get("targets"), list) and "local" in st["targets"])
+    check("...and the staleness line, so 'out of date' has a number behind it",
+          st.get("stale_days") == PC.STALE_DAYS)
+
+
+# ==========================================================================
+#   Which AI the prompt is headed for (the owner's words, 2026-10-09)
+# ==========================================================================
+#
+# *"make sure it is aware of what model of cloud AI I am using because each
+# kind has their own intricacies and make sure this can stay up to date."*
+
+def t_every_ai_the_driver_offers_has_notes_of_its_own():
+    """The check that keeps the knowledge from freezing. A service added to
+    jarvis_chatbot_api.PRESETS or a website added to jarvis_chatbot.ADAPTERS
+    with no row here fails THIS, by name, instead of being silently coached as
+    if it were the local model."""
+    missing = PC.unknown_targets()
+    check("every API service and website adapter the driver offers has a row",
+          missing == (), "no notes for: " + ", ".join(missing))
+    check("the local model has one too - the default target",
+          PC.resolve_target("local") == "local")
+    check("there are rows for the cloud services the repo names",
+          {"openai_api", "deepseek_api", "groq_api"} <= set(PC.target_ids()),
+          sorted(PC.target_ids()))
+
+
+def t_a_target_is_matched_by_its_own_names_never_by_a_near_miss():
+    for name, want in [("openai_api", "openai_api"), ("openai", "openai_api"),
+                       ("ChatGPT (OpenAI API)", "openai_api"),
+                       ("gemini", "gemini_web"), ("deepseek", "deepseek_api"),
+                       ("groq", "groq_api"), ("le chat", "lechat_web"),
+                       ("this PC", "local"),
+                       ("qwen3:8b", ""), ("", ""), (None, "")]:
+        got = PC.resolve_target(name)
+        check(f"resolve_target({name!r}) -> {want!r}", got == want, got)
+
+
+def t_an_unknown_ai_is_reported_and_never_guessed_at():
+    a = PC.advice_for("some-model-jarvis-has-never-heard-of")
+    check("an unknown AI is known=False", a["known"] is False, a)
+    check("...with no quirks and no style invented for it",
+          a["quirks"] == () and a["style"] == () and a["context"] == "", a)
+    check("...and a plain sentence naming the thing the owner named",
+          "some-model-jarvis-has-never-heard-of" in a["advice"]
+          and PC.TARGETS_NAME in a["advice"], a["advice"])
+    check("a target that was not named at all still says it does not know",
+          PC.advice_for("")["known"] is False)
+    check("...and that sentence does not pretend an AI was named",
+          "Jarvis does not know this AI yet" in PC.advice_for("")["advice"])
+
+
+def t_the_model_is_told_either_the_quirks_or_that_they_are_unknown():
+    _reset()
+    PC.set_enabled(True)
+    seen = {}
+
+    def fake(url, model, prompt):
+        seen["prompt"] = prompt
+        return json.dumps({"score": 5, "clear": False, "issues": [], "missing": [],
+                           "suggestion": ""})
+
+    def run(target):
+        return _with_gate_stubbed(lambda: PC.coach(
+            "summarise the quarterly report please", ask=fake,
+            url="http://127.0.0.1:11434", model="m", target=target))
+
+    out = run("openai_api")
+    check("a known target: its own name reaches the model",
+          "ChatGPT (OpenAI API, gpt-5-mini)" in seen["prompt"], seen["prompt"][:900])
+    check("...and at least one of its real quirks does",
+          any(q in seen["prompt"] for q in PC.advice_for("openai_api")["quirks"]))
+    check("...and the critique carries what Jarvis knew back to the app",
+          out["target"]["known"] is True and out["target"]["id"] == "openai_api", out["target"])
+    check("...including the date it was last checked, so 'out of date' is visible",
+          out["target"]["checked"] == PC.advice_for("openai_api")["checked"])
+
+    run("nope-not-a-model")
+    check("an unknown target: the model is told NOT to guess, in as many words",
+          "does NOT know this AI" in seen["prompt"], seen["prompt"][:900])
+    check("...and told not to invent a claim about it",
+          "do not invent a claim" in seen["prompt"])
+    check("...and no other AI's quirks are smuggled in as if they were its own",
+          all(q not in seen["prompt"] for q in PC.advice_for("openai_api")["quirks"]))
+
+    run(None)
+    check("no target named at all means the ordinary local chat",
+          "the model on this PC (Ollama)" in seen["prompt"], seen["prompt"][:600])
+    PC.set_enabled(False)
+    _reset()
+
+
+def t_an_owner_row_can_correct_or_add_a_target_without_a_new_build():
+    """"...and make sure this can stay up to date": the file, not a release."""
+    _reset()
+    path = Path(_CFG) / PC.TARGETS_NAME
+    path.write_text(json.dumps({"targets": [
+        {"id": "openai_api", "quirks": ["my own note about this one"],
+         "checked": "2026-10-09"},
+        {"id": "brand_new_api", "name": "Some New AI", "kind": "api",
+         "context": "came out last week", "quirks": ["forgets long pastes"],
+         "style": ["keep it short"]},
+    ]}), encoding="utf-8")
+
+    a = PC.advice_for("openai_api")
+    check("an owner's quirks replace the shipped ones", a["quirks"] == ("my own note about this one",), a)
+    check("...and the fields the owner did not type are kept from the shipped row",
+          a["name"] == "ChatGPT (OpenAI API, gpt-5-mini)" and a["style"], a)
+    check("...including the shipped `source`, unless the owner gave one",
+          a["source"] == "preset notes in jarvis_chatbot_api.py", a["source"])
+    b = PC.advice_for("brand_new_api")
+    check("a target the shipped table never heard of works at once",
+          b["known"] is True and b["name"] == "Some New AI", b)
+    check("...and its own quirks are the ones carried", b["quirks"] == ("forgets long pastes",))
+    check("...and it is dated today rather than trusted as fresh for ever",
+          b["checked"] == __import__("time").strftime("%Y-%m-%d"), b["checked"])
+    check("it joins the list the apps can name", "brand_new_api" in PC.target_ids())
+
+    path.write_text(json.dumps({"targets": [{"id": "no_name"}, "not a row", 7]}),
+                    encoding="utf-8")
+    rows, problems = PC.from_file()
+    check("a row with no name is refused, not half-read", rows == (), rows)
+    check("...and every bad row is reported rather than swallowed",
+          len(problems) == 3 and all(PC.TARGETS_NAME in p for p in problems), problems)
+    check("...and the shipped table still answers while the file is bad",
+          PC.advice_for("local")["known"] is True)
+    path.write_text("{not json", encoding="utf-8")
+    rows, problems = PC.from_file()
+    check("a file that is not JSON is one plain problem, not a crash",
+          rows == () and len(problems) == 1, problems)
+    path.unlink()
+    _reset()
+
+
+def t_notes_that_are_old_say_so_rather_than_reading_as_fresh():
+    _reset()
+    path = Path(_CFG) / PC.TARGETS_NAME
+    path.write_text(json.dumps({"targets": [
+        {"id": "local", "checked": "2001-01-01"}]}), encoding="utf-8")
+    a = PC.advice_for("local")
+    check("a row older than STALE_DAYS is marked stale", a["stale"] is True, a)
+    check("...and its own words say so, with the date",
+          "may be out of date" in a["advice"] and "2001-01-01" in a["advice"], a["advice"])
+    seen = {}
+
+    def fake(url, model, prompt):
+        seen["prompt"] = prompt
+        return json.dumps({"score": 5, "clear": False, "issues": [], "missing": [],
+                           "suggestion": ""})
+
+    PC.set_enabled(True)
+    _with_gate_stubbed(lambda: PC.coach(
+        "summarise the quarterly report please", ask=fake,
+        url="http://127.0.0.1:11434", model="m", target="local"))
+    check("...and the model is told not to treat them as certain",
+          "may be out of date" in seen["prompt"], seen["prompt"][:900])
+    PC.set_enabled(False)
+
+    path.write_text(json.dumps({"targets": [
+        {"id": "local", "checked": "not a date"}]}), encoding="utf-8")
+    check("a date that cannot be read counts as stale, never as fresh",
+          PC.advice_for("local")["stale"] is True)
+    path.unlink()
+    check("the shipped date is inside the window, so nothing cries wolf",
+          PC.advice_for("local")["stale"] is False,
+          PC.advice_for("local")["checked"])
+    _reset()
+
+
+def t_the_target_and_the_settings_ride_back_with_the_critique():
+    _reset()
+    PC.set_enabled(True)
+    seen = {}
+
+    def fake(url, model, prompt):
+        seen["prompt"] = prompt
+        return json.dumps({"score": 6, "clear": False, "issues": [], "missing": [],
+                           "suggestion": "s"})
+
+    out = _with_gate_stubbed(lambda: PC.coach(
+        "summarise the quarterly report please", ask=fake,
+        url="http://127.0.0.1:11434", model="m", target="groq_api"))
+    check("the critique carries the target's own notes for the screen",
+          out["target"]["name"] == "Groq (API, openai/gpt-oss-20b)", out["target"])
+    check("...and the settings it was judged with, so the screen can say which",
+          out["settings"] == PC.choices(), out["settings"])
+    check("no model name of the target was passed to the LOCAL model call",
+          "gpt-oss-20b" not in seen.get("model", "") and seen.get("model") is None)
+    code, body = PC.handle_post({"text": "summarise the quarterly report please",
+                                 "target": "groq_api"})
+    check("the route carries `target` through from the body",
+          code in (409, 200), (code, body))
+    PC.set_enabled(False)
+    code, body = PC.handle_post({"text": "summarise the quarterly report please",
+                                 "target": "groq_api"})
+    check("with the coach off the route still refuses in the module's own words",
+          code == 409 and body["error"] == PC.OFF_LINE, (code, body))
+    _reset()
+
+
 def main():
     _reset()
     for fn in (t_off_by_default_and_fails_closed,
@@ -345,7 +813,25 @@ def main():
                t_a_silent_model_says_so,
                t_the_routes_own_half,
                t_it_approves_nothing_and_keeps_nothing,
-               t_both_paths_end_in_one_writer):
+               t_both_paths_end_in_one_writer,
+               # The four settings (the owner's answers, 2026-10-09).
+               t_four_settings_exist_and_all_default_to_todays_behaviour,
+               t_a_missing_or_damaged_choice_falls_back_to_its_own_default,
+               t_one_setting_moves_at_a_time_without_losing_the_others,
+               t_a_setting_that_is_not_one_is_refused_in_words,
+               t_the_master_switch_route_still_works_exactly_as_before,
+               t_only_when_weak_really_holds_back_a_fine_prompt,
+               t_the_quieter_phone_shows_less_and_says_so_in_the_prompt,
+               t_bluntness_and_scope_reach_the_model_in_its_own_instructions,
+               t_the_screens_read_every_choice_from_the_pc,
+               # Which AI the prompt is headed for.
+               t_every_ai_the_driver_offers_has_notes_of_its_own,
+               t_a_target_is_matched_by_its_own_names_never_by_a_near_miss,
+               t_an_unknown_ai_is_reported_and_never_guessed_at,
+               t_the_model_is_told_either_the_quirks_or_that_they_are_unknown,
+               t_an_owner_row_can_correct_or_add_a_target_without_a_new_build,
+               t_notes_that_are_old_say_so_rather_than_reading_as_fresh,
+               t_the_target_and_the_settings_ride_back_with_the_critique):
         print(f"\n--- {fn.__name__} ---")
         fn()
     _reset()

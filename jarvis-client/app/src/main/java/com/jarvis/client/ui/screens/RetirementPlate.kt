@@ -227,7 +227,14 @@ internal fun RetirementSection(
                             modifier = Modifier.liveStatus())
                     }
                     Quiet(
-                        "Clear the numbers",
+                        // It used to say "Clear the numbers", and the tap put
+                        // the PC's assumed figures straight back into every box
+                        // (Retirement.startingValues returns exactly the fields
+                        // with a placeholder default), so the label promised
+                        // something it did not do (first Android audit, finding
+                        // 9). "Start over" is what it does: the assumed numbers
+                        // back, the owner's own entries dropped.
+                        "Start over",
                         enabled = !busy,
                         onClick = {
                             values = Retirement.startingValues(d)

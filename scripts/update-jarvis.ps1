@@ -936,10 +936,13 @@ if ($isGit -and (Get-Command git -ErrorAction SilentlyContinue)) {
         # the same clock reading (Windows only moves it on the system timer
         # tick), and this folder is deleted at the end - so the second run would
         # delete the first run's copy while it was still patching from it. The
-        # same trap is why scripts\apply-patches.ps1 names its rehearsal folder
-        # per run (next-patcher-race), and tools\check_same_tick_paths.py reads
-        # every *.ps1 for it.
-        $unique = [Guid]::NewGuid().ToString('N').Substring(0, 12)
+        # same trap is why scripts\apply-patches.ps1 names all five of its
+        # throwaway folders per run (next-patcher-race; its rehearsal was one of
+        # them, and the others went unnoticed until 2026-10-09). That sentence
+        # used to end "and tools\check_same_tick_paths.py reads every *.ps1 for
+        # it" - it did not, and does not: the checker read only *.py and
+        # *.patch. It reads *.ps1 too now, which is what makes the claim true.
+        $unique = $([Guid]::NewGuid().ToString('N').Substring(0, 12))
         $tmp = Join-Path ([IO.Path]::GetTempPath()) "jarvis-source-$unique"
         try {
             New-Item -ItemType Directory -Force -Path $tmp | Out-Null

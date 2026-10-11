@@ -21,7 +21,7 @@ import org.junit.Test
  * The settings switches' one table, held to `src/test/resources/contract/settings-cases.json`
  * that tools/gen_settings_cases.py makes from backend/jarvis_settings_registry.py.
  * The desktop's tests/settings-catalogue.mjs reads the same file, and the desktop page's own
- * 26 rows are generated from the same table - so this is the phone's end of one source.
+ * 27 rows are generated from the same table - so this is the phone's end of one source.
  *
  * WHAT THIS PROVES, AND WHAT IT DELIBERATELY DOES NOT
  *
@@ -75,22 +75,22 @@ class SettingsCatalogTest {
     }
 
     @Test
-    fun `there are 26 desktop toggles and 2 phone rows`() {
+    fun `there are 27 desktop toggles and 2 phone rows`() {
         // The number this work was briefed with was 19, which is the count of
         // rows spelled exactly `<label class="toggle">` - it misses the seven
         // that also carry a label id. Pinned here so it cannot quietly move.
-        assertEquals(26, rows.count { it.s("owner") == "desktop" })
+        assertEquals(27, rows.count { it.s("owner") == "desktop" })
         assertEquals(2, rows.count { it.s("owner") == "phone" })
-        assertEquals(28, rows.size)
-        assertEquals(28, doc["counts"]!!.jsonObject.i("all"))
-        assertEquals(26, doc["counts"]!!.jsonObject.i("desktop"))
+        assertEquals(29, rows.size)
+        assertEquals(29, doc["counts"]!!.jsonObject.i("all"))
+        assertEquals(27, doc["counts"]!!.jsonObject.i("desktop"))
         assertEquals(2, doc["counts"]!!.jsonObject.i("phone"))
     }
 
     @Test
-    fun `every order is unique and the desktop rows run 1 to 26`() {
+    fun `every order is unique and the desktop rows run 1 to 27`() {
         val desktop = rows.filter { it.s("owner") == "desktop" }.map { it.i("order") }
-        assertEquals((1..26).toList(), desktop)
+        assertEquals((1..27).toList(), desktop)
         assertEquals(rows.size, SettingsCatalog.ROWS.map { it.id }.toSet().size)
     }
 
@@ -172,7 +172,7 @@ class SettingsCatalogTest {
     fun `exactly one row is not a setting at all`() {
         val notSettings = SettingsCatalog.ROWS.filter { !it.settingRow }.map { it.id }
         assertEquals(listOf("spd-accept"), notSettings)
-        assertEquals(27, SettingsCatalog.SETTING_ROWS.size)
+        assertEquals(28, SettingsCatalog.SETTING_ROWS.size)
         // ...and it is hidden, because it is the spending screen's accept-all
         // control rather than a preference.
         assertTrue(rows.first { it.s("id") == "spd-accept" }.b("hidden"))

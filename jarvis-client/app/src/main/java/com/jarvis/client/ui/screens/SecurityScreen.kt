@@ -256,9 +256,16 @@ fun SecurityScreen(
 
             item(key = "rules") {
                 Text(
-                    "Saved on this phone only, never sent to your PC. Turning something on is " +
-                        "instant. Turning something off, or making it looser, asks for your " +
-                        "fingerprint or PIN first. The notification and the widget can deny, " +
+                    // The first sentence used to say "Turning something on is
+                    // instant", and two switches on this very screen ask for the
+                    // fingerprint or PIN on the way ON ("Swipe to approve or
+                    // deny", "Let Jarvis read this phone's screen") - both are
+                    // loosenings (data/Security.kt's SecurityRules.loosens,
+                    // MainActivity's ownerCheck), so the footer contradicted the
+                    // screen it sat on (first Android audit, finding 4).
+                    "Saved on this phone only, never sent to your PC. Turning something " +
+                        "off, or making it looser, asks for your fingerprint or PIN " +
+                        "first. The notification and the widget can deny, " +
                         "never approve.",
                     style = MaterialTheme.typography.bodySmall,
                     color = chrome.textMid,

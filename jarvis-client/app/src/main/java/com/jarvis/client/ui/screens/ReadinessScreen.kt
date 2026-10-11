@@ -101,6 +101,18 @@ fun ReadinessScreen(
     /** Null hides the button entirely - this phone has no assistant role to
      *  request at all, or Jarvis already holds it. */
     onRequestAssistantRole: (() -> Unit)? = null,
+    /**
+     * Opens Android's own screen for choosing the assistant app. Offered
+     * beside the role request because the request is not always answerable:
+     * the owner's phone reports the role as available, then its own permission
+     * controller refuses with "Role is not requestable" and draws nothing
+     * (measured on the attached handset, 2026-10-09). Null hides the button.
+     */
+    onOpenAssistantSettings: (() -> Unit)? = null,
+    /** What the last role request ended up doing, or null - drawn in that card. */
+    assistantRoleNote: String? = null,
+    /** What the last "Start link" tap ended up doing, or null - drawn in that card. */
+    linkStartNote: String? = null,
     /** The desktop's wake word, as three states — never as a boolean. */
     wakeWord: WakeWord = WakeWord.UNKNOWN,
     /** A card to turn it on is waiting for the owner. */
@@ -190,10 +202,19 @@ fun ReadinessScreen(
                 "Start link",
                 warn = item.state == ReadinessItem.State.WARN,
                 onClick = onStartService,
+                note = linkStartNote,
             )
         ReadinessItem.Fix.ASSISTANT_ROLE ->
             onRequestAssistantRole?.let {
-                CardFix("Set Jarvis as the assistant app", warn = false, onClick = it)
+                CardFix(
+                    "Set Jarvis as the assistant app",
+                    warn = false,
+                    onClick = it,
+                    alternative = onOpenAssistantSettings?.let { open ->
+                        CardFix.Alternative("Open Android's assistant settings", open)
+                    },
+                    note = assistantRoleNote,
+                )
             }
         null -> null
     }
@@ -246,7 +267,22 @@ fun ReadinessScreen(
 }
 
 /** A fix button, as it will be drawn inside its card. */
-private data class CardFix(val label: String, val warn: Boolean, val onClick: () -> Unit)
+private data class CardFix(
+    val label: String,
+    val warn: Boolean,
+    val onClick: () -> Unit,
+    /**
+     * A second, always-available route drawn quietly under the main button.
+     * The assistant card is the reason this exists: its main button goes
+     * through the platform's role request, which some phones refuse without
+     * showing anything, and this is the way in that still works there.
+     */
+    val alternative: Alternative? = null,
+    /** A line the last tap on this card produced, or null. Shown under the buttons. */
+    val note: String? = null,
+) {
+    data class Alternative(val label: String, val onClick: () -> Unit)
+}
 
 /**
  * The link, in words, with the two things that can be done about it.
@@ -595,6 +631,21 @@ private fun ReadinessCard(item: ReadinessItem, fix: CardFix?) {
                 modifier = Modifier.fillMaxWidth(),
                 onClick = fix.onClick,
             )
+            val alternative = fix.alternative
+            if (alternative != null) {
+                Gap(8)
+                Secondary(
+                    text = alternative.label,
+                    color = chrome.textMid,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = alternative.onClick,
+                )
+            }
+            val note = fix.note
+            if (note != null) {
+                Gap(6)
+                Text(note, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+            }
         }
     }
 }

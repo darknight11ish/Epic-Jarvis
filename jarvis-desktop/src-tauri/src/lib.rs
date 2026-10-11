@@ -46,6 +46,7 @@ pub mod lock;
 pub mod logfile;
 pub mod look;
 pub mod notifications;
+pub mod open_app;
 pub mod plain_errors;
 pub mod proctree;
 pub mod prompt_coach;
@@ -463,9 +464,26 @@ pub struct RouteState {
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let mut system = telemetry_system();
+        //: Which wake-up we are on, so the notification choices are re-read
+        //: every `SYNC_EVERY` ticks rather than every three seconds (2026-10-09).
+        let mut tick: u32 = 0;
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
+
+            // A choice made on the PHONE has to reach the toasts without anyone
+            // opening this PC's Settings window (notifications.rs,
+            // `refresh_notification_prefs`). It rides this loop because the loop
+            // already runs whether or not a window is open, and it is the lowest
+            // -risk place to put it: one plain GET, nothing raised, nothing
+            // written, and every failure leaves the choices already in force.
+            // The interval is the loop's own, so this is at most ~30 s late -
+            // and a change made HERE still applies at once, through
+            // `set_notification_prefs`.
+            tick = tick.wrapping_add(1);
+            if tick.is_multiple_of(notifications::SYNC_EVERY) {
+                notifications::refresh_notification_prefs(app.clone()).await;
+            }
 
             // A drag is persisted even while the widget is collapsed or
             // hidden - and the same for the floating face. `flush` writes a
@@ -1023,6 +1041,10 @@ pub fn run() {
             // read-only, opened from Settings and the tray.
             commands::open_features,
             commands::mark_answer,
+            // Re-opening the walkthrough on demand, from Settings (the owner,
+            // 2026-10-10). It reads and writes no marker: the automatic
+            // first-run show below is unchanged.
+            commands::replay_onboarding,
             commands::finish_onboarding,
             commands::get_api_settings,
             commands::set_api_settings,
@@ -1121,6 +1143,7 @@ pub fn run() {
             devices::pair_cancel,
             devices::devices_list,
             devices::devices_remove,
+            devices::devices_label,
             devices::devices_shared,
             tool_updates::get_tool_updates,
             tool_updates::check_tool_updates,
@@ -1154,6 +1177,11 @@ pub fn run() {
             commands::get_widget_prefs,
             commands::get_floating,
             commands::set_floating,
+            // Where the floating face's own page says its picture is drawn,
+            // so clicks can pass through the window everywhere except on the
+            // animal (2026-10-10). The floating window is the only one
+            // granted it - permissions/surfaces.toml's "floating-hit-mask".
+            commands::note_floating_hit_mask,
             commands::prefill_quickbar,
             commands::capture_note,
             commands::capture_note_status,
@@ -1201,6 +1229,13 @@ pub fn run() {
             // (with Windows Hello, on this PC) that choosing "Keep offering it"
             // raises. Settings only.
             handoff::handoff_mode,
+            // What a captcha does about the browser window it is blocking
+            // (handoff.rs `handoff_front`; the owner's decision of 2026-10-09:
+            // "1 by default with the option for 2 in the settings of Jarvis"):
+            // leave that one window exactly where it is (the default), or ask
+            // to bring it to the front - ONE approval card on this PC with
+            // Windows Hello. Settings only; it raises no window itself.
+            handoff::handoff_front,
             browser_engine::browser_engine,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
@@ -1281,16 +1316,14 @@ pub fn run() {
                     match action {
                         // With Watch with me on, a fresh look is taken first,
                         // while the program the owner is in is still in front
-                        // (look.rs).
+                        // (look.rs). `toggle_quickbar` centres and focuses the
+                        // window AND tells the WebView to put the caret in the
+                        // input itself (windows.rs `focus_quickbar_input`), so
+                        // there is no second emit here any more - the tray
+                        // icon's left click goes through the same function and
+                        // gets the same caret.
                         "toggle_quickbar" => match look::toggle_bar_with_look(app) {
-                            Ok(visible) => {
-                                if visible {
-                                    // `toggle_quickbar` has already centred and
-                                    // focused the window; tell the WebView to
-                                    // put the caret in the input.
-                                    emit_quickbar(app, events::FOCUS_INPUT, ());
-                                }
-                            }
+                            Ok(_) => {}
                             Err(err) => eprintln!("[jarvis] quickbar toggle failed: {err}"),
                         },
                         "ingest_clipboard" => ingest_clipboard(app),
@@ -1367,6 +1400,11 @@ pub fn run() {
         // the first one drawn rather than a swap after the default.
         let appearance = app.state::<appearance::AppearanceState>().snapshot();
         push_to_hud(app, "appearance", &appearance);
+
+        // And same reason again, for the button beside the box: a HUD that
+        // reloads while the Jarvis bar is already up would otherwise offer to
+        // open a bar that is on screen (`windows.rs` `publish_bar_state`).
+        windows::publish_bar_state(app);
     });
 
     let app = builder
@@ -1390,6 +1428,13 @@ pub fn run() {
             if autostart::launched_at_login() {
                 logfile::log("[jarvis] started by Windows at login");
             }
+
+            // "open Notion" (jarvis_open.py, the owner's request of 2026-10-10):
+            // read this PC's Start menu shortcuts now, once, rather than on the
+            // first sentence that needs them. It is two shallow folder reads -
+            // milliseconds - and doing it here means the first "open Notion" of
+            // a session opens the app instead of saying "still reading".
+            open_app::warm_up();
 
             // Before anything reads the token (the HUD bootstrap, the backend
             // it may start): a token an older version kept in the settings
@@ -1597,6 +1642,11 @@ pub fn run() {
             // this line is what makes Jarvis actually work, and a walkthrough
             // that opened before the tray icon or the event stream existed
             // would be explaining surfaces that were not there yet.
+            //
+            // ONCE, and only here. `commands::replay_onboarding` opens the
+            // same window on demand from Settings (the owner, 2026-10-10) and
+            // never touches the marker, so this gate still means exactly what
+            // it always did: unprompted, the walkthrough appears one time.
             if !commands::onboarding_seen(&handle) {
                 if let Err(err) = windows::show_onboarding(&handle) {
                     logfile::log(&format!(

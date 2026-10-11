@@ -106,8 +106,18 @@ private val FAQS = listOf(
     ),
     Faq(
         "How do I teach Jarvis my voice? Where is the talk button?",
-        "Open Platform checks and tap Train my voice on the Your voice card. " +
-            "Read the twelve short sentences, send them, then approve the card that " +
+        // This used to say "tap Train my voice on the Your voice card"
+        // unconditionally, and on an unpaired phone that card shows the button
+        // nowhere (MainActivity passes onTrainVoice only once paired, by
+        // design - the clips go to the desktop). Help is the screen someone
+        // reads when something is wrong, so it names the condition first
+        // (device tour, 2026-10-09).
+        "Pair this phone with your desktop first: the recordings go to the " +
+            "desktop, so Train my voice appears on the Your voice card only once " +
+            "there is one to send them to - before that the card says Unknown. " +
+            "Once paired, open Platform checks and tap Train my voice on the " +
+            "Your voice card. Read the twelve short " +
+            "sentences, send them, then approve the card that " +
             "appears on your desktop or here - Jarvis learns your voice only " +
             "when you approve it, and the recordings are deleted either way. " +
             "The talk button on Home appears once your voice is trained and " +

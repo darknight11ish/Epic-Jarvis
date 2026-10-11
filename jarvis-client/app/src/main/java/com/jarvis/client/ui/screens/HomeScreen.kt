@@ -141,6 +141,7 @@ import com.jarvis.client.voice.VoiceSession
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.State
 import com.jarvis.client.ui.parts.pressable
+import com.jarvis.client.ui.parts.scrollToKey
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
@@ -664,6 +665,12 @@ data class HomeActions(
     /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
     val onOpenLive: () -> Unit = {},
     /**
+     * "Find anything" (ui/screens/FindScreen.kt): the typed search over every
+     * place in the app, opened from the Find button on the status line. It
+     * searches and navigates; nothing here changes a setting.
+     */
+    val onOpenFind: () -> Unit = {},
+    /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
      * nothing while the link is stale.
@@ -1026,37 +1033,25 @@ fun HomeScreen(
         // Where "Open the approval →" actually lands. The id used to be set and
         // then dropped unread, so the tap navigated home and left the reader to
         // find the right card themselves.
-        val focusIndex = state.focusApproval?.let { id ->
-            state.pending.indexOfFirst { it.id == id }.takeIf { it >= 0 }
-        }
-        LaunchedEffect(state.focusApproval, focusIndex) {
-            val index = focusIndex ?: return@LaunchedEffect
+        //
+        // Scrolled to by the card's own KEY, never by counting rows (second
+        // Android audit, N3, 2026-10-09). The cards below are keyed by their
+        // own id (`items(state.pending, key = { it.id })`), and the old sum of
+        // ten conditional items - kept in step by hand, by a comment asking the
+        // next person to remember - silently named a different row the moment
+        // anything was added above them. This one place sends the owner to
+        // decide something, so it is the worst place for that class of bug.
+        // From the top: a notification can open Home with the thread scrolled
+        // anywhere, and the walk only ever moves down.
+        val focusCard = state.focusApproval?.takeIf { id -> state.pending.any { it.id == id } }
+        LaunchedEffect(state.focusApproval, focusCard) {
+            val id = focusCard ?: return@LaunchedEffect
             // Room first. At the owner's 75% the list was about 130dp tall,
             // so scrolling to the top of a card left its Approve and Deny
             // below the bottom edge. This only moves the layout; the card is
             // still decided by the owner, by hand.
             if (state.makeRoomForApprovals && fold == Fold.NONE) fold = Fold.APPROVALS
-            // Counted, not guessed. The face has its own pane now and is no
-            // longer item 0 here; the notice and the approvals-off plate are
-            // conditional; the "waiting on you" label sits immediately above
-            // the cards and exists whenever any card does - which a found
-            // index guarantees. Adding an item to this list above the cards
-            // means adding it here too.
-            val busy = (state.activity != Activity.IDLE && state.activity != Activity.ERROR) ||
-                state.streaming || state.voicePhase == VoiceSession.Phase.SPEAKING
-            val leading =
-                (if (busy) 1 else 0) +
-                (if (state.lockdown) 1 else 0) +
-                (if (state.watchSign != null) 1 else 0) +
-                (if (state.phoneWatchSign != null || state.phoneWatchOffered) 1 else 0) +
-                (if (state.activity == Activity.WORKING || state.activity == Activity.PAUSED) 1 else 0) +
-                1 +
-                1 +
-                (if (state.inboxTidy != null) 1 else 0) +
-                (if (state.notice != null) 1 else 0) +
-                (if (state.approvalsOff) 1 else 0) +
-                1
-            listState.animateScrollToItem(leading + index)
+            scrollToKey(listState, id, fromTop = true)
         }
 
         // Keep a streaming reply in view. The reply is the last item, below
@@ -1604,6 +1599,17 @@ private fun StatusLine(
                 }
             }
         }
+
+        // "Find anything" (ui/screens/FindScreen.kt; the parity audit of
+        // 2026-10-10, gap 8): the typed search over every place in the app.
+        // Here rather than in the navigation row below, for a reason that
+        // shows on a narrow phone: that row weights six destinations equally,
+        // and a seventh would ellipsize "Appearance" on most screens. This
+        // line is always on screen - even when the owner has the navigation
+        // row set to "Hidden until swiped" - so the way in is a control the
+        // owner can see, never a gesture. Word for word the label the
+        // desktop's own bar puts on its palette button.
+        Quiet(com.jarvis.client.ui.FindWords.BUTTON, color = chrome.textMid, onClick = actions.onOpenFind)
 
         // Shown only while there is something to retry: offline, and also
         // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
@@ -3447,6 +3453,22 @@ private fun Composer(
                 onCancel = actions.onVoiceCancel,
             )
         }
+    }
+    // Why Send is greyed, while the link is down (feature sweep on the
+    // owner's phone, 2026-10-10). It said nothing at all before: the owner
+    // typed a message, pressed Send and nothing happened, with no sentence
+    // anywhere naming the link as the reason. The runtime's own blocker cannot
+    // cover this one - a disabled button never reaches it. It is the line
+    // every other plate already shows under a control it has greyed for the
+    // link (this screen's own PhoneWatchStartPlate, just above), and only
+    // while the link is down: an empty box on a live link is not a fault.
+    com.jarvis.client.LinkWords.composerHeldLine(state.link)?.let { waiting ->
+        Text(
+            waiting,
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textLo,
+            modifier = Modifier.padding(top = 6.dp).liveStatus(),
+        )
     }
     }
 }

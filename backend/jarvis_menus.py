@@ -7,7 +7,7 @@ NEW MODULE, shipped whole, NO PATCH and NO ROUTE. Hiding is per device: each app
 keeps its own set of hidden and folded ids (the desktop in localStorage, the
 phone in SharedPreferences). Nothing about menus is sent anywhere, so there is
 no HTTP route, no approval card and nothing on jarvis_gate.py. This module is
-read by exactly two things:
+read by exactly three things:
 
   * jarvis_quick.py - "hide the finance menu" / "show the quiz menu" / "collapse
     the goals menu" / "show everything", answered with no model. The reply is the
@@ -18,6 +18,26 @@ read by exactly two things:
     desktop and the phone (ids, groups, never-hideable list, words, defaults,
     migration rules, worked cases of the state machine below), so neither app
     can carry a different list.
+  * tools/check_registry_phone.py - the reverse check (the parity audit of
+    2026-10-10). It fails when an id this file calls desktop-only is one the
+    phone really has, when a desktop-only id has no recorded reason, and when
+    this file and jarvis_settings_registry.py disagree about the same section.
+
+WHAT `apps` MEANS, AND WHAT IT DOES NOT. It says which app HAS the feature, not
+which app draws a row the owner can hide. The two came apart in eight places
+the parity audit of 2026-10-10 found - `settings.animal-options`,
+`settings.briefing-settings`, `settings.voices`, `settings.updates`,
+`settings.about`, `brain.history.tags`, `brain.work.undo` and
+`brain.work.activity` were all marked desktop-only while the phone really drew
+them - and "desktop-only" in these files is read by people as "the phone does
+not have this", which is how a real gap hides behind a wrong row.
+
+So a feature both apps have but with no separate phone row is written as BOTH
+with `hide=False` and a `why` naming the phone menu that hides it instead (the
+phone's "Updates" is a row of Platform checks; its "Animal options" is inside
+Appearance). That keeps `apps` honest AND keeps the phone from growing a hide
+row that hides nothing. A `(DESKTOP,)` id must have a reason the phone lacks
+it, recorded in tools/check_registry_phone.py's PHONE_LACKS.
 
 WHAT HIDING IS: hiding only tidies. Nothing is turned off; the feature still
 works when the owner asks Jarvis. A menu has two independent states -
@@ -125,6 +145,20 @@ MENUS: tuple = (
        hide=False, collapse=False, kind="card",
        why="Acting is blocked when the link is stale (rule 4), so its status is always visible.",
        names=("connection", "connection settings", "pairing", "the server address")),
+    # "Set up Jarvis" (the parity audit of 2026-10-10). This card, "Starting
+    # Jarvis for you" and "Hang and crash notes" were the three of the audit's
+    # FOUR cards that appeared in no registry that tools/check_feature_list.py
+    # reads (`settings.notifications`, the fourth, is below and is the one the
+    # audit's GAP list came from). They are all here now, desktop-only and with
+    # the reason written down, so their absence from the phone is a recorded
+    # decision rather than silence - and `tools/check_registry_phone.py` fails
+    # if a future card is left out of the registry again.
+    _m("settings.first-run", "Set up Jarvis",
+       "The first-run card: the five choices that matter on a new install.", (DESKTOP,),
+       hide=False, collapse=False,
+       why="Desktop only, and never hideable: it is the page a new owner meets first.",
+       names=("set up jarvis", "first run setup", "the setup page",
+              "getting started with jarvis")),
     _m("settings.devices", "Devices", "Every paired device with its own key.",
        hide=False, kind="card", names=("devices", "paired devices"),
        why="Removing a lost phone must stay reachable."),
@@ -140,8 +174,17 @@ MENUS: tuple = (
     # place, not two - and nothing was lost.
     _m("settings.appearance-card", "Appearance", "Theme, faces and how it all looks.",
        names=("appearance", "the theme", "themes", "faces")),
+    # "Animal options" (the parity audit of 2026-10-10): the phone HAS this
+    # card, drawn inside Appearance (jarvis-client AnimalOptionsPlate.kt
+    # `AnimalOptionsSection`, reached from the Appearance row), so it is a
+    # BOTH feature - the same shape `settings.second-card` already uses (a
+    # phone Brain plate keeping the desktop's id). It is NOT separately
+    # hideable on the phone: there is one Appearance row, and hiding that is
+    # how the owner hides both, so `hide` is False here.
     _m("settings.animal-options", "Animal options",
-       "Every animal-face option in one place.", (DESKTOP,),
+       "Every animal-face option in one place.", BOTH,
+       hide=False, collapse=False,
+       why="On the phone it is drawn inside Appearance; the Appearance menu is how it is hidden.",
        names=("animal options", "animal settings")),
     _m("settings.voice", "Voice", "Talk, read aloud, hands-free and sounds.",
        names=("voice", "voice settings")),
@@ -156,8 +199,17 @@ MENUS: tuple = (
        "How long a chat can sit idle before the next message starts a new one.",
        names=("a new conversation starts after", "new conversation timing",
               "the idle timeout")),
+    # The phone draws this card inside its Morning briefing plate
+    # (jarvis-client BriefingPlate.kt, `menus.shows("settings.briefing-settings")`
+    # around the "When it arrives" block), so the feature is on both apps and
+    # hideable on both under this one id. The plate ITSELF is a different menu,
+    # `brain.work.briefing`: it keeps the phone's Brain item key "briefing" and
+    # its `MenuFrame(menus, "brain.work.briefing")` in BrainScreen.kt. This id
+    # has no item key of its own and belongs in MenuPlaces.INSIDE; pointing the
+    # "briefing" key at this id instead (2026-10-10) left `brain.work.briefing`
+    # with no place and broke MenuVisibilityTest.
     _m("settings.briefing-settings", "Morning briefing settings",
-       "What the morning briefing includes.", (DESKTOP,),
+       "What the morning briefing includes.", BOTH,
        names=("briefing settings", "morning briefing settings")),
     _m("settings.shortcuts", "Shortcuts", "Keyboard shortcuts.", (DESKTOP,),
        names=("shortcuts", "keyboard shortcuts", "hotkeys")),
@@ -165,7 +217,25 @@ MENUS: tuple = (
        hide=False, collapse=False, kind="card",
        why="Safety: the lock and fingerprint settings must always be reachable.",
        names=("security", "security settings", "app lock", "windows hello")),
-    _m("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.", (DESKTOP,),
+    # "Jarvis's voice" (the parity audit of 2026-10-10). ONE id for ONE
+    # feature: it was `(DESKTOP,)` here while the phone had the SAME feature
+    # under a second id, `entry.voices` ("Jarvis's voice row", further down),
+    # which broke this file's own rule that one id means one feature. The
+    # second id is gone and this one is what both apps use: the desktop's
+    # Settings card, and the phone's "Jarvis's voice" button, which
+    # SettingsScreen.kt draws INSIDE its Voice item and hides with
+    # `menus.shows("settings.voices")`. The phone keeps that button hideable
+    # under this id, exactly as it was hideable under the old one.
+    #
+    # It has NO `item(key = ...)` of its own on the phone. The Voice item's key
+    # "voice" belongs to `settings.voice` above - a DIFFERENT menu (Talk, read
+    # aloud, hands-free and sounds). Two menus can share one item key and only
+    # one owns it, so writing `"voice" to "settings.voices"` in MenuPlaces.kt
+    # beside `"voice" to "settings.voice"` did not move the row: it deleted the
+    # Voice section's place, because Kotlin's `mapOf` keeps the last duplicate
+    # and drops the rest (MenuVisibilityTest, 2026-10-10). This id belongs in
+    # MenuPlaces.INSIDE.
+    _m("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.",
        names=("jarvis's voice", "jarvis's voices", "custom voices")),
     _m("settings.prompt-coach", "Prompt coach",
        "Checks a prompt before you send it.",
@@ -228,15 +298,54 @@ MENUS: tuple = (
        "How long the captcha hand-off stays on offer.",
        names=("when the phone does not answer", "the captcha hand-off",
               "how long the hand-off stays on offer", "solve it here settings")),
+    # "When a captcha stops Jarvis" (the owner's decision of 2026-10-09: "1 by
+    # default with the option for 2 in the settings of Jarvis"): what a captcha
+    # does about the browser window it is blocking - leave that one window
+    # exactly where it is (the default, touching nothing) or bring it to the
+    # front, which takes the owner's screen and keyboard and is therefore one
+    # approval card on the PC with Windows Hello. Its own section, not a row
+    # inside "When the phone does not answer": that one is about how long the
+    # phone may watch a window; this one is about whether the window moves at
+    # all. Same id in both apps, like every other settings row.
+    _m("settings.handoff-front", "When a captcha stops Jarvis",
+       "Whether the stuck browser window comes to the front.",
+       names=("when a captcha stops jarvis", "the captcha window",
+              "does the browser window come to the front",
+              "bring the window to the front", "leave it where it is")),
     _m("settings.backup", "Backups", "One locked backup file into a folder you pick.",
        names=("backups", "backup settings")),
-    _m("settings.updates", "Updates", "New versions of this app.", (DESKTOP,),
+    # "Updates" (the parity audit of 2026-10-10): the phone HAS its own update
+    # card - net/UpdateCheck.kt, platform/UpdateChecker.kt, the "Check for new
+    # versions" row on Platform checks (ReadinessScreen.kt, item "this-app"),
+    # and the FAQ's own answer. Each app checks its OWN release page, so this
+    # is one feature both apps have. It has no separate phone Settings row to
+    # hide: the Platform checks card is where it lives, so `hide` is False.
+    _m("settings.updates", "Updates", "New versions of this app.", BOTH,
+       hide=False, collapse=False,
+       why="On the phone it is the \"Check for new versions\" row on Platform checks; there is no separate row to hide.",
        names=("updates", "app updates")),
     _m("settings.tool-updates", "Check for tool updates", "Outdated packages and tools.",
        (DESKTOP,), names=("tool updates",)),
     _m("settings.more-options", "More options", "Startup, logs and crash notes.", (DESKTOP,),
        hide=False, collapse=False, kind="card",
        why="Already a fold of its own; it stays where it is."),
+    # "Starting Jarvis for you" and "Hang and crash notes" (the parity audit of
+    # 2026-10-10, the other two of the four cards no registry knew about). Both
+    # are rows inside the desktop's "More options" fold, so they are
+    # never-hideable: the fold itself is the thing the owner hides. The phone
+    # has the same two things in its own way - it can neither start the PC's
+    # process nor watch it, and it keeps its own crash screen
+    # (CrashScreen.kt, platform/CrashLog.kt), which is its own id, not this one.
+    _m("settings.start-jarvis", "Starting Jarvis for you",
+       "Let Jarvis start and stop the backend on this PC.", (DESKTOP,),
+       hide=False, collapse=False,
+       why="A row inside the desktop's own More options fold, which is what is hidden.",
+       names=("starting jarvis for you", "start jarvis automatically")),
+    _m("settings.crash-notes", "Hang and crash notes",
+       "What the PC's own process wrote when it hung or crashed.", (DESKTOP,),
+       hide=False, collapse=False,
+       why="A row inside the desktop's own More options fold; the phone keeps its own crash notes.",
+       names=("crash notes", "hang and crash notes", "the crash notes")),
     _m("settings.asks-first", "What asks first", "Every action and whether it asks.",
        hide=False, collapse=False, kind="card",
        why="Safety: what asks first must always be reachable.",
@@ -253,8 +362,33 @@ MENUS: tuple = (
               "limits and frequency", "how often jarvis does things")),
     _m("settings.email-sending", "Sending email", "Sending email, one card per email.",
        names=("sending email", "email sending")),
-    _m("settings.about", "About Jarvis", "Version, licences and credits.", (DESKTOP,),
+    # "About Jarvis" (the parity audit of 2026-10-10): the phone HAS this card
+    # - FaqScreen.kt's `AboutCard()` at the end of Help, described in its own
+    # comment as mirroring the desktop's About section, and reached by "open
+    # about" (OpenPlace.kt) - so it is a BOTH feature, not a desktop one.
+    # Neither app can hide it: it is the version and the licence, and hiding
+    # it on the phone would mean hiding the whole Help screen. `hide` is False
+    # on both apps for that reason (the desktop's own About card is the only
+    # place its version is shown since the Help card was folded away, 2026-10-08).
+    _m("settings.about", "About Jarvis", "Version, licences and credits.", BOTH,
+       hide=False, collapse=False,
+       why="The version and the licence: on the phone it is the end of the Help screen, which is not hideable.",
        names=("about jarvis", "about")),
+    # "Notifications" (the parity audit of 2026-10-10, and the card six real
+    # desktop controls were missing from the phone behind). The card was in NO
+    # registry that tools/check_feature_list.py reads, so nothing failed when
+    # it changed and nothing noticed it had no phone form at all. It is here
+    # now, desktop-only and with the reason written down, so the absence is a
+    # recorded decision rather than silence. See the phone's own words:
+    # `jarvis-client` OpenPlace.kt lists "notifications" in PC_ONLY and
+    # SettingsScreen.kt's "jarvis-notify" row opens Android's own per-app
+    # notification screen instead - which is the phone's per-kind control.
+    _m("settings.notifications", "Notifications",
+       "Which notifications Jarvis shows on this PC, quiet hours, and a test.",
+       (DESKTOP,), hide=False, collapse=False,
+       why="Desktop only: the phone's notification controls are Android's own, per channel "
+           "(OpenPlace.kt's PC_ONLY, and its \"jarvis-notify\" row opens Android's screen).",
+       names=("notifications", "notification settings", "desktop notifications")),
     _m("settings.backend-supports", "What this backend supports",
        "The capability list the app branches on.",
        names=("what this backend supports", "backend capabilities", "this backend")),
@@ -268,6 +402,18 @@ MENUS: tuple = (
        names=("floating jarvis", "floating face", "the bubble")),
     _m("settings.quick-tiles", "Quick Settings tiles", "The tiles in the phone's quick panel.",
        (PHONE,), names=("quick settings tiles", "quick tiles")),
+    # "Screen refresh rate" (2026-10-09): what the PANEL is asked to run at
+    # while Jarvis is on screen (jarvis-client's data/ScreenRate.kt and
+    # ui/screens/ScreenRatePlate.kt). Phone only, and deliberately so: it is
+    # about a phone's own display modes, read from that phone's
+    # Display.getSupportedModes(), and the desktop draws on a monitor the
+    # Windows app already owns - so there is no desktop row to generate and
+    # none is invented. It is NOT the animal's frame rate (the face editor
+    # under settings.appearance-card), which is how often the animal is DRAWN;
+    # ScreenRate.kt's own doc says why the two must never be merged.
+    _m("settings.screen-rate", "Screen refresh rate",
+       "The rate the screen is asked to run at while Jarvis is on screen.",
+       (PHONE,), names=("screen refresh rate", "refresh rate", "the refresh rate")),
     _m("settings.menu-visibility", "Show or hide menus",
        "The list you are looking at.", kind="card",
        hide=False, collapse=False,
@@ -352,8 +498,22 @@ MENUS: tuple = (
     _m("brain.history.conversations", "Chat history and conversations",
        "The list of your past chats and how long they are kept.", (DESKTOP,),
        area="brain", view="history", names=("conversations", "past chats")),
-    _m("brain.history.tags", "Chat tags", "The tag chips and the tag editor.", (DESKTOP,),
-       area="brain", view="history", names=("chat tags", "tags")),
+    # "Chat tags" (the parity audit of 2026-10-10): the phone HAS the tag
+    # chips, the tag editor and "Suggest tags overnight" - HistoryTags.kt and
+    # HistoryScreen.kt's own `TagsEditor` - and it reads the same route
+    # (`/api/history/tags`, which tools/check_parity.py already classifies
+    # "ported"). So both apps have the feature, under this one id.
+    #
+    # NOT separately hideable on the phone, and that is a recorded choice
+    # rather than silence: the editor takes the whole History screen over
+    # (`editorOpen`, so it draws under no `item(key = ...)` of its own), which
+    # is exactly the shape `brain.tab.tutorials` already has - a BOTH menu with
+    # `hide=False` and a reason. The one menu that hides the phone's tags is
+    # the History entry (`entry.history`), which that screen already reads.
+    _m("brain.history.tags", "Chat tags", "The tag chips and the tag editor.", BOTH,
+       area="brain", view="history", hide=False, collapse=False,
+       why="On the phone the editor takes the History screen over and is hidden by the History entry; there is no separate row to hide.",
+       names=("chat tags", "tags")),
     _m("brain.history.tag-suggestions", "Suggest tags overnight",
        "The overnight tag suggestions switch.", area="brain", view="history",
        parent="brain.history.tags", kind="row",
@@ -427,11 +587,26 @@ MENUS: tuple = (
        area="brain", view="work", names=("morning briefing", "briefing")),
     _m("brain.work.jobs", "Background jobs", "Long jobs Jarvis is running.",
        area="brain", view="work", names=("background jobs", "background work")),
-    _m("brain.work.undo", "Undo shelf", "Changes you can still undo.", (DESKTOP,),
+    # "Undo shelf" (the parity audit of 2026-10-10): the phone HAS it - the
+    # Inbox draws the shelf with Undo/Cancel (InboxScreen.kt, item key "undo")
+    # off `/api/undo` and `/api/undo/revert`, both of which
+    # tools/check_parity.py classifies "ported". So it is a BOTH feature, and
+    # it stays never-hideable exactly as it is on the desktop: it is a safety
+    # net, and hiding it could strand a 10-minute Undo.
+    _m("brain.work.undo", "Undo shelf", "Changes you can still undo.", BOTH,
        area="brain", view="work", hide=False,
        why="Undo is a safety net; hiding it could strand a 10-minute Undo."),
-    _m("brain.work.activity", "Activity", "What Jarvis did lately.", (DESKTOP,),
-       area="brain", view="work", names=("activity",)),
+    # "Activity" (the parity audit of 2026-10-10): the phone HAS the
+    # read-only list of cards already decided - its own "Past approvals"
+    # screen (ApprovalsScreen.kt, net/PastApprovals.kt, reached from the
+    # Inbox's ACTIVITY row) with its own Screen.APPROVALS destination. So it
+    # is a BOTH feature. NOT separately hideable on the phone: the Inbox is a
+    # never-hideable screen of its own and this is a row on it, the same shape
+    # `settings.about` (above) and `brain.history.tags` (below) have.
+    _m("brain.work.activity", "Activity", "What Jarvis did lately.", BOTH,
+       area="brain", view="work", hide=False, collapse=False,
+       why="On the phone it is one row on the Inbox, which is never hideable; there is no separate row to hide.",
+       names=("activity",)),
 
     # ---- Brain: Projects -----------------------------------------------
     _m("brain.projects.progress", "Progress", "The activity heatmap and balance chart.",
@@ -463,8 +638,6 @@ MENUS: tuple = (
     # ---- Entry points (a button or row that only leads to a screen) ----
     _m("entry.appearance", "Appearance button on Home", "The Appearance button in Home's row.",
        (PHONE,), area="entry", kind="entry", names=("appearance button",)),
-    _m("entry.voices", "Jarvis's voice row", "The row that opens Jarvis's voice.", (PHONE,),
-       area="entry", kind="entry", names=("voices row",)),
     _m("entry.voice-check", "Voice check row", "The row that opens the voice check.", (PHONE,),
        area="entry", kind="entry", names=("voice check", "voice check row")),
     _m("entry.history", "History entry in Brain", "The row that opens your past chats.", (PHONE,),

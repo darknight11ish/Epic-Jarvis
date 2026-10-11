@@ -162,7 +162,13 @@ internal fun FaceEditor(
         )
 
         Setting(
-            title = "Quality",
+            // "Quality" until 2026-10-09, and it is the SAME stored field and the
+            // same control as "Sharpness" under Animal options - the two names
+            // sat on one screen over one value (first Android audit, finding 12).
+            // Sharpness is what the rest of the app calls it: the section that
+            // draws it there, and every sentence Jarvis says about it
+            // (net/AnimalOptions.kt, ChatSession.kt).
+            title = "Sharpness",
             caption = when {
                 saver -> null
                 auto -> "Auto is using ${live.tier.label}. Picking one turns Auto adjust off."

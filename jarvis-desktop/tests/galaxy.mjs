@@ -147,6 +147,68 @@ await check("finding a name counts every match, steps with Enter, and says when 
   assert.equal(live, "polite");
 });
 
+/* ── "Nothing is drawn only on the canvas" ────────────────────────────────
+ *
+ * The project's own rule (docs/HANDOFF-DESKTOP-2026-10-09.md item 2): a thing
+ * that exists only as pixels on the canvas is a thing a keyboard user and a
+ * screen reader cannot reach. The Galaxy's answer is that every dot NAMES a
+ * person or thing, and the search box finds any name in the list - so the
+ * accessible path to every node is `#graph-search`, and the canvas is a view of
+ * it rather than the only way in.
+ *
+ * That was a promise in comments. These two checks make it a fact the build
+ * tests: one at the data level, one against the running window.
+ */
+
+await check("every dot the graph draws has a name a search can find (the canvas is not the only way in)", async () => {
+  // Pure: a node with a blank label, or one whose label the search would not
+  // match, is a dot that exists only as pixels.
+  const g = buildEntityGraph(readEntities(ENTITIES));
+  assert.ok(g.nodes.length >= ENTITIES.entities.length, `only ${g.nodes.length} nodes for ${ENTITIES.entities.length} names`);
+  for (const node of g.nodes) {
+    assert.ok(typeof node.label === "string" && node.label.trim() !== "",
+      `a node with no name reaches the canvas: ${JSON.stringify(node.id)}`);
+    assert.equal(findNames([node], node.label).length, 1,
+      `"${node.label}" does not find itself, so its dot cannot be reached by name`);
+    // The owner's own word for it counts too ("sister" -> Priya), which is what
+    // makes the search usable rather than merely present.
+    for (const alias of [...(node.also || []), ...(node.aliases || [])]) {
+      assert.equal(findNames([node], alias).length, 1, `"${alias}" does not find "${node.label}"`);
+    }
+  }
+  // CONTROL: the search is not matching everything - a name nobody has must
+  // come back empty, or the assertions above would pass on a broken filter.
+  assert.deepEqual(findNames(g.nodes, "zzz-nobody"), []);
+});
+
+await check("every dot's name is reachable in the running window, through the box the keyboard uses", async () => {
+  const page = await galaxy();
+  // How many dots the window actually drew. The pure check above proves every
+  // node in the graph is findable, so this number plus that fact is the whole
+  // guarantee: N drawn, N findable, therefore no dot is canvas-only.
+  const stat = await page.locator("#graph-stat").innerText();
+  const drawn = Number(/^(\d+) names? · /.exec(stat)?.[1]);
+  assert.equal(drawn, ENTITIES.entities.length,
+    `the window drew ${drawn} dots for ${ENTITIES.entities.length} names - a name with no dot, or a dot with no name`);
+  // A real type-and-read round trip over the names that are easiest to get
+  // wrong: one with a space, a short one, one with no kind at all, one that is
+  // only an alias, and a generated one.
+  for (const name of ["Priya", "Lisbon", "Miso", "Initech", "Marta", "Jarvis app", "Blue bike", "Okafor", "Name 1", "Name 31"]) {
+    await page.fill("#graph-search", name);
+    await page.waitForTimeout(140);
+    const line = await page.locator("#graph-find").innerText();
+    const picked = await page.locator("#node-label").innerText();
+    assert.doesNotMatch(line, /No name matches that/, `"${name}" is drawn on the canvas but the search cannot find it`);
+    assert.ok(picked.trim() !== "", `"${name}" found nothing to show in the inspector`);
+  }
+  // And the owner's own word for it, which is the search's reason for existing:
+  // the alias must still reach the person, not only the exact name.
+  await page.fill("#graph-search", "sister");
+  await page.waitForTimeout(140);
+  assert.equal(await page.locator("#node-label").innerText(), "Priya");
+  await page.close();
+});
+
 await check("a picked name says what the list says - never a fact's words - and About opens the Memory tab at it", async () => {
   const page = await galaxy();
   await page.fill("#graph-search", "Priya");

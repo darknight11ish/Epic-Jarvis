@@ -7,17 +7,22 @@
  *  - set_limit:   POST /api/limits/settings - ONE limit, one value.
  *
  * The page decides nothing. It sends a key and a value; the BACKEND compares
- * it with the number already in force, and turning one UP that lets Jarvis do
- * more is a loosening it puts to the owner on an approval card before writing
- * anything. The sentence under the list is always the PC's own - `said` when it
- * worked, its refusal in the owner's words when it did not - never one made up
- * here, which is why nothing is drawn as changed until the PC answers.
+ * it with the number already in force, and a change that lets Jarvis do more is
+ * a loosening it puts to the owner on an approval card before writing anything.
+ * WHICH DIRECTION THAT IS, IS THE ROW'S OWN (corrected 2026-10-09): on most rows
+ * a bigger number is the loosening, and on the voice check's bar a SMALLER one
+ * is, so the line above the rows may not tell the owner that turning a number
+ * down always applies at once - that was false for the row right under it. The
+ * row's own `note`, written by the PC, says which way that row goes. The
+ * sentence under the list is always the PC's own - `said` when it worked, its
+ * refusal in the owner's words when it did not - never one made up here, which
+ * is why nothing is drawn as changed until the PC answers.
  *
  * @module limits-settings
  */
 
 import { onQueue } from "./jarvis-link.js";
-import { normaliseLimits, stepped, valueFor, rowWords, problemWords } from "./limits.js";
+import { normaliseLimits, stepped, validTime, valueFor, rowWords, problemWords } from "./limits.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -73,10 +78,16 @@ function paint(reading, keep) {
   }
   el.state.textContent = reading.rows.length ? "" : "There is nothing on this PC to change yet.";
   el.body.hidden = false;
-  const asked = reading.rows.some((r) => r.loosenUp);
   if (!keep) {
-    el.note.textContent = asked
-      ? "Turning a number down changes at once. Turning one up asks you first, on this PC."
+    // THE ONE LINE ABOVE THE ROWS may promise nothing about direction. It used
+    // to read "Turning a number down changes at once. Turning one up asks you
+    // first, on this PC." - and on the voice check's bar the loosening IS the
+    // way down, so the line contradicted the row right under it. Which way asks
+    // is the ROW's to say (`loosenUp` for up, the note for down); the list says
+    // only what holds for all of them.
+    el.note.textContent = reading.rows.length
+      ? "Some of these take effect at once. Others ask you first, on this PC - the line under "
+        + "each one says which."
       : "";
   }
   el.rows.replaceChildren(...reading.rows.map((limit) => {
@@ -92,6 +103,28 @@ function paint(reading, keep) {
       controls.append(button(limit.value ? "Turn off" : "Turn on",
                              `${limit.title}: turn it ${limit.value ? "off" : "on"}`,
                              true, () => send(limit, !limit.value)));
+    } else if (limit.kind === "time") {
+      // A clock time is drawn as a clock - the same `<input type="time">` the
+      // Notifications card has always used - not as "−/+" over a string that is
+      // not a number. While the PC says quiet hours are off (`quiet_on`) the
+      // hour decides nothing, so the control is disabled and says so rather
+      // than being a clock that changes nothing.
+      if (limit.quietOn) {
+        const input = node("input", "sc-gpu-time");
+        input.type = "time";
+        input.value = validTime(limit.value) || "";
+        input.setAttribute("aria-label", `${limit.title}: ${rowWords(limit)}`);
+        input.addEventListener("change", () => {
+          const t = validTime(input.value);
+          // Only a real "HH:MM" is sent. An empty or half-typed box sends
+          // nothing at all - it is never turned into a number of minutes.
+          if (t) send(limit, t);
+        });
+        controls.append(input);
+      } else {
+        controls.append(node("span", "sc-gpu-role",
+                             "Quiet hours are off, so this hour decides nothing."));
+      }
     } else if (limit.choices.length) {
       for (const choice of [...limit.choices].sort((a, b) => a - b)) {
         const chosen = choice === limit.value;

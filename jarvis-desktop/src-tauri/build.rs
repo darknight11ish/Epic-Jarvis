@@ -187,6 +187,11 @@ fn main() {
             "mark_answer",
             // The first-run walkthrough — one command, closes itself.
             "finish_onboarding",
+            // Re-opening that same walkthrough on demand (the owner's request
+            // of 2026-10-10), from Settings' "Show the intro again" button.
+            // Settings window only: it is the only surface with the button,
+            // and it opens the same narrow window `finish_onboarding` closes.
+            "replay_onboarding",
             // Windows Hello (lock.rs). The Security settings are read and
             // changed from the settings window only; loosening one asks
             // Windows Hello first. Show, for the Brain's private lists, is
@@ -406,14 +411,15 @@ fn main() {
             // address for the QR code, start / watch / cancel a pairing
             // (the QR code drawn in Rust; the window hidden from screen
             // capture while a code shows), the device list, Remove ONE
-            // device, and retire / bring back the old shared key. Settings
-            // window only.
+            // device, label ONE device (docs/MULTI-DEVICE-DESIGN.md), and
+            // retire / bring back the old shared key. Settings window only.
             "pair_phone_address",
             "pair_start",
             "pair_session",
             "pair_cancel",
             "devices_list",
             "devices_remove",
+            "devices_label",
             "devices_shared",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
@@ -504,6 +510,16 @@ fn main() {
             // itself has no button to call either from.
             "get_floating",
             "set_floating",
+            // Where the floating face's own page says its picture is drawn,
+            // so a click can be let past the window everywhere except on the
+            // animal (2026-10-10, the integration evaluation). A command
+            // rather than an event on purpose: `core:event:allow-emit` is
+            // forbidden to every window (apps security audit M1,
+            // tests/security.mjs), because a page that could emit could fake
+            // the voice check or an approval card. Granted to the floating
+            // window alone - permissions/surfaces.toml's "floating-hit-mask"
+            // set.
+            "note_floating_hit_mask",
             // Bug audit 2026-09-27, desktop-rust finding #2: crash_notes and
             // find_python were added to generate_handler! in lib.rs but
             // never added here, so no permission file ever existed for
@@ -814,6 +830,16 @@ fn main() {
             // and fixed sentences - never a picture of the paused browser
             // window, which this PC's windows have no route to.
             "handoff_mode",
+            // What a captcha does about the browser window it is blocking
+            // (handoff.rs `handoff_front`; the owner's decision of 2026-10-09:
+            // "1 by default with the option for 2 in the settings of Jarvis").
+            // One command for the setting alone: read it, put it back to
+            // "Leave it where it is" at once, or ask to bring that one window
+            // to the front (ONE card on this PC). Settings only, and it carries
+            // one word and fixed sentences - it never raises a window itself
+            // and never pictures the paused browser window, which this PC's
+            // windows have no route to.
+            "handoff_front",
         ]));
 
     // Generates `src-tauri/gen/schemas/*`, embeds the Windows resource and

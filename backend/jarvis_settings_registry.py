@@ -208,13 +208,37 @@ SECTIONS: tuple = (
     # the phone is never asked for an account secret.
     Section("chatbot-api-keys", ("chatbot api keys", "the api keys",
                                  "chatbot keys", "my api keys"), app="desktop"),
-    Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="desktop"),
+    # "Hardware and models" (corrected 2026-10-10, the parity audit): this said
+    # "desktop" while `backend/jarvis_menus.py` said both and the phone drew
+    # the plate - the disagreement §6.3 of the audit found. The phone HAS this
+    # section: BrainScreen.kt `item(key = "hardware")`, menu
+    # `settings.hardware`, drawn by HardwarePlate.kt. What is desktop-only is
+    # the memory bars, the "Details" arithmetic, Copy and the Modelfile, which
+    # ARCHITECTURE section 8 keeps off the phone - a limit of the section, not
+    # of its existence.
+    Section("hardware", ("hardware and models", "hardware", "graphics cards"), app="both"),
+    # "Your second graphics card" (corrected 2026-10-10, the parity audit): the
+    # phone has SecondCardPlate.kt - all four rows, `MenuPlaces.INSIDE` - under
+    # the same menu id `settings.second-card`, which `jarvis_menus.py` already
+    # marks both. The phone cannot create the second card's own copy of Ollama
+    # or measure the card, and arch/ARCHITECTURE section 8 says so; the section
+    # itself is on both apps.
     Section("second-card", ("the second graphics card", "second card", "second gpu"),
-            app="desktop"),
-    Section("big-model", ("the big model", "big model settings"), app="desktop"),
+            app="both"),
+    # "Big model (slow)" (corrected 2026-10-10, the parity audit): the phone has
+    # BigModelPlate.kt, menu `settings.big-model`, marked both in
+    # `jarvis_menus.py`. The phone can switch it on and off like the desktop;
+    # `colibri` itself runs on the PC.
+    Section("big-model", ("the big model", "big model settings"), app="both"),
     Section("folders", ("folders jarvis may look in", "folders", "the notion export")),
     Section("backup", ("backups", "backup settings")),
-    Section("updates", ("updates", "app updates"), app="desktop"),
+    # "Updates" (corrected 2026-10-10, the parity audit): the phone HAS its own
+    # update card - net/UpdateCheck.kt, platform/UpdateChecker.kt and the
+    # "Check for new versions" row on Platform checks (ReadinessScreen.kt, item
+    # "this-app"), which is where OpenPlace.kt sends "open updates". Each app
+    # checks its own release page. `jarvis_menus.py`'s `settings.updates` is
+    # both for the same reason. `tool-updates` below really is the PC's.
+    Section("updates", ("updates", "app updates"), app="both"),
     Section("tool-updates", ("tool updates", "check for tool updates"), app="desktop"),
     Section("more-options", ("more options", "startup and logs"), app="desktop"),
     Section("start-jarvis", ("starting jarvis for you", "start jarvis automatically"),
@@ -235,18 +259,39 @@ SECTIONS: tuple = (
                        "how often jarvis does things"),
             app="both"),
     Section("email-sending", ("sending email", "email sending settings")),
-    Section("about", ("about jarvis", "about")),
+    # "About Jarvis" (corrected 2026-10-10, the parity audit): the phone HAS
+    # this card - FaqScreen.kt's `AboutCard()` at the end of Help, reached by
+    # "open about" (OpenPlace.kt) - so it is on both apps, and
+    # `jarvis_menus.py`'s `settings.about` is both for the same reason.
+    Section("about", ("about jarvis", "about"), app="both"),
     # "Hang and crash notes": inside "More options" on the desktop (its own
     # <section id="crash-notes">). The phone has no such list - its own
     # crash screen only appears after a crash - so OpenPlace.PC_ONLY says so.
     Section("crash-notes", ("crash notes", "hang and crash notes", "the crash notes"),
             app="desktop"),
+    # "What this backend supports" (corrected 2026-10-10, the parity audit):
+    # this said "desktop" while `jarvis_menus.py` said both AND the phone drew
+    # the plate - BrainScreen.kt `item(key = "capabilities")`, menu
+    # `settings.backend-supports` - which the audit's section 6.3 found. Only
+    # the capability LIST is read (the app branches on it); nothing here is a
+    # desktop-only control.
     Section("backend-supports", ("what this backend supports", "backend capabilities"),
-            app="desktop"),
+            app="both"),
     Section("watch-notify", ("smartwatch notifications", "watch notifications"),
             app="phone"),
     # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
     Section("quick-tiles", ("quick tiles", "quick settings tiles", "the quick tiles"),
+            app="phone"),
+    # "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to run at
+    # while Jarvis is on screen (jarvis-client's SettingsScreen.kt item
+    # "screen-rate"; data/ScreenRate.kt, ui/screens/ScreenRatePlate.kt).
+    # Phone-only: the rates come from that phone's own
+    # Display.getSupportedModes(), which a desktop does not have, so there is no
+    # desktop row and none is invented. Not the animal's frame rate - that lives
+    # in the face editor under "appearance-card" and is how often the animal is
+    # DRAWN; ScreenRate.kt's own doc says why the two must never be merged.
+    Section("screen-rate", ("screen refresh rate", "refresh rate", "the refresh rate",
+                            "screen rate", "the screen refresh rate"),
             app="phone"),
     # "Floating Jarvis" (2026-09-27): the phone's own Settings row
     # (SettingsScreen.kt's `item(key = "floating-avatar")` - saved on that phone
@@ -280,6 +325,16 @@ SECTIONS: tuple = (
     # same words from the PC.
     Section("handoff", ("when the phone does not answer", "the captcha hand-off",
                         "how long the hand-off stays on offer", "solve it here settings")),
+    # "When a captcha stops Jarvis" (2026-10-09): what a captcha does about the
+    # browser window it is blocking (jarvis_handoff_front.py; the owner's own
+    # decision of that day, "1 by default with the option for 2 in the settings
+    # of Jarvis"). A card on the desktop and a Settings row on the phone, both
+    # fed by the same words from the PC - the same shape as the row above, and
+    # deliberately its own id: this is a different question (does the window
+    # come forward) from that one (how long the phone may watch it).
+    Section("handoff-front", ("when a captcha stops jarvis", "the captcha window",
+                              "does the browser window come to the front",
+                              "bring the window to the front", "leave it where it is")),
     # "Show or hide menus" (2026-09-30): a card on the desktop and Settings row on the phone.
     Section("menu-visibility", ("menu visibility", "show or hide menus", "hidden menus",
                                 "the menus", "menus")),
@@ -294,10 +349,31 @@ SECTIONS: tuple = (
     Section("hud-window", ("the big hud window", "big hud window", "the hud window",
                            "hud window", "the big jarvis window", "big jarvis window"),
             app="desktop"),
-    # Spending (2026-09-30): a card on the desktop.
+    # Spending (2026-09-30): the phone draws this plate itself (BrainScreen.kt
+    # `item(key = "spending")`, menu `settings.spending`, which
+    # `contract/menu-cases.json` marks available on the phone, and
+    # OpenPlace.kt sends "open spending" there). Corrected from "desktop" to
+    # "both" on 2026-10-10 (the parity audit): only the bank-file layouts and
+    # the categories editor are the PC's (SpendingPlate.kt says "Set up on the
+    # PC"); the summaries themselves are on both.
     Section("spending", ("spending", "spending settings", "my spending", "bank files"),
-            app="desktop"),
-    # Notifications (2026-10-01): a card on the desktop.
+            app="both"),
+    # Notifications (2026-10-01): a card on the desktop ONLY, and it said
+    # "both" until 2026-10-09 (settings-coverage audit) - which was untrue.
+    # The PC's card is per kind: alarms, reminders, the briefing and the
+    # captcha hand-off each on or off, plus quiet hours and a Test button
+    # (notifications-settings.js; the toasts themselves are raised in Rust,
+    # src-tauri/src/notifications.rs, which is why the choices are pushed to
+    # it). The phone has no such screen and cannot have this one: its
+    # notification controls are Android's own, per channel (strings.xml
+    # "channel_alarm", "channel_schedule", "channel_approval",
+    # "channel_handoff" - one per kind, which is what the owner asked for on
+    # 2026-09-30: "per kind: on/off, style, Test button, quiet hours"). The
+    # phone already said so in its own words: jarvis-client ui/OpenPlace.kt
+    # lists "notifications" in PC_ONLY, so "open notifications" there answers
+    # "only in Jarvis on your PC" - while this table told the same phone the
+    # section was on both apps. Corrected here rather than left for the next
+    # reader to find; test_settings_registry.py holds the two together now.
     Section("notifications", ("notifications", "notification settings", "desktop notifications"),
             app="desktop"),
     # "Limits and how often Jarvis does things" (2026-10-08): the limits and
@@ -825,6 +901,28 @@ SETTINGS_ROWS: tuple = (
         "desktop",
         indent=8,
         has_detail=True),
+    # "Click through to what is behind" (2026-10-10, the integration
+    # evaluation, docs/INTEGRATION-EVAL-2026-10-10.md): the floating face stops
+    # taking clicks everywhere except on the animal itself. Off by default and
+    # applied at once, and it has no spoken "adjust" of its own - it is a
+    # cosmetic switch on the row below "Floating face", so it needs no entry
+    # in BOOL_SETTINGS (see that list's own note).
+    SettingRow(
+        "floating-click-through",
+        None,
+        "",
+        "floating-click-through-label",
+        "floating-click-through-detail",
+        'Click through to what is behind',
+        (
+        "Clicks on the floating face go to whatever is behind it, except on\n"
+        'the animal itself - so it can still be dragged, and the face stops\n'
+        'getting in the way of whatever is underneath. Off to start.\n'),
+        3,
+        "appearance-card",
+        "desktop",
+        indent=8,
+        has_detail=True),
     SettingRow(
         "sky-show",
         None,
@@ -833,7 +931,7 @@ SETTINGS_ROWS: tuple = (
         "sky-show-detail",
         'Show the sun and moon behind the face',
         '',
-        3,
+        4,
         "animal-options",
         "desktop",
         indent=12,
@@ -850,7 +948,7 @@ SETTINGS_ROWS: tuple = (
         'Picks quality and frame rate for this computer, and steps down\n'
         'if the face runs slow. On a capable graphics chip an animal can\n'
         'go up to Maximum.\n'),
-        4,
+        5,
         "animal-options",
         "desktop",
         indent=10,
@@ -863,7 +961,7 @@ SETTINGS_ROWS: tuple = (
         "voice-one-moment-detail",
         'Say "One moment" if I\'m kept waiting',
         '',
-        5,
+        6,
         "voice",
         "desktop",
         indent=8,
@@ -877,7 +975,7 @@ SETTINGS_ROWS: tuple = (
         "voice-heard-sound-detail",
         'Play a short sound when I finish speaking',
         '',
-        6,
+        7,
         "voice",
         "desktop",
         indent=8,
@@ -891,7 +989,7 @@ SETTINGS_ROWS: tuple = (
         "mn-humor-detail",
         'Occasional light humour in answers',
         '',
-        7,
+        8,
         "manner",
         "desktop",
         indent=10,
@@ -906,7 +1004,7 @@ SETTINGS_ROWS: tuple = (
         "coach-enabled-detail",
         'Prompt coach',
         '',
-        8,
+        9,
         "prompt-coach",
         "desktop",
         indent=10,
@@ -920,7 +1018,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Show who new emails are from',
         'The briefing lists who your newest unread emails are from (up to 5), next to how many there are. Off: the number only. Turning it on shows you an approval card first; turning it off happens at once.',
-        9,
+        10,
         "briefing-settings",
         "desktop",
         indent=10,
@@ -933,7 +1031,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Alarms and urgent alerts',
         'Alarms and urgent "tell me when" alerts ring until dismissed. They break through Windows Focus Assist so you do not miss them.',
-        10,
+        11,
         "notifications",
         "desktop",
         indent=8,
@@ -947,7 +1045,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Reminders, timers and to-dos',
         'Timers, reminders and to-do items chime once when they are due and offer Snooze.',
-        11,
+        12,
         "notifications",
         "desktop",
         indent=8,
@@ -961,7 +1059,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Morning briefing',
         'Tells you when your morning briefing is ready to read in the Brain.',
-        12,
+        13,
         "notifications",
         "desktop",
         indent=8,
@@ -975,7 +1073,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Website needs you (Solve it here)',
         'Tells you when a website or support chat pauses at a captcha or sign-in page.',
-        13,
+        14,
         "notifications",
         "desktop",
         indent=8,
@@ -989,7 +1087,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Turn on quiet hours',
         "",
-        14,
+        15,
         "notifications",
         "desktop",
         indent=8,
@@ -1006,7 +1104,7 @@ SETTINGS_ROWS: tuple = (
         'opens the Jarvis bar ready to type. Off: the button is not drawn\n'
         'there. The chat box, its Send and the microphone button are\n'
         'unchanged, and Alt+Space still opens the Jarvis bar.\n'),
-        15,
+        16,
         "hud-window",
         "desktop",
         indent=8,
@@ -1019,7 +1117,7 @@ SETTINGS_ROWS: tuple = (
         "sec-app-lock-detail",
         'App lock',
         '',
-        16,
+        17,
         "security",
         "desktop",
         indent=8,
@@ -1033,7 +1131,7 @@ SETTINGS_ROWS: tuple = (
         "sec-private-detail",
         'Windows Hello for memory lists and chat history',
         '',
-        17,
+        18,
         "security",
         "desktop",
         indent=8,
@@ -1047,7 +1145,7 @@ SETTINGS_ROWS: tuple = (
         "cv-face-detail",
         'Voice follows the face',
         '',
-        18,
+        19,
         "voices",
         "desktop",
         indent=12,
@@ -1061,7 +1159,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Make custom voices on the second graphics card',
         'A more natural copy of the voice. Turning it on shows you an approval card first; turning it off happens at once.',
-        19,
+        20,
         "voices",
         "desktop",
         indent=12,
@@ -1074,7 +1172,7 @@ SETTINGS_ROWS: tuple = (
         "ws-enabled-detail",
         'Web search',
         '',
-        20,
+        21,
         "web-search",
         "desktop",
         indent=10,
@@ -1088,7 +1186,7 @@ SETTINGS_ROWS: tuple = (
         "ws-ask-detail",
         'Ask before every web search',
         '',
-        21,
+        22,
         "web-search",
         "desktop",
         indent=10,
@@ -1102,7 +1200,7 @@ SETTINGS_ROWS: tuple = (
         "",
         '',
         "",
-        22,
+        23,
         "spending",
         "desktop",
         indent=12,
@@ -1119,7 +1217,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Turn on Picture mode (slow)',
         "",
-        23,
+        24,
         "screen-look",
         "desktop",
         indent=10,
@@ -1132,7 +1230,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis use the windowless browser (Obscura)',
         "",
-        24,
+        25,
         "browser-engine",
         "desktop",
         indent=10,
@@ -1145,7 +1243,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Let Jarvis Desktop start and stop Jarvis',
         "",
-        25,
+        26,
         "start-jarvis",
         "desktop",
         indent=10),
@@ -1157,7 +1255,7 @@ SETTINGS_ROWS: tuple = (
         "",
         'Start Jarvis Desktop when Windows starts',
         "",
-        26,
+        27,
         "more-options",
         "desktop",
         indent=10),
@@ -1290,6 +1388,79 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   "What can I change?" (the owner's decision, 2026-10-10)
+# --------------------------------------------------------------------------
+#
+# The owner asked to change every setting by talking to Jarvis. Most of the
+# machinery was already here: BOOL_SETTINGS above is what "turn off web
+# search" and ten more phrases act through, and each setting's own setter
+# decides whether it needs a card. What was missing is that Jarvis could not
+# TELL him what he may change - "what can I change?" reached the AI model and
+# came back with an invention rather than this answer.
+#
+# This list is DERIVED from the table above, never typed out again: a switch
+# added to BOOL_SETTINGS appears here by itself, and one removed stops being
+# offered. A second, hand-written list would drift from the real switches and
+# nobody would notice - the exact trap this project keeps fixing.
+#
+# Deliberately NOT promised here:
+#   * anything that would LOOSEN a rule. Those still raise their card and ask
+#     for Windows Hello on the PC; "change any setting by voice" must not
+#     become a way round the gate (rule 4).
+#   * the pick-one settings (web search provider, weather source), which have
+#     their own phrasings today ("switch to Brave for search"). Naming them
+#     here would promise a phrasing that does not match yet.
+
+#: Plain short words for what a section is about, so the answer reads like a
+#: person talking rather than the Settings screen being read out. Only the
+#: sections that can appear below need an entry.
+SECTION_PLAIN = {
+    "web-search": "the web search",
+    "asks-first": "what asks first",
+    "voice": "the voice",
+    "animals": "the animal faces",
+    "screen-look": "looking at the screen",
+    "briefing-settings": "the morning briefing",
+    "browser-engine": "the browser",
+    "phone-notify": "phone notifications",
+    "watch-notify": "watch notifications",
+    "prompt-coach": "the prompt coach",
+}
+
+
+def changeable_settings() -> dict:
+    """Everything the owner can change by talking, in plain words.
+
+    {"switches": [(name, section_plain), ...], "count": n, "words": "..."}
+    Each name is that setting's own first alias, so what is offered is exactly
+    what a phrase can actually reach.
+    """
+    rows = []
+    for b in BOOL_SETTINGS:
+        name = b.names[0] if b.names else b.key
+        where = SECTION_PLAIN.get(b.section or "", "")
+        rows.append((name, where))
+    return {"switches": rows, "count": len(rows), "words": changeable_words(rows)}
+
+
+def changeable_words(rows=None) -> str:
+    """The answer to "what can I change?", as one thing to say.
+
+    Written as a spoken sentence - semicolons between items, no bullet list
+    and no markdown - because this reply may be read aloud.
+    """
+    if rows is None:
+        rows = changeable_settings()["switches"]
+    if not rows:
+        return ("Nothing can be changed by talking on this PC yet. Everything "
+                "lives in Settings in the app.")
+    names = [f"{name} ({where})" if where else name for name, where in rows]
+    return ("You can change these by asking: " + "; ".join(names) +
+            ". Anything that loosens a rule still shows you a card first, and "
+            "say \"undo\" in the same chat if you change your mind.")
 
 
 # --------------------------------------------------------------------------

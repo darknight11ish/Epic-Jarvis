@@ -217,6 +217,26 @@ class StandInSherpa:
     OfflineTtsZipvoiceModelConfig = object
 
 
+class NoVoiceModel:
+    """A PC with NO voice-ID model installed: what jarvis_voice.EcapaEmbedder()
+    does there - raise from `__init__`, so jarvis_voice_enroll._embedder() falls
+    back to the basic spectral check and a training is refused with
+    jarvis_voice.NO_MODEL_REASON.
+
+    The `models="none"` world below used to reach for the real class, so on a PC
+    with the speaker model installed the "needs_model" case came back 200 with a
+    held round instead of 409 - a fixture that changed from machine to machine,
+    and (measured 2026-10-10) the reason backend/test_voice_contract.py was red
+    only on the owner's PC. A stand-in that merely hides the model FILE would
+    not be enough: with speechbrain and torch installed, EcapaEmbedder()
+    succeeds with no file at all. Raising is the branch jarvis_voice's own
+    docstring requires."""
+
+    def __init__(self, *a, **k):
+        raise ModuleNotFoundError(
+            "no voice-ID model is installed (this run's stand-in)")
+
+
 class World:
     """A temporary config folder for every voice module, the stand-in
     models, and the jarvis_voices hooks test_voices.py replaces.
@@ -245,6 +265,17 @@ class World:
             mock.patch.object(V, "PROFILE_PATH", profile),
             mock.patch.object(W, "model_dir", return_value=d / "voice-models" / "wakeword"),
             mock.patch.object(T, "model_path", return_value=d / "voice-models" / "turn" / "x.onnx"),
+            # WHERE THE SPEAKER MODELS ARE, pinned like every other folder
+            # here: jarvis_voice.status() reports the stronger models from
+            # these paths and jarvis_voice_flow's _anything_installed() decides
+            # from them whether to warm anything at all. Left to the machine,
+            # the fixture's "installed": false and "warm": "waiting" became
+            # this PC's answers instead - "warming" with REAL millisecond
+            # steps, which no fixture can hold (measured 2026-10-10).
+            mock.patch.object(V, "speaker_model_path",
+                              lambda: d / "voice-models" / "speaker" / "model.onnx"),
+            mock.patch.object(V, "strong_model_path",
+                              lambda: d / "voice-models" / "speaker" / "strong.onnx"),
             mock.patch.object(VO, "_config_dir", return_value=d),
             mock.patch.object(VO, "_cfg", side_effect=lambda k, default=None: default),
             mock.patch.object(VO, "_audit", side_effect=lambda e, det: None),
@@ -256,6 +287,10 @@ class World:
         ]
         if self.models in ("both", "small"):
             self.patches.append(mock.patch.object(V, "EcapaEmbedder", SmallModel))
+        else:
+            # Nothing installed, in full: the small model raises, and there is
+            # no stronger one.
+            self.patches.append(mock.patch.object(V, "EcapaEmbedder", NoVoiceModel))
         strong = StrongModel() if self.models == "both" else None
         self.patches.append(mock.patch.object(V, "strong_embedder", lambda *a: strong))
         for p in self.patches:

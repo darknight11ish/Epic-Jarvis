@@ -163,6 +163,124 @@ def t_every_patch_parses() -> None:
           "; ".join(bad_halves[:4]) if bad_halves else None)
 
 
+def crlf_on_disk(pairs) -> list:
+    """[(name, path)] -> the names whose bytes carry a CRLF.
+
+    The real check, factored out so the control below exercises this function
+    and not a restatement of it."""
+    return [n for n, p in pairs if p.is_file() and b"\r\n" in p.read_bytes()]
+
+
+def patch_pairs() -> list:
+    """[(name, path)] for every patch git has to read: the $PATCHES list, then
+    the rebuilt halves, which are checked alongside it."""
+    out = [(n, PDIR / n) for n in listed_patches()]
+    out += [(f"rebuilt-patches/{p.name}", p) for p in rebuilt_halves()]
+    return out
+
+
+def t_no_patch_is_stored_with_crlf_endings() -> None:
+    """A patch whose own bytes are CRLF cannot match an LF target file.
+
+    WHY THIS IS A DEFECT AND NOT A STYLE CHOICE. `.gitattributes` marks
+    `*.patch -text` - no conversion, ever - and its own comment gives the
+    reason: a unified diff's context lines have to match the target byte for
+    byte, and if a patch's endings are rewritten then "every hunk would carry
+    CRLF context against an LF source and `git apply` would refuse the lot -
+    and the error it prints ("patch does not apply") says nothing about line
+    endings, so the natural conclusion is that the patch is wrong rather than
+    that git edited it in transit."
+
+    MEASURED, 2026-10-10, against a copy of the owner's live `jarvis_hud.py`:
+
+        git apply --check backend/prompt-coach.patch            -> exit 1
+            error: patch failed: jarvis_hud.py:2457
+        git apply --reverse --check backend/prompt-coach.patch  -> exit 1
+            error: patch failed: jarvis_hud.py:2457
+        the same text with LF endings instead:
+        git apply --reverse --check <the LF copy>               -> exit 0
+
+    The patch was applied all along and its anchor was correct; only its
+    endings were wrong. THAT is the trap, and it is worth a test of its own:
+    both directions failing reads as "the anchor has drifted", so the reader
+    goes off to re-anchor a patch that needed no re-anchoring. It happened -
+    `docs/PATCH-ANCHOR-FRAGILITY-2026-10-09.md` has the third report of it.
+
+    `prompt-coach.patch` was the only patch of 135 in that state, and it
+    arrived on 2026-10-08 with the commit that re-anchored it (45175c86): a
+    Windows editor wrote the file and `-text` meant nothing normalised it.
+
+    The installer itself survives this. It normalises every patch to LF into a
+    temp copy before applying it (`Copy-AsLf`), and the manifest hashes that
+    same LF copy, so no run of `apply-patches.ps1` fails on it and nothing it
+    records changes. Two readers do not survive it: a hand `git apply`, which
+    `backend/README.md` and `docs/INSTALL.md` both still tell a person to use,
+    and anyone who sees "will not apply" and goes hunting for a stale anchor.
+
+    `test_patch_history.py` already holds this rule for the ARCHIVED versions
+    ("every earlier version is stored with LF endings"). Nothing held it for
+    the live ones. This is that missing half.
+    """
+    pairs = patch_pairs()
+    bad = crlf_on_disk(pairs)
+    check("no patch is stored with CRLF endings (a CRLF patch cannot match an LF file)",
+          not bad, "; ".join(bad[:4]) if bad else None)
+
+    # The same question, asked of git, about the INDEX - which is what a clone
+    # actually receives. Asked rather than worked out here, because a working
+    # tree can differ from its blob (`core.autocrlf`), and only git's answer
+    # says which bytes the owner's `git clone` lands.
+    inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"],
+                            cwd=str(REPO), capture_output=True, text=True)
+    if inside.stdout.strip() != "true":
+        # Not a checkout (a staged tree, as test_installed_stand_in.py builds):
+        # the on-disk check above is all there is to ask, and saying so beats a
+        # green line that proved nothing.
+        print("note  not a git checkout, so the committed blob cannot be asked"
+              " - the on-disk bytes above are the whole check here")
+        return
+    rel = []
+    for _n, p in pairs:
+        if not p.is_file():
+            continue
+        try:
+            rel.append(p.relative_to(REPO).as_posix())
+        except ValueError:
+            pass
+    r = subprocess.run(["git", "ls-files", "--eol", "--"] + rel,
+                       cwd=str(REPO), capture_output=True, text=True)
+    indexed, wrong = 0, []
+    for line in (r.stdout or "").splitlines():
+        head, _tab, path = line.partition("\t")
+        if not path:
+            continue
+        side = next((f.split("/", 1)[1] for f in head.split() if f.startswith("i/")), "")
+        if not side:
+            continue
+        indexed += 1
+        if side != "lf":
+            wrong.append(f"{path} (i/{side})")
+    check("git was asked about every patch's committed blob", indexed >= len(rel),
+          f"asked about {indexed} of {len(rel)}")
+    check("...and every committed blob is LF, not only the working tree",
+          not wrong, "; ".join(wrong[:4]) if wrong else None)
+
+
+def t_the_endings_check_is_sensitive_both_directions() -> None:
+    """The control that makes the endings check above mean something: the same
+    hunk text, differing only in its endings, passes once and is named once."""
+    body = b"--- a/x.py\n+++ b/x.py\n@@ -1,2 +1,3 @@\n a\n+b\n c\n"
+    with tempfile.TemporaryDirectory() as tmp:
+        good = Path(tmp) / "good.patch"
+        bad = Path(tmp) / "bad.patch"
+        good.write_bytes(body)
+        bad.write_bytes(body.replace(b"\n", b"\r\n"))
+        check("CONTROL: an LF patch passes the endings check",
+              crlf_on_disk([("good.patch", good)]) == [])
+        check("CONTROL: the same hunk with CRLF endings IS named",
+              crlf_on_disk([("bad.patch", bad)]) == ["bad.patch"])
+
+
 def t_the_check_is_sensitive_both_directions() -> None:
     """The control that makes the rest mean something.
 
@@ -198,6 +316,8 @@ def t_the_real_list_is_the_size_we_think() -> None:
 def main() -> int:
     for fn in (t_the_list_and_the_folder_agree,
                t_every_patch_parses,
+               t_no_patch_is_stored_with_crlf_endings,
+               t_the_endings_check_is_sensitive_both_directions,
                t_the_check_is_sensitive_both_directions,
                t_the_real_list_is_the_size_we_think):
         print(f"\n--- {fn.__name__} ---")

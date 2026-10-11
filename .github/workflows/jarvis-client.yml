@@ -293,6 +293,31 @@ jobs:
           done
           echo "::endgroup::"
 
+      # Every native library in the APK, against Android 15's 16 KB page size.
+      #
+      # Android 15 lets a device run with 16 KB memory pages, and there are two
+      # independent ways a .so breaks there. Its PT_LOAD segments can be only
+      # 4 KB aligned, so dlopen fails - and for this app that is the "hey
+      # Jarvis" spotter, because libonnxruntime.so and libonnxruntime4j_jni.so
+      # are prebuilt by Microsoft and shipped inside the onnxruntime-android
+      # AAR. Or its GNU_RELRO can end mid-page with writable memory inside the
+      # page the linker rounds up over, which faults on the first write there.
+      # Nothing in this repository can fix either one by itself.
+      #
+      # It passes today (measured 2026-10-09: all ten packaged libraries have
+      # p_align 16384, and no RELRO round-up window holds anything writable).
+      # This step exists so a BUMP cannot quietly break it - build.gradle.kts's
+      # own comment on the 1.22.0 pin invites one ("not to be bumped without
+      # unzipping the new AAR first"), and that is exactly the change that
+      # would ship a 4 KB library to a phone that cannot load it. The failure
+      # it prevents is invisible on every 4 KB device, including the emulator
+      # this workflow smokes on.
+      #
+      # Read-only: it opens the APK and parses ELF headers in Python. It does
+      # not touch the signing key or the artifact.
+      - name: Check the native libraries load on 16 KB page devices
+        run: python3 ../tools/check_apk_16kb.py app/build/outputs/apk/release/app-release.apk
+
       # The certificate inside the APK, compared with the certificate in the
       # key CI restored above. If they differ, the APK was signed with
       # something else (a throwaway key the build tools made, say) and must

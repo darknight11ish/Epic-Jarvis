@@ -238,16 +238,22 @@ internal fun ChatbotSection(
                     }
                     Gap(6)
                     val s = if (showCompare) null else v.session
-                    if (showCompare && c != null) {
+                    // `showCompare` is `c != null && ...`, so the compiler knew
+                    // the old `if (showCompare && c != null)` was always true and
+                    // said so on every build - a real warning buried in a noise
+                    // (N4, docs/ANDROID-AUDIT-2-2026-10-09.md). Bind the
+                    // non-null comparison once instead of asking twice.
+                    val shownCompare = if (showCompare) c else null
+                    if (shownCompare != null) {
                         ComparePart(
-                            c = c, canAct = canAct, busy = busy, privateHidden = privateHidden,
+                            c = shownCompare, canAct = canAct, busy = busy, privateHidden = privateHidden,
                             onOpenHistory = onOpenHistory,
                             onAction = { action ->
                                 perform {
                                     when (action) {
                                         "pause" -> JarvisRuntime.chatbotPause()
                                         "resume" -> JarvisRuntime.chatbotResume()
-                                        else -> JarvisRuntime.chatbotCompareStop(c.id)
+                                        else -> JarvisRuntime.chatbotCompareStop(shownCompare.id)
                                     }
                                 }
                             },

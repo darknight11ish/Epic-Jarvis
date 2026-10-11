@@ -33,11 +33,23 @@ Runs anywhere; no Home Assistant, no model and no network. What it proves:
    loosening - the PC only, one card (enable_reading_tool) plus Windows
    Hello to turn ON; OFF is instant, from either app - and writes ONE line
    of the settings file the same careful way.
+10. Neither card may NAME a file jarvis_gate.py protects (2026-10-10, after
+   two cards that could never be approved by anyone). Both cards ARE the
+   `prompt` `jarvis_gate.check()` is handed, and the gate's first rule -
+   before the tier table, before any card is raised - refuses a prompt that
+   names a file in its own `_PROTECTED` list at tier "never". The loosening
+   card and the reading-tool card both said
+   "(jarvis-framework.toml)", so `gate.refused_protected` fired 21 times for
+   each of them in the owner's audit log and NO card was ever shown. Both
+   are held here against the gate's own `_PROTECTED` list, read out of
+   `jarvis-backend/jarvis_gate.py` with `ast`.
 """
 from __future__ import annotations
 
+import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -118,6 +130,20 @@ def t_the_page_lists_every_action():
           and rows["fixed:lights"]["says"] == AF.SAYS["ask"])
     check("plain repeats: 'Does it without asking' (2026-09-26)",
           rows["fixed:repeats"]["says"] == "Does it without asking")
+    # The Reject-click row (the owner's decision of 2026-10-10; entry 003 of
+    # docs/RULE-FLEXIBILITY.md, whose step 3 asks for it here). It is the third
+    # step of a relaxation that HAS no gate action of its own - a "no" is the
+    # decision - so this row is the only place on the page the owner can find
+    # it, and its words must not claim Jarvis does it without asking.
+    check("the Reject-click row is on the page, worded as a guess",
+          rows["fixed:playbook_rejection"]["title"] == "Learn a rule from a Reject click"
+          and rows["fixed:playbook_rejection"]["says"]
+          == "Writes a guessed rule for you to Keep or Discard",
+          rows.get("fixed:playbook_rejection"))
+    check("... and its note says nothing is applied without your Keep",
+          "Keep" in rows["fixed:playbook_rejection"]["note"]
+          and "never a saved fact" in rows["fixed:playbook_rejection"]["note"],
+          rows["fixed:playbook_rejection"]["note"])
     check("the wiki says why it cannot be loosened", rows["wiki_update"]["note"] == AF.NOTE_WIKI)
     check("from the phone, a switch cannot loosen",
           all(r["switch"]["can_loosen"] is False for r in rows.values() if r.get("switch")))
@@ -936,6 +962,224 @@ def t_both_apps_read_the_current_contract():
                        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
     check("asks-first-cases.json (desktop and phone) is what the backend says today "
           "(python3 tools/gen_asks_first_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+
+
+def t_the_shared_note_does_not_name_the_wrong_place():
+    """THE NOTE UNDER A ROW MAY NOT SAY "not in the app" ABOUT A ROW AN APP
+    CHANGES (2026-10-09).
+
+    `NOTE_FILE` used to read "This can only be changed in your PC's settings
+    file (jarvis-framework.toml), not in the app." It sits under every row that
+    has no "Ask me first" switch - and the page shows it under rows that ARE
+    changed from an app, each with ONE approval card: raising one of the limits
+    (`raise_a_limit`), raising the interruption budget
+    (`raise_attention_budget`), and lowering the voice check's bar
+    (`lower_the_voice_check_bar`, whose loosening is the way DOWN). So the
+    sentence named the wrong place for exactly the changes the owner makes from
+    a Settings screen.
+
+    This is the check that keeps it honest, and it is deliberately about the
+    PROMISE rather than about the sentence: any note under a loosening row on
+    the page must not tell the owner that no app can change it. Writing the old
+    sentence back fails it.
+    """
+    page = AF.view(here=True)
+    #: The actions on this page that some app screen turns into one approval
+    #: card. Read from the page's own rows: each of these is named by a row, and
+    #: the card each raises is the app's own control.
+    card_actions = {"raise_a_limit", "raise_attention_budget", "lower_the_voice_check_bar"}
+    seen = {}
+    for group in page["groups"]:
+        for row in group.get("rows") or []:
+            if not isinstance(row, dict):
+                continue
+            key = row.get("action") or row.get("id")
+            if key in card_actions:
+                seen[key] = row
+    check("the page names every action an app raises a loosening card for",
+          card_actions <= set(seen), sorted(seen))
+    for action in sorted(seen):
+        note = str(seen[action].get("note") or "")
+        check(f"{action}: the page names it", bool(note), seen[action])
+        # Both shapes of the false claim, not just the first one written down:
+        # an earlier attempt at this fix ended "by hand - never from an app",
+        # which is the same promise with "never" moved.
+        check(f"{action}: ... and does not tell the owner an app cannot change it",
+              "not in the app" not in note.lower()
+              and "never from an app" not in note.lower(), note)
+    # And the shared note itself, said plainly: every row that carries it has no
+    # switch, so the one thing the note may claim is about the switch.
+    check("the shared note no longer points only at the settings file",
+          "not in the app" not in AF.NOTE_FILE.lower()
+          and "never from an app" not in AF.NOTE_FILE.lower(), AF.NOTE_FILE)
+    check("... and says what IS true of every row it sits under - there is no switch",
+          "no switch" in AF.NOTE_FILE.lower(), AF.NOTE_FILE)
+
+
+# ============================================ 10. the two cards the gate refused
+
+def _published_gate_names() -> list:
+    """jarvis_gate.py's own `_PROTECTED` list, read out of the copy of the
+    owner's gate published in `jarvis-backend/`.
+
+    Read with `ast`, never by importing it: the file is the owner's live
+    module and importing it here would open its approvals database and read
+    his real settings. A check about a list of names needs the list, not the
+    module - and an empty answer means the list could not be read, which
+    every check that uses it says out loud rather than passing quietly."""
+    path = REPO / "jarvis-backend" / "jarvis_gate.py"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "_PROTECTED" for t in node.targets):
+            try:
+                return [str(e.value) for e in node.value.elts]
+            except AttributeError:
+                return []
+    return []
+
+
+def _protected_hits(text: str, names: list) -> list:
+    """The names from `names` that `text` contains, the way the gate looks for
+    them: `_PROTECTED_RE` is those names `re.escape`d and joined with "|",
+    searched case-insensitively over the prompt AND the detail beside it."""
+    return sorted(n for n in names if re.search(re.escape(n), str(text), re.I))
+
+
+def t_the_gate_would_raise_both_cards_again():
+    """THE BUG, 2026-10-10: two of the owner's cards could never be approved
+    by anyone.
+
+    `jarvis_gate.check()` scans the `prompt` it is handed - and for a card
+    raised by a route, the prompt IS that route's card text - against its own
+    `_PROTECTED` filename list, and it does that BEFORE the tier branches.
+    So a card whose own wording names a protected file is refused at tier
+    "never" before any card is raised: no card, no prompt, no Windows Hello,
+    for anybody, ever.
+
+    MEASURED IN THE OWNER'S OWN AUDIT LOG (counted from the seven logfiles
+    that hold one, 2026-10-03 to 2026-10-10): `gate.refused_protected`
+    appears 21 times for `enable_reading_tool` and 21 times for
+    `loosen_what_asks_first`, every one of them naming a "<redacted 21
+    chars>" file with its own `{"outcome": "refused"}` line beside it.
+    Twenty-one characters is "jarvis-framework.toml"; the same log's
+    `restore_backup` entries are "<redacted 13 chars>", and thirteen is
+    "jarvis_hud.py", which was the same bug in `jarvis_backup.restore_card()`
+    (fixed on branch fix/restore-route-tells-the-truth).
+
+    Both cards said "(jarvis-framework.toml)". They now say "your settings
+    file on this PC", which means the same thing and is plainer. This check
+    holds BOTH the card text and the `detail` handed to the gate beside it
+    against the gate's own list - so writing either name back fails here
+    instead of silently killing the card again."""
+    names = _published_gate_names()
+    check("the published jarvis_gate.py is here and its _PROTECTED list could be read",
+          bool(names), "jarvis-backend/jarvis_gate.py")
+    if not names:
+        return
+    check("... and it still names the file both cards used to name, so this check "
+          "would catch it (a list that lost that entry would pass for the wrong reason)",
+          "jarvis-framework.toml" in names, names)
+
+    # Call each builder the way the route calls it, and keep what the gate
+    # would be handed: the card as the prompt, and the detail beside it.
+    for label, card, setting in (("the loosening card", AF.loosen_card("calendar_read"),
+                                  "calendar_read"),
+                                 ("the reading-tool card", AF.tool_enable_card("calendar_read"),
+                                  "calendar_read")):
+        detail = {"text": card, "what": "x", "setting": setting, "to": "auto",
+                  "leaves_this_pc": False}
+        check(f"{label} names no file jarvis_gate.py protects (naming one refuses the "
+              f"card at tier 'never', so nobody is ever asked)",
+              _protected_hits(card, names) == [], _protected_hits(card, names))
+        check(f"... nor does the detail handed to the gate beside {label}",
+              _protected_hits(json.dumps(detail), names) == [],
+              _protected_hits(json.dumps(detail), names))
+
+    # The rewording must not have cost the card its meaning: everything the
+    # owner is deciding by is still on it.
+    card = AF.loosen_card("calendar_read")
+    check("the loosening card still shows the exact line the owner is agreeing to",
+          'calendar_read = "auto"' in card, card)
+    check("... still says it is only your settings file that changes",
+          "your settings file on this PC" in card and "Nothing else in it changes" in card, card)
+    check("... and still names Windows Hello and what 'no' means",
+          "Windows Hello" in card and "If you say no: nothing changes" in card, card)
+    card = AF.tool_enable_card("calendar_read")
+    check("the reading-tool card still shows the exact line the owner is agreeing to",
+          '"calendar_read" is added to [tools].enabled' in card, card)
+    check("... still says it is only your settings file that changes",
+          "your settings file on this PC" in card and "Nothing else in it changes" in card, card)
+    check("... and still names Windows Hello and what 'no' means",
+          "Windows Hello" in card and "If you say no: nothing changes" in card, card)
+
+
+def _recording_request(body, *, tiers, here, tools=None):
+    """Run a route with a gate that records what it was handed, exactly as
+    the route would hand it to the real gate."""
+    seen = {}
+    AF._reset_for_tests()
+
+    def recording_gate(action, detail, prompt):
+        seen.update(action=action, detail=detail, prompt=prompt)
+        return Verdict(True, "ask", "approved")
+
+    keep = AF.tools_enabled_set
+    if tools is not None:
+        AF.tools_enabled_set = tools.enabled
+    try:
+        if tools is None:
+            return AF.request_tier(body, here=here, tier_of=tiers, write=tiers.write,
+                                   gate=recording_gate, spawn=lambda fn: fn(),
+                                   armed=lambda: True), seen
+        return AF.request_tool_enable(body, here=here, tier_of=tiers, write=tools.write,
+                                      gate=recording_gate, spawn=lambda fn: fn(),
+                                      armed=lambda: True), seen
+    finally:
+        AF.tools_enabled_set = keep
+
+
+def t_both_routes_raise_a_card_the_gate_can_actually_show():
+    """The same bug seen from the ROUTE, not from the builder: what the route
+    actually hands `jarvis_gate.check()` is the card text, and the gate reads
+    that prompt for its `_PROTECTED` names before it raises anything.
+
+    These two routes are the only way either setting can be changed from an
+    app (`jarvis_owner_check.PC_ONLY_ACTIONS` holds both action names), so if
+    the card is refused at tier "never" the setting is unreachable for the
+    owner from anywhere - which is what the 42 audit lines describe."""
+    names = _published_gate_names()
+    check("the published jarvis_gate.py's _PROTECTED list could be read", bool(names))
+    if not names:
+        return
+
+    tiers = Tiers(calendar_read="ask")
+    (code, out), seen = _recording_request(
+        {"action": "calendar_read", "ask": False}, tiers=tiers, here=True)
+    check("the loosening route reached the gate with a card (not refused earlier)",
+          code == 202 and seen.get("action") == AF.LOOSEN_ACTION, (code, out, seen.get("action")))
+    check("... and the prompt the gate is handed names no protected file",
+          _protected_hits(seen.get("prompt", ""), names) == [],
+          _protected_hits(seen.get("prompt", ""), names))
+    check("... nor does the detail handed beside it",
+          _protected_hits(json.dumps(seen.get("detail", {})), names) == [],
+          _protected_hits(json.dumps(seen.get("detail", {})), names))
+
+    tools = ToolsFile()
+    (code, out), seen = _recording_request(
+        {"tool": "calendar_read", "enabled": True}, tiers=Tiers(), here=True, tools=tools)
+    check("the reading-tool route reached the gate with a card (not refused earlier)",
+          code == 202 and seen.get("action") == AF.ENABLE_TOOL_ACTION,
+          (code, out, seen.get("action")))
+    check("... and the prompt the gate is handed names no protected file",
+          _protected_hits(seen.get("prompt", ""), names) == [],
+          _protected_hits(seen.get("prompt", ""), names))
+    check("... nor does the detail handed beside it",
+          _protected_hits(json.dumps(seen.get("detail", {})), names) == [],
+          _protected_hits(json.dumps(seen.get("detail", {})), names))
 
 
 if __name__ == "__main__":

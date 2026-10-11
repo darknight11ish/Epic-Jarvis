@@ -17,6 +17,21 @@ import traceback
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+# ...and the ten modules this repository ships WHOLE, from backend/rebuilt/.
+# On the owner's PC apply-patches.ps1 copies each one BESIDE jarvis_hud.py, and
+# run_suites.py flattens the same ten into the staged backend it hands every
+# suite - so in both of those the whole backend sits in one folder, which is
+# what CI's Ubuntu job runs against. Run this file directly instead and they are
+# the one thing missing: `import jarvis_framework` fails inside
+# jarvis_inbox_tidy (its own `try:` makes `fw` None), `tier_of()` then answers
+# its fail-closed default "ask" for EVERY action, and tidy_inbox refuses at the
+# email_read pre-gate before the tier check these tests drive is reached - 5
+# failures that say nothing about the product ("tidy_inbox at auto: the model is
+# told why" x3, and two `at tier ask ... runs`). Flattened in here, so that
+# `python backend/test_agent.py` measures the shipped tiers rather than that
+# default. Seen through `python backend/run_suites.py test_agent.py`, which
+# stages the backend this way, the same suite is 202 passed, 0 failed.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "rebuilt"))
 # On a real install (JARVIS_BACKEND set), the backend's own copy must be
 # there and be this one - see _where.require_shipped.
 from _where import require_shipped  # noqa: E402
@@ -477,6 +492,43 @@ def _valid_args(tname):
     return build(AG.TOOLS[tname].parameters)
 
 
+def t_this_run_can_read_the_shipped_tier_table():
+    """The tier loop below only means something when the tier table is
+    READABLE in this run.
+
+    `jarvis_inbox_tidy` imports jarvis_framework inside its own `try:` and
+    keeps going without it (`fw = None`); `tier_of()` then answers its
+    fail-closed default "ask" for EVERY action. With the ten modules this
+    repository ships whole (backend/rebuilt/) missing from sys.path, tidy_inbox
+    therefore refuses at the email_read pre-gate - "reading your email asks
+    first on this PC" - before the tier check that loop is driving is ever
+    reached, and five checks fail on the run mode alone rather than on
+    anything the product does. Pinned here, against the shipped toml's own
+    line, so a missing sys.path entry is one plain failure instead of five
+    confusing ones."""
+    import jarvis_inbox_tidy as tidy
+    check("jarvis_inbox_tidy can read jarvis_framework in this run",
+          tidy.fw is not None,
+          "fw is None: the ten shipped modules in backend/rebuilt/ are not on "
+          "sys.path, so every action's tier reads the fail-closed default 'ask'")
+    if tidy.fw is None:
+        return
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
+    cfg = tomllib.loads((Path(__file__).resolve().parent / "rebuilt"
+                         / "jarvis-framework.toml").read_text(encoding="utf-8"))
+    want = cfg["autonomy"]["tiers"]["email_read"]
+    got = tidy.tier_of("email_read")
+    check("...and email_read's tier is the shipped file's own line",
+          got == want, f"read {got!r}, the shipped jarvis-framework.toml says {want!r}")
+    # The premise the tidy_inbox cases rest on: looking at the inbox needs no
+    # card of its own, so tidying can be offered (tier_problem/read_problem).
+    check("...which lets Jarvis look at the inbox without a card (auto/notify)",
+          want in ("auto", "notify"), want)
+
+
 def t_every_outbound_tool_is_refused_unless_a_person_approved():
     """ARCHITECTURE §3: `allowed` is not "a human decided". For every tool in
     NEEDS_A_PERSON, a verdict the gate would give at tier auto or notify
@@ -535,6 +587,32 @@ def t_every_outbound_tool_is_refused_unless_a_person_approved():
                 said = calls[1]["messages"][-1]["content"]
                 check(f"{tname} at {tier}: the model is told why, and which line to change",
                       "without asking anyone" in said and action in said, said)
+
+
+def t_a_tool_let_through_without_asking_says_plain_words():
+    """2026-10-10. A tool that must ask was allowed by the gate at a tier that
+    is not "ask" - so nobody was asked, and it must not run. What the model is
+    handed back (and what it can quote to the owner) is now plain words: what
+    happened, and the one thing to do. The tier, the gate's own action and the
+    setting to change are kept in the SAME tool result, under `gate`.
+
+    The old words were `"... but the approval gate let it through at tier
+    'auto' without asking anyone. Nothing was run. To use it, set
+    run_shell_on_host to "ask" in jarvis-framework.toml's [autonomy.tiers]."` -
+    every check below fails on them: the tier was in the sentence a person
+    reads, and there was no `gate` at all."""
+    not_a_person = _GateVerdict(True, "auto", "run_shell_on_host", "tier is auto", "auto")
+    executed, _gate_calls, said = _one_call_turn("shell_exec", "  ls", lambda *a: not_a_person)
+    check("nobody asked: it did not run", executed == [], repr(executed))
+    told = json.loads(said)
+    error, gate = str(told.get("error", "")), str(told.get("gate", ""))
+    check("the words a person reads name no tier", "tier" not in error, error)
+    check("... and say plainly that nothing ran", "nothing was run" in error, error)
+    check("... and name the file to put right", "jarvis-framework.toml" in error, error)
+    check("... and keep the section name a programmer reads out of them",
+          "[autonomy.tiers]" not in error, error)
+    check("the diagnosis keeps the tier, the action and the setting",
+          "auto" in gate and "run_shell_on_host" in gate and "[autonomy.tiers]" in gate, gate)
 
 
 def _one_call_turn(tname, plan_text, gate):
@@ -1166,7 +1244,9 @@ if __name__ == "__main__":
                t_tool_content_never_slices_a_json_string_mid_structure,
                t_every_tool_resolves_to_a_real_jarvis_gate_action,
                t_github_search_resolves_to_an_auto_tier_in_the_shipped_config,
+               t_this_run_can_read_the_shipped_tier_table,
                t_every_outbound_tool_is_refused_unless_a_person_approved,
+               t_a_tool_let_through_without_asking_says_plain_words,
                t_every_outbound_gate_action_is_covered,
                t_a_plan_too_long_for_its_card_is_refused_before_anyone_is_asked,
                t_a_long_note_at_auto_is_not_refused_for_its_length,

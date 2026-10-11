@@ -283,7 +283,18 @@ class GoalsTest {
     fun theSectionIsOnBrainBesideComingUpAndNeverBuildsItsOwnApprovalFlow() {
         val main = "jarvis-client/app/src/main/java/com/jarvis/client"
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
-        assertTrue(brain.indexOf("item(key = \"coming-up\")") in 0 until brain.indexOf("item(key = \"goals\")"))
+        // "Goals" sits after "Coming up" on the screen. Read as the plate's NAME
+        // rather than as the whole `item(key = ...)` line: since 2026-10-10
+        // (BrainSections.kt) every plate is drawn through `plate("...")` - the
+        // item's key carries the plates' namespace, `brain-plate:<name>` - so the
+        // exact `item(key = "goals")` this used to look for is no longer a line of
+        // its own, and `indexOf` returned -1. Coming up is still drawn above
+        // Goals, which is the thing this test is about; the order is unchanged.
+        val comingUp = brain.indexOf("plate(\"coming-up\")")
+        val goals = brain.indexOf("plate(\"goals\")")
+        assertTrue("Coming up is on Brain", comingUp >= 0)
+        assertTrue("Goals is on Brain", goals >= 0)
+        assertTrue("Goals is below Coming up", comingUp < goals)
         assertTrue(brain.contains("GoalsSection("))
         val plate = repoFile("$main/ui/screens/GoalsPlate.kt").readText()
         // Accept and Stop tracking call JarvisRuntime directly - there is no

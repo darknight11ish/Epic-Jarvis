@@ -425,9 +425,10 @@ def temporary_body(body) -> bool:
 # --------------------------------------------------------------------------
 #
 # "remember" then a colon, comma or dash, at the very start. Deliberately NOT
-# "remember this:", "remember that", or "remember when": jarvis_gate writes
-# "Remember this: I do not want Jarvis to ..." itself when you turn an action
-# down, and "remember when we went to Porto" is conversation, not a request.
+# "remember this:", "remember that", or "remember when": the gate's denial
+# proposal used to open "Remember this: ..." when you turned an action down
+# (since 2026-10-10 it opens "Jarvis noticed a \"no\" ..." and says it is a
+# guess), and "remember when we went to Porto" is conversation, not a request.
 # The gate's text never reaches this code anyway - it goes straight to
 # propose() - but the pattern does not match it either, on purpose.
 #
@@ -1410,9 +1411,12 @@ def note_said_again(proposed, turns, store=None) -> int:
 # no model, nothing on the graphics card. Written fresh; OpenJarvis's scanner
 # was read for the idea only.
 #
-# jarvis_gate's own "Remember this: I do not want Jarvis to <action> without
-# asking me first" - the card a denial raises - is tested NOT to trip this:
-# asking MORE often is not the danger.
+# jarvis_gate's own guessed-rule proposal - "Jarvis noticed a \"no\" ... This is
+# Jarvis's GUESS, marked as a guess: ... No reason was given ... - a guess for
+# the owner to keep or discard" - is tested NOT to trip this: asking MORE often
+# is not the danger. (Before 2026-10-10 it read "Remember this: I do not want
+# Jarvis to <action> without asking me first"; that claim was the owner's, and
+# this module's scanner had spared it for the same reason.)
 
 _EMAIL = r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"
 _URL = r"(?:https?://|www\.)\S+"
@@ -1477,8 +1481,10 @@ def injection_flags(text) -> list[dict]:
     for code, why, rx in _FLAG_RULES:
         if code == "less_oversight" and re.search(
                 r"\b(?:do\s+not|don'?t|never)\s+want\b.{0,120}\bwithout\s+asking\b", text, re.I | re.S):
-            # "I do not want Jarvis to X without asking me first" asks for
-            # MORE oversight, not less - the gate-denial card's own wording.
+            # "I do not want Jarvis to X without asking me first" asks for MORE
+            # oversight, not less - a shape the owner himself may type, and the
+            # gate's denial proposal used to write it. Kept, and tested, so the
+            # scanner still spares it wherever a person writes it.
             continue
         if rx.search(text):
             out.append({"code": code, "why": why})
@@ -1488,6 +1494,19 @@ def injection_flags(text) -> list[dict]:
 #: The `source` of feedback.patch's "retire this?" card (jarvis_extract's
 #: RETIRE_SOURCE). Spelled out here so this module does not need that patch.
 RETIRE_CARD_SOURCE = "feedback_retire"
+
+#: The `source` jarvis_gate's denial proposal carries ("gate_denial"). A Reject
+#: click carries none of the owner's words - jarvis_hud.py sends only {id, by}
+#: and jarvis_gate.decide NULLs prompt and detail - so anything learned from one
+#: is Jarvis's guess, and the review card has to say so. Spelled out here for
+#: the same reason RETIRE_CARD_SOURCE is: no patch of this module's own.
+GUESS_SOURCE = "gate_denial"
+#: Why a guessed card stayed a card, in the PC's own words. It goes in the same
+#: `auto_reason` line both apps already show under a review card, so the marking
+#: is visible wherever the queue is read - the Brain window on the PC and the
+#: phone's Memory tab alike - and not only in this backend.
+GUESS_REASON = ("Jarvis's guess, not something you said: made from an action you turned "
+                "down, with no reason given and none made up")
 
 
 def annotate(rows: list) -> list:
@@ -1514,6 +1533,23 @@ def annotate(rows: list) -> list:
         jarvis_auto_learn.annotate(rows)
     except Exception:
         pass
+    # A denial's proposal is Jarvis's GUESS, and the card has to say so (the
+    # owner's decision of 2026-10-10). The text of the proposal says it in its
+    # own words; this is the other half - the field every review surface
+    # already reads, so the marking cannot be missed by anything that shows the
+    # queue. Set here rather than in the gate so the wording lives with every
+    # other card's reason, and so a card old enough to predate the change is
+    # marked too. Before the older-news note below, so that note still goes on
+    # the end where every card carries it. Nothing is dropped either way: the
+    # owner still decides, and the row is still there to Keep or Discard.
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        if r.get("source") != GUESS_SOURCE:
+            continue
+        r["guessed"] = True
+        why = str(r.get("auto_reason") or "").strip().rstrip(".")
+        r["auto_reason"] = f"{why}. {GUESS_REASON}" if why else GUESS_REASON
     # Memory idea 4: a correction that sounds OLDER than the fact it names
     # says so, in the line both apps already show under a card (its
     # reason) - keeping it saves it as history and the newer fact stays.

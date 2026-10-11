@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 
 export const menuManager = createMenuManager();
 
-function createSwitchRow(title, about, checked, onChange, indent = 0) {
+function createSwitchRow(title, about, checked, onChange, { indent = 0, key = "" } = {}) {
   const row = document.createElement("div");
   row.className = "menu-switch-row";
   if (indent) row.style.paddingLeft = `${indent}px`;
@@ -37,6 +37,10 @@ function createSwitchRow(title, about, checked, onChange, indent = 0) {
   input.role = "switch";
   input.checked = checked;
   input.setAttribute("aria-checked", String(checked));
+  // A stable id per switch, so a rebuild can put the keyboard back where it
+  // was (see renderMenuList). Menu and group ids are unique in the catalogue,
+  // so these are unique on the page.
+  if (key) input.id = `menu-switch-${key}`;
   input.addEventListener("change", () => {
     input.setAttribute("aria-checked", String(input.checked));
     onChange(input.checked);
@@ -64,6 +68,17 @@ function createSwitchRow(title, about, checked, onChange, indent = 0) {
 export function renderMenuList() {
   const container = $("menu-visibility-list");
   if (!container) return;
+
+  // Where the keyboard was, before the rebuild throws it away. Toggling one
+  // switch re-renders this whole list, and every row afterwards is a NEW
+  // element, so without this the toggle drops focus onto <body> and a keyboard
+  // user loses their place on every single flip. The same idiom Settings uses
+  // for the rows it rebuilds in place (`scRestoreFocusId`, settings.js).
+  // Only a control inside this list is restored: a re-render triggered from
+  // elsewhere (the storage event) must not steal focus from wherever the owner
+  // has moved on to.
+  const here = document.activeElement;
+  const focusedId = here && container.contains(here) ? here.id : "";
   container.innerHTML = "";
 
   const state = menuManager.getState();
@@ -105,7 +120,7 @@ export function renderMenuList() {
       else menuManager.hide(group.id);
       applyVisibility();
       renderMenuList();
-    });
+    }, { key: group.id });
     groupFieldset.appendChild(groupRow);
 
     for (const memId of mems) {
@@ -121,7 +136,7 @@ export function renderMenuList() {
           applyVisibility();
           renderMenuList();
         },
-        m.parent && mems.includes(m.parent) ? 24 : 12
+        { indent: m.parent && mems.includes(m.parent) ? 24 : 12, key: memId }
       );
       groupFieldset.appendChild(memRow);
     }
@@ -150,7 +165,8 @@ export function renderMenuList() {
           else menuManager.hide(m.id);
           applyVisibility();
           renderMenuList();
-        }
+        },
+        { key: m.id }
       );
       fs.appendChild(row);
     }
@@ -178,12 +194,28 @@ export function renderMenuList() {
           else menuManager.hide(m.id);
           applyVisibility();
           renderMenuList();
-        }
+        },
+        { key: m.id }
       );
       fs.appendChild(row);
     }
     container.appendChild(fs);
   }
+
+  // Put the keyboard back on the switch the owner just flipped. Done last, so
+  // the whole list is in the document before focus moves.
+  if (focusedId) document.getElementById(focusedId)?.focus();
+}
+
+/**
+ * A card that is not hidden is marked `false` rather than left unmarked, so
+ * "this card is not hidden by a menu" is a fact the search can read - see the
+ * note in `applyVisibility` below and `settings-search.js`.
+ */
+export function markMenuHidden(card, hidden) {
+  card.dataset.menuHidden = hidden ? "true" : "false";
+  if (hidden) card.hidden = true;
+  else if (!document.body.classList.contains("searching")) card.hidden = false;
 }
 
 export function applyVisibility() {
@@ -192,14 +224,23 @@ export function applyVisibility() {
     const mid = card.dataset.menuId || (card.id ? `settings.${card.id}` : null);
     if (!mid || !known(mid, "desktop")) continue;
 
-    const hidden = menuManager.isHidden(mid);
-    card.hidden = hidden;
+    // THE MENU'S DECISION IS RECORDED, NOT ONLY APPLIED (settings search,
+    // 2026-10-09). `settings-search.js` filters by setting `hidden` too, and
+    // these are two different reasons for the same attribute: a card the
+    // owner hid must not come back because it happens to match a search, and
+    // must still be hidden after the search is cleared. So the menu writes
+    // its answer to `data-menu-hidden` and touches `hidden` only while no
+    // search is on - the search's own pass reads the attribute and leaves it
+    // alone. `markMenuHidden` is that one place.
+    markMenuHidden(card, menuManager.isHidden(mid));
 
     const m = menu(mid);
     if (m && m.collapse) {
       if (menuManager.isCollapsed(mid)) {
         card.classList.add("card-collapsed");
-      } else {
+      } else if (!card.dataset.searchWasCollapsed) {
+        // ...and a card the SEARCH opened stays open until the box is empty,
+        // or folding it here would hide the row that just matched.
         card.classList.remove("card-collapsed");
       }
       updateCollapseButton(card, mid);

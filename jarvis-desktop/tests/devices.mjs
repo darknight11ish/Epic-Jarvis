@@ -5,8 +5,12 @@
  * What must hold:
  * - a PC whose backend has no pairing says so, and the old "Show the token
  *   for my phone" stays where it always was;
- * - the device list: This PC with no Remove, each phone with Remove, which
- *   asks the design's "are you sure?" first and removes ONE device;
+ * - the device list: This PC with no Remove, each phone with Name and
+ *   Remove, Remove asking the design's "are you sure?" first and removing
+ *   ONE device; naming a device (docs/MULTI-DEVICE-DESIGN.md, the first
+ *   slice) asking with a box that starts at the name it has now, sending
+ *   nothing on Cancel and nothing unchanged, and clearing it by leaving the
+ *   box empty;
  * - the old shared key's row in its three states, the warning naming the
  *   address that still uses it, Retire at once, Bring it back as a card;
  *   the old reveal moves under that row, renamed, and hides once retired;
@@ -14,8 +18,9 @@
  *   code, the countdown, the PC's own sentence for each state, the four
  *   words as given; the code leaves the page when the session ends;
  *   Cancel; the address remembered or found;
- * - rule 4: Pair a phone and Bring it back wait for a live link; Remove and
- *   Retire only take access away and never wait;
+ * - rule 4: Pair a phone and Bring it back wait for a live link; Remove,
+ *   Retire and naming a device only take access away (or change nothing at
+ *   all) and never wait;
  * - CONTROL (the Rust): settings window only; the window hidden from
  *   screen capture before the code is handed over; the QR text never
  *   handed over at all.
@@ -56,9 +61,10 @@ function list({ shared = {}, pairing = {}, extra = [] } = {}) {
   return {
     you: "pc",
     devices: [
-      { id: "pc", name: "This PC", kind: "pc", removable: false },
-      { id: "d3f9a1c2e", name: "Pixel 9", kind: "phone", created: 1790000000,
-        last_seen: NOW - 120, this_device: false, removable: true, approval_key: false },
+      { id: "pc", name: "This PC", shown: "This PC", label: null, kind: "pc", removable: false },
+      { id: "d3f9a1c2e", name: "Pixel 9", shown: "Pixel 9", label: null, kind: "phone",
+        created: 1790000000, last_seen: NOW - 120, this_device: false, removable: true,
+        approval_key: false },
       ...extra,
     ],
     shared: { retired: false, retired_at: null, last_other_seen: null,
@@ -173,7 +179,7 @@ await check("the list: This PC cannot be removed, a phone can, with its dates", 
   const page = await open({ devices: { list: list() } });
   await page.waitForTimeout(400);
   const rows = await page.locator("#dv-list li").allInnerTexts();
-  const removes = await page.locator("#dv-list li button").count();
+  const removes = await page.locator("#dv-list li button.dv-remove").count();
   const html = await page.content();
   await page.close();
   assert.equal(rows.length, 2);
@@ -240,11 +246,11 @@ await check("Remove asks the design's question first; No changes nothing, Yes re
   await page.waitForTimeout(400);
   const asked = [];
   page.once("dialog", (d) => { asked.push(d.message()); d.dismiss(); });
-  await page.locator("#dv-list li button").click();
+  await page.locator("#dv-list li button.dv-remove").click();
   await page.waitForTimeout(250);
   const none = await calls(page, "devices_remove");
   page.once("dialog", (d) => { asked.push(d.message()); d.accept(); });
-  await page.locator("#dv-list li button").click();
+  await page.locator("#dv-list li button.dv-remove").click();
   await page.waitForTimeout(400);
   const sent = await calls(page, "devices_remove");
   const rows = await page.locator("#dv-list li").count();
@@ -255,6 +261,93 @@ await check("Remove asks the design's question first; No changes nothing, Yes re
   assert.deepEqual(sent, [{ id: "d3f9a1c2e" }], "exactly one id, never a list");
   assert.equal(rows, 1);
   assert.equal(said, "Pixel 9 was removed.");
+});
+
+await check("naming a device: the box starts at what it is called now, and one label goes to the PC", async () => {
+  const page = await open({ devices: { list: list() } });
+  await page.waitForTimeout(400);
+  // This page's call log is per-page in the stub, but the earlier Remove test
+  // may have left entries behind; count only what THIS check does.
+  await page.evaluate(() => { window.__calls.length = 0; });
+  const button = await page.locator("#dv-list li button.dv-label").innerText();
+  const words = await import("../src/devices-words.js");
+  const prompts = [];
+  // Cancel sends nothing at all.
+  page.once("dialog", (d) => { prompts.push([d.type(), d.message(), d.defaultValue()]); d.dismiss(); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(250);
+  const cancelled = await calls(page, "devices_label");
+  // A label the owner typed.
+  page.once("dialog", (d) => { prompts.push([d.type(), d.message(), d.defaultValue()]); d.accept("Garden phone"); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page, "devices_label");
+  const said = await page.locator("#dv-status").innerText();
+  // Typing the same thing again sends nothing either.
+  page.once("dialog", (d) => { d.accept("Garden phone"); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(250);
+  const again = await calls(page, "devices_label");
+  const html = await page.content();
+  await page.close();
+  assert.equal(button, words.LABEL_BUTTON);
+  assert.equal(prompts[0][0], "prompt", "naming must ask with a box, not a confirm");
+  assert.equal(prompts[0][1], words.LABEL_PROMPT);
+  assert.equal(prompts[0][2], "", "a device with no label starts empty");
+  assert.deepEqual(cancelled, [], "Cancel still sent a label");
+  assert.deepEqual(sent, [{ id: "d3f9a1c2e", label: "Garden phone" }],
+    "one id and one label, never a whole list");
+  assert.equal(said, words.labelDone("Garden phone"));
+  assert.equal(again.length, 1, "an unchanged label was sent again");
+  assert.ok(!/jdk1\.|token_sha256/.test(html), "no key on the page");
+});
+
+await check("naming a device: the box opens at the label it already has, and clearing it goes back", async () => {
+  const extra = [{ id: "d3f9a1c2e", name: "Pixel 9", shown: "Garden phone", label: "Garden phone",
+                   kind: "phone", created: 1790000000, last_seen: NOW - 120,
+                   this_device: false, removable: true, approval_key: false }];
+  const page = await open({ devices: { list: { ...list(), devices: [
+    { id: "pc", name: "This PC", shown: "This PC", label: null, kind: "pc", removable: false },
+    ...extra,
+  ] } } });
+  await page.waitForTimeout(400);
+  const rows = await page.locator("#dv-list li").allInnerTexts();
+  const title = await page.locator("#dv-list li button.dv-label").getAttribute("title");
+  const source = await page.locator("#dv-list li").nth(1).getAttribute("data-dv-source");
+  const starts = [];
+  page.once("dialog", (d) => { starts.push(d.defaultValue()); d.accept(""); });
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page, "devices_label");
+  await page.close();
+  assert.match(rows[1], /Garden phone/, "the list shows the owner's own name");
+  assert.match(rows[1], /Pixel 9/, "and the name the phone gave itself is still there to go back to");
+  assert.equal(source, "Pixel 9");
+  assert.equal(title, "Currently called Garden phone");
+  assert.deepEqual(starts, ["Garden phone"], "the box must start at the name it has now");
+  assert.deepEqual(sent, [{ id: "d3f9a1c2e", label: "" }],
+    "clearing must send an empty label, which is how the PC goes back");
+});
+
+await check("naming a device: a refusal is the PC's own sentence, and no page error", async () => {
+  const page = await open({ devices: { list: list() } });
+  await page.waitForTimeout(400);
+  // The Rust command refuses this before it ever reaches the PC; the page only
+  // ever shows what it is handed.
+  await page.evaluate(() => {
+    const real = window.__TAURI__.core.invoke;
+    window.__TAURI__.core.invoke = (name, args) => (name === "devices_label"
+      ? Promise.reject(new Error("Use a shorter label, with letters, numbers, spaces and - _ . ' ( ) only. Leave it empty to go back to the name the device gave itself."))
+      : real(name, args));
+  });
+  page.once("dialog", (d) => d.accept("A".repeat(80)));
+  await page.locator("#dv-list li button.dv-label").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#dv-status").innerText();
+  const errors = page.__errors;
+  await page.close();
+  assert.match(said, /Use a shorter label/);
+  assert.deepEqual(errors || [], [], "a refusal is words, never a page error");
 });
 
 await check("the old key: used elsewhere lately - named, Retire asks, then it is retired", async () => {
@@ -320,12 +413,14 @@ await check("rule 4: on a stale link Pair and Bring it back wait; Remove and Ret
   const pair = await page.locator("#dv-pair").isEnabled();
   const why = await page.locator("#dv-pair-why").innerText();
   const back = await page.locator("#dv-bring-back").isEnabled();
-  const remove = await page.locator("#dv-list li button").isEnabled();
+  const remove = await page.locator("#dv-list li button.dv-remove").isEnabled();
+  const label = await page.locator("#dv-list li button.dv-label").isEnabled();
   await page.close();
   assert.ok(!pair, "Pair a phone offered on a stale link");
   assert.match(why, /catching up/);
   assert.ok(!back, "Bring it back offered on a stale link");
   assert.ok(remove, "Remove held on a stale link - it only takes access away");
+  assert.ok(label, "Naming a device held on a stale link - it grants and revokes nothing");
   const page2 = await open({ link: { stale: true }, devices: { list: list() } });
   await page2.waitForTimeout(400);
   const retire = await page2.locator("#dv-retire").isEnabled();

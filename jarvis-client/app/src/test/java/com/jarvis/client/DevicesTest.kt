@@ -142,6 +142,79 @@ class DevicesTest {
     }
 
     @Test
+    fun `naming a device - the label, and what it goes back to`() {
+        // docs/MULTI-DEVICE-DESIGN.md, the first slice: the owner's own name
+        // for a device he already paired, kept beside its key on the PC.
+        val labelled = Devices.parse(
+            obj(
+                """
+                {"you": "d3f9a1c2e",
+                 "devices": [{"id": "d3f9a1c2e", "name": "Pixel 9", "shown": "Garden phone",
+                              "label": "Garden phone", "kind": "phone", "removable": true},
+                             {"id": "d11112222", "name": "Tablet", "shown": "Garden phone",
+                              "label": "Garden phone", "kind": "tablet", "removable": true}]}
+                """,
+            ),
+        )
+        // This phone itself, named: the one-line "Remove this phone?" is
+        // unchanged (it never names the phone, because the owner is holding it).
+        assertEquals("Garden phone", labelled.devices[0].displayName)
+        assertEquals(
+            "Remove this phone? This phone will stop reaching Jarvis at once and go back to the pairing screen.",
+            Devices.removeQuestion(labelled.devices[0]),
+        )
+        // Another device, named: the label is what the question asks about,
+        // because that is the name the owner just pressed Remove on.
+        val d = labelled.devices[1]
+        assertEquals("Tablet", d.name)
+        assertEquals("Garden phone", d.label)
+        assertEquals("Garden phone", d.displayName)
+        assertEquals(
+            "Remove Garden phone? It stops reaching Jarvis at once. To use it again, pair it again with the QR code.",
+            Devices.removeQuestion(d),
+        )
+
+        // A device with no label, and a PC too old to send `shown`: `name`.
+        val plain = Devices.parse(
+            obj("""{"you": "pc", "devices": [{"id": "d3f9a1c2e", "name": "Pixel 9", "kind": "phone"}]}"""),
+        ).devices[0]
+        assertEquals("", plain.label)
+        assertEquals("Pixel 9", plain.displayName)
+        val onlyShown = Devices.parse(
+            obj("""{"devices": [{"id": "d1", "name": "Pixel 9", "shown": "Garden phone"}]}"""),
+        ).devices[0]
+        assertEquals("Garden phone", onlyShown.displayName)
+    }
+
+    @Test
+    fun `naming a device - the body, the rule, and the answers`() {
+        assertEquals("""{"id":"d3f9a1c2e","label":"Garden phone"}""", Devices.labelBody("d3f9a1c2e", "Garden phone"))
+        assertEquals("""{"id":"d3f9a1c2e","label":""}""", Devices.labelBody("d3f9a1c2e", ""))
+
+        // The same rule as a paired name: 1-40 characters of letters and
+        // digits in any script, space, and - _ . ' ( ) - and the empty string
+        // is how a label is cleared, so it is always allowed.
+        assertNull(Devices.labelProblem(""))
+        assertNull(Devices.labelProblem("Garden phone"))
+        assertNull(Devices.labelProblem("Sam's (old) phone"))
+        assertNull(Devices.labelProblem("A".repeat(40)))
+        assertEquals(Devices.LABEL_BAD, Devices.labelProblem("A".repeat(41)))
+        assertEquals(Devices.LABEL_BAD, Devices.labelProblem("Phone\nsecond line"))
+        assertEquals(Devices.LABEL_BAD, Devices.labelProblem("Phone | Fake card"))
+        assertEquals(Devices.LABEL_BAD, Devices.labelProblem("<b>Phone</b>"))
+
+        assertEquals(
+            "Garden phone is what this device is called now.",
+            Devices.labelSaid(200, obj("""{"shown": "Garden phone"}"""), "Pixel 9"),
+        )
+        // The PC's own words for a refusal, never invented here.
+        assertEquals(Devices.LABEL_BAD, Devices.labelSaid(400, obj("""{"reason": "bad_label"}"""), "x"))
+        assertEquals("This PC has no label - it is always this PC.", Devices.labelSaid(400, obj("""{"reason": "not_labelable"}"""), "x"))
+        assertEquals("Pixel 9 is no longer on the list.", Devices.labelSaid(404, obj("""{"reason": "no_such_device"}"""), "Pixel 9"))
+        assertTrue(Devices.labelSaid(503, obj("""{"error": "The device list could not be written."}"""), "x").startsWith("Not named."))
+    }
+
+    @Test
     fun `the design's sentences, word for word`() {
         assertEquals(
             "This phone's key was removed on your PC, so Jarvis no longer answers it. Pair again with the QR " +

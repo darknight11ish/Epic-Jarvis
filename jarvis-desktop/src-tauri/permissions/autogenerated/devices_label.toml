@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-devices-label"
+description = "Enables the devices_label command without any pre-configured scope."
+commands.allow = ["devices_label"]
+
+[[permission]]
+identifier = "deny-devices-label"
+description = "Denies the devices_label command without any pre-configured scope."
+commands.deny = ["devices_label"]

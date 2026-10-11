@@ -54,6 +54,81 @@
     },
     "code": 429
   },
+  "front_active_chosen": false,
+  "front_default": "leave_in_place",
+  "front_default_view": {
+    "brings_to_front": false,
+    "default": "leave_in_place",
+    "last": null,
+    "mode": "leave_in_place",
+    "mode_name": "leave_in_place",
+    "modes": [
+      "leave_in_place",
+      "bring_to_front"
+    ],
+    "pc_only": true,
+    "waiting": false,
+    "words": {
+      "bring_to_front": "Bring it to the front",
+      "bring_to_front_detail": "That one window is raised and activated the moment Jarvis is stuck, so it is in front and ready to type into. It takes your screen and your keyboard away from whatever you were doing, so turning this on asks for your approval.",
+      "damaged": "the captcha window setting is damaged, so the window stays where it is. Choose \"Bring it to the front\" again to rewrite it",
+      "detail": "When Jarvis is stuck on a captcha or a sign-in page, it can leave that browser window exactly where it is - or bring it to the front so you can type into it. Either way the PC says which window is stuck.",
+      "leave_in_place": "Leave it where it is",
+      "leave_in_place_detail": "The window is not touched: it keeps its size, its place and whatever is in front of it. The PC says which window Jarvis is stuck on, and you solve it there when you are ready.",
+      "off_now": "Done. The window stays where it is again.",
+      "opens_windows_hello": "Turning \"Bring it to the front\" on asks for your approval on the PC.",
+      "title": "When a captcha stops Jarvis",
+      "waiting": "Waiting for your approval. The window stays where it is until you approve the card."
+    }
+  },
+  "front_looser": "bring_to_front",
+  "front_modes": [
+    "leave_in_place",
+    "bring_to_front"
+  ],
+  "front_nothing_waiting_chosen": false,
+  "front_route_get": {
+    "body": {
+      "brings_to_front": false,
+      "default": "leave_in_place",
+      "last": null,
+      "mode": "leave_in_place",
+      "mode_name": "leave_in_place",
+      "modes": [
+        "leave_in_place",
+        "bring_to_front"
+      ],
+      "pc_only": true,
+      "waiting": false,
+      "words": {
+        "bring_to_front": "Bring it to the front",
+        "bring_to_front_detail": "That one window is raised and activated the moment Jarvis is stuck, so it is in front and ready to type into. It takes your screen and your keyboard away from whatever you were doing, so turning this on asks for your approval.",
+        "damaged": "the captcha window setting is damaged, so the window stays where it is. Choose \"Bring it to the front\" again to rewrite it",
+        "detail": "When Jarvis is stuck on a captcha or a sign-in page, it can leave that browser window exactly where it is - or bring it to the front so you can type into it. Either way the PC says which window is stuck.",
+        "leave_in_place": "Leave it where it is",
+        "leave_in_place_detail": "The window is not touched: it keeps its size, its place and whatever is in front of it. The PC says which window Jarvis is stuck on, and you solve it there when you are ready.",
+        "off_now": "Done. The window stays where it is again.",
+        "opens_windows_hello": "Turning \"Bring it to the front\" on asks for your approval on the PC.",
+        "title": "When a captcha stops Jarvis",
+        "waiting": "Waiting for your approval. The window stays where it is until you approve the card."
+      }
+    },
+    "route": "/api/chatbot/handoff_front"
+  },
+  "front_stuck_chosen": true,
+  "front_stuck_default": false,
+  "front_words": {
+    "bring_to_front": "Bring it to the front",
+    "bring_to_front_detail": "That one window is raised and activated the moment Jarvis is stuck, so it is in front and ready to type into. It takes your screen and your keyboard away from whatever you were doing, so turning this on asks for your approval.",
+    "damaged": "the captcha window setting is damaged, so the window stays where it is. Choose \"Bring it to the front\" again to rewrite it",
+    "detail": "When Jarvis is stuck on a captcha or a sign-in page, it can leave that browser window exactly where it is - or bring it to the front so you can type into it. Either way the PC says which window is stuck.",
+    "leave_in_place": "Leave it where it is",
+    "leave_in_place_detail": "The window is not touched: it keeps its size, its place and whatever is in front of it. The PC says which window Jarvis is stuck on, and you solve it there when you are ready.",
+    "off_now": "Done. The window stays where it is again.",
+    "opens_windows_hello": "Turning \"Bring it to the front\" on asks for your approval on the PC.",
+    "title": "When a captcha stops Jarvis",
+    "waiting": "Waiting for your approval. The window stays where it is until you approve the card."
+  },
   "input_after_resume": {
     "body": {
       "ended": "resumed",
@@ -264,6 +339,7 @@
   "routes": {
     "end": "/api/chatbot/handoff/end",
     "frame": "/api/chatbot/handoff/frame",
+    "front": "/api/chatbot/handoff_front",
     "input": "/api/chatbot/handoff/input",
     "mode": "/api/chatbot/handoff_mode",
     "start": "/api/chatbot/handoff/start"

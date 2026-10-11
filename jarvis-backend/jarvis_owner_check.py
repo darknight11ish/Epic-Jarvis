@@ -142,7 +142,8 @@ QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell
 #: either app (the OFF path in jarvis_handoff_mode.request never reaches here).
 PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
                              "pair_device", "unretire_shared_key", "register_approval_key",
-                             "raise_api_limit", "handoff_keep_offering"})
+                             "raise_api_limit", "handoff_keep_offering",
+                             "handoff_bring_to_front"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 
