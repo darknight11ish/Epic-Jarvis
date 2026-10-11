@@ -488,6 +488,12 @@ def t_hygiene():
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
              "plugin-loader.patch",
+             # card-prefs.patch (2026-10-10, "cards read short"): ONE added block
+             # in jarvis_hud.py, straight after animal.patch's own and before
+             # plugin-loader.patch - nowhere near
+             # the POST /api/screen route this patch's wrapper takes over - so
+             # the request body is still read once, and still by this wrapper.
+             "card-prefs.patch",
              # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
              # hunks, both in jarvis_gate.py - under `_PROTECTED`/`_PROTECTED_RE` and
              # at check()'s own `hit = _touches_protected(prompt, detail)` call. It

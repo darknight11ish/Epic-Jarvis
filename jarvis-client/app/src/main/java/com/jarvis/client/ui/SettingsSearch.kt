@@ -100,6 +100,20 @@ object SettingsSearch {
             source = SCREEN,
         ),
         Row(
+            // "Approval cards" (the owner's request of 2026-10-09: "a more simple
+            // summary, with an explain more button ... and approval card
+            // preferences such as this should be changeable in the settings").
+            // The heading and both choice lines are net/CardSummary.kt's own
+            // constants, so the quote is looked for there, like the browser
+            // heading - and the value is the PC's, so the row is the same
+            // setting on the desktop.
+            key = "approval-cards", title = "Approval cards",
+            label = "Explain more; the short summary; the whole card; how much of a card " +
+                "is shown; always show everything; start short",
+            quotes = listOf("Nothing is hidden from you - it is one tap away."),
+            source = JUMP + listOf("net/CardSummary.kt", PLATES + "ApprovalCardsPlate.kt"),
+        ),
+        Row(
             key = "floating-avatar", title = "Floating Jarvis",
             label = "Floating face; bubble mode; draw over other apps; overlay",
             quotes = listOf("Floating Jarvis"),

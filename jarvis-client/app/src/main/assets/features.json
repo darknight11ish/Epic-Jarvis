@@ -1507,7 +1507,8 @@
     "limit": "On a PC with no Windows Hello, or a phone with no screen lock, a risky approval is refused until one is set up, with a plain message saying how.",
     "surface": "both",
     "covers": [
-      "safety.approvals"
+      "safety.approvals",
+      "settings.approval-cards"
     ]
   },
   {
