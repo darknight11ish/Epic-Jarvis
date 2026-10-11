@@ -371,7 +371,18 @@ fun BrainScreen(
             )
         }
 
-        /** Opens the heading holding [key], for a link into Brain or a jump inside it. */
+        /**
+         * Opens the heading holding [key], for a link into Brain or a jump inside
+         * it.
+         *
+         * [key] here is the `item(key = ...)` the walk below is looking for, which
+         * is the namespaced one (`plateKeyAt`) - `ScrollToKeyOnce` hands `onOpen`
+         * the key it was given, not the plate's bare name. Both spellings name the
+         * same plate, and `BrainSections.sectionOf` answers for either; the bare
+         * one is what "open the morning briefing" sends as `initialSection`.
+         * Without that, no heading ever opened for a link and every Find row into
+         * Brain landed on a shut screen (2026-10-11).
+         */
         fun openFor(key: String) {
             BrainSections.sectionOf(key)?.let { section ->
                 openKey = section.key
@@ -384,11 +395,20 @@ fun BrainScreen(
         }
 
         /**
-         * The `item(key = ...)` a plate is drawn under. A plate's key carries a
+         * The `item(key = ...)` a plate is drawn under, and the one every line
+         * drawn OUTSIDE the headings is drawn under too. A plate's key carries a
          * namespace of its own ([PlateList.PLATE_PREFIX]), which is what keeps it
          * from ever equalling the key of the heading above it - so the two walks
          * below, which look a key up by exact equality, have to name the
          * namespaced key and not the bare plate name.
+         *
+         * The lines outside every heading share this namespace for the same
+         * reason: the walk cannot tell a plate from any other item, so it looks
+         * up one spelling and one only. The attention budget, the rush latch and
+         * the rest were drawn as bare `item(key = "attention")` until
+         * 2026-10-11, while every plate was drawn as `brain-plate:<name>` - so
+         * "Attention budget" in Find anything found nothing and left the owner at
+         * the top of Brain (the defect this line fixes).
          */
         fun plateKeyAt(name: String): String = PlateList.PLATE_PREFIX + name
 
@@ -436,7 +456,7 @@ fun BrainScreen(
             val rush = rushOf(brain.contentRisk)
             val riskFailed = brain.contentRiskRead as? SectionRead.Failed
             if (rush != null || riskFailed != null) {
-                item(key = "rush") {
+                item(key = plateKeyAt("rush")) {
                     Column(Modifier.fillMaxWidth()) {
                         if (rush != null) {
                             RushBanner(
@@ -462,7 +482,7 @@ fun BrainScreen(
             // 2. Whether any of this can be trusted at all. A stale board is
             // worse than no board: every number below is last-known, and on a
             // screen full of numbers that distinction has to lead.
-            item(key = "freshness") {
+            item(key = plateKeyAt("freshness")) {
                 Freshness(
                     link,
                     stale,
@@ -473,7 +493,7 @@ fun BrainScreen(
             }
 
             if (notice != null) {
-                item(key = "notice") { Notice(notice, onDismissNotice) }
+                item(key = plateKeyAt("notice")) { Notice(notice, onDismissNotice) }
             }
 
             // The headings (BrainSections.kt, the owner's words of 2026-10-10:
@@ -1254,7 +1274,7 @@ fun BrainScreen(
             // the screen itself, and it is the one line that can put a hidden plate
             // back, so it must not be inside a heading that could be shut.
             if (menus.hiddenCount > 0 && onOpenMenuList != null) {
-                item(key = "menus-hidden") { HiddenMenusLine(menus.hiddenCount, onOpenMenuList) }
+                item(key = plateKeyAt("menus-hidden")) { HiddenMenusLine(menus.hiddenCount, onOpenMenuList) }
             }
 
             // The attention budget - how many interruptions are left today.
@@ -1272,7 +1292,14 @@ fun BrainScreen(
             // heading was one of the two that crashed when tapped, so the budget
             // was missing from the collapsed Brain AND unreachable - the same
             // rule broken from both ends.
-            item(key = "attention") {
+            //
+            // Its item key carries the plates' namespace (`plateKeyAt`), because
+            // the walk that a link into Brain runs looks a key up by exact
+            // equality: as a bare `"attention"` this line was invisible to it, so
+            // "Attention budget" in Find anything landed at the top of Brain
+            // (2026-10-11). Every other line outside a heading was bare in the
+            // same way; they are namespaced together.
+            item(key = plateKeyAt("attention")) {
                 BrainAttentionPlate(
                     attention = attention,
                     canAct = canAct,
@@ -1280,7 +1307,7 @@ fun BrainScreen(
                 )
             }
 
-            item(key = "tail") { Gap(24) }
+            item(key = plateKeyAt("tail")) { Gap(24) }
         }
     }
 }

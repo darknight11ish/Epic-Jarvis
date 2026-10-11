@@ -659,7 +659,6 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # jarvis_gate.py at all, so it cannot rewrite a line
                                 # devices.patch wrote - and the later_rewriting() half
                                 # below proves it.
-                                "plugin-loader.patch",
                                 # gate-touches.patch (2026-10-11) is appended last and
                                 # has exactly TWO hunks, both in jarvis_gate.py: under
                                 # `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
@@ -670,6 +669,7 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # devices.patch wrote. The later_rewriting() half below
                                 # proves it.
                                 "gate-touches.patch",
+                                "plugin-loader.patch",
                                 # picture-card.patch (2026-10-10) is "which card
                                 # draws the pictures": ONE hunk in jarvis_hud.py,
                                 # an install block on the OWNER's own lines just

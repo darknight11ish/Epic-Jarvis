@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,6 +26,7 @@ import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.Rule
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
@@ -32,16 +34,46 @@ import kotlinx.coroutines.launch
 
 /**
  * "People and things" on Brain ([Entities], the owner's decision of
- * 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): a plain list, grouped by
- * kind - People, Pets, Places, Organisations, Projects, Things, Other - each
- * row a name and how many facts name it. Tap one to read those facts, newest
- * first, 20 at a time ("Show 20 more"). No picture, no links, and read-only:
- * Forget, Erase and Pin stay where they already are.
+ * 2026-09-30, docs/GALAXY-PANEL-DESIGN.md option B): the people, pets,
+ * places and things Jarvis's saved facts name. A list grouped by kind -
+ * People, Pets, Places, Organisations, Projects, Things, Other - each row a
+ * name and how many facts name it. Tap one to read those facts, newest first,
+ * 20 at a time ("Show 20 more"), and the **other names those same facts
+ * mention** ("Shares facts with").
+ *
+ * ## This is the phone's Galaxy, and it is deliberately read-only
+ *
+ * The owner asked for the Galaxy on his phone (2026-10-11) - "can i see the
+ * galaxy on the android phone? I should be able to see it" - and, offered a
+ * choice, picked a light, read-only version built for the phone. So this
+ * screen shows the same information the desktop's map carries. What the map
+ * draws as a line between two dots, [Entities.connections] says in words: the
+ * names that appear in the same saved facts. A thumb-width column and a
+ * screen reader both get more from "Priya, 4 shared facts" than from two
+ * points and a line, and it is the same fact the line stands for.
+ *
+ * **Read-only, on purpose** - the owner's decision, not an oversight. There is
+ * no Forget, no Erase, no Pin, no merge, no rename and nothing to drag here,
+ * though this app offers Forget a few plates away. Those live in the memory
+ * lists where they already are; this screen exists to be looked at. Do not add
+ * one without asking the owner first, and read [Entities]'s docstring for the
+ * full reason.
+ *
+ * ## Why there is no canvas
+ *
+ * A force layout is the wrong tool for a phone: the desktop's map wants a wide
+ * canvas, a pointer and a hover, and drawn at thumb size it becomes a knot of
+ * unlabelled dots that TalkBack cannot read and a finger cannot select. The
+ * list below is the same data in the shape the device is good at. It also
+ * costs nothing to keep on screen: no animation frame, no GL context, no
+ * battery, and nothing to recompute when the owner scrolls.
  *
  * Two reads, no new route: the names from `GET /api/memory/entities`, the
  * words from `GET /api/memory/used?ids=` ([JarvisRuntime.memoryUsed]). Both
  * are read when this is shown and dropped when it is left; nothing is kept on
- * the phone.
+ * the phone. The connections need **neither** - they are worked out from the
+ * same list of names already in memory, so opening a name is not a second
+ * round trip.
  *
  * "Hide memory lists and chat history" (Security) replaces the whole thing
  * with [HiddenSection] until Show is confirmed, and because the panel is part
@@ -92,6 +124,9 @@ internal fun PeopleAndThingsSection(
             val shown = entities
             val err = readError
             val open = shown?.firstOrNull { it.id == openId }
+            // Built once for the whole screen, not once per name: the
+            // connections of every name are read off this same map.
+            val perFact = remember(shown) { Entities.namesPerFact(shown.orEmpty()) }
             when {
                 missing -> Text(Entities.MISSING, style = MaterialTheme.typography.bodySmall,
                     color = chrome.textMid)
@@ -102,7 +137,7 @@ internal fun PeopleAndThingsSection(
                 )
                 open != null -> {
                     Quiet(Entities.BACK, color = chrome.textMid, onClick = { openId = null })
-                    EntityFacts(open)
+                    EntityFacts(open, shown, perFact)
                 }
                 else -> {
                     if (err != null) {
@@ -130,9 +165,20 @@ internal fun PeopleAndThingsSection(
  * for the next 20. An erased fact says [Entities.ERASED] and keeps its date; a
  * forgotten one is marked and sorted after the current ones; a fact hidden by
  * an Off topic is not shown, only counted.
+ *
+ * Above the facts, "Shares facts with" lists the other names those facts
+ * mention - the Galaxy's connections, in words ([Entities.connections]). It is
+ * worked out from [all] - the same list of names already on screen - so it
+ * costs no read of its own and is right even when the facts below fail to
+ * load. [perFact] is the count of names per fact, built once per screen rather
+ * than once per name. Read-only, like the rest of this screen.
  */
 @Composable
-private fun EntityFacts(entity: Entities.Entity) {
+private fun EntityFacts(
+    entity: Entities.Entity,
+    all: List<Entities.Entity>,
+    perFact: Map<Long, Int>,
+) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var rows by remember(entity.id) { mutableStateOf<List<Entities.Row>>(emptyList()) }
@@ -170,6 +216,37 @@ private fun EntityFacts(entity: Entities.Entity) {
     Gap(6)
     Text(entity.name, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
     Text(Entities.heading(entity.count), style = MaterialTheme.typography.labelLarge, color = chrome.textMid)
+
+    // The Galaxy's connections, in words. Worked out from the names already
+    // read, so this is the one part of the panel that is always right - it
+    // says the same thing whether or not the facts below could be read.
+    //
+    // Plain text, deliberately, not the `Quiet` this file uses for the rows in
+    // the list: a connection is something to read, not a control. `Quiet`
+    // carries a 48dp touch target and a button's own announcement, so a column
+    // of them would tell TalkBack "button" nine times about nine things that do
+    // nothing when tapped. Nothing here is tappable, which is the read-only
+    // decision showing up in the accessibility tree as well as in the code.
+    val links = Entities.connections(entity, all, perFact)
+    Gap(10)
+    Kicker(Entities.WITH)
+    if (links.isEmpty()) {
+        Gap(4)
+        Text(Entities.ALONE, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+        Text(Entities.ALONE_WHY, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    } else {
+        links.forEach { c ->
+            Text(
+                Entities.connectionLine(c),
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textHi,
+                modifier = Modifier.padding(vertical = 2.dp),
+            )
+        }
+    }
+    Gap(12)
+    Rule()
+
     val err = failed
     when {
         err != null -> {

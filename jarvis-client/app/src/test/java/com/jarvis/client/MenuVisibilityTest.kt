@@ -9,6 +9,7 @@ import com.jarvis.client.net.MenuState
 import com.jarvis.client.net.MenuView
 import com.jarvis.client.net.MenuWords
 import com.jarvis.client.ui.MenuPlaces
+import com.jarvis.client.ui.screens.PlateList
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -270,6 +271,54 @@ class MenuVisibilityTest {
 
     private val screens = "jarvis-client/app/src/main/java/com/jarvis/client/ui/"
 
+    /**
+     * Every `item(key = ...)` [src] draws, in the spelling the list really holds.
+     *
+     * Two spellings are real on these screens and they are NOT the same key: the
+     * plates go through BrainSections' recorder (the screen writes `plate("...")`,
+     * the recorder writes the item key), and the lines outside every heading spell
+     * their key out through `plateKeyAt` (BrainScreen), which carries the plates'
+     * namespace. A bare `item(key = "attention")` is a third spelling that finds
+     * nothing, so it is read as the bare key it is rather than quietly namespaced
+     * here.
+     *
+     * Comments are blanked first, the same `code()` habit `BrainListTest` keeps:
+     * BrainScreen's notes quote both spellings in backticks while explaining this
+     * very defect, and a key quoted in a note is not a key the screen draws.
+     */
+    private fun itemKeysIn(src: String): Set<String> =
+        Regex("item\\(key = (?:plateKeyAt\\(\"([\\w-]+)\"\\)|\"([\\w-]+)\")\\)")
+            .findAll(code(src))
+            .map { m ->
+                m.groupValues[2].ifEmpty { PlateList.PLATE_PREFIX + m.groupValues[1] }
+            }
+            .toSet()
+
+    /** [src] with whole-line `//` comments and block comments blanked, not dropped. */
+    private fun code(src: String): String {
+        val out = ArrayList<String>()
+        var inBlock = false
+        for (line in src.lines()) {
+            val t = line.trimStart()
+            if (inBlock) {
+                if (t.contains("*/")) inBlock = false
+                out.add("")
+                continue
+            }
+            if (t.startsWith("/*")) {
+                if (!t.contains("*/")) inBlock = true
+                out.add("")
+                continue
+            }
+            if (t.startsWith("//")) {
+                out.add("")
+                continue
+            }
+            out.add(line)
+        }
+        return out.joinToString("\n")
+    }
+
     private fun repoFile(rel: String): File {
         var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null) {
@@ -325,7 +374,10 @@ class MenuVisibilityTest {
     @Test
     fun `every item key in MenuPlaces is a real item on its screen`() {
         val settings = repoFile(screens + "screens/SettingsScreen.kt").readText()
-        val brain = repoFile(screens + "screens/BrainScreen.kt").readText()
+        // Brain's own CODE: its notes quote `plate("...")` and both spellings of an
+        // item key while explaining the headings, and a name quoted in a note is
+        // not a name the screen draws.
+        val brain = code(repoFile(screens + "screens/BrainScreen.kt").readText())
         for (key in MenuPlaces.SETTINGS.keys) {
             assertTrue("SettingsScreen has no item(key = \"$key\")", settings.contains("item(key = \"$key\")"))
         }
@@ -334,11 +386,16 @@ class MenuVisibilityTest {
             // (BrainSections.kt): ONE recorder writes their item keys, so the
             // screen's own line names the plate rather than spelling the key out.
             // A plate that comes in two halves names BOTH through `plateDrawn`,
-            // which is the other spelling to accept here.
+            // which is the other spelling to accept here. The lines drawn OUTSIDE
+            // every heading spell their key out through `plateKeyAt` instead
+            // (2026-10-11), which is the third real spelling - "attention" is one
+            // of those, and it is in this map.
             assertTrue(
-                "BrainScreen has no plate(\"$key\"), no plateDrawn(\"$key\") and no item(key = \"$key\")",
+                "BrainScreen has no plate(\"$key\"), no plateDrawn(\"$key\"), no " +
+                    "item(key = plateKeyAt(\"$key\")) and no item(key = \"$key\")",
                 brain.contains("plate(\"$key\")") || brain.contains("item(key = \"$key\")") ||
-                    brain.contains("plateDrawn(\"$key\")"),
+                    brain.contains("plateDrawn(\"$key\")") ||
+                    brain.contains("item(key = plateKeyAt(\"$key\"))"),
             )
         }
         // The other way: no item on either screen is a menu without a place (a plate added to
@@ -354,21 +411,30 @@ class MenuVisibilityTest {
         // never appears in `brainKeys` either.
         // "attention" is in this list as a key, not merely a permission: since
         // 2026-10-10 it is drawn OUTSIDE every heading (BrainSections.ALWAYS_DRAWN)
-        // by an `item(key = "attention")` of its own, so it is a Brain item with
-        // no menu of its own to place - its menu id `brain.now.budget` can never
-        // be hidden, and AttentionSettingsTest holds that separately.
+        // by an `item(key = plateKeyAt("attention"))` of its own, so it is a Brain
+        // item with no menu of its own to place - its menu id `brain.now.budget`
+        // can never be hidden, and AttentionSettingsTest holds that separately.
+        // Its key carries the plates' namespace (2026-10-11), which is the KEY
+        // the walk that Find anything's rows run looks up; drawn bare, it was
+        // invisible to that walk and the row landed at the top of Brain.
         val fixed = setOf("rush", "freshness", "notice", "group-now", "group-memory", "group-model-pc",
             "menus-hidden", "tail", "attention", "memory-hidden", "wiki-hidden", "memory-as-of-hidden",
             "deep-questions-hidden")
-        val brainKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(brain).map { it.groupValues[1] }.toSet()
+        // The screen's `item(key = ...)` lines as the list really holds them, and
+        // the plate NAMES they stand for (this map and `fixed` are written in
+        // names) - read from the source so a line that drifts back to the bare
+        // spelling is seen here rather than only by BrainSectionsTest.
+        val brainItemKeys = itemKeysIn(brain)
+        val brainKeys = brainItemKeys.map { it.removePrefix(PlateList.PLATE_PREFIX) }.toSet()
         val brainPlates = Regex("\\bplate\\(\"([\\w-]+)\"\\)").findAll(brain).map { it.groupValues[1] }.toSet()
         val undecided = brainKeys - MenuPlaces.BRAIN.keys - fixed
         assertTrue("Brain items with no decision in MenuPlaces: $undecided", undecided.isEmpty())
         val undecidedPlates = brainPlates - MenuPlaces.BRAIN.keys - fixed
         assertTrue("Brain plates with no decision in MenuPlaces: $undecidedPlates", undecidedPlates.isEmpty())
         assertTrue(
-            "the attention budget is no longer an item of its own outside the headings",
-            "attention" in brainKeys,
+            "the attention budget is no longer an item of its own outside the headings, under the " +
+                "key the walk looks up (${PlateList.PLATE_PREFIX}attention)",
+            PlateList.PLATE_PREFIX + "attention" in brainItemKeys,
         )
         val settingsKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(settings).map { it.groupValues[1] }.toSet()
         // Every Settings row is a menu with a place, or one of these: the rows

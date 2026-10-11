@@ -13003,8 +13003,7 @@ only, no code.
 ### 81.2 Quick Settings tiles you choose
 
 Android cannot add a tile while an app runs, so the app ships **three tile
-slots** ("Jarvis tile 1" to "3" in Android's tile editor;
-`service/QuickTileService.kt`) and the owner gives each one action in
+slots** (`service/QuickTileService.kt`) and the owner gives each one action in
 Settings -> Quick Settings tiles (`ui/screens/QuickTilesPlate.kt`,
 `data/QuickTiles.kt`). Saved on the phone only. The pattern (fixed tile
 services plus an assignment screen) is Home Assistant Android's (Apache);
@@ -13017,6 +13016,25 @@ no code copied.
 | Open briefing | opens Jarvis on Brain's briefing (the same intent as the "Brief me now" app-icon shortcut, §52); shows nothing itself | - | App lock asks, as for any opening |
 | Stop everything | `POST /api/stop_all` (§28), after stopping the phone's own speech | **never** (it only stops things) | runs straight away |
 | Play/pause PC | `GET /api/media` to see whether something is playing ("Playing: ..." -> pause, else play), then ONE `POST /api/media/control` (§74.2) | yes | unlock the phone first |
+
+**An unchosen slot is named for what its tap does (2026-10-11).** The owner
+read the panel on his own phone: "Jarvis Live", then three tiles called
+"Jarvis tile 1", "Jarvis tile 2", "Jarvis tile 3". A number is not an action,
+so a person picking a tile could not tell what any of them did - and no test
+could fail on it, because a shape and a number say nothing to test. Android's
+tile **editor** reads the MANIFEST `android:label` (`res/values/strings.xml`,
+`tile_slot_1` to `tile_slot_3`), which is fixed when the app is built and
+cannot know which of the five actions the owner will give a slot later, so all
+three now say `QuickTiles.UNASSIGNED_LABEL` - "Tap to choose", the same words
+as the empty slot's second line, because for an empty slot the label and the
+state are the same truth. It names the tap's real answer,
+`Decision.OpenChooser`. Once a slot HAS an action, the tile in the shade draws
+that action's own name (`QuickTiles.tileLabel`), and the tile also sets
+`contentDescription` to "<label>, <subtitle>" so a screen reader hears what the
+Live tile already said. `QuickTilesTest` fails on any `tile \d+` label and
+holds all five actions to their own names; the Settings hint and the plate's
+rows were corrected with it (the rows now say "Tile 1 - <what it does>", named
+by position, since the three manifest labels are identical on purpose).
 
 **The tile's label says what its tap does (2026-10-10).** The briefing slot
 used to DRAW the shared word "Brief me" while only opening the app, so the
