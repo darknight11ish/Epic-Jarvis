@@ -1748,6 +1748,156 @@ def t_the_throwaway_folders_cannot_collide_with_another_run():
           len(set(used)) == 1 and len(used) >= 6, sorted(set(used)))
 
 
+# ------------------ a patch that is fine, behind one that is left alone
+
+#: The state this miniature is written against. Four patches, and the point of
+#: each. X, Y and W are ON the backend; Z is not, which is what makes the whole
+#: stack fail to reverse - so the strip runs at all - and that is the owner's
+#: own case (docker.patch was the one patch genuinely not on his files).
+#: Y and W are the pair that reproduces his 16: W REWRITES the very line Y adds,
+#: so Y's own text can no longer prove Y is on the file, while Y's hunk prints
+#: X_LINE as context - exactly speed-record.patch's `if _speed is not None:`
+#: being rewritten by chat-stream.patch above it.
+WHOLE_STACK_BASE = "".join(f"{n}\n" for n in
+                           ("alpha", "beta", "gamma", "delta", "xmark", "epsilon",
+                            "zeta", "eta", "theta", "tail1", "tail2", "tail3"))
+
+#: X's hunk: it adds X_LINE between gamma and delta. Every line it adds is in
+#: the file where its hunk puts it, and its context lines are long enough for
+#: the one-line-hunk neighbour rule, so Test-PatchOnBackend answers YES for it -
+#: it is "already on", correctly, and that answer is what the old re-apply left
+#: it at.
+WHOLE_STACK_X_HUNK = """@@ -1,4 +1,5 @@
+ alpha
+ beta
+ gamma
++X_LINE
+ delta
+"""
+
+#: Y's hunk: it adds Y_LINE after delta, and prints X_LINE as context - so Y
+#: cannot go on without X, and cannot be put on before it. Applied, W_LINE
+#: takes Y_LINE's place, which is why Y's own added line is nowhere on the file
+#: and Test-PatchOnBackend answers NO for a patch that IS on it.
+WHOLE_STACK_Y_HUNK = """@@ -3,4 +3,5 @@
+ gamma
+ X_LINE
+ delta
++Y_LINE
+ xmark
+"""
+
+#: W's hunk: it replaces Y_LINE with W_LINE, and prints Y_LINE among the lines
+#: it removes - the way chat-stream.patch rewrites speed-record.patch's line.
+WHOLE_STACK_W_HUNK = """@@ -4,4 +4,4 @@
+ X_LINE
+ delta
+-Y_LINE
++W_LINE
+ xmark
+"""
+
+#: Z's hunk: not on the backend, so the stack does not reverse.
+WHOLE_STACK_Z_HUNK = """@@ -11,4 +11,5 @@
+ theta
+ tail1
++Z_LINE
+ tail2
+ tail3
+"""
+
+
+def backend_with_x_y_and_w_applied(tmp: Path) -> str:
+    """The miniature backend: WHOLE_STACK_BASE with X, Y and W applied and Z
+    not, built with `git apply` so the starting state is the patches' real
+    output rather than a copy of it typed out here."""
+    git = shutil.which("git")
+    assert git, "this check needs git"
+    d = tmp / "preimage-whole-stack"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "jarvis_hud.py").write_text(WHOLE_STACK_BASE, encoding="utf-8", newline="\n")
+    subprocess.run([git, "init", "-q"], cwd=d, check=True, capture_output=True, text=True)
+    env = _gitapply.env_for(git, d)
+    for name, hunk in (("x-alone.patch", WHOLE_STACK_X_HUNK),
+                       ("y-alone.patch", WHOLE_STACK_Y_HUNK),
+                       ("w-alone.patch", WHOLE_STACK_W_HUNK)):
+        p = d / name
+        p.write_text(regression_patch(hunk), encoding="utf-8", newline="\n")
+        r = subprocess.run([git, "-c", "core.autocrlf=false", "-c", "core.eol=lf",
+                            "apply", str(p)], cwd=d, capture_output=True, text=True, env=env)
+        assert r.returncode == 0, r.stdout + r.stderr
+    return (d / "jarvis_hud.py").read_text(encoding="utf-8")
+
+
+def t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about():
+    """The 2026-10-10 refusal: 16 patches named "will not apply" that were fine.
+
+    THE OWNER'S RUN (`_jarvis-logs/apply-patches-2026-10-10-162207.txt`):
+    "134 of these are already on your backend from an earlier run", then
+    "16 patch(es) will not apply. NOTHING HAS BEEN CHANGED." All 16 are patches
+    whose CONTEXT LINES ARE OTHER PATCHES' OWN OUTPUT - schedule.patch's hunk
+    wants wiki.patch's comment, token-store.patch's wants bind-wildcard's
+    `_binds_every_interface`, docker.patch's wants tutorials.patch's block -
+    so none of them can apply to a copy those patches are missing from.
+
+    WHY THEY COULD NOT APPLY. The strip took all 134 off the copy, and the
+    re-apply then asked `Test-PatchOnBackend` - which reads the REAL backend -
+    about every one of them. Every patch the strip took off came off that
+    folder, so the answer there is "yes, already on" for all of them, correctly;
+    101 were left at that and never put back on the copy. The copy was missing
+    101 patches' work, and the 16 are the patches that needed it.
+
+    THE STATE HERE, and what each half proves. X, Y and W are on the backend and
+    Z is not. W rewrites the line Y adds, so Y's own text cannot prove Y is on
+    the file while Y's hunk prints X_LINE as context; X, by contrast, IS proved
+    by its own bytes. So on the script as it was: X is answered "already on" and
+    never put back on the copy, Y is applied to a copy with no X_LINE, and the
+    run refuses BY NAME - "Y.patch - will not apply" - which is the owner's own
+    16 in miniature.
+
+    WHAT IS ASSERTED IS THE OUTCOME: every patch's work on the backend
+    afterwards, and a clean run with no patch named. On the script as it was,
+    the run stops at the rehearsal and changes nothing at all, so Z_LINE is
+    never there.
+    """
+    if not shutil.which("git"):
+        print("SKIP  git is not installed, so no patch can be taken off here")
+        return
+
+    tmp = tmpdir()
+    root = mini_repo(tmp / "r", patches=["X.patch", "Y.patch", "W.patch", "Z.patch"],
+                     patch_files={"X.patch": regression_patch(WHOLE_STACK_X_HUNK),
+                                  "Y.patch": regression_patch(WHOLE_STACK_Y_HUNK),
+                                  "W.patch": regression_patch(WHOLE_STACK_W_HUNK),
+                                  "Z.patch": regression_patch(WHOLE_STACK_Z_HUNK)})
+    be = tmp / "be"
+    be.mkdir()
+    (be / "jarvis_hud.py").write_text(backend_with_x_y_and_w_applied(tmp),
+                                      encoding="utf-8", newline="\n")
+    before = (be / "jarvis_hud.py").read_text(encoding="utf-8")
+    check("SETUP: the backend has X's and W's lines on it, not Y's (W rewrote it) "
+          "and not Z's",
+          "X_LINE" in before and "W_LINE" in before
+          and "Y_LINE" not in before and "Z_LINE" not in before, repr(before))
+
+    code, out = run(root / "scripts" / "apply-patches.ps1", be,
+                    "-SkipTests", "-SkipPackages", "-Force")
+
+    after = (be / "jarvis_hud.py").read_text(encoding="utf-8")
+    check("the run ends clean instead of naming a patch that is fine",
+          code == 0 and "DONE WITH PROBLEMS" not in out, out[-1800:])
+    check("... and it can say all four are on, on the files themselves",
+          "all 4 patches are on" in out, out[-1200:])
+    check("... the patch the strip took off was put back on, not left alone",
+          "already on   X.patch" not in out, out[-1800:])
+    check("... which is what the patch written against its line needed, so it was "
+          "never named at all", "Y.patch - will not apply" not in out, out[-1800:])
+    check("... and the patch that really was missing went on too, so this is not "
+          "a run that did nothing", "Z_LINE" in after, repr(after))
+    check("... and X's and W's own lines are still there, so nothing the run "
+          "touched was lost", "W_LINE" in after and "X_LINE" in after, repr(after))
+
+
 def main():
     if not PWSH:
         print("SKIP  no PowerShell 7 (pwsh) here")
@@ -1770,7 +1920,8 @@ def main():
                t_mini_unmatched_files_are_named_not_blessed,
                t_already_on_is_proved_by_the_patchs_own_bytes,
                t_a_shifted_stack_is_still_recognised_as_on,
-               t_a_patch_answered_already_on_is_never_reversed_off):
+               t_a_patch_answered_already_on_is_never_reversed_off,
+               t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about):
         try:
             fn()
         except Exception:
