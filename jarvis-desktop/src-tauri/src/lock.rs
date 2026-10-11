@@ -242,6 +242,221 @@ fn covered_focused(app: &AppHandle) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Blocking screenshots while the app is locked (the owner's decision, 2026-10-11)
+// ---------------------------------------------------------------------------
+//
+// The desktop half of the phone's `FLAG_SECURE`
+// (`jarvis-client/.../data/Security.kt` `blockScreenCapture`), which the owner
+// decided for the phone on 2026-09-25 and left undecided here. He said yes on
+// 2026-10-11, so this is a decided feature - not a new switch: it follows App
+// lock and "Windows Hello for memory lists and chat history", exactly as the
+// phone's rule follows App lock and its own hide-lists setting.
+//
+// Being honest about what this is worth, because it is easy to overstate:
+//
+// * It DOES keep Jarvis's own windows out of a screen capture made through
+//   Windows' own capture APIs (`PrintScreen`, Snipping Tool, the Game Bar, a
+//   screen recorder, a screen share) on Windows 10 2004 and newer. Before that
+//   build `WDA_EXCLUDEFROMCAPTURE` degrade to `WDA_MONITOR`, where the window
+//   still shows - as a black rectangle - rather than leaving the picture. See
+//   Microsoft's own page for `SetWindowDisplayAffinity`.
+// * It does NOT stop a camera pointed at the screen. Microsoft says so in the
+//   same paragraph: "unlike a security feature ... there is no guarantee".
+// * It does NOT remove the window from a capture of the WHOLE desktop. On
+//   Windows 11 the taskbar's own screenshot tool and most capture programs take
+//   the screen as one picture; the exclusion generally still applies to that
+//   picture, but the guarantee Microsoft gives is about the window's own
+//   content, not about what sits around it. The doc line in
+//   `docs/ARCHITECTURE.md` says this plainly rather than implying a wall.
+// * It is not what makes the lock safe. The lock itself - hiding a window that
+//   was left open, asking Windows Hello before showing one again - is what
+//   protects the content. This only closes the cheapest way to copy it.
+//
+// Not Tauri's `set_content_protected`, which would be the obvious call, and
+// `devices.rs` already records why in full: on Windows tao applies it by
+// RECREATING the window, which closed Settings the moment a pairing succeeded
+// (the owner's report, 2026-10-07). `SetWindowDisplayAffinity` is called
+// directly instead - it changes an attribute of a window this app already
+// owns, and rebuilds nothing, so the lock can never close a window under the
+// owner.
+
+/// The windows a capture is blocked on while the app is locked.
+///
+/// Every window this app can put Jarvis's words in, by Tauri's own label. The
+/// four App lock covers (`Covered`) hide themselves once the owner has been
+/// away, so this list buys nothing for them in that state - but a window is
+/// still on screen between the moment the owner leaves and the moment the
+/// watch notices (up to [`WATCH_EVERY`]), and on a second monitor a Brain left
+/// open can be photographed... captured, rather than read. Cheap to include,
+/// and wrong to leave out. The rest are the windows that stay visible while
+/// locked, which is the gap this feature closes.
+///
+/// `onboarding` is here for the same reason as the rest: it draws Jarvis's
+/// words, and a one-time window is not a licence to leak them.
+///
+/// The two badges (`live-badge`, `watch-badge`) are NOT here. They are the
+/// small status marks for a Live session and "Watch with me", drawn over
+/// whatever else is on screen; their words ("Jarvis is watching") are the whole
+/// point of them, and blocking them would hide the notice that Jarvis is
+/// listening or looking - the opposite of what this project wants.
+pub const SNAPSHOT_LABELS: [&str; 9] = [
+    crate::QUICKBAR_LABEL,
+    crate::HUD_LABEL,
+    crate::windows::WIDGET_LABEL,
+    crate::windows::FLOATING_LABEL,
+    crate::windows::BRAIN_LABEL,
+    crate::windows::SETTINGS_LABEL,
+    crate::windows::FACES_LABEL,
+    crate::windows::FEATURES_LABEL,
+    crate::windows::ONBOARDING_LABEL,
+];
+
+/// True when a screen capture of Jarvis's windows must not show their content.
+///
+/// The decision, pure, so its cases are testable without a window: App lock on
+/// and the lock would ask for Windows Hello now, or the Brain's private lists
+/// hidden and that show has ended. The settings decide whether the block is
+/// allowed at all; the state decides whether it is on. Unlocked, the owner is
+/// looking at those windows, so there is nothing to keep from a capture they
+/// asked for themselves.
+///
+/// Deliberately not `current(app).app_lock` alone, which is the phone's shape:
+/// the phone must set `FLAG_SECURE` from the setting because Android gives it
+/// no "the owner has gone" moment it could react to. Here there is one, and
+/// `app_locked` is already it - the same test that ends a Live session and
+/// tells talk-to-type to stop listening. One notion of "locked", not a second.
+pub fn capture_blocked(app: &AppHandle) -> bool {
+    let owner_here = !app_locked(app);
+    if owner_here {
+        // The owner is looking at their own screen. Nothing to keep from them.
+        return false;
+    }
+    current(app).blocks_capture(owner_here) || private_hidden(app)
+}
+
+/// Hides `window` from screen capture (`excluded`), or puts it back.
+///
+/// The one Win32 call, shared with `devices.rs`, which needs the same thing
+/// while a pairing code is on screen. The window must belong to this process
+/// and be top level - both true of every window Tauri gives us here.
+///
+/// A refusal is logged once and otherwise ignored: the owner decided the lock
+/// is worth having, and an older Windows that cannot exclude a window must not
+/// turn that into a crash or a window that will not open. It is a cheap guard
+/// against the easiest copy, not a wall (docs/ARCHITECTURE.md section 3).
+pub fn set_affinity(window: &WebviewWindow, excluded: bool) {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetWindowDisplayAffinity, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+        };
+        let Ok(handle) = window.hwnd() else {
+            eprintln!(
+                "[jarvis] could not read {}'s handle for the capture block",
+                window.label()
+            );
+            return;
+        };
+        // SAFETY: `handle` is this app's own window handle, read back from
+        // Tauri. SetWindowDisplayAffinity only sets an attribute on it - unlike
+        // Tauri's set_content_protected, it cannot rebuild the window.
+        let ok = unsafe {
+            SetWindowDisplayAffinity(
+                handle.0 as _,
+                if excluded {
+                    WDA_EXCLUDEFROMCAPTURE
+                } else {
+                    WDA_NONE
+                },
+            )
+        };
+        if ok == 0 {
+            let err = std::io::Error::last_os_error();
+            crate::crash_notes::record(
+                "lock",
+                "capture-block-refused",
+                &format!(
+                    "Windows refused to keep {} out of screen capture ({err}), so it can be captured while the app is locked",
+                    window.label()
+                ),
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        // No equivalent on the platforms this app is not shipped for.
+        let _ = (window, excluded);
+    }
+}
+
+/// What the last [`sweep`] did: the state it was asked for, and the windows it
+/// is sure it reached. `None` until the first one.
+///
+/// [`sweep`] runs from the watch every five seconds for the whole life of the
+/// app, so it asks Windows only when the answer has changed or when a window is
+/// one it has never set (one built since the last look). Two small values,
+/// rather than a call into `user32` per window per tick.
+static SWEPT: Mutex<Option<(bool, HashSet<&'static str>)>> = Mutex::new(None);
+
+/// Which windows still need [`set_affinity`] asked of them, returning them and
+/// updating `reached` to say that they have now been done.
+///
+/// `reached` is the set `sweep` remembers between its ticks, so this is what
+/// decides both halves of the feature: a window never set is set; every window
+/// is set again when the answer has CHANGED - which is the "off" half, and the
+/// one that would leave a screen uncapturable for good if it were missing. Pure
+/// apart from the set it is handed, so both are testable without a window and
+/// without an app.
+fn to_set(
+    excluded: bool,
+    last: Option<bool>,
+    reached: &mut HashSet<&'static str>,
+    present: &[&'static str],
+) -> Vec<&'static str> {
+    let changed = last != Some(excluded);
+    let mut set = Vec::new();
+    // A window that is not there now may be built later, so it is forgotten:
+    // when it appears, it is one we have never set.
+    for label in SNAPSHOT_LABELS {
+        if !present.contains(&label) {
+            reached.remove(label);
+        }
+    }
+    for label in present {
+        if changed || !reached.contains(label) {
+            reached.insert(label);
+            set.push(*label);
+        }
+    }
+    set
+}
+
+/// Puts every window in [`SNAPSHOT_LABELS`] into the state [`capture_blocked`]
+/// asks for, right now.
+///
+/// Called when the lock turns on (the watch, [`spawn_watch`]), when it turns
+/// off (the owner passing Windows Hello, [`start_unlock`]), when the security
+/// settings change, and once as a window is created - a window built while the
+/// lock is on must not sit unprotected until the next tick.
+pub fn sweep(app: &AppHandle) {
+    let excluded = capture_blocked(app);
+    let mut swept = SWEPT.lock().unwrap_or_else(|p| p.into_inner());
+    let last = swept.as_ref().map(|(last, _)| *last);
+    let mut reached = swept.take().map(|(_, reached)| reached).unwrap_or_default();
+    let present: Vec<&'static str> = SNAPSHOT_LABELS
+        .into_iter()
+        .filter(|label| app.get_webview_window(label).is_some())
+        .collect();
+    let set = to_set(excluded, last, &mut reached, &present);
+    for label in set {
+        if let Some(window) = app.get_webview_window(label) {
+            set_affinity(&window, excluded);
+        }
+    }
+    *swept = Some((excluded, reached));
+}
+
+// ---------------------------------------------------------------------------
 // Asking Windows Hello
 // ---------------------------------------------------------------------------
 
@@ -574,6 +789,10 @@ fn start_unlock(app: &AppHandle, which: Covered) {
         match strict_verdict(outcome) {
             Ok(()) => {
                 state.touch(Instant::now());
+                // The owner is back and has just proved it, so the windows stop
+                // being hidden from capture. `touch` above is what
+                // `capture_blocked` reads, so this is the unlock half.
+                sweep(&app);
                 open_now(&app, which);
             }
             // Dismissed: the owner's own answer, nothing to say.
@@ -682,6 +901,14 @@ pub fn spawn_watch(app: AppHandle) {
         loop {
             tokio::time::sleep(WATCH_EVERY).await;
             let security = current(&app);
+            // Before the two `continue`s below, not after. This is the one
+            // place that runs whether the lock is on or off, so it is where
+            // the capture block turns on as the owner leaves and off as they
+            // come back - including the case where App lock has just been
+            // switched off in Settings while this loop was asleep. It writes
+            // to the windows only when the answer has changed, so the usual
+            // tick does no more than a boolean per window.
+            sweep(&app);
             if !security.app_lock && !security.private_answers {
                 continue;
             }
@@ -812,6 +1039,11 @@ pub async fn set_security_settings(
     // Turning the lock on from Settings: the owner is here, so the window
     // they are in does not lock under them the moment they click away.
     state.touch(Instant::now());
+    // ...which also means turning App lock on does not blank the screen out of
+    // every capture while the owner is still sitting in front of it. This
+    // settles the block either way: on if the settings now call for it and the
+    // owner has gone, off if they have just turned the last of them off.
+    sweep(&app);
     crate::emit_all(&app, crate::events::SECURITY_CHANGED, settings);
     Ok(settings)
 }
@@ -848,5 +1080,459 @@ mod read_tests {
         assert!(!s.app_lock && !fell_back);
         let (s, _) = resolve_read(Ok(&None), Some(locked()));
         assert_eq!(s, Security::default());
+    }
+}
+
+/// Blocking a capture while the app is locked (2026-10-11).
+///
+/// The app's own `capture_blocked` asks the live settings and the live lock
+/// state, so what these check is the rule underneath it - the same shape as
+/// `read_tests` above, which tests `resolve_read` rather than the store.
+#[cfg(test)]
+mod capture_tests {
+    use super::*;
+
+    /// A stand-in for the app's two settings, so a case reads as the situation
+    /// it describes. The real `capture_blocked` is checked against these by
+    /// `the_live_rule_is_the_one_these_cases_check` below.
+    fn block(app_lock: bool, hide_lists: bool, after_the_lock_would_ask: bool) -> bool {
+        Security {
+            app_lock,
+            private_answers: hide_lists,
+            ..Security::default()
+        }
+        .blocks_capture(!after_the_lock_would_ask)
+    }
+
+    #[test]
+    fn nothing_is_blocked_with_both_settings_off() {
+        // CONTROL. Without this one, a build that blocked every capture for
+        // its whole life would pass every case below.
+        assert!(!block(false, false, false));
+        assert!(!block(false, false, true));
+    }
+
+    #[test]
+    fn the_lock_blocks_once_it_would_ask_for_windows_hello() {
+        // The feature: the owner has walked away, so a capture must not show
+        // Jarvis's windows.
+        assert!(block(true, false, true));
+    }
+
+    #[test]
+    fn the_lock_leaves_capture_alone_while_the_owner_is_there() {
+        // The other half of the same rule, and the one that would be left
+        // broken by a build that only ever turned the block ON: an owner
+        // sitting in front of their own screen can still take a picture of it.
+        assert!(!block(true, false, false));
+    }
+
+    #[test]
+    fn hidden_memory_lists_block_capture_the_same_way_the_phone_does() {
+        // The phone's rule is `appLock || privateLists`
+        // (`Security.kt` `blockScreenCapture`); this is the desktop's half of
+        // it. "Hide memory lists and chat history" is off by default, and with
+        // it on the Brain comes back with the entries taken out until Show
+        // passes Windows Hello - a capture in that window is the leak.
+        assert!(block(false, true, true));
+        assert!(block(true, true, true));
+        // Show just passed, or the owner is here: the lists are on screen
+        // because they asked for them, so there is nothing to keep back.
+        assert!(!block(false, true, false));
+    }
+
+    #[test]
+    fn the_live_rule_is_the_one_these_cases_check() {
+        // The cases above are only worth anything if the shipped rule takes
+        // the same three inputs. Pinned as source, because this crate has no
+        // headless way to build a Tauri app and call the real one.
+        let src = include_str!("lock.rs");
+        let rule = &src[src.find("pub fn capture_blocked").expect("the rule")..];
+        let rule = &rule[..rule.find("\n}\n").expect("its end")];
+        assert!(
+            rule.contains("app_locked(app)") && rule.contains("private_hidden(app)"),
+            "capture_blocked no longer asks the two things these cases are about:\n{rule}"
+        );
+    }
+
+    /// Two windows on screen, and nothing set yet.
+    fn two() -> (HashSet<&'static str>, Vec<&'static str>) {
+        (
+            HashSet::new(),
+            vec![crate::QUICKBAR_LABEL, crate::windows::FLOATING_LABEL],
+        )
+    }
+
+    #[test]
+    fn the_first_sweep_sets_every_window_it_can_see() {
+        let (mut reached, present) = two();
+        let set = to_set(true, None, &mut reached, &present);
+        assert_eq!(set, present, "a window was left unset on the first sweep");
+        assert_eq!(reached.len(), 2, "the sweep forgot what it had just set");
+    }
+
+    #[test]
+    fn a_tick_that_changes_nothing_asks_nothing() {
+        // The watch runs every five seconds for the whole life of the app.
+        let (mut reached, present) = two();
+        to_set(true, None, &mut reached, &present);
+        assert!(
+            to_set(true, Some(true), &mut reached, &present).is_empty(),
+            "a locked-down PC is re-set every five seconds for nothing"
+        );
+    }
+
+    #[test]
+    fn the_answer_changing_sets_every_window_again() {
+        // BOTH halves of the feature. The second is the one that matters most:
+        // if turning the lock off did not re-set these, the screen would stay
+        // uncapturable after the owner came back - a block left ON, which is
+        // exactly the failure this test exists to catch.
+        let (mut reached, present) = two();
+        let on = to_set(true, None, &mut reached, &present);
+        assert_eq!(on.len(), 2, "the lock did not set the windows");
+        let off = to_set(false, Some(true), &mut reached, &present);
+        assert_eq!(off, present, "the unlock did not clear the block");
+    }
+
+    #[test]
+    fn a_window_built_later_is_set_as_soon_as_it_appears() {
+        // The floating face can be switched on while the app is already locked.
+        let (mut reached, present) = two();
+        to_set(true, None, &mut reached, &present);
+        // It is not on screen, so it is forgotten rather than counted as done.
+        let fewer = vec![crate::QUICKBAR_LABEL];
+        assert!(to_set(true, Some(true), &mut reached, &fewer).is_empty());
+        assert!(!reached.contains(crate::windows::FLOATING_LABEL));
+        // It appears. Nothing has changed about the lock, but it is new.
+        let set = to_set(true, Some(true), &mut reached, &present);
+        assert_eq!(
+            set,
+            vec![crate::windows::FLOATING_LABEL],
+            "a window built while locked waited for the next change to be set"
+        );
+    }
+
+    #[test]
+    fn the_windows_are_the_ones_jarvis_puts_its_words_in() {
+        // A list, so a window added later is a deliberate choice rather than a
+        // silent hole. Every label must be one this app really has.
+        for label in SNAPSHOT_LABELS {
+            assert!(
+                [
+                    crate::QUICKBAR_LABEL,
+                    crate::HUD_LABEL,
+                    crate::windows::WIDGET_LABEL,
+                    crate::windows::FLOATING_LABEL,
+                    crate::windows::BRAIN_LABEL,
+                    crate::windows::SETTINGS_LABEL,
+                    crate::windows::FACES_LABEL,
+                    crate::windows::FEATURES_LABEL,
+                    crate::windows::ONBOARDING_LABEL,
+                ]
+                .contains(&label),
+                "{label} is not a window this app builds"
+            );
+        }
+        // The two badges are deliberately absent: their whole job is to say
+        // Jarvis is listening or looking, and a capture that misses them would
+        // hide the notice rather than the secret.
+        assert!(
+            !SNAPSHOT_LABELS.contains(&crate::live::BADGE_LABEL)
+                && !SNAPSHOT_LABELS.contains(&crate::look::BADGE_LABEL),
+            "a badge that says Jarvis is watching must stay in a capture"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The real thing, on the real Windows
+// ---------------------------------------------------------------------------
+//
+// Everything above decides; this measures. `cargo test` runs on Windows in CI
+// (ci.yml's `rust` job), so this is checked there too, and skips - loudly, as
+// a pass with a printed reason - rather than failing a machine with no
+// desktop, which is not this feature being wrong.
+#[cfg(all(test, windows))]
+mod capture_probe {
+    use super::*;
+    use image::RgbaImage;
+    use windows_sys::Win32::Foundation::HWND;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        CreateWindowExW, DestroyWindow, GetWindowDisplayAffinity, GetWindowRect, IsWindowVisible,
+        SetWindowDisplayAffinity, ShowWindow, SW_SHOWNOACTIVATE, WDA_EXCLUDEFROMCAPTURE, WDA_NONE,
+        WS_EX_TOOLWINDOW, WS_POPUP, WS_VISIBLE,
+    };
+
+    /// One window, one screen. Taken for real: the exclusion is a property of
+    /// the desktop, not of this process, so two of these at once would be
+    /// measuring each other's windows.
+    static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+    /// This probe's own window class - not a stock one, so that giving it a red
+    /// background brush cannot repaint anything else on the owner's desktop.
+    const CLASS: &[u16] = &[
+        b'J' as u16,
+        b'a' as u16,
+        b'r' as u16,
+        b'v' as u16,
+        b'i' as u16,
+        b's' as u16,
+        b'C' as u16,
+        b'a' as u16,
+        b'p' as u16,
+        b't' as u16,
+        b'u' as u16,
+        b'r' as u16,
+        b'e' as u16,
+        b'P' as u16,
+        b'r' as u16,
+        b'o' as u16,
+        b'b' as u16,
+        b'e' as u16,
+        0,
+    ];
+    /// `COLORREF`, which is 0x00BBGGRR - so this is a pure red.
+    const RED: u32 = 0x0000_00FF;
+    const SIZE: i32 = 240;
+
+    fn wide(text: &str) -> Vec<u16> {
+        text.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// A visible top-level window of our own class, 240 by 240, filled red, with
+    /// its top-left corner at `(x, y)`. `None` when Windows will not give us a
+    /// window at all - no interactive desktop, a session with no window station.
+    unsafe fn red_window(x: i32, y: i32) -> Option<HWND> {
+        use windows_sys::Win32::Graphics::Gdi::CreateSolidBrush;
+        use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            DefWindowProcW, RegisterClassW, WNDCLASSW,
+        };
+
+        let module = GetModuleHandleW(std::ptr::null());
+        // A red brush as the class background: `DefWindowProcW` erases with it,
+        // so the window is red with no paint code of ours. Freed when the
+        // process exits - one brush, for one test.
+        let class = WNDCLASSW {
+            style: 0,
+            lpfnWndProc: Some(DefWindowProcW),
+            cbClsExtra: 0,
+            cbWndExtra: 0,
+            hInstance: module,
+            hIcon: std::ptr::null_mut(),
+            hCursor: std::ptr::null_mut(),
+            hbrBackground: CreateSolidBrush(RED),
+            lpszMenuName: std::ptr::null(),
+            lpszClassName: CLASS.as_ptr(),
+        };
+        // 0 means the class already exists, which is fine: the test binary runs
+        // this once, and a second registration of the same name is not an error
+        // we care about.
+        RegisterClassW(&class);
+
+        let title = wide("Jarvis capture probe");
+        let hwnd = CreateWindowExW(
+            WS_EX_TOOLWINDOW,
+            CLASS.as_ptr(),
+            title.as_ptr(),
+            WS_POPUP | WS_VISIBLE,
+            x,
+            y,
+            SIZE,
+            SIZE,
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            module,
+            std::ptr::null(),
+        );
+        if hwnd.is_null() {
+            return None;
+        }
+        ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+        Some(hwnd)
+    }
+
+    fn affinity(hwnd: HWND) -> Option<u32> {
+        let mut value = WDA_NONE;
+        // SAFETY: a plain Win32 read of an attribute of a window we own.
+        let ok = unsafe { GetWindowDisplayAffinity(hwnd, &mut value) };
+        (ok != 0).then_some(value)
+    }
+
+    fn set(hwnd: HWND, value: u32) -> bool {
+        // SAFETY: an attribute write on a window this test created.
+        unsafe { SetWindowDisplayAffinity(hwnd, value) != 0 }
+    }
+
+    /// Red pixels anywhere in `frame`.
+    fn red_in(frame: &RgbaImage) -> u32 {
+        frame
+            .pixels()
+            .filter(|p| p[0] > 180 && p[1] < 90 && p[2] < 90)
+            .count() as u32
+    }
+
+    #[test]
+    fn the_exclusion_is_real_and_reversible_on_this_pc() {
+        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|p| p.into_inner());
+
+        // The primary display, and the capture of a small region of it around
+        // the probe window. A region rather than the whole display: it says
+        // exactly which pixels were looked at, and it is quick.
+        let Ok(monitors) = xcap::Monitor::all() else {
+            println!("SKIP  the exclusion is real: no displays were reported");
+            return;
+        };
+        let Some(monitor) = monitors
+            .iter()
+            .find(|m| m.is_primary().unwrap_or(false))
+            .or_else(|| monitors.first())
+        else {
+            println!("SKIP  the exclusion is real: no display to put a window on");
+            return;
+        };
+        let (mx, my) = match (monitor.x(), monitor.y()) {
+            (Ok(x), Ok(y)) => (x, y),
+            _ => {
+                println!("SKIP  the exclusion is real: the display gave no position");
+                return;
+            }
+        };
+        let (mw, mh) = (monitor.width().unwrap_or(0), monitor.height().unwrap_or(0));
+
+        // Just inside the top-left corner of that display: clear of the centre,
+        // and clear of the taskbar.
+        let (wx, wy) = (mx + 40, my + 40);
+        // SAFETY: creating our own window is the point of the probe.
+        let Some(hwnd) = (unsafe { red_window(wx, wy) }) else {
+            println!("SKIP  the exclusion is real: no desktop to put a window on");
+            return;
+        };
+        // The window's own screen coordinates, as Windows now sees them - not
+        // as they were asked for, so a desktop that moved it says so.
+        // SAFETY: reads of our own window's state.
+        let mut rect = windows_sys::Win32::Foundation::RECT {
+            left: wx,
+            top: wy,
+            right: wx + SIZE,
+            bottom: wy + SIZE,
+        };
+        // SAFETY: a plain Win32 read into a local.
+        let placed = unsafe { GetWindowRect(hwnd, &mut rect) } != 0;
+        let visible = unsafe { IsWindowVisible(hwnd) } != 0;
+
+        // A 40 px inset of that window, in the display's own coordinates: the
+        // part of the picture this probe looks at. Inset, so a border or a
+        // shadow is never what is being judged.
+        let region = (
+            (rect.left - mx + 40).max(0) as u32,
+            (rect.top - my + 40).max(0) as u32,
+            160,
+            160,
+        );
+
+        /// One capture of the probe's region, or a printed reason this machine
+        /// cannot make it.
+        fn grab(
+            monitor: &xcap::Monitor,
+            region: (u32, u32, u32, u32),
+            why: &str,
+        ) -> Option<RgbaImage> {
+            let frame = match monitor.capture_region(region.0, region.1, region.2, region.3) {
+                Ok(frame) => frame,
+                Err(_) => {
+                    println!("SKIP  the exclusion is real: {why}");
+                    return None;
+                }
+            };
+            let (w, h) = (frame.width(), frame.height());
+            match RgbaImage::from_raw(w, h, frame.into_raw()) {
+                Some(image) => Some(image),
+                None => {
+                    println!("SKIP  the exclusion is real: a capture had an unexpected size");
+                    None
+                }
+            }
+        }
+
+        // Every pixel of a frame, since the frame IS the region now.
+        // A moment for the desktop to draw the window first: one this process
+        // has just asked for is not necessarily composited on the next line,
+        // and every reading below is of what is on screen.
+        std::thread::sleep(std::time::Duration::from_millis(700));
+
+        // 1. NOT excluded: the capture must see the window. This is the
+        //    CONTROL - without it, "nothing red" below would also pass on a
+        //    machine where the capture was simply broken.
+        let Some(before) = grab(monitor, region, "this machine will not capture the screen") else {
+            // SAFETY: our own window.
+            unsafe { DestroyWindow(hwnd) };
+            return;
+        };
+        let before = red_in(&before);
+
+        // 2. Excluded, through the same call the shipped code makes.
+        let applied = set(hwnd, WDA_EXCLUDEFROMCAPTURE);
+        let read_back = affinity(hwnd);
+        let Some(while_out) = grab(monitor, region, "the second capture failed") else {
+            // SAFETY: our own window.
+            unsafe { DestroyWindow(hwnd) };
+            return;
+        };
+        let after = red_in(&while_out);
+
+        // 3. Cleared again: the same thing the unlock path does.
+        let cleared = set(hwnd, WDA_NONE);
+        let restored = affinity(hwnd);
+        let back = grab(monitor, region, "the third capture failed").map(|frame| red_in(&frame));
+
+        // SAFETY: our own window.
+        unsafe { DestroyWindow(hwnd) };
+
+        println!(
+            "the exclusion on this PC: red before={before}, red while excluded={after}, \
+             red after clearing={back:?} (display {mw}x{mh} at {mx},{my}); \
+             window placed={placed} visible={visible} at {:?}; set={applied} read back \
+             {read_back:?}; clear={cleared} read back {restored:?}",
+            (rect.left, rect.top)
+        );
+
+        assert!(
+            applied,
+            "Windows refused WDA_EXCLUDEFROMCAPTURE on our own window"
+        );
+        assert_eq!(
+            read_back,
+            Some(WDA_EXCLUDEFROMCAPTURE),
+            "the attribute did not stick"
+        );
+        assert_eq!(restored, Some(WDA_NONE), "the attribute would not clear");
+
+        // The attribute is set and read back correctly. What is left is
+        // whether the pixels really go - and that needs a desktop that puts the
+        // window on screen in the first place.
+        if before == 0 {
+            // A skip, said plainly, never as a quiet pass. A session with no
+            // interactive desktop (a service, a CI runner, a session whose
+            // windows are never composited onto the captured screen) captures
+            // the screen happily and never shows a window on it, ours or
+            // anyone's. Measured on this project's own machine, 2026-10-11:
+            // 293 colours in a screen capture, and a plainly visible window
+            // absent from it.
+            println!(
+                "SKIP  the exclusion is real: this session captures the screen but never \
+                 shows a window on it, so the pixels cannot be judged here"
+            );
+            return;
+        }
+        assert_eq!(
+            after, 0,
+            "the window's pixels are STILL in a screen capture while excluded"
+        );
+        assert!(
+            matches!(back, Some(n) if n > 0),
+            "the window stayed out of the capture after the exclusion was cleared"
+        );
     }
 }

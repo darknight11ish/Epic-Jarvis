@@ -13,14 +13,38 @@ import java.util.Locale
 
 /**
  * "People and things" - a plain grouped LIST of the people, pets, places,
- * organisations, projects and things Jarvis's saved facts name, and the
- * facts behind each (the owner's decision of 2026-09-30,
- * docs/GALAXY-PANEL-DESIGN.md sections 4 and 7, option B).
+ * organisations, projects and things Jarvis's saved facts name, the facts
+ * behind each, and the other names those same facts mention (the owner's
+ * decision of 2026-09-30, docs/GALAXY-PANEL-DESIGN.md sections 4 and 7,
+ * option B; the connections added 2026-10-11, see below).
  *
- * It is NOT the Galaxy or the memory graph: no picture, no links between
- * names, no merging. The desktop draws the Galaxy; the phone gets this list
- * only, so the standing rule "no memory graph on the phone" stays true in
- * spirit.
+ * It is NOT the Galaxy's picture: no canvas, no force layout, no draggable
+ * dots, no positions, no merging. The desktop draws the map; the phone draws
+ * words.
+ *
+ * ## Why the phone shows connections but not a map (owner, 2026-10-11)
+ *
+ * The owner asked to see the Galaxy on the phone - "can i see the galaxy on
+ * the android phone? I should be able to see it" - and, offered a choice,
+ * picked "a light, read-only version built for the phone". What he wanted to
+ * see is the same information the desktop's map carries: which people and
+ * things Jarvis knows, how many facts each is in, and **who appears
+ * alongside whom**. That last part is the map's edges, and it is the half a
+ * plain list was missing.
+ *
+ * So the phone gets the map's *information* and not its *drawing*:
+ * [connections] turns the same list into "the other names these facts
+ * mention", which is what a desktop line between two dots means, said in
+ * words that fit a thumb-width column and a screen reader.
+ *
+ * **Read-only, and that is the owner's decision, not an oversight.** He
+ * narrowed CLAUDE.md's "do not build ... the memory graph ... on the phone"
+ * for this one screen: it shows, and that is all. There is no Forget, no
+ * Erase, no Pin, no merge ("are these the same?"), no rename and no drag
+ * here, and no way to make one - the plate has no write to call. A future
+ * reader wondering why the app that offers Forget everywhere else offers
+ * none here should read this paragraph first. The order to change it would
+ * have to come from the owner; it is not a gap to fill.
  *
  * Two existing reads, no new route, nothing stored on the phone:
  * - `GET /api/memory/entities` - one entry per name, with `fact_ids` (newest
@@ -45,14 +69,39 @@ object Entities {
     /** The fixture's page size: how many facts one "Show 20 more" reads. */
     const val PAGE_SIZE = 20
 
+    /**
+     * A fact naming more names than this joins nothing: such a fact is a list,
+     * and joining everything in it says nothing. The desktop's own number
+     * (`galaxy-view.js` `MAX_NAMES_PER_FACT`), kept equal on purpose - two
+     * apps drawing "who is connected to whom" must not disagree.
+     */
+    const val MAX_NAMES_PER_FACT = 12
+
     // The section's own words (not in the fixture, which fixes the panel's).
     const val TITLE = "People and things"
     const val UNDER =
-        "The people, pets, places and things your saved facts name. Tap a name to read the facts behind it."
-    const val EMPTY = "No names yet. They appear as Jarvis saves facts about people and things."
+        "The people, pets, places and things your saved facts name. Tap a name to read the facts behind it, and the other names those facts mention."
+    /**
+     * A fresh Jarvis has nothing to draw here, and the screen says so rather
+     * than showing an empty list that reads like a fault. Deliberately NOT
+     * "you have no memories": this list holds only the names that saved facts
+     * mention, so a Jarvis that knows plenty about the owner but has never
+     * saved a fact naming a person or thing is empty here too, and the words
+     * must not claim otherwise.
+     */
+    const val EMPTY =
+        "Nothing here yet. When a saved fact mentions a person, pet, place or thing, it appears here by name - and two names appear together when one fact mentions both."
     const val MISSING =
         "Your PC's Jarvis cannot list these names yet - run apply-patches.ps1 on the PC to update it."
     const val BACK = "Back to the list"
+
+    // The connections' own words (2026-10-11). Phone-only, like TITLE and
+    // UNDER above: the shared fixture holds the words BOTH apps say, and the
+    // desktop's map draws its edges as lines rather than in words.
+    const val WITH = "Shares facts with"
+    const val ALONE = "No other name appears in this one's facts yet."
+    const val ALONE_WHY =
+        "The Galaxy joins two names when one saved fact mentions both, so this fills in as Jarvis learns."
 
     // The panel's words, word for word from the fixture (`words`).
     const val PANEL = "Facts behind this dot ({count})"
@@ -97,6 +146,16 @@ object Entities {
 
     /** One list row's words: "Priya, 4 facts". */
     fun rowLine(e: Entity): String = e.name + ", " + factCount(e.count)
+
+    /**
+     * Every line of text the list itself draws, top to bottom: each group's
+     * heading followed by its rows. The plate draws exactly these strings, so a
+     * test can hold what the owner sees without a Compose host - the same
+     * trick `MemoryWords.statusRows` uses. The empty case and the section's own
+     * words are not here: they are not rows.
+     */
+    fun drawnLines(entities: List<Entity>): List<String> =
+        groups(entities).flatMap { g -> listOf(g.title) + g.entities.map { rowLine(it) } }
 
     // ------------------------------------------------------------ groups ---
 
@@ -166,6 +225,69 @@ object Entities {
             .takeIf { it.isNotEmpty() }?.let { out.add(Group(OTHER, it)) }
         return out
     }
+
+    // ------------------------------------------------------ connections ---
+
+    /**
+     * How many names each fact id is linked to, over the whole [entities]
+     * list. Worked out once for all names rather than once per name: the panel
+     * asks for one name's connections at a time, and rebuilding this from
+     * scratch on each of them would walk the whole list every time.
+     */
+    fun namesPerFact(entities: List<Entity>): Map<Long, Int> {
+        val out = HashMap<Long, Int>()
+        for (e in entities) for (f in e.factIds) out[f] = (out[f] ?: 0) + 1
+        return out
+    }
+
+    /**
+     * The other names that appear in [one]'s facts, most shared facts first.
+     * [perFact] is [namesPerFact]'s map for the same list.
+     *
+     * This is the desktop Galaxy's edge, in words: `galaxy-view.js`
+     * `buildEntityGraph` joins two dots when one fact names both, and the line
+     * is as strong as how many facts they share. Here, for one name, that is
+     * "Priya, 4 shared facts".
+     *
+     * Worked out from the [entities] list ALONE, by intersecting `factIds` -
+     * no fact's words, no third read, no `/api/graph`. `factIds` are already
+     * de-duplicated by [parse], so the size of an intersection is a real count
+     * of facts mentioning both names and never a repeated id.
+     *
+     * A fact naming more than [MAX_NAMES_PER_FACT] names is a list rather than
+     * a connection ("shopping: milk, eggs, bread"), so it joins nothing - the
+     * desktop's own rule, kept here so the two apps agree on what an edge is.
+     * Ties are broken by name, so the order never depends on the order the PC
+     * happened to send.
+     */
+    fun connections(
+        one: Entity,
+        entities: List<Entity>,
+        perFact: Map<Long, Int> = namesPerFact(entities),
+    ): List<Connection> {
+        if (one.factIds.isEmpty()) return emptyList()
+        val mine = one.factIds.toHashSet()
+        return entities.asSequence()
+            .filter { it.id != one.id }
+            .mapNotNull { other ->
+                val shared = other.factIds.count { it in mine && (perFact[it] ?: 0) <= MAX_NAMES_PER_FACT }
+                if (shared > 0) Connection(other, shared) else null
+            }
+            .sortedWith(
+                compareByDescending<Connection> { it.shared }
+                    .thenBy { it.entity.name.lowercase(Locale.ROOT) },
+            )
+            .toList()
+    }
+
+    /** One name that shares facts with the name on screen, and how many. */
+    data class Connection(val entity: Entity, val shared: Int)
+
+    /** "4 shared facts" / "1 shared fact" - the desktop's `sharedWords`, for one row. */
+    fun sharedWords(n: Int): String = if (n == 1) "1 shared fact" else "$n shared facts"
+
+    /** One connection's row: "Priya, 4 shared facts". */
+    fun connectionLine(c: Connection): String = c.entity.name + ", " + sharedWords(c.shared)
 
     // ------------------------------------------------------------ facts ----
 

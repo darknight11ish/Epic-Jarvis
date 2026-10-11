@@ -316,9 +316,26 @@ internal object BrainSections {
         ),
     )
 
-    /** The heading holding [itemKey], or null for an item no heading holds. */
-    fun sectionOf(itemKey: String): Section? =
-        SECTIONS.firstOrNull { itemKey in it.plateKeys }
+    /** The heading holding the plate named or keyed [itemKey], or null for an item no heading holds. */
+    fun sectionOf(itemKey: String): Section? {
+        // Either spelling names the same plate, and both are really used: a link
+        // ("open the morning briefing") sends the plate's bare NAME
+        // ([toOpen], from `BrainScreen.initialSection`), and the screen's own
+        // walk sends the ITEM KEY it is looking for - `brain-plate:<name>`,
+        // because that is what `ScrollToKeyOnce` hands `onOpen`
+        // (`BrainScreen.plateKeyAt`). Until 2026-10-11 this only knew the bare
+        // name, so the key the walk really handed it found no heading at all: no
+        // heading opened, the plate was not in the list, and every link into
+        // Brain - Find anything's rows included - landed at the top of a shut
+        // screen.
+        //
+        // The lines drawn outside every heading ([ALWAYS_DRAWN]) belong to no
+        // heading, so this answers null for them in either spelling - which is
+        // right: the jump to one of them scrolls to it, and nothing has to be
+        // opened first.
+        val name = itemKey.removePrefix(PlateList.PLATE_PREFIX)
+        return SECTIONS.firstOrNull { name in it.plateKeys }
+    }
 
     /** The plates under [section], in the order the screen draws them. */
     fun platesOf(section: String): List<Plate> =
@@ -360,9 +377,18 @@ internal object BrainSections {
      * `menus-hidden` only when something is hidden; the rest are always there.
      * The order is the order the screen emits them, and `BrainSectionsTest`
      * holds it to that.
+     *
+     * Each key is the FULL `item(key = ...)` the screen draws, in the same
+     * namespace a plate's key carries ([PlateList.PLATE_PREFIX]): one list, one
+     * spelling, so this list is what the screen is held to and there is no
+     * second bare spelling to drift back to. It was a list of bare names until
+     * 2026-10-11, and the screen really did draw them bare - which is why the
+     * walk a link into Brain runs, looking up `brain-plate:attention`, found
+     * nothing and left the owner at the top of the screen.
      */
     val ALWAYS_DRAWN: List<String> =
         listOf("rush", "freshness", "notice", "attention", "menus-hidden", "tail")
+            .map { PlateList.PLATE_PREFIX + it }
 
     /**
      * Which heading starts open, given the plate a link asked for

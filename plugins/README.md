@@ -8,9 +8,9 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **20 drop-in modules**, in [`ready/`](ready/) -
+- **21 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **114 core patches**, which still go on through
+- **115 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -36,7 +36,8 @@ you drop in and take out.
 | 111 | `progress` | the activity heatmap and the owner's balance chart (the owner's decision of 2026-09-30, docs/BUILD-QUEUE-2026-09-30.md item 7; docs/GOALS-PROGRESS-DESIGN.md part C and its "Progress contract (frozen)" | `progress.patch` |
 | 117 | `chatbot-limits-hud` | the monthly money limits and the price list for the chatbot driver's API services, set from the PC's own app. | `chatbot-limits-hud.patch` |
 | 119 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
-| 129 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
+| 129 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
+| 130 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
 
 ## What stays in the core
 
@@ -159,6 +160,7 @@ stack's order and cannot be moved into a folder.
 | `retrieve-count.patch` | edits lines the core already has; it cannot be applied out of order |
 | `handoff-mode.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `handoff-front.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
+| `uncensored-optins.patch` | also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card |
 | `plugin-loader.patch` | the loader itself: the ONE startup call that makes every other drop-in folder possible. It is what replaces the patches, so it can never be replaced by a folder. |
 
 ## Adding and removing one

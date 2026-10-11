@@ -659,7 +659,41 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # jarvis_gate.py at all, so it cannot rewrite a line
                                 # devices.patch wrote - and the later_rewriting() half
                                 # below proves it.
-                                "plugin-loader.patch"}
+                                # gate-touches.patch (2026-10-11) is appended last and
+                                # has exactly TWO hunks, both in jarvis_gate.py: under
+                                # `_PROTECTED`/`_PROTECTED_RE` and at check()'s own
+                                # `hit = _touches_protected(prompt, detail)` call. It
+                                # removes no line, adds no gate list entry, no risk row
+                                # and no _TOOL_ACTIONS line, and has no jarvis_hud.py
+                                # hunk at all - so it cannot rewrite a line
+                                # devices.patch wrote. The later_rewriting() half below
+                                # proves it.
+                                "gate-touches.patch",
+                                "plugin-loader.patch",
+                                # picture-card.patch (2026-10-10) is "which card
+                                # draws the pictures": ONE hunk in jarvis_hud.py,
+                                # an install block on the OWNER's own lines just
+                                # before the main socket is built - immediately
+                                # before plugin-loader.patch (which must stay last
+                                # of all) and after devices.patch. It cannot go
+                                # inside the chain of install blocks that ends at
+                                # `# Before the main socket`: it was first written
+                                # between progress.patch and topics.patch, anchored
+                                # on progress.patch's block with topics.patch's own
+                                # banner as its trailing context, and topics.patch
+                                # runs after it (see _stack.py's RATCHET). It
+                                # touches jarvis_gate.py not at all - no gate list
+                                # entry, no risk row, no _TOOL_ACTIONS line - so it
+                                # cannot rewrite a line devices.patch wrote. The
+                                # later_rewriting() half below proves it.
+                                # uncensored-optins.patch (2026-10-11) is appended in front of
+                                # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+                                # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+                                # install block at the end of jarvis_hud.py's chain. It removes no line,
+                                # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+                                # it cannot rewrite a line devices.patch wrote.
+                                "uncensored-optins.patch",
+                                "picture-card.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

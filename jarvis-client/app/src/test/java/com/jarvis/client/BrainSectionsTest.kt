@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import com.jarvis.client.ui.screens.BrainSections
+import com.jarvis.client.ui.screens.PlateList
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -36,12 +37,43 @@ class BrainSectionsTest {
 
     private val screen: String = repoFile(screens + "BrainScreen.kt").readText()
 
+    /**
+     * The screen's own CODE, with whole-line and block comments blanked - the
+     * `code()` habit `BrainListTest` and `AttentionSettingsTest` already keep.
+     *
+     * BrainScreen's notes explain this very defect and quote the key it was
+     * drawn under in backticks ("as a bare `item(key = "attention")`"), so
+     * reading the raw text would count a line the screen does not draw. Line
+     * numbers and the order of what is left are unchanged; only comment text is
+     * blanked.
+     */
+    private val screenCode: String = code(screen)
+
     /** The file the heading itself, and the rule that draws one, live in. */
     private val sections: String = repoFile(screens + "BrainSections.kt").readText()
 
-    /** Every `item(key = "...")` the screen draws at the top level of its list. */
+    /**
+     * Every `item(key = ...)` the screen draws at the top level of its list, in
+     * the spelling the list really holds.
+     *
+     * The lines outside every heading carry the plates' own namespace
+     * (`item(key = plateKeyAt("attention"))`, BrainScreen's `plateKeyAt`), which
+     * is the KEY a walk looks up by equality; a bare `item(key = "attention")`
+     * is a line nothing can find. The two spellings are therefore not the same
+     * thing here, and this reads them as they are: a namespaced one is kept
+     * namespaced, a bare one stays bare.
+     */
     private val itemKeys: Set<String> =
-        Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(screen).map { it.groupValues[1] }.toSet()
+        Regex("item\\(key = (?:plateKeyAt\\(\"([\\w-]+)\"\\)|\"([\\w-]+)\")\\)")
+            .findAll(screenCode)
+            .map { m ->
+                m.groupValues[2].ifEmpty { PlateList.PLATE_PREFIX + m.groupValues[1] }
+            }
+            .toSet()
+
+    /** Where the screen draws the line outside every heading named [name]. */
+    private fun alwaysDrawnAt(name: String): Int =
+        screenCode.indexOf("item(key = plateKeyAt(\"$name\"))")
 
     /**
      * Every plate name the screen writes inside a heading, read from the
@@ -88,7 +120,7 @@ class BrainSectionsTest {
         // `BrainSections.SECTIONS[i]` and draws that heading, so a heading
         // added to the list but not drawn fails here.
         val drawn = Regex("brainSection\\(\\s*BrainSections\\.SECTIONS\\[(\\d+)\\]")
-            .findAll(screen).map { it.groupValues[1].toInt() }.toList()
+            .findAll(screenCode).map { it.groupValues[1].toInt() }.toList()
         assertEquals(
             "BrainScreen must draw each heading once, in the list's own order",
             BrainSections.SECTIONS.indices.toList(),
@@ -138,10 +170,10 @@ class BrainSectionsTest {
         // tap. The freshness line decides whether anything else can be trusted.
         // Both are drawn before the first heading... and the attention budget,
         // which cannot be hidden or folded at all, after the last one.
-        val firstHeading = screen.indexOf("brainSection(")
+        val firstHeading = screenCode.indexOf("brainSection(")
         assertTrue("the first heading is not drawn", firstHeading > 0)
         for (key in listOf("rush", "freshness")) {
-            val at = screen.indexOf("item(key = \"$key\")")
+            val at = alwaysDrawnAt(key)
             assertTrue("$key is not drawn", at > 0)
             assertTrue("$key is inside the headings", at < firstHeading)
         }
@@ -150,19 +182,23 @@ class BrainSectionsTest {
         // than among the headings, so the collapsed screen is the seven headings
         // and then the two lines that must always be there.
         for (key in listOf("menus-hidden", "attention")) {
-            val at = screen.indexOf("item(key = \"$key\")")
+            val at = alwaysDrawnAt(key)
             assertTrue("$key is not drawn", at > 0)
             assertTrue(
                 "$key must not be inside a heading",
-                at > screen.lastIndexOf("brainSection("),
+                at > screenCode.lastIndexOf("brainSection("),
             )
         }
         // The attention budget cannot be put inside one at all: its menu can
         // never be hidden or folded, and AttentionSettingsTest asserts the
         // screen draws it with no `menus.shows` check.
-        assertTrue(screen.contains("item(key = \"menus-hidden\")"))
+        assertTrue(alwaysDrawnAt("menus-hidden") > 0)
+        // Every line outside a heading, in the order the screen emits them, in
+        // the key spellings the list really holds: the plates' namespace, which
+        // is what the walk that lands on one of them looks up.
         assertEquals(
-            listOf("rush", "freshness", "notice", "attention", "menus-hidden", "tail"),
+            listOf("rush", "freshness", "notice", "attention", "menus-hidden", "tail")
+                .map { PlateList.PLATE_PREFIX + it },
             BrainSections.ALWAYS_DRAWN,
         )
     }
@@ -205,9 +241,28 @@ class BrainSectionsTest {
             val section = BrainSections.sectionOf(key)
             assertTrue("no heading holds $key, so its link lands nowhere", section != null)
             assertEquals("$key's link would not open its heading", section!!.key, BrainSections.toOpen(key))
+            // ...and by the ITEM KEY the walk really hands it. `ScrollToKeyOnce`
+            // calls `onOpen` with the key it was given, which BrainScreen builds
+            // with `plateKeyAt` - `brain-plate:<name>` - so a lookup that only
+            // knew the bare name answered null for every link and left the owner
+            // at the top of a shut Brain. Find anything's rows take this same
+            // path (FindAnythingTest walks them), so this is the line the
+            // owner's "Attention budget lands at the top of Brain" report came
+            // from, fixed from both ends.
+            assertEquals(
+                "$key: the key the walk really looks up finds no heading, so its link would " +
+                    "never open one",
+                section.key,
+                BrainSections.sectionOf(PlateList.PLATE_PREFIX + key)?.key,
+            )
         }
         assertNull("no link asks for anything, so nothing opens", BrainSections.toOpen(null))
         assertNull("a key no heading holds opens nothing", BrainSections.toOpen("no-such-plate"))
+        // A line drawn OUTSIDE every heading belongs to no heading, in either
+        // spelling - the jump to one of them scrolls and opens nothing, which is
+        // what keeps the attention budget out of a foldable heading for good.
+        assertNull(BrainSections.sectionOf("attention"))
+        assertNull(BrainSections.sectionOf(PlateList.PLATE_PREFIX + "attention"))
 
         // Opening by a link is not a toggle: it never closes what is open.
         val open = BrainSections.Open()
@@ -282,6 +337,36 @@ class BrainSectionsTest {
         val rest = src.substring(at)
         val end = rest.indexOf("\n}\n")
         return if (end > 0) rest.substring(0, end) else rest
+    }
+
+    /**
+     * [src] with whole-line `//` comments and block comments blanked (not
+     * dropped, so a line's own offset never moves), the `code()` habit
+     * `BrainListTest` and `AttentionSettingsTest` already keep: a key quoted in
+     * a note is not a key the screen draws.
+     */
+    private fun code(src: String): String {
+        val out = ArrayList<String>()
+        var inBlock = false
+        for (line in src.lines()) {
+            val t = line.trimStart()
+            if (inBlock) {
+                if (t.contains("*/")) inBlock = false
+                out.add("")
+                continue
+            }
+            if (t.startsWith("/*")) {
+                if (!t.contains("*/")) inBlock = true
+                out.add("")
+                continue
+            }
+            if (t.startsWith("//")) {
+                out.add("")
+                continue
+            }
+            out.add(line)
+        }
+        return out.joinToString("\n")
     }
 
     private companion object {
