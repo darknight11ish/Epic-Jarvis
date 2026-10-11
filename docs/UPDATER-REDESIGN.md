@@ -1304,8 +1304,21 @@ short of it.
   `Taking off 134 patch(es) an earlier run applied, newest first.` and
   `ok    Checked again on the real files: all 135 patches are on.`
   `-StateJson` classifies all 135 `taken-off`, 0 `on-but-unstrippable`,
-  0 `not-recognised`. The copy is his `jarvis_hud.py` plus `docker.patch`'s
-  block, byte for byte, and the other 201 `.py` files are unchanged.
+  0 `not-recognised`. **Every file the PATCHES produce comes out byte for byte
+  his own**: `jarvis_hud.py` is his file plus `docker.patch`'s 20-line install
+  block (both hashed and compared), and 193 of his 202 `.py` files are
+  unchanged. The rest of the movement is step 3, which is not patch output at
+  all - it is the modules this repository ships WHOLE. Eight of his were older
+  copies (`jarvis_agent.py`, `jarvis_asks_first.py`, `jarvis_backup.py`,
+  `jarvis_card_words.py`, `jarvis_menus.py`, `jarvis_quick.py`,
+  `jarvis_second_card.py`, `jarvis_settings_registry.py`), each backed up and
+  replaced, which the run says itself - "this run replaced it with this
+  repository's own copy", naming the backup folder - and four his folder did
+  not have were copied in (`jarvis_docker.py`, `jarvis_open.py`,
+  `jarvis_optin_models.py`, `jarvis_storage.py`). Every successful run does
+  that, before this change and after it. An earlier draft of this bullet said
+  "the other 201 `.py` files are unchanged", which was not measured carefully
+  and is not true.
 * `backend/test_apply_outcomes.py` - 168 passed, 0 failed, including §13's own
   checks unchanged. The new check,
   `t_the_whole_stack_goes_back_on_not_only_what_it_can_ask_about`, builds the
