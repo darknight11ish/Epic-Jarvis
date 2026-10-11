@@ -58,6 +58,13 @@ object MenuPlaces {
         "handoff-front" to "settings.handoff-front",
         "devices" to "settings.devices",
         "quick-tiles" to "settings.quick-tiles",
+        // "Screen refresh rate" (2026-10-09): the panel's rate while Jarvis is
+        // on screen. Its own row on the phone, and phone-only - there is no
+        // desktop row to generate, because the desktop draws on a monitor whose
+        // mode the Windows app already owns. Declared here rather than added to
+        // MenuVisibilityTest's "not a menu" list, so the row is hideable like
+        // every other section and the test's own rule is kept, not relaxed.
+        "screen-rate" to "settings.screen-rate",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */

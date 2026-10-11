@@ -18,6 +18,17 @@ running the release APK built from that commit (`2f925c1`). `origin/main` has
 since moved on; nothing here was re-checked against the newer commits, and this
 branch changes exactly one file — this report.
 
+**The instrumented suite was not run — and the trap that is in it.** A
+`connectedDebugAndroidTest` run removes both APKs when it finishes, and the
+pairing key lives in the app's own data, so on a *paired* phone a run costs the
+owner a fresh pairing and another Windows Hello tap. It happened for real on
+2026-10-10 (`docs/ANDROID-PAIRED-AUDIT-2026-10-10.md`, Finding A).
+`jarvis-client/gradle.properties` now sets
+`android.injected.androidTest.leaveApksInstalledAfterRun=true`, which stops it,
+and `InstrumentedRunKeepsInstallTest` fails if that line is removed or
+commented out. This run needed neither, because the phone was unpaired and the
+suite was never started.
+
 **What I could not complete, and exactly what stopped me**
 
 | Not done | What stopped me |

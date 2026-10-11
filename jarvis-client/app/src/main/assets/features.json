@@ -1043,6 +1043,19 @@
     ]
   },
   {
+    "id": "phone-screen-rate",
+    "group": "Phone",
+    "title": "Screen refresh rate",
+    "what": "The rate Jarvis asks the phone's screen to run at while Jarvis is on screen.",
+    "where": "Settings, Screen refresh rate. \"Check again\" re-reads what the screen settled on.",
+    "asks": "No card - it never reaches the PC, and nothing here is a route.",
+    "limit": "It only asks. It cannot change the phone's own display setting - that belongs to the phone, and only the phone's own Settings or a system app can change it. If the screen does not take the rate, the row says so rather than pretending. A higher rate uses more battery. Not the animal's frame rate, which is how often the animal is drawn.",
+    "surface": "phone",
+    "covers": [
+      "settings.screen-rate"
+    ]
+  },
+  {
     "id": "also-on-phone",
     "group": "Phone",
     "title": "Also on my phone",

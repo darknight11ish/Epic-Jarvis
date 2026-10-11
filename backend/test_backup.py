@@ -35,13 +35,27 @@ fake key provider stands in). What it proves:
    to the whole stack and reverses; the module is shipped; restore_backup
    is in jarvis_owner_check.PC_ONLY_ACTIONS, [autonomy.tiers] and has a
    plain-words title.
+8. What a restore must never do to the person trying it (2026-10-10, after
+   a restore that could never be approved):
+   - its card must not NAME a file jarvis_gate.py protects - the card IS the
+     prompt the gate reads, so naming `jarvis_hud.py` got the card refused
+     at tier "never" with nobody ever asked; the card and the detail handed
+     to the gate are held against the gate's own `_PROTECTED` list, read out
+     of `jarvis-backend/jarvis_gate.py`;
+   - a caller that cannot approve the card - `jarvis_owner_check.from_this_pc`
+     says it is not this PC, the same rule `PC_ONLY_ACTIONS` refuses on - is
+     told so up front in plain words, and is never answered 202-and-waiting;
+   - a refusal says, in the sentence the app shows, what to do instead, while
+     the technical reason stays in the record's `why` for a bug report.
 """
 from __future__ import annotations
 
+import ast
 import io
 import itertools
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -1256,11 +1270,188 @@ def t_the_restore_card_says_what_it_really_does():
     # 2026-10-05: a restore now also puts back the backend's own program files,
     # which is a bigger thing to do than it used to be. The card must say so,
     # and must say that an older backup therefore restores an older program.
+    # 2026-10-10: it no longer NAMES jarvis_hud.py while saying it. That name
+    # is in jarvis_gate.py's own `_PROTECTED` list, and the gate reads the card
+    # (the card is the prompt it is handed), so naming it refused the card at
+    # tier "never" before anybody could see it - see the two tests below, which
+    # hold this card against the gate's own list. The meaning is unchanged: the
+    # folder the program runs from says the same thing, plainer.
     check("... and it says plainly that Jarvis's own program files come back too",
-          "program files" in text and "jarvis_hud.py" in text
-          and "back into the folder Jarvis runs from" in text, text)
+          "program files" in text and "the folder Jarvis runs from" in text, text)
     check("... and warns that restoring an OLDER backup undoes updates to the code",
           "restoring an OLDER backup" in text and "apply-patches.ps1" in text, text)
+
+
+def _published_gate_names() -> list:
+    """jarvis_gate.py's own `_PROTECTED` list, read out of the copy of the
+    owner's gate published in `jarvis-backend/` (tracked since 2026-10-06).
+
+    Read with `ast`, never by importing it: that file is the owner's live
+    module, and importing it here would open its approvals database. A check
+    about a list of names needs the list, not the module. An empty answer
+    means the list could not be read - every check that uses it says so out
+    loud instead of passing quietly, which is the one shape that would hide
+    this bug all over again."""
+    path = REPO / "jarvis-backend" / "jarvis_gate.py"
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError, UnicodeDecodeError):
+        return []
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+                isinstance(t, ast.Name) and t.id == "_PROTECTED" for t in node.targets):
+            try:
+                return [str(e.value) for e in node.value.elts]
+            except AttributeError:
+                return []
+    return []
+
+
+def _protected_hits(text: str, names: list) -> list:
+    """The names from `names` that `text` contains, the way the gate looks for
+    them: `_PROTECTED_RE` is those names, `re.escape`d and joined with "|",
+    searched case-insensitively over the prompt and the detail."""
+    return sorted(n for n in names if re.search(re.escape(n), str(text), re.I))
+
+
+def t_the_card_handed_to_the_gate_names_no_protected_file():
+    """Defect, 2026-10-10: the restore card said "(the .py files beside
+    jarvis_hud.py)". `jarvis_gate.check()` is handed the card AS THE PROMPT,
+    and its first rule after the tier table is `_touches_protected(prompt,
+    detail)` - a prompt naming a file in `_PROTECTED` is refused at tier
+    "never", and no card is ever raised. So a restore could never be approved
+    by anybody, at the PC or anywhere else.
+
+    Measured on the owner's PC that night (his own audit log, 16:36:12Z):
+    `gate.refused_protected {"action": "restore_backup", "file": "<redacted 13
+    chars>"}` and then `backup.restore.card {"outcome": "refused"}`. Thirteen
+    characters is "jarvis_hud.py", and `jarvis_backup.py`'s own record read
+    "the gate answered at tier 'never', which is not a person saying yes"."""
+    names = _published_gate_names()
+    check("the published jarvis_gate.py is here and its _PROTECTED list could be read",
+          bool(names), "jarvis-backend/jarvis_gate.py")
+    if not names:
+        return
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    B._save_settings({"folder": str(backups)})
+    out = B.backup_now(str(backups))
+    seen = {}
+
+    def recording_deny(action, detail, prompt):
+        seen.update(action=action, detail=detail, prompt=prompt)
+        return Verdict(False, "denied")
+
+    code, resp = B.request_restore({"name": out["name"], "code": out["recovery_code"]},
+                                   here=True, gate=recording_deny, tier_of=tier_ask,
+                                   spawn=sync_spawn, armed=lambda: True)
+    check("the route raised its card through the real _decide_restore",
+          code == 202 and "prompt" in seen, (code, sorted(seen)))
+    check("... and the card text names NO file jarvis_gate.py protects (naming one "
+          "refuses the card at tier 'never', so nobody is ever asked)",
+          _protected_hits(seen.get("prompt", ""), names) == [],
+          _protected_hits(seen.get("prompt", ""), names))
+    check("... nor does the detail handed to the gate beside it",
+          _protected_hits(json.dumps(seen.get("detail", {})), names) == [],
+          _protected_hits(json.dumps(seen.get("detail", {})), names))
+
+
+def t_a_caller_that_cannot_approve_is_told_so_and_never_waits():
+    """Defect, 2026-10-10: an API caller holding the pairing token was answered
+    202 `{"ok": true, "waiting": true, "message": "Waiting for your approval,
+    with Windows Hello. Nothing changes unless you approve."}` - and the
+    restore was refused a millisecond later. No card, no prompt, and the owner
+    waited for a Windows Hello check that could never come.
+
+    WHO THIS CALLER IS, from the module's own code rather than a guess:
+    `restore_backup` is in `jarvis_owner_check.PC_ONLY_ACTIONS`, and
+    `jarvis_owner_check.from_this_pc(peer, local)` is the rule that decides
+    whether an approval of it is accepted at all. A caller that rule says is
+    not this PC can never approve this card, so the route must not tell it to
+    wait. `own=()` is that function's own seam for "this PC has no other
+    addresses", which is what keeps the check off DNS here; the routes test
+    above stands in `B._from_this_pc` for the same reason."""
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    B._save_settings({"folder": str(backups)})
+    out = B.backup_now(str(backups))
+    body = {"name": out["name"], "code": out["recovery_code"]}
+    peer, local = "100.64.0.7", "127.0.0.1"          # the phone's kind of address
+    check("the module's own rule says this caller is NOT this PC",
+          OC.from_this_pc(peer, local, own=()) is False)
+    asked = []
+    real_from_this_pc = B._from_this_pc
+
+    def from_this_pc_off_this_pc(p, l):
+        asked.append((p, l))
+        return OC.from_this_pc(p, l, own=())         # the module's own rule
+
+    B._from_this_pc = from_this_pc_off_this_pc
+    try:
+        code, resp = B.handle_post(B.RESTORE_ROUTE, body, peer=peer, local=local)
+        pcode, presp = B.handle_post(B.PREVIEW_ROUTE, body, peer=peer, local=local)
+    finally:
+        B._from_this_pc = real_from_this_pc
+    check("the route asked the module's own PC check about this caller before it answered",
+          asked == [(peer, local), (peer, local)], asked)
+    check("a caller that cannot approve is NOT answered 202-and-waiting",
+          code != 202 and "waiting" not in resp and resp.get("waiting") is not True, resp)
+    check("... it is refused outright (403, pc_only), and nothing is left waiting",
+          code == 403 and resp.get("pc_only") is True and B._R_STATE["pending"] == {}
+          and B._R_STATE["latest"] == {}, (code, resp, B._R_STATE))
+    check("... in plain words that say where a restore IS done ('in Jarvis on your PC')",
+          "Jarvis on your PC" in resp.get("error", ""), resp.get("error"))
+    check("... and the preview route says the same, so the two cannot drift apart",
+          pcode == 403 and presp.get("error") == resp.get("error"), (pcode, presp))
+    check("... with no address, no port and no number at all in the sentence",
+          not re.search(r"\d", resp.get("error", "")) and "http" not in resp.get("error", ""),
+          resp.get("error"))
+
+
+def t_the_owner_reads_plain_words_and_the_diagnosis_is_kept():
+    """Defect, 2026-10-10: the record of a refused restore read "the gate
+    answered at tier 'never', which is not a person saying yes" - accurate,
+    engine-room, and no use to the owner, who was left not knowing what to do.
+
+    WHAT THE OWNER READS is `last_restore.message`: the desktop's Settings,
+    Backups panel shows `lastRestore.message` and nothing else
+    (`jarvis-desktop/src/backup-settings.js`, its `say(lastRestore.message)`
+    line). WHAT A BUG REPORT NEEDS is `last_restore.why`, which GET
+    /api/backup returns and neither app shows. So the plain words go in the
+    message and the diagnosis stays in `why` - re-worded where it is shown,
+    never deleted."""
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    B._save_settings({"folder": str(backups)})
+    out = B.backup_now(str(backups))
+    # What the real gate answered on 2026-10-10, tier, outcome and its own
+    # sentence about WHY (the live audit log's `gate.refused_protected`).
+    gate_said = "this touches jarvis_hud.py, which no tool may modify; edit it by hand"
+
+    def refuse_before_any_card(action, detail, prompt):
+        v = Verdict(False, "refused", tier="never")
+        v.reason = gate_said
+        return v
+
+    code, resp = B.request_restore({"name": out["name"], "code": out["recovery_code"]},
+                                   here=True, gate=refuse_before_any_card, tier_of=tier_ask,
+                                   spawn=sync_spawn, armed=lambda: True)
+    result = B.take_restore_result() or {}
+    shown = result.get("message", "")
+    why = result.get("why", "")
+    check("a gate that answers before any card exists is recorded as 'refused'",
+          result.get("outcome") == "refused", result)
+    check("the sentence the owner is shown has no engine-room words in it",
+          "tier" not in shown.lower() and "gate" not in shown.lower()
+          and "which is not a person" not in shown, shown)
+    check("... and it says what to do instead: restore in Jarvis on the PC",
+          "Jarvis on your PC" in shown and "Backups" in shown, shown)
+    check("... and that nothing changed", "Nothing was restored" in shown, shown)
+    check("the diagnosis is KEPT for a bug report in the record's own `why` - which tier "
+          "the gate answered at, and the gate's own sentence about why",
+          "tier" in why and "'never'" in why and gate_said in why, why)
+    check("... and the engine-room words appear ONLY there, never in what the app shows",
+          why != shown and "tier" not in shown and gate_said not in shown, (shown, why))
 
 
 def t_delete_older_backups_is_one_card_this_pc_only():

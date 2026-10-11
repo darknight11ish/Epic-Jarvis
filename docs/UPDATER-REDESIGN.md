@@ -506,7 +506,10 @@ choice: when the manifest says a file is drift, copy his version into
 name. **Verify:** a copy of his folder, with the hand-edit of §3 deliberately
 present, must produce that behaviour - the backup byte-identical to the file as
 it was, the patched version in place afterwards, and the file he was told about
-named in the run's own output.
+named in the run's own output. **BUILT 2026-10-11 (§12)**, with the trigger the
+owner settled on that day: a file the run could not reproduce fires it on the
+run that noticed it, `verified: false` included - see §12 for the one rule and
+the three corrections it took to get there.
 
 5. **Fix the one real defect found on the way.** Where the script decides a
    patch is "already on" it reaches that verdict by *failing to put it on*
@@ -516,6 +519,7 @@ named in the run's own output.
    strategy is replaced, this verdict must be obtained **before** anything is
    applied, not after. **Verify:** a test whose expected answer is "left alone"
    must answer the same way whether the patch would have applied or not.
+   **BUILT 2026-10-11 (§13).** The gate is unchanged, exactly as §8 requires.
 
 ---
 
@@ -870,5 +874,339 @@ script without this change:
 `t_mini_success_and_endings`'s second-run expectation changed from "already
 applied" to the record's own wording, because on a backend the record covers the
 second run no longer asks the stack that question.
+
+---
+
+## 11. Build step 3, built (2026-10-11): the base can be re-taken, and says when it differs
+
+**Step 3 of §5 is built: `tools/gen_base_from_backend.py`.** One switch is the
+whole of it. With `--source <backend folder>` it re-takes `jarvis-backend/`
+from that folder by the rule the folder's own README already carried
+("The exact rule, so it can be re-taken"): every top-level `*.py` except
+`test_*.py`, `patch_openjarvis.py` and `spike_sandbox.py`, plus six files - five
+of them this repository's own copies (`jarvis_hud.html` from
+`jarvis-desktop/src/`, the settings **template** from `backend/rebuilt/`,
+`requirements.lock`, `quiz_grader_cases.json`, `rust-crates.lock`) and
+`jarvis-visual-spec.json`, which is the owner's. With `--check` it derives the
+folder **in memory** and compares: exit 0 if `jarvis-backend/` is exactly what
+that folder produces, exit 1 naming every file that is not - in both directions,
+a copy edited here and a live file this repository has never seen. `--source` is
+only ever read; `jarvis-backend/README.md` and `.gitignore` are left alone, and
+so is `jarvis-backend/_where.py`, which is a resource this repository owns and
+whose two copies are deliberately different.
+
+**The one exception is now the script's rule, not four line numbers.**
+`jarvis-backend/README.md`'s "one deliberate difference" is that the owner's
+live `jarvis_gate.py` writes keys into one dict literal twice, and the base was
+published with the dead earlier lines removed (CPython keeps the last one
+silently; `tools/check_literal_keys.py` is what found them). The tool applies
+that rule generally: inside one dict literal a key written more than once keeps
+its last line and the dead earlier lines go, every drop printed with its line
+number, and a drop that would not compile is refused rather than written. The
+rule is validated against the published base itself - see below.
+
+### What it measured on the owner's folder (read only)
+
+Run against the owner's live folder in `--check` mode, the tool prints
+`FAIL 7 file(s) differ from what this folder produces` and names them:
+
+| file | committed base | the owner's folder produces | what the difference is |
+|---|---|---|---|
+| `jarvis_gate.py` | 120,109 B | 124,410 B | the two dead duplicate lines come off correctly (the tool names both), and what is left is the base **plus** the entries newer patches add |
+| `jarvis_hud.py` | 339,860 B | 356,080 B | `screen-attach.patch` and later work (§4.3's "one patch behind", and more) |
+| `jarvis_asks_first.py` | 109,780 B | 108,570 B | live is **smaller**: this repository's copy has moved on and the live folder has not |
+| `jarvis_limits.py` | 46,884 B | 42,314 B | the same, the other way |
+| `jarvis_voice.py` | 125,754 B | 122,054 B | the same |
+| `jarvis_voice_enroll.py` | 74,262 B | 72,824 B | the same |
+| `jarvis_framework.py` | 28,620 B | 27,077 B | the same |
+
+**The exception rule reproduces the published base exactly.** Derived from the
+owner's folder, `jarvis_gate.py` is the committed base plus the `raise_api_limit`,
+`lower_api_limit`, `handoff_keep_offering` and `handoff_bring_to_front` entries
+and nothing else, with the two dead duplicate lines dropped by name - which is
+what §4.3's "deliberately differs from his `jarvis_gate.py` in four dead lines"
+describes, now reproduced by a rule instead of by hand. (Four keys are named in
+the README's table; two of the four were written only once in the file measured
+here, so two lines are dropped.)
+
+### What this means for step 3's own verification, honestly
+
+§5 says to verify step 3 by regenerating from a copy of the owner's folder and
+confirming `backend/test_base_matches_repo.py` still passes. **On today's
+folders that cannot pass, and it is worth saying why rather than dressing it
+up.** `test_base_matches_repo.py` requires the base's copy of every module this
+repository ships whole to be *this repository's* copy, and the table above shows
+seven files where the live folder and this repository disagree - in both
+directions. So a base re-taken from the owner's folder today would fail that
+suite on those seven, by design: the suite is the second line of defence
+against a stale twin, and it is doing its job. The regeneration is *correct*;
+what is not yet true is that the owner's folder, this repository's copies and
+the published base are the same program on the same day. They converge when his
+folder has been taken through steps 4 and 5 - which is the same blocker step 4
+already has (§10: his machine still refuses, so it has no `_jarvis-state.json`).
+
+What **is** verified, and by what:
+
+- `backend/test_base_regeneration.py` (25 checks, passes anywhere including CI)
+  builds folders whose answer is known in advance and reads the tool's own plan:
+  the two files the rule copies and the three it refuses; the six beside-files
+  and where each comes from (the owner's live settings file is *not* what the
+  base's `.toml` is made from); the duplicate-key rule on one literal, on two
+  literals, and with the result required to compile; a folder with no
+  `jarvis_hud.py` refused rather than half-copied; and `--check` exiting 1 on a
+  base that has been edited here and on a base holding a file the source no
+  longer produces, **without writing a byte**. Two checks read this repository:
+  the tool is pure ASCII, and the five files whose source is this repository's
+  own copy are byte-identical to it in the base.
+- `backend/test_base_matches_repo.py` still passes (13 checks) - step 3 changed
+  no file the base is checked against.
+
+**What this step does not do, plainly.** It does not update the base: the seven
+files above are a report to act on, not something this change acts on by
+itself, because re-taking the base from the owner's folder would overwrite four
+files this repository's copies are ahead on and would publish his newer
+`jarvis_hud.py` and `jarvis_gate.py` without the repository's copies moving -
+which is exactly what `test_base_matches_repo.py` exists to refuse. It does not
+apply patches, so it cannot tell a half-patched folder from a patched one; that
+stays `test_base_matches_repo.py`'s job. And it does not change the result gate
+or anything in `apply-patches.ps1`.
+
+**A question this step puts to the owner, with the numbers in front of him:**
+the base and his folder have drifted apart in both directions, so should the
+repository (a) re-take `jarvis-backend/` and move this repository's own copies
+of those seven files to match at the same time - the base becomes his folder on
+the day it is taken, and `test_base_matches_repo.py` is what proves the two
+moved together; or (b) leave the base as the 2026-10-06 snapshot and let
+`--check` keep reporting the seven until steps 4 and 5 have taken his folder
+through the stack, so the base never describes a state the patches have not
+produced? This is the one decision in step 3 that is not in §5, and it is his
+because (a) publishes his newer files and (b) leaves the base knowingly stale.
+
+---
+
+## 12. Build step 4, built (2026-10-11): what a run could not reproduce, named
+
+**Step 4 of §5 is built.** The owner answered §3 on 2026-10-08 - **(b), back it
+up and overwrite** - and on 2026-10-11 he settled the half that question 1 had
+left open: **"treat 'the run could not reproduce this file' as step 4's trigger
+on the SAME run."** A file the run could not reproduce must trigger the
+backup-and-overwrite **on the run that noticed it**, and Jarvis must **say what
+it replaced, by name**. Nothing may be silent.
+
+### What the trigger was, and why it did not fire
+
+Step 2 records, per file, whether the record can **speak for** it: `verified` is
+true only when exactly one patch of the list names the file and this run applied
+that patch. `Test-ManifestDrift` had two halves, and only the first did anything:
+
+| the file | what step 2 recorded | what the old drift check did |
+|---|---|---|
+| a patch-owned file whose hash has moved | `verified: true` | named it as drift - this half worked |
+| a patch-owned file whose hash has NOT moved, or any file no patch of the list names | `verified: false` | **listed the name and nothing else** |
+
+The second row is the owner's case. §10 measures that his folder has no
+`_jarvis-state.json` at all, so the first run that finishes is a **baseline**
+run: it records every file it can see, and every module this repository ships
+whole is `verified: false` because no patch of the list names one. His
+hand-edited `jarvis_hud.py` is in that set. With only the moved-hash half, the
+edit was baselined unverified and **merely listed**, so the backup-and-overwrite
+step 4 exists for never fired for the very hand-edit it was built for, and the
+edit silently survived - the failure mode §8 calls the one that hurts most.
+
+### What the run does now
+
+The new block sits **before step 3**, and that placement is the whole of one of
+the three corrections this step needed. For every `.py` in the folder that the
+record names, the run asks **the source it owns** whether the bytes on disk are
+the ones it produces:
+
+- a **module this repository ships whole** - the source is a file in this
+  checkout, so the answer is exact: are the bytes on disk the bytes
+  `$SHIPPED` holds? If yes, this run reproduced the file perfectly and nothing
+  is reported, whatever `verified` says. If no, the module is named, because
+  step 3 is about to put this repository's copy in its place.
+- a **file a patch of this list names** - the source is the patch output the
+  record wrote down, so a hash that has moved past it, or a `verified: false`
+  the record never tied to a patch, is named and reported as replaced.
+- a **file with no version anywhere in this repository** - named as **left
+  alone**, never overwritten.
+
+**It writes no file itself, and that is deliberate.** Both halves of the owner's
+answer are already carried out by the two steps around it: step 2 copies every
+file a patch header names into `_jarvis-backup-$Stamp` **before** anything
+touches it, and step 3 backs a module up before it replaces it ("replaced an
+older copy (the old one is in ...)" is its own line). So the run has already
+backed up and overwritten; what it had not done is **say so in one place, by
+name**. That is what this step adds. A second mechanism that wrote files would
+only be able to disagree with those two about what is on disk.
+
+The report ends the run's output, edits no file, and names each file with its
+reason:
+
+```
+Replaced: 1 file(s) this run could not reproduce have been
+          backed up and overwritten, exactly as you asked. By name:
+            jarvis_agent.py  -  this run replaced it with this repository's own copy
+          Your own copy of each one, byte for byte, is in:
+            <backend>\_jarvis-backup-<date>
+          The version this run produces is in place. Anything you added by hand to
+          those files is NO LONGER in the live ones until you put it back from the
+          backup folder.
+```
+
+### The three corrections, each measured
+
+Each of these was found by running the change, and each was a real defect:
+
+1. **Reporting after step 3 reported nothing.** Step 3 has already replaced his
+   hand-edited module with this repository's copy, so the file on disk matches
+   the source, the question answers "reproduced", and the run is silent about
+   the file it just overwrote. **Measured 2026-10-11:** with the block after
+   step 3, a hand-edited `jarvis_agent.py` produced no report at all. Moving the
+   block *before* step 3 puts the question to the owner's own bytes while they
+   are still there.
+2. **`verified: false` read as "could not reproduce" named 180 files.** Step 2
+   records every shipped module `verified: false`, so that reading named all of
+   them - and the one file that had really been missed was lost in the middle of
+   the list. **Measured 2026-10-11:** 180 named; after asking the source's own
+   bytes instead, **exactly 1**.
+3. **A `-not $already` guard meant it never ran on the fast path.** A hand-edited
+   module this repository ships whole does not make the record unusable -
+   `Test-ManifestCurrent` checks the patch list and every file a **patch** names,
+   and a shipped module is in neither - so the next run prints "No rehearsal was
+   needed" and goes straight to step 3. **Measured 2026-10-11:** guarded, the run
+   replaced the module with one word of its own about it (step 3's line) and no
+   step-4 report. The guard is gone.
+
+### The owner's folder, measured read-only (2026-10-11)
+
+Of his 201 `.py` files: **7** are named by a patch header, **180** are modules
+this repository ships whole, and **17** are in neither - `jarvis_preview.py`,
+`jarvis_style.py`, `jarvis_undo.py`, `patch_openjarvis.py`, `spike_sandbox.py`
+and twelve `test_*.py`. The 17 are the reason this step **names** rather than
+overwrites when there is no source: there is no version of them to write, and
+taking them from `jarvis-backend/` is not possible in any case (they are not in
+it). §11 measures the base differing from his folder in **both** directions, so
+overwriting from it would move files backwards and `test_base_matches_repo.py`
+exists to refuse exactly that.
+
+### What this step does NOT do, plainly
+
+- **It does not force his hand-edit out of a file it cannot reproduce.** The
+  replacement is whatever the run's own sources produce, and for a file the
+  patches cannot apply to, the run refuses at the rehearsal before step 4 is
+  reached. **§3's hand-edit is exactly that case on today's files**, and that is
+  the blocker §13 records: `prompt-coach.patch` will not apply to his
+  `jarvis_hud.py`, so his folder never reaches step 4 at all.
+- **It does not relax the result gate** (§8), and it does not change the patch
+  list, the strip, the re-apply or the manifest's own rules.
+- **It does not clean up old backups**, as the owner decided on 2026-10-08.
+
+### How it was verified
+
+`backend/test_apply_outcomes.py` gained
+`t_mini_step4_backs_up_and_overwrites_what_it_could_not_reproduce`, on the mini
+backend the file already builds (the real script with only the patch list cut,
+plus a real `git apply`). It hand-edits `jarvis_agent.py` - a module this
+repository ships whole, so the assertion is exact - and asserts all four halves
+of the owner's answer:
+
+- the run **names** the file, in the report's own words, and says **why**;
+- his own copy is in `_jarvis-backup-<date>` **byte for byte**;
+- the file in place afterwards is **this repository's copy, byte for byte**;
+- the run says plainly that a hand-edit in it is **no longer live** until it is
+  put back.
+
+`t_mini_a_hand_edit_put_back_makes_the_record_usable_again` covers the other
+half, unchanged by this step: a record works again once the files match it.
+`t_mini_a_hand_edit_is_drift_by_name` lost its old "Nothing has been changed
+yet" assertion, because that promise is what this step removes.
+
+---
+
+## 13. Build step 5, built (2026-10-11): "left alone" is asked, not inferred
+
+**Step 5 of §5 is built.** The design note names one real defect: where the
+script decides a patch is "already on" it reached that verdict by **failing to
+put it on**, which is not proof that the work is there. It says the verdict must
+be obtained **before** anything is applied, not after, so that a patch whose
+expected answer is "left alone" answers the same way whether it would have
+applied or not.
+
+**Where the defect was.** In branch (c) - "part of the stack is already on", the
+usual case on a real machine - the re-apply loop applied each patch and only
+asked `Test-PatchOnBackend` when the apply had **failed**. So the run learned
+"this is already on" from the failure, and then recorded it in the same words a
+genuine apply gets for part of the path. Commit `ba344211` closed the half of
+that which deleted two of the owner's features; this closes the other half.
+
+**What changed.** `Test-PatchOnBackend` is now asked **first**, and a patch it
+answers yes for is never applied at all:
+
+```powershell
+if (Test-PatchOnBackend -File $full) {
+    $alreadyOn += @{ Name = $name; File = $full }
+    Set-PatchClass -Name $name -Verdict 'on-but-unstrippable' -Round 2
+    Say "  already on   $name  (left as it is - not put on this run)" Cyan
+    continue
+}
+$r = Invoke-Patch -File $full
+```
+
+**Why this cannot move the work.** `Test-PatchOnBackend` reads **the real
+backend folder** and never the rehearsal copy, so the question and its answer
+are identical before and after the apply - the reordering cannot change where
+anything ends up. A patch whose work is genuinely absent answers no and is
+applied exactly as before. The verdict is recorded in round 2, the round the
+strip records in, because it is a statement about what was **found** on the
+files rather than about what went on a clean copy.
+
+**The result gate is unchanged.** This step makes the classification honest; it
+does not touch `Test-StackReverses`, the `$broken` list, the refusal, or
+`$todo`.
+
+**How it was verified.** `t_a_patch_answered_already_on_is_never_reversed_off`
+already pinned the outcome ("a patch that was on the backend when the run
+started is still on it afterwards"). Its pinned wording was updated for the new
+message, and it gained step 5's own check: the run prints **no** `ok Y.patch`
+line, which is `Invoke-Patch`'s own success report, so Y - the patch the run
+answers "left alone" - is never applied anywhere, on the copy or on the files.
+Its expected answer is reached from the file rather than from the apply.
+
+---
+
+## 14. What these two steps still cannot do, and the blocker they sit behind
+
+**Step 4 cannot fire on the owner's PC yet, and this is worth stating in the
+plainest words available.** §10 records that his machine has never finished a
+run, so it has no `_jarvis-state.json`. §11 records that his folder, this
+repository's copies and the published base are not the same program on the same
+day. Commit `4bf3d19e8`'s own message records the run's current end:
+
+```
+FAIL  prompt-coach.patch - will not apply
+error: patch failed: jarvis_hud.py:3478
+```
+
+That refusal happens at the **rehearsal**, before step 2 applies anything, before
+step 3 copies a module and before step 4 is reached. So on his folder today:
+
+- step 4's report cannot print, because the run stops earlier;
+- §3's hand-edit - the `_why` lines in his `jarvis_hud.py` that no patch
+  produces - is the very thing that makes `prompt-coach.patch` fail to apply, so
+  the file step 4 was built for is the file that stops the run reaching step 4.
+
+**What unblocks him is not in steps 4 or 5.** It is re-anchoring
+`prompt-coach.patch` onto his `jarvis_hud.py`, the same class of work as
+`tutorials.patch`'s re-anchor in commit `0ef8a063`. Steps 4 and 5 are proven on
+copies, which is exactly what §5 asks of them, and they are the behaviour he
+asked for the moment a run can get past the rehearsal.
+
+**One more thing this pass did not change:** the run still refuses rather than
+half-applying when a patch cannot be applied to a hand-edited file. That
+refusal is the gate §8 forbids relaxing before step 5, and step 5 is now built -
+but relaxing it is a separate decision with a separate risk, and it is not taken
+here.
+
 
 

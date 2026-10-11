@@ -1060,7 +1060,14 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
   assert.deepEqual(cap.permissions,
     ["core:app:default", "core:event:allow-listen", "core:event:allow-unlisten",
       "core:path:default", "core:webview:default", "core:window:default",
-      "core:webview:allow-set-webview-zoom", "hud-voice", "hud-link"]);
+      "core:webview:allow-set-webview-zoom", "hud-voice", "hud-link",
+      // The settings gear the OWNER ASKED FOR on this window (2026-10-10,
+      // question 2 of docs/BARS-AND-SETTINGS-AUDIT-2026-10-10.md): the same
+      // navigation-only `open_fix_place` the bar's gear and the widget's gear
+      // hold. It opens or focuses the Settings window at a named place, changes
+      // no setting and approves nothing, so the sentence this test is really
+      // about - no record, no approve, no deny - is unchanged.
+      "open-fix-place"]);
   assert.match(cap.description, /holds NO pairing token/);
   assert.doesNotMatch(cap.description, /worst any drop of that page can do with it is open a window/);
   const surfaces = readFileSync(join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");

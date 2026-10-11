@@ -248,6 +248,17 @@ SECTIONS: tuple = (
     # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
     Section("quick-tiles", ("quick tiles", "quick settings tiles", "the quick tiles"),
             app="phone"),
+    # "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to run at
+    # while Jarvis is on screen (jarvis-client's SettingsScreen.kt item
+    # "screen-rate"; data/ScreenRate.kt, ui/screens/ScreenRatePlate.kt).
+    # Phone-only: the rates come from that phone's own
+    # Display.getSupportedModes(), which a desktop does not have, so there is no
+    # desktop row and none is invented. Not the animal's frame rate - that lives
+    # in the face editor under "appearance-card" and is how often the animal is
+    # DRAWN; ScreenRate.kt's own doc says why the two must never be merged.
+    Section("screen-rate", ("screen refresh rate", "refresh rate", "the refresh rate",
+                            "screen rate", "the screen refresh rate"),
+            app="phone"),
     # "Floating Jarvis" (2026-09-27): the phone's own Settings row
     # (SettingsScreen.kt's `item(key = "floating-avatar")` - saved on that phone
     # only, so it needs no `canAct` gate). It had NO section here until
@@ -1337,6 +1348,79 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   "What can I change?" (the owner's decision, 2026-10-10)
+# --------------------------------------------------------------------------
+#
+# The owner asked to change every setting by talking to Jarvis. Most of the
+# machinery was already here: BOOL_SETTINGS above is what "turn off web
+# search" and ten more phrases act through, and each setting's own setter
+# decides whether it needs a card. What was missing is that Jarvis could not
+# TELL him what he may change - "what can I change?" reached the AI model and
+# came back with an invention rather than this answer.
+#
+# This list is DERIVED from the table above, never typed out again: a switch
+# added to BOOL_SETTINGS appears here by itself, and one removed stops being
+# offered. A second, hand-written list would drift from the real switches and
+# nobody would notice - the exact trap this project keeps fixing.
+#
+# Deliberately NOT promised here:
+#   * anything that would LOOSEN a rule. Those still raise their card and ask
+#     for Windows Hello on the PC; "change any setting by voice" must not
+#     become a way round the gate (rule 4).
+#   * the pick-one settings (web search provider, weather source), which have
+#     their own phrasings today ("switch to Brave for search"). Naming them
+#     here would promise a phrasing that does not match yet.
+
+#: Plain short words for what a section is about, so the answer reads like a
+#: person talking rather than the Settings screen being read out. Only the
+#: sections that can appear below need an entry.
+SECTION_PLAIN = {
+    "web-search": "the web search",
+    "asks-first": "what asks first",
+    "voice": "the voice",
+    "animals": "the animal faces",
+    "screen-look": "looking at the screen",
+    "briefing-settings": "the morning briefing",
+    "browser-engine": "the browser",
+    "phone-notify": "phone notifications",
+    "watch-notify": "watch notifications",
+    "prompt-coach": "the prompt coach",
+}
+
+
+def changeable_settings() -> dict:
+    """Everything the owner can change by talking, in plain words.
+
+    {"switches": [(name, section_plain), ...], "count": n, "words": "..."}
+    Each name is that setting's own first alias, so what is offered is exactly
+    what a phrase can actually reach.
+    """
+    rows = []
+    for b in BOOL_SETTINGS:
+        name = b.names[0] if b.names else b.key
+        where = SECTION_PLAIN.get(b.section or "", "")
+        rows.append((name, where))
+    return {"switches": rows, "count": len(rows), "words": changeable_words(rows)}
+
+
+def changeable_words(rows=None) -> str:
+    """The answer to "what can I change?", as one thing to say.
+
+    Written as a spoken sentence - semicolons between items, no bullet list
+    and no markdown - because this reply may be read aloud.
+    """
+    if rows is None:
+        rows = changeable_settings()["switches"]
+    if not rows:
+        return ("Nothing can be changed by talking on this PC yet. Everything "
+                "lives in Settings in the app.")
+    names = [f"{name} ({where})" if where else name for name, where in rows]
+    return ("You can change these by asking: " + "; ".join(names) +
+            ". Anything that loosens a rule still shows you a card first, and "
+            "say \"undo\" in the same chat if you change your mind.")
 
 
 # --------------------------------------------------------------------------

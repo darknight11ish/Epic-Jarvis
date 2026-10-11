@@ -296,6 +296,28 @@ object PlainErrors {
     /** [networkKind] for a real exception. */
     fun networkKind(t: Throwable): String = networkKind(t::class.java.simpleName, t.message)
 
+    /**
+     * A transport failure in the app's own sentence, from the exception
+     * alone: the same words [forInput] would show for it, and the same
+     * classification.
+     *
+     * The platform's own text must never reach a screen. OkHttp writes the
+     * address it tried and BOTH ports into a connect failure's message, and
+     * the owner's Home screen showed it word for word (feature sweep,
+     * 2026-10-10): "failed to connect to
+     * marioirelan11-alps.nord/100.75.21.228 (port 4719) from
+     * /100.124.30.77 (port 42892) after 10000ms" - a mesh address, a port and
+     * this phone's own address, where a glance-sized sentence belongs. A name
+     * the owner types into the connection settings is theirs to see; the
+     * address a failed dial happened to use is not what they need.
+     *
+     * The classification still travels separately ([networkKind], which
+     * classify turns into the kind), and that is what a bug report needs: it
+     * is what "Details" prints, and [Kind.says] is what the owner reads.
+     */
+    fun networkSays(t: Throwable): String =
+        KINDS.getValue(classify(Input(network = networkKind(t)))).says
+
     /** The PC's own sentence in an error body (`{"error": "..."}` or `{"error": {"message"}}`). */
     fun saidIn(body: String?): Pair<String?, Boolean?> {
         val obj = runCatching { JarvisJson.parseToJsonElement(body.orEmpty()) as? JsonObject }.getOrNull()

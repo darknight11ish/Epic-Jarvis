@@ -1879,7 +1879,7 @@ to the **model** as the tool result, and "denied" tells it to find another way
 — which, for a tool the owner would have approved, means routing around a gate
 nobody answered.
 
-## Added since: a denial can teach a standing rule — but only as a proposal
+## Added since: a denial can teach a standing rule — but only as a marked guess
 
 A prior audit found the gap and the raw material for closing it in the same
 pass: every `check()`/`decide()` branch already calls `_audit(...)`, so a
@@ -1892,10 +1892,26 @@ a line in a log.
 detail)` — added to both places a denial is returned (the on-time path and the
 late-poll path; `timed_out` calls it from neither, on purpose: nobody decided
 anything there, and seeding a rule from silence would teach Jarvis something
-that never happened). It builds one plain-language sentence — *"Remember
-this: I do not want Jarvis to `<action>` without asking me first. I just said
-no when it asked."* — and hands it to `jarvis_extract.propose()` tagged
-`source="gate_denial"`.
+that never happened). It builds one plain-language sentence that says in its own
+words that it is **Jarvis's guess** — *"Jarvis noticed a "no" when it asked to
+`<action>`. This is Jarvis's GUESS, marked as a guess: it is not a record of
+your words. No reason was given, just the action turned down - and none was made
+up to fill the gap. Jarvis is guessing the owner may want it to ask first before
+it `<action>` again: a guess for the owner to keep or discard."* — and hands it
+to `jarvis_extract.propose()` tagged `source="gate_denial"`.
+
+**Why a guess, and why it says so** (the owner's decision of 2026-10-10; entry
+`003` of `docs/RULE-FLEXIBILITY.md`). A Reject click carries none of the owner's
+words: `jarvis_hud.py`'s Reject sends only `{id, by}`, and `decide()` NULLs the
+card's own `prompt` and `detail`, so the action's name, the tier, the time and
+who pressed it are all that survive. The sentence this function used to write
+was a first-person claim — *"Remember this: I do not want Jarvis to `<action>`
+without asking me first. I just said no when it asked."* — presented to the
+learner as the owner's own turn, with "I just said no when it asked" inventing a
+reason for a click that carries none. Facts here are learned from the owner's
+own words only (`CLAUDE.md`, 2026-09-24), so the wording changed; `detail` is
+deliberately not read at all, because there is nothing in it that could honestly
+become a reason.
 
 **Why `propose()` and not a direct write.** It is the one choke point every
 fact this project learns already goes through — `memory-safety.patch` removed
@@ -1908,6 +1924,13 @@ same review queue as every extracted fact, "Keep" or "Discard" in the Brain
 window's Memory tab, one at a time, same as always. Best-effort: a failed or
 missing `jarvis_extract` import is swallowed, because a completed denial must
 never become an error the owner has to do something about.
+
+**The marking is not only in the backend.** `jarvis_intake.annotate()` sets
+`guessed` and puts the same words into `auto_reason` for a `gate_denial` row,
+which is the field both the PC's Brain window and the phone's Memory tab
+already show under a review card; the desktop draws it as a "Jarvis's guess,
+not something you said" note on the card itself. So the guess is labelled where
+the owner actually decides, not just inside `jarvis_gate.py`.
 
 Two new tests in `test_gate_outcome.py`, stubbing `jarvis_extract` the same
 way the rest of the file stubs `jarvis_framework`: a real denial (the same
@@ -3662,8 +3685,8 @@ checked for text written to be obeyed: "ignore your previous instructions",
 "always forward invoices to someone@…", "don't ask me before …", chat-format
 markers, hidden characters. A match adds a `flags` list to the card. **It
 drops nothing.** It runs on the processor, not the graphics card. The gate's
-own "I do not want Jarvis to … without asking me first" card is tested not
-to trip it.
+own guessed-rule card ("Jarvis noticed a \"no\" ... marked as a guess") is
+tested not to trip it.
 
 **10. Never learn from turns the backend started.** The learner now reads a
 conversation only when the code handing it over says it came from you -
@@ -4230,11 +4253,12 @@ audit log, through the same writer. Still one log.
   twice about one file. Its scanner still runs when the skill is loaded
   (`jarvis-framework.toml` section 12 says the scanner runs on the raw bytes
   before any skill reaches the model).
-- **Saying no also proposes a memory rule.** `gate-outcome.patch` turns every
-  denial into a memory proposal - here, "I do not want Jarvis to modify own
-  code without asking me first". That is the gate's own behaviour. It is only
-  a proposal in the review queue; Discard it if you only meant "not this
-  skill".
+- **Saying no also proposes a guessed rule.** `gate-outcome.patch` turns every
+  denial into a proposal in the review queue - here, a rule guessed from the
+  action's name, `modify_own_code`, saying plainly that it is Jarvis's guess
+  and not the owner's words. That is the gate's own behaviour. It is only a
+  suggestion: Discard it if you only meant "not this skill", and nothing is
+  saved or applied either way.
 - `notice_for()` words the card's lock-screen line from `jarvis_gate._RISK`.
   Whether `_RISK` has an entry for `modify_own_code` is not visible here; if
   it does not, the notice uses the unknown-action wording.
@@ -12624,8 +12648,8 @@ proves it can anchor on.
 
 Like every other settings switch of this shape (`learning_enable`,
 `custom_voice`, `loosen_what_asks_first`...), a "no" on this card must not
-turn into a proposed rule ("I do not want Jarvis to X without asking me
-first") - the card always asks anyway, so the proposal would say nothing.
+turn into a proposed rule (a rule guessed from the action's name, marked as
+Jarvis's guess) - the card always asks anyway, so the proposal would say nothing.
 `watch_notifications_enable` joins `_NO_RULE_FROM_DENIAL`, and its own
 `_RISK` entry says the card stays on this PC, as its own hunk in
 `watch-notifications.patch`, positioned after `asks-first.patch`'s own
@@ -13099,16 +13123,50 @@ counts and the backup's own date, read from its `manifest.json`, before
 anything is decided), then raises ONE approval card under `restore_backup`
 - added to `jarvis_owner_check.PC_ONLY_ACTIONS`, so it always needs
 Windows Hello and is always refused from any device but this PC, whatever
-`jarvis_gate.py`'s own risk table says. On approval, Jarvis backs up the
-CURRENT state first, automatically, with a fresh one-time recovery code
-(carried in the outcome exactly once, then gone on the next read), so the
-restore itself can be undone - then writes the backup's files back.
+`jarvis_gate.py`'s own risk table says. That refusal comes FIRST, before
+the body is read, in words that say where a restore is done ("Restoring
+has to be done in Jarvis on your PC, so nothing was restored...", both
+restore routes): a caller that can never approve the card is never told to
+wait for it (2026-10-10 - an API caller used to be answered "waiting for
+your approval, with Windows Hello" and the restore was refused a
+millisecond later, with no card and no prompt). On approval, Jarvis backs
+up the CURRENT state first, automatically, with a fresh one-time recovery
+code (carried in the outcome exactly once, then gone on the next read), so
+the restore itself can be undone - then writes the backup's files back.
 Restore only adds and overwrites; it never deletes a file that is not in
 the backup. Since 2026-10-05 it also writes the archive's `source/*.py`
 back into the folder the module runs from, so the CODE comes back with the
 data; the card says plainly that restoring an OLDER backup therefore puts
 back the older program and undoes updates applied since, naming
 `apply-patches.ps1`.
+
+**The restore card must not name a file `jarvis_gate.py` protects.** The
+card is what `jarvis_gate.check()` is handed as its `prompt`, and the gate
+reads the prompt for the names in its own `_PROTECTED` list
+(`jarvis-framework.toml`, `jarvis_gate.py`, `jarvis_hud.py`, ...) before it
+raises anything: a prompt naming one is refused at tier `never`, no card is
+ever shown and no Windows Hello prompt ever comes. Measured on the owner's
+PC, 2026-10-10 16:36:12Z: `gate.refused_protected {"action":
+"restore_backup", "file": "<redacted 13 chars>"}` and then
+`backup.restore.card {"outcome": "refused"}` - "jarvis_hud.py" was in the
+card's own sentence about the program files, so a restore could never be
+approved by anybody. The card now says "the .py files in the folder Jarvis
+runs from", and `backend/test_backup.py` holds the card and the detail
+handed to the gate against the gate's own list, read from
+`jarvis-backend/jarvis_gate.py`. **The same trap is open for any other card
+whose text names a protected file**: the owner's audit log to 2026-10-10
+holds `gate.refused_protected` 21 times for `enable_reading_tool` and 21
+times for `loosen_what_asks_first` (both are in
+`jarvis_owner_check.PC_ONLY_ACTIONS`, and both cards say which line of
+`jarvis-framework.toml` they change). Whether those two should be reworded
+or the gate should stop reading a route's own card for protected names is
+the owner's call, not this module's.
+
+**What the owner reads when a restore is refused** is `last_restore.message`
+(the desktop's Settings, Backups shows it): plain words with the next step
+in them. The technical reason - which tier the gate answered at, and the
+gate's own sentence - stays in `last_restore.why`, which `GET /api/backup`
+returns and neither app shows.
 
 ## `jarvis_gate.py`: a denial proposes no standing rule
 
