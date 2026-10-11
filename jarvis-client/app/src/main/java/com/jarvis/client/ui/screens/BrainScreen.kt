@@ -383,11 +383,25 @@ fun BrainScreen(
             openKey = if (openKey == section) null else section
         }
 
-        ScrollToKeyOnce(listState, initialSection, onOpen = ::openFor, onDone = onSectionConsumed)
+        /**
+         * The `item(key = ...)` a plate is drawn under. A plate's key carries a
+         * namespace of its own ([PlateList.PLATE_PREFIX]), which is what keeps it
+         * from ever equalling the key of the heading above it - so the two walks
+         * below, which look a key up by exact equality, have to name the
+         * namespaced key and not the bare plate name.
+         */
+        fun plateKeyAt(name: String): String = PlateList.PLATE_PREFIX + name
+
+        ScrollToKeyOnce(
+            listState,
+            initialSection?.let { plateKeyAt(it) },
+            onOpen = ::openFor,
+            onDone = onSectionConsumed,
+        )
         // A jump inside Brain: the "facts kept, hidden" link under Saved
         // automatically brings Topics into view (docs/TOPIC-CONTROLS-DESIGN.md C4).
         var jumpTo by remember { mutableStateOf<String?>(null) }
-        ScrollToKeyOnce(listState, jumpTo, onOpen = ::openFor) { jumpTo = null }
+        ScrollToKeyOnce(listState, jumpTo?.let { plateKeyAt(it) }, onOpen = ::openFor) { jumpTo = null }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -465,10 +479,10 @@ fun BrainScreen(
                 onToggle = { toggle("waiting") },
             plates = {
     if (privateHidden) {
-        item(key = "memory-hidden") {
+        plate("memory-hidden") {
             HiddenSection("Memory awaiting review", busy = showPrivateBusy, onShow = onShowPrivate)
         }
-    } else item(key = "memory") {
+    } else plate("memory") {
         // The QUEUE, not the corpus. /api/graph is desktop-only by the
         // contract's own instruction, and a memory graph is not a thing
         // to read on a phone; what belongs here is the short list of
@@ -502,7 +516,7 @@ fun BrainScreen(
 
                 // How much Jarvis remembers, and whether it is learning - the
                 // desktop's Memory pane numbers, read-only (MemoryCountsPlate.kt).
-                if (menus.shows("brain.memory.learning")) item(key = "memory-counts") {
+                if (menus.shows("brain.memory.learning")) plate("memory-counts") {
                     MenuFrame(menus, "brain.memory.learning") {
                         MemoryCountsSection(
                             canAct = canAct,
@@ -517,7 +531,7 @@ fun BrainScreen(
                                 // Showing it for this visit is the app's own
                                 // mechanism for exactly this (MenuPrefs.showForVisit).
                                 com.jarvis.client.JarvisRuntime.menus.showForVisit("brain.memory.auto")
-                                listScope.launch { scrollToKey(listState, "memory-auto") }
+                                listScope.launch { scrollToKey(listState, plateKeyAt("memory-auto")) }
                             },
                             // "Jarvis remembered N things" opens those facts: a memory
                             // list, hidden like the others.
@@ -531,7 +545,7 @@ fun BrainScreen(
                 // docs/JARVIS-API.md section 19), each with a Forget. Right after
                 // the plate its switches are on - the line above scrolls to it.
                 // Hidden like the other memory lists (AutoLearnPlate.kt).
-                if (menus.shows("brain.memory.auto")) item(key = "memory-auto") {
+                if (menus.shows("brain.memory.auto")) plate("memory-auto") {
                     MenuFrame(menus, "brain.memory.auto") {
                         SavedAutomaticallySection(
                             canAct = canAct,
@@ -547,7 +561,7 @@ fun BrainScreen(
                 // just above, each with an Unpin (ProfilePlate.kt). Right after
                 // that list, not before it: the line in "memory-counts" scrolls
                 // to the item after itself, which must stay "Saved automatically".
-                if (menus.shows("brain.memory.profile")) item(key = "memory-profile") {
+                if (menus.shows("brain.memory.profile")) plate("memory-profile") {
                     MenuFrame(menus, "brain.memory.profile") {
                         AlwaysKeepInMindSection(
                             canAct = canAct,
@@ -561,7 +575,7 @@ fun BrainScreen(
                 // and nicknames, tagged from the list above, each with "Not
                 // between us" and Forget (SharedPlate.kt). Right after "Always
                 // keep in mind", the other fact label with its own section.
-                if (menus.shows("brain.memory.between-us")) item(key = "memory-shared") {
+                if (menus.shows("brain.memory.between-us")) plate("memory-shared") {
                     MenuFrame(menus, "brain.memory.between-us") {
                         BetweenUsSection(
                             canAct = canAct,
@@ -577,7 +591,7 @@ fun BrainScreen(
                 // history" as rows "Topic 1, 41 facts, mode" (the plate does that
                 // itself, so it is drawn in both cases). "switch off my work topic"
                 // opens this item (OpenPlace, "topics").
-                if (menus.shows("brain.memory.topics")) item(key = "topics") {
+                if (menus.shows("brain.memory.topics")) plate("topics") {
                     MenuFrame(menus, "brain.memory.topics") {
                         TopicsSection(
                             canAct = canAct,
@@ -592,7 +606,7 @@ fun BrainScreen(
                 // grouped list of the names saved facts are linked to and the facts
                 // behind each - a list, not the Galaxy's map. Hidden under "Hide
                 // memory lists and chat history" like the other memory lists.
-                if (menus.shows("brain.memory.people-things")) item(key = "people-and-things") {
+                if (menus.shows("brain.memory.people-things")) plate("people-and-things") {
                     MenuFrame(menus, "brain.memory.people-things") {
                         PeopleAndThingsSection(
                             privateHidden = privateHidden,
@@ -604,7 +618,7 @@ fun BrainScreen(
                 // Chat history on the PC: its own screen (HistoryScreen.kt), next
                 // to Memory, as the desktop puts it in the Brain window.
                 if (onOpenHistory != null) {
-                    if (menus.shows("entry.history")) item(key = "history") {
+                    if (menus.shows("entry.history")) plate("history") {
                         MenuFrame(menus, "entry.history") {
                             HistoryEntrySection(
                                 onOpen = onOpenHistory,
@@ -621,7 +635,7 @@ fun BrainScreen(
                 // Undo - next to History, as the desktop puts it on its History
                 // tab. "forget what you learned last week" opens this item
                 // (OpenPlace, "forget-range").
-                if (menus.shows("brain.history.forget-range")) item(key = "forget-range") {
+                if (menus.shows("brain.history.forget-range")) plate("forget-range") {
                     MenuFrame(menus, "brain.history.forget-range") {
                         ForgetRangeSection(
                             canAct = canAct,
@@ -635,15 +649,15 @@ fun BrainScreen(
                 // backend/wiki.patch - its own plate, reading and acting through
                 // JarvisRuntime directly (WikiPlate.kt), so this is its only line.
                 if (privateHidden) {
-                    if (menus.shows("brain.memory.wiki")) item(key = "wiki-hidden") { HiddenSection("Wiki", busy = showPrivateBusy, onShow = onShowPrivate) }
+                    if (menus.shows("brain.memory.wiki")) plate("wiki-hidden") { HiddenSection("Wiki", busy = showPrivateBusy, onShow = onShowPrivate) }
                 } else {
-                    if (menus.shows("brain.memory.wiki")) item(key = "wiki") { MenuFrame(menus, "brain.memory.wiki") { WikiSection(canAct = canAct) } }
+                    if (menus.shows("brain.memory.wiki")) plate("wiki") { MenuFrame(menus, "brain.memory.wiki") { WikiSection(canAct = canAct) } }
                 }
                 if (privateHidden) {
-                    if (menus.shows("brain.memory.as-of")) item(key = "memory-as-of-hidden") {
+                    if (menus.shows("brain.memory.as-of")) plate("memory-as-of-hidden") {
                         HiddenSection("What did I believe on this date?", busy = showPrivateBusy, onShow = onShowPrivate)
                     }
-                } else if (menus.shows("brain.memory.as-of")) item(key = "memory-as-of") {
+                } else if (menus.shows("brain.memory.as-of")) plate("memory-as-of") {
                     MenuFrame(menus, "brain.memory.as-of") {
                         Section("What did I believe on this date?") {
                             MemoryAsOfPlate(
@@ -664,7 +678,7 @@ fun BrainScreen(
                 open = openKey == "doing",
                 onToggle = { toggle("doing") },
             plates = {
-                if (menus.shows("brain.now.right-now")) item(key = "doing") {
+                if (menus.shows("brain.now.right-now")) plate("doing") {
                     MenuFrame(menus, "brain.now.right-now") {
                         Section("Doing") {
                             Plate {
@@ -731,14 +745,14 @@ fun BrainScreen(
 
                 // The tool loop's steps, live (StepsPlate.kt) - the desktop's
                 // Brain → Live. Reads JarvisRuntime directly.
-                if (menus.shows("brain.now.trace")) item(key = "steps") { MenuFrame(menus, "brain.now.trace") { StepsSection() } }
+                if (menus.shows("brain.now.trace")) plate("steps") { MenuFrame(menus, "brain.now.trace") { StepsSection() } }
 
 
                 // "Focus session" (the owner's decision of 2026-09-25): start and
                 // stop one, the countdown, the counts and the report card
                 // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.
                 // Watching what is in front happens on the PC only.
-                if (menus.shows("brain.work.focus")) item(key = "focus") {
+                if (menus.shows("brain.work.focus")) plate("focus") {
                     MenuFrame(menus, "brain.work.focus") {
                         FocusSection(canAct = canAct, privateHidden = privateHidden)
                     }
@@ -749,30 +763,25 @@ fun BrainScreen(
                 // conversation with the chatbot's words marked outside text,
                 // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
                 // the desktop's Brain -> Work, the same card.
-                if (menus.shows("brain.work.chatbot")) item(key = "chatbot") {
+                if (menus.shows("brain.work.chatbot")) plate("chatbot") {
                     MenuFrame(menus, "brain.work.chatbot") {
                         ChatbotSection(canAct = canAct, privateHidden = privateHidden, onOpenHistory = onOpenHistory)
                     }
                 }
 
-                if (menus.shows("brain.work.support")) item(key = "support") {
+                if (menus.shows("brain.work.support")) plate("support") {
                     MenuFrame(menus, "brain.work.support") {
                         SupportSection(canAct = canAct, privateHidden = privateHidden, onOpenHistory = onOpenHistory)
                     }
                 }
 
-                item(key = "attention") {
-                    Section("Attention budget") {
-                        AttentionPlate(
-                            attention = attention,
-                            canAct = canAct,
-                            onRefreshAttention = onRefreshAttention,
-                        )
-                    }
-                }
+                // The attention budget is NOT here. It is drawn outside every
+                // heading, below the last one - see "Attention budget" further
+                // down. Its menu can never be hidden or folded, so it may not
+                // sit inside a heading that can be shut (BrainSections.ALWAYS_DRAWN).
 
                 if (jobs.isNotEmpty()) {
-                    if (menus.shows("brain.work.jobs")) item(key = "jobs") {
+                    if (menus.shows("brain.work.jobs")) plate("jobs") {
                         MenuFrame(menus, "brain.work.jobs") {
                             Section("Background jobs") {
                                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -789,15 +798,15 @@ fun BrainScreen(
                 // item of its own, because this list has to be visible when there
                 // are no Long Fuse jobs. It reads and steers through JarvisRuntime
                 // directly (TasksPlate.kt), so this is its only line.
-                if (menus.shows("brain.work.jobs")) item(key = "tasks") {
+                if (menus.shows("brain.work.jobs")) plate("tasks") {
                     TasksSection(canAct = canAct)
                 }
 
                 // The GitHub watch list (WatchPlate.kt) - it reads and acts
                 // through JarvisRuntime directly, so this is its only line.
-                item(key = "watch") { WatchSection(canAct = canAct) }
+                plate("watch") { WatchSection(canAct = canAct) }
 
-                if (menus.shows("brain.now.findings")) item(key = "initiative") {
+                if (menus.shows("brain.now.findings")) plate("initiative") {
                     MenuFrame(menus, "brain.now.findings") {
                         Probed(
                             "Findings",
@@ -822,7 +831,7 @@ fun BrainScreen(
                 // "Morning briefing" (the owner's decisions of 2026-09-25): the
                 // latest one, "Brief me now", and when it arrives
                 // (BriefingPlate.kt) - the desktop's Brain -> Work and Settings.
-                if (menus.shows("brain.work.briefing")) item(key = "briefing") {
+                if (menus.shows("brain.work.briefing")) plate("briefing") {
                     MenuFrame(menus, "brain.work.briefing") {
                         BriefingSection(
                             canAct = canAct,
@@ -837,7 +846,7 @@ fun BrainScreen(
                 // cards shown at a time on chosen days, and the parts of the
                 // latest briefing made today (TodayPlate.kt) - the desktop's
                 // Brain -> Work -> Today, just above Coming up. Nothing new is read.
-                if (menus.shows("brain.work.today")) item(key = "today") {
+                if (menus.shows("brain.work.today")) plate("today") {
                     MenuFrame(menus, "brain.work.today") {
                         TodaySection(
                             canAct = canAct,
@@ -852,7 +861,7 @@ fun BrainScreen(
                 // widgets described in the owner's words, previewed before Add,
                 // and which one each home-screen "Jarvis widget" shows
                 // (WidgetsPlate.kt) - the desktop's Brain -> Work -> Widgets.
-                if (menus.shows("brain.work.widgets")) item(key = "widgets") {
+                if (menus.shows("brain.work.widgets")) plate("widgets") {
                     MenuFrame(menus, "brain.work.widgets") {
                         WidgetsSection(canAct = canAct, privateHidden = privateHidden)
                     }
@@ -862,7 +871,7 @@ fun BrainScreen(
                 // alarms, reminders and the to-do list, each with its own
                 // buttons (ComingUpPlate.kt) - the desktop's Brain -> Work ->
                 // Coming up. It reads and acts through JarvisRuntime directly.
-                if (menus.shows("brain.work.coming-up")) item(key = "coming-up") {
+                if (menus.shows("brain.work.coming-up")) plate("coming-up") {
                     MenuFrame(menus, "brain.work.coming-up") {
                         ComingUpSection(
                             canAct = canAct,
@@ -877,7 +886,7 @@ fun BrainScreen(
                 // section 100): READ-ONLY - "Set up on the PC", the saved bank
                 // layouts and the category words (SpendingPlate.kt). The columns
                 // check and the categories editor are the PC's alone.
-                if (menus.shows("settings.spending")) item(key = "spending") {
+                if (menus.shows("settings.spending")) plate("spending") {
                     MenuFrame(menus, "settings.spending") {
                         SpendingSection(
                             privateHidden = privateHidden,
@@ -891,7 +900,7 @@ fun BrainScreen(
                 // docs/JARVIS-API.md section 103; menu id brain.retirement, group
                 // finance): a form and an answer drawn from the PC, the typed
                 // numbers held in memory only (RetirementPlate.kt).
-                if (menus.shows("brain.work.retirement")) item(key = "retirement") {
+                if (menus.shows("brain.work.retirement")) plate("retirement") {
                     MenuFrame(menus, "brain.work.retirement") {
                         RetirementSection(
                             canAct = canAct,
@@ -913,7 +922,7 @@ fun BrainScreen(
                 // "Progress" (the owner's tick of 2026-09-30, JARVIS-API section
                 // 105): the activity grid and the balance chart (ProgressPlate.kt),
                 // at the top of Projects. Nothing is kept; hidden with the lists.
-                if (menus.shows("brain.projects.progress")) item(key = "progress") {
+                if (menus.shows("brain.projects.progress")) plate("progress") {
                     MenuFrame(menus, "brain.projects.progress") {
                         ProgressSection(
                             canAct = canAct,
@@ -928,7 +937,7 @@ fun BrainScreen(
                 // their notes and benchmarks with a chart (ProjectsPlate.kt) -
                 // the desktop's Brain -> Projects. It reads and acts through
                 // JarvisRuntime directly.
-                if (menus.shows("brain.tab.projects")) item(key = "projects") {
+                if (menus.shows("brain.tab.projects")) plate("projects") {
                     MenuFrame(menus, "brain.tab.projects") {
                         ProjectsSection(
                             canAct = canAct,
@@ -944,7 +953,7 @@ fun BrainScreen(
                 // check-in, no card for ticking a step or Stop tracking
                 // (GoalsPlate.kt) - the desktop's Brain -> Work, beside Coming
                 // up, docs/JARVIS-API.md section 59.
-                if (menus.shows("brain.work.goals")) item(key = "goals") {
+                if (menus.shows("brain.work.goals")) plate("goals") {
                     MenuFrame(menus, "brain.work.goals") {
                         GoalsSection(
                             canAct = canAct,
@@ -967,7 +976,7 @@ fun BrainScreen(
                 // 2026-09-30): paste a text, answer typed questions one at a
                 // time, marked on the PC by the local model, nothing saved or
                 // learned (QuizPlate.kt) - the desktop's Quiz page.
-                if (menus.shows("brain.work.quiz")) item(key = "quiz") {
+                if (menus.shows("brain.work.quiz")) plate("quiz") {
                     MenuFrame(menus, "brain.work.quiz") {
                         QuizSection(
                             canAct = canAct,
@@ -982,7 +991,7 @@ fun BrainScreen(
                 // 2026-09-30): questions kept from a finished quiz, asked again on
                 // the PC's schedule; the owner rates each card (DecksPlate.kt) -
                 // the desktop's section beside its Quiz page.
-                if (menus.shows("brain.work.decks")) item(key = "decks") {
+                if (menus.shows("brain.work.decks")) plate("decks") {
                     MenuFrame(menus, "brain.work.decks") {
                         DecksSection(
                             canAct = canAct,
@@ -1010,7 +1019,7 @@ fun BrainScreen(
                 // rule: [modelsCache] can only be non-null here if a live read
                 // succeeded at some past point, which needed the capability.
                 if (models != null || modelsCache != null || version?.can("models") == true) {
-                    if (menus.shows("brain.model.models")) item(key = "models") {
+                    if (menus.shows("brain.model.models")) plate("models") {
                         MenuFrame(menus, "brain.model.models") {
                             Section("Model") {
                                 ModelsPlate(
@@ -1032,7 +1041,7 @@ fun BrainScreen(
                 // the cards and the three setups, above the second card's own
                 // switches. Reads and acts through JarvisRuntime directly
                 // (HardwarePlate.kt), so this is its only line.
-                if (menus.shows("settings.hardware")) item(key = "hardware") {
+                if (menus.shows("settings.hardware")) plate("hardware") {
                     MenuFrame(menus, "settings.hardware") {
                         HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
                     }
@@ -1043,13 +1052,13 @@ fun BrainScreen(
                 // (PcHelpPlate.kt), so this is its only line.
                 // "Tutorials" (docs/JARVIS-API.md section 114, TutorialsPlate.kt): one
                 // catalogue for both apps, reading progress kept on the PC, no card.
-                if (menus.shows("brain.model.tutorials")) item(key = "tutorials") {
+                if (menus.shows("brain.model.tutorials")) plate("tutorials") {
                     MenuFrame(menus, "brain.model.tutorials") {
                         TutorialsSection()
                     }
                 }
 
-                if (menus.shows("brain.model.pc-help")) item(key = "pc-help") {
+                if (menus.shows("brain.model.pc-help")) plate("pc-help") {
                     MenuFrame(menus, "brain.model.pc-help") {
                         PcHelpSection()
                     }
@@ -1069,7 +1078,7 @@ fun BrainScreen(
 
                 // backend/second-card.patch. Right under Model, because a feature
                 // whose model is missing is installed with the box above.
-                if (menus.shows("settings.second-card")) item(key = "second-card") {
+                if (menus.shows("settings.second-card")) plate("second-card") {
                     MenuFrame(menus, "settings.second-card") {
                         Section("Second graphics card") {
                             SecondCardPlate(
@@ -1092,7 +1101,7 @@ fun BrainScreen(
                 // way to run a model the main card cannot. Both plates read and
                 // act through JarvisRuntime directly (BigModelPlate.kt), so these
                 // are their only lines.
-                if (menus.shows("settings.big-model")) item(key = "big-model") {
+                if (menus.shows("settings.big-model")) plate("big-model") {
                     MenuFrame(menus, "settings.big-model") {
                         BigModelSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
                     }
@@ -1101,21 +1110,21 @@ fun BrainScreen(
                 // the memory lists and chat history, like the wiki (the desktop's
                 // get_deep takes them out in Rust the same way).
                 if (privateHidden) {
-                    if (menus.shows("brain.memory.deep")) item(key = "deep-questions-hidden") {
+                    if (menus.shows("brain.memory.deep")) plate("deep-questions-hidden") {
                         HiddenSection("Deep questions", busy = showPrivateBusy, onShow = onShowPrivate)
                     }
                 } else {
-                    if (menus.shows("brain.memory.deep")) item(key = "deep-questions") { MenuFrame(menus, "brain.memory.deep") { DeepQuestionsSection(canAct = canAct) } }
+                    if (menus.shows("brain.memory.deep")) plate("deep-questions") { MenuFrame(menus, "brain.memory.deep") { DeepQuestionsSection(canAct = canAct) } }
                 }
 
                 // 4. The endpoints whose shape the contract does not fix. Rendered
                 // from whatever actually came back — see JarvisApi.probe.
-                if (menus.shows("brain.model.compute")) item(key = "compute") {
+                if (menus.shows("brain.model.compute")) plate("compute") {
                     MenuFrame(menus, "brain.model.compute") {
                         Probed("Compute", brain.compute, "GPU and VRAM plan", brain.computeRead, retry)
                     }
                 }
-                item(key = "ledger") {
+                plate("ledger") {
                     Probed(
                         "Audit chain",
                         brain.ledger,
@@ -1124,7 +1133,7 @@ fun BrainScreen(
                         retry,
                     )
                 }
-                if (menus.shows("brain.model.skills")) item(key = "skills") {
+                if (menus.shows("brain.model.skills")) plate("skills") {
                     MenuFrame(menus, "brain.model.skills") {
                         // Read as the desktop reads it, with Remove (SkillsPlate.kt).
                         // An answer with no list falls back to its raw keys, as before.
@@ -1134,7 +1143,7 @@ fun BrainScreen(
                     }
                 }
 
-                if (menus.shows("settings.backend-supports")) item(key = "capabilities") {
+                if (menus.shows("settings.backend-supports")) plate("capabilities") {
                     MenuFrame(menus, "settings.backend-supports") {
                         // Sorted once per handshake, not once per event. `version` holds a
                         // JsonObject, which Compose treats as an unstable type, so this whole
@@ -1204,7 +1213,7 @@ fun BrainScreen(
                 // and appearance - see that file's own doc comment for exactly
                 // what moved and what stayed a separate, only-linked screen.
         if (onOpenSettings != null) {
-            item(key = "settings-entry") { SettingsEntrySection(onOpen = onOpenSettings) }
+            plate("settings-entry") { SettingsEntrySection(onOpen = onOpenSettings) }
         }
             },
         )
@@ -1215,6 +1224,29 @@ fun BrainScreen(
             // back, so it must not be inside a heading that could be shut.
             if (menus.hiddenCount > 0 && onOpenMenuList != null) {
                 item(key = "menus-hidden") { HiddenMenusLine(menus.hiddenCount, onOpenMenuList) }
+            }
+
+            // The attention budget - how many interruptions are left today.
+            //
+            // OUTSIDE every heading, like the rush latch and the freshness line,
+            // and for a rule rather than a preference: its menu can never be
+            // hidden or folded (net/MenuCatalog.kt's NEVER_HIDE, and
+            // AttentionSettingsTest holds this screen to drawing it with no
+            // `menus.shows` check at all), so it must not sit inside a heading
+            // that can be shut. It is also the one number on this screen the
+            // owner checks at a glance, which is why BrainSections.ALWAYS_DRAWN
+            // lists it.
+            //
+            // It lived inside "What Jarvis is doing" until 2026-10-10. That
+            // heading was one of the two that crashed when tapped, so the budget
+            // was missing from the collapsed Brain AND unreachable - the same
+            // rule broken from both ends.
+            item(key = "attention") {
+                BrainAttentionPlate(
+                    attention = attention,
+                    canAct = canAct,
+                    onRefreshAttention = onRefreshAttention,
+                )
             }
 
             item(key = "tail") { Gap(24) }
@@ -1676,6 +1708,29 @@ private fun bytes(n: Long): String = when {
     n >= 1_000_000_000L -> "%.1f GB".format(n / 1_000_000_000.0)
     n >= 1_000_000L -> "%.0f MB".format(n / 1_000_000.0)
     else -> "$n B"
+}
+
+/**
+ * The attention budget's card, as one item of Brain's list.
+ *
+ * It is a plate of the screen itself, NOT of a heading: nothing here is behind a
+ * tap, and nothing may put it behind one. The card [Section] around it is the
+ * same one it was drawn in while it lived under "What Jarvis is doing", so the
+ * owner's reading of it does not change - only its place in the list does.
+ */
+@Composable
+private fun BrainAttentionPlate(
+    attention: Attention,
+    canAct: Boolean,
+    onRefreshAttention: () -> Unit,
+) {
+    Section("Attention budget") {
+        AttentionPlate(
+            attention = attention,
+            canAct = canAct,
+            onRefreshAttention = onRefreshAttention,
+        )
+    }
 }
 
 @Composable
@@ -2521,96 +2576,6 @@ private fun SettingsEntrySection(onOpen: () -> Unit) {
     }
 }
 
-/**
- * One heading on Brain, and the tap that opens or shuts what is under it
- * (the owner's words, 2026-10-10: "Put different section headers, with a
- * secondary menu that opens for that item if i click on it").
- *
- * This replaces `GroupHeading`, which drew the same size and weight of text
- * over "Now", "Memory" and "Model and PC" but hid nothing underneath:
- * UI-AUDIT-2026-09-26 item 9 grouped a screen of about 38 plates, and it was
- * still every plate at once. [BrainSections] decides which plates are under
- * which heading; [LazyListScope.brainSection] draws this and, when it is open,
- * the plates below it.
- *
- * Item 8's rule still holds - the title is made stronger by size and weight,
- * never by the accent colour, which stays reserved for focus and selection -
- * and it is this phone's own headline size
- * ([com.jarvis.client.ui.theme.JarvisType]), which [TopBar]'s title shares.
- *
- * What a screen reader is told, in words rather than by a shape or a colour:
- *
- *  * the title is a real heading ([heading]), as `GroupHeading` was, so
- *    "navigate by headings" walks the seven headings instead of every row;
- *  * the row carries [stateDescription] "Expanded" or "Collapsed", the words
- *    this app already uses on the FAQ's and "Everything Jarvis can do"'s own
- *    open/close cards, so the state is announced and never left to the
- *    chevron's direction;
- *  * the state is drawn as a word too - "Fold" or "Open" - and the whole row
- *    is the target, at the 48dp minimum every other control in this app keeps.
- *
- * The count of what is inside is drawn while the heading is SHUT, not while it
- * is open: it is the one thing that says whether opening is worth a tap, and
- * once the plates are drawn the list itself says the same thing. Nothing here
- * sets `maxLines`, so a long heading wraps on a narrow phone rather than being
- * cut off.
- */
-@Composable
-private fun BrainGroupHeading(section: BrainSections.Section, open: Boolean, onToggle: () -> Unit) {
-    val chrome = LocalChrome.current
-    // Turned in the draw phase, so the short turn redraws one small box and
-    // recomposes nothing (the FAQ's own note, screens-14).
-    val turn by animateFloatAsState(
-        targetValue = if (open) 180f else 0f,
-        animationSpec = LocalMotion.current.micro(),
-        label = "brain-heading-chevron",
-    )
-    Column(Modifier.fillMaxWidth().animateContentSize()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .clip(LocalRadii.current.insetShape)
-                .semantics {
-                    heading()
-                    stateDescription = if (open) "Expanded" else "Collapsed"
-                }
-                .pressable(onClick = onToggle),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                section.title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = chrome.textHi,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                if (open) "Fold" else "Open",
-                style = MaterialTheme.typography.labelMedium,
-                color = chrome.textMid,
-            )
-            Spacer(Modifier.width(6.dp))
-            Chevron(tint = chrome.textMid, modifier = Modifier.graphicsLayer { rotationZ = turn })
-        }
-        if (!open && section.items.size > 1) {
-            Text(
-                "${section.items.size} inside",
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
-                modifier = Modifier.padding(start = 2.dp),
-            )
-        }
-        if (section.hint.isNotEmpty()) {
-            Text(
-                section.hint,
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textLo,
-                modifier = Modifier.padding(start = 2.dp),
-            )
-        }
-    }
-}
 
 @Composable
 fun TopBar(

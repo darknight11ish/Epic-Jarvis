@@ -321,24 +321,43 @@ class MenuVisibilityTest {
             assertTrue("SettingsScreen has no item(key = \"$key\")", settings.contains("item(key = \"$key\")"))
         }
         for (key in MenuPlaces.BRAIN.keys) {
-            assertTrue("BrainScreen has no item(key = \"$key\")", brain.contains("item(key = \"$key\")"))
+            // Brain's plates are drawn through `plate("...")` since 2026-10-10
+            // (BrainSections.kt): ONE recorder writes their item keys, so the
+            // screen's own line names the plate rather than spelling the key out.
+            assertTrue(
+                "BrainScreen has no plate(\"$key\") and no item(key = \"$key\")",
+                brain.contains("plate(\"$key\")") || brain.contains("item(key = \"$key\")"),
+            )
         }
         // The other way: no item on either screen is a menu without a place (a plate added to
         // Brain or Settings must be decided - listed here, or one of the fixed ones below).
         //
         // The three `group-*` keys were Brain's own group headings until
         // 2026-10-10; they are replaced by the headings in BrainSections.kt,
-        // drawn as `item(key = BrainSections.SECTIONS[i].key)` - which this
-        // regex does not match at all, so no heading needs a menu id.
+        // whose item key is `brain-heading:<section key>` - written by
+        // `item(key = BrainSections.headingKey(section))`, which this regex does
+        // not match at all, so no heading needs a menu id.
         // "features" (the way into "Everything Jarvis can do", drawn by
         // `onOpenFeatures?.let { item { ... } }`) has no key of its own and so
         // never appears in `brainKeys` either.
+        // "attention" is in this list as a key, not merely a permission: since
+        // 2026-10-10 it is drawn OUTSIDE every heading (BrainSections.ALWAYS_DRAWN)
+        // by an `item(key = "attention")` of its own, so it is a Brain item with
+        // no menu of its own to place - its menu id `brain.now.budget` can never
+        // be hidden, and AttentionSettingsTest holds that separately.
         val fixed = setOf("rush", "freshness", "notice", "group-now", "group-memory", "group-model-pc",
-            "menus-hidden", "tail", "memory-hidden", "wiki-hidden", "memory-as-of-hidden",
+            "menus-hidden", "tail", "attention", "memory-hidden", "wiki-hidden", "memory-as-of-hidden",
             "deep-questions-hidden")
         val brainKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(brain).map { it.groupValues[1] }.toSet()
+        val brainPlates = Regex("\\bplate\\(\"([\\w-]+)\"\\)").findAll(brain).map { it.groupValues[1] }.toSet()
         val undecided = brainKeys - MenuPlaces.BRAIN.keys - fixed
         assertTrue("Brain items with no decision in MenuPlaces: $undecided", undecided.isEmpty())
+        val undecidedPlates = brainPlates - MenuPlaces.BRAIN.keys - fixed
+        assertTrue("Brain plates with no decision in MenuPlaces: $undecidedPlates", undecidedPlates.isEmpty())
+        assertTrue(
+            "the attention budget is no longer an item of its own outside the headings",
+            "attention" in brainKeys,
+        )
         val settingsKeys = Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(settings).map { it.groupValues[1] }.toSet()
         // Every Settings row is a menu with a place, or one of these: the rows
         // that are deliberately NOT menus. "limits" joined them on 2026-10-08

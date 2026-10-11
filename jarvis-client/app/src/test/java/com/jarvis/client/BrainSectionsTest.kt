@@ -36,9 +36,16 @@ class BrainSectionsTest {
 
     private val screen: String = repoFile(screens + "BrainScreen.kt").readText()
 
-    /** Every `item(key = "...")` the screen draws, and every heading item's key. */
+    /** The file the heading itself, and the rule that draws one, live in. */
+    private val sections: String = repoFile(screens + "BrainSections.kt").readText()
+
+    /** Every `item(key = "...")` the screen draws at the top level of its list. */
     private val itemKeys: Set<String> =
         Regex("item\\(key = \"([\\w-]+)\"\\)").findAll(screen).map { it.groupValues[1] }.toSet()
+
+    /** Every `plate("...")` the screen draws inside a heading. */
+    private val plateNames: Set<String> =
+        Regex("\\bplate\\(\"([\\w-]+)\"\\)").findAll(screen).map { it.groupValues[1] }.toSet()
 
     // ------------------------------------------------------- the headings ---
 
@@ -50,7 +57,7 @@ class BrainSectionsTest {
         assertEquals("a heading title is used twice", sections.size, sections.map { it.title }.toSet().size)
         for (s in sections) {
             assertTrue("${s.key} has no title", s.title.isNotBlank())
-            assertTrue("${s.key} holds nothing", s.items.isNotEmpty())
+            assertTrue("${s.key} holds nothing", s.plates.isNotEmpty())
             // A heading is a phrase, not a sentence, and never jargon.
             assertTrue("${s.title} is too long for a heading", s.title.length <= 32)
         }
@@ -88,23 +95,30 @@ class BrainSectionsTest {
 
     @Test
     fun `every plate still has a heading, and every heading names a real plate`() {
-        val placed = BrainSections.allKeys.toSet()
-        assertEquals("a key is placed under two headings", BrainSections.allKeys.size, placed.size)
+        val placed = BrainSections.allPlateKeys().toSet()
+        assertEquals("a plate is placed under two headings", BrainSections.allPlateKeys().size, placed.size)
 
         // One way: a key a heading claims must really be drawn by the screen.
+        // 2026-10-10: the screen draws its plates through `plate("...")` now, not
+        // `item(key = "...")` - the crash was a plate key equal to its heading's,
+        // and one receiver for both is what stops it - so the plate's own name is
+        // what is looked for. `BrainListTest` holds those two lists equal, in
+        // order, one for one.
         for (key in placed) {
-            assertTrue("no item(key = \"$key\") in BrainScreen.kt", key in itemKeys)
+            assertTrue("no plate(\"$key\") in BrainScreen.kt", key in plateNames)
         }
 
         // The other way: nothing the screen draws is left out of the headings,
         // except the few lines that must never be shut away.
         val always = BrainSections.ALWAYS_DRAWN.toSet()
-        val unplaced = itemKeys - placed - always
-        assertTrue("Brain items under no heading at all: $unplaced", unplaced.isEmpty())
+        val unplaced = plateNames - placed
+        assertTrue("Brain plates under no heading at all: $unplaced", unplaced.isEmpty())
+        val unowned = itemKeys - always
+        assertTrue("Brain items under no heading at all: $unowned", unowned.isEmpty())
 
         // Each key is counted once, so the "N inside" on a heading is the truth.
         for (s in BrainSections.SECTIONS) {
-            assertEquals("${s.key} lists a key twice", s.items.size, s.items.toSet().size)
+            assertEquals("${s.key} lists a key twice", s.plateKeys.size, s.plateKeys.toSet().size)
         }
     }
 
@@ -113,7 +127,8 @@ class BrainSectionsTest {
         // The rush latch is about outside text that tried to raise the tier: it
         // is the one adversarial thing on this screen and it may not be behind a
         // tap. The freshness line decides whether anything else can be trusted.
-        // Both are drawn before the first heading.
+        // Both are drawn before the first heading... and the attention budget,
+        // which cannot be hidden or folded at all, after the last one.
         val firstHeading = screen.indexOf("brainSection(")
         assertTrue("the first heading is not drawn", firstHeading > 0)
         for (key in listOf("rush", "freshness")) {
@@ -121,16 +136,22 @@ class BrainSectionsTest {
             assertTrue("$key is not drawn", at > 0)
             assertTrue("$key is inside the headings", at < firstHeading)
         }
-        // The line that puts a hidden menu back is outside them too, and the
-        // attention budget cannot be put inside one at all: its menu can never
-        // be hidden or folded, and AttentionSettingsTest asserts the screen
-        // draws it with no `menus.shows` check.
+        // The hidden-menus line, and the attention budget with it, are outside
+        // them too - and, since 2026-10-10, at the BOTTOM of the list rather
+        // than among the headings, so the collapsed screen is the seven headings
+        // and then the two lines that must always be there.
+        for (key in listOf("menus-hidden", "attention")) {
+            val at = screen.indexOf("item(key = \"$key\")")
+            assertTrue("$key is not drawn", at > 0)
+            assertTrue(
+                "$key must not be inside a heading",
+                at > screen.lastIndexOf("brainSection("),
+            )
+        }
+        // The attention budget cannot be put inside one at all: its menu can
+        // never be hidden or folded, and AttentionSettingsTest asserts the
+        // screen draws it with no `menus.shows` check.
         assertTrue(screen.contains("item(key = \"menus-hidden\")"))
-        val lastHeadingEnd = screen.lastIndexOf("brainSection(")
-        assertTrue(
-            "the hidden-menus line must not be inside a heading",
-            screen.indexOf("item(key = \"menus-hidden\")") > lastHeadingEnd,
-        )
         assertEquals(
             listOf("rush", "freshness", "notice", "attention", "menus-hidden", "tail"),
             BrainSections.ALWAYS_DRAWN,
@@ -185,17 +206,20 @@ class BrainSectionsTest {
         open.open("pc")
         assertTrue("the link did not open its heading", open.isOpen("pc"))
 
-        // And the screen really wires the link to it.
+        // And the screen really wires the link to it. The key it looks up carries
+        // the plates' namespace (PlateList.PLATE_PREFIX): a plate's item key is
+        // no longer the bare name, and a walk that looks a key up by equality has
+        // to name the key the list really holds.
         assertTrue(
             "the screen does not open a heading for a link",
-            screen.contains("ScrollToKeyOnce(listState, initialSection, onOpen = ::openFor"),
+            screen.contains("ScrollToKeyOnce(") && screen.contains("initialSection?.let { plateKeyAt(it) }"),
         )
         // A jump from a link INSIDE a heading goes the same way: the "facts
         // kept, hidden" link under Saved automatically jumps to Topics.
         assertTrue(
             "a jump inside Brain does not open the heading it lands in",
             screen.contains("BrainSections.sectionOf(key)") &&
-                screen.contains("ScrollToKeyOnce(listState, jumpTo, onOpen ="),
+                screen.contains("ScrollToKeyOnce(listState, jumpTo?.let { plateKeyAt(it) }, onOpen ="),
         )
     }
 
@@ -203,7 +227,7 @@ class BrainSectionsTest {
 
     @Test
     fun `a heading is a real heading and says whether it is open in words`() {
-        val body = functionBody(screen, "private fun BrainGroupHeading(")
+        val body = functionBody(sections, "private fun BrainGroupHeading(")
         assertTrue("the heading is not announced as a heading", body.contains("heading()"))
         assertTrue(
             "the open or shut state is not in words",
@@ -224,16 +248,20 @@ class BrainSectionsTest {
 
     @Test
     fun `no heading is clipped and the count is shown while it is shut`() {
-        val body = functionBody(screen, "private fun BrainGroupHeading(")
+        val body = functionBody(sections, "private fun BrainGroupHeading(")
         // A clipped label is a hidden label: the phone's largest font must be
         // able to wrap a heading rather than cut it off.
         assertFalse("a heading can be clipped", body.contains("maxLines"))
         assertFalse("a heading can be clipped", body.contains("TextOverflow"))
         assertTrue(
             "the count of what is inside is not drawn while the heading is shut",
-            body.contains("if (!open && section.items.size > 1)"),
+            body.contains("if (!open && inside > 1)"),
         )
         assertTrue("the count is not said in words", body.contains("inside\""))
+        // The count drawn is the count of what was emitted, never the length of
+        // the declared list - the number that said "6 inside" over five plates.
+        assertTrue("the count is not the measured one", body.contains("\"\$inside inside\""))
+        assertFalse("the declared list's length is back on the heading", body.contains("plates.size"))
         // The heading's own hint is drawn only when it has one.
         assertTrue("the hint has no empty check", body.contains("section.hint.isNotEmpty()"))
     }
@@ -241,7 +269,7 @@ class BrainSectionsTest {
     /** The body of a top-level function, from its `fun` line to the line that closes it. */
     private fun functionBody(src: String, marker: String): String {
         val at = src.indexOf(marker)
-        assertTrue("$marker is gone from BrainScreen.kt", at >= 0)
+        assertTrue("$marker is gone", at >= 0)
         val rest = src.substring(at)
         val end = rest.indexOf("\n}\n")
         return if (end > 0) rest.substring(0, end) else rest

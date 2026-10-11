@@ -2,7 +2,6 @@ package com.jarvis.client.ui.screens
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,17 +41,45 @@ import com.jarvis.client.ui.theme.LocalRadii
  * and PC") that headed things but hid nothing. Now one heading holds several
  * plates, and a tap opens it.
  *
- * Two things live here and nothing else:
+ * Three things live here and nothing else:
  *
- *  * [SECTIONS] - the headings, in the order they are drawn, and the `item(key
- *    = "...")` of [BrainScreen] each one holds. The screen reads this to draw
- *    the headings and to decide which plates to draw; nothing here draws a
- *    plate and nothing here touches the network, so `BrainSectionsTest` can
- *    hold it to the screen's real item keys on a plain JVM.
+ *  * [SECTIONS] - the headings, in the order they are drawn, and the plates
+ *    each one holds, in the order the screen draws them. The screen reads this
+ *    to draw the headings; nothing here draws a plate and nothing here touches
+ *    the network, so `BrainSectionsTest` can hold it to the screen's real item
+ *    keys on a plain JVM.
  *  * [Open] - which heading is open, and the rule that a link into Brain
  *    ("open the morning briefing", "show everything saved automatically")
  *    opens the heading it lands in, so nothing that used to be one tap away
  *    became unreachable.
+ *  * [PlateList] - the only way a plate may be emitted, which is what keeps a
+ *    heading's key and its plates' keys from ever colliding again (the crash of
+ *    2026-10-10, below).
+ *
+ * ## Two keys that may never collide, and one count that may not lie
+ *
+ * The first build of these headings drew `item(key = section.key)` for the
+ * heading and let each plate keep its own key. Under "What Jarvis is doing"
+ * the first plate's key was also `"doing"`, and under "Your projects and
+ * goals" it was `"projects"` - so tapping either heading handed LazyColumn two
+ * items with one key and the app died:
+ *
+ * ```
+ * java.lang.IllegalArgumentException: Key "doing" was already used.
+ * ```
+ *
+ * A rename would have fixed those two taps and left the next plate free to
+ * break it again, so the two namespaces are separated structurally instead:
+ * [HEADING_PREFIX] is the only spelling a heading's item key may have, and
+ * [PlateList.plate] refuses any plate whose key starts with it. The two can
+ * therefore never be equal, whatever a future plate is called.
+ *
+ * The "N inside" a shut heading shows is `BrainScreen`'s measured count of the
+ * plates it really emitted ([PlateList.keys]) - never the length of the list
+ * below. Those two differ: `memory`/`memory-hidden`, `wiki`/`wiki-hidden` and
+ * `memory-as-of`/`memory-as-of-hidden` are pairs of which exactly one is ever
+ * drawn, and the hidden-menus and empty-job checks remove others. The declared
+ * list said "6 inside" for a heading that drew 5.
  *
  * ## Why these headings
  *
@@ -93,6 +120,43 @@ import com.jarvis.client.ui.theme.LocalRadii
  */
 internal object BrainSections {
 
+    /**
+     * The one spelling a heading's own `item(key = ...)` may have. A plate's
+     * key may not start with it ([PlateList.plate] refuses one that does), so a
+     * heading row and a plate under it can never carry the same key - which is
+     * the crash of 2026-10-10, made impossible rather than renamed away.
+     */
+    const val HEADING_PREFIX = "brain-heading:"
+
+    /** The key the heading row of [section] is drawn under. */
+    fun headingKey(section: Section): String = HEADING_PREFIX + section.key
+
+    /**
+     * Refuses a plate named like a heading row. [PlateList.plate] calls this for
+     * every plate before it emits one, so the two keys of one `Comparable` cannot
+     * be equal however a future plate is named - a rename would have fixed the
+     * two taps that crashed and left the next plate free to break it again.
+     */
+    fun checkPlateName(key: String) {
+        require(!key.startsWith(HEADING_PREFIX)) {
+            "a plate may not be named \"$HEADING_PREFIX...\": that is a heading row's key, and two " +
+                "items of one LazyColumn may never share a key"
+        }
+    }
+
+    /**
+     * One plate under a heading, as [BrainScreen] draws it: [key] is the
+     * `plate("...")` name, [guard] the menu id whose `menus.shows(...)` decides
+     * whether it is drawn at all (null for one that is always drawn), and [note]
+     * any other condition, in words, for the test to hold.
+     *
+     * This is the declaration the drift test holds the screen's own
+     * `plate("...")` lines to, in order and one for one. It exists so that "N
+     * inside" is a measured fact about this screen rather than a number living
+     * in a file that nothing checks.
+     */
+    data class Plate(val key: String, val guard: String? = null, val note: String = "")
+
     /** One heading: [key] is its own stable id, [title] is what is drawn. */
     data class Section(
         val key: String,
@@ -102,9 +166,17 @@ internal object BrainSections {
          * name alone would leave the owner guessing what is inside.
          */
         val hint: String,
-        /** The `item(key = "...")`s of [BrainScreen] drawn under this heading, in order. */
-        val items: List<String>,
-    )
+        /**
+         * The plates [BrainScreen] draws under this heading, in the order it
+         * draws them. Some are drawn only when their menu is shown or their
+         * data is there, so this is what the heading *may* hold - the count the
+         * heading shows is measured from what it really emitted.
+         */
+        val plates: List<Plate>,
+    ) {
+        /** The plate keys, in order; what the drift test compares to the screen. */
+        val plateKeys: List<String> get() = plates.map { it.key }
+    }
 
     /**
      * The headings, in the order they are drawn.
@@ -120,95 +192,121 @@ internal object BrainSections {
             key = "waiting",
             title = "Waiting for you",
             hint = "A yes or a no from you.",
-            items = listOf("memory-hidden", "memory"),
+            // One of this pair is always drawn, never both: the review queue, or
+            // the line that can bring it back out of "Hide memory lists".
+            plates = listOf(
+                Plate("memory-hidden", note = "drawn instead of memory when memory lists are hidden"),
+                Plate("memory", note = "drawn instead of memory-hidden when lists are not hidden"),
+            ),
         ),
         Section(
             key = "knows",
             title = "What Jarvis knows about you",
             hint = "",
-            items = listOf(
-                "memory-counts",
-                "memory-auto",
-                "memory-profile",
-                "memory-shared",
-                "topics",
-                "people-and-things",
-                "history",
-                "forget-range",
-                "wiki-hidden",
-                "wiki",
-                "memory-as-of-hidden",
-                "memory-as-of",
+            plates = listOf(
+                Plate("memory-counts", guard = "brain.memory.learning"),
+                Plate("memory-auto", guard = "brain.memory.auto"),
+                Plate("memory-profile", guard = "brain.memory.profile"),
+                Plate("memory-shared", guard = "brain.memory.between-us"),
+                Plate("topics", guard = "brain.memory.topics"),
+                Plate("people-and-things", guard = "brain.memory.people-things"),
+                Plate("history", guard = "entry.history"),
+                Plate("forget-range", guard = "brain.history.forget-range"),
+                // The wiki and "what did I believe on this date?" are pairs too,
+                // for the same reason as the review queue above.
+                Plate("wiki-hidden", guard = "brain.memory.wiki", note = "drawn instead of wiki when lists are hidden"),
+                Plate("wiki", guard = "brain.memory.wiki", note = "drawn instead of wiki-hidden when lists are not hidden"),
+                Plate("memory-as-of-hidden", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of when lists are hidden"),
+                Plate("memory-as-of", guard = "brain.memory.as-of", note = "drawn instead of memory-as-of-hidden when lists are not hidden"),
             ),
         ),
         Section(
             key = "doing",
             title = "What Jarvis is doing",
             hint = "",
-            items = listOf(
-                "doing",
-                "steps",
-                "focus",
-                "chatbot",
-                "support",
-                "attention",
-                "jobs",
-                "tasks",
-                "watch",
-                "initiative",
+            // NOT attention: the interruption budget may never be inside a
+            // heading that can be shut (see [ALWAYS_DRAWN]).
+            plates = listOf(
+                Plate("doing", guard = "brain.now.right-now"),
+                Plate("steps", guard = "brain.now.trace"),
+                Plate("focus", guard = "brain.work.focus"),
+                Plate("chatbot", guard = "brain.work.chatbot"),
+                Plate("support", guard = "brain.work.support"),
+                Plate("jobs", guard = "brain.work.jobs", note = "drawn only when there are background jobs"),
+                Plate("tasks", guard = "brain.work.jobs"),
+                Plate("watch", note = "always drawn; the watch list draws its own empty line"),
+                Plate("initiative", guard = "brain.now.findings"),
             ),
         ),
         Section(
             key = "money-time",
             title = "Money and time",
             hint = "",
-            items = listOf("briefing", "today", "widgets", "coming-up", "spending", "retirement"),
+            plates = listOf(
+                Plate("briefing", guard = "brain.work.briefing"),
+                Plate("today", guard = "brain.work.today"),
+                Plate("widgets", guard = "brain.work.widgets"),
+                Plate("coming-up", guard = "brain.work.coming-up"),
+                Plate("spending", guard = "settings.spending"),
+                Plate("retirement", guard = "brain.work.retirement"),
+            ),
         ),
         Section(
             key = "projects",
             title = "Your projects and goals",
             hint = "",
-            items = listOf("progress", "projects", "goals"),
+            plates = listOf(
+                Plate("progress", guard = "brain.projects.progress"),
+                Plate("projects", guard = "brain.tab.projects"),
+                Plate("goals", guard = "brain.work.goals"),
+            ),
         ),
         Section(
             key = "learning",
             title = "Your learning",
             hint = "",
-            items = listOf("quiz", "decks"),
+            plates = listOf(
+                Plate("quiz", guard = "brain.work.quiz"),
+                Plate("decks", guard = "brain.work.decks"),
+            ),
         ),
         Section(
             key = "pc",
             title = "Jarvis on your PC",
             hint = "",
-            items = listOf(
-                "models",
-                "hardware",
-                "tutorials",
-                "pc-help",
-                "second-card",
-                "big-model",
-                "deep-questions-hidden",
-                "deep-questions",
-                "compute",
-                "ledger",
-                "skills",
-                "capabilities",
-                "settings-entry",
+            plates = listOf(
+                Plate("models", guard = "brain.model.models"),
+                Plate("hardware", guard = "settings.hardware"),
+                Plate("tutorials", guard = "brain.model.tutorials"),
+                Plate("pc-help", guard = "brain.model.pc-help"),
+                Plate("second-card", guard = "settings.second-card"),
+                Plate("big-model", guard = "settings.big-model"),
+                Plate("deep-questions-hidden", guard = "brain.memory.deep", note = "drawn instead of deep-questions when lists are hidden"),
+                Plate("deep-questions", guard = "brain.memory.deep", note = "drawn instead of deep-questions-hidden when lists are not hidden"),
+                Plate("compute", guard = "brain.model.compute"),
+                Plate("ledger", note = "always drawn; the audit chain draws its own empty line"),
+                Plate("skills", guard = "brain.model.skills"),
+                Plate("capabilities", guard = "settings.backend-supports"),
+                Plate("settings-entry", note = "drawn only when the screen was given a way into Settings"),
             ),
         ),
     )
 
     /** The heading holding [itemKey], or null for an item no heading holds. */
     fun sectionOf(itemKey: String): Section? =
-        SECTIONS.firstOrNull { itemKey in it.items }
+        SECTIONS.firstOrNull { itemKey in it.plateKeys }
+
+    /** The plates under [section], in the order the screen draws them. */
+    fun platesOf(section: String): List<Plate> =
+        SECTIONS.firstOrNull { it.key == section }?.plates ?: emptyList()
 
     /**
-     * Every `item(key = ...)` this file places, all headings together. Held
-     * against the screen's own list by `BrainSectionsTest`: a plate added to
-     * BrainScreen.kt under no heading, or a heading naming an item the screen
-     * does not draw, fails there rather than quietly disappearing.
+     * Every plate this file places, all headings together. Held against the
+     * screen's own `plate("...")` lines by `BrainSectionsTest`: a plate added to
+     * BrainScreen.kt under no heading, or a declared plate the screen does not
+     * draw, fails there rather than quietly disappearing.
      */
-    val allKeys: List<String> = SECTIONS.flatMap { it.items }
+    fun allPlateKeys(): List<String> = SECTIONS.flatMap { it.plateKeys }
 
     /**
      * Keys that are drawn by [BrainScreen] and are NOT placed under a heading:
@@ -224,9 +322,20 @@ internal object BrainSections {
      *    screen draws it with no `menus.shows` check at all), so it cannot go
      *    inside a heading that can be shut without breaking that rule. It is
      *    also the one number here the owner checks at a glance.
+     *
+     *    It was inside "What Jarvis is doing" - one of the two headings that
+     *    crashed on 2026-10-10 - so it was both unreachable on the new screen
+     *    and absent from the collapsed one. It is emitted outside every heading
+     *    now, which is what this list, the heading note above it and
+     *    `BrainSectionsTest` all say.
      *  * `menus-hidden` - "N hidden - Show", the one line that can put a hidden
      *    plate back (Settings has the list).
      *  * `tail` - the gap at the bottom.
+     *
+     * `rush` and `notice` are drawn only when there is something to say, and
+     * `menus-hidden` only when something is hidden; the rest are always there.
+     * The order is the order the screen emits them, and `BrainSectionsTest`
+     * holds it to that.
      */
     val ALWAYS_DRAWN: List<String> =
         listOf("rush", "freshness", "notice", "attention", "menus-hidden", "tail")
@@ -286,6 +395,12 @@ internal object BrainSections {
  * chevron, how many plates are inside while it is shut, and the tap that opens
  * or shuts it.
  *
+ * [inside] is the count of plates this heading's own emission really produced -
+ * never `section.plates.size`, which counts what *could* be drawn. A heading
+ * that says "6 inside" and draws 5 is a number the owner cannot use: the pairs
+ * of plates ([BrainSections.Section.plates]) and the hidden menus both make the
+ * two differ.
+ *
  * What a screen reader is told, in words rather than by a shape or a colour:
  *
  *  * the title is a real heading ([heading]), as the old `GroupHeading` was, so
@@ -307,7 +422,12 @@ internal object BrainSections {
  * focus and selection.
  */
 @Composable
-private fun BrainGroupHeading(section: BrainSections.Section, open: Boolean, onToggle: () -> Unit) {
+private fun BrainGroupHeading(
+    section: BrainSections.Section,
+    open: Boolean,
+    inside: Int,
+    onToggle: () -> Unit,
+) {
     val chrome = LocalChrome.current
     // Turned in the draw phase, so the short turn redraws one small box and
     // recomposes nothing (the FAQ's own note, screens-14).
@@ -344,9 +464,9 @@ private fun BrainGroupHeading(section: BrainSections.Section, open: Boolean, onT
             Spacer(Modifier.width(6.dp))
             Chevron(tint = chrome.textMid, modifier = Modifier.graphicsLayer { rotationZ = turn })
         }
-        if (!open && section.items.size > 1) {
+        if (!open && inside > 1) {
             Text(
-                "${section.items.size} inside",
+                "$inside inside",
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textMid,
                 modifier = Modifier.padding(start = 2.dp),
@@ -364,39 +484,159 @@ private fun BrainGroupHeading(section: BrainSections.Section, open: Boolean, onT
 }
 
 /**
+ * The only way a plate may be added to Brain's list: [plate] takes the plate's
+ * own key, checks it can never collide with the heading row above it, emits the
+ * item, and counts it.
+ *
+ * `LazyListScope.item` is deliberately NOT the way in. A test cannot watch that
+ * one being called, and - the reason this class exists - the first build proved
+ * a plate can be handed the *wrong* list: `brainSection` passed its own receiver
+ * into a `Column`'s content, Compose read the plate's `item(key = ...)` against
+ * that receiver, and every plate on the screen was appended to the BOTTOM of the
+ * list, after the last heading, instead of under the heading that was tapped.
+ * Going through one method with one receiver is what makes the emitted order
+ * something the screen owns and `BrainSectionsTest` can drive.
+ */
+sealed class PlateList {
+    /**
+     * Every plate's item key starts with this, and a heading's own key may not
+     * ([BrainSections.HEADING_PREFIX]): the two namespaces cannot overlap, so the
+     * crash of 2026-10-10 cannot come back through a new plate's name.
+     */
+    companion object {
+        const val PLATE_PREFIX = "brain-plate:"
+    }
+
+/** The plate keys emitted so far, in the order the list draws them. */
+    abstract val keys: List<String>
+
+    /**
+     * Emits the plate named [key] into Brain's list. The name is the plate's own
+     * name, kept verbatim inside the key, so a link, a jump or a `MenuPlaces`
+     * entry that names a plate still names the same thing - it is only the item
+     * key that carries the namespace.
+     */
+    abstract fun plate(key: String, content: @Composable () -> Unit)
+
+    protected fun checkName(key: String) = BrainSections.checkPlateName(key)
+}
+
+/**
+ * The real one: records the plates as they are written, then emits the recorded
+ * ones into the list being built.
+ *
+ * Recording first and emitting second is what lets a heading show a count it has
+ * measured: the count lives on the heading row's item, which has to be emitted
+ * before the first plate, so the plates have to be known before it. Recording up
+ * front also means the plates are placed by this one method, in the order they
+ * were written, rather than by whatever receiver happened to be in reach.
+ */
+internal class LazyPlateList(private val list: LazyListScope) : PlateList() {
+    private val emitted = ArrayList<String>()
+    private val bound = ArrayList<Pair<String, @Composable () -> Unit>>()
+
+    override val keys: List<String> get() = emitted
+
+    override fun plate(key: String, content: @Composable () -> Unit) {
+        checkName(key)
+        bound.add(key to content)
+    }
+
+    /** The names of one heading's plates, as written, without emitting them. */
+    internal fun measure(plates: PlateList.() -> Unit): List<String> {
+        bound.clear()
+        plates()
+        return bound.map { it.first }
+    }
+
+    /**
+     * Writes the plates of one heading into [out]: [plates] runs against this
+     * recorder - which is the only way a plate may be written - and then each
+     * recorded plate becomes one item of the list, in the order it was written,
+     * keyed `brain-plate:<name>`.
+     */
+    internal fun emit(plates: PlateList.() -> Unit, out: MutableList<String>) {
+        bound.clear()
+        plates()
+        for ((key, content) in bound) {
+            out.add(key)
+            list.item(key = PLATE_PREFIX + key) { content() }
+        }
+    }
+}
+
+/**
  * One heading on Brain, and the plates under it while it is open.
  *
  * A shut heading draws its title alone, so the whole screen is seven rows. The
- * heading and its plates are separate LazyColumn items - the heading's own key
- * for the title, so a jump inward still finds it, and a second key for the
- * plates - and a shut heading draws only the first.
+ * heading is one item and each of its plates is another, emitted immediately
+ * after it - which is what "opens in place" means: the plates of an open heading
+ * sit between its own row and the next heading's, never at the end of the list.
+ * The list's own `verticalArrangement` gives the heading and every plate the same
+ * 16dp gap, so the plates read as one group under their heading.
  *
- * [content] is handed a `plates` slot to put its `item(key = ...)` lines in.
- * That slot is the only shape Kotlin accepts here: `item` belongs to the lazy
- * list, and inside a composable - which is what a section's plates are drawn
- * as - the list's own receiver is out of reach. The slot hands the items back
- * to the list; the `Column` inside it gives them the 16dp gap the list's own
- * `verticalArrangement` cannot reach inside one item.
+ * [drawn] is filled with the name of every plate this call really emitted, in
+ * order, and it is the ONLY source of the count drawn on the heading - so "N
+ * inside" is what the tap will show, never a number declared somewhere else.
+ * `section.plates` is the list of what *may* be drawn, and the two differ
+ * whenever a menu is hidden, a pair of plates draws only one of itself, or a
+ * list is empty.
+ *
+ * The plates are written TWICE, deliberately, and only while the heading is
+ * open: once to be counted, before the heading's own item is emitted, and once
+ * to be placed, after it. Nothing runs twice that has an effect - a plate body
+ * is a lambda the list itself calls when that row comes into view - and the
+ * count is the only thing the first pass is for.
  */
 internal fun LazyListScope.brainSection(
     section: BrainSections.Section,
     open: Boolean,
     onToggle: () -> Unit,
-    plates: LazyListScope.() -> Unit,
-) {
-    item(key = section.key) { BrainGroupHeading(section, open = open, onToggle = onToggle) }
-    if (open) {
-        item(key = section.key + "-plates") {
-            // The plates are handed back the lazy list they were written
-            // against (this `brainSection`'s own receiver), which is what makes
-            // the caller's `item(key = ...)` lines work - no composable has an
-            // `item` of its own.
-            Column(
-                Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                plates(this@brainSection)
-            }
-        }
+    plates: PlateList.() -> Unit,
+    /** Filled with the plates really emitted, in order; the heading's count is `drawn.size`. */
+    drawn: MutableList<String> = ArrayList(),
+): Int {
+    val plateList = LazyPlateList(this)
+    val measured = if (open) plateList.measure(plates) else emptyList()
+    // The heading's own key, in its own namespace: a plate's key can never be
+    // this (PlateList refuses one that is), so the two items cannot collide.
+    item(key = BrainSections.headingKey(section)) {
+        BrainGroupHeading(section, open = open, inside = measured.size, onToggle = onToggle)
     }
+    if (!open) {
+        drawn.clear()
+        return 0
+    }
+    plateList.emit(plates, drawn)
+    return drawn.size
+}
+
+/**
+ * Every item Brain's list is built from, in the order it is drawn, as one call:
+ * a heading's key, then the keys of its plates while it is open, section after
+ * section - and finally the items that are outside every heading
+ * ([BrainSections.ALWAYS_DRAWN]).
+ *
+ * This is the shape `BrainScreen` builds, written once here so that a test on a
+ * plain JVM can build it and read it back. Nothing about the headings is decided
+ * in this function: [openSection] and [drawnInSection] ARE the screen's taps and
+ * its `menus.shows` checks (a test passes the same ones the screen's own
+ * `plate("...")` lines use). What it adds is the one thing the screen cannot show
+ * a test - the whole sequence, with the headings and their plates in it together
+ * - which is where two items sharing a key appear, and where a plate that drifted
+ * out of its section shows up as a plate drawn after the wrong heading.
+ */
+internal fun brainListKeys(
+    openSection: (String) -> Boolean,
+    drawnInSection: (String, MutableList<String>) -> Unit,
+): List<String> {
+    val out = ArrayList<String>()
+    for (section in BrainSections.SECTIONS) {
+        val drawn = ArrayList<String>()
+        if (openSection(section.key)) drawnInSection(section.key, drawn)
+        out.add(BrainSections.headingKey(section))
+        out.addAll(drawn.map { PlateList.PLATE_PREFIX + it })
+    }
+    out.addAll(BrainSections.ALWAYS_DRAWN)
+    return out
 }
