@@ -20,11 +20,11 @@ same answer on every route. These tests hold that line.
 WHERE THE CODE COMES FROM. `jarvis_hud.py` is the owner's file and is not in
 this repository, so in CI this suite used to be skipped BY NAME and every
 check in it ran only on the owner's PC (`backend/run_suites.py`'s NEEDS_OWNER
-list). Two of its checks execute the code rather than read it - `_no_speech()`
-itself, and the sentence `_SAY_FALLBACK` - and both of those are written
-entirely by patches, so the whole patch stack's text for that file HAS them:
-`_lift()` below takes them from the real file when this machine has one and
-from the stand-in built by `backend/_stack.py` when it does not, one function
+list). Two of its four groups of checks execute the code rather than read it -
+`_no_speech()` itself, and the sentence `_SAY_FALLBACK` - and both of those are
+written entirely by patches, so the whole patch stack's text for that file HAS
+them: `_lift()` below takes them from the real file when this machine has one
+and from the stand-in built by `backend/_stack.py` when it does not, one piece
 at a time. The route checks still need the whole file - the stand-in carries
 the routes' own lines but not the `if route == "..."` that owns them, and
 `ast.parse` cannot read it - so those are named as skips here and run on the
@@ -85,7 +85,7 @@ def _assignment_text(source: str, name: str):
     `_stack.function_text()` cuts a `def` out of the stand-in; `_SAY_FALLBACK`
     is a constant, and the stand-in is fragments, so ast cannot find it either.
     Brackets are counted, so a value written across several lines comes out
-    whole - which is the shape both of them are written in."""
+    whole - which is the shape `_SAY_FALLBACK` is written in."""
     lines = source.splitlines()
     starts = [i for i, l in enumerate(lines)
               if l.startswith(f"{name} =") or l.startswith(f"{name}=")]
