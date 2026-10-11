@@ -487,7 +487,13 @@ def t_hygiene():
     # is the same shape, after that one.
     stack_order = __import__("_stack").order()
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # gate-touches.patch (2026-10-11) is appended last and has exactly TWO
+             # hunks, both in jarvis_gate.py - under `_PROTECTED`/`_PROTECTED_RE` and
+             # at check()'s own `hit = _touches_protected(prompt, detail)` call. It
+             # removes no line and has no jarvis_hud.py hunk at all, so it cannot
+             # rewrite the POST /api/screen wrapper this patch installs.
+             "gate-touches.patch"}
     check("the patch that wires it is in the script's list, and last",
           "'screen-attach.patch'" in ps1 and "screen-attach.patch" in stack_order
           and [n for n in stack_order if n not in later][-1] == "screen-attach.patch")
