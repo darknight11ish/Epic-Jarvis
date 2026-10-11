@@ -1375,8 +1375,15 @@ $PATCHES = @(
     # loosen_what_asks_first 21, restore_backup 3 - and three features had
     # never once worked. It now reads what the action TOUCHES: the
     # parameters it was handed, and the model's own tool call (the JSON
-    # object inside the prompt). Card prose is not a target. ONE hunk pair,
-    # in jarvis_gate.py alone; see backend/README.md's own section.
+    # object inside the prompt). Card prose is not a target. Widened
+    # 2026-10-11: _gate_prompt cuts the model's arguments at 1500
+    # characters for its audit-log line, and a JSON object cut in half does
+    # not parse, so that argument block used to be dropped entirely - a tool
+    # action whose target was the gate's own file came back as an ordinary
+    # "ask" card. The project's tool-call prompt shapes are now matched end
+    # to end and their raw argument text is read as it stands; anchored at
+    # both ends, so a card's own words still never reach the rule. ONE hunk
+    # pair, in jarvis_gate.py alone; see backend/README.md's own section.
     'gate-touches.patch'
     # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
     # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block

@@ -18,6 +18,18 @@ Measured in the owner's own log (.openjarvis/logs/*.jsonl, 2026-10-03 ..
 the files exactly: 21 characters is jarvis-framework.toml, 13 is
 jarvis_hud.py. Three features had never once worked.
 
+WHAT WAS STILL WRONG (found 2026-10-11, pinned here). #249 read the model's
+own tool call out of the prompt, but only when that call PARSES as JSON.
+`jarvis_agent._gate_prompt` writes `tool <name> {json.dumps(args)[:1500]}` -
+the audit-log line has a 1500-character budget - and a JSON object cut in
+half does not parse. The whole argument block was therefore dropped from the
+search: measured, args 3453 characters long with
+`pathlib.Path('jarvis_gate.py').write_text('')` at character 62 gave blobs
+`['{}', 'run_shell_on_host']`, so `run_shell_on_host` was not refused but
+offered as an ordinary "ask" card - a person could approve a write to the
+gate itself. Making the arguments LONGER than the log line was enough to hide
+the target.
+
 WHAT THIS SUITE PINS. `_target_blobs()` decides what the rule may read: the
 action's parameters (`detail`, minus the keys holding the card's own text)
 and the model's own tool call, which is the JSON object inside the prompt.
@@ -28,10 +40,14 @@ Card prose is not a target and is not searched. So:
   2. an action whose TARGET is a protected file is still refused at "never",
      before any card exists, with the same plain reason as before - on every
      shape a real caller uses to hand it over (section 2);
-  3. the three real cards are raisable END TO END through the real gate and
+  3. a tool call CUT to the audit-log line's budget is still read as a tool
+     call, so a protected target cannot be hidden by making the arguments
+     longer than that line (section 2b) - and the cut is NOT an excuse to
+     read a card's words again (section 2b's counter-test);
+  4. the three real cards are raisable END TO END through the real gate and
      the SHIPPED tier table, with a scratch approvals database and a scratch
      audit directory (section 3);
-  4. everything else the gate refuses today, it still refuses (section 4).
+  5. everything else the gate refuses today, it still refuses (section 4).
 
 `jarvis-backend/jarvis_gate.py` is this repository's published copy of the
 gate (jarvis-backend/README.md says where it came from), so the module under
@@ -316,6 +332,95 @@ def t_a_refused_target_never_reaches_a_windows_hello_prompt():
     check(".openjarvis-patch.json is protected too",
           v.tier == "never" and "no tool may modify" in v.reason, repr(v.reason))
     check("and the queue is no longer than it was", len(_pending_rows()) >= before)
+
+
+# ====== 2b. a tool call CUT to the audit-log line's budget is still read
+
+def t_a_cut_tool_call_line_still_refuses_a_protected_target():
+    """THE HOLE. `jarvis_agent._gate_prompt` writes
+    `tool <name> {json.dumps(args)[:1500]}` - the audit-log line has a
+    1500-character budget. A JSON object cut in half does not parse, so the
+    rule read no arguments at all and offered an action whose target is the
+    gate itself as an ordinary card, which a person could approve. What the
+    action would TOUCH does not depend on the line being long enough to hold
+    it. The line is taken from the real module, never retyped here."""
+    try:
+        import jarvis_agent
+    except Exception as exc:                       # pragma: no cover
+        return skip(f"jarvis_agent is not importable here ({type(exc).__name__}: {exc})")
+
+    # `pathlib.Path('jarvis_gate.py').write_text('')` in the first 62
+    # characters of the arguments, exactly as measured, then enough filler to
+    # push the JSON past the line's 1500.
+    args = {"command": "python -c \"import pathlib; "
+                       "pathlib.Path('jarvis_gate.py').write_text('')\" "
+                       "# " + "x" * 3300}
+    full = json.dumps(args, ensure_ascii=False)
+    prompt = jarvis_agent._gate_prompt("run_shell_on_host", args)
+    check("the arguments are longer than the audit-log line's 1500 characters",
+          len(full) > 1500, len(full))
+    cut = prompt[prompt.index("{"):]
+    check("... so the line really holds a CUT JSON object, with the protected "
+          "name still inside it",
+          len(prompt) < len(full) and "jarvis_gate.py" in cut,
+          f"line={len(prompt)} args={len(full)}")
+    check("... which does not parse", not _parses(cut), cut[-30:])
+
+    blobs = G._target_blobs("run_shell_on_host",
+                            {"text": "Run a command the owner asked for."}, prompt)
+    check("the cut arguments are still handed to the PROTECTED rule",
+          any("jarvis_gate.py" in b for b in blobs), repr(blobs)[:200])
+
+    v = G.check("run_shell_on_host", {"text": "Run a command the owner asked for."},
+                prompt=prompt, timeout=TIMEOUT)
+    check("... so it is REFUSED at 'never', not offered as a card",
+          v.tier == "never" and v.outcome == "refused" and "jarvis_gate.py" in v.reason,
+          f"tier={v.tier!r} outcome={v.outcome!r} reason={v.reason!r}")
+    check("... and NO row reached the queue, so there is nothing to approve",
+          not [r for r in _pending_rows() if r.get("action") == "run_shell_on_host"], "")
+
+    # The CONTROL, so none of the above can pass by the rule being dead: a
+    # real protected target in `detail` is refused exactly as section 2 says.
+    v = G.check("delete_file", {"path": "C:/x/jarvis_gate.py"},
+                prompt="Delete a file.", timeout=TIMEOUT)
+    check("CONTROL: a protected target in the arguments is still refused",
+          v.tier == "never" and v.outcome == "refused", repr((v.tier, v.outcome)))
+
+
+def t_the_cut_rule_only_reads_a_real_tool_call_line():
+    """THE SCOPE, PINNED. The fix must not become an excuse to read a card's
+    words again - that is what refused 45 of the owner's cards. Only a prompt
+    that IS a tool-call line, from its first character to its last, is read
+    as arguments. Here is a card that names three protected files, carries a
+    brace that does not close, and even quotes a half-written tool call of
+    its own: prose, and still raisable."""
+    card = ("Restore Jarvis from this backup?\n\n"
+            "This puts the .py files beside jarvis_hud.py back, and it leaves "
+            "jarvis-framework.toml and jarvis_gate.py exactly as they are.\n\n"
+            "The line it would run: tool file_write {\"path\": \"notes/today.md\"\n")
+    blobs = G._target_blobs("restore_backup", {"text": card}, card)
+    check("a card's words are not read as arguments, even with an unclosed "
+          "brace and a tool-call fragment in them",
+          not any("jarvis_gate.py" in b or "jarvis-framework.toml" in b
+                  or "jarvis_hud.py" in b for b in blobs),
+          repr(blobs)[:300])
+    v, rows = _raise_and_watch("restore_backup", {"text": card}, card)
+    check("... so the card it raises on is still raised",
+          v.tier == "ask" and v.outcome != "refused" and bool(rows),
+          f"tier={v.tier!r} outcome={v.outcome!r} reason={v.reason!r}")
+
+    # The plainest form of the same thing: no braces at all, a protected name
+    # in the prose, an action that touches nothing protected.
+    prose = ("Let Jarvis read your calendar without asking you first?\n\n"
+             "This changes one line of your settings file (jarvis-framework.toml).")
+    blobs = G._target_blobs("loosen_what_asks_first", {"text": prose}, prose)
+    check("... and so is a plain card naming jarvis-framework.toml",
+          not any("jarvis-framework.toml" in b for b in blobs), repr(blobs)[:200])
+    v = G.check("loosen_what_asks_first", {"text": prose}, prompt=prose,
+                timeout=TIMEOUT)
+    check("... which the gate still raises rather than refuses",
+          v.tier == "ask" and v.outcome != "refused",
+          f"tier={v.tier!r} outcome={v.outcome!r} reason={v.reason!r}")
 
 
 # ============================== 3. the three real cards, end to end
