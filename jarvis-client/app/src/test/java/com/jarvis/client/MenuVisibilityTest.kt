@@ -280,10 +280,19 @@ class MenuVisibilityTest {
         error("$rel not found above ${System.getProperty("user.dir")}")
     }
 
+    /**
+     * Every phone screen file that can carry a `menus.shows(...)` check or a MenuFrame. A file
+     * left out of this list is a hideable menu the test cannot see: `settings.briefing-settings`
+     * lives only in BriefingPlate.kt, so that file joined on 2026-10-10 (the parity audit made
+     * the id a phone menu, and hiding the plate's "When it arrives" half is real phone
+     * behaviour). Adding a file here only ever widens what is checked - every id found in it
+     * must still name a real menu, one this phone has.
+     */
     private fun uiSources(): Map<String, String> =
         listOf(
             "screens/BrainScreen.kt", "screens/SettingsScreen.kt", "screens/HomeScreen.kt",
             "screens/HistoryTags.kt", "screens/SecondCardPlate.kt", "screens/QuizPlate.kt",
+            "screens/BriefingPlate.kt",
         ).associateWith { repoFile(screens + it).readText() }
 
     @Test
@@ -376,6 +385,35 @@ class MenuVisibilityTest {
         val undecidedS = settingsKeys - MenuPlaces.SETTINGS.keys -
             setOf("menus-hidden", "tail", "jump-list", "limits", "jarvis-notify")
         assertTrue("Settings items with no decision in MenuPlaces: $undecidedS", undecidedS.isEmpty())
+    }
+
+    @Test
+    fun `no item key is listed twice in MenuPlaces`() {
+        // `mapOf` takes a duplicate key in silence and keeps the LAST value, so a second
+        // `"voice" to ...` line does not add a place - it DELETES the first one. That is exactly
+        // how `settings.voice` lost its place on 2026-10-10: the test above failed with
+        // "no place in MenuPlaces for: [settings.voice, brain.work.briefing]", naming the two
+        // victims and never the duplicate line that caused it. The built map cannot show this
+        // (by the time Kotlin has made it, the duplicate is gone), so the source is read, the
+        // same way the item-key test above reads it.
+        val places = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/MenuPlaces.kt").readText()
+        for (name in listOf("SETTINGS", "BRAIN")) {
+            val body = Regex(
+                "val ${name}\\s*:\\s*Map<String, String>\\s*=\\s*mapOf\\((.*?)\\n    \\)",
+                RegexOption.DOT_MATCHES_ALL,
+            ).find(places)?.groupValues?.get(1)
+                ?: error("MenuPlaces.$name is no longer a mapOf(...) block - this test has drifted")
+            // The comments quote the very lines this test looks for, so they are stripped
+            // first: the rule is about the code Kotlin builds the map from, not the prose.
+            val code = body.lines().joinToString("\n") { it.substringBefore("//") }
+            val keys = Regex("\"([\\w-]+)\"\\s+to\\s+\"").findAll(code).map { it.groupValues[1] }.toList()
+            assertTrue("MenuPlaces.$name lists no item keys - this test has drifted", keys.isNotEmpty())
+            val twice = keys.groupingBy { it }.eachCount().filterValues { it > 1 }.keys
+            assertTrue(
+                "MenuPlaces.$name lists $twice twice: mapOf keeps only the last, so the earlier menu loses its place",
+                twice.isEmpty(),
+            )
+        }
     }
 
     @Test

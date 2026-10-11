@@ -6,10 +6,12 @@ import com.jarvis.client.net.MenuState
 import com.jarvis.client.net.MenuView
 import com.jarvis.client.ui.FindAnything
 import com.jarvis.client.ui.FindWords
+import com.jarvis.client.ui.MenuPlaces
 import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.SettingsJump
 import com.jarvis.client.ui.SettingsSearch
 import com.jarvis.client.ui.SettingsSearchWords
+import com.jarvis.client.ui.screens.BrainSections
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -158,8 +160,16 @@ class FindAnythingTest {
             }
         }
         assertEquals(
+            // A tripwire, not a fact worth knowing: it was 113 until the parity
+            // audit of 2026-10-10 put the four cards no registry knew about into
+            // `backend/jarvis_menus.py` (`settings.first-run`,
+            // `settings.start-jarvis`, `settings.crash-notes`,
+            // `settings.notifications`) and retired the duplicate phone-only
+            // `entry.voices`. It is here so that a regeneration which drops the
+            // `names` field, or a catalogue that comes back a different size,
+            // is noticed rather than quietly searched.
             "the catalogue must still carry the names at all",
-            113,
+            116,
             MenuCatalog.MENUS.size,
         )
         assertTrue(
@@ -178,6 +188,12 @@ class FindAnythingTest {
             // and are in the list (checked by the test below).
             if (m.area == "safety" && m.kind != "entry") continue
             if (m.id in NO_PLACE) continue
+            // A menu the phone draws INSIDE another card or screen has no place
+            // of its own to open (`MenuPlaces.INSIDE`, which is the app's own
+            // record of exactly that, and which `MenuVisibilityTest` reads as a
+            // place for the same reason). The box lists places, so there is
+            // nothing here for it to offer.
+            if (m.id in MenuPlaces.INSIDE) continue
             if (FindAnything.row(m.id) == null) missing += m.id
         }
         assertTrue(
@@ -188,15 +204,17 @@ class FindAnythingTest {
     }
 
     @Test
-    fun `the two phone menus with no place of their own are left out, and nothing else`() {
+    fun `the phone menus with no place of their own are left out, and nothing else`() {
         val excluded = MenuCatalog.MENUS
             .filter { it.phone && !(it.area == "safety" && it.kind != "entry") }
+            .filter { it.id !in MenuPlaces.INSIDE }
             .filter { FindAnything.row(it.id) == null }
             .map { it.id }
             .toSet()
         assertEquals(
             "a phone menu with no place on this phone has appeared: decide where it " +
-                "opens and it joins the list (ui/FindAnything.kt, placeOf)",
+                "opens and it joins the list, or say in MenuPlaces.INSIDE where the " +
+                "phone really draws it (ui/FindAnything.kt, placeOf)",
             NO_PLACE,
             excluded,
         )
@@ -585,9 +603,23 @@ class FindAnythingTest {
         assertEquals(SettingsSearch.normalise("Wi-Fi"), FindAnything.fold("Wi-Fi"))
         assertEquals("jarvis s voice", FindAnything.fold("Jarvis's voice"))
         assertEquals("cafe", FindAnything.fold("café"))
+        // The one apostrophe in the whole catalogue is in `settings.voices`'
+        // own names ("jarvis's voice"), and that id has no row in the box: on
+        // the phone it is the button drawn inside the Voice item
+        // (`MenuPlaces.INSIDE`), and the phone-only `entry.voices` id this used
+        // to name was retired by the parity audit of 2026-10-10 - one id, one
+        // feature (`backend/jarvis_menus.py`). So what is held here is the fold
+        // itself, both ways round, plus a real search: the owner's own
+        // apostrophe and the catalogue's must fold to the same words, which is
+        // what makes the box punctuation-blind.
+        val voices = MenuCatalog.MENUS.first { it.id == "settings.voices" }
         assertTrue(
-            "an apostrophe typed the app's way still finds the row",
-            FindAnything.results("jarvis's voice", menus, false).any { it.id == "entry.voices" },
+            "an apostrophe typed the app's way must fold to the catalogue's own words",
+            voices.names.any { FindAnything.fold(it) == FindAnything.fold("Jarvis's voice") },
+        )
+        assertTrue(
+            "and that fold is the one the box really searches with",
+            FindAnything.results("voice", menus, false).any { it.id == "settings.voice" },
         )
         // The desktop's own order: title start, then title at a word start,
         // then title anywhere, then the extra words, then the description.
@@ -646,8 +678,12 @@ class FindAnythingTest {
     // ------------------------------------------------------------------ kit --
 
     /**
-     * The two phone menus with no place on this phone, each for a reason that
-     * is written down in `ui/FindAnything.kt`:
+     * The two phone menus with no place on this phone AT ALL - not even one
+     * inside another card, which is the other half of the same idea and lives
+     * in `MenuPlaces.INSIDE` (the parity audit of 2026-10-10 turned eight ids
+     * from "desktop only" to "both apps", and every one of them is drawn inside
+     * something rather than under an `item(key = ...)` of its own). Each of
+     * these two has a reason written down in `ui/FindAnything.kt`:
      *
      *  - `settings.connection` is never hideable and has no Settings row here
      *    (`MenuPlaces` omits it for that reason); its place is Platform checks'
@@ -673,9 +709,20 @@ class FindAnythingTest {
      * that names one then fails the check rather than passing it by default.
      */
     private fun itemKeys(screen: Screen): Set<String>? {
+        // The Brain draws its rows as PLATES now, not as `item(key = ...)`
+        // (the seven foldable headings, merged 2026-10-11):
+        // `plate("quiz")` inside a `brainSection(...)`, and a plate comes in two
+        // halves through one call (`plate(if (plateDrawn("wiki")) "wiki" else
+        // "wiki-hidden")`), which no regular expression over the source reads
+        // safely. BrainSections is the screen's own list of them, and
+        // BrainSectionsTest holds it to the real `plate("...")` lines one for
+        // one - so reading it here keeps the same teeth this check always had,
+        // and the seam is checked twice rather than not at all.
+        if (screen == Screen.BRAIN) {
+            return BrainSections.allPlateKeys().toSet() + BrainSections.ALWAYS_DRAWN
+        }
         val file = when (screen) {
             Screen.SETTINGS -> "ui/screens/SettingsScreen.kt"
-            Screen.BRAIN -> "ui/screens/BrainScreen.kt"
             Screen.HISTORY -> "ui/screens/HistoryScreen.kt"
             Screen.CHECKS -> "ui/screens/ReadinessScreen.kt"
             Screen.FAQ -> "ui/screens/FaqScreen.kt"

@@ -862,6 +862,10 @@ fun BrainScreen(
                             privateHidden = privateHidden,
                             showPrivateBusy = showPrivateBusy,
                             onShowPrivate = onShowPrivate,
+                            // `settings.briefing-settings`: the phone's half of that
+                            // card is the plate's "When it arrives" block, so the
+                            // same one menu hides it on both apps.
+                            menus = menus,
                         )
                     }
                 }
