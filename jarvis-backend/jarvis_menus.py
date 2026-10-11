@@ -462,6 +462,19 @@ MENUS: tuple = (
     # ---- Brain: Projects -----------------------------------------------
     _m("brain.projects.progress", "Progress", "The activity heatmap and balance chart.",
        area="brain", view="projects", group="goals-projects", names=("progress", "heatmap")),
+    # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+    # pictures.patch, JARVIS-API section 124). The id is the SAME in both apps
+    # even though the phone draws it in Brain -> Pictures and the PC draws it
+    # above the project list (the module's own rule: one id means one feature).
+    # Both draw the gallery, the prompts and "Make another"; the PC also has
+    # the switch, the drawing program and the folder, which are the PC's own
+    # business. The prompts are the owner's own words, so it hides with the
+    # private lists.
+    _m("brain.projects.pictures", "Pictures",
+       "Ask for a picture in your own words, and see the ones you kept.",
+       area="brain", view="projects", group="goals-projects",
+       names=("pictures", "the pictures", "my pictures", "the picture gallery",
+              "making pictures")),
 
     # ---- Brain: Now, Trust, Watch --------------------------------------
     _m("brain.now.right-now", "Right now", "What Jarvis is doing and its power state.",

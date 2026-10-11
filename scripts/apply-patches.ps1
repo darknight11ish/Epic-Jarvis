@@ -1329,6 +1329,22 @@ $PATCHES = @(
     # differs on purpose can skip the patch and paste the four lines by hand;
     # plugins/loader/README.md prints them.
     'plugin-loader.patch'
+    # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27:
+    # "12 GB card: longer conversations with picture understanding first, and
+    # making pictures too (swapped in when asked, since both cannot sit on the
+    # card at once)"; docs/JARVIS-API.md section 124).
+    #
+    # LAST, by the rule every new patch follows: its context is the install
+    # block progress.patch wrote, so it needs the whole stack above it. It adds
+    # ONE more block of the same shape, calling jarvis_pictures.install(), and
+    # touches no other line of jarvis_hud.py. It cannot be applied on its own,
+    # and the dry run rehearses that before anything is changed.
+    #
+    # No gate file is touched, on purpose: a picture is a new file in a folder
+    # on this PC, drawn by a program on this PC, so making one needs no
+    # approval card (the same shape as a timer or a note). Sending a picture
+    # anywhere would be a new named way out of the PC, and no route here does.
+    'pictures.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1627,6 +1643,8 @@ $SHIPPED = @(
     'jarvis_optin_models.py'     # The owner chose BOTH halves: one clearly-labelled opt-in for fiction/role-play, never the everyday assistant and never a default, AND the abliterated models already on disk made usable as opt-in choices with no new download. TWO switches, each off on a machine that has never run it, in their own optin-models.json beside hardware-choice.json; the labelled list carries the measured cost in plain words (TruthfulQA -5.8 to -6.9 points on this family, MMLU about noise, the only fitting build 7 months old against a 5-day-old official one). Uses Ollama's own import - a local .gguf PATH, so nothing is downloaded - and the EXISTING switch the model screen already calls; adds no route, no tool, and never writes jarvis-framework.toml - no patch
     # --- What this machine can hold (2026-10-10, the owner's Decision 6) ---
     'jarvis_storage.py'          # the machine decides what may be offered: free space on the drive models live on, card count and video memory, then the Lean / Comfortable / Generous tiers, each labelled with its size on disk, what it is for, which card it uses and what it leaves free. may_download() is the ONE gate every download passes: never a silent download, and never one that would leave less than 25 GB free - the night C: hit 5.7 GB free and every build on this PC broke. Reads no network, starts nothing, downloads nothing. The work setups use it rather than building a second chooser - no patch, no route
+    # --- Ask for a picture, and keep it (2026-10-11, pictures.patch, JARVIS-API section 124) ---
+    'jarvis_pictures.py'         # /api/pictures, /api/pictures/file and POST /api/pictures: a prompt the owner typed, drawn by a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a setting with named values, never guessed at), saved as a PNG in a folder on this PC (Pictures\Jarvis by default, PC-only) with a sidecar holding the prompt, the seed, the model and the settings so it can be made again. Nothing leaves the PC; no route sends a picture anywhere, so making one needs NO approval card. Nothing is deleted on a timer. The switch ("Making pictures") is OFF by default - the second card is shared with the everyday model - and with nothing configured the owner gets ONE plain sentence naming both programs to install, never a crash. Not a tool in jarvis_agent.py, so no model turn can fill in a prompt
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -49,6 +49,7 @@ pub mod history;
 pub mod history_import;
 pub mod inbox_tidy;
 pub mod photo_reminder;
+pub mod pictures;
 pub mod profile;
 pub mod progress;
 pub mod projects;

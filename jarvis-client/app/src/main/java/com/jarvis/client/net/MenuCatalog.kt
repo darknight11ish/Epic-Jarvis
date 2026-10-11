@@ -133,6 +133,7 @@ object MenuCatalog {
         Menu("brain.work.undo", "Undo shelf", "Changes you can still undo.", true, false, "brain", "work", "card", null, "brain.tab.work", false, true, "Undo is a safety net; hiding it could strand a 10-minute Undo."),
         Menu("brain.work.activity", "Activity", "What Jarvis did lately.", true, false, "brain", "work", "card", null, "brain.tab.work", true, true, ""),
         Menu("brain.projects.progress", "Progress", "The activity heatmap and balance chart.", true, true, "brain", "projects", "card", "group.goals-projects", "brain.tab.projects", true, true, ""),
+        Menu("brain.projects.pictures", "Pictures", "Ask for a picture in your own words, and see the ones you kept.", true, true, "brain", "projects", "card", "group.goals-projects", "brain.tab.projects", true, true, ""),
         Menu("brain.now.right-now", "Right now", "What Jarvis is doing and its power state.", true, true, "brain", "now", "card", null, "brain.tab.now", true, true, ""),
         Menu("brain.now.budget", "Attention budget", "How many interruptions are left.", true, true, "brain", "now", "card", null, "brain.tab.now", false, true, "Pending attention is counted here, so it stays visible."),
         Menu("brain.now.trace", "What Jarvis is doing", "The tool steps, newest last.", true, true, "brain", "now", "card", null, "brain.tab.now", true, true, ""),

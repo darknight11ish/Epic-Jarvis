@@ -1054,6 +1054,32 @@ permissions = [
   "allow-brain-progress-balance-save",
 ]
 
+# Ask for a picture, and keep it (the owner's decision of 2026-09-27;
+# brain/pictures.rs, backend jarvis_pictures.py; JARVIS-API.md section 124).
+# The switch, the drawing program (ComfyUI or stable-diffusion.cpp) and the
+# folder pictures are kept in, plus the gallery and one picture's bytes.
+#
+# NO APPROVAL CARD, and this is the place that says so: a picture is a new file
+# in a folder on THIS PC, drawn by a program on THIS PC, from words the owner
+# typed - the same shape as a timer or a note. It opens no way out of the PC
+# (there is no route here that sends a picture anywhere) and loosens no rule.
+# Drawing one and changing the settings are both held on a stale link, because
+# both write. The prompts are the owner's own words, so the whole gallery is
+# taken out while the private lists are hidden or App lock is on - and the
+# bytes are not even fetched then. Freshness: reading a picture is idempotent,
+# so `brain_pictures_file` is in `brain-read`'s sibling set rather than
+# `brain-act`.
+[[set]]
+identifier = "brain-pictures"
+description = "Draw one picture from the owner's own words and keep it on this PC, read the gallery and one picture's bytes, and change the switch, the drawing program or the folder - no approval card (nothing leaves the PC), every change held on a stale link, the prompts and the picture hidden with the private lists."
+permissions = [
+  "allow-brain-pictures",
+  "allow-brain-pictures-file",
+  "allow-brain-pictures-make",
+  "allow-brain-pictures-settings",
+  "allow-choose-pictures-folder",
+]
+
 # Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11; brain/quiz.rs,
 # backend jarvis_quiz.py; JARVIS-API.md section 98). The owner pastes a text,
 # the PC's local model writes questions, the owner types answers and gets a

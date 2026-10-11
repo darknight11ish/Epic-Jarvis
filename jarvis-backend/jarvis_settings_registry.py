@@ -284,6 +284,16 @@ SECTIONS: tuple = (
     # uses, and the install line.
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
+    # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 124): "Making pictures", which program on this PC draws
+    # them (ComfyUI or stable-diffusion.cpp - a setting with named supported
+    # values, never guessed at), the folder the pictures are kept in and its
+    # size, and the gallery. Desktop-only as a Settings CARD: the phone reaches
+    # the same gallery through the Brain's Pictures plate, and it has no drawing
+    # program of its own to configure.
+    Section("pictures", ("pictures", "making pictures", "the pictures",
+                         "my pictures", "the picture gallery", "drawing pictures"),
+            app="desktop"),
     # "When the phone does not answer" (2026-10-08): how long the captcha
     # hand-off stays on offer (jarvis_handoff_mode.py; the owner's own decision
     # of that day, "make this a setting for both options with 1 as the default").
@@ -523,6 +533,40 @@ def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
         return _missing("the headless browser")
     code, out = BE.request(bool(on), BE.set_obscura)
     return _say(code, out)
+
+
+# --- making pictures (jarvis_pictures.py, JARVIS-API section 124) ----------
+
+def set_pictures(on: bool, *, peer=None, local=None) -> Outcome:
+    """The one switch the picture feature has. BOTH directions happen at once
+    and neither asks for a card.
+
+    Said plainly, because it is the kind of thing that gets "fixed" wrongly
+    later: this is NOT one of the switches that must ask. It opens no way out
+    of the PC (a picture is drawn by a program on this PC and saved in a
+    folder on this PC), changes no account, and loosens no rule - it is the
+    same shape as "web search" or "prompt coach", which both flip at once.
+    Turning it ON does mean the drawing program will take the second card when
+    the owner asks for a picture, which is exactly why it starts OFF and why
+    the owner has to say so once (CLAUDE.md: a feature using the second card
+    keeps its own switch, off until that feature is measured).
+
+    A Jarvis without jarvis_pictures.py answers in words, never silently.
+    """
+    try:
+        import jarvis_pictures as P
+    except Exception:
+        return _missing("making pictures")
+    path = P.settings_path()
+    values = P.load_settings(path)
+    values["enabled"] = bool(on)
+    P.save_settings(values, path)
+    if on and not values.get("runtime"):
+        # Switched on, but there is nothing to draw with yet. Say both things:
+        # the switch moved, AND nothing can be drawn until a program is named.
+        return Outcome(True, "Making pictures is on. " + P.NOT_CONFIGURED)
+    return Outcome(True, "Making pictures is on." if on
+                   else "Making pictures is off.")
 
 
 # --- topic controls: a topic's mode (jarvis_topics.py) ---------------------
@@ -1337,6 +1381,16 @@ BOOL_SETTINGS: tuple = (
                ("the headless browser", "headless browser", "obscura", "the obscura browser",
                 "the browser with no window"),
                "browser-engine", set_browser_engine),
+    # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
+    # JARVIS-API section 124). Its own switch, OFF by default: the second card
+    # is shared with the everyday model, and CLAUDE.md's rule is that a feature
+    # using the second card stays off until THAT feature is measured. Both
+    # directions happen at once - see set_pictures above for why that is not a
+    # loosening.
+    BoolSetting("pictures",
+               ("making pictures", "making pictures on the pc", "the picture maker",
+                "drawing pictures", "asking for a picture"),
+               "pictures", set_pictures),
     BoolSetting("briefing_senders",
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),

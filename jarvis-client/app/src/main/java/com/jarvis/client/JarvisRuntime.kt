@@ -7732,6 +7732,85 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------------------------------------------------------
+    // "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+    // docs/JARVIS-API.md section 124; [com.jarvis.client.net.Pictures] and
+    // ui/screens/PicturesPlate.kt).
+    //
+    // NOTHING LEAVES THE OWNER'S OWN MACHINES. The prompt is typed on this
+    // phone and drawn by a program on the PC; "Save to my phone" writes the
+    // picture into THIS phone's own Pictures collection over Tailscale or
+    // Meshnet, which is the owner's own device and not a way out of the PC.
+    //
+    // MAKING ONE NEEDS NO APPROVAL CARD: a picture is a new file in a folder
+    // on the PC, from words the owner typed - the same shape as a timer or a
+    // note. Drawing one is still held on a stale link (rule 4), because it
+    // does write a file.
+    //
+    // THE SWITCH, THE DRAWING PROGRAM AND THE FOLDER ARE THE PC'S. There is no
+    // call from here for any of them, and the backend refuses them from
+    // anywhere but the PC.
+    // ---------------------------------------------------------------------
+
+    /**
+     * The gallery: the folder, its size, the switch and every picture with its
+     * own prompt, seed and when it was made. A read; never held, never spoken,
+     * never put in a notification.
+     */
+    suspend fun pictures(): ApiResult<com.jarvis.client.net.Pictures.Reply> = api.pictures()
+
+    /**
+     * ONE picture's PNG bytes, for "Save to my phone". Refused while "Hide
+     * memory lists and chat history" is on, and the id is checked before
+     * anything is sent, so the phone can never ask the PC for another path.
+     */
+    suspend fun pictureBytes(id: String): ApiResult<ByteArray> {
+        com.jarvis.client.net.Pictures.filePath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("unreadable")))
+        if (privateListsHidden) {
+            return ApiResult.Failed(
+                ApiError.Malformed(com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short")),
+            )
+        }
+        return api.pictureBytes(id)
+    }
+
+    /**
+     * Draws ONE picture from the owner's own words and keeps it on the PC.
+     *
+     * NO CARD. Held on a stale link, and refused while the private lists are
+     * hidden (the gallery's own words are not on screen then, so there is
+     * nothing to ask "another" of). The PC's own sentence comes back as sent:
+     * a plain "start it on this PC", "nothing is set up yet" or "the switch is
+     * off" - never a code, never a blank.
+     */
+    suspend fun makePicture(prompt: String): com.jarvis.client.net.PicturesMake {
+        val body = com.jarvis.client.net.Pictures.makeBody(prompt)
+            ?: return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("no_words"), null,
+            )
+        if (privateListsHidden) {
+            return com.jarvis.client.net.PicturesMake(
+                false, com.jarvis.client.net.Pictures.WORDS.getValue("hidden_short"), null,
+            )
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.PicturesMake(false, it, null) }
+        return when (val r = api.makePicture(body)) {
+            is ApiResult.Ok -> {
+                val words = r.value["words"]?.let { element ->
+                    runCatching { element.jsonPrimitive.contentOrNull }.getOrNull()
+                }.orEmpty()
+                com.jarvis.client.net.PicturesMake(
+                    true, words.ifBlank { "Drawn and kept on your PC." },
+                    com.jarvis.client.net.Pictures.madeId(r.value),
+                )
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.PicturesMake(
+                false, describe(r.error), null,
+            )
+        }
+    }
+
     // ----------------------------------------------- forget a time frame ----
     // docs/JARVIS-API.md section 64 (the owner's decision of 2026-09-28) -
     // see [com.jarvis.client.net.ForgetRange] and ui/screens/ForgetRangePlate.kt.

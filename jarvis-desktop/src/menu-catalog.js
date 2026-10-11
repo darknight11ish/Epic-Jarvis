@@ -78,12 +78,14 @@ export const GROUPS = [
       "desktop": [
         "brain.tab.projects",
         "brain.work.goals",
-        "brain.projects.progress"
+        "brain.projects.progress",
+        "brain.projects.pictures"
       ],
       "phone": [
         "brain.tab.projects",
         "brain.work.goals",
-        "brain.projects.progress"
+        "brain.projects.progress",
+        "brain.projects.pictures"
       ]
     },
     "listed": {
@@ -2096,6 +2098,30 @@ export const MENUS = [
     ]
   },
   {
+    "id": "brain.projects.pictures",
+    "title": "Pictures",
+    "about": "Ask for a picture in your own words, and see the ones you kept.",
+    "apps": [
+      "desktop",
+      "phone"
+    ],
+    "area": "brain",
+    "view": "projects",
+    "kind": "card",
+    "group": "group.goals-projects",
+    "parent": "brain.tab.projects",
+    "hide": true,
+    "collapse": true,
+    "why": "",
+    "names": [
+      "pictures",
+      "the pictures",
+      "my pictures",
+      "the picture gallery",
+      "making pictures"
+    ]
+  },
+  {
     "id": "brain.now.right-now",
     "title": "Right now",
     "about": "What Jarvis is doing and its power state.",
@@ -2623,6 +2649,7 @@ export const ALIASES = {
   "limits and frequency": "settings.limits",
   "look at this": "settings.screen-look",
   "look at this and watch with me": "settings.screen-look",
+  "making pictures": "brain.projects.pictures",
   "manner": "settings.manner",
   "memory": "brain.tab.memory",
   "memory (model view)": "brain.model.memory",
@@ -2647,6 +2674,8 @@ export const ALIASES = {
   "people": "brain.memory.people-things",
   "people and things": "brain.memory.people-things",
   "phone notifications": "settings.phone-notify",
+  "picture gallery": "brain.projects.pictures",
+  "pictures": "brain.projects.pictures",
   "pin everyday chat": "settings.second-card.chat-card",
   "pinned facts": "brain.memory.profile",
   "progress": "brain.projects.progress",

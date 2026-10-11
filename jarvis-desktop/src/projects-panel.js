@@ -33,6 +33,10 @@
 
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
 import { refreshProgress, setProgressVisible } from "./progress-panel.js";
+// "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
+// JARVIS-API section 124). It sits beside the Progress pictures, above the
+// project list, and reads on its own - never blocking this page.
+import { refreshPictures, setPicturesVisible } from "./pictures-panel.js";
 import {
   APP_WORDS,
   appProjectBody,
@@ -250,9 +254,12 @@ export async function showProjects() {
   }
   paint();
   // The Progress pictures (progress-panel.js) sit above the list, not inside
-  // a project; they read on their own and never block this page.
+  // a project; they read on their own and never block this page. The Pictures
+  // gallery (pictures-panel.js) sits beside them and follows the same rule.
   setProgressVisible(!state.open);
   if (!state.open) refreshProgress();
+  setPicturesVisible(!state.open);
+  if (!state.open) refreshPictures();
   if (state.again) {
     state.again = false;
     await showProjects();
