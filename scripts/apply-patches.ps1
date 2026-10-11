@@ -2115,7 +2115,18 @@ if ($UsingRebuilt) {
         if (Test-Path -LiteralPath $half) {
             $swapped += "rebuilt-patches\$name"
         }
-        # else: the whole patch is superseded, so it is simply left out.
+        else {
+            # The whole patch is superseded AND it has no surviving half, so it
+            # is left out. SAID OUT LOUD, not dropped quietly (2026-10-11):
+            # this branch used to be a silent omission, and "a patch that was
+            # never applied and nothing said so" is the shape that has cost
+            # this project several merges. The property that makes leaving it
+            # out safe - that such a patch edits ONLY files a rebuilt module
+            # replaces, so no surviving half is lost - is asserted by
+            # backend/test_shipped_modules.py, which turns a patch that starts
+            # touching a live file into a failure instead of a silence.
+            Warn "$name - left out whole: the rebuilt modules already carry it ($($REBUILT_SUPERSEDES[$name]))"
+        }
     }
     $PATCHES = $swapped
 }
