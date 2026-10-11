@@ -289,11 +289,62 @@ def t_job_follows_the_switch():
 # ---------------------------------------------------------------- one night
 
 
+#: The month names the facts' own words and the question below are built from:
+#: jarvis_memory parses the full name, and words the end date back as "1 Sep".
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
+           "September", "October", "November", "December")
+
+
+def _months_back(year: int, month: int, back: int) -> tuple:
+    """year-month moved `back` months (negative goes forward), 1-based, as
+    mktime wants them."""
+    month -= back
+    while month > 12:
+        month -= 12
+        year += 1
+    while month < 1:
+        month += 12
+        year -= 1
+    return year, month
+
+
+def _month_start(year: int, month: int) -> float:
+    """Midnight on the 1st of year-month, local time."""
+    return time.mktime((year, month, 1, 0, 0, 0, 0, 0, -1))
+
+
+def _said_label(year: int, month: int, now: float) -> str:
+    """ "1 Sep", or "1 Sep 2027" when it is not the year `now` is in - the words
+    jarvis_memory.until_words() puts on that date, written out here so the
+    card's wording is not checked against the module that writes it."""
+    said = f"1 {_MONTHS[month - 1][:3]}"
+    return said if year == time.localtime(now).tm_year else f"{said} {year}"
+
+
 def seed_until(st, now, n):
+    """`n` facts whose own words give an end date that has passed, saved while
+    that date was still ahead - the shape the tidy offers a "Still true?" card
+    for. Every date is worked out FROM `now`: the facts are saved in the month
+    the question below names, and the date they say is the 1st of the month
+    after it.
+
+    IT USED TO BE A WRITTEN-IN "until 1 September 2026", with the facts saved
+    40 days before TODAY. From 11 October 2026 - CI's clock is UTC and its run
+    was at 00:40 on the 11th - the first fact was saved on 1 September, after
+    the August the question asks about, so past_hits() rightly reported that it
+    was not true then, and the check below failed on a fact of the calendar
+    rather than of the code (run 38098452656, `backend` and `backend-windows`
+    red). Two days on, no card would have been offered for that fact at all.
+    Do not put a fixed date back here: derive it from `now`."""
+    lt = time.localtime(now)
+    qy, qm = _months_back(lt.tm_year, lt.tm_mon, 2)   # the month the question names
+    ey, em = _months_back(qy, qm, -1)                 # the date said: the 1st after it
+    said = f"1 {_MONTHS[em - 1]} {ey}"
     ids = []
     for i in range(n):
-        ids.append(at(now - (40 + i) * DAY, lambda i=i: st.add(
-            f"Owner has a loan of the club's projector number {i} until 1 September 2026",
+        when = time.mktime((qy, qm, 1 + i, 12, 0, 0, 0, 0, -1))
+        ids.append(at(when, lambda i=i, said=said: st.add(
+            f"Owner has a loan of the club's projector number {i} until {said}",
             source="t")))
     return ids
 
@@ -353,6 +404,21 @@ def t_still_true_cards():
     st = store()
     now = noon_today()
     ids = seed_until(st, now, 7)
+    lt = time.localtime(now)
+    qy, qm = _months_back(lt.tm_year, lt.tm_mon, 2)
+    ey, em = _months_back(qy, qm, -1)
+    question = f"projector number 0 in {_MONTHS[qm - 1]} {qy}"
+    # THE PREMISE THIS SECTION STANDS ON, read from the stored timestamps
+    # rather than assumed: each fact must have been IN USE during the month the
+    # question names, or past_hits() is right to report nothing and the check
+    # below is asking for the wrong answer. A fixed "until 1 September 2026"
+    # against facts saved 40 days before TODAY broke exactly this on
+    # 2026-10-11 (CI, run 38098452656) - the saving landed after that month.
+    check("premise: every fact was saved during the month the question names",
+          all(_month_start(qy, qm) <= float(st.get(i)["valid_from"]) < _month_start(ey, em)
+              for i in ids),
+          [(i, time.strftime("%d %b %H:%M", time.localtime(st.get(i)["valid_from"])))
+           for i in ids])
     hist = at(now - 10 * DAY, lambda: st.add("Owner lived in Leeds until 2024", source="t"))
     ahead = st.add("Owner's lease ends in December 2099", source="t")
     before = facts_rows(st)
@@ -364,7 +430,8 @@ def t_still_true_cards():
     check("each is an ordinary 'stop using this fact?' card about ONE fact",
           all(c["source"] == "feedback_retire" and c["replaces_id"] in ids for c in got))
     check("... with the plain question and the date said",
-          all(c["text"].startswith("Still true? You said this would be true until 1 Sep")
+          all(c["text"].startswith(
+              f"Still true? You said this would be true until {_said_label(ey, em, now)}")
               for c in got), got[0]["text"])
     check("never for a fact that was history when said, or one still ahead",
           not any(c["replaces_id"] in (hist, ahead) for c in got))
@@ -382,7 +449,7 @@ def t_still_true_cards():
     check("accepting: the fact ends ON THE DATE ITS WORDS GAVE",
           fa["valid_to"] is not None and abs(float(fa["valid_to"]) - end) < 1, fa)
     check("... as history, not a Forget", "forgotten_at" not in meta)
-    ph = PA.past_hits(st, "projector number 0 in August 2026", now=now)
+    ph = PA.past_hits(st, question, now=now)
     check("... so a question about then still finds it, labelled",
           any(h["id"] == a["replaces_id"] for h in ph), ph)
     decide(st, b["id"], False)
