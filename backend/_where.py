@@ -103,6 +103,32 @@ if _b in sys.path:
     sys.path.remove(_b)
 sys.path.insert(0, _b)
 
+#: The ten modules this repository ships WHOLE, as this checkout holds them:
+#: `backend/rebuilt/`. APPENDED, never prepended - a copy in BACKEND is the one
+#: under test and must win (see `_b` above).
+_REBUILT = _HERE / "rebuilt"
+
+# WHY THIS LINE IS HERE, AND WHY IT IS NOT IN EVERY SUITE.
+# On the owner's PC, apply-patches.ps1 flattens these ten BESIDE jarvis_hud.py;
+# run_suites.py flattens them into the staged backend it hands every suite. In
+# both of those `import jarvis_memory` just works. A suite run straight out of a
+# clone (JARVIS_BACKEND unset - `python backend/test_x.py`, which is how the
+# owner runs them) has neither: this folder holds the patches and the tests, and
+# `rebuilt/` holds the ONLY copy of those ten modules that exists anywhere. So
+# 110 suites already carry the same line themselves, in FOUR spellings
+# (`append(str(HERE / "rebuilt"))` x51, `insert(0, ...)` x32, `insert(1, ...)`
+# x14, `append(str(REPO / "backend" / "rebuilt"))` x14). The six that forgot it
+# died at `ModuleNotFoundError: No module named 'jarvis_memory'` before a single
+# check could run - which is how this drift is found: one suite at a time, by
+# whoever runs the next one. This module already owns sys.path (its docstring
+# above says putting `BACKEND` on it is so "`import jarvis_memory` works without
+# each test repeating it"), so the missing half lives here too, once. A suite
+# that needs these modules FIRST still says so itself - `test_rebuilt.py` tests
+# the rebuilt copies and puts them at the front - and for everyone else BACKEND's
+# copy still wins.
+if _REBUILT.is_dir() and str(_REBUILT) not in sys.path:
+    sys.path.append(str(_REBUILT))
+
 
 def missing(*names: str) -> list[str]:
     """Which of these backend files are not where BACKEND says they are.
@@ -645,4 +671,46 @@ def require_shipped(*names: str) -> None:
             print("FAIL  " + p)
         print("\nNot run: this suite would have tested this repository's copy "
               "instead of the one your backend uses.")
+        sys.exit(1)
+
+
+def require_rebuilt(*modules: str) -> None:
+    """Stop the suite, plainly, if a module this repository ships WHOLE
+    (`backend/rebuilt/`) cannot be imported in this run.
+
+    THE GUARD FOR THE LINE AT THE TOP OF THIS FILE. `_REBUILT` is put on
+    sys.path above, so a suite that needs one of the ten shipped-whole modules
+    imports it in every run mode. If that line is ever lost, the suite used to
+    die at the next `import jarvis_memory` with a bare traceback and no checks
+    at all; five suites failed exactly that way in a clone of this repository
+    (`ModuleNotFoundError: No module named 'jarvis_memory'`, measured
+    2026-10-10). This says so in one named line instead, and exits.
+
+    Sibling of `require_shipped` above, with the same shape for the same
+    reason: a suite that cannot import the module under test must say that,
+    not look like nine assertion failures. Call it BEFORE the import:
+
+        from _where import require_rebuilt
+        require_rebuilt("jarvis_memory")
+        import jarvis_memory as M
+
+    When JARVIS_BACKEND is set, `require_shipped` is still the check that the
+    backend's own copy is the one being used; this only asks whether the
+    module can be imported at all.
+    """
+    problems = []
+    for name in modules:
+        try:
+            __import__(name)
+        except Exception as exc:                 # noqa: BLE001 - report, never raise
+            problems.append(f"{name}: {type(exc).__name__}: {exc}")
+    if problems:
+        print("FAIL  this run cannot import the modules this repository ships "
+              "whole (backend/rebuilt/):")
+        for p in problems:
+            print("      " + p)
+        print(f"      _where.py looks in {_REBUILT} and puts it on sys.path; "
+              f"BACKEND is {BACKEND}. {explain()}")
+        print("\nNot run: this suite would have tested something other than the "
+              "modules it is about.")
         sys.exit(1)
