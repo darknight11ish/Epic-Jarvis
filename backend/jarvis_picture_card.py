@@ -735,11 +735,14 @@ def handle_post(route: str, body, *, settings=None, path=None) -> tuple:
 def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     """Wrap the PC's Handler so the three switches answer over the API.
 
-    The same shape jarvis_progress.py uses, with the POST side added because a
-    switch has to be turned ON as well as read: GET /api/picture-card and
-    POST /api/picture-card. Nothing here draws, downloads or starts anything by
-    itself - starting the picture-maker on the right card is
-    D:\\Jarvis\\ImageGen\\Start-Pictures.ps1's job, which reads these settings.
+    The same shape the progress module's own `install()` uses, with the POST
+    side added because a switch has to be turned ON as well as read: GET
+    /api/picture-card and POST /api/picture-card. Nothing here draws, downloads
+    or starts anything by itself - starting the picture-maker on the right card
+    is D:\\Jarvis\\ImageGen\\Start-Pictures.ps1's job, which reads these
+    settings. (That module is named nowhere here on purpose: test_progress.py
+    fails if any module in backend/ but its own three names it, which is how
+    "not reachable from a model" is kept honest.)
     """
     previous_get = handler_cls.do_GET
     previous_post = getattr(handler_cls, "do_POST", None)
