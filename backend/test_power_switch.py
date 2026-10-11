@@ -463,6 +463,25 @@ def t_only_this_pcs_ollama():
           and "urllib.request.urlopen(" not in body)
 
 
+#: How long a test here waits for the answer when it runs the warm-up in
+#: place (`warm=lambda fn: fn()`). set_mode hands its work to a thread and
+#: gives up after `wait_s` - 1.5 s by default - answering 202 "Waiting for
+#: your approval on your PC or phone": a real answer for a real card, but one
+#: with no `warm_up` in it. Running the warm-up in place puts jarvis_agent's
+#: import (8,000-odd lines, and everything that pulls in) inside that same
+#: 1.5 s, and a GitHub Windows runner compiles it from source every time
+#: (PYTHONDONTWRITEBYTECODE=1, and no .pyc is shipped). On 2026-10-11 it
+#: outran the 1.5 s and PR #265's backend-windows job failed on the 202 body:
+#:
+#:     FAIL  waking from standby loads the chat model at once
+#:     KeyError: 'warm_up'
+#:
+#: This is patience, not a lower bar: every check below is the same check,
+#: and the first now also asserts `code == 200`, so a timeout is named as the
+#: timeout it is instead of surfacing as a KeyError.
+WAIT_S = 30.0
+
+
 def t_waking_loads_the_chat_model_again():
     import os
     reset()
@@ -470,15 +489,18 @@ def t_waking_loads_the_chat_model_again():
     o = FakeOllama()
     os.environ["JARVIS_MODEL"] = "jarvis-primary"
     try:
-        code, out = S.set_mode("active", gate_check=_auto, ollama=o, warm=lambda fn: fn())
+        code, out = S.set_mode("active", gate_check=_auto, ollama=o,
+                               warm=lambda fn: fn(), wait_s=WAIT_S)
     finally:
         os.environ.pop("JARVIS_MODEL", None)
     check("waking from standby loads the chat model at once",
-          o.loads == ["jarvis-primary"] and S.warm_status()["state"] == "ready", repr(o.loads))
+          code == 200 and o.loads == ["jarvis-primary"]
+          and S.warm_status()["state"] == "ready", repr((code, o.loads)))
     check("... and says so, naming it", out["warm_up"] == "jarvis-primary"
           and "Loading the chat model (jarvis-primary) again now" in out["message"], repr(out))
     o2 = FakeOllama()
-    code, out = S.set_mode("quiet", gate_check=_auto, ollama=o2, warm=lambda fn: fn())
+    code, out = S.set_mode("quiet", gate_check=_auto, ollama=o2, warm=lambda fn: fn(),
+                           wait_s=WAIT_S)
     check("active -> quiet loads nothing (the model was never unloaded)",
           o2.loads == [] and "warm_up" not in out, repr(out))
     reset()
@@ -486,7 +508,8 @@ def t_waking_loads_the_chat_model_again():
     o3 = FakeOllama()
     os.environ["JARVIS_MODEL"] = "jarvis-primary"
     try:
-        code, out = S.set_mode("quiet", gate_check=_auto, ollama=o3, warm=lambda fn: fn())
+        code, out = S.set_mode("quiet", gate_check=_auto, ollama=o3, warm=lambda fn: fn(),
+                               wait_s=WAIT_S)
     finally:
         os.environ.pop("JARVIS_MODEL", None)
     check("standby -> quiet loads nothing: the apps let Quiet through on a stale link, "
