@@ -16,15 +16,49 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # the dev container, $JARVIS_BACKEND on a real install. REPO is this
 # repository. They used to be the same path and are not on the machine
 # that runs Jarvis.
-from _where import BACKEND, REPO, missing, explain
-SRC = Path(sys.argv[1] if len(sys.argv) > 1
-          else BACKEND / "jarvis_hud.py").read_text(encoding="utf-8")
+from _where import BACKEND, REPO, missing, explain, hud_block
 SPEC = REPO / "jarvis-desktop" / "src" / "jarvis-visual-spec.json"
 
-# Pull the block from APPEARANCE_FILE to the end of _appearance_save.
-start = SRC.index("APPEARANCE_FILE = CONFIG_DIR")
-end = SRC.index("def _desktop_action")
-block = SRC[start:end]
+# THE APPEARANCE HELPERS, OUT OF THE PATCHED jarvis_hud.py.
+#
+# jarvis_hud.py is the entry point scripts/apply-patches.ps1 edits IN PLACE, so
+# a clone's backend/ does not hold it and this read used to be a
+# FileNotFoundError before one check - a suite that reported a broken patch
+# when what it was missing was one file only the owner's PC has.
+#
+# This suite never looks at the surrounding file: it drives one self-contained
+# block of it (four helpers) against the repository's real spec. That block is
+# the text the patch stack itself writes, so in a clone this reads the block
+# from the stack's own stand-in and SAYS SO - see _where.hud_block, which also
+# refuses a block the stack could not rebuild whole. Everything a stand-in
+# cannot honestly give (a route that must still be wired into main(), an
+# import that must still sit inside a try:) is a different suite's business,
+# and those skip instead.
+START, END = "APPEARANCE_FILE = CONFIG_DIR", "def _desktop_action"
+if len(sys.argv) > 1:
+    # A person naming a built file, which is what the docstring above offers:
+    # taken at their word, so a path that is wrong or a file without the block
+    # is a real error rather than something skipped quietly.
+    WHERE = sys.argv[1]
+    SRC = Path(WHERE).read_text(encoding="utf-8")
+    try:
+        block = SRC[SRC.index(START):SRC.index(END)]
+    except ValueError:
+        raise SystemExit(f"FAIL  {WHERE} does not hold both `{START}` and `{END}`, "
+                         f"so it is not a patched jarvis_hud.py")
+else:
+    block, WHERE = hud_block(START, END)
+    if block is None:
+        print(f"skip  the four appearance helpers are read out of jarvis_hud.py, "
+              f"and {WHERE}")
+        print("\n0 passed, 1 skipped, 0 failed")
+        sys.exit(0)
+    if WHERE != str(BACKEND / "jarvis_hud.py"):
+        print(f"note  no jarvis_hud.py in {BACKEND}, so this run drives the block "
+              f"the patch stack itself writes - {WHERE}. The same four helpers, "
+              f"against the same real spec; read _where.hud_block for what that "
+              f"does and does not prove. {explain()}")
+
 
 tmp = Path(tempfile.mkdtemp())
 ns = {
