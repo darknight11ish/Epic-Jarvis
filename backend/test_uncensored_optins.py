@@ -576,8 +576,22 @@ def t_listed_and_applies():
         return
     order = _stack.order()
     at = order.index("uncensored-optins.patch")
-    check("uncensored-optins.patch is in apply-patches.ps1's order, in front of the loader",
-          at == len(order) - 2 and order[at + 1] == "plugin-loader.patch", order[-3:])
+    loader = order.index("plugin-loader.patch")
+    # POSITION, NOT ADJACENCY, and that is the honest reading of what actually
+    # depends on where this patch sits.
+    #
+    # It must be in the list and in front of the loader, and the loader must be
+    # last of all - all three are checked here or just below. It does NOT have
+    # to be the loader's immediate predecessor: `gate-touches.patch` (PR #249,
+    # merged 2026-10-11) sits in front of the loader too, and it writes NO
+    # jarvis_hud.py line, so the loader's hunk still finds the lines THIS patch
+    # printed. That is what the two checks below actually prove - the loader's
+    # re-anchored text, and the stack built up to and including this patch -
+    # and the whole-stack build in CI proves it end to end. Asserting adjacency
+    # would be asserting a fact about the list's shape that nothing depends on,
+    # and it would collide with the suite that pins the other patch's place.
+    check("uncensored-optins.patch is in apply-patches.ps1's order, before the loader",
+          at < loader, order[-3:])
     check("...so the loader stays LAST, which is the repository's own rule for it "
           "(everything after the loader must be a drop-in folder, never a core patch)",
           order[-1] == "plugin-loader.patch", order[-1])
