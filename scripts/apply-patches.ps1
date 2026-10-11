@@ -1010,6 +1010,17 @@ $PATCHES = @(
     # card, no gate line). Not a model tool. Needs jarvis_progress.py (and jarvis_projects.py, jarvis_goals.py)
     # copied in; without them, or on any error, the banner says so and the routes are simply not there.
     'progress.patch'
+    # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
+    # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
+    # right after progress.patch's own, so it goes after it. The three ways of running a picture-maker
+    # beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card
+    # with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched), each
+    # its own switch, ALL OFF until the owner turns one on. It draws nothing (asking for a picture is
+    # jarvis_pictures.py's route, section 123), starts nothing (D:\Jarvis\ImageGen\Start-Pictures.ps1 does
+    # that, reading these settings) and needs no gate line and no card: it only chooses a card for a local
+    # program and unloads/reloads the owner's own chat. Needs jarvis_picture_card.py copied in; without it,
+    # or on any error, the banner says so and the routes are simply not there.
+    'picture-card.patch'
     # "Topic controls" (the owner's decision of 2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md, JARVIS-API section
     # 107): GET/POST /api/topics, /api/topics/mode|file|settings, GET /api/topics/preview|review|hidden, the
     # owner's memory lists with the topic filter applied, and the count `topics_left_out` in the chat route's
@@ -1509,6 +1520,8 @@ $SHIPPED = @(
     'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
     # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Which card draws the pictures" (2026-10-10, picture-card.patch) ---
+    'jarvis_picture_card.py'     # picture-card.patch: the three ways of running a picture-maker beside the everyday chat (pictures on the 12 GB card with the chat stepping aside; on the 12 GB card with the chat moved to the 8 GB card; small pictures on the 8 GB card with the chat untouched) - each its own switch, ALL OFF until the owner turns one on; it draws nothing, starts nothing and is not a model tool; the card is pinned by UUID from nvidia-smi and never by index
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)

@@ -18282,3 +18282,35 @@ a refusal in the module's own words (`_file_words`), never into a zero.
 The answer holds service ids, model names, dollars, dates and the PC's own sentences.
 No key, no message, no chat and no piece of one is ever read or written here, and the
 audit line carries the action, the service and the dollar amounts only.
+
+### 124. Which card draws the pictures, and what the chat does about it
+
+`jarvis_picture_card.py` (the owner's decision of 2026-10-10; the design is in
+`docs/PICTURE-CARDS-DESIGN.md`). This is the *card* half of making pictures. Asking
+for one, saving it and listing it are `jarvis_pictures.py`'s own section (123) and are
+deliberately not repeated here.
+
+`GET /api/picture-card` answers with the three ways, each read as its own switch; both
+cards, found by asking `nvidia-smi` and ranked by their own memory; the chat lanes as
+they really are; and one plain sentence. `POST /api/picture-card` turns one on with
+`{"option":"A"}`, `{"option":"B"}` or `{"option":"C"}`, or all of them off with
+`{"option":null}`. Turning one on turns the other two off and says so, because they are
+three answers to one question. `GET /api/picture-card/ready` answers the one question
+that matters before a draw - is everything this way needs actually on this PC - and
+names every missing file with its size.
+
+**All three start OFF**, which is the project's own rule for anything that uses the
+second card: a feature keeps its own switch, off until *that feature* is measured. The
+chosen way is kept in `picture-card.json` in the config folder; nobody edits it by hand
+(`Start-Pictures.ps1 -Option A|B|C` writes it, and so does the route). There is no
+approval card: nothing leaves the PC and nothing is undone - these routes only choose
+which card a program on this PC runs on, and unload or reload the owner's own chat.
+
+The card is pinned by **UUID, never by index**, and where this module starts the
+picture-maker it passes the card twice over - `CUDA_VISIBLE_DEVICES` *and* ComfyUI's own
+`--cuda-device 0`. `CUDA_VISIBLE_DEVICES` alone is not enough for Ollama (it falls back
+to Vulkan onto the other card), which is why nothing here pins Ollama at all: the lanes
+are `jarvis_second_card.py`'s.
+
+The module is not reachable from any model turn, is not a tool, and owns no route under
+`/api/pictures`; `test_picture_card.py` fails if either changes.
