@@ -43,6 +43,7 @@ No pytest, no network, no model.
 """
 from __future__ import annotations
 
+import calendar
 import json
 import os
 import sys
@@ -79,6 +80,19 @@ import jarvis_tidy as T  # noqa: E402
 
 PASSED, FAILED = [], []
 DAY = 86400.0
+
+#: This suite's fake clock, as INSTANTS: one moment, the same in every time
+#: zone. `time.mktime` reads its tuple as LOCAL time and the trailing -1 lets
+#: the C library pick DST, so `time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))`
+#: meant 12:00 PDT on the owner's PC (19:00 UTC) and 12:00 UTC on CI - seven
+#: hours apart - and `noon_today()` meant a different CALENDAR DAY whenever
+#: the real clock had already crossed midnight UTC. That moved the past-hits
+#: window for "projector number 0 in August 2026" across the 1 September
+#: boundary, so "... so a question about then still finds it, labelled" failed
+#: on CI and passed here (2026-10-10). `calendar.timegm` reads the tuple as
+#: UTC and takes no DST flag, so these mean one instant everywhere.
+NOW = float(calendar.timegm((2026, 9, 28, 12, 0, 0)))
+NIGHT = float(calendar.timegm((2026, 9, 28, 3, 30, 0)))
 
 
 def check(name, cond, detail=""):
@@ -186,7 +200,7 @@ def switch(on: bool):
 
 
 def t_true_until_parser():
-    now = time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))
+    now = NOW
     cases = {
         "Owner is on holiday in Lisbon until 12 October 2026": "2026-10-12",
         "Owner is staying with Priya until 12 October": "2026-10-12",
@@ -245,7 +259,7 @@ def t_true_until_is_a_label_never_a_hide():
 
 def t_recall_label():
     st = store()
-    now = time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))
+    now = NOW
     fid = at(now - DAY, lambda: st.add("Owner is on holiday in Lisbon until 12 October 2026",
                                        source="t"))
     hits = PA.recall(st, "where is my holiday in Lisbon", k=5, now=now)
@@ -300,7 +314,7 @@ def seed_until(st, now, n):
 
 def t_nights_that_do_nothing():
     st = store()
-    now = time.mktime((2026, 9, 28, 3, 30, 0, 0, 0, -1))
+    now = NIGHT
     seed_until(st, now, 2)
     switch(False)
     backoff()
@@ -309,30 +323,28 @@ def t_nights_that_do_nothing():
     switch(True)
     bo = backoff()
     bo.note_conversation()
-    # After the tidy hour on today's date, whatever the real clock says: with the real
-    # time these two checks failed whenever the suite ran before 02:00 (CI, 2026-09-30).
-    lt = time.localtime()
-    after_hour = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
-    out = T.run_night(now=after_hour, store=st, ask=lambda p: "{}")
+    # The pinned clock, not `time.localtime()`: an instant is the same on every
+    # machine and in every zone. (With the real clock these two checks failed
+    # whenever the suite ran before 02:00 - CI, 2026-09-30 - because the two
+    # calls landed either side of the tidy hour.)
+    out = T.run_night(now=NOW, store=st, ask=lambda p: "{}")
     check("the owner is chatting: held back, nothing raised", out["why"] == "conversation"
           and not cards(st), out)
     backoff("standby")
-    out = T.run_night(now=after_hour, store=st, ask=lambda p: "{}")
+    out = T.run_night(now=NOW, store=st, ask=lambda p: "{}")
     check("Standby: held back, nothing raised", out["why"] == "quiet" and not cards(st), out)
     switch(False)
 
 
-def noon_today() -> float:
-    """Today at 12:00 local time. The tidy is once a day from its hour (02:00) on, so a test
-    that calls it twice a minute apart and takes the real clock fails when it starts at
-    01:59 (CI, 2026-09-30): the second call lands after 02:00 and counts as a new day."""
-    lt = time.localtime()
-    return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
-
-
+# The tidy is once a day from its hour (02:00) on, so `now` must be after that
+# hour on its own local day, and every call must use the SAME instant: with the
+# real clock, two calls a minute apart failed when the first landed at 01:59
+# (CI, 2026-09-30) and the second counted as a new day. NOW is one pinned
+# instant (12:00 UTC), and run_night itself steps `today` back a day when the
+# local hour has not arrived yet, so the day rule reads the same everywhere.
 def t_still_true_cards():
     st = store()
-    now = noon_today()
+    now = NOW
     ids = seed_until(st, now, 7)
     hist = at(now - 10 * DAY, lambda: st.add("Owner lived in Leeds until 2024", source="t"))
     ahead = st.add("Owner's lease ends in December 2099", source="t")
@@ -437,7 +449,12 @@ def t_which_is_true_now():
 
 def t_no_model_no_conflict_half():
     st = store()
-    now = time.time()
+    # The pinned clock, not the real one: seed_until() counts back 40 days from
+    # `now`, and the seeded facts' end date is fixed at 1 September 2026 - so
+    # with the real clock this check quietly stopped raising its card once the
+    # run moved past 12 October 2026 (created would land after the end date,
+    # and ended_facts() skips a fact that was already history when said).
+    now = NOW
     at(now - 30 * DAY, lambda: st.add("Owner works at Initech", source="t"))
     at(now - DAY, lambda: st.add("Owner started a new job at Globex", source="t"))
     seed_until(st, now, 1)
