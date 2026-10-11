@@ -17,6 +17,7 @@ auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa37
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10Z	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
 auto-learn.patch	auto-learn/b2eef2b.patch	b2eef2b712c15fc47e44845f89e1c8839b0e0353	2026-09-24T20:51:14Z	Automatic learning: the audits' backend findings, and injected_sensitive on the chat route
 auto-learn.patch	auto-learn/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44Z	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
+big-coder.patch	big-coder/f13d795.patch	f13d795116434212bccbf09fe36402e0f5b750fd	2026-10-11T07:54:49-07:00	the 30B coder: both cards, with Jarvis paused
 big-model.patch	big-model/ee05ef0.patch	ee05ef0b3dcca894079a3ccda259a71560e2f8cc	2026-09-24T04:35:14Z	Big model: big-model.patch, the install lists, and parity
 bitemporal.patch	bitemporal/688640e.patch	688640efca47502ec38032394fa127eabb03101b	2026-09-15T03:28:09Z	bitemporal.patch: the second time axis, and a surface that shows it
 brain-reads.patch	brain-reads/59e753f.patch	59e753f5957b93d8050804473c93ad99612fab6c	2026-09-28T06:49:07Z	Backend: search what was said in old chats, and a fact's history
