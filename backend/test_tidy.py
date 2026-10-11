@@ -322,12 +322,31 @@ def t_nights_that_do_nothing():
     switch(False)
 
 
+#: The one moment this suite pretends it is. NOT the real clock, and not
+#: "today": `noon_today()` used to read `time.localtime()`, which made two
+#: checks answer differently on a CI runner than on the owner's PC. Both
+#: runners are UTC, and this suite reasons in local time, so `noon_today()`
+#: and every date `time.mktime` builds from it landed an hour or a day away
+#: from the dates the assertions name - `t_still_true_cards` failed on
+#: "... so a question about then still finds it, labelled", because the fact
+#: it retires ended a few hours on the wrong side of the "in August 2026"
+#: window. Measured 2026-10-11: 15 runs under TZ=UTC, 15 failures; the same
+#: suite on `main` fails 5 of 5 under TZ=UTC and passes in the owner's own
+#: zone. A suite that tests dates must not give a different answer in a
+#: different country, so the moment is pinned - 2026-09-28 12:00 local, the
+#: same day the other checks in this file already name - instead of the
+#: assertions being loosened.
+WHEN = time.mktime((2026, 9, 28, 12, 0, 0, 0, 0, -1))
+
+
 def noon_today() -> float:
-    """Today at 12:00 local time. The tidy is once a day from its hour (02:00) on, so a test
-    that calls it twice a minute apart and takes the real clock fails when it starts at
-    01:59 (CI, 2026-09-30): the second call lands after 02:00 and counts as a new day."""
-    lt = time.localtime()
-    return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
+    """The pinned moment this suite runs at, at midday. It was "today at 12:00
+    local time", because the tidy is once a day from its hour (02:00) on, so a
+    test that called it twice a minute apart on the real clock failed when it
+    started at 01:59 (CI, 2026-09-30): the second call landed after 02:00 and
+    counted as a new day. It is pinned to a DAY now as well as an hour - see
+    WHEN - so the answer no longer depends on the machine's timezone."""
+    return WHEN
 
 
 def t_still_true_cards():

@@ -2,12 +2,21 @@
 
     python3 test_gate_denial_rule.py
 
-gate-outcome.patch turns a denial into a PROPOSED memory: "Remember this: I
-do not want Jarvis to <action> without asking me first." For an action that
+gate-outcome.patch turns a denial into a PROPOSED memory. For an action that
 always asks - the module refuses to act on any tier but "ask", or the owner
 started it with a button - that sentence says nothing, and every "no" put
 one in the Memory tab's review queue ("...to second card enable without
 asking me first").
+
+It also holds the proposal's own words to the owner's decision of 2026-10-10:
+a Reject click carries none of the owner's words (`jarvis_gate.decide` NULLs
+`prompt` and `detail`; the HUD's Reject sends only `{id, by}`), so the
+proposal may only ever be Jarvis's guess, plainly marked as one, with no
+reason invented - never the first-person sentence it used to write into the
+learner's mouth ("I do not want Jarvis to ... I just said no when it asked").
+The other good properties are held here too: never from a timeout, only ever
+through `propose()`, `_NO_RULE_FROM_DENIAL` still skips a one-card denial, and
+a failed proposal never turns a completed denial into an error.
 
 Runs anywhere: jarvis_gate.py is the owner's file, so the gate's lines come
 from a stand-in built from the whole patch stack (backend/_stack.py), with
@@ -121,6 +130,147 @@ def t_the_patch_applies_forwards_and_backwards_on_the_stack():
     full, log = _stack.stand_in("jarvis_gate.py")
     check("every later patch for jarvis_gate.py still applies over it", full is not None,
           "\n".join(log[-2:]))
+
+
+# ---------------------------------------------------------------------------
+# The proposal's own words (owner, 2026-10-10)
+#
+# Before this change the text was "Remember this: I do not want Jarvis to
+# <action> without asking me first. I just said no when it asked." - a
+# first-person sentence presented to the learner as the owner's own turn, on
+# the strength of a button press, with "I just said no when it asked" standing
+# in for a reason the click does not carry (jarvis_gate.decide NULLs prompt and
+# detail; the HUD's Reject sends only {id, by}). The owner's rule is that facts
+# are learned from his own words only, so the proposal may only ever be
+# Jarvis's guess, marked as one, with no reason invented. What must survive:
+# never from a timeout, only ever a proposal, _NO_RULE_FROM_DENIAL, best-effort.
+# ---------------------------------------------------------------------------
+
+#: A first-person claim in the owner's voice. `\bI\b` covers "I do not want";
+#: the possessives cover his own words being put in his mouth.
+_OWNER_VOICE = re.compile(r"\bI\b|\bI'm\b|\bI'd\b|\bI've\b|\bmy\b|\bme\b|\bmine\b|\bwe\b",
+                          re.IGNORECASE)
+#: A reason the click does not carry, invented by the sentence. The old wording
+#: said "I just said no when it asked"; "you said" is here because a rejection
+#: carries no words of the owner's at all, so no phrase may claim it does.
+_INVENTED_REASON = re.compile(r"\bI just\b|\byou said\b|\bbecause\b|\bsince\b",
+                              re.IGNORECASE)
+#: What the old sentence claimed, word for word. A test that only listed
+#: forbidden phrases could be satisfied by any wording at all; this pins the
+#: one claim that must never come back.
+_OLD_CLAIM = ("Remember this: I do not want Jarvis to delete file without "
+              "asking me first. I just said no when it asked.")
+
+
+def _one_proposal(ns, action):
+    calls = _proposals(ns, action)
+    assert len(calls) == 1, f"expected exactly one proposal for {action}, got {calls!r}"
+    return calls[0]
+
+
+def t_the_proposal_is_a_guess_in_jarvis_s_words_never_the_owners():
+    """(a) no owner-voiced first-person claim, and no invented reason.
+
+    Measured on `detail={}` on purpose: a rejection carries no reason
+    (jarvis_gate.decide erases prompt and detail), so a sentence that still
+    explains itself is inventing one.
+    """
+    ns = _lifted(_gate())
+    turns, kw = _one_proposal(ns, "delete_file")
+    text = turns[0]["content"]
+    check("it is still a turn handed to the learner (the same shape propose reads)",
+          isinstance(turns, list) and len(turns) == 1 and turns[0].get("role") == "user"
+          and isinstance(text, str) and text.strip(), repr(turns))
+    check("no first-person claim in the owner's voice (\"I do not want ...\")",
+          _OWNER_VOICE.search(text) is None, text)
+    check("and no invented reason (\"I just said no when it asked\")",
+          _INVENTED_REASON.search(text) is None, text)
+    check("and not the old sentence, word for word", text != _OLD_CLAIM, text)
+
+
+def t_the_proposal_is_marked_as_a_guess_for_the_owner():
+    """(b) marked as a guess in the proposal itself."""
+    ns = _lifted(_gate())
+    turns, kw = _one_proposal(ns, "delete_file")
+    text = turns[0]["content"]
+    check("the text says in its own words that it is a guess",
+          re.search(r"\bguess", text, re.IGNORECASE) is not None
+          and re.search(r"\bmarked\b", text, re.IGNORECASE) is not None, text)
+    check("and it says keeping or discarding it is the owner's call",
+          re.search(r"\bkeeps?\b.{0,40}\bdiscards?\b", text, re.IGNORECASE | re.S) is not None,
+          text)
+    check("it names the action it is about, so the guess is readable",
+          "delete file" in text, text)
+    check("the source tag the review queue already shows is unchanged",
+          kw.get("source") == "gate_denial", repr(kw))
+
+
+def t_a_timeout_still_proposes_nothing():
+    """(c) a timeout is the absence of an answer, so it proposes nothing.
+
+    The DENIED branches are the only callers; the expired branch at the end of
+    `check()` returns `timed_out` without calling this function. Read out of the
+    patch stack's own text rather than restated, so a new call site is caught.
+    """
+    text = _gate()
+    lines = text.splitlines()
+    denied = [i for i, l in enumerate(lines)
+              if l.strip() == "_propose_constraint_from_denial(action, detail)"]
+    check("the only call sites are the two DENIED branches", len(denied) == 2,
+          f"found {len(denied)}")
+    expiry = next((i for i, l in enumerate(lines) if 'outcome="timed_out"' in l), None)
+    check("outcome=\"timed_out\" is in the stand-in (test setup)", expiry is not None)
+    if expiry is None:
+        return
+    for i in denied:
+        guard = any('row["state"] == "denied"' in l for l in lines[max(0, i - 4):i])
+        check(f"the call at line {i + 1} is guarded by state == \"denied\"", guard,
+              "\n".join(lines[max(0, i - 4):i + 1]))
+        check(f"and it is not the expired path (line {i + 1} is above {expiry + 1})",
+              i < expiry)
+    ns = _lifted(text)
+    check("CONTROL: an ordinary denial still proposes one",
+          len(_proposals(ns, "delete_file")) == 1)
+
+
+def t_it_only_ever_proposes_nothing_is_applied():
+    """(d) it must keep going through propose(), the one review queue.
+
+    A denial writing straight into memory would be a second door into the same
+    room (memory-safety.patch removed the single auto-accept path inside
+    propose() for exactly this reason). The stub below offers ONLY propose():
+    anything else the function reached for is recorded, and the function's own
+    best-effort try/except would have hidden an AttributeError - so the check is
+    what the stub was ASKED for, not that no exception escaped.
+    """
+    ns = _lifted(_gate())
+    seen = []
+    stub = types.ModuleType("jarvis_extract")
+
+    def propose(turns, **kw):
+        seen.append(("propose", kw))
+        return []
+
+    def _forbidden(name):
+        def _no(*a, **k):
+            seen.append((name, {}))
+            raise AssertionError(f"{name}() must never be called from a denial")
+        return _no
+
+    stub.propose = propose
+    for name in ("add_fact", "accept_auto", "_accept", "decide", "store", "remember"):
+        setattr(stub, name, _forbidden(name))
+    real = sys.modules.get("jarvis_extract")
+    sys.modules["jarvis_extract"] = stub
+    try:
+        ns["_propose_constraint_from_denial"]("delete_file", {})
+    finally:
+        if real is None:
+            sys.modules.pop("jarvis_extract", None)
+        else:
+            sys.modules["jarvis_extract"] = real
+    check("it called propose() once, and nothing else on the memory layer",
+          seen == [("propose", {"source": "gate_denial"})], repr(seen))
 
 
 def t_a_no_on_an_always_ask_card_proposes_nothing():
