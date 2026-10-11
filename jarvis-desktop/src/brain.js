@@ -2626,6 +2626,19 @@ function proposalRow(p) {
     const main = item.querySelector(".row-main");
     (main || item).append(warn);
   }
+  // Jarvis's own guess (the owner's decision of 2026-10-10): a "no" on a card
+  // carries none of the owner's words, so anything proposed from one is marked
+  // as a guess - in the proposal's own text, in `guessed`/`auto_reason` from
+  // the PC, and here where the owner actually reads it. Keep or Discard still
+  // decides it; nothing is saved by the marking either way.
+  if (p.guessed === true) {
+    const guess = el("div", "row-warning");
+    guess.append(el("strong", "", "Jarvis's guess, not something you said. "));
+    guess.append(el("span", "", "A Reject click carries none of your words, so this rule was worked out from the action's name, and no reason was given. "));
+    guess.append(el("span", "", "Keep it to have Jarvis ask first before it does this again; Discard it and nothing is saved."));
+    const main = item.querySelector(".row-main");
+    (main || item).append(guess);
+  }
   return item;
 }
 

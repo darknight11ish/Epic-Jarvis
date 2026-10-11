@@ -107,4 +107,13 @@
          second Share entry (activity-alias ShareToLive). -->
     <string name="live_tile_label">Jarvis Live</string>
     <string name="share_to_live_label">Talk about this in Live</string>
+
+    <!-- The link tile's own label (service/LinkTileService.kt draws
+         data/QuickTiles.kt's LINK_TILE_LABEL into the shade; the manifest gives
+         this same string to that service, so the tile editor and the shade
+         agree). It NAMES THE TAP: this tile mutes and unmutes Jarvis's spoken
+         interruptions. Before 2026-10-10 the manifest said @string/app_name and
+         the shade drew "Jarvis", so a tile with Jarvis's own name on it
+         silently muted Jarvis. -->
+    <string name="link_tile_label">Mute Jarvis</string>
 </resources>

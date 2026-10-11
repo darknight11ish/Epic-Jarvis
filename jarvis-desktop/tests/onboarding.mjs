@@ -34,6 +34,24 @@ const page = (name) => readFileSync(join(SRC, name), "utf8");
 const HTML = page("onboarding.html");
 const RUST = readFileSync(join(HERE, "..", "src-tauri", "src", "commands.rs"), "utf8");
 const WINDOWS = readFileSync(join(HERE, "..", "src-tauri", "src", "windows.rs"), "utf8");
+const LIB = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
+const BUILD = readFileSync(join(HERE, "..", "src-tauri", "build.rs"), "utf8");
+const SURFACES = readFileSync(
+  join(HERE, "..", "src-tauri", "permissions", "surfaces.toml"), "utf8");
+const SETTINGS_HTML = page("settings.html");
+const SETTINGS_JS = page("first-run-settings.js");
+const acl = (...parts) =>
+  readFileSync(join(HERE, "..", "src-tauri", ...parts), "utf8");
+const SETTINGS_CAP = acl("capabilities", "settings.json");
+const ONBOARDING_CAP = acl("capabilities", "onboarding.json");
+
+/** The body of one Rust function, from its `fn` line to its closing brace. */
+const rustFn = (src, name) => {
+  const at = src.indexOf(`fn ${name}(`);
+  if (at < 0) return null;
+  const end = src.indexOf("\n}\n", at);
+  return end < 0 ? null : src.slice(at, end + 3);
+};
 
 const fails = [];
 const check = (name, fn) => {
@@ -206,6 +224,108 @@ check("CONTROL: the walkthrough still asks for nothing but the theme", () => {
   const calls = [...HTML.matchAll(/invoke\("([a-z_]+)"/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(calls)].sort(), ["finish_onboarding", "get_theme"],
     `the walkthrough asks Rust for: ${calls.join(", ")}`);
+});
+
+/* ── Replayable on demand (the owner, 2026-10-10) ───────────────────────────
+ *
+ * The gap these four checks close: the walkthrough was interactive and
+ * skippable, but NOT redoable - one Escape and it was gone for good, because
+ * `lib.rs` only ever opened it while the marker was missing and no control
+ * anywhere could open it again. The owner asked for it to be replayable if it
+ * was skipped by accident.
+ *
+ * The boundary the same four checks hold, which matters more than the button:
+ * this is ON-DEMAND replay. It must not change when the walkthrough appears by
+ * itself, so the replay path touches no marker, and the auto-show gate stays
+ * exactly where and what it was.
+ */
+
+/** The `#first-run` card in Settings, where the owner finds the intro again. */
+const FIRST_RUN = (() => {
+  const at = SETTINGS_HTML.indexOf('<section class="card" id="first-run">');
+  assert.ok(at >= 0, "Settings has no #first-run card to put the control near");
+  const end = SETTINGS_HTML.indexOf("</section>", at);
+  return SETTINGS_HTML.slice(at, end);
+})();
+
+check("Settings has a findable way back to the intro, near Set up Jarvis", () => {
+  assert.match(FIRST_RUN, /id="fr-intro"/,
+    "the Set up Jarvis card has no control for replaying the intro");
+  assert.match(FIRST_RUN, /<button[^>]*id="fr-intro"[^>]*>\s*Show the intro again\s*<\/button>/,
+    "the button does not say what it does in plain words");
+  // It must survive the card being marked done: `fr-rows` and `fr-body-full`
+  // are hidden in that state, and that is exactly when the owner wants it.
+  const again = FIRST_RUN.indexOf('id="fr-again"');
+  assert.ok(again >= 0, "the Set up Jarvis card lost its own 'Set up again' button");
+  assert.ok(FIRST_RUN.indexOf('id="fr-intro"') > again,
+    "the intro button sits inside the part of the card that is hidden once set-up is done");
+  // And it says out loud that replaying does not change the once-only show.
+  assert.match(FIRST_RUN, /does not change when it appears on its own/,
+    "nothing tells the owner that replaying the intro leaves the once-only show alone");
+});
+
+check("the control is wired to the replay command, and to nothing else", () => {
+  assert.match(SETTINGS_JS, /invoke\("replay_onboarding"\)/,
+    "the Settings page never asks Rust to re-open the walkthrough");
+  assert.match(SETTINGS_JS, /dom\.intro\.addEventListener\("click", showIntro\)/,
+    "the button exists but no handler is attached to it");
+  // The one dead-control class this tree has shipped: a button whose command
+  // the window's capability does not grant. `tools/check_invoke_grants.py`
+  // holds the general rule; this holds the pair itself.
+  assert.match(SETTINGS_CAP, /"onboarding-replay"/,
+    "capabilities/settings.json does not grant the replay set to the Settings window");
+  assert.match(SURFACES, /identifier = "onboarding-replay"/,
+    "surfaces.toml has no onboarding-replay set");
+  const setAt = SURFACES.indexOf('identifier = "onboarding-replay"');
+  const nextSet = SURFACES.indexOf("[[set]]", setAt);
+  const block = SURFACES.slice(setAt, nextSet < 0 ? undefined : nextSet);
+  assert.match(block, /"allow-replay-onboarding"/,
+    "the onboarding-replay set does not contain allow-replay-onboarding");
+  assert.match(BUILD, /"replay_onboarding"/,
+    "the command is not in build.rs's commands list, so it has no permission at all");
+  assert.match(LIB, /commands::replay_onboarding,/,
+    "the command is not registered in lib.rs's generate_handler!");
+});
+
+check("the replay reuses the walkthrough's own window, it does not build one", () => {
+  const body = rustFn(RUST, "replay_onboarding");
+  assert.ok(body, "commands.rs has no replay_onboarding command at all");
+  assert.match(body, /crate::windows::show_onboarding\(&app\)/,
+    "the replay does not go through windows::show_onboarding");
+  assert.ok(!/WebviewWindowBuilder/.test(body),
+    "the replay builds its own window instead of reusing the walkthrough's");
+  // Same label, therefore the same narrow capability - and a replay pressed
+  // while the walkthrough is already up is a no-op, never a second copy.
+  assert.match(WINDOWS, /if app\.get_webview_window\(ONBOARDING_LABEL\)\.is_some\(\)/,
+    "show_onboarding no longer refuses to open a second copy");
+  assert.ok(!/"onboarding-replay"/.test(ONBOARDING_CAP),
+    "the walkthrough's own window was handed the power to open itself");
+});
+
+check("the intro still appears by itself exactly once, and only through the marker", () => {
+  // The auto-show gate is unchanged, and is still the only thing `lib.rs`
+  // consults.
+  assert.match(LIB, /if !commands::onboarding_seen\(&handle\) \{/,
+    "lib.rs no longer gates the unprompted walkthrough on onboarding_seen");
+  // The marker still has exactly one writer, and the replay is not it.
+  const finish = rustFn(RUST, "finish_onboarding");
+  assert.ok(finish, "finish_onboarding is gone");
+  assert.match(finish, /store\.set\(\s*ONBOARDING_VERSION_KEY/,
+    "finish_onboarding no longer writes the versioned marker");
+  const replay = rustFn(RUST, "replay_onboarding");
+  for (const forbidden of ["ONBOARDING_VERSION_KEY", "onboarding_seen", ".store(",
+    "store.set", "store.save", ".remove(", "ONBOARDING_VERSION"]) {
+    assert.ok(!replay.includes(forbidden),
+      `the replay path touches ${forbidden} - playing the intro again must not change when it shows on its own`);
+  }
+  // And finishing a replay is still an ordinary finish: the page's only write
+  // is the same one Escape and the last screen always made.
+  assert.match(HTML, /await TAURI\.core\.invoke\("finish_onboarding"\)/,
+    "the walkthrough no longer marks itself seen when it is finished");
+  assert.match(HTML, /if \(event\.key === "Escape"\) finish\(\)/,
+    "Escape no longer finishes the walkthrough");
+  assert.match(HTML, /step === STEPS \? "Got it/,
+    "the last screen no longer finishes the walkthrough");
 });
 
 if (fails.length) {

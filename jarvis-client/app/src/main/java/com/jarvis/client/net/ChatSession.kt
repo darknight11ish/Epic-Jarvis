@@ -980,10 +980,14 @@ class ChatSession(
                     Log.d(TAG, "chat interrupted by the user")
                 } else {
                     Log.w(TAG, "chat failed", t)
+                    // The app's own sentence, never the platform's: this
+                    // `detail` is what "Details" prints word for word, and it
+                    // reaches Home's notice (ChatSession.problem). OkHttp's own
+                    // text for a failed dial carries the address and both ports.
                     failWith(
                         PlainErrors.forInput(
                             PlainErrors.Input(network = PlainErrors.networkKind(t)),
-                            "${t::class.java.simpleName}: ${t.message.orEmpty()}",
+                            PlainErrors.networkSays(t),
                         ),
                     )
                 }

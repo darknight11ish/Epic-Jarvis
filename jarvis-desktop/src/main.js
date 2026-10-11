@@ -380,6 +380,8 @@ const dom = {
   liveEnd: $("jarvis-live-end"),
   liveChips: $("jarvis-live-chips"),
   pin: $("pin"),
+  openSettings: $("open-settings"),
+  hideBar: $("hide-bar"),
   submitHint: $("submit-hint"),
   noteChip: $("note-chip"),
   noteChipLabel: $("note-chip-label"),
@@ -1594,10 +1596,55 @@ function menuVisibilityFromRoute(route) {
  * the same day, to any section id, not only "Starting Jarvis for you")
  * takes it from there. Nothing here changes a setting - this only jumps
  * the app to it, the owner still makes the change by hand.
+ *
+ * Since 2026-10-10 this function is also the door for the `jarvis` kind of
+ * "open Jarvis settings" (jarvis_open.py): see handleOpenAppRoute below.
  */
 function openSettingsFromRoute(route) {
   const place = route && typeof route.open_settings === "string" ? route.open_settings : "";
-  if (!place) return;
+  if (!place) {
+    // "open Jarvis settings" and "open web search" said out loud
+    // (jarvis_open.py, the owner's request of 2026-10-10) arrive as
+    // `open_app_kind: "jarvis"` instead: a program or a Windows panel is
+    // opened in Rust (`commands.rs open_app_from_route`, which starts nothing
+    // for this kind), while THIS window is the one that opens the Settings
+    // window. `open_place` is the section id, and "" is the top of the page -
+    // a real answer, not a missing one, so it is not treated as absent.
+    handleOpenAppRoute(route);
+    return;
+  }
+  goToSettingsPlace(place);
+}
+
+/**
+ * "open Jarvis settings" / "open web search" (jarvis_open.py, the owner's
+ * request of 2026-10-10): the Jarvis kind of an "open ..." answer. Opens or
+ * focuses the Settings window at the named section, or at the top when the
+ * owner asked for Jarvis's settings as a whole.
+ *
+ * The other two kinds in the same answer are not this window's business: an
+ * app or a Windows panel has already been started in Rust by the time the
+ * route line is painted (`commands.rs open_app_from_route`), so acting on
+ * them here would open each thing twice.
+ */
+function handleOpenAppRoute(route) {
+  if (!route || route.open_app_kind !== "jarvis") return;
+  const place = typeof route.open_place === "string" ? route.open_place : "";
+  if (!place) {
+    invoke("open_fix_place", { place: "settings" });
+    return;
+  }
+  goToSettingsPlace(place);
+}
+
+/**
+ * Leave a place for settings.js to read, then ask Rust to open or focus the
+ * Settings window. The same mechanism "Show me where" already uses
+ * (plain-errors.js's own button): settings.js's `goToPlace()` takes it from
+ * there. Nothing here changes a setting - this only jumps the app to it, and
+ * the owner still makes the change by hand.
+ */
+function goToSettingsPlace(place) {
   try {
     localStorage.setItem(SETTINGS_PLACE_KEY, JSON.stringify({ place, at: Date.now() }));
   } catch {
@@ -5165,6 +5212,29 @@ dom.copy.addEventListener("click", async () => {
 });
 
 dom.pin.addEventListener("click", () => setPinned(!state.pinned));
+
+// "Hide the Jarvis bar" - the × on the bar itself (the owner's request,
+// 2026-10-10). Exactly what Esc does: `hide_quickbar` in Rust drops the pin
+// first, so the next summon starts clean rather than reappearing stuck open.
+// The command is already in the quickbar's own permission set
+// (`allow-hide-quickbar`), so this added no new command and no new grant.
+if (dom.hideBar) {
+  dom.hideBar.addEventListener("click", () => {
+    invoke("hide_quickbar");
+  });
+}
+
+// "Jarvis settings" - the gear on the bar itself (the owner's request,
+// 2026-10-10). `open_fix_place` is the one door to the Settings window that
+// already existed for this window's own error-fix buttons (plain_errors.rs),
+// and the quickbar already holds `allow-open-fix-place`. It builds the window
+// if it is not open, shows and focuses it if it is, and goes through the app
+// lock either way, so a locked PC asks Windows Hello first.
+if (dom.openSettings) {
+  dom.openSettings.addEventListener("click", () => {
+    invoke("open_fix_place", { place: "settings" });
+  });
+}
 
 // Push-to-talk: pointer down starts, pointer up sends, the pointer leaving
 // the button (or a second pointer cancelling it) abandons the clip rather

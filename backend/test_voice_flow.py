@@ -58,6 +58,8 @@ import jarvis_agent as AG  # noqa: E402
 import jarvis_turn as T  # noqa: E402
 import _ollama_wire as OW  # noqa: E402
 
+from _voice_test import no_voice_models  # noqa: E402
+
 FAILED, PASSED = [], []
 
 
@@ -607,7 +609,20 @@ def t_warm_up():
         F.ensure_warm(spawn=started.append)
         check("[voice] warm_engines = false: not started", started == []
               and F.warm_state()["state"] == "off")
-    with World():
+    with World(), no_voice_models(V):
+        # NOT a machine-dependent accident. `_anything_installed()` decides by
+        # looking in the settings folder for a text-to-speech, speech-to-text,
+        # VAD or speaker-onnx model - the OWNER'S own folder, where all four are
+        # installed. Without a state built for it this check measured the owner's
+        # install and failed ("nothing installed: nothing to warm"), because
+        # `World()` redirects the voice PRINT and not the model folder. The state
+        # is now built (an empty settings folder) and the premise is checked
+        # before the behaviour, so this can no longer pass or fail for a reason
+        # the test did not choose.
+        check("this run looks like a PC with no voice models - the state the "
+              "check below is about", F._anything_installed() is False,
+              "a voice model is still visible with the settings folder moved to "
+              "an empty one, so the check below would not be about what it says")
         started.clear()
         F.ensure_warm(spawn=started.append)
         check("nothing installed: nothing to warm", started == [])

@@ -222,6 +222,33 @@ object SettingsSearch {
             source = JUMP + listOf(PLATES + "QuickTilesPlate.kt"),
         ),
         Row(
+            // "Screen refresh rate" (2026-10-09): the rate the PANEL is asked to
+            // run at while Jarvis is on screen (ui/screens/ScreenRatePlate.kt,
+            // data/ScreenRate.kt). Phone-only - the panel's own modes come from
+            // this phone's Display API, so there is no desktop row to copy words
+            // from - and NOT the animal's frame rate, which is how often the
+            // animal is DRAWN; ScreenRate.kt's own doc says why the two must
+            // never be merged.
+            key = "screen-rate", title = "Screen refresh rate",
+            label = "The panel's refresh rate while Jarvis is on screen; follow the phone; " +
+                "60, 90 or 120; asks the screen, never changes your phone's own display setting, " +
+                "and says when the rate did not take effect",
+            quotes = listOf(
+                // `ScreenRate.HONEST_NOTE` and `ScreenRate.BATTERY_NOTE`, which the
+                // plate shows as they are - so the quotes are looked for in the
+                // module that owns them, the way the browser row names
+                // net/BrowserEngine.kt. Both are written as two literals there;
+                // wordsOf folds them back into one sentence.
+                "While Jarvis is on screen, Jarvis asks the screen for this rate. It cannot change " +
+                    "your phone's own display setting - that belongs to the phone, and only the " +
+                    "phone's own Settings or a system app can change it. If the screen does not " +
+                    "take the rate, this screen will say so.",
+                "A higher refresh rate uses more battery. The screen redraws more often, and that " +
+                    "is power the phone spends whether or not anything on it is moving.",
+            ),
+            source = JUMP + listOf("data/ScreenRate.kt", PLATES + "ScreenRatePlate.kt"),
+        ),
+        Row(
             // The PC's own limit table, on the phone (LimitsPlate.kt; the
             // owner's decision of 2026-10-08). It is the last section on the
             // screen, so it is last here too.

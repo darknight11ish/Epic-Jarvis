@@ -1226,6 +1226,44 @@ def t_a_scheduler_call_does_not_leave_its_database_file_open():
           removed, why)
 
 
+def t_the_docs_say_which_channel_a_phone_notification_uses():
+    """Which notification channel a fired job uses on the phone (docs, 2026-10-10).
+
+    `docs/JARVIS-API.md` section 21.4 said it went on the APPROVAL channel. It
+    does not. `ScheduleNotifier.kt` builds an ordinary one on its own
+    `jarvis_schedule` channel ("Reminders and timers"; the owner's decision of
+    2026-09-30, so silencing reminders does not silence approvals), and an
+    alarm - or an urgent "tell me when" - on `jarvis_alarm` ("Alarms and urgent
+    alerts"). Measured on the owner's own phone: a reminder set on the PC
+    arrived on `jarvis_schedule`, title "Reminder", with its Snooze action.
+
+    Both channel ids are read OUT OF the phone's own source here rather than
+    written into this test, so the document and the app cannot drift apart
+    quietly: rename a channel in `ScheduleNotifier.kt` and this fails until the
+    document says the new name."""
+    api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
+    start = api.index("### 21.4 The event")
+    section = api[start:api.index("### 21.5", start)]
+    kotlin = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
+              / "client" / "service" / "ScheduleNotifier.kt")
+    if not kotlin.is_file():
+        return skip("jarvis-client's ScheduleNotifier.kt is not here to check the doc against")
+    src = kotlin.read_text(encoding="utf-8")
+    named = re.search(r'SCHEDULE_CHANNEL_ID\s*=\s*"([^"]+)"', src)
+    ringing = re.search(r'ALARM_CHANNEL_ID\s*=\s*"([^"]+)"', src)
+    if not named or not ringing:
+        return check("ScheduleNotifier.kt still names its two channels", False, str(kotlin))
+    channel, alarm = named.group(1), ringing.group(1)
+    check("the phone's own code gives a schedule notification its own channel, apart from "
+          "the approval one", (channel, alarm) == ("jarvis_schedule", "jarvis_alarm"),
+          (channel, alarm))
+    check(f"JARVIS-API.md section 21.4 names `{channel}` for it", f"`{channel}`" in section,
+          section[:200])
+    check(f"... and `{alarm}` for an alarm that keeps ringing", f"`{alarm}`" in section)
+    check("... and no longer says it goes on the approval channel (the line that was wrong)",
+          "on the approval channel" not in section)
+
+
 def main():
     orig_tz = os.environ.get("TZ")
     try:
