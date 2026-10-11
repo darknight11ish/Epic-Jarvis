@@ -351,21 +351,160 @@ def import_name_for(path: Path) -> str:
 #: The measured cost, word for word, and the one place it is written down.
 #: Every label is built from these strings, so a label cannot quietly lose a
 #: fact by being hand-typed somewhere else.
-MEASURED_COST = (
+#:
+#: Split in two on 2026-10-10, when these four files were finally measured on
+#: this PC. The FAMILY cost is what other people measured on this model family
+#: and it stays true. The PROVENANCE sentence is the one that had to change:
+#: it used to say "not re-measured on this file on this PC", and for the four
+#: files that HAVE now been measured here, saying that would be a lie on a
+#: label. A measured file gets `MEASURED_HERE`'s own sentence instead.
+FAMILY_COST = (
     "Measured cost, from what was measured on 2026-10-10: answers are less "
     "truthful - TruthfulQA drops 5.8 to 6.9 points on this model family; "
     "MMLU is about noise, so no real change there; and the only fitting build "
-    "is 7 months old, against a 5-day-old official one. These are "
-    "family-level numbers, not re-measured on this file on this PC.",
+    "is 7 months old, against a 5-day-old official one.",
 )
+
+#: What a label says when nobody has measured THIS file on THIS PC. A plain
+#: string, not a one-element tuple: `measured_words` returns it directly, and
+#: the tests compare it against a label with `in`.
+PROVENANCE_UNMEASURED = (
+    "These are family-level numbers, not re-measured on this file on this PC."
+)
+
+#: The old single tuple, kept so anything already reading it still works. It is
+#: the UN-measured wording, which is what every file got before tonight, and it
+#: is deliberately no longer what a measured file's label is built from.
+MEASURED_COST = FAMILY_COST + (PROVENANCE_UNMEASURED,)
+
+#: Where the numbers below were taken from, so a drift between this module and
+#: the report can be caught rather than trusted. The same shape as
+#: `jarvis_work.EVIDENCE` / `tools/check_work_claims.py`: a checkout without
+#: the report is a SKIP, not a failure, because `.dsh-scratch/` is gitignored.
+EVIDENCE = (".dsh-scratch/android-verify/MODELS-D-MEASURED-2026-10-10.md",)
+
+#: What was actually measured ON THIS PC on 2026-10-10, per file, keyed by the
+#: lower-cased file name. Every number here was taken on this machine, one
+#: model loaded at a time, with the same three prompt kinds and the same ten
+#: coding cases the 2026-10-10 bench used - so they are comparable with
+#: `MODEL-BENCH-2026-10-10.md` and `MODEL-STRATEGY-2026-10-10.md`.
+#:
+#: `max_clean_ctx` is the largest num_ctx at which Ollama reported
+#: size_vram == size. `None` means it spilled at EVERY size tried, i.e. it does
+#: not fit that card at all. `write_tps` is the median of three streamed runs.
+#:
+#: The two verdicts that matter most are in `words` rather than buried here:
+#:   * `thinking_default` - "on-ignores-off" means the model reasons before
+#:     answering AND does not honour the setting that turns thinking off, so a
+#:     short question spends its whole answer budget on reasoning. That is the
+#:     exact failure that made qwen3.5:9b and ornith:9b return empty answers.
+#:   * `refused_harmful` - False means it did not refuse a plainly illegal
+#:     request. The stock qwen3:8b on the same harness did refuse.
+MEASURED_HERE = {
+    "qwen2.5-coder-14b-instruct-abliterated-q4_k_m.gguf": {
+        "imported_as": "jarvis-uncensored-qwen2.5-coder-14b",
+        "size_gb": 8.37,
+        "window": 32768,
+        "max_clean_ctx": {"rtx-2060-12gb": 16384, "rtx-2080-super-8gb": None},
+        "vram_gb_at_8192": 8.87,
+        "write_tps": {"a_factual": 17.0, "b_reasoning": 12.8, "c_long": 12.8},
+        "coding": "10/10",
+        "thinking_default": "off",
+        "refused_harmful": False,
+        "words": (
+            "On this file, measured on this PC on 2026-10-10: 12.8 to 17.0 "
+            "tokens a second, the slowest of the five measured, against 48.8 "
+            "for qwen3:8b on the same card; 8.87 GB of video memory, holding "
+            "16,384 tokens before it spills, and not fitting the 8 GB card at "
+            "all; 10 of 10 on this project's own coding test; it does not "
+            "think before answering; and it did not refuse a plainly illegal "
+            "request."),
+    },
+    "qwen2.5-14b-instruct-abliterated-v2.q4_k_m.gguf": {
+        "imported_as": "jarvis-uncensored-qwen2.5-14b",
+        "size_gb": 8.37,
+        "window": 32768,
+        "max_clean_ctx": {"rtx-2060-12gb": 16384, "rtx-2080-super-8gb": None},
+        "vram_gb_at_8192": 8.87,
+        "write_tps": {"a_factual": 39.6, "b_reasoning": 29.8, "c_long": 29.7},
+        "coding": "10/10",
+        "thinking_default": "off",
+        "refused_harmful": False,
+        "words": (
+            "On this file, measured on this PC on 2026-10-10: 29.7 to 39.6 "
+            "tokens a second; 8.87 GB of video memory, holding 16,384 tokens "
+            "on the 12 GB card and not fitting the 8 GB card at all; 10 of 10 "
+            "on this project's own coding test; it does not think before "
+            "answering; and it did not refuse a plainly illegal request."),
+    },
+    "qwen2.5-7b-instruct-abliterated-v2.q4_k_m.gguf": {
+        "imported_as": "jarvis-uncensored-qwen2.5-7b",
+        "size_gb": 4.36,
+        "window": 32768,
+        "max_clean_ctx": {"rtx-2060-12gb": 32768, "rtx-2080-super-8gb": 32768},
+        "vram_gb_at_8192": 4.58,
+        "write_tps": {"a_factual": 73.1, "b_reasoning": 54.8, "c_long": 54.7},
+        "coding": "10/10",
+        "thinking_default": "off",
+        "refused_harmful": False,
+        "words": (
+            "On this file, measured on this PC on 2026-10-10: 54.7 to 73.1 "
+            "tokens a second, faster than qwen3:8b's 48.8 on the same card; "
+            "4.58 GB of video memory, holding its whole 32,768-token window "
+            "with nothing spilled, on either card; 10 of 10 on this project's "
+            "own coding test; it does not think before answering; and it did "
+            "not refuse a plainly illegal request. It is the only one of the "
+            "four that needs no special handling to be usable."),
+    },
+    "lfm2.5-8b-a1b-uncensored-gaston-q4_k_m.gguf": {
+        "imported_as": "jarvis-uncensored-lfm2.5-a1b-gaston-8b",
+        "size_gb": 4.80,
+        "window": 128000,
+        "max_clean_ctx": {"rtx-2060-12gb": 128000, "rtx-2080-super-8gb": 65536},
+        "vram_gb_at_8192": 4.96,
+        "write_tps": {"a_factual": 155.9, "b_reasoning": 154.6, "c_long": 155.0},
+        "coding": "10/10",
+        "thinking_default": "on-ignores-off",
+        "refused_harmful": False,
+        "words": (
+            "On this file, measured on this PC on 2026-10-10: 154.6 to 155.9 "
+            "tokens a second, the fastest measured here, with its whole "
+            "128,000-token window in 4.96 GB; 10 of 10 on this project's own "
+            "coding test. But it thinks before answering and does NOT honour "
+            "the setting that turns thinking off - measured with that setting "
+            "sent, a one-word question still spent its whole 32-token budget "
+            "on reasoning - which is the same failure that made qwen3.5:9b "
+            "and ornith:9b return empty answers. It also did not refuse a "
+            "plainly illegal request."),
+    },
+}
+
+
+def measured_for(path) -> Optional[dict]:
+    """What was measured on THIS file here, or None if it never was."""
+    return MEASURED_HERE.get(Path(path).name.lower())
+
+
+def measured_words(path) -> str:
+    """The provenance sentence for a label: the measured one where there is one.
+
+    A file nobody measured here keeps the honest "these are family-level
+    numbers" wording. A file that WAS measured here gets its own numbers
+    instead, so a label can never claim a measurement that was not taken.
+    """
+    entry = measured_for(path)
+    return entry["words"] if entry else PROVENANCE_UNMEASURED
 
 
 def label_for(path: Path, name: str = "") -> str:
     """The label the owner reads, in plain words, with the cost on it.
 
     The model's own name first, then the file it came from, then the measured
-    cost. Never shortened: `test_optin_models.py` fails if any part of
-    `MEASURED_COST` is missing from any label.
+    cost. The family-level cost is always there in full; the sentence after it
+    is either "not re-measured on this file on this PC" or, for a file that HAS
+    been measured here, its own numbers. `test_optin_models.py` fails if any
+    part of `FAMILY_COST` is missing from a label, and fails if a measured file
+    claims to be un-measured (or the other way round).
     """
     what = plain_words(path)
     size = _size_from_name(path.name)
@@ -375,7 +514,7 @@ def label_for(path: Path, name: str = "") -> str:
     head += f" - the file {Path(path).name}"
     if name:
         head += f", known to Jarvis as {name}"
-    return head + ". " + " ".join(MEASURED_COST)
+    return head + ". " + " ".join(FAMILY_COST) + " " + measured_words(path)
 
 
 def detail_for(path: Path) -> str:
@@ -383,7 +522,7 @@ def detail_for(path: Path) -> str:
     return (f"Made from {Path(path).name}, which is already on this PC - "
             "importing it downloads nothing. Ollama copies the weights into "
             "its own store, so it uses the file's size again in disk space. " +
-            " ".join(MEASURED_COST))
+            " ".join(FAMILY_COST) + " " + measured_words(path))
 
 
 #: The folders this PC keeps hand-downloaded model files in, newest home

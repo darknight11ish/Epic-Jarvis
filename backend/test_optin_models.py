@@ -249,21 +249,76 @@ check("THE COST: the only fitting build is 7 months old",
       "7 months old" in _label, _label)
 check("THE COST: against a 5-day-old official one",
       "5-day-old official one" in _label, _label)
-check("the label does NOT claim the numbers were measured on this file here",
-      "not re-measured on this file on this PC" in _label, _label)
+check("a file that WAS measured here never claims it was not",
+      O.measured_for(Path(REAL_NAMES[0])) is not None
+      and O.PROVENANCE_UNMEASURED not in _label, _label)
+check("a file nobody measured here still says so, in plain words",
+      O.PROVENANCE_UNMEASURED in
+      O.label_for(Path("Qwen2.5-3B-Instruct-abliterated-Q4_K_M.gguf")))
 check("the label does not oversell it: no 'better', 'faster' or 'improved'",
       not re.search(r"\b(better|faster|improved|superior)\b", _label, re.I), _label)
-check("the detail line carries the same cost, not a shortened version",
-      all(p in O.detail_for(Path(REAL_NAMES[0])) for p in O.MEASURED_COST))
+check("the detail line carries the same family cost, not a shortened version",
+      all(p in O.detail_for(Path(REAL_NAMES[0])) for p in O.FAMILY_COST))
 check("one place holds the cost, so a label cannot lose a fact by hand-typing",
       O.MEASURED_COST and all(isinstance(p, str) and p for p in O.MEASURED_COST))
 
-#: Every label built from a real file carries every part. A new model added to
-#: the list cannot ship a label missing a measured fact.
+#: Every label built from a real file carries every part of the family cost,
+#: AND the right provenance sentence: its own measured numbers where it has
+#: them, the honest "not measured here" line where it does not.
 for _n in REAL_NAMES:
     _l = O.label_for(Path(_n), O.import_name_for(Path(_n)))
-    check(f"every part of the cost is on the label for {_n[:28]}",
-          all(p in _l for p in O.MEASURED_COST))
+    _m = O.measured_for(Path(_n))
+    check(f"every part of the family cost is on the label for {_n[:26]}",
+          all(p in _l for p in O.FAMILY_COST))
+    check(f"{_n[:26]} carries its OWN measured numbers",
+          _m is not None and _m["words"] in _l
+          and O.PROVENANCE_UNMEASURED not in _l, _l)
+
+
+# --------------------------------------------------------------------------
+#   B2. Do the measured numbers match the report they were taken from?
+# --------------------------------------------------------------------------
+
+print("\n-- B2. the measured numbers against the evidence report --")
+
+#: The distinctive measured figures: a decimal ("12.8", "4.96") or a grouped
+#: thousands ("16,384"). `\.\d+` and not `\.\d`, so "4.96" is taken whole
+#: instead of truncated to "4.9" - a truncating pattern would let a report say
+#: "4.9" while the module says "4.96" and still pass. Deliberately NOT every
+#: integer: "32" inside "32-token" is not a measurement, and a check that
+#: demanded it would fail for the wrong reason.
+_FIGURE = re.compile(r"\d[\d,]*\.\d+|\d{1,3}(?:,\d{3})+")
+_wanted = set()
+for _e in O.MEASURED_HERE.values():
+    for _t in _FIGURE.findall(_e["words"]):
+        _wanted.add(_t)
+
+_text, _absent = [], []
+for _rel in O.EVIDENCE:
+    _p = HERE.parent / _rel
+    if _p.exists():
+        _text.append(_p.read_text("utf-8", "replace"))
+    else:
+        _absent.append(_rel)
+
+if _absent:
+    print("  SKIP: the evidence report is not in this checkout (%s), so no "
+          "measured figure is claimed to be verified here." % ", ".join(_absent))
+else:
+    _blob = "\n".join(_text).replace(",", "")
+    for _fig in sorted(_wanted):
+        check("the report contains the measured figure %s" % _fig,
+              _fig.replace(",", "") in _blob, _fig)
+    check("every measured file names the build it was imported as",
+          all(e.get("imported_as") for e in O.MEASURED_HERE.values()))
+    check("every measured file points at both cards, so a card cannot be "
+          "quietly dropped from a claim",
+          all(set(e["max_clean_ctx"]) == {"rtx-2060-12gb", "rtx-2080-super-8gb"}
+              for e in O.MEASURED_HERE.values()))
+    check("a file whose ceiling is unknown is recorded as None, not as a number",
+          all(all(v is None or isinstance(v, int)
+                  for v in e["max_clean_ctx"].values())
+              for e in O.MEASURED_HERE.values()))
 
 
 # --------------------------------------------------------------------------
