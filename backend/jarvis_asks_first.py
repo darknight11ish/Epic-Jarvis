@@ -548,7 +548,17 @@ GROUPS = (
         # own, exactly as raising any other row's number does not.
         "lower_the_voice_check_bar",
         "modify_own_code", LOOSEN_ACTION, ENABLE_TOOL_ACTION, "restore_backup",
-        "check_tool_updates"]),
+        "check_tool_updates",
+        # Learning from a Reject click (the owner's decision of 2026-10-10;
+        # jarvis_gate.py's _propose_constraint_from_denial). It raises no card
+        # of its own - a "no" is the decision - so this is a fixed row, and the
+        # page must name it because rule 3 of docs/RULE-FLEXIBILITY.md asks for
+        # every relaxation to be findable in one place. Entry 003 there is the
+        # written record: a rejection carries none of the owner's words, so the
+        # rule is Jarvis's guess, marked as one, for the owner to Keep or
+        # Discard. It sits in this group because what it changes is what Jarvis
+        # may learn, beside the other learning settings.
+        "fixed:playbook_rejection"]),
     ("Other", ["agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool"]),
 )
 
@@ -619,6 +629,19 @@ FIXED = {
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "
                          "else's program. Only tools that read are offered for now."),
+    # A Reject click (the owner's decision of 2026-10-10; entry 003 of
+    # docs/RULE-FLEXIBILITY.md, and rule 3 of that file asks for this row).
+    # The card is the proposal itself in Brain's Memory tab, where the owner
+    # Keeps or Discards it - so nothing is "done without asking": nothing is
+    # applied at all until the owner says so, and the row's own words say which
+    # of the two it is.
+    "fixed:playbook_rejection": ("Learn a rule from a Reject click",
+                                 "Writes a guessed rule for you to Keep or Discard",
+                                 "A Reject click carries none of your words, so the rule is "
+                                 "worked out from the action's name and says so. It is a "
+                                 "suggestion in Brain, never a saved fact, and it never "
+                                 "changes what Jarvis is allowed to do until you Keep it. "
+                                 "Never from a card that timed out."),
 }
 
 #: The plug-in start row's words: the owner's open question 9 is answered in

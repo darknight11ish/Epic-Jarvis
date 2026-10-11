@@ -342,6 +342,11 @@ def t_nights_that_do_nothing():
 # (CI, 2026-09-30) and the second counted as a new day. NOW is one pinned
 # instant (12:00 UTC), and run_night itself steps `today` back a day when the
 # local hour has not arrived yet, so the day rule reads the same everywhere.
+#
+# This is the same DAY a concurrent main-side fix pinned (`WHEN`, merged in
+# #236) - that one kept `time.mktime`, which reads the tuple as LOCAL time, so
+# it only passed because the assertions happen to sit far enough from the
+# boundary. A pinned instant is the fix; a pinned calendar tuple is not.
 def t_still_true_cards():
     st = store()
     now = NOW
