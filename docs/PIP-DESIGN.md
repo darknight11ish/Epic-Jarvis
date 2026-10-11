@@ -1,7 +1,9 @@
 # Picture-in-picture: a small Jarvis window over other apps (design)
 
 **Status: DESIGN ONLY - nothing built, nothing measured on a phone.** Written
-2026-10-11 on branch `docs/pip-design`, off `main` at `5f382aff`.
+2026-10-11 on branch `docs/pip-design`, off `main` at `5f382aff`. **Every
+question this design raised has been answered by the owner (§9), so the design
+is settled and nothing is left open.**
 
 **The owner's words (2026-10-11):** *"can you add a picture in picture mode to
 jarvis that's similar to Google maps"* - and when asked what the little window
@@ -13,12 +15,12 @@ is **mode 1** (the face plus the current answer's first line), because that is
 always true, whereas mode 3 (Live) needs a Live session actually running or the
 window has nothing to show.
 
-**On whether 3 should instead be automatic when Live is running - my answer is
-yes, and the lead asked me to say plainly.** See §2.4. Short version: the
-SETTING says whether PiP exists and which mode the owner prefers; it should not
-be able to leave a Live session invisible in a window that is already up. Mode 3
-joins the default automatically while Live runs and steps aside when it ends, so
-"1 or 3" is one preference, not two things to keep in sync.
+**Mode 3 IS automatic while Live runs - DECIDED BY THE OWNER (§9.2), on the
+designer's recommendation and with the reasoning accepted as written.** See
+§2.4. The SETTING says whether PiP exists and which mode the owner prefers; it
+should not be able to leave a Live session invisible in a window that is already
+up. Mode 3 joins the default automatically while Live runs and steps aside when
+it ends, so "1 or 3" is one preference, not two things to keep in sync.
 
 **Unverified everywhere below** means: not tried on a real phone. Nothing in
 this document has been run.
@@ -75,10 +77,11 @@ independent one ("what does the window show when I leave the app?").
 
 ## 2. The settings, and what the window shows
 
-### 2.1 One new Settings row, one three-way choice
+### 2.1 One new Settings row, one three-way choice - DECIDED (§9.3)
 
 A new row **`pip-mode`**, "Picture-in-picture", next to "Floating Jarvis"
-(Settings -> This app), with plain words before it:
+(Settings -> This app) - **the owner's choice (§9.3)**, over folding it into the
+"Floating Jarvis" row as a third value. Plain words before it:
 
 > A small Jarvis window that stays on screen while you use other apps - like the
 > next-turn box in Maps. It can never approve anything. Tapping it brings Jarvis
@@ -97,13 +100,13 @@ Three choices, matching the owner's picks:
 `floatingAvatar` and every other display setting - nothing about it is sent to
 the PC. No new permission: PiP needs none.
 
-### 2.2 Can two of them be on at once? Yes, and that is the right answer
+### 2.2 Can two of them be on at once? Yes - DECIDED (§9.3)
 
 `Floating Jarvis` and `Picture-in-picture` are **separate rows and may both be
-on**. They do different things: the floating face is a way to TALK to Jarvis
-without opening it; PiP is a way to SEE something after leaving it. Turning one
-on must not silently turn the other off - that is the kind of hidden coupling
-that produces a bug report six weeks later.
+on** - the owner's choice (§9.3). They do different things: the floating face is
+a way to TALK to Jarvis without opening it; PiP is a way to SEE something after
+leaving it. Turning one on must not silently turn the other off - that is the
+kind of hidden coupling that produces a bug report six weeks later.
 
 What happens if both are on is worth stating, because it is visible on screen:
 
@@ -165,11 +168,12 @@ that is not "is it listening" and "stop it".
 `RemoteAction` in the PiP params: it brings the full app back. No second action
 in any mode.
 
-### 2.4 Mode 3 while Live is not running - and should 3 be automatic?
+### 2.4 Mode 3 while Live is not running - and 3 IS automatic (decided)
 
-**My recommendation: yes, automatic - while a Live session is running, mode 3's
-display takes over whatever mode is set, and gives the window back when Live
-ends.** The reasons:
+**DECIDED BY THE OWNER, 2026-10-11: yes, automatic.** While a Live session is
+running, mode 3's display takes over whatever mode is set, and gives the window
+back when Live ends. The reasons below are the ones put to him and accepted as
+written:
 
 1. A Live session is a thing the owner started and expects to keep going. If he
    set mode 1 and then started Live, a window showing the last typed answer
@@ -261,20 +265,20 @@ section says what is forbidden AND how each is proven to hold (§6).
    (`Listening`) - never a transcript line, never a camera frame in mode 1 or 2.
    A camera preview exists only in mode 3, where the owner turned the camera on.
 
-**What the window shows when the content IS hidden - this is the owner's
-choice, not mine.** Two honest options, and the difference is what someone
-looking over his shoulder learns:
+**What the window shows when the content IS hidden - DECIDED BY THE OWNER,
+2026-10-11 (§10): a dimmed face that says why.**
 
 - **A neutral face, dimmed, and one line: "Hidden while Jarvis is locked."**
   The face is already public information (§1: the floating face shows
   connectivity while App lock is on, the owner's 2026-09-27 decision), and this
   says *why* there is nothing to read, so it does not look broken.
-- **A blank window** - the face only, no words at all.
+- The other option put to him - the face alone, no words at all - was **not**
+  taken.
 
-I have put this to the owner in §9 rather than deciding it. **What must NOT
-happen** either way is the failure mode this project just lived through: the
-content silently missing with no explanation, so the owner cannot tell "hidden"
-from "broken". Whichever he picks, the window says which state it is in.
+**The reason he gave is the reason it was written that way:** the failure this
+project lived through on the day this design was written was content silently
+missing from a list, with no way to tell *hidden* from *broken*. This window
+must never reproduce that. It always says which state it is in.
 
 ## 5. Approvals are never decided in a PiP window
 
@@ -317,12 +321,22 @@ in the source and silently dropped at runtime**. So:
    become pure functions, so a test drives the whole truth table: every
    combination of the four inputs, and the assertion that with `privateHidden`
    or `appLock` the answer is the hidden layout and never the answer layout.
-2. **The forbidden-words test.** The same shape as the project's existing
-   private-aloud cases: a made-up answer containing a fake secret, a fake
-   recipient address and a fake approval title is fed through the PiP
-   formatters, and the test asserts **none** of those strings appears in the
-   result. This is the test that would have caught the plate: it checks the
-   VALUE, not that a function was called.
+2. **THE FORBIDDEN-WORDS TEST ON THE VALUES - the test that makes §4 real
+   rather than stated.** A made-up answer is built carrying three things that
+   must never survive into a PiP window:
+   - a fake secret (`API_KEY=sk-live-0000` style, plus a fake card number);
+   - a fake recipient address (a made-up `@example.invalid` address) and a fake
+     subject line;
+   - a fake approval title and body ("Send this email?", the plan's own words).
+
+   The test feeds that through every PiP formatter - mode 1's first line, mode
+   2's thread rows, and the action labels - and asserts **none** of those
+   strings appears in any result, in any mode, with `privateHidden` true or
+   false. The same shape as the project's existing private-aloud cases.
+
+   This is the test that would have caught the plate: it checks the **value**
+   that comes out, not that a function was called. "The formatter ran" is not
+   the claim; "the secret is not in the string" is.
 3. **The first line, and only the first line.** `PipText.firstLine(reply)` is
    pure: given a multi-line answer it returns one line, ellipsised, with no
    second line and no markdown.
@@ -377,18 +391,33 @@ absence of an error):**
 | 5 | Settings -> Picture-in-picture -> Jarvis Live, start Live, then Home | the window shows the Live controls; `adb shell dumpsys activity services | Select-String JarvisLive` still shows `LiveService` running |
 | 6 | While mode 1 is set, start Live, then Home | the window shows the LIVE view, not the answer (the §2.4 automatic swap) |
 | 7 | End Live from the window | the window still exists and shows the face with the "Live is off" line; it does **not** close |
-| 8 | Turn ON "Hide memory lists and chat history", enter PiP | the dump contains **neither** the answer's first line **nor** any memory word, and **does** contain whichever hidden line the owner chose in §9 |
+| 8 | Turn ON "Hide memory lists and chat history", enter PiP | the dump contains **neither** the answer's first line **nor** any memory word, and **does** contain the decided line from §9.1: "Hidden while Jarvis is locked." |
 | 9 | Turn ON App lock, lock, enter PiP | same as 8, with the App-lock wording |
 | 10 | Raise an approval on the PC while the window is up | the PiP window's dump contains **no** approval title, body, recipient or plan word, and **no** action other than Expand: `adb shell dumpsys activity activities | Select-String -Pattern "approve|deny"` finds nothing for the PiP session |
 | 11 | Tap `Expand` in the window | the full app returns with the same screen it left on |
 | 12 | Settings -> Picture-in-picture -> Off, then swipe Home | no PiP window; `dumpsys activity activities` shows no pinned stack; the app is simply in the background and Live, if on, keeps running |
 | 13 | With Floating Jarvis = Overlay AND PiP on, enter PiP | exactly ONE Jarvis window is visible; the overlay is hidden while PiP is up and returns when it ends |
 
-**The negative controls, because a green-looking absence is how this project's
-last bug hid:** for steps 8, 9 and 10, run the SAME dump with the setting OFF
-first and confirm the words ARE there. A dump that never contained the string
-proves nothing; a dump that contains it when allowed and not when forbidden
-proves the gate.
+### 7.1 The negative controls - not optional, and not tidied away
+
+**For steps 8, 9 and 10, run the SAME dump with the setting OFF first and
+confirm the words ARE there.** A dump that never contained the string proves
+nothing, and a privacy check that passes because it is looking at an empty
+window proves less than nothing - it is the shape of a false pass.
+
+This is not a hypothetical. On the day this design was written, the same
+project produced **two** examples of exactly that shape:
+
+1. a plate the source said was composed, which the runtime silently dropped, so
+   the screen was checked and looked "fine" while the thing being checked for
+   was never there;
+2. a `logcat` probe that returned **zero lines in total**, which read like "no
+   problem found" when it actually meant "nothing was being observed at all".
+
+Both were caught only because someone checked that the observation apparatus
+itself worked before believing its answer. Step 8's OFF run is that check here:
+the words must be FOUND when they are allowed, before their absence when they
+are forbidden counts as a pass.
 
 ## 8. Risks
 
@@ -413,29 +442,47 @@ proves the gate.
   build step must not add any approval text to the PiP layout "just for the
   state word" - the state word is fixed and already exists.
 
-## 9. Questions for the owner
+## 9. The owner's answers (2026-10-11) - all four decided, nothing left open
 
-*(Two at a time, as usual. Each has a recommendation first.)*
+*(The four questions below were put to him in this shape, recommended option
+first. He took the recommendation on every one. Each block keeps the reasoning
+he accepted, so a later reader can see what was HIS and what was the designer's.)*
 
-1. **When a list is hidden and the little window is up, what should it show?**
-   - **A dimmed face and "Hidden while Jarvis is locked."** (recommended) - it
-     says why there is nothing to read, so it never looks broken.
-   - **The face only, no words at all** - says less, and looks the same as
-     Jarvis being offline.
-2. **Should the window switch to Live by itself when a Live session is
-   running?** (This is the "should 3 be automatic" question.)
-   - **Yes - Live takes the window while it runs, and gives it back after**
-     (recommended).
-   - **No - the window shows only what the setting says**, so with mode 1 set,
-     Live is not in the window at all.
-3. **Where should the setting live?**
-   - **Its own row, "Picture-in-picture", next to "Floating Jarvis"**
-     (recommended) - and both may be on at once.
-   - **A third value inside "Floating Jarvis"** - one choice for both, but then
-     the owner cannot have the floating face AND the window.
-4. **Is one `Expand` action enough in the window?** (The alternative is adding a
-   second action.)
-   - **Expand only** (recommended) - every other action belongs on a screen the
-     owner opened on purpose.
-   - **Expand, plus Deny for an approval** - quicker on a card, and it puts a
-     decision one accidental tap away in a window Android can move or cover.
+### 9.1 When a list is hidden and the little window is up, what does it show?
+
+- **DECIDED: a dimmed face and "Hidden while Jarvis is locked."**
+- Not taken: the face alone, no words at all.
+- **His reason, and he said it in these terms:** with the content silently gone
+  there is no way to tell *hidden* from *broken* - which is exactly what this
+  project spent the day fixing (a plate the source said was drawn and the
+  runtime dropped). The window always says which state it is in.
+
+### 9.2 Should the window switch to Live by itself while a Live session runs?
+
+- **DECIDED: yes - Live takes the window while it runs, and gives it back
+  after.** The three reasons in §2.4 are accepted as written.
+- Not taken: the window shows only what the setting says, so mode 1 would hide
+  a running Live session entirely.
+
+### 9.3 Where does the setting live?
+
+- **DECIDED: its own row, "Picture-in-picture" (`pip-mode`), next to "Floating
+  Jarvis" - and both may be on at once.** The overlay hides (`GONE`) while PiP
+  is up, and the setting itself is never touched (§2.2).
+- Not taken: a third value inside "Floating Jarvis", which would have meant the
+  owner could not have the floating face AND the window.
+
+### 9.4 Is one `Expand` action enough?
+
+- **DECIDED: `Expand` only.** Approvals are never decided in the window, and
+  `decide()` (`JarvisRuntime.kt:3821`) is not called from that surface at all
+  (§5).
+- Not taken: `Expand` plus Deny for an approval - quicker on a card, and it puts
+  a decision one accidental tap away in a window Android can move or cover.
+
+**Nothing is open.** The three things this document deliberately does NOT
+answer are in §8, and they are not questions for the owner - they are
+measurements that only a phone can make: **the face's frame budget inside a PiP
+window**, **`FLAG_SECURE` behaviour there**, and **Android's own PiP chrome**,
+which Jarvis does not control and cannot restyle. They stay marked unverified
+rather than guessed at.
