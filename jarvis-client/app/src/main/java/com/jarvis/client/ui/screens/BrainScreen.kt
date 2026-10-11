@@ -666,9 +666,16 @@ fun BrainScreen(
                 // People and things (the owner's decision of 2026-09-30;
                 // EntitiesPlate.kt, docs/GALAXY-PANEL-DESIGN.md option B): a plain
                 // grouped list of the names saved facts are linked to and the facts
-                // behind each - a list, not the Galaxy's map. Hidden under "Hide
-                // memory lists and chat history" like the other memory lists.
-                if (menus.shows("brain.memory.people-things")) plate("people-and-things") {
+                // behind each - a list, not the Galaxy's map.
+                //
+                // Drawn whatever "Hide memory lists and chat history" says. This
+                // plate is not a memory list with a hidden twin - it guards ITSELF,
+                // drawing "Hidden. Tap Show and confirm it is you." while the lists
+                // are hidden. Letting the heading's own rule drop it removed that
+                // prompt and made Home's Galaxy button end at the bottom of the
+                // list instead of on the thing that was asked for (2026-10-11).
+                // With the lists shown, `plateDrawn` answers exactly as before.
+                if (menus.shows("brain.memory.people-things")) plate("people-and-things", drawn = { true }) {
                     MenuFrame(menus, "brain.memory.people-things") {
                         PeopleAndThingsSection(
                             privateHidden = privateHidden,

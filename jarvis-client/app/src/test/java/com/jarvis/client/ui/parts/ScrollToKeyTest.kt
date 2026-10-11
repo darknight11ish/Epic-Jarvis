@@ -243,11 +243,18 @@ class ScrollToKeyTest {
         )
 
         // And the plate really is drawn under that key, from the menu guard -
-        // so the jump has something to land on whenever the plate exists.
+        // so the jump has something to land on whenever the plate exists. It
+        // asks to be drawn whatever the private-lists rule says too: with the
+        // lists hidden, the heading's own rule would drop it, and "drawn
+        // somewhere the walk can find" is exactly what the walk needs.
+        val call = screen.substringAfter("""if (menus.shows("brain.memory.people-things"))""")
         assertTrue(
             "the Galaxy plate is not drawn, so the jump has nowhere to land",
-            Regex("""if \(menus\.shows\("brain\.memory\.people-things"\)\) plate\("people-and-things"\)""")
-                .containsMatchIn(screen),
+            Regex("""\bplate\(\s*"people-and-things"\s*[,)]""").containsMatchIn(call),
+        )
+        assertTrue(
+            "the Galaxy plate is dropped when the lists are hidden, so the walk finds no item",
+            call.substringBefore(") {").contains("drawn = { true }"),
         )
 
         // The heading that holds it is a real one, and one `toOpen` finds -
