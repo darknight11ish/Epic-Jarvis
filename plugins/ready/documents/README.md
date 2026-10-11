@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_documents.install()` (takes the core's Handler)
 - The patch this replaces: `backend/documents.patch`
-- Position in the old patch stack: 67 of 139
+- Position in the old patch stack: 67 of 140
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_documents.py`), copied into the backend by
