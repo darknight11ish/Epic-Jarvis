@@ -600,6 +600,9 @@ fn launched_by_deny() -> bool {
     // of launch: it answers from the toast and puts no window up.
     winrt_toast::deny_id_from_argv(&argv).is_some()
         || winrt_toast::snooze_id_from_argv(&argv).is_some()
+        // And a Stop on a ringing toast (the owner's report of 2026-10-11):
+        // it answers nothing, so it must put no window up either.
+        || winrt_toast::stop_id_from_argv(&argv).is_some()
 }
 
 /// Always false off Windows: no toast, no Deny action, no such launch.
@@ -773,6 +776,14 @@ pub fn run() {
                 winrt_toast::snooze_detached(app, id);
                 return;
             }
+            // A Stop on a ringing toast (2026-10-11): this one answers
+            // nothing at all, so it does not even need the event stream - it
+            // takes that one notification away and stops there.
+            #[cfg(windows)]
+            if let Some(id) = winrt_toast::stop_id_from_argv(&_argv) {
+                winrt_toast::stop_detached(id);
+                return;
+            }
             logfile::log("[jarvis] second launch folded into the running instance");
             // Through the app lock, like every other way to the HUD (apps
             // security audit M3): with it on, Windows Hello is asked first.
@@ -934,7 +945,7 @@ pub fn run() {
             brain::progress::brain_progress_activity,
             brain::progress::brain_progress_balance,
             brain::progress::brain_progress_balance_save,
-            // "Ask for a picture, and keep it" (JARVIS-API section 126). A
+            // "Ask for a picture, and keep it" (JARVIS-API section 129). A
             // picture is a new file in a folder on this PC, drawn by a program
             // on this PC, from words the owner typed, so drawing one raises NO
             // approval card - the same shape as a timer or a note. Changing
@@ -1580,6 +1591,10 @@ pub fn run() {
             // And a Snooze clicked while Jarvis was closed - the same wait.
             #[cfg(windows)]
             winrt_toast::snooze_at_startup(&handle);
+            // And a Stop clicked while Jarvis was closed - it answers
+            // nothing, so there is nothing to wait for.
+            #[cfg(windows)]
+            winrt_toast::stop_at_startup(&handle);
 
             // One outbound GET, if the owner left it on, and nothing is
             // installed by it. Spawned and forgotten: a slow endpoint must not

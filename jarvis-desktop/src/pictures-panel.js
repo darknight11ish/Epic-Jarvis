@@ -1,6 +1,6 @@
 /**
  * pictures-panel.js — "Ask for a picture, and keep it" on the PC
- * (the owner's decision of 2026-09-27; `docs/JARVIS-API.md` section 126;
+ * (the owner's decision of 2026-09-27; `docs/JARVIS-API.md` section 129;
  * backend `jarvis_pictures.py`, `brain/pictures.rs`).
  *
  * Four commands, all of them plain reads or one named change:

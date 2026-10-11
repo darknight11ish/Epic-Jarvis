@@ -289,7 +289,7 @@ MENUS: tuple = (
        "Which browser Jarvis uses for plain reading.",
        names=("browser without a window", "headless browser", "browser settings")),
     # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 126): the switch ("Making pictures"), which program on
+    # JARVIS-API section 129): the switch ("Making pictures"), which program on
     # this PC draws them (ComfyUI or stable-diffusion.cpp - a setting with
     # named supported values, never guessed at), and the folder they are kept
     # in. The gallery itself is Brain -> Projects -> Pictures
@@ -624,7 +624,7 @@ MENUS: tuple = (
     _m("brain.projects.progress", "Progress", "The activity heatmap and balance chart.",
        area="brain", view="projects", group="goals-projects", names=("progress", "heatmap")),
     # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
-    # pictures.patch, JARVIS-API section 126). The id is the SAME in both apps
+    # pictures.patch, JARVIS-API section 129). The id is the SAME in both apps
     # even though the phone draws it in Brain -> Pictures and the PC draws it
     # above the project list (the module's own rule: one id means one feature).
     # Both draw the gallery, the prompts and "Make another"; the PC also has

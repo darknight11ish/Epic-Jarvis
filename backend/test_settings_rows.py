@@ -74,7 +74,7 @@ SETTINGS_HTML = REPO / "jarvis-desktop" / "src" / "settings.html"
 #: than a smaller number that every other check happily agrees with.
 #:
 #: 28 since "Making pictures" (the owner's decision of 2026-09-27; the
-#: Pictures card, JARVIS-API section 126) joined the page on 2026-10-11. The
+#: Pictures card, JARVIS-API section 129) joined the page on 2026-10-11. The
 #: row and its fixture were added first and this number was left behind, which
 #: is exactly what this constant is here to catch.
 EXPECTED_ROWS = 28
@@ -211,10 +211,12 @@ def t_setting_links_are_real():
           len(linked) == 7, f"{linked} - if this grew, the row was given a setter")
     # The spoken settings with no desktop toggle. Three have no switch row at
     # all on this page (two are on the Brain's Memory tab, one is a row inside
-    # "What asks first"), and two are the phone's own.
+    # "What asks first"), and two are the phone's own. `big_coder` joined them
+    # on 2026-10-11: the 30B coder's opt-in has a route and a spoken switch,
+    # and no page row yet.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known five",
-          orphans == ["background_learning", "learn_sensitive_topics",
+    check("...and the BoolSettings with no desktop row are the known six",
+          orphans == ["background_learning", "big_coder", "learn_sensitive_topics",
                       "lights_without_card", "phone_notifications",
                       "smartwatch_notifications"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
@@ -254,22 +256,27 @@ def t_fallback_rows_are_the_known_ten():
           not R.setting_row("cv-better-switch").fallback)
 
 
-def t_bool_settings_is_the_measured_twelve():
+def t_bool_settings_is_the_measured_thirteen():
     """The spoken table, pinned.
 
-    Twelve since "Making pictures" joined it on 2026-10-11 (eleven before).
-    That row is the ONE deliberate exception to this check's original point
-    ("the rows were added beside the spoken table, not inside it"): the row on
-    the Pictures card and the spoken "turn on making pictures" are one switch
-    through one function, `set_pictures`, so the two tables overlap by seven
-    rows rather than six. The growth is argued where it lives - the
-    BoolSetting's own comment and `set_pictures`'s docstring both say why
-    neither direction raises a card - and `jarvis_quick.py:2788` matches the
-    phrase while `:3703` dispatches on the same key, so the phrase really
-    works. Any further growth has to be argued the same way.
+    Thirteen since 2026-10-11, when TWO names joined it on the same day from
+    two different branches, and both are GAINS this check must keep:
+
+      * "Making pictures" (`pictures`) - the row on the Pictures card and the
+        spoken "turn on making pictures" are one switch through one function,
+        `set_pictures`, so the two tables overlap by seven rows rather than six.
+      * the 30B coder's opt-in (`big_coder`) - the row the big-coder mode
+        turns on, which the spoken table answers for too.
+
+    Neither is a row added "beside" the spoken table: each is a switch the
+    owner can say out loud, which is what this table is. The growth is argued
+    where each lives - the BoolSetting's own comment and the setter's docstring
+    say why neither direction raises a card - and `jarvis_quick.py` matches the
+    phrase and dispatches on the same key, so both phrases really work. Any
+    further growth has to be argued the same way.
     """
-    check("BOOL_SETTINGS holds its twelve spoken settings",
-          len(R.BOOL_SETTINGS) == 12, str(len(R.BOOL_SETTINGS)))
+    check("BOOL_SETTINGS holds its thirteen spoken settings",
+          len(R.BOOL_SETTINGS) == 13, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:
@@ -277,7 +284,7 @@ def main() -> int:
                t_the_count_is_what_it_is, t_row_order_matches_the_page,
                t_indent_matches_the_page, t_label_ids_match_the_page,
                t_setting_links_are_real, t_not_switches_are_the_known_one,
-               t_fallback_rows_are_the_known_ten, t_bool_settings_is_the_measured_twelve):
+               t_fallback_rows_are_the_known_ten, t_bool_settings_is_the_measured_thirteen):
         fn()
     print()
     if FAILED:

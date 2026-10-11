@@ -714,7 +714,11 @@ def t_the_patch_and_the_lists():
              # hunk, in jarvis_hud.py: an install block at the end of the install
              # chain. It removes no line and does not touch jarvis_gate.py at all,
              # so it rewrites nothing referee.patch wrote.
-             "pictures.patch"}
+             "pictures.patch",
+             # big-coder.patch (2026-10-11) is appended after it, before
+             # plugin-loader.patch: two ADDED route blocks in jarvis_hud.py, no
+             # gate list, no tier row and no _RISK row.
+             "big-coder.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

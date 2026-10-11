@@ -137,7 +137,7 @@ object OpenPlace {
         // Jarvis on your PC" with the plate one tap away.
         "spending" to Where.Go(Screen.BRAIN, "spending"),
         // "Pictures" (the owner's decision of 2026-09-27; JARVIS-API section
-        // 124): the registry's Section for "Making pictures" is a CARD on the
+        // 129): the registry's Section for "Making pictures" is a CARD on the
         // PC's Settings screen - the switch, the drawing program and the folder
         // are the PC's own and the backend refuses them from the phone. The
         // phone's half of the feature IS the gallery, drawn on the Brain

@@ -27,6 +27,13 @@ tables inline - is left in the CORE bucket, untouched and still applied by
 
 Run:  py -3 tools/gen_plugin_catalogue.py [--check]
       --check fails instead of writing, the way the other gen_* tools do.
+
+--check COMPARES EVERY FILE LISTED ABOVE, the two README kinds included
+(2026-10-11). It did not: `registry.json` and the `plugin.json` files were
+compared and the READMEs were not, so every one of them could - and did -
+still say "of 134" against a stack of 136, with this check green. The four
+kinds come from one list, `owned_files()`, so a file the writer writes is a
+file the check compares.
 """
 from __future__ import annotations
 
@@ -254,67 +261,45 @@ def build() -> dict:
     }
 
 
-def write_plugin_folders(data: dict) -> list[Path]:
-    written: list[Path] = []
-    ready = PLUGINS / "ready"
-    keep = {e["name"] for e in data["entries"] if e["bucket"] == "plug-in"}
-
-    # Prune first. A folder stays only while its feature is still a drop-in:
-    # when a patch stops being one, its folder must go, or the tree keeps a
-    # manifest for something that is no longer true.
-    removed: list[str] = []
-    if ready.is_dir():
-        for child in sorted(ready.iterdir()):
-            if child.is_dir() and child.name not in keep:
-                shutil.rmtree(child, ignore_errors=True)
-                removed.append(child.name)
-    for name in removed:
-        print(f"  pruned ready/{name} (no longer a drop-in module)")
-
-    for entry in data["entries"]:
-        if entry["bucket"] != "plug-in":
-            continue
-        folder = ready / entry["name"]
-        folder.mkdir(parents=True, exist_ok=True)
-        manifest = {
-            "name": entry["name"],
-            "summary": entry["summary"],
-            "module": entry["module"],
-            "install": entry["install"],
-            "replaces_patch": entry["patch"],
-            "stack_order": entry["order"],
-        }
-        p = folder / "plugin.json"
-        p.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-        written.append(p)
-
-        doc = [
-            f"# {entry['name']}",
-            "",
-            entry["summary"],
-            "",
-            "**Drop-in.** Nothing about `jarvis_hud.py` changes to add this. Copy",
-            f"this folder into the backend's `jarvis_plugins\\` folder (or run",
-            f"`scripts\\add-plugin.ps1 -Name {entry['name']}`) and restart Jarvis.",
-            "",
-            f"- Module the loader calls: `{entry['module']}.install()`"
-            + (" (takes the core's Handler)" if entry["install"] == "handler" else " (takes nothing)"),
-            f"- The patch this replaces: `backend/{entry['patch']}`",
-            f"- Position in the old patch stack: {entry['order']} of {data['patch_count']}",
-            "",
-            "The module itself is one of the ones this repository already ships",
-            "(`backend/" + entry["module"] + ".py`), copied into the backend by",
-            "`scripts/apply-patches.ps1` exactly as before. This folder does not",
-            "change it.",
-            "",
-        ]
-        p = folder / "README.md"
-        p.write_text("\n".join(doc), encoding="utf-8")
-        written.append(p)
-    return written
+def plugin_manifest_text(entry: dict) -> str:
+    """The exact body of one `ready/<name>/plugin.json`."""
+    return json.dumps({
+        "name": entry["name"],
+        "summary": entry["summary"],
+        "module": entry["module"],
+        "install": entry["install"],
+        "replaces_patch": entry["patch"],
+        "stack_order": entry["order"],
+    }, indent=2) + "\n"
 
 
-def write_index(data: dict) -> Path:
+def plugin_readme_text(entry: dict, patch_count: int) -> str:
+    """The exact body of one `ready/<name>/README.md`."""
+    doc = [
+        f"# {entry['name']}",
+        "",
+        entry["summary"],
+        "",
+        "**Drop-in.** Nothing about `jarvis_hud.py` changes to add this. Copy",
+        f"this folder into the backend's `jarvis_plugins\\` folder (or run",
+        f"`scripts\\add-plugin.ps1 -Name {entry['name']}`) and restart Jarvis.",
+        "",
+        f"- Module the loader calls: `{entry['module']}.install()`"
+        + (" (takes the core's Handler)" if entry["install"] == "handler" else " (takes nothing)"),
+        f"- The patch this replaces: `backend/{entry['patch']}`",
+        f"- Position in the old patch stack: {entry['order']} of {patch_count}",
+        "",
+        "The module itself is one of the ones this repository already ships",
+        "(`backend/" + entry["module"] + ".py`), copied into the backend by",
+        "`scripts/apply-patches.ps1` exactly as before. This folder does not",
+        "change it.",
+        "",
+    ]
+    return "\n".join(doc)
+
+
+def index_text(data: dict) -> str:
+    """The exact body of `plugins/README.md`."""
     rows = ["| # | Drop-in module | What it does | Replaces |", "|---|---|---|---|"]
     for entry in data["entries"]:
         if entry["bucket"] == "plug-in":
@@ -325,7 +310,7 @@ def write_index(data: dict) -> Path:
     for entry in core:
         core_rows.append(f"| `{entry['patch']}` | {entry['why']} |")
 
-    text = f"""# Plug-and-play modules
+    return f"""# Plug-and-play modules
 
 Generated by `tools/gen_plugin_catalogue.py` from the patch stack in
 `scripts/apply-patches.ps1`. Do not edit by hand.
@@ -369,9 +354,49 @@ Both scripts copy or delete one folder inside the backend's
 `jarvis_plugins\\` folder and nothing else. Removing a module never touches
 the module file itself, so adding it again needs no re-install.
 """
-    p = PLUGINS / "README.md"
-    p.write_text(text, encoding="utf-8")
-    return p
+
+
+def prune_ready(data: dict) -> list[str]:
+    """Delete `ready/<name>/` folders whose feature is no longer a drop-in.
+
+    A folder stays only while its patch is still one of these: when a patch
+    stops being a drop-in, its folder must go, or the tree keeps a manifest
+    for something that is no longer true.
+    """
+    ready = PLUGINS / "ready"
+    keep = {e["name"] for e in data["entries"] if e["bucket"] == "plug-in"}
+    removed: list[str] = []
+    if ready.is_dir():
+        for child in sorted(ready.iterdir()):
+            if child.is_dir() and child.name not in keep:
+                shutil.rmtree(child, ignore_errors=True)
+                removed.append(child.name)
+    return removed
+
+
+def owned_files(data: dict) -> list[tuple[Path, str]]:
+    """EVERY file this tool owns, as `(path, exact text)` - one list, used for
+    both jobs: the write, and `--check`'s comparison (2026-10-11).
+
+    That is the point of it. `--check` used to compare `registry.json` and the
+    `plugin.json` files only, so `plugins/README.md` and every
+    `ready/<name>/README.md` could fall behind the patch stack with the check
+    still green - and by the time this was written they had: every one of them
+    said "of 134" against a stack of 136, and the newest drop-in's folder had
+    never been written at all. Two lists of "what this tool writes" is how that
+    happens, so there is one.
+    """
+    out: list[tuple[Path, str]] = [
+        (PLUGINS / "registry.json", json.dumps(data, indent=2) + "\n"),
+        (PLUGINS / "README.md", index_text(data)),
+    ]
+    for entry in data["entries"]:
+        if entry["bucket"] != "plug-in":
+            continue
+        folder = PLUGINS / "ready" / entry["name"]
+        out.append((folder / "plugin.json", plugin_manifest_text(entry)))
+        out.append((folder / "README.md", plugin_readme_text(entry, data["patch_count"])))
+    return out
 
 
 def main() -> int:
@@ -381,28 +406,11 @@ def main() -> int:
     args = ap.parse_args()
 
     data = build()
-    body = json.dumps(data, indent=2) + "\n"
-    index = None
-    folders: list[tuple[Path, str]] = []
-    for entry in data["entries"]:
-        if entry["bucket"] != "plug-in":
-            continue
-        folders.append((PLUGINS / "ready" / entry["name"] / "plugin.json",
-                        json.dumps({
-                            "name": entry["name"], "summary": entry["summary"],
-                            "module": entry["module"], "install": entry["install"],
-                            "replaces_patch": entry["patch"],
-                            "stack_order": entry["order"],
-                        }, indent=2) + "\n"))
+    owned = owned_files(data)
 
     if args.check:
-        stale = []
-        reg = PLUGINS / "registry.json"
-        if not reg.is_file() or reg.read_text(encoding="utf-8") != body:
-            stale.append(str(reg.relative_to(ROOT)))
-        for path, text in folders:
-            if not path.is_file() or path.read_text(encoding="utf-8") != text:
-                stale.append(str(path.relative_to(ROOT)))
+        stale = [str(path.relative_to(ROOT)) for path, text in owned
+                 if not path.is_file() or path.read_text(encoding="utf-8") != text]
         if stale:
             print("plug-in catalogue is stale; run: py -3 tools/gen_plugin_catalogue.py")
             for s in stale[:10]:
@@ -410,12 +418,16 @@ def main() -> int:
             return 1
         print(f"plug-in catalogue is up to date "
               f"({data['counts']['plug-in']} drop-in, {data['counts']['core']} core)")
+        print(f"  ({len(owned)} file(s) compared - registry.json, README.md and "
+              f"every ready/<name>/plugin.json AND README.md)")
         return 0
 
     PLUGINS.mkdir(exist_ok=True)
-    (PLUGINS / "registry.json").write_text(body, encoding="utf-8")
-    write_plugin_folders(data)
-    index = write_index(data)
+    for name in prune_ready(data):
+        print(f"  pruned ready/{name} (no longer a drop-in module)")
+    for path, text in owned:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
 
     print(f"wrote plugins/registry.json - {data['patch_count']} patches: "
           f"{data['counts']['plug-in']} drop-in, {data['counts']['core']} core"
@@ -423,8 +435,8 @@ def main() -> int:
     for entry in data["entries"]:
         if entry["bucket"] == "plug-in":
             print(f"  ready/{entry['name']:<22} {entry['module']}.install()")
-    if index:
-        print(f"wrote {index.relative_to(ROOT)}")
+    print(f"wrote {len(owned)} file(s) under {PLUGINS.relative_to(ROOT)}/ - the "
+          f"{data['counts']['plug-in']} ready/<name>/ folders with their own README.md")
     return 0
 
 

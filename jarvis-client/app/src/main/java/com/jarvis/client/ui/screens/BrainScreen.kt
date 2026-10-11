@@ -983,7 +983,7 @@ fun BrainScreen(
                 }
 
                 // "Ask for a picture, and keep it" (the owner's decision of
-                // 2026-09-27; JARVIS-API section 126; PicturesPlate.kt). The
+                // 2026-09-27; JARVIS-API section 129; PicturesPlate.kt). The
                 // owner types what the picture should show, the PC draws it and
                 // keeps it, and "Save to my phone" copies it into THIS phone's
                 // own Pictures collection. No card: it is a new file on the PC,

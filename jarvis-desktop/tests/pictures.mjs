@@ -359,26 +359,50 @@ check(
   "... and apply-patches.ps1 both ships it and applies its patch",
   apply.includes("'jarvis_pictures.py'") && apply.includes("'pictures.patch'"),
 );
-check(
-  "... and the patch is LAST, after plugin-loader.patch",
-  apply.indexOf("'pictures.patch'") > apply.indexOf("'plugin-loader.patch'"),
+// The repository's rule, held by test_gate_touches.py and
+// test_uncensored_optins.py: plugin-loader.patch is LAST OF ALL, and every core
+// patch sits above it. This check asserted the OPPOSITE until 2026-10-11
+// ("the patch is LAST, after plugin-loader.patch"), which is exactly how the
+// branch went red in CI; the position is now the real one, and the loader's own
+// "last of all" is asserted beside it rather than assumed.
+const patchBlock = apply.slice(
+  apply.indexOf("$PATCHES = @("),
+  apply.indexOf("\n)", apply.indexOf("$PATCHES = @(")),
 );
+const patchNames = patchBlock
+  .split("\n")
+  .map((line) => (line.match(/^\s*'([^']+\.patch)'\s*$/) || [])[1])
+  .filter(Boolean);
 check(
-  "the API document has section 124 with all three routes",
-  apiDoc.includes("## 124.") && apiDoc.includes("/api/pictures")
-    && apiDoc.includes("/api/pictures/file") && apiDoc.includes("/api/pictures/settings"),
+  "... and it sits immediately BEFORE plugin-loader.patch, which stays last of all",
+  patchNames.length > 1
+    && patchNames[patchNames.length - 1] === "plugin-loader.patch"
+    && patchNames[patchNames.indexOf("plugin-loader.patch") - 1] === "pictures.patch",
+  `the stack ends: ${patchNames.slice(-3).join(", ")}`,
+);
+// This branch's own section moved 124 -> 126 on 2026-10-11: main's 124 is the
+// picture-CARD module and 125 the uncensored opt-ins, so the next free number
+// is 126. Slicing from "## 124." now reads MAIN'S section, so every check below
+// reads this feature's own heading and stops at the next one.
+const sectionAt = apiDoc.indexOf("## 129.");
+const nextHeading = apiDoc.indexOf("\n## ", sectionAt + 1);
+const section = sectionAt < 0 ? "" : apiDoc.slice(sectionAt, nextHeading < 0 ? undefined : nextHeading);
+check(
+  "the API document has section 129 with all three routes",
+  sectionAt >= 0 && section.includes("/api/pictures")
+    && section.includes("/api/pictures/file") && section.includes("/api/pictures/settings"),
 );
 check(
   "... and says a picture needs no approval card, and why",
-  /no approval card/i.test(apiDoc.slice(apiDoc.indexOf("## 124."))),
+  /no approval card/i.test(section),
 );
 check(
   "... and says nothing leaves the PC",
-  apiDoc.slice(apiDoc.indexOf("## 124.")).includes("Nothing leaves the PC"),
+  section.includes("Nothing leaves the PC"),
 );
 check(
   "... and says the switch starts off",
-  /default OFF|OFF by default|starts `false`|starts off/i.test(apiDoc.slice(apiDoc.indexOf("## 124."))),
+  /default OFF|OFF by default|starts `false`|starts off/i.test(section),
 );
 
 console.log(`\n${passed} passed, ${failed.length} failed`);

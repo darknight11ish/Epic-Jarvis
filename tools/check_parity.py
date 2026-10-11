@@ -292,7 +292,7 @@ CLASSIFICATION = {
     # "Ask for a picture, and keep it" (the owner's decision of 2026-09-27:
     # "12 GB card: longer conversations with picture understanding first, and
     # making pictures too (swapped in when asked, since both cannot sit on the
-    # card at once)"; pictures.patch, JARVIS-API.md section 126). The drawing
+    # card at once)"; pictures.patch, JARVIS-API.md section 129). The drawing
     # program is a program ON THIS PC (ComfyUI or stable-diffusion.cpp, a
     # setting with named supported values, never guessed at) and the only
     # address the backend opens is the one the owner configured, so NOTHING

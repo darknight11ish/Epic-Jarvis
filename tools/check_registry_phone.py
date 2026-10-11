@@ -173,6 +173,15 @@ PHONE_LACKS = {
         "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
         "must_contain": '"crash-notes",',
     },
+    "settings.pictures": {
+        "name": "Making pictures",
+        "why": ("The switch, the drawing program and the folder are the PC's own - the "
+                "backend refuses all three from anywhere but the PC (403 pc_only) - so this "
+                "is the PC's Settings card. The phone's half of the feature is the gallery, "
+                "which its own \"open my pictures\" opens on the Brain instead."),
+        "where": "jarvis-client/app/src/main/java/com/jarvis/client/ui/OpenPlace.kt",
+        "must_contain": '"pictures" to Where.Go(Screen.BRAIN, "pictures"),',
+    },
     "brain.tab.memory": {
         "name": "Memory (rail tab)",
         "why": ("A layout difference, not a missing feature: the phone draws the Memory "

@@ -1,5 +1,5 @@
 """test_pictures.py - "ask for a picture, and keep it" (jarvis_pictures.py,
-pictures.patch, docs/JARVIS-API.md section 123; the owner's decision of
+pictures.patch, docs/JARVIS-API.md section 129; the owner's decision of
 2026-09-27: *"12 GB card: longer conversations with picture understanding
 first, and making pictures too (swapped in when asked, since both cannot sit on
 the card at once)"*).
@@ -698,8 +698,8 @@ def address_only(src: str) -> bool:
 
 def t_the_api_document_has_the_section_and_it_matches_this_code():
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("docs/JARVIS-API.md has section 126", "## 126." in api,
-          "no section 126 yet")
+    check("docs/JARVIS-API.md has section 129", "## 129." in api,
+          "no section 129 yet")
     for route in ("/api/pictures", "/api/pictures/file"):
         check(f"... and names the route {route}", route in api, route)
     check("... and says the pictures are kept on this PC",
@@ -723,8 +723,14 @@ def t_the_api_document_has_the_section_and_it_matches_this_code():
           "tool in `jarvis_agent.py`" in api
           and "reachable from no\nmodel turn" in api.replace("  ", " "),
           "the section must say this")
-    check("the section is the newest one, after section 123",
-          api.rindex("\n## 124.") > api.rindex("\n## 123."))
+    # This branch's section moved 124 -> 126 on 2026-10-11 (main's 124 is the
+    # picture-CARD module and 125 the uncensored opt-ins), so a check on
+    # "the last 124" would now read MAIN's section and prove nothing about this
+    # feature. It asserts this feature's own heading, and that nothing at all is
+    # written after it.
+    check("the section is the newest one: nothing is written after it",
+          api.count("\n## 129.") == 1
+          and api.rindex("\n## 129.") == api.rindex("\n## "))
 
 
 def t_the_settings_route_changes_one_named_thing_and_only_on_the_pc():

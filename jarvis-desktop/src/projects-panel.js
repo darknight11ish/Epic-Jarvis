@@ -34,7 +34,7 @@
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
 import { refreshProgress, setProgressVisible } from "./progress-panel.js";
 // "Ask for a picture, and keep it" (the owner's decision of 2026-09-27;
-// JARVIS-API section 126). It sits beside the Progress pictures, above the
+// JARVIS-API section 129). It sits beside the Progress pictures, above the
 // project list, and reads on its own - never blocking this page.
 import { refreshPictures, setPicturesVisible } from "./pictures-panel.js";
 import {

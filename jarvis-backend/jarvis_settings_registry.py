@@ -319,7 +319,7 @@ SECTIONS: tuple = (
     Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
                                "browser settings", "the browser settings")),
     # "Pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 126): "Making pictures", which program on this PC draws
+    # JARVIS-API section 129): "Making pictures", which program on this PC draws
     # them (ComfyUI or stable-diffusion.cpp - a setting with named supported
     # values, never guessed at), the folder the pictures are kept in and its
     # size, and the gallery. Desktop-only as a Settings CARD: the phone reaches
@@ -564,6 +564,21 @@ def set_screen_picture(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --- the 30B coder, both cards, Jarvis paused (jarvis_big_coder.py) --------
+
+def set_big_coder(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn the big coding model's opt-in switch on or off. ON is ONE approval
+    card inside jarvis_big_coder (action change_own_config, tier "ask"); OFF is
+    immediate. This does not START the mode - that is its own call, and it
+    pauses the two live lanes first."""
+    try:
+        import jarvis_big_coder as BC
+    except Exception:
+        return _missing("the big coding model")
+    code, out = BC.set_enabled(bool(on))
+    return _say(code, out)
+
+
 # --- the headless browser, Obscura (jarvis_browser_engine.py) --------------
 
 def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
@@ -575,7 +590,7 @@ def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
-# --- making pictures (jarvis_pictures.py, JARVIS-API section 126) ----------
+# --- making pictures (jarvis_pictures.py, JARVIS-API section 129) ----------
 
 def set_pictures(on: bool, *, peer=None, local=None) -> Outcome:
     """The one switch the picture feature has. BOTH directions happen at once
@@ -1304,7 +1319,7 @@ SETTINGS_ROWS: tuple = (
         "desktop",
         indent=10),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 126). The one switch that belongs to the Pictures card
+    # JARVIS-API section 129). The one switch that belongs to the Pictures card
     # and, with the record button above it, the one row on the page whose
     # subject is a whole feature rather than a behaviour. It is linked to its
     # BoolSetting (`pictures`), so "turn on making pictures" and this row are
@@ -1445,7 +1460,7 @@ BOOL_SETTINGS: tuple = (
                 "the browser with no window"),
                "browser-engine", set_browser_engine),
     # "Making pictures" (the owner's decision of 2026-09-27; pictures.patch,
-    # JARVIS-API section 126). Its own switch, OFF by default: the second card
+    # JARVIS-API section 129). Its own switch, OFF by default: the second card
     # is shared with the everyday model, and CLAUDE.md's rule is that a feature
     # using the second card stays off until THAT feature is measured. Both
     # directions happen at once - see set_pictures above for why that is not a
@@ -1458,6 +1473,14 @@ BOOL_SETTINGS: tuple = (
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),
                "briefing-settings", set_briefing_senders),
+    # The 30B coder (2026-10-11, the owner asked for it by name). OFF by
+    # default; turning it ON is ONE card (change_own_config), OFF is instant.
+    # It is the one model here that needs BOTH cards, so it pauses the two
+    # live lanes and puts them back when it stops - jarvis_big_coder.py.
+    BoolSetting("big_coder",
+               ("the big coding model", "the big coder", "the 30B coder",
+                "the thirty billion coder", "the coder for big jobs"),
+               None, set_big_coder),
 )
 
 _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}

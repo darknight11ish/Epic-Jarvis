@@ -1,6 +1,6 @@
 /**
  * pictures-settings.js — the PC's own setup for "Ask for a picture, and keep
- * it" (the owner's decision of 2026-09-27; `docs/JARVIS-API.md` section 126;
+ * it" (the owner's decision of 2026-09-27; `docs/JARVIS-API.md` section 129;
  * backend `jarvis_pictures.py`, `brain/pictures.rs`).
  *
  * THREE THINGS, AND ALL THREE ARE THE PC'S:

@@ -730,7 +730,7 @@ SHIPPED = (
     # building a second chooser.
     "jarvis_storage.py",
     # "Ask for a picture, and keep it" (2026-10-11, the owner's decision of
-    # 2026-09-27; pictures.patch, docs/JARVIS-API.md section 126). A prompt the
+    # 2026-09-27; pictures.patch, docs/JARVIS-API.md section 129). A prompt the
     # owner typed, drawn by a program ON THIS PC (ComfyUI or
     # stable-diffusion.cpp - a setting with named values, never guessed at),
     # saved in a folder on this PC with a sidecar holding the prompt, the seed,
@@ -740,6 +740,14 @@ SHIPPED = (
     # with nothing configured the owner gets ONE plain sentence naming both
     # programs. Not a tool in jarvis_agent.py.
     "jarvis_pictures.py",
+    # The 30B coder: both cards, with Jarvis paused (2026-10-11, the owner asked
+    # for it by name). One model that needs BOTH cards - so it is an OPT-IN mode,
+    # off by default, that pauses the two live lanes (proved from /api/ps), loads
+    # at the largest zero-spill context measured (28,672), announces the pause
+    # BEFORE it starts, and puts both lanes back exactly as they were, proved
+    # again. big-coder.patch wires its three routes; nothing downloads, every
+    # call is loopback, and turning it on is one approval card.
+    "jarvis_big_coder.py",
 )
 
 

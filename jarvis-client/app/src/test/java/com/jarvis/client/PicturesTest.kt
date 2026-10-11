@@ -16,7 +16,7 @@ import org.junit.Test
  * "Ask for a picture, and keep it" on the phone (the owner's decision of
  * 2026-09-27: *"12 GB card: longer conversations with picture understanding
  * first, and making pictures too (swapped in when asked, since both cannot sit
- * on the card at once)"*; docs/JARVIS-API.md section 126;
+ * on the card at once)"*; docs/JARVIS-API.md section 129;
  * net/Pictures.kt, ui/screens/PicturesPlate.kt, backend jarvis_pictures.py).
  *
  * WHAT THIS IS, HONESTLY

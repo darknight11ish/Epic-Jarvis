@@ -17,7 +17,7 @@ import java.util.Locale
  * "Ask for a picture, and keep it" — the owner's decision of 2026-09-27
  * (*"12 GB card: longer conversations with picture understanding first, and
  * making pictures too (swapped in when asked, since both cannot sit on the
- * card at once)"*), docs/JARVIS-API.md section 126 and backend
+ * card at once)"*), docs/JARVIS-API.md section 129 and backend
  * `jarvis_pictures.py`.
  *
  * Three routes, and NOT ONE OF THEM PUTS A MODEL ON THE PHONE:

@@ -79,7 +79,7 @@ class SettingsCatalogTest {
         // The number this work was briefed with was 19, which is the count of
         // rows spelled exactly `<label class="toggle">` - it misses the seven
         // that also carry a label id. Pinned here so it cannot quietly move.
-        // "Making pictures" (2026-10-11, JARVIS-API section 126) is one more
+        // "Making pictures" (2026-10-11, JARVIS-API section 129) is one more
         // bare one: 20 to 21 bare, 27 to 28 desktop.
         assertEquals(28, rows.count { it.s("owner") == "desktop" })
         assertEquals(2, rows.count { it.s("owner") == "phone" })

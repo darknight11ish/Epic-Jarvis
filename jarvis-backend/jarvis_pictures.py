@@ -1,11 +1,11 @@
 """jarvis_pictures.py - "ask for a picture, and keep it" (the owner's decision
 of 2026-09-27: *"12 GB card: longer conversations with picture understanding
 first, and making pictures too (swapped in when asked, since both cannot sit on
-the card at once)"*; docs/JARVIS-API.md section 123).
+the card at once)"*; docs/JARVIS-API.md section 129).
 
 NEW MODULE, shipped whole. `pictures.patch` adds one call at start-up,
-`install(Handler, ...)`, which answers the routes below (the same shape as
-jarvis_progress.py and jarvis_backup.py).
+`install(Handler, ...)`, which answers the routes below (the same shape as the
+activity-heatmap module and the backup module).
 
 WHAT THIS IS, IN PLAIN WORDS
 
@@ -175,9 +175,9 @@ def not_running(runtime: str) -> str:
             "PC, then ask again.".format(which))
 
 
-#: The fixed sentences both apps show, word for word (the shape
-#: jarvis_progress.py's WORDS has). The PC sends the finished ones; these are
-#: the labels the screens need.
+#: The fixed sentences both apps show, word for word (the shape the
+#: activity-heatmap module's WORDS has). The PC sends the finished ones; these
+#: are the labels the screens need.
 WORDS = {
     "title": "Pictures",
     "under": "Ask for a picture in your own words. Jarvis draws it on this PC and keeps it here.",
@@ -730,7 +730,7 @@ def picture_path(folder, pid: str) -> Optional[Path]:
 
 
 # --------------------------------------------------------------------------
-#   The routes (docs/JARVIS-API.md section 123)
+#   The routes (docs/JARVIS-API.md section 129)
 # --------------------------------------------------------------------------
 
 BASE = "/api/pictures"

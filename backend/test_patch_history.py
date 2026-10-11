@@ -418,6 +418,37 @@ def t_the_script_reads_the_history():
           "Invoke-Patch -File $u.File -Reverse" in ps1)
     check("apply-patches.ps1 is ASCII (Windows PowerShell 5.1 reads it as ANSI)",
           all(ord(c) < 128 for c in ps1))
+    # ... AND SO IS EVERY OTHER *.ps1 THIS REPOSITORY CARRIES (2026-10-11).
+    # This rule used to cover apply-patches.ps1 alone, which is the hottest
+    # script here and not the only one the owner runs. CI's powershell-5 job
+    # does read every .ps1 with 5.1's own reader and fails a non-ASCII TOKEN
+    # outside a comment - but that rule lives in ci.yml, so it cannot be run
+    # locally before a push, and it deliberately permits non-ASCII inside a
+    # comment. This is the stricter half: no non-ASCII BYTE anywhere in a
+    # *.ps1, which is what "5.1 reads a BOM-less script as ANSI" asks for and
+    # what a grep of the source wants too. `git ls-files` is the list of the
+    # files this repository actually carries - a scan of the working tree
+    # would walk other agents' worktrees under .dsh-scratch/, which are not
+    # this repository's files and are not there in CI. The count is asserted
+    # too, so a ls-files that returned nothing could not pass this quietly.
+    if not GIT:
+        # This file's own convention for a missing git (see
+        # t_the_upgrade_rule_on_a_made_up_backend): say so, do not go quiet
+        # about it, and do not fail a suite whose subject needs git anyway.
+        print("skip  git is not installed, so the other *.ps1 files cannot be listed")
+    else:
+        listed = subprocess.run([GIT, "-C", str(ROOT), "ls-files", "*.ps1"],
+                                capture_output=True, text=True)
+        shells = [ROOT / l for l in listed.stdout.splitlines() if l.strip()]
+        not_ascii = []
+        for p in shells:
+            bad = sum(1 for b in p.read_bytes() if b > 0x7F)
+            if bad:
+                not_ascii.append(f"{p.relative_to(ROOT).as_posix()} ({bad} byte(s))")
+        check(f"every one of this repository's {len(shells)} *.ps1 files is ASCII, "
+              f"not only apply-patches.ps1",
+              len(shells) >= 15 and not not_ascii,
+              f"{len(shells)} file(s) found; not ASCII: " + ", ".join(not_ascii))
 
 
 if __name__ == "__main__":

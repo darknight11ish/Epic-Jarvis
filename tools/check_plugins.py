@@ -161,14 +161,57 @@ def main() -> int:
               text.startswith("--- a/jarvis_hud.py") and "+++ b/jarvis_hud.py" in text)
 
         # Its context is the output of the last patch BEFORE it that writes an
-        # install block into jarvis_hud.py. That is not simply the patch listed
-        # above it: gate-risk-rows.patch sits between them and changes
-        # jarvis_gate.py, touching none of these lines.
+        # install block into the CHAIN the hook itself sits in. That is not
+        # simply the patch listed above it: gate-risk-rows.patch sits between
+        # them and changes jarvis_gate.py, touching none of these lines.
+        #
+        # AND IT IS NOT SIMPLY "the last one that adds a `.install(Handler`
+        # line" EITHER (2026-10-11). picture-card.patch is listed immediately
+        # before the hook and adds that call, but it adds it OUTSIDE the
+        # chain, on the owner's own lines just past the banner - its own
+        # comment says why ("every install block above writes into the chain
+        # that ends at `# Before the main socket`, so a block added in the
+        # middle of it leaves the next patch's hunk without its context").
+        # Reading the list alone called that patch the hook's neighbour, and
+        # the two checks below reported a defect in two patches that are both
+        # right: the whole stack applies, too (_stack.stand_in("jarvis_hud.py")
+        # invents nothing for either of them).
+        #
+        # What actually says "writes INTO the chain": every block in the chain
+        # is appended to the block before it, so the patch's block lands
+        # directly after a line ANOTHER install-block patch wrote into
+        # jarvis_hud.py. Read from the patch text, not from the list order -
+        # and only from its jarvis_hud.py half, because a patch that also
+        # touches jarvis_gate.py (uncensored-optins.patch does) would
+        # otherwise be read as if its first block were the HUD one.
+        def hud_hunks(name: str):
+            """(added, lands_after) for this patch's jarvis_hud.py half."""
+            added, lead, in_hud, done = [], [], False, False
+            for line in (BACKEND / name).read_text(encoding="utf-8").splitlines():
+                if line.startswith(("---", "+++")):
+                    if line.startswith("+++"):
+                        in_hud = line.split()[1] == "b/jarvis_hud.py"
+                    continue
+                if not in_hud:
+                    continue
+                if line.startswith("+"):
+                    added.append(line[1:])
+                    done = True
+                elif not done and line.startswith(" ") and line.strip():
+                    lead.append(line[1:])
+            return added, (lead[-1] if lead else "")
+
+        writers = {}
+        for name in listed[:listed.index("plugin-loader.patch")]:
+            added, line_above = hud_hunks(name)
+            if any(".install(Handler" in l for l in added):
+                writers[name] = (added, line_above)
+        written = {n: v[0] for n, v in writers.items()}
         above = None
-        for name in reversed(listed[:listed.index("plugin-loader.patch")]):
-            text_above = (BACKEND / name).read_text(encoding="utf-8")
-            if any(".install(Handler" in l for l in text_above.splitlines()
-                   if l.startswith("+") and not l.startswith("+++")):
+        for name in reversed(list(writers)):
+            line_above = writers[name][1]
+            if line_above and any(line_above in written[other]
+                                  for other in writers if other != name):
                 above = name
                 break
         check("hook: an install block is what it anchors on", above is not None)
