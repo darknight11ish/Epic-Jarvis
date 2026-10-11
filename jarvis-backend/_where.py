@@ -292,6 +292,11 @@ SHIPPED = (
     "jarvis_past.py",
     "jarvis_entities.py",
     "jarvis_profiles.py", "jarvis_hardware.py",
+    # the five work setups - combinations of local models for a kind of work,
+    # each explained in plain words before the owner starts, and the pure
+    # offer that reads the owner's own words (work.patch). It switches
+    # nothing: every model change is still the existing card.
+    "jarvis_work.py",
     "jarvis_scrub.py",
     # The one connection class that CLOSES when its `with` block ends, shared
     # by jarvis_schedule.py, jarvis_goals.py and jarvis_projects.py

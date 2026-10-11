@@ -709,6 +709,13 @@ def t_the_patch_and_the_lists():
              # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
              # it cannot rewrite a line this patch wrote.
              "uncensored-optins.patch",
+             # work.patch (2026-10-10) comes after it too: exactly TWO hunks, both
+             # in jarvis_hud.py - one GET route in the read-only set and one POST
+             # block, each anchored on a route that predates it - and neither is in
+             # the install chain referee.patch's own block belongs to. It removes no
+             # line and touches jarvis_gate.py not at all, so it rewrites nothing
+             # referee.patch's hunks anchor on.
+             "work.patch",
              "picture-card.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])

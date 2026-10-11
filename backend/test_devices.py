@@ -693,6 +693,15 @@ def t_the_hunk_comes_before_every_token_ok():
                                 # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
                                 # it cannot rewrite a line devices.patch wrote.
                                 "uncensored-optins.patch",
+                                # work.patch (2026-10-10) is the work setups: exactly
+                                # TWO hunks, both in jarvis_hud.py - one GET route in
+                                # the read-only set and one POST block, each anchored on
+                                # a route that predates it. It removes no line, adds no
+                                # gate list entry, no risk row and no _TOOL_ACTIONS line,
+                                # and touches jarvis_gate.py not at all - so it cannot
+                                # rewrite a line devices.patch wrote. The
+                                # later_rewriting() half below proves it.
+                                "work.patch",
                                 "picture-card.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
