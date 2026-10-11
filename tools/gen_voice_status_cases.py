@@ -111,6 +111,38 @@ class FixtureModel(V.Embedder):
         return "sherpa-onnx:fixture00000"
 
 
+class NoVoiceModel:
+    """A PC with NO voice-ID model installed - the other half of the pair, and
+    what jarvis_voice.EcapaEmbedder() does there: raise from `__init__`, so
+    jarvis_voice_enroll._embedder() falls back to the basic spectral check and
+    jarvis_voice.NO_MODEL_REASON is the answer a training gets.
+
+    WHY THIS EXISTS AT ALL. Two cases below name that state, and the tool read
+    the MACHINE's instead. The one that broke first was
+
+        ready=E._model_missing      "training is refused with only the basic
+                                     voice check installed"
+
+    which on a PC WITH the model returns "" instead of the reason, so stage()
+    went on to raise its card - and the assert under it (code == 409) failed,
+    so `python tools/gen_voice_status_cases.py --check` died with an
+    AssertionError before it could compare anything (measured 2026-10-10 on
+    the owner's PC). It is also what made test_voice_contract.py red only
+    there: 734 passed, 1 failed direct, 737 passed, 0 failed with
+    OPENJARVIS_CONFIG_DIR pointed at an empty folder.
+
+    A stand-in that only HIDES the model file would not be enough: on a PC
+    with speechbrain and torch installed, EcapaEmbedder() succeeds with no
+    model file at all (jarvis_voice.speaker_model_path()). Raising is what the
+    contract in jarvis_voice itself describes - "RAISES from __init__ when
+    neither is available, and that is required rather than sloppy" - so this
+    is that branch, chosen, rather than the machine's answer."""
+
+    def __init__(self, *a, **k):
+        raise ModuleNotFoundError(
+            "no voice-ID model is installed (this run's stand-in)")
+
+
 class World:
     """A temporary config folder for jarvis_speech, jarvis_wakeword and
     jarvis_turn, and a temporary folder for the voice prints."""
@@ -126,6 +158,7 @@ class World:
         self.profile.parent.mkdir(parents=True)
         wake_dir = d / "voice-models" / "wakeword"
         turn_file = d / "voice-models" / "turn" / T.MODEL_FILE
+        speaker_dir = d / "voice-models" / "speaker"
         self.patches = [
             mock.patch.object(S, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", self.profile),
@@ -135,13 +168,28 @@ class World:
             # their own (jarvis_voice_flow): not started here, so every run
             # writes the same file.
             mock.patch.object(F, "_spawn", lambda fn: None),
+            # THE VOICE-ID MODEL IS BUILT, NEVER THE MACHINE'S - both ways
+            # round, so the file this tool writes is the same everywhere (its
+            # own docstring's promise, and what test_voice_contract.py
+            # compares). See FixtureModel and NoVoiceModel above.
+            #
+            # The two paths matter as much as the class: jarvis_voice_flow's
+            # _anything_installed() answers "is there anything to warm" from
+            # the model FILES, and jarvis_voice.status() reports whether the
+            # small and stronger models are installed from the same two. Left
+            # to the machine, a PC with the speaker model on it answers
+            # "warming" where this file says "waiting", and "installed: true"
+            # where it says false - both measured 2026-10-10.
+            mock.patch.object(V, "speaker_model_path",
+                              lambda: speaker_dir / "model.onnx"),
+            mock.patch.object(V, "strong_model_path",
+                              lambda: speaker_dir / "strong.onnx"),
+            mock.patch.object(V, "EcapaEmbedder",
+                              FixtureModel if self.models else NoVoiceModel),
         ]
         for p in self.patches:
             p.start()
         if self.models:
-            p = mock.patch.object(V, "EcapaEmbedder", FixtureModel)
-            p.start()
-            self.patches.append(p)
             # Empty stand-ins: status() only checks that the files are there.
             for name in list(W.MODEL_FILES.values()) + list(W.PHRASE_MODELS.values()):
                 (wake_dir / name).parent.mkdir(parents=True, exist_ok=True)

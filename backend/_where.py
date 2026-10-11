@@ -73,6 +73,36 @@ else:
 
     Path.write_text = _compat_write_text
 
+# A SUITE'S OWN OUTPUT, CARRIED BY A WINDOWS CONSOLE TOO.
+#
+# A Windows console - and a pipe - defaults Python's stdout to the machine's
+# ANSI code page (cp1252 here), and 56 suites print a character it cannot
+# encode: a curly quote from a fixture, an em dash, the Cyrillic host
+# test_youtube.py refuses. The print raises UnicodeEncodeError INSIDE the
+# suite, so a check that passed is reported as a failing suite. run_suites.py
+# sets PYTHONIOENCODING for its children for exactly this reason (its own
+# docstring documents the class) and scripts/apply-patches.ps1 asks for it
+# too - but a bare `python backend\test_wakeword.py`, which is how one suite
+# gets run by hand, has neither.
+#
+# Measured 2026-10-10, test_wakeword.py direct in this checkout: 101 passed,
+# 1 failed, exit 1 without this, and 121 passed, 0 failed, 1 skipped with
+# PYTHONIOENCODING=utf-8 - the exception abandoned one check twenty checks
+# early. Every suite imports this module, so the fix belongs here once rather
+# than in each of the 56 files, which is how such a line gets rediscovered one
+# suite at a time. tools/check_tutorial_places.py sets its two streams the
+# same way for the same reason; there the check IS the process, so nobody can
+# set the variable for it. A character the console cannot draw is replaced
+# rather than fatal.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, OSError, ValueError):
+        # Not a text stream (a suite's own capture, a closed pipe): nothing to
+        # reconfigure, and never a reason for an import to fail.
+        pass
+del _stream
+
 _HERE = Path(__file__).resolve().parent
 
 #: This repository. The tests are in it, so its location is never in doubt.
@@ -103,6 +133,32 @@ if _b in sys.path:
     sys.path.remove(_b)
 sys.path.insert(0, _b)
 
+#: The ten modules this repository ships WHOLE, as this checkout holds them:
+#: `backend/rebuilt/`. APPENDED, never prepended - a copy in BACKEND is the one
+#: under test and must win (see `_b` above).
+_REBUILT = _HERE / "rebuilt"
+
+# WHY THIS LINE IS HERE, AND WHY IT IS NOT IN EVERY SUITE.
+# On the owner's PC, apply-patches.ps1 flattens these ten BESIDE jarvis_hud.py;
+# run_suites.py flattens them into the staged backend it hands every suite. In
+# both of those `import jarvis_memory` just works. A suite run straight out of a
+# clone (JARVIS_BACKEND unset - `python backend/test_x.py`, which is how the
+# owner runs them) has neither: this folder holds the patches and the tests, and
+# `rebuilt/` holds the ONLY copy of those ten modules that exists anywhere. So
+# 110 suites already carry the same line themselves, in FOUR spellings
+# (`append(str(HERE / "rebuilt"))` x51, `insert(0, ...)` x32, `insert(1, ...)`
+# x14, `append(str(REPO / "backend" / "rebuilt"))` x14). The six that forgot it
+# died at `ModuleNotFoundError: No module named 'jarvis_memory'` before a single
+# check could run - which is how this drift is found: one suite at a time, by
+# whoever runs the next one. This module already owns sys.path (its docstring
+# above says putting `BACKEND` on it is so "`import jarvis_memory` works without
+# each test repeating it"), so the missing half lives here too, once. A suite
+# that needs these modules FIRST still says so itself - `test_rebuilt.py` tests
+# the rebuilt copies and puts them at the front - and for everyone else BACKEND's
+# copy still wins.
+if _REBUILT.is_dir() and str(_REBUILT) not in sys.path:
+    sys.path.append(str(_REBUILT))
+
 
 def missing(*names: str) -> list[str]:
     """Which of these backend files are not where BACKEND says they are.
@@ -120,6 +176,70 @@ def explain() -> str:
     where = "JARVIS_BACKEND" if os.environ.get("JARVIS_BACKEND") else "this folder"
     return (f"Backend modules were looked for in {BACKEND} ({where}). "
             f"Set JARVIS_BACKEND to the folder holding jarvis_hud.py.")
+
+
+def hud_block(start: str, end: str) -> tuple:
+    """(the text between `start` and `end` in the patched jarvis_hud.py, where
+    it came from) - or (None, why this run cannot have it).
+
+    WHY THIS IS HERE AND NOT IN ONE SUITE. jarvis_hud.py is the entry point
+    scripts/apply-patches.ps1 edits IN PLACE (it is never copied), so a clone's
+    backend/ does not hold it and `SRC = BACKEND / "jarvis_hud.py"` died as a
+    FileNotFoundError before a single check. Seven suites read it; one of them,
+    test_appearance.py, only ever looks at ONE self-contained block of it, and
+    that block is the text the patch stack itself writes. So the block is what
+    this returns, from whichever of the two this run can honestly use:
+
+      * BACKEND's own jarvis_hud.py when it is there - the file the backend
+        runs, and the only thing a check that reads the SURROUNDING file may
+        use. Anything asking "is this route still wired up in main()" needs
+        the owner's own lines, which no stand-in holds; those suites say so
+        and skip instead (a stand-in that made such a check pass would be the
+        patch grading itself).
+      * otherwise, in repo mode only (no JARVIS_BACKEND), the patch stack's
+        own text for it (`_stack.stand_in`, which walks every patch
+        apply-patches.ps1 applies, in order). Ten suites already lift real
+        code out of that stand-in - test_chat_log.py, test_temporary_chat.py,
+        test_tidy.py, eval_learner.py and the rest - so this is the project's
+        own way of driving patch-written code in a clone, not a new one.
+
+    IT REFUSES A BLOCK THE STACK COULD NOT REBUILD WHOLE. `_stack` leaves a
+    "# gap" where the owner's own lines between two hunks are missing, so a
+    block with a gap in it is part real, part absent, and a suite that drove
+    it would be testing a fragment. The block must also compile. Both are
+    returned as the reason, so the caller skips saying which and why - never a
+    pass, and never a traceback.
+    """
+    path = BACKEND / "jarvis_hud.py"
+    if path.is_file():
+        src, where = path.read_text(encoding="utf-8"), str(path)
+    elif os.environ.get("JARVIS_BACKEND"):
+        # A run that NAMES a backend: a file missing from it is that install's
+        # problem and is said so, not papered over with the stack's text.
+        return None, (f"jarvis_hud.py is not in {BACKEND}, which JARVIS_BACKEND "
+                      f"names, and the patcher edits it in place. {explain()}")
+    else:
+        import _stack                                   # beside this file
+        src, log = _stack.stand_in("jarvis_hud.py")
+        if src is None:
+            return None, ("the patch stack could not build jarvis_hud.py: "
+                          + "; ".join(log[-2:]))
+        where = "the patch stack's own text for it, from backend/_stack.py"
+    try:
+        block = src[src.index(start):src.index(end)]
+    except ValueError:
+        return None, (f"jarvis_hud.py ({where}) does not hold both `{start}` and "
+                      f"`{end}`")
+    if any(line.startswith("# gap") for line in block.splitlines()):
+        return None, (f"the stand-in has a gap between `{start}` and `{end}`: the "
+                      f"owner's own lines are missing there, so this block is not "
+                      f"all real and a check that drove it would prove nothing")
+    try:
+        compile(block, f"<jarvis_hud.py {start!r}>", "exec")
+    except SyntaxError as exc:
+        return None, (f"the block from `{start}` to `{end}` in jarvis_hud.py "
+                      f"({where}) does not compile: {exc.msg} (line {exc.lineno})")
+    return block, where
 
 
 #: Modules this repository ships WHOLE, for the owner's backend folder:
@@ -645,4 +765,46 @@ def require_shipped(*names: str) -> None:
             print("FAIL  " + p)
         print("\nNot run: this suite would have tested this repository's copy "
               "instead of the one your backend uses.")
+        sys.exit(1)
+
+
+def require_rebuilt(*modules: str) -> None:
+    """Stop the suite, plainly, if a module this repository ships WHOLE
+    (`backend/rebuilt/`) cannot be imported in this run.
+
+    THE GUARD FOR THE LINE AT THE TOP OF THIS FILE. `_REBUILT` is put on
+    sys.path above, so a suite that needs one of the ten shipped-whole modules
+    imports it in every run mode. If that line is ever lost, the suite used to
+    die at the next `import jarvis_memory` with a bare traceback and no checks
+    at all; five suites failed exactly that way in a clone of this repository
+    (`ModuleNotFoundError: No module named 'jarvis_memory'`, measured
+    2026-10-10). This says so in one named line instead, and exits.
+
+    Sibling of `require_shipped` above, with the same shape for the same
+    reason: a suite that cannot import the module under test must say that,
+    not look like nine assertion failures. Call it BEFORE the import:
+
+        from _where import require_rebuilt
+        require_rebuilt("jarvis_memory")
+        import jarvis_memory as M
+
+    When JARVIS_BACKEND is set, `require_shipped` is still the check that the
+    backend's own copy is the one being used; this only asks whether the
+    module can be imported at all.
+    """
+    problems = []
+    for name in modules:
+        try:
+            __import__(name)
+        except Exception as exc:                 # noqa: BLE001 - report, never raise
+            problems.append(f"{name}: {type(exc).__name__}: {exc}")
+    if problems:
+        print("FAIL  this run cannot import the modules this repository ships "
+              "whole (backend/rebuilt/):")
+        for p in problems:
+            print("      " + p)
+        print(f"      _where.py looks in {_REBUILT} and puts it on sys.path; "
+              f"BACKEND is {BACKEND}. {explain()}")
+        print("\nNot run: this suite would have tested something other than the "
+              "modules it is about.")
         sys.exit(1)
