@@ -111,4 +111,9 @@ The three routes are listed as `planned` in `tools/check_parity.py`, which is
 its word for "on the backend, not in the desktop yet". `/api/work/recommend`
 goes one step further: it is also in that tool's `UNREACHABLE` list, because
 the phone builds it in a function nothing calls - so the checker prints the
-missing half rather than reporting agreement it has not shown.
+missing half rather than reporting agreement it has not shown, and it is not
+listed among the routes the phone is on (a literal in the phone's source is not
+a call). What it prints, word for word:
+
+    ::warning::/api/work/recommend is 'planned' and NEITHER app calls it: the
+    phone builds the route in a helper nothing calls (...)

@@ -25,14 +25,18 @@ three times:
 
   1. as the branch really is - one function, no caller. The declaration must
      hold: no "declared unreachable" error, and (the defect itself) no
-     "the phone calls it" warning either;
+     "the phone calls it" warning either. The route must instead be NAMED as
+     one neither app calls, once, and kept out of the list of routes the phone
+     is on - going quiet about it was the follow-up defect, and this suite pins
+     the sentence both docs quote;
   2. with one real call site added in the phone's UI and a live caller above it
      - the shape a genuine fix takes. The checker MUST fail, and its message
      must name the entry to delete;
   3. with the same call site but its own function uncalled. This is the defect
      one level down, and the interesting case: a checker that only counts call
      sites passes this tree, and such a checker would also have passed the real
-     phone on 2026-10-11. It must still say the declaration is stale.
+     phone on 2026-10-11. It must still say the declaration is stale - and still
+     name the route as one neither app calls.
 
 The fake checkout fails other checks of its own (it has no desktop routes at
 all), so the runs are told apart by the message, never by the exit code alone.
@@ -157,6 +161,12 @@ def _run(root):
 
 DECLARED_GONE = "is declared unreachable in tools/check_parity.py"
 NOT_WIRED = "/api/work/recommend is 'planned' and the phone calls it"
+#: What the tool must SAY instead of the false line above - the missing half.
+#: Silently saying nothing was the follow-up defect: the line was gone, and with
+#: it every mention of the route, so the tool under-reported what it knew. The
+#: checker must name it, and `docs/WORK-SETUPS.md` and `docs/JARVIS-API.md`
+#: section 124.4 quote this sentence.
+NOTHING_CALLS_IT = "/api/work/recommend is 'planned' and NEITHER app calls it"
 
 
 def main():
@@ -184,6 +194,14 @@ def main():
               DECLARED_GONE not in first)
         check("... and the checker no longer claims the phone calls it",
               NOT_WIRED not in first)
+        check("... and it SAYS the missing half instead: NEITHER app calls it",
+              NOTHING_CALLS_IT in first, first[-600:])
+        check("... and says it once, not twice",
+              first.count(NOTHING_CALLS_IT) == 1, first[-600:])
+        check("... and does not list it among the routes the phone is on",
+              "\n  /api/work/recommend " not in first,
+              "the route is in `phone` only because a literal names it; a literal "
+              "is not a call, so it must not appear in the phone's own list")
 
         _put(root, "jarvis-client/app/src/main/java/com/jarvis/client/ui/Wired.kt", WIRED)
         second = _run(root)
@@ -207,6 +225,10 @@ def main():
               "the checker counted a call site without asking whether its own "
               "function is called - the exact defect it exists to catch:\n"
               + third[-600:])
+        check("... and that tree still SAYS NEITHER app calls it",
+              NOTHING_CALLS_IT in third,
+              "the declaration holds, so the tool must keep naming the missing "
+              "half rather than going quiet about the route:\n" + third[-600:])
     finally:
         shutil.rmtree(str(root), ignore_errors=True)
 

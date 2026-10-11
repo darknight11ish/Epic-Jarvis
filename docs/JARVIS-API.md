@@ -18807,7 +18807,10 @@ conversation's surface.
 the phone's screen, and in **no** desktop build yet. That is what makes CI name
 the missing desktop half instead of reporting parity. For `/api/work` and
 `/api/work/choose` the warning reads "the phone calls it; the desktop does not
-yet". For `/api/work/recommend` it says **nothing at all**, because the route is
-declared unreachable: the old line, "the phone calls it", came from a string
-match and was never true. `backend/test_parity_callgraph.py` pins that silence -
-one real call site and the checker fails instead.
+yet". For `/api/work/recommend` it reads **"NEITHER app calls it"** and names the
+helper nothing calls, because the route is declared unreachable; it is also kept
+out of the "On the phone and not the desktop" list, since a literal in the
+phone's source is not a call. The old line, "the phone calls it", came from a
+string match and was never true. `backend/test_parity_callgraph.py` still pins
+the direction that matters for shipping - one real call site and the checker
+fails instead.

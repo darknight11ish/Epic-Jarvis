@@ -715,9 +715,12 @@ PHONE_BUILT_ROUTES = {
 # the checker fails and says which one, so the wiring cannot land while the
 # "nothing is wired" note, or this declaration, lives on. The route stays in the
 # phone's calls either way, so `CLASSIFICATION` and the two count lines above
-# cannot quietly change. key -> (the text that proves the function still builds
-# the route, the file that holds the function, the function, why nothing calls
-# it).
+# cannot quietly change, and main() NAMES it in the warnings while keeping it out
+# of the "on the phone" list - so the tool says the missing half out loud, rather
+# than claiming the phone calls it (the defect of 2026-10-11) or saying nothing
+# at all about it (the follow-up of the same day). key -> (the text that proves
+# the function still builds the route, the file that holds the function, the
+# function, why nothing calls it).
 UNREACHABLE = {
     "/api/work/recommend": (
         "WorkSetups.RECOMMEND_PATH",
@@ -728,6 +731,15 @@ UNREACHABLE = {
         "draws from JarvisRuntime.workOffer is never populated. Nothing offers a "
         "setup inside a chat turn yet"),
 }
+
+
+def _nothing_calls_it(route: str) -> str:
+    """The one sentence for a route whose declaration still holds: no app calls
+    it. Shared by the two warning sites below that used to say either too much
+    ("the phone calls it", which was false) or too little (nothing at all).
+    """
+    return (f"{route} is 'planned' and NEITHER app calls it: the phone builds the "
+            f"route in a helper nothing calls ({UNREACHABLE[route][3]}).")
 
 
 def _call_sites(text, func):
@@ -816,8 +828,16 @@ def reachable_calls(problems):
 
 
 def phone_built_routes(problems):
+    """(routes the phone's source builds, the declared routes nothing calls).
+
+    The second value is `reachable_calls`' own answer: the routes declared in
+    `UNREACHABLE` whose builder is still called by nobody. `main()` needs it to
+    say so out loud and to keep them out of the "on the phone" list - a route in
+    `phone` only because its literal is somewhere in the phone's source is not a
+    route the phone is on.
+    """
     found = {}
-    wireable = reachable_calls(problems)
+    nothing_calls_it = reachable_calls(problems)
     for route, (rel, needle) in PHONE_BUILT_ROUTES.items():
         try:
             with open(os.path.join(ROOT, rel), encoding="utf-8", errors="replace") as fh:
@@ -826,9 +846,9 @@ def phone_built_routes(problems):
         except OSError:
             pass
     for route, (_needle, rel, _func, _why) in UNREACHABLE.items():
-        if route not in wireable:
+        if route not in nothing_calls_it:
             found.setdefault(route, set()).add(rel)
-    return found
+    return found, nothing_calls_it
 
 
 def check_route_fields(problems, warnings):
@@ -852,7 +872,8 @@ def main():
     unused_allow = apply_allowlists(desk_at, allow)
     phone_at = scan(PHONE_DIRS)
     problems, warnings = [], []
-    for route, files in phone_built_routes(problems).items():
+    built, nothing_calls_it = phone_built_routes(problems)
+    for route, files in built.items():
         phone_at.setdefault(route, set()).update(files)
     desk, phone = set(desk_at), set(phone_at)
 
@@ -886,20 +907,18 @@ def main():
         warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
                         f"'ported' (if the phone calls it too) or 'todo'.")
     for r in sorted(by("planned") & phone - desk):
-        if r in UNREACHABLE:
-            # Counted, but only because its ONE call site is the uncalled helper
-            # declared above - so this is not "the phone calls it", and the
-            # classification is still "built on the backend, in no app".
+        if r in nothing_calls_it:
+            # Counted in the phone's set (the phone's source carries a literal
+            # for it, which is not a call), but nothing calls it. Say so: this
+            # used to read "the phone calls it", which was the defect itself.
+            warnings.append(_nothing_calls_it(r))
             continue
         warnings.append(f"{r} is 'planned' and the phone calls it; the desktop does not yet.")
     for r in sorted(by("planned") - desk - phone):
-        if r in UNREACHABLE:
-            # The route is in no app: the phone's only reference to it is a
-            # helper nothing calls. Say so, because the warning above used to
-            # stand in for the truth and "planned" hid which half was missing.
-            warnings.append(
-                f"{r} is 'planned' and NEITHER app calls it: the phone builds the "
-                f"route in a helper nothing calls ({UNREACHABLE[r][3]}).")
+        if r in nothing_calls_it:
+            # The route is in no app at all: the phone's only reference to it is
+            # a helper nothing calls.
+            warnings.append(_nothing_calls_it(r))
         else:
             problems.append(
                 f"{r} is classified 'planned' but nothing checks it: the desktop does "
@@ -935,7 +954,10 @@ def main():
         print("\nStill to port:")
         for r in todo:
             print(f"  {r:<26} {CLASSIFICATION[r][1]}")
-    ahead = sorted(phone - desk)
+    # A route in `nothing_calls_it` is in `phone` only because the phone's source
+    # carries a literal for it; nothing asks for it, so it is not a route the
+    # phone is on and must not be listed here as one. The warning above names it.
+    ahead = sorted(phone - desk - nothing_calls_it)
     if ahead:
         print("\nOn the phone and not the desktop (parity runs both ways):")
         for r in ahead:
