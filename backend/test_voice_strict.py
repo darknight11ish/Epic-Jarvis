@@ -197,8 +197,29 @@ STRANGER = unit([0.0, 0.0, 1.0, 0.0, 0.0, 0.3, 0.0, 0.0])
 
 # ------------------------------------------------------------ 1. hole one --
 
+class NoVoiceIdModel:
+    """`jarvis_voice.EcapaEmbedder` on a PC where model.onnx is NOT installed.
+
+    Both `jarvis_voice.status()` and `jarvis_voice_enroll._model_missing()`
+    answer "is the better voice check installed?" by BUILDING the real
+    EcapaEmbedder, whose own __init__ reads the model file. The file lives at
+    `_profile_dir().parent / "voice-models" / "speaker" / "model.onnx"` - the
+    machine's own settings folder (`~/.openjarvis`), which `Temp` does NOT
+    redirect - so on a PC where the owner has installed the voice-ID model,
+    the checks below that mean to describe the basic-check-only state
+    described that installed model instead: the talk button said "train your
+    voice again" rather than "install the voice-ID model", and a training was
+    allowed rather than refused. Both answers are right FOR THAT PC and wrong
+    for the state this test is about, which is why the state is now built
+    rather than assumed - raising here is exactly what a missing model file
+    does."""
+
+    def __init__(self, *a, **k):
+        raise RuntimeError("no voice-ID model installed (this test put it so)")
+
+
 def t_hole_one_the_basic_check_lets_nobody_in():
-    with Temp():
+    with Temp(), mock.patch.object(V, "EcapaEmbedder", NoVoiceIdModel):
         emb = V.Embedder()
         clips = [wav(2.0, 180 + i) for i in range(3)]
         pcm = [E._read_clip(1, c)[0] for c in clips]
@@ -212,6 +233,9 @@ def t_hole_one_the_basic_check_lets_nobody_in():
             check("broad mode (the owner's explicit choice) is unchanged",
                   V.verify(b"x", emb).is_owner)
         st = S.status()
+        check("this run looks like a PC with no voice-ID model - the state the "
+              "two checks below (and the training) are about",
+              st.get("speaker_model") is False, st.get("speaker_model"))
         check("the talk button is hidden, and says to install the model",
               st["listening"]["push_to_talk"] is False
               and "voice-ID model" in st["listening"]["push_to_talk_why"], st["listening"])
