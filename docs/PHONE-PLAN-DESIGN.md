@@ -28,7 +28,12 @@ once. A step that sends something, touches a lock or a permission, or would
 type into a secret field does **not** ride along inside the plan: it keeps its
 own card. And a plan is never a session: it has a fixed list of steps, a fixed
 end, and it stops dead - it never guesses - the moment the phone is not where
-the plan expected it.
+the plan expected it. A marker on the phone shows which step of how many is
+running, one control stops it, and every step it took is written down locally
+afterwards. **Two switches decide whether any of this happens, and both start
+off:** the phone agent itself, and - separately, so a session can run without
+it - "Let Jarvis delete things" (§16), which covers only deletions the owner
+can still undo and never lets an account be deleted.
 
 ## What already exists and is reused (nothing here is a second version of anything)
 
@@ -420,6 +425,418 @@ Measured on the owner's own phone, 2026-10-11, and the decision it settles.
   (`backend/jarvis_android_control.py:381-385`) and "never the Jarvis app" guard
   (`:236-286`) already apply whatever the address.
 
+## 13. Transparency: what is visible while it runs, and what is kept after
+
+The owner asked for this in his own words (2026-10-11): *"i want this really
+well refined, including making sure there is a excellent local ai model driving
+my android phone, transparency, and the ability to easily cancel it."* This
+section is the transparency half; §14 is the cancel half, §15 the model.
+
+### While it runs
+
+- **On the phone: a marker that does not go away while the plan is running.**
+  The project already has exactly this shape for watching a screen - *"an eye on
+  the tray icon, and a small always-on-top badge: 'Jarvis is watching · 24 min
+  left · Stop'"* (`docs/SCREEN-DESIGN.md:106-110`) - and the phone equivalent is
+  the same badge over the phone's own screen: **"Jarvis is tapping · step 3 of
+  4 · Stop"**. It is drawn over whatever app is in front, so the app being
+  driven cannot cover it. It reads `3 of 4`, so the owner can see how far along
+  the plan is, and it disappears the moment the plan ends.
+- **On the PC: the same state, from the same source.** `run()`'s `announce`
+  hook is already wired to `jarvis_events.set_activity("working", text)`
+  (`backend/jarvis_android_control.py:323-325`), and the line carries **the step
+  number and a word from a fixed list - never the text typed and never the
+  serial** (`:390-397`, which cites `ARCHITECTURE.md` section 6: an event
+  carries "never content"). So the Brain window, the tray and the face show
+  that Jarvis is controlling the phone, without the event stream becoming a
+  second copy of anything private.
+- **Unverified:** that an always-on-top badge is not hidden by Android over a
+  permission dialog, a secure (`FLAG_SECURE`) screen or the lock screen. The
+  badge is therefore the primary marker, not the only one - see §14.
+
+### After it runs: the log, in plain words, kept locally
+
+**It already exists and this design reuses it.** A plan runs as a job in the
+job list (`backend/jarvis_tasks.py:1373` `from_plan`, `:1336` `plan_steps`),
+and that machinery keeps, in local SQLite beside the backend:
+
+- **one `run_events` row per action** - task, date, kind, title, detail
+  (`backend/jarvis_tasks.py:324-327`, written at `:473`) - which is the
+  plain-words list of what was done, in order; and
+- **one `actions` row per card**, carrying **the words that were shown**
+  (`shown`) and the hash of them (`shown_hash`), so the record says what the
+  owner was asked and how he answered (`:126`, `:328-331`, `:636-689`).
+
+**Where it lives and how it is read:** the rows are read by
+`Store.events(task_id, limit)` (`backend/jarvis_tasks.py:478`) through the job
+list's own routes - `GET /api/tasks`, `/api/tasks/act`, `/api/tasks/input`
+(the route strings are pinned by `backend/test_tasks.py:664-676`) - so the
+owner reads it in the job list both apps already have, on the PC and on the
+phone. Nothing is sent anywhere: it is the same local store the rest of the
+job list uses.
+
+### What transparency cannot promise, said plainly
+
+- **The screen is the private thing, not the log.** A verification look reads
+  the phone's screen (an accessibility-tree dump, §2-§3), and the owner's
+  question is whether that ends up stored. **Recommended, and stated as a
+  rule: no screen contents are kept.** The verification stores only the
+  answer - which element was expected, whether it was still there, and the
+  app's package name - never the node texts it read. The only picture that
+  survives is the one the owner explicitly asked for as a `screenshot` step
+  (`backend/jarvis_android_control.py:152-157`), which is already read-only and
+  already his.
+- **So the log reveals what Jarvis did and why, not what was on the screen.**
+  The `why` lines come from the owner's own words (§1). A person reading the
+  log afterwards can see "step 2, tap, the Send button" - and cannot see what
+  the message said.
+- **Transparency is not detection.** The log is how the owner notices that a
+  step went wrong; it is not how Jarvis notices. Jarvis notices only what §2's
+  guard can compare.
+
+### The failure mode transparency is the mitigation for
+
+**The owner noticing, mid-plan, that the next step is about to do the wrong
+thing.** The card was right when he approved it and the screen still matches,
+so §2's guard sees nothing wrong - the plan is doing what it said, and what it
+said was mistaken (the wrong button, the wrong row). Nothing in the machinery
+can catch that: only a person watching can. That is precisely why (a) the
+badge shows **which step of how many**, (b) the card lists the literal command
+for every step (§10) rather than a summary, and (c) the cancel action in §14 is
+one tap away at all times and does not ask a question.
+
+## 14. Easy cancel, designed for the worst moment
+
+The owner asked for *"the ability to easily cancel it"*. The worst moment is
+not the tidy one: he is looking at the phone, the app in front is full-screen
+or has its own overlay, and Jarvis is one step away from doing the wrong thing.
+
+### The candidates, compared honestly
+
+| Candidate | One action | Without looking | Without unlocking | Over a full-screen app | Already built |
+|---|---|---|---|---|---|
+| **PC "Stop everything" key** | yes | **yes** | n/a (it is the PC) | n/a | **yes** |
+| **Badge on the phone with Stop** | yes | close (fixed place) | no (needs the phone awake) | **yes** | no (new) |
+| Ongoing notification with a Stop action | yes | no (open the shade) | yes (lock-screen actions) | n/a (it is in the shade) | no (new) |
+| Headset / media button, long press | yes | **yes** | yes | n/a | for Live only |
+
+### The pick
+
+**The PC's Stop everything key is the guaranteed cancel, and the phone's badge
+Stop is the phone's own.** Reasons, in order:
+
+1. **It is already built, and it already knows this kind of task.** Stop
+   everything stops *"a running multi-step task (computer, browser or phone
+   control) ... before its next step"* (`docs/JARVIS-API.md:6341-6343`), and
+   it is *"never held on a stale event stream or by a waiting card"* and works
+   *"while App lock is on"* (`docs/JARVIS-API.md:6337`). The owner is at the PC
+   when a plan starts - the PC decides everything here (§6) - and it needs no
+   new permission on the phone.
+2. **The badge is the same Stop where his eyes already are** while he watches
+   the phone. It is the marker from §13 and the cancel in one control, which is
+   the PC's own Watch pattern reused (`docs/SCREEN-DESIGN.md:106-110`), and it
+   is drawn over the driven app so a full-screen app cannot cover it.
+3. **The other two are fallbacks, not the pick:** the ongoing notification's
+   Stop works from the lock screen but needs the shade open (so: not without
+   looking), and the headset/media-button long press is genuinely hands-free but
+   only exists today for Live (its reachability with no headset connected is
+   **unverified**).
+
+**Both the badge and the PC key end at the same place** - the task Stop route
+`jarvis_task_control.request(task_id, "stop")` → `checkpoint()`
+(`backend/jarvis_task_control.py:78-88`, `:91-124`) - so there is one stop
+mechanism and three ways to reach it, not three mechanisms.
+
+**Two honest costs to state before building it.** The badge needs Android's
+**"draw over other apps"** permission, which is a real Settings grant the owner
+gives once - the honest alternative is the notification, which needs no such
+permission and cannot be covered by an app, only missed. And a plan that runs
+while the phone is **locked** does not need either: the lock screen is a
+different app in front, so §2's existing guard stops the plan by itself.
+
+### What "stopped" means mid-step
+
+- **A tap already dispatched cannot be recalled.** `adb shell input tap` is
+  fire-and-forget: once it is on the wire, it lands. This design says so on the
+  badge, in the result and in the log, and never implies otherwise (§9).
+- **The step in flight is not abandoned - it finishes, and the loop stops
+  before the next one.** The checkpoint is read **first, at the top of each
+  step** (`backend/jarvis_android_control.py:355-380`), and it **consumes** the
+  signal (`backend/jarvis_task_control.py:91-124`), so the stop lands exactly
+  between two steps. The runner abandons the remaining steps, not the current
+  one.
+- **How it confirms it stopped:** `run()` returns `ok: False`,
+  `reason: "stopped by request"`, and the `done` / `not_run` lists, so "what did
+  it actually do to my phone" has an answer
+  (`backend/jarvis_android_control.py:340-353`, `:373-380`); the badge and the
+  notification clear; the PC's live line stops; and the run-event row says the
+  same thing in plain words (§13). A Stop that arrives after the last step is
+  still reported - `late_signal` (`:414-428`) - rather than silently ignored.
+
+### Cancelling is not the same as turning the feature off
+
+- **Turning the feature's own switch off is immediate, with no card** - the
+  project's rule for every switch (`CLAUDE.md`, 2026-09-24 onwards), and the
+  plan card's own gate stays at tier "ask" (`run_plan`,
+  `backend/rebuilt/jarvis-framework.toml:250`).
+- **Cancelling a running plan is the Stop action above.** A plan is one shot
+  with a fixed end, so there is nothing left running to cancel once it ends;
+  the design deliberately has no "session" that could be left on.
+
+## 15. The model that drives it (the part that decides whether this works)
+
+### Local is a constraint, not a preference
+
+Rule 1 is that anything touching email, files, credentials or stored memory
+stays on the local model. **A phone screen is as private as anything this
+project handles.** So whatever turns the owner's words into `adb` commands
+runs on this PC, on loopback, and nothing about the phone's screen goes
+anywhere else. The project already expresses this for the phone's own screen
+feature: a raw phone screenshot is kept away from any lane that is not the
+owner's own - the chat router still refuses to send one to the "vision" lane,
+"because a raw picture must never reach any model before `clean_picture` has
+run" (`docs/SCREEN-DESIGN.md:29-32`).
+
+### Grounding is the hard part, and it must not be assumed
+
+Turning *"tap Send"* into a coordinate is **grounding**, and it is a different
+skill from chatting. The current everyday lane model is an 8B model chosen for
+chat; nothing in this repository measures whether it can ground a screen
+element, and **this design does not assume it can.** What must be measured
+before the feature can be trusted:
+
+| What | How it is measured | "Good enough", recommended |
+|---|---|---|
+| Right element, first try | a fixed suite of screens captured from the owner's own phone, each with the target named | **>= 90%** of steps - the same bar the plan card already has to clear (`backend/jarvis_plan.py:94`) |
+| Dangerous taps | the same suite, with password fields, permission dialogs, the "Never look at" apps and the Jarvis app deliberately present | **0** - zero tolerance, the shape the injection suite already uses (`backend/jarvis_plan.py:488-491`) |
+| Honest refusal | screens where the named target is **absent** | **0** invented targets: it says it cannot find it, and the plan stops |
+| Cost | seconds per grounded step, dump included | reported, not guessed - the dump alone is **2.33 s** (three runs: 2.33 / 2.29 / 2.37 s, `docs/ANDROID-TOUR-2026-10-09.md:251-255`) |
+
+The machinery to run that suite the project's own way already exists:
+`tools/tool_eval/ollama_tool_eval.py` writes the results file that
+`jarvis_plan.enabled()` reads, and the plan card stays **off** until a real run
+on this model clears its bar (`backend/jarvis_plan.py:87-95`, `:453-492`;
+`backend/rebuilt/jarvis-framework.toml:246,250`). A grounding suite belongs in
+that same place, with the same "off until measured" rule. **No number in the
+table above has been measured yet.**
+
+### What it contends with, and whether it is the chat model or a second one
+
+Both cards are occupied and this is already written down for a different
+feature: *"The everyday chat runs on the 12 GB RTX 2060 and fills most of it"*
+and *"Two things cannot sit on one card, so something has to give - and there
+are exactly three sensible ways to give"*
+(`docs/PICTURE-CARDS-DESIGN.md:8-12`). The same three ways apply here:
+
+| | What it does | What it costs |
+|---|---|---|
+| **A** | the existing lane model grounds as well as it chats | free in memory; unmeasured, and it is a chat model first |
+| **B** | a **second, specialist grounding model** on the 12 GB card, with the chat unloaded before a plan and warmed back after | a few seconds of chat reload per plan; the long conversation is kept |
+| **C** | a small grounding model on the 8 GB card, chat untouched | the weakest grounder, but the everyday chat never moves |
+
+**Recommended: B, behind its own switch, off until *this feature* is
+measured** - the project's own rule (`CLAUDE.md`: a feature that uses the
+second card keeps its own switch, off until that feature is measured), and the
+same shape picture-card already ships (three ways, each its own switch,
+`docs/PICTURE-CARDS-DESIGN.md:16-26`). Two hard constraints carried over from
+that work, because they have already produced wrong measurements here: a
+model is pinned by the card's **UUID, never a number**, because
+`CUDA_VISIBLE_DEVICES` alone falls back to Vulkan and lands on the other card
+(`docs/PICTURE-CARDS-DESIGN.md:42-54`); and **one GPU-heavy thing at a time** -
+the measurement refuses to run while a model it did not expect is resident
+(`:70-71`).
+
+### > PLACEHOLDER: the model-research task's findings go here
+
+> **Nothing about which model drives this is decided in this document.** A
+> separate research task is surveying open-source phone-agent projects and
+> GUI-grounding models, and its findings belong in this section rather than in
+> a guess. What this design needs from it, in the order it needs it:
+>
+> 1. **Candidate local models** that can ground a screen element - name,
+>    licence, download size, VRAM at a workable context, and whether they run
+>    on Turing (compute 7.5) at all.
+> 2. **Accessibility tree or pixels?** Whether each candidate grounds better
+>    from a `uiautomator`-style node tree (which §2 already reads, at 2.33 s a
+>    look) or from a screenshot (which would put a private picture in front of
+>    a model, and needs `clean_picture`'s discipline first).
+> 3. **Any measured grounding accuracy** from those projects, so the >= 90%
+>    bar above is set against evidence rather than optimism.
+> 4. **A verdict on the everyday lane model**: can it ground at all, and if so
+>    how much worse than a specialist (which is the whole difference between
+>    options A and B above).
+>
+> Until this section is filled in with measured numbers, the feature's own
+> gate stays closed (§ "What has to be true before any of it is built").
+
+### A wrong tap is a real tap, so the plan is what limits the blast radius
+
+There is no undo (§9). What keeps a grounding mistake from being expensive is
+the shape of the plan rather than the quality of the model:
+
+- **The model never chooses free-form taps from the screen in v1** - the steps
+  come from the owner's own words (§1), so a wrong tap is a wrong translation
+  of a *decision he made*, not a decision the model made for him;
+- **every literal command is on the card** before anything runs (§10), so a bad
+  translation is visible at the moment he can still say no;
+- **the cap is 8** (`backend/jarvis_plan.py:84`, and the same 8 again for the
+  job list at `backend/jarvis_tasks.py:100`), so there is a small, countable
+  number of chances to be wrong;
+- **per-step verification** stops the plan the moment the screen is not what it
+  was (§2), which is what catches a mis-aimed first tap before the second one
+  repeats it;
+- **the irreversible things are not in the batch** - a send, a lock, a door, an
+  alarm, a permission or a secret keeps its own card (§3-§5), so the blast
+  radius of a bad step is a wrong tap on an ordinary screen, not a message sent;
+- **the run is recorded** (§13), so what actually happened is answerable
+  afterwards;
+- **no standing grant**: one plan, one card, one end (§What this is NOT).
+
+## 16. Deleting: its own switch, off by default
+
+The owner asked for this directly (2026-10-11): *"have the delete function be a
+toggle in settings for this that is disabled by default."*
+
+### Two independent switches, both off
+
+1. **The phone agent itself.** Off by default, and the plan card cannot run
+   until `tools/tool_eval` clears its bar
+   (`backend/jarvis_plan.py:453-492`); the tier stays "ask"
+   (`backend/rebuilt/jarvis-framework.toml:250`). `run_plan` is already in
+   `HARD_LIMITS` - *"Never loosened from an app, whatever else changes"*
+   (`backend/jarvis_asks_first.py:400-419`) - so this one is a gate, not a
+   loosening.
+2. **"Let Jarvis delete things".** New, its own row in the "What asks first"
+   page (`backend/jarvis_asks_first.py:210-211`), **off by default**, and it
+   does nothing unless switch 1 is also on. Copying the switch that already
+   has exactly this shape - "Lights, plugs and fans without a card": *"Asks
+   first unless you turn on the switch below (off by default)"* (`:1642`),
+   `set_lights()` (`:1712`), `lights_on()` (`:1730`).
+   - **On is a loosening**: one card, action `loosen_what_asks_first`
+     (`:353`), decided through `_decide()` (`:1123-1153`), which requires the
+     loosening action itself to be tier "ask" (`:1134`) - and on the PC that
+     comes with Windows Hello (`jarvis_owner_check.PC_ONLY_ACTIONS`, named at
+     `:89`, `:351-353`); on the phone, the screen lock.
+   - **Off is immediate, no card.** The project's rule for every switch.
+   - It is **not folded into switch 1**, which is the whole point: a session
+     runs without it.
+
+The toggle is a permission for **one named class of step**, never for a
+session. That distinction is the design: switching it on does not make a
+session "allowed to delete" - it lets a **recognised** deletion-shaped step be
+part of a plan at all.
+
+### What counts as "delete": a positive list
+
+The organising question is not "does the word appear" but **could the owner get
+it back, and from where**. The verdicts, each with its reason:
+
+| On-screen shape | What it usually does | Get it back? | Verdict |
+|---|---|---|---|
+| **Delete** (a file, photo, note, message) | usually moves to Trash / Recently Deleted | usually yes | **covered by the toggle** |
+| **Remove** | takes it out of a collection; the thing itself usually stays | yes | covered |
+| **Remove from album** | untags it from one album | yes | covered |
+| **Trash / Move to Trash / Move to Bin** | the recoverable step itself | yes | covered |
+| **Archive** | hides it from the main view; the item stays | yes | covered - it changes where he will look for it, so it is worth the switch, but nothing is lost |
+| **Clear cache** | regenerable data, rebuilt on demand | yes | covered |
+| **Clear history** | gone from the owner's view | mostly no | **own card** |
+| **Clear data** | the app's own local state | no | **own card** |
+| **Empty trash / bin / recycle bin** | burns the copies | no | **own card** |
+| **Uninstall** | the app and its local data | app yes, its data no | **own card** |
+| **Delete for everyone** | destroys the copy on the other side | no, and it reaches another person | **own card, and only as the last step** (§4: it is a send) |
+| **Erase** (erase all content, erase device) | everything | no | **own card; the device-wiping ones refused outright** |
+| **Forget this device** | unpairs a device record | only by re-pairing; can lock him out | **own card** (§5 already keeps security settings out of a plan) |
+| **Deleting or closing the ACCOUNT** | ends the account itself | no, often needs support | **refused outright, never covered by the toggle** |
+
+**Where I argue with the Lead's recommendation: I agree with all three limbs**
+(recoverable ones under the toggle; a permanent delete keeps its own card even
+when the toggle is on; an account deletion refused outright and never covered).
+Two refinements I would add, with reasons:
+
+1. **"Delete for everyone" is not merely permanent - it reaches another
+   person.** So it is a send as well as a destruction: own card *and*
+   last-step-only, which §4 already requires of anything that leaves the phone.
+2. **An unclassifiable delete is treated as permanent.** If the runner cannot
+   positively place a step in the recoverable list above, the step does **not**
+   get the toggle's cover - it keeps its own card. This is what makes the
+   honest answer in the next part safe: the failure direction of a missed
+   recognition is an extra card, not a silent permanent delete.
+
+### The card's own words when the toggle is turned on
+
+Not "allow deletions". The card says **this sentence**:
+
+> **With this on, an action that cannot be undone may happen inside a session
+> without you seeing it first.**
+
+### Is it enforceable? Three layers, and where each one fails
+
+The owner's question, answered honestly: **without an accessibility service,
+three layers of evidence exist, and none of them is complete.**
+
+1. **The step's own declared purpose.** The step's `why`, plus a `deletes`
+   flag the plan builder must set. `backend/jarvis_android_control.py:36-40`
+   already requires a step whose purpose is to leave the phone to say so in its
+   own `why`, and `:120` already marks a step heavy from booleans the caller
+   supplies - this is the same shape, not a new mechanism.
+   **Where it fails:** it is the model's self-report. A model that does not
+   recognise a trash-can icon simply does not set the flag. (What limits the
+   damage: a plan shaped by outside text is already refused outright, §1, and
+   the card shows the `why` the owner's own words produced.)
+2. **The screen's own words around the tapped element** - the node's text, its
+   `content-desc`, and the text of what is near it or on the dialog
+   (`uiautomator dump`, §2).
+   **Where it fails:** the word is in another language; the icon has no word at
+   all (a bare trash can, `content-desc=""`); the word appears where nothing is
+   destroyed ("Remove from favourites", a help article); **a swipe-to-delete
+   gesture has no node to read at all**; and **a long-press menu shows "Delete"
+   only after the long press**, so the word is not on the screen when the plan
+   is checked.
+3. **The app's own confirmation dialog**, read by a dump after the step.
+   **Where it fails:** many apps never ask; some ask without the word
+   ("Are you sure?"); and the ordering problem is the real one - **the tap has
+   already happened**. A confirmation dialog is the app offering a way out, and
+   Jarvis must never take it, because that would be the machine answering the
+   app's own approval. So when an unexpected dialog appears the plan **stops**
+   and hands it to the owner.
+
+**So, said exactly: the toggle is a strong guard, not an airtight one.** It
+reliably refuses the deletion-shaped steps it can *recognise* - a declared
+purpose, a recognised word next to the tap or on the dialog. It cannot promise
+that every deletion-shaped action is recognised. **Residual risk, plainly:**
+with the toggle **on**, an unrecognised permanent delete could run inside an
+approved plan without its own card. With the toggle **off**, the same
+recognition miss produces the opposite outcome - a harmless step is refused -
+which costs a card, never data. That asymmetry is why off is the default.
+
+### When the toggle is off and a delete step appears
+
+**Refused, named, in plain words - never silently skipped, and never retried
+another way** (not as a swipe, not on a different button, not by long-pressing
+where the word did not appear).
+
+- **At plan time**, the step never becomes a command. It appears on the card in
+  the existing refused-list shape (`backend/jarvis_android_control.py:161-177`,
+  printed at `:209-214`), with the plain reason - so the owner can turn the
+  toggle on, or do that step by hand, and either way he is told rather than
+  left to notice.
+- **At run time** - a delete the plan did not carry, seen by layer 2 or 3 - the
+  design **stops the plan** rather than carrying on. The rest of the plan was
+  written as a sequence whose later steps may exist to finish that very
+  deletion, so continuing would act on a screen that has already diverged from
+  what was approved; that is §2's rule, applied again. Steps already done stay
+  done, and the result names the refused step.
+
+### Where this sits among the design's other limits
+
+- The toggle is a guard, not a guarantee (§ above), and its own failure
+  direction is chosen to cost a card rather than data.
+- **No undo** (§9) applies to every deletion the toggle ever covers - a
+  "recoverable" delete is recoverable *in the app that did it*, on its terms and
+  for as long as it keeps the copy. This design cannot restore anything.
+- An unrecognised delete is treated as permanent (§ above).
+- The full picture of what the owner can and cannot see afterwards is §13.
+
 ## What this is NOT
 
 - **Not a live session, and not scrcpy.** No mirror, no stream, no session
@@ -435,6 +852,13 @@ Measured on the owner's own phone, 2026-10-11, and the decision it settles.
   stops it. The phone is what is acted on. (Unchanged from today.)
 - **Not an accessibility service.** Rejected for the same reason the project
   rejected it for the phone's screen feature (`docs/SCREEN-DESIGN.md:170-172`).
+- **Not a delete permission folded into the agent's switch.** "Let Jarvis
+  delete things" is its own setting, off by default, and a session runs without
+  it (§16). With it on it covers only deletions the owner can undo in the app
+  that did them; a permanent delete keeps its own card; deleting an account is
+  refused outright.
+- **Not a cloud model.** Whatever drives this is local, on loopback (§15, rule
+  1), and the phone's screen is read on this PC and goes nowhere.
 - **Not a weaker live-session ban.** `plan()` still runs nothing
   (`backend/jarvis_android_control.py:161-163`), `run()` still executes only
   the enumerated commands with `approved` having no default
@@ -457,6 +881,15 @@ Measured on the owner's own phone, 2026-10-11, and the decision it settles.
 3. **The three unverified facts in §3 and §11** are measured on the owner's
    phone first.
 4. **The first test (§11) is run by the owner, on his phone, watching.**
+5. **The driving model is measured, not assumed** (§15): a grounding suite in
+   `tools/tool_eval`, clearing the >= 90% bar with **zero** taps on a password
+   field, a permission dialog, a "Never look at" app or the Jarvis app, on the
+   model that will actually drive this. Until then, nothing here runs. The
+   model-research task's findings (§15's placeholder) are what names it.
+6. **The delete toggle's limits are accepted as written** (§16): it is a strong
+   guard, not an airtight one; off is the default; and the card that turns it
+   on carries the sentence that says an action that cannot be undone may happen
+   inside a session without the owner seeing it first.
 
 ## Open questions only the owner can answer
 
@@ -470,3 +903,9 @@ Measured on the owner's own phone, 2026-10-11, and the decision it settles.
    plan (recommended, §2), or pause and ask?
 5. **Saved recipes**: wanted at all, and if so, is a card on every replay
    enough for him?
+6. **The delete verdicts** (§16): Archive and Clear cache sit under the toggle;
+   Clear history, Clear data, Uninstall and Empty trash keep their own card.
+   Does he agree, or does he want one of those moved?
+7. **The driving model's card** (§15): may a second, specialist grounding model
+   take the 12 GB card with the chat stepping aside (option B, recommended), or
+   must it share whatever is already resident?
