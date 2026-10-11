@@ -5230,9 +5230,28 @@ if (dom.hideBar) {
 // and the quickbar already holds `allow-open-fix-place`. It builds the window
 // if it is not open, shows and focuses it if it is, and goes through the app
 // lock either way, so a locked PC asks Windows Hello first.
+//
+// How long the gear's own request is given before the bar says so. Nothing in
+// that path has a bound of its own: `open_fix_place` is `async` because a plain
+// command building a window on Windows deadlocks (plain_errors.rs), and it may
+// sit in a Windows Hello prompt first (lock.rs). The local `invoke` swallows a
+// rejection and returns null, and this call used to ignore even that - so a
+// request that never came back gave the owner no window, no words and nothing
+// to tell them apart from a frozen app. This is the one wait on this button,
+// and its failure is shown with the words every other failure in this window
+// already uses. Long enough not to be a false alarm while Windows Hello is up.
+const OPEN_SETTINGS_BUDGET_MS = 45_000;
+
 if (dom.openSettings) {
   dom.openSettings.addEventListener("click", () => {
-    invoke("open_fix_place", { place: "settings" });
+    const bell = setTimeout(() => {
+      showProblem(fromChatFailure(
+        "The Settings window has not opened. Press the gear again, or restart Jarvis Desktop."
+      ));
+    }, OPEN_SETTINGS_BUDGET_MS);
+    invokeStrict("open_fix_place", { place: "settings" })
+      .catch((error) => showProblem(fromChatFailure(error)))
+      .finally(() => clearTimeout(bell));
   });
 }
 
