@@ -118,6 +118,85 @@ REPO = _HERE.parent
 #: them, so nothing there needs the variable.
 BACKEND = Path(os.environ.get("JARVIS_BACKEND") or _HERE).resolve()
 
+
+# --------------------------------------------------------------------------
+#   ONE STAGING ROOT FOR A DIRECT RUN (2026-10-11)
+# --------------------------------------------------------------------------
+#
+# THE HALF OF THE LEAK #261 LEFT. That work closed the SWEEP path: a run of
+# `backend/run_suites.py` stages one `jarvis-sweep-<rand>` root, points
+# TMPDIR/TEMP/TMP into it, and removes it in a `finally`. But suites are run
+# DIRECTLY too - `python backend/<suite>.py`, which is how every teammate works
+# and what the briefs instruct - and then nothing owns their scratch. Nearly
+# every suite in this folder makes its own `jarvis-<suite>-<rand>` at import
+# time with `tempfile.mkdtemp` and never removes it: one folder per suite per
+# run. Measured 2026-10-11: 1,663 `jarvis-*` folders under %TEMP% and growing
+# (581 at 02:20 the same night), against 20,633 reaching 123.6 GB the night
+# this started.
+#
+# WHAT THIS DOES, and it is deliberately the SAME machinery, not a second one:
+# a direct run claims ONE `jarvis-direct-<rand>` root with run_suites.claim()
+# (so it carries `_owner.json` and an exclusive lock, and a killed run's root
+# is recognisable and reapable by run_suites.reap_orphans), points
+# TMPDIR/TEMP/TMP - and `tempfile.tempdir`, which is cached on first use - into
+# `<root>/tmp`, and removes the whole root from an `atexit` handler that closes
+# the lock FIRST (on Windows a file this process still holds open cannot be
+# deleted, which is how a folder gets left behind whole).
+#
+# WHY IT DOES NOT REAP. Reaping here would delete the folders that are already
+# on the machine - most of the 1,663 carry no marker and are over a day old -
+# and cleaning %TEMP% while agents run is how tonight's damage happened. The
+# reaper stays where #261 put it, on the sweep path, and a killed direct run's
+# marked root is collected there.
+#
+# INSIDE A SWEEP IT DOES NOTHING: the sweep owns the root already, and TMPDIR
+# is `<sweep>/tmp`.
+def _stage_a_direct_run() -> None:
+    """Never raises: a suite must still run if this cannot. A failure here
+    leaves the old behaviour (folders under %TEMP%), not a broken suite."""
+    try:
+        if str(os.environ.get("JARVIS_NO_DIRECT_STAGE") or "") == "1":
+            return
+        import atexit
+        import tempfile
+
+        here = Path(tempfile.gettempdir())
+        try:
+            import run_suites as _R
+        except Exception:
+            return
+        # Already inside a sweep: `<sweep>/tmp`. Its root owns this already.
+        if here.name == _R.SUITE_TEMP_NAME and _R.REAPABLE.match(here.parent.name or ""):
+            return
+        root = Path(tempfile.mkdtemp(prefix=_R.DIRECT_PREFIX, dir=str(here)))
+        lock = _R.claim(root, "direct")
+        if lock is None:
+            return
+        inner = root / _R.SUITE_TEMP_NAME
+        inner.mkdir(parents=True, exist_ok=True)
+        for _k in ("TMPDIR", "TEMP", "TMP"):
+            os.environ[_k] = str(inner)
+        # tempfile caches the answer on its first use, and a suite's own
+        # mkdtemp may already have run by now in an odd import order.
+        tempfile.tempdir = str(inner)
+
+        def _done() -> None:
+            try:
+                os.close(lock)
+            except Exception:
+                pass
+            try:
+                _R.remove_tree(root, "direct suite run")
+            except Exception:
+                pass
+
+        atexit.register(_done)
+    except Exception:
+        return
+
+
+_stage_a_direct_run()
+
 #: Every suite imports this file. A suite run on the owner's PC (with
 #: JARVIS_BACKEND set, or by apply-patches.ps1) must never write the made-up
 #: conversations it runs into the owner's real chat history: the modules that

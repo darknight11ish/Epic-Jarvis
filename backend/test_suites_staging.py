@@ -326,6 +326,49 @@ def t_stage_still_works_with_no_argument():
           "d = root / BACKEND_NAME" in (HERE / "run_suites.py").read_text(encoding="utf-8"))
 
 
+def t_a_finished_direct_run_leaves_no_folder():
+    """THE OTHER HALF OF THE LEAK, and the reason this file has a second
+    end-to-end check. #261 closed the SWEEP path. Suites are also run DIRECTLY -
+    `python backend/<suite>.py`, which is how every teammate works - and then
+    nothing owned their scratch: nearly every suite makes its own
+    `jarvis-<suite>-<rand>` at import time and never removes it, one folder per
+    suite per run (1,663 under %TEMP% on 2026-10-11, against 581 at 02:20).
+    `_where.py` now claims one `jarvis-direct-<rand>` root per PROCESS with the
+    same marker and lock as a sweep, points TEMP/TMP/TMPDIR into it, and removes
+    it at exit - so one mechanism covers both paths."""
+    scratch, lock = _scratch("jarvis-direct-test-")
+    temp = scratch / "temp"
+    temp.mkdir(parents=True, exist_ok=True)
+    try:
+        check("CONTROL: nothing is under the temp folder before the run",
+              _names(temp) == [], _names(temp))
+        r = _run([HERE / SUITE], _env(temp))
+        after = _names(temp)
+        check("CONTROL: the direct suite really ran",
+              f"ok    {SUITE}" in r.stdout or "passed" in r.stdout,
+              r.stdout[-1500:] + "\n--stderr--\n" + r.stderr[-800:])
+        check("CONTROL: the direct suite passed on its own terms", r.returncode == 0,
+              f"exit {r.returncode}\n" + r.stdout[-1500:])
+        check("a finished DIRECT run leaves NO jarvis-* folder behind", after == [], after)
+
+        # AND THE CHECK ABOVE CAN FAIL, which is what makes it worth having:
+        # with the staging turned off, the very same run leaves the folder where
+        # the leak always left it - in the machine's temp folder.
+        env = _env(temp)
+        env["JARVIS_NO_DIRECT_STAGE"] = "1"
+        r2 = _run([HERE / SUITE], env)
+        leaked = [n for n in _names(temp) if n.startswith("jarvis-")]
+        check("CONTROL: with the staging turned OFF the same run DOES leave a "
+              "jarvis-* folder - so the check above is not vacuous",
+              bool(leaked) and r2.returncode == 0, _names(temp))
+        for name in _names(temp):
+            shutil.rmtree(temp / name, ignore_errors=True)
+    finally:
+        if lock is not None:
+            os.close(lock)
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
 def main() -> int:
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
