@@ -64,7 +64,13 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = (os.environ.get("JARVIS_PARITY_ROOT")
+        or os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# `JARVIS_PARITY_ROOT` is for `backend/test_parity_callgraph.py`, and nothing
+# else: that suite points this checker at a throwaway checkout holding three
+# Kotlin constants so it can prove the UNREACHABLE declaration below fails
+# loudly when the route it guards is wired up. CI runs this tool with the
+# variable unset, against the checkout it lives in.
 DESKTOP_DIRS = [
     ("jarvis-desktop/src-tauri/src", (".rs",)),
     ("jarvis-desktop/src", (".js", ".mjs", ".html")),
@@ -80,6 +86,8 @@ _LIT = r"[A-Za-z0-9_-]+"
 _PH = r"(?:\$\{[^}\n]*\}|\{[^}/\"\n]*\}|\$[A-Za-z_][A-Za-z0-9_]*)"
 ROUTE = re.compile(rf"/api/{_LIT}(?:/(?:{_LIT}|{_PH}))*/?")
 _IS_PH = re.compile(rf"^{_PH}$")
+# `fun offerWorkSetup(` - the declaration half of the call check below.
+_FUN = re.compile(r"\bfun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(")
 
 # Allow-lists: files whose routes are a list of what a window MAY read, not
 # calls. {file: (the constant holding the list, the command that reads it)}.
@@ -116,7 +124,7 @@ CLASSIFICATION = {
     # three are `planned` and the desktop is what is missing - not the phone.
     "/api/work": ("planned", "The five work setups: combinations of local models for a kind of work - building an Android app, admin and paperwork, long conversations and big documents, everyday quick answers, and a coding specialist - each with what it is for, which model goes on which card, what it costs and what it is honestly worse at, in the PC's own words. Not a model catalogue: five combinations of models already on this PC, no list of what could be installed and no search. Phone: Brain, Hardware, Work setups (net/WorkSetups.kt, HardwarePlate.kt WorkSetupsSection). Desktop: still to build - Settings, Hardware and models needs its own section; the golden file (jarvis-client/app/src/test/resources/contract/work-setups-cases.json, tools/gen_work_cases.py) is the shape it builds against."),
     "/api/work/choose": ("planned", "Remember a work setup, or forget it. It changes NO model and no setting: choosing records a preference in work-setup-choice.json and returns the ONE step that would switch the model. Phone: JarvisRuntime.chooseWorkSetup, held on a stale link; forgetting is not held. Desktop: still to build."),
-    "/api/work/recommend": ("planned", "What setup to OFFER for the owner's own words, and the sentence to say. It SWITCHES NOTHING: the answer carries switched: false, and acting on it is the owner's tap - the switch itself is the existing /api/models/switch card. Phone: JarvisRuntime.offerWorkSetup (shown as a labelled suggestion in HardwarePlate.kt). Desktop: still to build. The offer is deliberately NOT wired into the chat turn yet: that seam is jarvis_hud.py's chat route, which this feature's patch does not touch."),
+    "/api/work/recommend": ("planned", "What setup to OFFER for the owner's own words, and the sentence to say. It SWITCHES NOTHING: the answer carries switched: false, and acting on it is the owner's tap - the switch itself is the existing /api/models/switch card. Phone: the screen and the parse are built (net/WorkSetups.kt, HardwarePlate.kt WorkSetupsSection), but the request is NOT wired: `JarvisRuntime.offerWorkSetup` is the only thing that posts this route and nothing calls it, so the offer panel can never be populated (tools/check_parity.py's UNREACHABLE, 2026-10-11). Desktop: still to build. The offer is deliberately NOT wired into the chat turn yet: that seam is jarvis_hud.py's chat route, which this feature's patch does not touch."),
     "/api/schedule": ("ported", "Coming up: timers, alarms, reminders, repeating jobs with their next time, and the to-do list (backend/schedule.patch, the owner's decisions of 2026-09-25; JARVIS-API section 21). Desktop: the Brain's Work tab (brain/schedule.rs brain_schedule, Brain only; the words taken out in Rust while the private lists are hidden) and the toast when a job goes off (stream.rs -> toast_fired, `?id=`). Phone: Brain, Coming up (ComingUpPlate.kt, net/Schedule.kt) and the notification when a job goes off (JarvisRuntime.onScheduleEvent -> ScheduleNotifier, `?id=`)."),
     "/api/schedule/act": ("ported", "ONE job: pause, resume, delete, done, and (2026-09-25) Snooze 10 minutes on something that just went off - the same buttons in both apps (adding time to a timer is said or typed to Jarvis); the phone's notification and the Windows toast carry Snooze too. No card. The one list form, also since 2026-09-25: clearing ONE named list after \"are you sure?\", with the count the app showed (brain_schedule_clear_list, JarvisRuntime.clearList). Both apps hold every one on a stale link (brain_schedule_act, JarvisRuntime.scheduleAct)."),
     "/api/briefing": ("ported", "The morning briefing (backend/briefing.patch, the owner's decisions of 2026-09-25; JARVIS-API section 22): the latest one, the briefing jobs and what a briefing includes. Desktop: Brain -> Work (brain/briefing.rs brain_briefing; the lines taken out in Rust while the private lists are hidden) and Settings -> Morning briefing (get_briefing_setup, the briefing itself taken out). Phone: Brain -> Morning briefing (BriefingPlate.kt, net/Briefing.kt). Setting one up and stopping one use /api/schedule/add and /act with kind \"briefing\" in both apps (set_briefing / stop_briefing, JarvisRuntime.setBriefing / stopBriefing), held on a stale link."),
@@ -693,9 +701,123 @@ PHONE_BUILT_ROUTES = {
                                     '"${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}/cancel"'),
 }
 
+# A `/api/...` literal proves a route is BUILT, not that the phone ever asks for
+# it - and this checker used to count the literal and stop there. That is how it
+# told this project two apps matched when only one had the code: the phone's
+# `/api/work/recommend` is built inside `JarvisRuntime.offerWorkSetup`, nothing
+# calls that function, and the offer panel it feeds (`HardwarePlate.kt`, "Jarvis
+# suggests a setup") can never be populated (2026-10-11).
+#
+# So a route whose ONLY call site is a function nothing calls must be declared
+# here, with the reason. Each entry is checked both ways: while the function has
+# no caller, any entry for it must stay (a route that is wired up must not be
+# left declared unreachable); once the function IS called, its entry must GO -
+# the checker fails and says which one, so the wiring cannot land while the
+# "nothing is wired" note, or this declaration, lives on. The route stays in the
+# phone's calls either way, so `CLASSIFICATION` and the two count lines above
+# cannot quietly change. key -> (the text that proves the function still builds
+# the route, the file that holds the function, the function, why nothing calls
+# it).
+UNREACHABLE = {
+    "/api/work/recommend": (
+        "WorkSetups.RECOMMEND_PATH",
+        "jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+        "offerWorkSetup",
+        "this route is built by JarvisRuntime.offerWorkSetup and NO Kotlin file "
+        "under jarvis-client/app/src/main calls it, so the offer HardwarePlate.kt "
+        "draws from JarvisRuntime.workOffer is never populated. Nothing offers a "
+        "setup inside a chat turn yet"),
+}
 
-def phone_built_routes():
+
+def _call_sites(text, func):
+    """(line number, line) for every place `func(` is CALLED, never the place it
+    is declared (`fun func(`, `suspend fun func(`, `private fun func(`)."""
+    hits = []
+    for line_no, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if re.match(rf"^(?:\w+\s+)*fun\s+{re.escape(func)}\s*\(", stripped):
+            continue
+        if re.search(rf"(?<![\w])(?<!fun\s){re.escape(func)}\s*\(", line):
+            hits.append((line_no, stripped))
+    return hits
+
+
+def _holder_of(text, line_no):
+    """The function a call on `line_no` is written INSIDE, or None when the call
+    is at the top level. Resolved by indentation, because a Kotlin function
+    declaration may itself sit inside a class or an object (and so be indented)."""
+    best = None
+    for i, line in enumerate(text.splitlines(), 1):
+        if i > line_no:
+            break
+        m = re.match(r"(\s*)(?:\w+\s+)*fun\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", line)
+        if m:
+            best = (m.group(2), len(m.group(1)))
+    if best is None:
+        return None
+    name, body_indent = best
+    stripped = text.splitlines()[line_no - 1]
+    call_col = len(stripped) - len(stripped.lstrip())
+    return name if call_col > body_indent else None
+
+
+def _kt_texts():
+    """(relative path, comment-free source) for every Kotlin file the phone
+    scan reads."""
+    for dirpath, _, names in os.walk(os.path.join(ROOT, PHONE_DIRS[0][0])):
+        for n in sorted(names):
+            if os.path.splitext(n)[1] != ".kt":
+                continue
+            path = os.path.join(dirpath, n)
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                yield (os.path.relpath(path, ROOT).replace(os.sep, "/"),
+                       strip_comments(fh.read(), ".kt"))
+
+
+def reachable_calls(problems):
+    """The declared routes whose builder function is CALLED from code that is
+    itself reached. A declared route that is not in the answer, or that is not
+    built where the declaration says, is a failure - named in `problems`.
+
+    A call site is not enough on its own: a function nothing calls may call the
+    builder, and that is the same dead end one level down - the shape this
+    checker exists to catch. So each call site's OWN function is resolved, one
+    level, and the site only counts while that function is called somewhere."""
+    out = set()
+    texts = list(_kt_texts())
+    for route, (needle, rel, func, why) in UNREACHABLE.items():
+        try:
+            with open(os.path.join(ROOT, rel), encoding="utf-8",
+                      errors="replace") as fh:
+                builds_it = needle in fh.read()
+        except OSError:
+            builds_it = False
+        calls = []
+        for rel_kt, text in texts:
+            for line_no, _line in _call_sites(text, func):
+                holder = _holder_of(text, line_no)
+                if holder and holder != func and _call_sites(text, holder):
+                    calls.append(f"{rel_kt}:{line_no} in {holder}()")
+        if not builds_it:
+            problems.append(
+                f"{route} is declared unreachable in tools/check_parity.py, but {rel} "
+                f"no longer builds it ({needle!r} is gone). Delete the UNREACHABLE "
+                "entry, or point it at the file that does.")
+        elif calls:
+            problems.append(
+                f"{route} is declared unreachable in tools/check_parity.py, but "
+                f"{func} is now REACHED ({'; '.join(sorted(calls))}) - so it is wired "
+                f"up. Delete the UNREACHABLE entry, reclassify {route}, and correct "
+                "the docs that say it is not wired yet.")
+        else:
+            out.add(route)
+    return out
+
+
+def phone_built_routes(problems):
     found = {}
+    wireable = reachable_calls(problems)
     for route, (rel, needle) in PHONE_BUILT_ROUTES.items():
         try:
             with open(os.path.join(ROOT, rel), encoding="utf-8", errors="replace") as fh:
@@ -703,6 +825,9 @@ def phone_built_routes():
                     found[route] = {rel}
         except OSError:
             pass
+    for route, (_needle, rel, _func, _why) in UNREACHABLE.items():
+        if route not in wireable:
+            found.setdefault(route, set()).add(rel)
     return found
 
 
@@ -726,10 +851,10 @@ def main():
     desk_at = scan(DESKTOP_DIRS, allow)
     unused_allow = apply_allowlists(desk_at, allow)
     phone_at = scan(PHONE_DIRS)
-    for route, files in phone_built_routes().items():
+    problems, warnings = [], []
+    for route, files in phone_built_routes(problems).items():
         phone_at.setdefault(route, set()).update(files)
     desk, phone = set(desk_at), set(phone_at)
-    problems, warnings = [], []
 
     for r, (s, _) in CLASSIFICATION.items():
         if s not in STATUSES:
@@ -761,7 +886,25 @@ def main():
         warnings.append(f"{r} is 'planned' but the desktop now calls it - reclassify it as "
                         f"'ported' (if the phone calls it too) or 'todo'.")
     for r in sorted(by("planned") & phone - desk):
+        if r in UNREACHABLE:
+            # Counted, but only because its ONE call site is the uncalled helper
+            # declared above - so this is not "the phone calls it", and the
+            # classification is still "built on the backend, in no app".
+            continue
         warnings.append(f"{r} is 'planned' and the phone calls it; the desktop does not yet.")
+    for r in sorted(by("planned") - desk - phone):
+        if r in UNREACHABLE:
+            # The route is in no app: the phone's only reference to it is a
+            # helper nothing calls. Say so, because the warning above used to
+            # stand in for the truth and "planned" hid which half was missing.
+            warnings.append(
+                f"{r} is 'planned' and NEITHER app calls it: the phone builds the "
+                f"route in a helper nothing calls ({UNREACHABLE[r][3]}).")
+        else:
+            problems.append(
+                f"{r} is classified 'planned' but nothing checks it: the desktop does "
+                "not call it, the phone does not call it, and it is not declared in "
+                "UNREACHABLE. Classify it for real, or record why it is unreachable.")
     for r in sorted(set(CLASSIFICATION) - desk - by("planned")):
         problems.append(
             f"{r} is classified here but the desktop no longer calls it. "

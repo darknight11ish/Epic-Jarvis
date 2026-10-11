@@ -821,6 +821,55 @@ def t_the_phone_reads_the_same_words():
                   for i in range(len(W.SETUP_IDS))))
 
 
+def t_the_offer_is_not_wired_into_a_turn_yet():
+    """The branch's ONE honest gap, held by a test rather than by a sentence.
+
+    `JarvisRuntime.offerWorkSetup` is the only thing in either app that would
+    POST `/api/work/recommend`, and no Kotlin file under the phone's `main`
+    calls it - so the offer panel `HardwarePlate.kt` draws from
+    `JarvisRuntime.workOffer` can never be populated. `docs/WORK-SETUPS.md` and
+    `tools/check_parity.py` said otherwise, and `check_parity.py` went on saying
+    it because a route LITERAL is not a call.
+
+    This check is what makes that visible. It fails the day someone really does
+    wire the offer up (which is wanted), so the docs and the checker's
+    `UNREACHABLE` declaration have to be corrected in the same commit - and it
+    fails the day the function disappears, so the note cannot outlive the code.
+    `backend/test_parity_callgraph.py` proves the checker's own half."""
+    runtime = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com"
+               / "jarvis" / "client" / "JarvisRuntime.kt")
+    if not runtime.is_file():
+        check("the phone's runtime is in this checkout", False, str(runtime))
+        return
+    src = runtime.read_text(encoding="utf-8")
+    check("offerWorkSetup is still the phone's offer, in JarvisRuntime",
+          "fun offerWorkSetup(" in src and "WorkSetups.RECOMMEND_PATH" in src)
+    # A CALL is `offerWorkSetup(`, never the declaration the line above holds,
+    # and never a KDoc mention.
+    called_on = re.compile(r"(?<![\w])(?<!fun\s)offerWorkSetup\s*\(")
+    files_calling_it = []
+    for kt in runtime.parent.parent.rglob("*.kt"):
+        if called_on.search(kt.read_text(encoding="utf-8", errors="replace")):
+            files_calling_it.append(kt.name)
+    check("NOTHING calls offerWorkSetup yet, so the offer panel cannot fill",
+          files_calling_it == [],
+          f"a call site in {sorted(files_calling_it)}; if that is a real caller, "
+          "delete UNREACHABLE in tools/check_parity.py, correct "
+          "docs/WORK-SETUPS.md, and replace this check")
+
+    parity = (REPO / "tools" / "check_parity.py")
+    check("tools/check_parity.py is in the repository", parity.is_file())
+    if parity.is_file():
+        text = parity.read_text(encoding="utf-8")
+        check("... and it declares this route unreachable, with the reason",
+              '"/api/work/recommend": (' in text
+              and "UNREACHABLE" in text
+              and "offerWorkSetup" in text)
+    suite = HERE / "test_parity_callgraph.py"
+    check("... and the suite that proves that declaration cannot go stale is here",
+          suite.is_file(), str(suite))
+
+
 def t_the_phone_cannot_switch_a_model_from_an_offer():
     """Read the phone's own runtime. The offer may ask the PC one thing only -
     `/api/work/recommend` - and the switch is reached from the CHOSEN setup's

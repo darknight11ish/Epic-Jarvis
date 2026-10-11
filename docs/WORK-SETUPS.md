@@ -38,11 +38,24 @@ cards run at once for free; and `qwen3.5:9b` is the awkward one (9.17 of the
 
 ## What it does, and what it refuses to do
 
-- **A recommendation is an offer.** `jarvis_work.match()` reads the owner's own
+- **A recommendation is an offer, and the offer is NOT wired into a chat turn
+  yet** (measured 2026-10-11). `jarvis_work.match()` reads the owner's own
   words and returns the setup to *offer* and the sentence to say. It never
   switches, loads, unloads or writes anything, and the answer carries
   `switched: false`. A crisis turn offers nothing; a turn where the owner is
   already talking about models says nothing; one loose word is never enough.
+- **The recommendation half is a follow-up, and the picker does not depend on
+  it.** `JarvisRuntime.offerWorkSetup` is the only thing in either app that
+  would POST `/api/work/recommend`, and **no Kotlin file under
+  `jarvis-client/app/src/main` calls it** - so
+  `HardwarePlate.kt`'s offer panel reads `JarvisRuntime.workOffer`, which is
+  never set, and the panel can never be populated. The chat route in
+  `jarvis_hud.py` does not call `jarvis_work.match()` either. Two checks now
+  hold that, so it cannot be forgotten and cannot be over-claimed:
+  `backend/test_work.py` fails the day the offer is wired up (the docs and
+  `tools/check_parity.py`'s `UNREACHABLE` entry must be corrected in the same
+  change), and `backend/test_parity_callgraph.py` proves the checker itself
+  refuses to keep calling an unreachable route a call.
 - **Choosing only remembers.** `POST /api/work/choose` writes one preference
   (`work-setup-choice.json`) and returns the ONE step that would switch a model.
   It changes no model and no Ollama setting.
@@ -65,12 +78,13 @@ cards run at once for free; and `qwen3.5:9b` is the awkward one (9.17 of the
 | The setups, the offer, the choice (pure) | `backend/jarvis_work.py` (shipped; base copy in `jarvis-backend/`) |
 | The three routes | `backend/work.patch` (after `hardware.patch` and `second-card-suggest.patch`) |
 | Python suite | `backend/test_work.py` |
+| The dead-offer guard, on the checker itself | `backend/test_parity_callgraph.py` |
 | Claim checker (numbers must trace to the reports) | `tools/check_work_claims.py` |
 | Golden file for both apps | `jarvis-client/app/src/test/resources/contract/work-setups-cases.json` |
 | Generator | `tools/gen_work_cases.py` |
 | Phone | `net/WorkSetups.kt`, `HardwarePlate.kt` (`WorkSetupsSection`), `JarvisRuntime` |
 
-## Still to build (the desktop half)
+## Still to build (the desktop half, and the wire into a chat turn)
 
 `jarvis-desktop/` and `src-tauri/` were another conversation's surface while
 this was built, so **nothing there was edited**. The desktop needs:
@@ -81,16 +95,20 @@ this was built, so **nothing there was edited**. The desktop needs:
    on its own line, and one button that only chooses;
 2. the same two reads/one write in Rust (`hardware.rs` or a new `work.rs`):
    `GET /api/work`, `POST /api/work/choose`, and `POST /api/work/recommend`,
-   building against the golden file above;
-3. the offer shown **inside the chat turn** - which needs a seam that does not
-   exist yet: `jarvis_hud.py`'s chat route would have to call
-   `jarvis_work.match()` on the owner's own newest words, exactly as it already
-   calls `jarvis_second_card.maybe_suggest_combined` at the end of a turn, and
-   append the sentence. The route is ready and safe to call; the seam is the
-   core file, and this feature's patch deliberately does not touch it. Until
-   then the offer is available to a client that asks for it, which the phone's
-   screen does.
+   building against the golden file above.
+
+**And the recommendation itself is not wired into a turn yet.** That needs a
+seam that does not exist: `jarvis_hud.py`'s chat route would have to call
+`jarvis_work.match()` on the owner's own newest words, exactly as it already
+calls `jarvis_second_card.maybe_suggest_combined` at the end of a turn, and
+append the sentence. The route is ready and safe to call; the seam is the core
+file, and this feature's patch deliberately does not touch it. **So today the
+offer is reachable by nobody**: the phone's screen draws one only from
+`JarvisRuntime.workOffer`, nothing calls `offerWorkSetup`, and a client that
+asked `/api/work/recommend` would be the first ever to do so.
 
 The three routes are listed as `planned` in `tools/check_parity.py`, which is
-its word for "on the backend, not in that app yet" - so CI names the missing
-half rather than passing over it.
+its word for "on the backend, not in the desktop yet". `/api/work/recommend`
+goes one step further: it is also in that tool's `UNREACHABLE` list, because
+the phone builds it in a function nothing calls - so the checker prints the
+missing half rather than reporting agreement it has not shown.

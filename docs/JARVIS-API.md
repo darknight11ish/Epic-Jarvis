@@ -18694,3 +18694,120 @@ Both routes are reached by tapping on either app's own screen (the PC's
 Settings → "Limits and frequency" and its Brain Attention card; the phone's
 Settings → Limits, and its Brain card for the budget) and by asking in words.
 `tools/check_parity.py` carries both.
+
+## 124. Work setups: five model combinations for a kind of work (added 2026-10-10)
+
+The owner asked (2026-10-10):
+
+> "analyze what different model combinations from the latest and best models
+> available for download would be best for different work for jarvis. like if i
+> was going to code an android app, or work on admin stuff from my own life.
+> and have these as selectable options that explain what they do before i start
+> work. and jarvis can also recommend loading up certain combos if i talk about
+> work i'd like to do"
+
+`backend/jarvis_work.py` (shipped whole; `backend/work.patch` adds the three
+routes to `jarvis_hud.py`) holds **five combinations of local models**, each
+chosen for a kind of work, with the measured cost of each on its own label.
+The design note and every measurement are
+`.dsh-scratch/android-verify/WORK-SETUPS-DESIGN-2026-10-10.md`,
+`MODEL-BENCH-2026-10-10.md` and `MODEL-STRATEGY-2026-10-10.md`, on the owner's
+PC and not in this repository; `tools/check_work_claims.py` fails if a number or
+a quoted phrase in the module cannot be traced back to them.
+
+### 124.1 The three routes
+
+    GET  /api/work                 the five setups for THIS PC's cards: names,
+                                   what each is for, which model goes on which
+                                   card, its measured speed and context, what it
+                                   costs, what it is honestly worse at, which
+                                   models are already downloaded, which is
+                                   running now, and which one the owner chose
+
+    POST /api/work/choose          {"setup": "everyday"|"coding"|"admin"|
+                                    "long"|"specialist"|null}
+                                   Remember a setup, or forget it (null)
+
+    POST /api/work/recommend       {"words": "<what the owner said>"}
+                                   Which setup to OFFER for those words, and the
+                                   sentence to say
+
+`GET /api/work` also answers **`chosen`** (the remembered id, or `null`) and,
+per setup, **`ready`** - one of `ready`, `partial`, `missing` or `unknown`,
+worked out from Ollama's own `/api/tags` and never guessed, with the PC's own
+`ready_words` sentence beside it. A setup whose model is missing says so in
+words and points at the ordinary download card; this module never downloads
+anything and names **no** install route.
+
+The answer is model names, card names and measured numbers. It never carries a
+token, a prompt, an answer or anything the owner said.
+
+### 124.2 Nothing here changes a model
+
+- **`/api/work/choose` only remembers.** It writes one preference
+  (`work-setup-choice.json`, beside the other settings files) and returns the
+  **one** step that would switch a model. It changes no model and no Ollama
+  setting, and it raises no card of its own.
+- **`/api/work/recommend` switches nothing.** The answer carries
+  `switched: false`, always (`test_work.py` checks every case in the golden
+  file). Acting on an offer is the owner's tap, and the switch itself is the
+  existing `/api/models/switch` card - tier `ask`, raised by the app that posts
+  it and decided as any other model change is (the owner's decisions of
+  2026-09-18 and 2026-09-20). There is no new gate action, no new tier and no
+  new route for a model change.
+
+A crisis turn offers nothing, a turn where the owner is already talking about
+models says nothing, and one loose word is never enough - each of those is a
+case in `jarvis-client/app/src/test/resources/contract/work-setups-cases.json`.
+
+### 124.3 What is built, and the one half that is not
+
+**Built and reachable:** `GET /api/work` and `POST /api/work/choose`, and the
+phone's **Work setups** section under Brain → Hardware
+(`net/WorkSetups.kt`, `ui/screens/HardwarePlate.kt`'s `WorkSetupsSection`,
+`JarvisRuntime.refreshWorkSetups` / `chooseWorkSetup` / `workSetupStep`), with
+its own contract test (`WorkSetupsContractTest.kt`) reading the golden file the
+PC's module generates.
+
+**Built and NOT wired, deliberately:** the recommendation. Nothing in either
+app offers a setup inside a chat turn today, and this section says so outright
+because an earlier version of `docs/WORK-SETUPS.md` claimed the phone asked for
+it:
+
+- `jarvis_hud.py`'s chat route does not call `jarvis_work.match()`. The route
+  is ready and safe to call; the seam is the core file, and `work.patch`
+  deliberately does not touch it.
+- `JarvisRuntime.offerWorkSetup` is the **only** thing in either app that would
+  POST `/api/work/recommend`, and **no Kotlin file under
+  `jarvis-client/app/src/main` calls it**. So `JarvisRuntime.workOffer` is never
+  set, and the offer panel `HardwarePlate.kt` draws ("Jarvis suggests a
+  setup") can never be populated.
+
+Two checks now hold that, rather than a sentence in a document:
+
+- `backend/test_work.py` asserts that no Kotlin file under the phone's `main`
+  calls `offerWorkSetup`, with a message naming exactly what to correct when one
+  does. It is the check that fails the day the offer is wired up.
+- `tools/check_parity.py` carries `/api/work/recommend` in its `UNREACHABLE`
+  list, which names the file and the function that build it and why nothing
+  calls it. That list is checked in both directions: while the function has no
+  caller the entry must stay, and **the moment it is called the checker fails**
+  and says to delete the entry, reclassify the route, and correct the docs.
+  `backend/test_parity_callgraph.py` proves that second direction on a
+  throwaway checkout, including the harder case - a call site inside a function
+  nothing calls - which is the defect this whole guard exists to catch.
+
+The desktop's own section is still to build (`docs/WORK-SETUPS.md`, "Still to
+build"); it is not part of the same task, because `jarvis-desktop/` was another
+conversation's surface.
+
+### 124.4 Why the routes are `planned`, and not `ported`
+
+`tools/check_parity.py` classifies all three as `planned`: on the backend, in
+the phone's screen, and in **no** desktop build yet. That is what makes CI name
+the missing desktop half instead of reporting parity. For `/api/work` and
+`/api/work/choose` the warning reads "the phone calls it; the desktop does not
+yet". For `/api/work/recommend` it says **nothing at all**, because the route is
+declared unreachable: the old line, "the phone calls it", came from a string
+match and was never true. `backend/test_parity_callgraph.py` pins that silence -
+one real call site and the checker fails instead.
