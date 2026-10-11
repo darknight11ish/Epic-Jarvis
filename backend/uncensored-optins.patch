@@ -1,0 +1,62 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -647,6 +647,22 @@
+     # else. Jarvis still never solves a captcha for you, and going back to
+     # leaving the window alone is instant.
+     "handoff_bring_to_front": ("yes", "local", "raises and activates the one browser window Jarvis is stuck on a captcha or sign-in page in, so it takes your screen and your keyboard away from whatever you are doing the moment it happens - the window may be showing your own account details; Jarvis still never solves the captcha for you, and going back to leaving the window exactly where it is (the default) is instant"),
++    # uncensored-optins.patch (jarvis_optin_models.py; the owner's OWN decision of
++    # 2026-10-10, Decision 5 - ".dsh-scratch/QUEUE-OWNER-DECISIONS-2026-10-10.md":
++    # "Uncensored: both of these - (a) one clearly-labelled opt-in model for
++    # fiction/role-play, never the everyday assistant and never a default, and
++    # (b) make the abliterated models already on disk usable as opt-in choices
++    # rather than downloading anything new"). TWO separate switches, both tier
++    # "ask" and both OFF on a machine that has never run the module.
++    #
++    # Neither one leaves this PC, and that is not only prose: both are "local"
++    # and reversible in one tap, and the module's own local_only() refuses to
++    # offer - or to import anything into - a model store that is not on this
++    # PC. Nothing is downloaded either way: the import uses the .gguf file that
++    # is already on this disk, by PATH (rule 1: these models are local, and an
++    # uncensored opt-in must never become a way out of the PC).
++    "uncensored_models_enable": ("yes", "local", "offers the abliterated and uncensored model files already on this PC as choices, each with the measured cost printed on its label (TruthfulQA drops 5.8 to 6.9 points on this family, MMLU about noise); nothing is downloaded and nothing leaves the PC, none of them ever becomes your everyday assistant unless you choose it with its own separate card, and turning this off again is instant"),
++    "fiction_roleplay_enable": ("yes", "local", "turns on one model set aside for stories and role-play, with its own instructions instead of the assistant's; it is never your everyday assistant, turning it on changes nothing about your normal questions, nothing from a scene is saved or learned and no tool is used from one, it runs on this PC and sends nothing anywhere, and turning it off again is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+@@ -1160,6 +1176,8 @@
+     "lower_api_limit",  # jarvis_chatbot_limits.py: LOWERING a limit only ever spends less, so it asks nothing - this name exists so the owner-check's Windows Hello, which is attached to the action and not to the direction, lands on the raise alone (chatbot-limits.patch)
+     "handoff_keep_offering",  # jarvis_handoff_mode.py acts only on tier "ask": ONE card to keep the captcha hand-off on offer for the full 15 minutes instead of stopping early (handoff-mode.patch)
+     "handoff_bring_to_front",  # jarvis_handoff_front.py acts only on tier "ask": ONE card to raise and activate the one browser window a captcha is blocking, instead of leaving it exactly where it is (handoff-front.patch)
++    "uncensored_models_enable",  # jarvis_optin_models.py acts only on tier "ask": ONE card to offer the abliterated models already on this PC as choices (uncensored-optins.patch)
++    "fiction_roleplay_enable",  # jarvis_optin_models.py acts only on tier "ask": ONE card to turn on the separate fiction and role-play lane (uncensored-optins.patch)
+ })
+ 
+ 
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -6806,4 +6806,25 @@
+     except Exception as exc:
+         print(f"  screen     NOT ON ({type(exc).__name__}) - a look cannot hand back a picture")
+         print("             until jarvis_screen_attach.py is back: run apply-patches.ps1 again")
++    # uncensored-optins.patch (jarvis_optin_models.py; the owner's OWN decision of
++    # 2026-10-10, Decision 5). GET /api/models/uncensored lists the abliterated and
++    # uncensored .gguf files already on this PC, each labelled with the measured
++    # cost, and POST turns either switch on or off. Turning EITHER one ON is ONE
++    # approval card (uncensored_models_enable / fiction_roleplay_enable, tier
++    # "ask"); OFF is instant. Nothing is downloaded and nothing leaves this PC - the
++    # import uses a local .gguf PATH through the EXISTING models_create route, and
++    # the module refuses outright if the model store is not on this PC. Wrapped
++    # round Handler here, before anything listens, like screen-attach above.
++    #
++    # It sits HERE, just before plugin-loader.patch, and that position is
++    # load-bearing: the loader must stay the LAST entry in apply-patches.ps1's
++    # list, so plugin-loader.patch's own hunk is re-anchored onto this block's
++    # last two printed lines (tools/check_plugins.py derives that anchor).
++    try:
++        import jarvis_optin_models
++        print(jarvis_optin_models.install(Handler, origin_ok=_origin_ok,
++                                          token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  optin      NOT ON ({type(exc).__name__}) - the uncensored model choices are off")
++        print("             until jarvis_optin_models.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.

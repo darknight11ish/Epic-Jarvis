@@ -137,7 +137,24 @@ def t_the_patch_is_registered_last():
              # line it adds or removes mentions `_PROTECTED` or the refusal
              # sentence - so it cannot rewrite the two stale rows this patch
              # removes.
-             "gate-touches.patch"}
+             "gate-touches.patch",
+             # picture-card.patch (2026-10-11) goes immediately before
+             # plugin-loader.patch and has exactly ONE hunk, in jarvis_hud.py: an
+             # install block on the OWNER's own lines just before the main socket
+             # is built. It removes no line and touches jarvis_gate.py not at all -
+             # no gate list entry, no risk row, no _TOOL_ACTIONS line - so it
+             # cannot rewrite the stale rows this patch removes. (It was
+             # re-anchored there on 2026-10-11: its trailing context used to be
+             # topics.patch's own banner, and topics.patch runs after it. See
+             # _stack.py's RATCHET note.)
+             # uncensored-optins.patch (2026-10-11) is appended in front of
+             # plugin-loader.patch: TWO hunks in jarvis_gate.py, both ADDED lines at
+             # the END of the "acts only on tier ask" set and the _RISK table, plus ONE
+             # install block at the end of jarvis_hud.py's chain. It removes no line,
+             # adds no _TOOL_ACTIONS line and does not touch register_approval_key, so
+             # it cannot rewrite a line this patch wrote.
+             "uncensored-optins.patch",
+             "picture-card.patch"}
     check("it is LAST, like every new patch here, bar the ones written after it",
           [n for n in names if n not in later][-1] == "gate-risk-rows.patch",
           names[-3:] if names else names)

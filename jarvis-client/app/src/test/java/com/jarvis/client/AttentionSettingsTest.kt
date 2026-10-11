@@ -311,8 +311,13 @@ class AttentionSettingsTest {
     @Test
     fun `the Attention card keeps its place and its menu check`() {
         val screen = source(PLATE)
+        // Its item key carries the plates' namespace since 2026-10-11
+        // (BrainScreen's `plateKeyAt`): that is the key a link into Brain - and
+        // every Find anything row that points at the budget - looks up, and a
+        // bare "attention" is a key nothing can find (the defect that put the
+        // owner at the top of Brain when they tapped it in Find).
         assertTrue("the card lost its item key",
-            screen.contains("item(key = \"attention\")"))
+            screen.contains("item(key = plateKeyAt(\"attention\"))"))
         assertTrue("the card lost its section title",
             screen.contains("Section(\"Attention budget\")"))
         // The first two rows are untouched: the count and the meter.
