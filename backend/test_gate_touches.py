@@ -440,7 +440,14 @@ def t_the_patch_is_registered_and_carries_the_change():
     # patch that MUST be last (it edits the end of the file the whole stack
     # produces), so a patch appended after this one goes immediately before
     # it, and this check is what says so.
-    later = {"plugin-loader.patch"}
+    later = {"plugin-loader.patch",
+             # picture-card.patch (2026-10-11) is the first patch to take that
+             # advice: it sits immediately BEFORE plugin-loader.patch, and it
+             # touches jarvis_gate.py not at all (ONE hunk, in jarvis_hud.py, on
+             # the owner's own lines just before the main socket is built - see
+             # the note in apply-patches.ps1 and _stack.py's RATCHET), so it
+             # rewrites nothing this patch wrote.
+             "picture-card.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",

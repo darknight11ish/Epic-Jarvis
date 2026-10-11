@@ -692,7 +692,17 @@ def t_the_patch_and_the_lists():
              # referee.patch wrote. test_gate_touches.py's own check confirms no
              # other patch adds or removes the call it replaces.
              "gate-touches.patch",
-             "plugin-loader.patch"}
+             "plugin-loader.patch",
+             # picture-card.patch (2026-10-11) is the first patch to go
+             # immediately BEFORE plugin-loader.patch, and it has exactly ONE
+             # hunk, in jarvis_hud.py: an install block on the OWNER's own lines
+             # just before the main socket is built. It does not touch
+             # jarvis_gate.py at all, so it adds no tier row and no _RISK row, and
+             # rewrites nothing referee.patch wrote. (It was re-anchored there on
+             # 2026-10-11: it used to sit between progress.patch and topics.patch
+             # with topics.patch's OWN banner as its trailing context, and
+             # topics.patch runs after it. See _stack.py's RATCHET note.)
+             "picture-card.patch"}
     check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
           [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")

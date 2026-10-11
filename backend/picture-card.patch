@@ -1,13 +1,8 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -6418,9 +6418,26 @@
-     try:
-         import jarvis_progress
-         print(jarvis_progress.install(Handler, origin_ok=_origin_ok,
-                                       token_ok=_token_ok, read_body=_read_body))
-     except Exception as exc:
-         print(f"  progress   NOT ON ({type(exc).__name__}) - the Activity heatmap and balance chart are off")
-         print("             until jarvis_progress.py is back: run apply-patches.ps1 again")
+@@ -6523,3 +6523,25 @@
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
 +    # picture-card.patch ("Which card draws the pictures", the owner's decision of
 +    # 2026-10-10; docs/PICTURE-CARDS-DESIGN.md, JARVIS-API section 124): GET and POST
 +    # /api/picture-card. The three ways of running a picture-maker beside the everyday
@@ -17,7 +12,12 @@
 +    # on. It draws nothing itself (asking for a picture is jarvis_pictures.py's route,
 +    # section 123) and it starts nothing: D:\Jarvis\ImageGen\Start-Pictures.ps1 starts
 +    # the picture-maker on the right card, reading these settings. Wrapped round Handler
-+    # here, before anything listens, like progress above.
++    # here, just before the main socket is built, and on the OWNER's own lines rather
++    # than on another patch's block: every install block above writes into the chain
++    # that ends at `# Before the main socket`, so a block added in the middle of it
++    # leaves the next patch's hunk without its context (measured 2026-10-11 - this one
++    # was anchored on progress.patch's block with topics.patch's banner, a patch that
++    # runs after it, and the whole run would have been refused).
 +    try:
 +        import jarvis_picture_card
 +        print(jarvis_picture_card.install(Handler, origin_ok=_origin_ok,
@@ -25,5 +25,4 @@
 +    except Exception as exc:
 +        print(f"  picture-card NOT ON ({type(exc).__name__}) - the three ways of making pictures are off")
 +        print("             until jarvis_picture_card.py is back: run apply-patches.ps1 again")
-     # topics.patch ("Topic controls", the owner's decision of 2026-09-30;
-     # docs/TOPIC-CONTROLS-DESIGN.md, JARVIS-API section 107): GET and POST
+     httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)
