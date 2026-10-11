@@ -16,6 +16,20 @@ object MenuPlaces {
 
     /** SettingsScreen.kt `item(key = ...)` -> menu id. */
     val SETTINGS: Map<String, String> = mapOf(
+        // The Voice item (SettingsScreen.kt, `item(key = "voice")`) holds TWO
+        // hideable menus, and this map holds ONE id per item key. This line is
+        // the item itself - the Voice section, `settings.voice`. The button
+        // drawn INSIDE it, "Jarvis's voice" (`settings.voices`, read at
+        // SettingsScreen.kt's `menus.shows("settings.voices")`), is in INSIDE
+        // below, which is the place the phone-only `entry.voices` used to have
+        // - now under the one id both apps use.
+        //
+        // Do NOT add a second `"voice" to ...` line here. `mapOf` takes a
+        // duplicate key silently and keeps the LAST one, so the branch's
+        // `"voice" to "settings.voices"` (2026-10-10) quietly deleted
+        // `settings.voice` from this map and MenuVisibilityTest failed with
+        // "no place in MenuPlaces for: [settings.voice, brain.work.briefing]".
+        // A test below now fails on the duplicate line itself.
         "voice" to "settings.voice",
         "security" to "settings.security",
         "menu-visibility" to "settings.menu-visibility",
@@ -65,14 +79,6 @@ object MenuPlaces {
         // MenuVisibilityTest's "not a menu" list, so the row is hideable like
         // every other section and the test's own rule is kept, not relaxed.
         "screen-rate" to "settings.screen-rate",
-        // "Jarvis's voice" (the parity audit of 2026-10-10): ONE id for ONE
-        // feature. This row used to be menu `entry.voices`, while the desktop's
-        // own card for the SAME feature was `settings.voices` - two ids for one
-        // feature, against backend/jarvis_menus.py's own rule. The duplicate id
-        // is gone and the row now hides under the one id both apps use: the
-        // phone's "Jarvis's voice" button in the Voice item still disappears
-        // when it is hidden, because SettingsScreen.kt reads this id now.
-        "voice" to "settings.voices",
     )
 
     /** BrainScreen.kt `item(key = ...)` -> menu id (a key not listed is never hideable or is not a menu). */
@@ -90,7 +96,14 @@ object MenuPlaces {
         "focus" to "brain.work.focus",
         "chatbot" to "brain.work.chatbot",
         "support" to "brain.work.support",
-        "briefing" to "settings.briefing-settings",
+        // The Morning briefing plate is `brain.work.briefing` - BrainScreen.kt
+        // guards this item with `menus.shows("brain.work.briefing")` and wraps
+        // it in `MenuFrame(menus, "brain.work.briefing")`. The plate's
+        // "When it arrives" half is a SECOND menu inside it,
+        // `settings.briefing-settings`, and it is in INSIDE below. Pointing
+        // this key at that half (as 2026-10-10 did) left the plate's own id
+        // with no place at all.
+        "briefing" to "brain.work.briefing",
         "progress" to "brain.projects.progress",
         "projects" to "brain.tab.projects",
         "attention" to "brain.now.budget",
@@ -136,9 +149,18 @@ object MenuPlaces {
         // "entry.voices" was here until 2026-10-10. It was one of TWO ids for
         // the same feature - this row and the desktop's own `settings.voices`
         // card - against backend/jarvis_menus.py's rule that one id means one
-        // feature. The duplicate id is gone (the parity audit of 2026-10-10)
-        // and the row is now the menu both apps use, `settings.voices`, listed
-        // in SETTINGS above.
+        // feature. The duplicate id is gone and the row KEEPS ITS PLACE HERE,
+        // under the one id both apps use. It belongs in INSIDE and not in
+        // SETTINGS: it is a button drawn inside the Voice item, so it has no
+        // `item(key = ...)` of its own, and being in INSIDE is also what
+        // exempts it from the MenuFrame rule (no screen wraps a button in one).
+        "settings.voices" to "SettingsScreen: the Jarvis's voice button in the Voice item",
+        // `settings.briefing-settings` (the parity audit of 2026-10-10): the
+        // BOTH half of the morning briefing. The plate is `brain.work.briefing`
+        // (BrainScreen.kt, item key "briefing"); this id hides only the "When
+        // it arrives" block inside that plate (BriefingPlate.kt), which is why
+        // it lives here rather than under the plate's own item key.
+        "settings.briefing-settings" to "BriefingPlate: the When it arrives block inside the Morning briefing plate",
         "entry.voice-check" to "SettingsScreen: the Voice check button in the Voice item",
         "brain.history.tag-suggestions" to "HistoryTags: the last row, Suggest tags overnight",
         "settings.second-card.study-helper" to "SecondCardPlate: the Study helper switch",

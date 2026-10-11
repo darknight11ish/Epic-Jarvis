@@ -201,9 +201,13 @@ MENUS: tuple = (
               "the idle timeout")),
     # The phone draws this card inside its Morning briefing plate
     # (jarvis-client BriefingPlate.kt, `menus.shows("settings.briefing-settings")`
-    # around the "When it arrives" block; the plate itself is reached from
-    # `brain.work.briefing`), so the feature is on both apps and hideable
-    # on both under this one id.
+    # around the "When it arrives" block), so the feature is on both apps and
+    # hideable on both under this one id. The plate ITSELF is a different menu,
+    # `brain.work.briefing`: it keeps the phone's Brain item key "briefing" and
+    # its `MenuFrame(menus, "brain.work.briefing")` in BrainScreen.kt. This id
+    # has no item key of its own and belongs in MenuPlaces.INSIDE; pointing the
+    # "briefing" key at this id instead (2026-10-10) left `brain.work.briefing`
+    # with no place and broke MenuVisibilityTest.
     _m("settings.briefing-settings", "Morning briefing settings",
        "What the morning briefing includes.", BOTH,
        names=("briefing settings", "morning briefing settings")),
@@ -218,9 +222,19 @@ MENUS: tuple = (
     # under a second id, `entry.voices` ("Jarvis's voice row", further down),
     # which broke this file's own rule that one id means one feature. The
     # second id is gone and this one is what both apps use: the desktop's
-    # Settings card, and the phone's row (SettingsScreen.kt, `item(key =
-    # "voice")`) that opens its own VoicesScreen.kt. The phone keeps the row
-    # hideable under this id, exactly as it was hideable under the old one.
+    # Settings card, and the phone's "Jarvis's voice" button, which
+    # SettingsScreen.kt draws INSIDE its Voice item and hides with
+    # `menus.shows("settings.voices")`. The phone keeps that button hideable
+    # under this id, exactly as it was hideable under the old one.
+    #
+    # It has NO `item(key = ...)` of its own on the phone. The Voice item's key
+    # "voice" belongs to `settings.voice` above - a DIFFERENT menu (Talk, read
+    # aloud, hands-free and sounds). Two menus can share one item key and only
+    # one owns it, so writing `"voice" to "settings.voices"` in MenuPlaces.kt
+    # beside `"voice" to "settings.voice"` did not move the row: it deleted the
+    # Voice section's place, because Kotlin's `mapOf` keeps the last duplicate
+    # and drops the rest (MenuVisibilityTest, 2026-10-10). This id belongs in
+    # MenuPlaces.INSIDE.
     _m("settings.voices", "Jarvis's voice", "Custom voices and the voice pack.",
        names=("jarvis's voice", "jarvis's voices", "custom voices")),
     _m("settings.prompt-coach", "Prompt coach",
