@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -530,6 +530,93 @@
+@@ -530,6 +530,115 @@
  #   The decision
  # --------------------------------------------------------------------------
  
@@ -27,8 +27,8 @@
 +
 +
 +# Actions whose "no" answers one card, not a standing wish, so a denial
-+# proposes nothing for them. The proposal reads "I do not want Jarvis to X
-+# without asking me first" - and each of these ALWAYS asks, and the owner
++# proposes nothing for them. The proposal is a guessed rule that Jarvis would
++# ask before that action again - and each of these ALWAYS asks, and the owner
 +# started it with a button, so for them every "no" put a sentence in the
 +# Memory tab that says nothing. How each one comes to ask:
 +_NO_RULE_FROM_DENIAL = frozenset({
@@ -56,11 +56,26 @@
 +
 +
 +def _propose_constraint_from_denial(action: str, detail: dict) -> None:
-+    """Turns a "no" into a candidate standing rule - never an applied one.
++    """Turns a "no" into a guessed candidate rule - never an applied one.
 +
 +    Called from the two DENIED branches below, never from timed_out: a
 +    timeout is the absence of an answer, and proposing a rule from silence
 +    would teach Jarvis something nobody actually decided.
++
++    THE WORDS ARE JARVIS'S OWN, AND SAY SO (the owner's decision of
++    2026-10-10). This used to write a first-person sentence - "Remember
++    this: I do not want Jarvis to <action> without asking me first. I just
++    said no when it asked." - and hand it to the learner as if it were the
++    owner's own turn. It is not: a Reject click carries none of his words.
++    jarvis_hud.py's Reject sends only {id, by}, and decide() NULLs prompt
++    and detail, so the action's name, the tier, the time and who pressed it
++    are all that survive. The old sentence also invented a reason ("I just
++    said no when it asked") for a click that carries none. Facts here are
++    learned from the owner's own words only, so what is proposed now says
++    plainly that it is Jarvis's guess, that it is marked as one, that no
++    reason was given, and that keeping or discarding it is the owner's
++    call. `detail` is deliberately NOT read: this click carries no reason,
++    so there is nothing in it that could honestly become one.
 +
 +    Goes through propose(), the one choke point this project already has
 +    for every fact it ever learns - memory-safety.patch removed the single
@@ -70,7 +85,10 @@
 +    fixed for tier confirmation, one module over. So this only ever
 +    PROPOSES - the same review queue that already holds every extracted
 +    fact, "Keep" or "Discard" in the Brain window's Memory tab, one at a
-+    time, same as always.
++    time, same as always. source="gate_denial" is what marks it there:
++    jarvis_intake.annotate reads it for the guessed-note on the card, and
++    check_source() has always read it as "made from an action you turned
++    down, not from something you said".
 +
 +    Best-effort by design: a failed or skipped proposal must never turn a
 +    completed denial into an error the owner has to do something about.
@@ -83,8 +101,12 @@
 +        return  # memory layer not importable - nothing to propose into
 +    readable = str(action or "an action").replace("_", " ").strip() or "an action"
 +    turns = [{"role": "user", "content":
-+              f"Remember this: I do not want Jarvis to {readable} without "
-+              f"asking me first. I just said no when it asked."}]
++              f"Jarvis noticed a \"no\" when it asked to {readable}. This is "
++              f"Jarvis's GUESS, marked as a guess: it is not a record of your "
++              f"words. No reason was given, just the action turned down - and "
++              f"none was made up to fill the gap. Jarvis is "
++              f"guessing the owner may want it to ask first before it "
++              f"{readable} again: a guess for the owner to keep or discard."}]
 +    try:
 +        jarvis_extract.propose(turns, source="gate_denial")
 +    except Exception:
@@ -94,7 +116,7 @@
  @dataclass
  class Verdict:
      allowed: bool
-@@ -537,6 +623,30 @@
+@@ -537,6 +732,30 @@
      action: str
      reason: str
      request_id: Optional[str] = None
@@ -125,7 +147,7 @@
  
      def as_dict(self) -> dict:
          return asdict(self)
-@@ -656,7 +766,8 @@
+@@ -656,7 +899,8 @@
          # Cannot read the policy -> cannot claim the action is permitted.
          _audit("gate.policy_unreadable", {"action": action, "error": str(exc)})
          return Verdict(False, "unknown", action,
@@ -135,7 +157,7 @@
  
      # The one rule above the tier table: nothing gets to edit the tier table.
      hit = _touches_protected(prompt, detail)
-@@ -664,7 +775,7 @@
+@@ -664,7 +909,7 @@
          _audit("gate.refused_protected", {"action": action, "file": hit})
          return Verdict(False, "never", action,
                         f"this touches {hit}, which no tool may modify; "
@@ -144,7 +166,7 @@
  
      # Outside text that tried to rush the reader raises the effective tier of
      # whatever comes next. One direction only: this can turn auto into ask, it
-@@ -679,7 +790,8 @@
+@@ -679,7 +924,8 @@
          _audit("gate.refused", {"action": action, "tier": tier, "detail": detail})
          return Verdict(False, tier, action,
                         "this action is set to 'never' in jarvis-framework.toml; "
@@ -154,7 +176,7 @@
  
      # Any joplin action at all - including a read on the "auto" tier - pins
      # the conversation local. Done before the tier branches so it happens even
-@@ -689,7 +801,7 @@
+@@ -689,7 +936,7 @@
  
      if tier == "auto":
          _audit("gate.auto", {"action": action, "detail": detail})
@@ -163,7 +185,7 @@
  
      if tier == "notify":
          _audit("gate.notify", {"action": action, "detail": detail})
-@@ -703,7 +815,8 @@
+@@ -703,7 +950,8 @@
          # knows or guesses the string reads every message. On this tier there
          # is no human in the loop at all, so nothing else was going to catch it.
          _push(f"Jarvis did: {action}", _safe_detail(detail, 400))
@@ -173,7 +195,7 @@
  
      # ---- "ask", and anything unrecognised, waits for a human ----
      try:
-@@ -719,7 +832,8 @@
+@@ -719,7 +968,8 @@
      except Exception as exc:
          _audit("gate.queue_unavailable", {"action": action, "error": str(exc)})
          return Verdict(False, tier, action,
@@ -183,7 +205,7 @@
  
      _audit("gate.asked", {"id": rid, "action": action, "tier": tier, "detail": detail})
      # An unclassified action is safe (it became "ask") but opaque: you cannot
-@@ -772,11 +886,14 @@
+@@ -772,11 +1023,14 @@
              if row["state"] == "approved":
                  _audit("gate.approved", {"id": rid, "action": action,
                                           "by": row["decided_by"]})
@@ -200,7 +222,7 @@
      finally:
          if watch is not None:
              try:
-@@ -799,16 +916,24 @@
+@@ -799,16 +1056,24 @@
                  if row and row["state"] == "approved":
                      _audit("gate.approved", {"id": rid, "action": action,
                                               "by": row["decided_by"], "late": True})
@@ -228,7 +250,7 @@
  
  
  def confirm(prompt: str) -> bool:
-@@ -860,6 +985,15 @@
+@@ -860,6 +1133,15 @@
      v = check(action, detail, prompt=f"tool {name} {detail['args']}")
      if v.allowed:
          return None
@@ -244,3 +266,4 @@
      return (f"Refused by the autonomy gate: {name} is tier '{v.tier}' "
              f"({v.action}) - {v.reason}")
  
+
