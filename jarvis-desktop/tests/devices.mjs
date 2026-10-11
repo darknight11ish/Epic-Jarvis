@@ -679,8 +679,19 @@ await check("CONTROL: the window is hidden from capture BEFORE the code is hande
   assert.ok(guard > 0 && answer > guard, "guard_capture(true) must come before the answer");
   assert.match(fnBody(RUST, "pair_cancel"), /guard_capture\(&app, false\)/);
   assert.match(fnBody(RUST, "pair_session"), /guard_capture\(&app, false\)/);
-  // The guard itself: the direct Win32 attribute call...
-  assert.match(RUST, /SetWindowDisplayAffinity/);
+  // The guard itself: the direct Win32 attribute call. Since 2026-10-11 that
+  // one call lives in `lock::set_affinity`, because the same attribute keeps
+  // every window out of a capture while App lock is on (the owner's decision;
+  // `tests/lock-capture.mjs` holds that half). `devices.rs` must NOT keep a
+  // second copy - two copies are two things to keep in step, and this one's
+  // "off" would clear a block the lock still wanted. So the call is asserted
+  // where it now lives, and asserted absent here.
+  assert.match(read("src-tauri/src/lock.rs"), /SetWindowDisplayAffinity/);
+  assert.match(guard, /set_affinity/, "the guard no longer goes through the one Win32 call");
+  // The call's own bracket, so the comment above - which NAMES the function to
+  // explain where it went - is not mistaken for a second copy of it.
+  assert.ok(!/SetWindowDisplayAffinity\s*\(/.test(RUST),
+    "a second copy of the Win32 capture call came back to devices.rs");
   // ...and never the call that rebuilt - and so closed - the window. The
   // pattern needs the call's own bracket, so the comments above that explain
   // why this call is not used do not satisfy the check.
