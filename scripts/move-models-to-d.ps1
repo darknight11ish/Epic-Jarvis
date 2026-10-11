@@ -607,6 +607,10 @@ if (Test-Path -LiteralPath $startLane) {
     if (@($laneTasks).Count -eq 0) {
         Bad 'no scheduled task whose name starts with "Jarvis Ollama" exists on this PC.'
         Bad 'Nothing was started, and step 8b already stopped the lanes: THEY ARE DOWN RIGHT NOW.'
+        # Recorded as a failure on purpose. This is the branch that would
+        # otherwise be the 2026-10-10 bug all over again: Bad lines printed,
+        # nothing started, and an exit 0 that says the move was fine.
+        $lanesDown += 'no scheduled task named "Jarvis Ollama..." exists, so nothing was started'
     } else {
         foreach ($task in $laneTasks) {
             Say ("asking the logon task to start: {0}" -f $task.TaskName)
@@ -627,6 +631,7 @@ if (Test-Path -LiteralPath $startLane) {
 } else {
     Bad "- $startLane was not found, so the lanes were NOT started by this script."
     Bad 'Step 8b already stopped every Ollama process: THE LANES ARE DOWN RIGHT NOW.'
+    $lanesDown += ("{0} does not exist, so nothing could be started" -f $startLane)
 }
 
 # Wait for the lanes, and judge them by a port that answers. 90 seconds is
@@ -666,7 +671,7 @@ if (@($lanesDown).Count -gt 0) {
         Bad ("  {0}" -f $text)
         Bad ("  Start-ScheduledTask -TaskName '{0}'" -f $task.TaskName)
     }
-    if (@($laneTasks).Count -eq 0) {
+    if (@($laneTasks).Count -eq 0 -and (Test-Path -LiteralPath $startLane)) {
         Bad '  Neither logon task was found, so start the lane by hand, pointing it at its own card:'
         # No backtick-quoted words in these strings: `nvidia-smi` inside a
         # double-quoted string is a NEWLINE followed by "vidia-smi", because the
@@ -674,6 +679,11 @@ if (@($lanesDown).Count -gt 0) {
         Bad ("  powershell -NoProfile -File `"{0}`" -Lane main   -Port 11436 -GpuUuid <the RTX 2060 UUID from nvidia-smi -L> -ContextLength 196608" -f $startLane)
         Bad ("  powershell -NoProfile -File `"{0}`" -Lane coding -Port 11435 -GpuUuid <the RTX 2080 Super UUID from nvidia-smi -L> -ContextLength 16384" -f $startLane)
         Bad ("  {0} will say which card and which context each lane really has." -f (Join-Path $LaneDir 'health.ps1'))
+    } elseif (@($laneTasks).Count -eq 0) {
+        # No task to name AND no start-lane.ps1 to run: there is no command left
+        # to hand out, and inventing one would be the same lie again.
+        Bad ("  {0} has no logon task and no start-lane.ps1, so there is no one command to give." -f $LaneDir)
+        Bad '  Restore the two logon tasks (or start-lane.ps1) before the next run.'
     }
 }
 
