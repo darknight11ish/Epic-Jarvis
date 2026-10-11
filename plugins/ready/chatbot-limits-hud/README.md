@@ -8,7 +8,7 @@ this folder into the backend's `jarvis_plugins\` folder (or run
 
 - Module the loader calls: `jarvis_chatbot_limits.install()` (takes the core's Handler)
 - The patch this replaces: `backend/chatbot-limits-hud.patch`
-- Position in the old patch stack: 117 of 139
+- Position in the old patch stack: 117 of 141
 
 The module itself is one of the ones this repository already ships
 (`backend/jarvis_chatbot_limits.py`), copied into the backend by
