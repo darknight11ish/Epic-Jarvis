@@ -583,6 +583,15 @@ SHIPPED = (
     # plugins/registry.json says which features fit and why the rest do not.
     # Standard library only, no network, no child process, writes nothing.
     "jarvis_plugins.py",
+    # The owner's uncensored opt-ins, both halves (2026-10-10, Decision 5):
+    # ONE clearly-labelled opt-in for fiction and role-play that is never the
+    # everyday assistant and never a default, AND the abliterated models
+    # already on disk offered as opt-in choices with no new download, each
+    # carrying the measured cost on its label. Two switches, off on a machine
+    # that has never run it, in their own JSON beside hardware-choice.json.
+    # Uses Ollama's own import of a local .gguf path and the existing switch;
+    # no route, no tool, and it never writes jarvis-framework.toml.
+    "jarvis_optin_models.py",
     # What this machine can hold, and what may be offered on it (2026-10-10,
     # the owner's Decision 6): free space on the drive models live on, card
     # count and video memory, then the Lean / Comfortable / Generous tiers with
