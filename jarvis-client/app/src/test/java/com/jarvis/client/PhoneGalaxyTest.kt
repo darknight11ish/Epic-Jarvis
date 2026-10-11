@@ -2,6 +2,7 @@ package com.jarvis.client
 
 import com.jarvis.client.net.Entities
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.ui.screens.PlateList
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,14 +68,40 @@ class PhoneGalaxyTest {
         return if (end > 0) rest.substring(0, end) else rest
     }
 
+    /**
+     * Does BrainScreen.kt draw the plate (or row) named [name]?
+     *
+     * The same three spellings `OpenPlaceTest.draws` reads, and for the same
+     * reason: since the seven foldable headings merged (2026-10-10,
+     * `BrainSections.kt`'s `PlateList`) a plate is written as `plate("name")`
+     * and the recorder emits its item key as `brain-plate:<name>` - the key
+     * `BrainScreen.plateKeyAt` looks up. Only the rows drawn outside every
+     * heading are still a bare `item(key = "name")`. A name that is none of
+     * these is a plate nothing can reach, which is what the caller is asking.
+     */
+    private fun String.draws(name: String): Boolean =
+        contains("plate(\"$name\")") ||
+            contains("item(key = \"$name\")") ||
+            contains("item(key = \"${PlateList.PLATE_PREFIX}$name\")")
+
     // ------------------------------------------------------- reachable ---
 
     @Test
     fun thePlateIsUnderAHeadingAndTwoTapsFromTheTop() {
-        // Drawn at all, under the item key the heading list knows by name.
+        // Drawn at all, under the name the heading list knows it by.
+        //
+        // Brain's rows go through `plate("...")` since the seven foldable
+        // headings merged (2026-10-10, BrainSections.kt's `PlateList`): one
+        // recorder writes each plate's item key as `brain-plate:<name>`, which
+        // is exactly what the screen's own jump looks up (`BrainScreen`'s
+        // `plateKeyAt`). Only the rows drawn OUTSIDE every heading are still
+        // written as a bare `item(key = ...)`. So all three spellings are read
+        // here, the same way `OpenPlaceTest.draws` reads them - the bare
+        // `item(key = ...)` alone is what was true before the headings merged,
+        // and reading only that is what failed on 2026-10-11.
         assertTrue(
             "the Galaxy plate is not drawn on Brain",
-            screen.contains("item(key = \"people-and-things\")"),
+            screen.draws("people-and-things"),
         )
 
         // Under a heading - and the heading that fits. "What Jarvis knows about
