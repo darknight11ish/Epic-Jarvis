@@ -18837,3 +18837,84 @@ desktop's Brain → Model screen is where the controls belong (the phone does no
 browse models, per the standing rule). `tools/check_parity.py` reports no drift
 until a client calls it.
 
+---
+
+## 125. The big coding model: both cards, with Jarvis paused
+
+`qwen3-coder-30b-a3b-ud-q3-k-xl` (UD-Q3_K_XL, 13,806,312,608 B, Apache 2.0) is
+the one model on this PC that needs **both** graphics cards. It is the best
+coder and the fastest writer ever measured here - **10/10** on the project's
+coding test, about **101 / 76.5 / 76.3 tokens a second** on the three bench
+prompts, and **no thinking mode** to default on and return an empty answer -
+and its cost is the whole reason it is a mode and not a model: its
+GPU-resident footprint at the smallest context tested is **14,813 MiB** against
+a 12,288 MiB card and an 8,192 MiB card
+(`.dsh-scratch/android-verify/BIG-MODELS-2026-10-10.md`, sections 6b, 6c, 12).
+
+So the owner's decision, which `backend/jarvis_big_coder.py` implements and does
+not re-litigate: **OFF by default, never resident beside the two live lanes,
+the pause announced before it starts, and both lanes put back exactly as they
+were - proved from `/api/ps`.**
+
+### 125.1 The three routes
+
+| Route | Method | Body | What it does |
+|---|---|---|---|
+| `/api/big-coder` | GET | - | The switch, the model, the context, what is loaded on all three ports right now, and what a start would do. **Read-only**: it loads nothing, unloads nothing and writes nothing |
+| `/api/big-coder/mode` | POST | `{"on": true\|false}` | The opt-in switch. **ON is ONE approval card** (`change_own_config`, tier `"ask"`); OFF is immediate |
+| `/api/big-coder/run` | POST | `{"action": "start"\|"stop"}` | Start the mode, or stop it and restore the lanes. Through `power_manage`, the action that already governs what is on the cards |
+
+All three go through the server's own origin and token checks, like every other
+route, and every call is loopback only. No new gate action is invented: the
+opt-in reuses `change_own_config` (the shape `jarvis_backup.py` and
+`jarvis_big_model.py` use) and the mode itself reuses `power_manage`.
+
+There is **no desktop Settings row or phone control yet** - the route is the
+backend half, and the switch can also be turned on by asking Jarvis ("turn on
+the big coding model", a `BoolSetting` in `jarvis_settings_registry.py`). The
+page row needs its own Rust command and JavaScript, like every other switch on
+that page.
+
+### 125.2 The order, which is the contract
+
+1. The switch must be on, no multi-step task may be running, and the gate must
+   allow it. Otherwise **nothing is touched at all**.
+2. **The pause is announced first** - the card names both lanes, their models,
+   their contexts and their cards - and it goes out on the event bus and the
+   audit log **before** the first unload.
+3. One `ollama serve` is started for the mode alone, on its own port
+   (`jarvis_big_coder.BIG_PORT`, 11450), with `CUDA_VISIBLE_DEVICES` **removed**
+   (that is what lets Ollama see both cards) and `OLLAMA_VULKAN=0` (without
+   which the unset variable silently falls back to Vulkan onto one card). The
+   two **lane servers are never touched** - different port, different process.
+   A server already answering on that port is used as it is and not stopped
+   afterwards.
+4. **Both lanes are unloaded and proved gone from `/api/ps`.** If a lane will
+   not go, the start is refused (409), **nothing is loaded**, whatever was
+   unloaded is put back, and the server is stopped. It never runs beside a lane.
+5. The model is loaded **naming the context**, `jarvis_big_coder.NUM_CTX` -
+   **28,672**, the largest measured to fit both cards with zero spill. A load
+   that spills (`size_vram < size`) or comes up at another context is
+   **unloaded again**, the lanes are restored, and the answer says why (503).
+6. **Stopping** unloads the model, stops the server this mode started, and puts
+   both lanes back - `11436 qwen3.5:9b @196608` on the RTX 2060 and
+   `11435 qwen3:8b @16384` on the RTX 2080 SUPER - checking model, context and
+   zero spill in `/api/ps` for each. A lane that does not come back is a 503
+   naming it, never a success.
+
+Nothing here downloads anything, and nothing leaves this PC.
+
+### 125.3 What is not built
+
+- The desktop Settings row and any phone control (section 125.1).
+- `tools/check_parity.py` does not yet classify these routes: they are the
+  backend half, called by no client, and a follow-up lists them there.
+- No real load was run while this was written: the owner's two lanes are live
+  and other work was measuring on the same cards. The contract is proved
+  against fakes (`backend/test_big_coder.py`), and the live facts it depends on
+  were read, not assumed: on 2026-10-11 the two lanes were resident at
+  `qwen3:8b ctx=16384` (11435) and `qwen3.5:9b ctx=196608` (11436), both zero
+  spill, and the model was present in the Ollama store on `D:` - **but the
+  server on port 11434 did not know the model** (`POST /api/show` answered
+  404), so the mode's own both-cards server is what will see it.
+

@@ -554,6 +554,21 @@ def set_screen_picture(on: bool, *, peer=None, local=None) -> Outcome:
     return _say(code, out)
 
 
+# --- the 30B coder, both cards, Jarvis paused (jarvis_big_coder.py) --------
+
+def set_big_coder(on: bool, *, peer=None, local=None) -> Outcome:
+    """Turn the big coding model's opt-in switch on or off. ON is ONE approval
+    card inside jarvis_big_coder (action change_own_config, tier "ask"); OFF is
+    immediate. This does not START the mode - that is its own call, and it
+    pauses the two live lanes first."""
+    try:
+        import jarvis_big_coder as BC
+    except Exception:
+        return _missing("the big coding model")
+    code, out = BC.set_enabled(bool(on))
+    return _say(code, out)
+
+
 # --- the headless browser, Obscura (jarvis_browser_engine.py) --------------
 
 def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
@@ -1381,6 +1396,14 @@ BOOL_SETTINGS: tuple = (
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),
                "briefing-settings", set_briefing_senders),
+    # The 30B coder (2026-10-11, the owner asked for it by name). OFF by
+    # default; turning it ON is ONE card (change_own_config), OFF is instant.
+    # It is the one model here that needs BOTH cards, so it pauses the two
+    # live lanes and puts them back when it stops - jarvis_big_coder.py.
+    BoolSetting("big_coder",
+               ("the big coding model", "the big coder", "the 30B coder",
+                "the thirty billion coder", "the coder for big jobs"),
+               None, set_big_coder),
 )
 
 _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}

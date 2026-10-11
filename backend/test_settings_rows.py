@@ -203,10 +203,12 @@ def t_setting_links_are_real():
           len(linked) == 6, f"{linked} - if this grew, the row was given a setter")
     # The spoken settings with no desktop toggle. Three have no switch row at
     # all on this page (two are on the Brain's Memory tab, one is a row inside
-    # "What asks first"), and two are the phone's own.
+    # "What asks first"), and two are the phone's own. `big_coder` joined them
+    # on 2026-10-11: the 30B coder's opt-in has a route and a spoken switch,
+    # and no page row yet.
     orphans = sorted(keys - {r.setting for r in R.DESKTOP_ROWS if r.setting})
-    check("...and the BoolSettings with no desktop row are the known five",
-          orphans == ["background_learning", "learn_sensitive_topics",
+    check("...and the BoolSettings with no desktop row are the known six",
+          orphans == ["background_learning", "big_coder", "learn_sensitive_topics",
                       "lights_without_card", "phone_notifications",
                       "smartwatch_notifications"], str(orphans))
     phone_linked = sorted(r.setting for r in R.SETTINGS_ROWS
@@ -248,9 +250,11 @@ def t_fallback_rows_are_the_known_ten():
 
 def t_bool_settings_did_not_grow():
     """The spoken table is not this work's business: the rows were added
-    beside it, not inside it. Eleven before, eleven now."""
-    check("BOOL_SETTINGS still holds its eleven spoken settings",
-          len(R.BOOL_SETTINGS) == 11, str(len(R.BOOL_SETTINGS)))
+    beside it, not inside it. Eleven before, twelve now - the 30B coder's
+    opt-in (big_coder, 2026-10-11) joined it, which is a name GAINED, and the
+    check above says which desktop rows stayed unlinked."""
+    check("BOOL_SETTINGS now holds twelve spoken settings",
+          len(R.BOOL_SETTINGS) == 12, str(len(R.BOOL_SETTINGS)))
 
 
 def main() -> int:

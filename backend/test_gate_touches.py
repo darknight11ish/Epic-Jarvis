@@ -471,7 +471,13 @@ def t_the_patch_is_registered_and_carries_the_change():
              # the owner's own lines just before the main socket is built - see
              # the note in apply-patches.ps1 and _stack.py's RATCHET), so it
              # rewrites nothing this patch wrote.
-             "picture-card.patch"}
+             "picture-card.patch",
+             # big-coder.patch (2026-10-11) takes the same advice: it sits
+             # immediately BEFORE plugin-loader.patch, and it touches
+             # jarvis_gate.py not at all (two hunks, both in jarvis_hud.py, each
+             # ADDING one route block on lines no other patch writes), so it
+             # rewrites nothing this patch wrote.
+             "big-coder.patch"}
     others = [n for n in names if n not in later]
     check("it is LAST in the stack, bar the ones written after it, and bar "
           "plugin-loader.patch (which must be last of all)",
