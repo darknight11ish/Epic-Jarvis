@@ -138,7 +138,8 @@ def t_a_finished_run_leaves_no_folder():
         check(f"CONTROL: the sweep of {SUITE} passed on its own terms",
               r.returncode == 0, f"exit {r.returncode}\n" + r.stdout[-2000:])
         check("the run left NO jarvis-* directory behind", after == [], after)
-        check("and left nothing else behind either - one folder, made and removed",
+        check("and left nothing that is NOT a jarvis-* folder behind either - one "
+              "folder, made and removed",
               [n for n in after if not n.startswith("jarvis-")] == [], after)
     finally:
         if lock is not None:
@@ -188,11 +189,13 @@ def t_main_removes_its_folder_in_a_finally():
     if not final:
         return
     body = final[0]
-    check("and the finally removes this run's own folder", "remove_tree(root" in body, body)
+    removes = "remove_tree(root" in body
+    check("and the finally removes this run's own folder", removes, body)
     check("the lock is released BEFORE the folder is removed - on Windows a file "
           "this process still holds open cannot be deleted, and the folder would "
           "be left behind whole",
-          "os.close(lock)" in body and body.index("os.close(lock)") < body.index("remove_tree(root"),
+          removes and "os.close(lock)" in body
+          and body.index("os.close(lock)") < body.index("remove_tree(root"),
           body)
     check("this run's folder is claimed with a marker before it is used",
           "claim(root," in ast.unparse(main_fn) and "'sweep'" in ast.unparse(main_fn),
