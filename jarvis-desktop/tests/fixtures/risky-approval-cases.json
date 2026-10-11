@@ -15,6 +15,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -44,6 +46,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -72,6 +76,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -101,6 +107,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "heavy"
         },
@@ -134,6 +142,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "heavy"
         },
@@ -163,6 +173,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. something in the text it read tried to hurry you, so this was raised for a closer look. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "heavy"
         },
@@ -192,6 +204,8 @@
           "approve_ok": false,
           "body": "not classified, so treated as the worst case. nothing has happened yet.",
           "deny_ok": true,
+          "full": "not classified, so treated as the worst case. nothing has happened yet.",
+          "summary": "not classified, so treated as the worst case.",
           "title": "Jarvis wants your OK for \"some tool nobody classified\"",
           "weight": "heavy"
         },
@@ -221,6 +235,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -250,6 +266,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -279,6 +297,8 @@
           "approve_ok": false,
           "body": "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet. nothing has happened yet.",
+          "summary": "Jarvis wants to add its change to one of your apps.",
           "title": "Jarvis wants to add its change to one of your apps",
           "weight": "heavy"
         },
@@ -308,6 +328,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -337,6 +359,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -364,6 +388,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -391,6 +417,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },
@@ -419,6 +447,8 @@
           "approve_ok": false,
           "body": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
           "deny_ok": true,
+          "full": "adds one entry to the end of today's Logseq journal on this PC; nothing already there is changed. nothing has happened yet.",
+          "summary": "Jarvis wants to add to today's Logseq journal.",
           "title": "Jarvis wants to add to today's Logseq journal",
           "weight": "normal"
         },

@@ -1,6 +1,6 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -319,6 +319,87 @@
+@@ -319,6 +319,118 @@
      }
  
  
@@ -31,6 +31,8 @@
 +
 +    Returns:
 +        title    one line: what Jarvis wants to do
++        summary  the SHORT words a card shows first, from jarvis_card_words
++        full     the whole card - what "Explain more" opens (same as `body`)
 +        body     why it matters, and that nothing has happened yet
 +        weight   "heavy" | "normal" - whether to interrupt or wait to be found
 +        deny_ok  whether refusing WITHOUT reading the detail is safe (it is)
@@ -72,9 +74,38 @@
 +                    "was raised for a closer look")
 +    bits.append("nothing has happened yet")
 +
++    # The WHOLE card: why it matters, that outside text pushed it up, and that
++    # nothing has happened yet. It is what "Explain more" opens - the owner's
++    # request of 2026-10-09, "an explain more button that expands the approval
++    # card total word length and explains the details more" - and it is still
++    # `body` word for word, so a client that has never heard of the control
++    # shows exactly what it showed before.
++    full = ". ".join(b.strip(". ") for b in bits if b).strip() + "."
++
++    # The SHORT summary, from jarvis_card_words.SUMMARY - the same one source
++    # the title comes from. Built here rather than in each client so the phone,
++    # the desktop, the widget and a notification cannot word the same card four
++    # ways. It reads the action NAME and that module's own table: still nothing
++    # from `detail`, `prompt` or `raised`, so the notice stays safe to build on
++    # a lock screen - see the note above.
++    try:
++        import jarvis_card_words
++        summary = jarvis_card_words.summary_for(item.get("action"), full)
++    except Exception:
++        # An older copy of the module (or none): the card's own first sentence.
++        # Whole, never cut mid-word, and never the bare action name.
++        summary = ""
++        for _i, _ch in enumerate(full):
++            if _ch in ".!?":
++                summary = full[:_i + 1].strip()
++                break
++        summary = summary or full.strip() or title
++
 +    return {
 +        "title": title,
-+        "body": ". ".join(b.strip(". ") for b in bits if b).strip() + ".",
++        "summary": summary,
++        "full": full,
++        "body": full,
 +        "weight": "heavy" if heavy else "normal",
 +        # Refusing something you have not read costs you a retry. Approving
 +        # something you have not read is the failure this whole module exists
