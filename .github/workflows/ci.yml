@@ -1463,6 +1463,17 @@ jobs:
       # register rots exactly like the prose it replaced.
       - name: Every claim in docs/CLAIMS.tsv still holds, and every open gap is still open
         run: python3 ../../tools/check_claims.py
+      # docs/DEFECT-REGISTER.md and docs/defect-register.tsv are the board the
+      # agents claim a defect on, so that the same real bug is not repaired
+      # twice overnight. A register nobody checks drifts, and a drifted one is
+      # worse than none: it names an owner for work that is already done, or
+      # sends an agent at a file another one is holding. This fails on two open
+      # rows claiming the same file, on a row naming a file that is not in the
+      # checkout, on a malformed row, and on the two files disagreeing about
+      # which defects are open. Standard library only, two files read, no
+      # network.
+      - name: The defect register is well-formed and names only real files
+        run: python3 ../../tools/check_defect_register.py
 
   python-advisories:
     # The backend's Python packages, next to `cargo deny` above (feasibility
