@@ -220,8 +220,25 @@ class NotifyRowsTest {
         assertTrue(screen.contains("LimitRow("))
         assertTrue(screen.contains("TimeRowDialog("))
         // The PC's own sentence is what the owner reads back, and it comes from
-        // the one place that classifies a limits answer.
-        assertTrue(screen.contains("said = JarvisRuntime.setLimit(key, value)"))
+        // the one place that classifies a limits answer - as BOTH halves, so a
+        // save that did not happen cannot read as one that had. It is drawn
+        // under the ROW it was asked for, the rule the limits plate follows
+        // since 2026-10-10 (`LimitsTest.the plate says a failed save on the row
+        // it was asked for`): this card is long enough that a sentence drawn
+        // once for the whole card is off the screen for some row whatever place
+        // it is given.
+        assertTrue("both halves do not come from the one write",
+            screen.contains("val a = JarvisRuntime.setLimit(key, value)"))
+        assertTrue("the answer is not passed to the row it belongs to",
+            screen.contains("said = if (saidFor == r.key) said else null"))
+        assertTrue("the card does not know whether anything was written",
+            screen.contains("saidFailed = !a.changed"))
+        assertTrue("the sentence does not remember which row asked for it",
+            screen.contains("saidFor = key"))
+        assertTrue("an old answer is not cleared before a change",
+            screen.contains("saidFor = null") && screen.contains("saidFailed = false"))
+        assertFalse("the answer is drawn once for the whole card again",
+            screen.contains("said?.let"))
         val runtime = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt").readText()
         assertTrue(runtime.contains("suspend fun setLimit("))
         assertTrue("the PC's own sentence is no longer what a change reports",

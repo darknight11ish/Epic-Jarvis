@@ -69,7 +69,14 @@ internal fun PcNotifySection(canAct: Boolean) {
     var missing by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
+    // The answer belongs to the row it was asked for, and is drawn under that
+    // row's own control - the rule the limits plate follows (2026-10-10): the
+    // PC's sentence, which row it was about, and whether anything was written
+    // at all. A card long enough to scroll past a row is exactly why it is not
+    // drawn once for the whole card.
     var said by remember { mutableStateOf<String?>(null) }
+    var saidFor by remember { mutableStateOf<String?>(null) }
+    var saidFailed by remember { mutableStateOf(false) }
     /** The key of the clock row whose picker is open, if any. */
     var picking by remember { mutableStateOf<String?>(null) }
     /** What really happened last time "Send test notification" was pressed. */
@@ -96,9 +103,17 @@ internal fun PcNotifySection(canAct: Boolean) {
         if (busy) return
         busy = true
         said = null
+        saidFor = null
+        saidFailed = false
         scope.launch {
             try {
-                said = JarvisRuntime.setLimit(key, value)
+                // Both halves, as the limits plate takes them: the PC's
+                // sentence, and whether anything was written. A save that did
+                // not happen must not read as one that had.
+                val a = JarvisRuntime.setLimit(key, value)
+                said = a.sentence
+                saidFor = key
+                saidFailed = !a.changed
             } finally {
                 busy = false
                 // Re-read whatever the answer was, the same rule the limits
@@ -142,6 +157,8 @@ internal fun PcNotifySection(canAct: Boolean) {
                         LimitRow(
                             row = r,
                             enabled = canAct && !busy,
+                            said = if (saidFor == r.key) said else null,
+                            saidFailed = saidFailed,
                             onChange = { value -> change(r.key, value) },
                             onPickTime = { picking = r.key },
                         )
@@ -151,20 +168,13 @@ internal fun PcNotifySection(canAct: Boolean) {
                         LimitRow(
                             row = r,
                             enabled = canAct && !busy,
+                            said = if (saidFor == r.key) said else null,
+                            saidFailed = saidFailed,
                             onChange = { value -> change(r.key, value) },
                             onPickTime = { picking = r.key },
                         )
                     }
                 }
-            }
-            said?.let {
-                Gap(6)
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = chrome.textMid,
-                    modifier = Modifier.liveStatus(),
-                )
             }
 
             SubHead(NotifyRows.SUBHEAD_TEST)
