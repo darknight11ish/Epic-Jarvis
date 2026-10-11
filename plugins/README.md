@@ -8,9 +8,9 @@ adds one line to `jarvis_hud.py` calling that module. The loader in
 [`loader/`](loader/) makes that call itself, so the module becomes something
 you drop in and take out.
 
-- **23 drop-in modules**, in [`ready/`](ready/) -
+- **24 drop-in modules**, in [`ready/`](ready/) -
   one folder each, no core change.
-- **118 core patches**, which still go on through
+- **117 core patches**, which still go on through
   `scripts/apply-patches.ps1` in its own order.
 
 ## The drop-in modules
@@ -38,6 +38,7 @@ you drop in and take out.
 | 119 | `tutorials` | Tutorials and the FAQ, for both apps, with the owner's progress. | `tutorials.patch` |
 | 129 | `docker` | the containers on Jarvis's OWN list, and start/stop for them. | `docker.patch` |
 | 130 | `screen-attach` | "look at this" can hand the owner the PICTURE, so they can say "look at this" with a chart or an error message and ask about it. | `screen-attach.patch` |
+| 136 | `card-prefs` | how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it. | `card-prefs.patch` |
 | 137 | `picture-card` | "which card draws the pictures, and what the chat does about it". | `picture-card.patch` |
 | 139 | `pictures` | "ask for a picture, and keep it" (the owner's decision of 2026-09-27: *"12 GB card: longer conversations with picture understanding first, and making pictures too (swapped in when asked, since both ca | `pictures.patch` |
 
@@ -162,7 +163,6 @@ stack's order and cannot be moved into a folder.
 | `retrieve-count.patch` | edits lines the core already has; it cannot be applied out of order |
 | `handoff-mode.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `handoff-front.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
-| `work.patch` | adds lines to the core (routes, gate tables or a function) but removes none |
 | `uncensored-optins.patch` | also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card |
 | `gate-touches.patch` | edits lines the core already has; it cannot be applied out of order |
 | `big-coder.patch` | adds lines to the core (routes, gate tables or a function) but removes none |

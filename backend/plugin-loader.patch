@@ -18,4 +18,4 @@
 +    except Exception as exc:
 +        print(f"  plugins    NOT ON ({type(exc).__name__}) - drop-in modules are off")
 +        print("             until jarvis_plugins.py is back: run apply-patches.ps1 again")
-     httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)
+     # Before the main socket, so the banner lists every address together.

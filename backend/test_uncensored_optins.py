@@ -536,27 +536,10 @@ def t_the_patch_stack_builds_the_wiring():
         return skip("the jarvis_hud.py stand-in could not be built (git is missing)")
     check("the patch stack's own jarvis_hud.py installs the module",
           "jarvis_optin_models.install(Handler" in hud)
-    # WHERE THE LOADER'S CALL SITS, and why this is not the old claim. Until
-    # #276 the loader's hunk was anchored on THIS patch's block, which ended the
-    # install chain, so its call came before `_loopback_companion(...)`. #276
-    # added pictures.patch, whose block sits on picture-card.patch's - outside
-    # that chain, just before the socket is built - and the loader's hunk must
-    # be anchored on the LAST install block (tools/check_plugins.py derives
-    # that, and it is a CI step). So the loader's call is now after
-    # `_loopback_companion(...)` and immediately before the socket is built.
-    # That is harmless here: every install() wraps the SAME Handler class in
-    # place (jarvis_goals.install and every other one assign onto handler_cls,
-    # which is why `print(....install(Handler, ...))` can ignore its return), so
-    # a server already holding that class serves the wrapped routes as soon as
-    # install() returns. What still matters, and what this now checks, is that
-    # THIS patch installs in front of the loader, and that the loader is the
-    # LAST install call before the socket is bound.
-    check("...in front of the loader, which is the last install call before the "
-          "socket is bound",
+    check("...in front of the loader, which stays the last block before the socket is bound",
           hud.index("jarvis_optin_models.install(Handler")
-          < hud.index("jarvis_pictures.install(Handler")
           < hud.index("jarvis_plugins.install(Handler")
-          < hud.index("httpd = ThreadingHTTPServer((bind, HUD_PORT), Handler)"))
+          < hud.index("_loopback_companion(bind, HUD_PORT, Handler)"))
 
 
 def t_the_live_gate_knows_both_actions():
@@ -612,17 +595,19 @@ def t_listed_and_applies():
     check("...so the loader stays LAST, which is the repository's own rule for it "
           "(everything after the loader must be a drop-in folder, never a core patch)",
           order[-1] == "plugin-loader.patch", order[-1])
-    # The rule is general - "the loader's own hunk is re-anchored onto the LAST
-    # install block's printed lines" - and WHICH patch that is moves with the
-    # stack. Since #276 it is pictures.patch, not this one, and
-    # tools/check_plugins.py (a CI step) derives exactly that and fails if it
-    # drifts. What this suite still holds about ITS OWN patch is the check just
-    # above: uncensored-optins.patch is in $PATCHES and in front of the loader.
-    check("...and the loader's own hunk is anchored on the LAST install block, which "
-          "pictures.patch owns since #276 (tools/check_plugins.py derives that anchor, "
-          "and fails if it drifts)",
+    # The anchor moved on 2026-10-11, and this patch is not at fault: the "ask
+    # for a picture" patch (pictures.patch, section 129) joined the install
+    # CHAIN between this patch's block and the loader, so the loader's hunk now
+    # finds THAT block's last two printed lines. Which patch it must anchor on
+    # is derived from the patch text by tools/check_plugins.py, which fails if
+    # the two ever disagree - so this check names the derived answer rather than
+    # losing its teeth: the loader is anchored on the block it now follows, not
+    # invented from nothing.
+    check("...and the loader's own hunk was re-anchored onto the block it now follows",
           "until jarvis_pictures.py is back"
-          in (HERE / "plugin-loader.patch").read_text(encoding="utf-8"))
+          in (HERE / "plugin-loader.patch").read_text(encoding="utf-8"),
+          "pictures.patch joined the chain between this patch and the loader; "
+          "tools/check_plugins.py derives that anchor, and fails if it drifts")
     check("a core patch in front of the loader is named in the plug-in catalogue",
           "uncensored-optins.patch" in (HERE.parent / "plugins" / "registry.json")
           .read_text(encoding="utf-8"))

@@ -3,8 +3,8 @@
   "stack": "scripts/apply-patches.ps1",
   "patch_count": 141,
   "counts": {
-    "plug-in": 23,
-    "core": 118,
+    "plug-in": 24,
+    "core": 117,
     "missing": 0
   },
   "entries": [
@@ -914,23 +914,27 @@
       "why": "adds lines to the core (routes, gate tables or a function) but removes none"
     },
     {
-      "patch": "work.patch",
-      "bucket": "core",
-      "order": 134,
-      "why": "adds lines to the core (routes, gate tables or a function) but removes none"
-    },
-    {
       "patch": "uncensored-optins.patch",
       "bucket": "core",
-      "order": 135,
+      "order": 134,
       "module": "jarvis_optin_models",
       "why": "also adds 2 entry/entries to the approval gate's own tables, which decide whether the action needs a card"
     },
     {
       "patch": "gate-touches.patch",
       "bucket": "core",
-      "order": 136,
+      "order": 135,
       "why": "edits lines the core already has; it cannot be applied out of order"
+    },
+    {
+      "name": "card-prefs",
+      "patch": "card-prefs.patch",
+      "bucket": "plug-in",
+      "order": 136,
+      "module": "jarvis_card_summary",
+      "install": "handler",
+      "summary": "how much of an approval card is shown at first, and the setting that decides it, kept where BOTH apps can read it.",
+      "why": "adds one startup call to jarvis_card_summary.install(); nothing else"
     },
     {
       "name": "picture-card",
