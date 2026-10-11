@@ -1378,6 +1378,27 @@ $PATCHES = @(
     # object inside the prompt). Card prose is not a target. ONE hunk pair,
     # in jarvis_gate.py alone; see backend/README.md's own section.
     'gate-touches.patch'
+    # --- approval cards read short (the owner's request of 2026-10-09) -------
+    # "for approval cards, there should be a more simple summary, with an
+    # explain more button that expands the approval card total word length and
+    # explains the details more. and approval card preferences such as this
+    # should be changeable in the settings"
+    #
+    # ONE more install block of the same shape as animal.patch's, calling
+    # jarvis_card_summary.install() - GET/POST /api/card-prefs, the "Start
+    # short" or "Always show everything" choice, kept in card-prefs.json beside
+    # appearance.json and animal.json so both apps read the one setting.
+    # Nothing else in the core changes: the words the summary is built from are
+    # jarvis_card_words.py's (shipped whole, no patch), the two extra keys on a
+    # card's notice are approval-notice.patch's, and both are already in the
+    # stack above. Cosmetic, so it is at once with no card, either way.
+    #
+    # Its ONE hunk is that block, straight after animal.patch's own block in
+    # jarvis_hud.py's install chain - it removes no line and touches
+    # jarvis_gate.py not at all. It sits here, after gate-touches.patch and
+    # before picture-card.patch, and so before plugin-loader.patch, which MUST
+    # stay last of all (see backend/test_gate_touches.py).
+    'card-prefs.patch'
     # "Which card draws the pictures" (the owner's decision of 2026-10-10; docs/PICTURE-CARDS-DESIGN.md,
     # JARVIS-API section 124): GET and POST /api/picture-card. ONE hunk in jarvis_hud.py, an install block
     # on the OWNER's own lines just before the main socket is built, NOT inside the chain of install
@@ -1400,21 +1421,6 @@ $PATCHES = @(
     # or on any error, the banner says so and the routes are simply not there.
     'picture-card.patch'
     'plugin-loader.patch'
-    # --- approval cards read short (the owner's request of 2026-10-09) -------
-    # "for approval cards, there should be a more simple summary, with an
-    # explain more button that expands the approval card total word length and
-    # explains the details more. and approval card preferences such as this
-    # should be changeable in the settings"
-    #
-    # ONE more install block of the same shape as animal.patch's, calling
-    # jarvis_card_summary.install() - GET/POST /api/card-prefs, the "Start
-    # short" or "Always show everything" choice, kept in card-prefs.json beside
-    # appearance.json and animal.json so both apps read the one setting.
-    # Nothing else in the core changes: the words the summary is built from are
-    # jarvis_card_words.py's (shipped whole, no patch), the two extra keys on a
-    # card's notice are approval-notice.patch's, and both are already in the
-    # stack above. Cosmetic, so it is at once with no card, either way.
-    'card-prefs.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

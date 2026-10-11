@@ -129,9 +129,11 @@ def t_the_patch_is_registered_last():
              # touch jarvis_gate.py at all, so it rewrites nothing this patch
              # wrote.
              "plugin-loader.patch",
-             # card-prefs.patch (2026-10-10, "cards read short") is appended
-             # last and has exactly ONE hunk, in jarvis_hud.py: fifteen ADDED
-             # lines at the end of the install chain. It removes no line and
+             # card-prefs.patch (2026-10-10, "cards read short") sits after
+             # gate-touches.patch and before picture-card.patch (so, before
+             # plugin-loader.patch too) and has exactly ONE hunk, in
+             # jarvis_hud.py: fifteen ADDED lines, an install block straight
+             # after animal.patch's own. It removes no line and
              # does not touch jarvis_gate.py at all - no gate list entry, no
              # risk row, no _TOOL_ACTIONS line - so it rewrites nothing the
              # two stale rows this patch removes ever sat near.

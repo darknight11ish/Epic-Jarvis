@@ -489,7 +489,8 @@ def t_hygiene():
     later = {"retrieve-count.patch", "handoff-mode.patch", "handoff-front.patch",
              "plugin-loader.patch",
              # card-prefs.patch (2026-10-10, "cards read short"): ONE added block
-             # in jarvis_hud.py, at the end of the install chain - nowhere near
+             # in jarvis_hud.py, straight after animal.patch's own and before
+             # plugin-loader.patch - nowhere near
              # the POST /api/screen route this patch's wrapper takes over - so
              # the request body is still read once, and still by this wrapper.
              "card-prefs.patch",

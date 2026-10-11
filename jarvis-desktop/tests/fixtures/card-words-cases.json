@@ -861,6 +861,18 @@
       }
     },
     {
+      "action": "fiction_roleplay_enable",
+      "notice": {
+        "title": "Jarvis wants to turn on a separate lane for fiction and role-play",
+        "summary": "Jarvis wants to turn on the fiction and role-play lane.",
+        "full": "turns on one model set aside for stories and role-play, with its own instructions instead of the assistant's; it is never your everyday assistant, turning it on changes nothing about your normal questions, nothing from a scene is saved or learned and no tool is used from one, it runs on this PC and sends nothing anywhere, and turning it off again is instant. nothing has happened yet.",
+        "body": "turns on one model set aside for stories and role-play, with its own instructions instead of the assistant's; it is never your everyday assistant, turning it on changes nothing about your normal questions, nothing from a scene is saved or learned and no tool is used from one, it runs on this PC and sends nothing anywhere, and turning it off again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
       "action": "github_read",
       "notice": {
         "title": "Jarvis wants to check GitHub for a \"tell me when\"",
@@ -1527,6 +1539,18 @@
         "summary": "Jarvis wants to turn a private topic back on.",
         "full": "lets Jarvis learn about or use a private topic again (health, money, or one you marked private), or move its facts to a more open topic; the facts stay on this PC, sensitive ones are still kept on screen and never read aloud, and new sensitive ones still wait for your yes; switching a topic off again is instant. nothing has happened yet.",
         "body": "lets Jarvis learn about or use a private topic again (health, money, or one you marked private), or move its facts to a more open topic; the facts stay on this PC, sensitive ones are still kept on screen and never read aloud, and new sensitive ones still wait for your yes; switching a topic off again is instant. nothing has happened yet.",
+        "weight": "normal",
+        "deny_ok": true,
+        "approve_ok": false
+      }
+    },
+    {
+      "action": "uncensored_models_enable",
+      "notice": {
+        "title": "Jarvis wants to offer the uncensored AI models already on this PC",
+        "summary": "Jarvis wants to offer the uncensored models on this PC.",
+        "full": "offers the abliterated and uncensored model files already on this PC as choices, each with the measured cost printed on its label (TruthfulQA drops 5.8 to 6.9 points on this family, MMLU about noise); nothing is downloaded and nothing leaves the PC, none of them ever becomes your everyday assistant unless you choose it with its own separate card, and turning this off again is instant. nothing has happened yet.",
+        "body": "offers the abliterated and uncensored model files already on this PC as choices, each with the measured cost printed on its label (TruthfulQA drops 5.8 to 6.9 points on this family, MMLU about noise); nothing is downloaded and nothing leaves the PC, none of them ever becomes your everyday assistant unless you choose it with its own separate card, and turning this off again is instant. nothing has happened yet.",
         "weight": "normal",
         "deny_ok": true,
         "approve_ok": false

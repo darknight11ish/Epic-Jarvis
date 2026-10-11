@@ -171,11 +171,17 @@ class FindAnythingTest {
             // `backend/jarvis_menus.py` (`settings.first-run`,
             // `settings.start-jarvis`, `settings.crash-notes`,
             // `settings.notifications`) and retired the duplicate phone-only
-            // `entry.voices`. It is here so that a regeneration which drops the
-            // `names` field, or a catalogue that comes back a different size,
-            // is noticed rather than quietly searched.
+            // `entry.voices`; 116 until 2026-10-10, when "approval cards read
+            // short" added ONE real menu of its own, `settings.approval-cards`
+            // (`Approval cards` in `backend/jarvis_menus.py`, drawn by
+            // `SettingsScreen.kt`'s `ApprovalCardsSection` under Appearance) -
+            // the catalogue is one larger because a place really was added, not
+            // because a regeneration went wrong. It is here so that a
+            // regeneration which drops the `names` field, or a catalogue that
+            // comes back a different size, is noticed rather than quietly
+            // searched.
             "the catalogue must still carry the names at all",
-            116,
+            117,
             MenuCatalog.MENUS.size,
         )
         assertTrue(

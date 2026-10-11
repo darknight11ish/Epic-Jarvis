@@ -371,6 +371,13 @@ SUMMARY = {
     # --- the captcha hand-off
     "handoff_keep_offering": "keep the phone's live view for 15 minutes",
     "handoff_bring_to_front": "bring the stuck browser window to the front",
+    # --- the owner's uncensored opt-ins, BOTH halves (jarvis_optin_models.py,
+    # the owner's OWN decision of 2026-10-10, Decision 5). The same two actions
+    # TITLES carries above, cut to a breath: the one thing each card agrees to.
+    # `uncensored-optins.patch` put both rows in the gate's _RISK table, and
+    # test_card_short_words.py fails when an action there has no short row here.
+    "uncensored_models_enable": "offer the uncensored models on this PC",
+    "fiction_roleplay_enable": "turn on the fiction and role-play lane",
     # --- Docker (jarvis_docker.py): Jarvis's OWN containers, never the owner's
     "docker_service_start": "start one of its containers",
     "docker_service_stop": "stop one of its containers",
