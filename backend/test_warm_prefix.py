@@ -88,6 +88,7 @@ class Fake:
         self.posts: list = []            # (path, raw body bytes)
         self.lock = threading.Lock()
         self.tools_ok = tools_ok
+        self.no_ctx = False               # answer as a lane that cannot say its context
         self.hold = False                 # hold a warm-up until its caller goes
         self.warm_in = threading.Event()
         self.warm_gone = threading.Event()
@@ -107,6 +108,8 @@ class Fake:
 
             def do_GET(self):
                 if self.path == "/api/ps":
+                    if fake.no_ctx:
+                        return self._json({"models": []})
                     return self._json({"models": [{"name": MODEL + ":latest",
                                                    "model": MODEL + ":latest",
                                                    "context_length": 16384}]})
@@ -116,8 +119,8 @@ class Fake:
                 raw = self.rfile.read(int(self.headers.get("Content-Length") or 0))
                 if self.path == "/api/show":
                     caps = ["completion", "tools"] if fake.tools_ok else ["completion"]
-                    return self._json({"capabilities": caps,
-                                       "parameters": "num_ctx                        16384"})
+                    params = "" if fake.no_ctx else "num_ctx                        16384"
+                    return self._json({"capabilities": caps, "parameters": params})
                 with fake.lock:
                     fake.posts.append((self.path, raw))
                 body = json.loads(raw or b"{}")
@@ -511,7 +514,12 @@ def t_after_waking():
 def t_live_warms_the_model_chat_uses():
     """Effectiveness audit 2026-09-28, 3.2: Jarvis Live's warm-up
     (warm_everyday) loads the model chat really uses now, not the fixed
-    JARVIS_MODEL name, and sends no keep_alive (Ollama's own setting stays)."""
+    JARVIS_MODEL name, and sends no keep_alive (Ollama's own setting stays).
+
+    And since 2026-10-11 it always NAMES the lane's context: a
+    `POST /api/generate` with no `options.num_ctx` loads a model that is not
+    already loaded at Ollama's own default - 2,048 on the owner's PC - which
+    silently shrank the everyday lane from 196,608 to 2,048 on 2026-10-10."""
     fake = Fake()
     real = S.chat_model
     try:
@@ -520,6 +528,10 @@ def t_live_warms_the_model_chat_uses():
         gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
         check("after a switch from the phone: the switched-to model is loaded",
               bool(gens) and gens[-1].get("model") == "switched-model:8b", (ok, gens))
+        check("... with the lane's own context, never a context-blind preload",
+              bool(gens) and (gens[-1].get("options") or {}).get("num_ctx") == 16384, gens)
+        check("... and the body is never a bare {\"model\": name}",
+              bool(gens) and "options" in gens[-1], gens)
         check("... with no keep_alive (the owner's OLLAMA_KEEP_ALIVE stays in charge)",
               gens and "keep_alive" not in gens[-1], gens)
         S.chat_model = lambda: None
@@ -528,11 +540,39 @@ def t_live_warms_the_model_chat_uses():
         gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
         check("nothing says which model: the default name, as before",
               gens[-1].get("model") == "jarvis-primary", gens[-1])
+        check("... and its context is named too",
+              (gens[-1].get("options") or {}).get("num_ctx") == 16384, gens[-1])
         AG.warm_everyday(fake.url, model="named:1b")
         gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
         check("a model named by the caller wins", gens[-1].get("model") == "named:1b")
+        check("... and it is warmed with a context, never without one",
+              (gens[-1].get("options") or {}).get("num_ctx") == 16384, gens[-1])
     finally:
         S.chat_model = real
+        fake.close()
+
+
+def t_a_live_warm_never_goes_out_without_a_context():
+    """The other shipped preload (jarvis_agent.warm_everyday). A lane that
+    cannot say which context it is set to gets NO preload at all: sending the
+    load anyway would reload the model at Ollama's own 2,048 default, and the
+    first question loads it at the lane's own setting instead."""
+    fake = Fake()
+    try:
+        fake.no_ctx = True
+        ok = AG.warm_everyday(fake.url, model="mystery:9b")
+        check("no context can be read: nothing is warmed and it says so",
+              ok is False and fake.posts == [], (ok, fake.posts))
+        n = len(fake.posts)
+        AG.warm_everyday(fake.url, model="mystery:9b")
+        check("... and a second try sends nothing either", len(fake.posts) == n, fake.posts)
+        fake.no_ctx = False
+        AG.warm_everyday(fake.url, model="mystery:9b")
+        gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
+        check("once the context can be read, the same model IS warmed - with it "
+              "(the fake answers a load oddly, so the body is what counts)",
+              bool(gens) and (gens[-1].get("options") or {}).get("num_ctx") == 16384, gens)
+    finally:
         fake.close()
 
 
@@ -769,6 +809,7 @@ if __name__ == "__main__":
                    t_it_records_nothing_and_learns_nothing, t_where_it_is_never_sent,
                    t_the_off_switch_reads_only_a_real_false, t_after_learning, t_after_waking,
                    t_live_warms_the_model_chat_uses,
+                   t_a_live_warm_never_goes_out_without_a_context,
                    t_a_question_is_never_kept_waiting, t_a_turn_that_raises_is_still_uncounted,
                    t_its_place_in_the_stack, t_what_the_patch_does):
             print(f"\n--- {fn.__name__} ---")

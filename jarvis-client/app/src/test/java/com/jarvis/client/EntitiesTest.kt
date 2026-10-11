@@ -183,8 +183,10 @@ class EntitiesTest {
         assertTrue(plate.contains("JarvisRuntime.memoryUsed("))
         assertTrue(plate.contains("HiddenSection(Entities.TITLE"))
         val brain = repoFile("$main/ui/screens/BrainScreen.kt").readText()
-        assertTrue(brain.contains("item(key = \"people-and-things\")"))
-        assertTrue(brain.indexOf("item(key = \"topics\")") < brain.indexOf("item(key = \"people-and-things\")"))
+        // Drawn through `plate("...")` since 2026-10-10 (BrainSections.kt): the
+        // plate's own name, with the item's key carrying the plates' namespace.
+        assertTrue(brain.contains("plate(\"people-and-things\")"))
+        assertTrue(brain.indexOf("plate(\"topics\")") < brain.indexOf("plate(\"people-and-things\")"))
     }
 
     private fun repoFile(rel: String): File {

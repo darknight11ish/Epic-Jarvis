@@ -551,7 +551,11 @@ class RetirementTest {
     @Test
     fun `the plate is reachable from Brain by its literal key`() {
         val src = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/BrainScreen.kt").readText()
-        assertTrue(src.contains("item(key = \"retirement\")"))
+        // The plate's own name since 2026-10-10 (BrainSections.kt): it is drawn
+        // through `plate("...")`, and the item's key is `brain-plate:` + that
+        // name - one recorder writes it, so the name is still the literal thing
+        // to look for, and BrainListTest holds the two halves together.
+        assertTrue(src.contains("plate(\"retirement\")"))
         assertTrue(src.contains("RetirementSection("))
     }
 

@@ -28,6 +28,21 @@ sys.path.insert(0, str(HERE))
 from _where import BACKEND, REPO, missing, explain, require_shipped
 SRC = BACKEND / "jarvis_hud.py"
 
+# THE ONE FILE ONLY THE OWNER'S PC HAS. jarvis_hud.py is the entry point
+# scripts/apply-patches.ps1 edits IN PLACE rather than copying, so a clone does
+# not hold it and run_suites.py skips this whole suite by name for that reason.
+# EVERY check below executes the shipped `messages = ...recalled...` ordering or
+# reads the file for it, so run directly in a clone there is nothing here that
+# can be tested. That is one skip with the reason printed - not the "0 passed, 7
+# failed" this used to be, which reads as a broken patch rather than as the one
+# file this machine was never given.
+if not SRC.is_file():
+    print(f"skip  every check here lifts the recalled-facts ordering out of "
+          f"jarvis_hud.py, which is not in {BACKEND} - the patcher edits that "
+          f"file in place, so a clone does not hold it. {explain()}")
+    print("\n0 passed, 1 skipped, 0 failed")
+    sys.exit(0)
+
 FAILED, PASSED = [], []
 
 

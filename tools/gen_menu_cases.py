@@ -307,6 +307,11 @@ def _kt(text: str) -> str:
     return '"' + "".join(out) + '"'
 
 
+def _kt_list(items) -> str:
+    """A Kotlin `listOf("a", "b")`, empty list included."""
+    return "listOf(" + ", ".join(_kt(i) for i in items) + ")"
+
+
 def kotlin_source() -> str:
     lines = [
         "package com.jarvis.client.net",
@@ -335,6 +340,8 @@ def kotlin_source() -> str:
         "        val hide: Boolean,",
         "        val collapse: Boolean,",
         "        val why: String,",
+        "        /** The names Jarvis already answers to, so typing one finds it. */",
+        "        val names: List<String>,",
         "    )",
         "",
         "    data class Group(val id: String, val title: String, val about: String)",
@@ -354,7 +361,7 @@ def kotlin_source() -> str:
             f"        Menu({_kt(m.id)}, {_kt(m.title)}, {_kt(m.about)}, "
             f"{str(DESKTOP_APP in m.apps).lower()}, {str(PHONE_APP in m.apps).lower()}, "
             f"{_kt(m.area)}, {_kt(m.view)}, {_kt(m.kind)}, {grp}, {par}, "
-            f"{str(m.hide).lower()}, {str(m.collapse).lower()}, {_kt(m.why)}),")
+            f"{str(m.hide).lower()}, {str(m.collapse).lower()}, {_kt(m.why)}, {_kt_list(m.names)}),")
     lines += [")".rjust(5), "", "    /** The fixed never-hideable list (design section 5); a test fails if one is hideable. */",
               "    val NEVER_HIDE: List<String> = listOf("]
     for i, _ in M.NEVER_HIDE:

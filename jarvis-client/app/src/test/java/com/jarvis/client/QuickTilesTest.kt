@@ -195,14 +195,15 @@ class QuickTilesTest {
         val tile = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/service/QuickTileService.kt")
             .readText()
         assertTrue("the tile draws the tile's own words",
-            tile.contains("tile.label = QuickTiles.tileLabel(action, slot)"))
+            tile.contains("val label = QuickTiles.tileLabel(action, slot)"))
         assertFalse("never the shared word straight onto a tile again",
             tile.contains("action?.tileLabel"))
         // The other four are unchanged, so this cannot quietly rename them.
         assertEquals("Focus session", QuickTiles.tileLabel(TileAction.FOCUS, 0))
         assertEquals("Play/pause PC", QuickTiles.tileLabel(TileAction.PC_PLAY_PAUSE, 2))
-        assertEquals("an empty slot still says which tile it is",
-            "Jarvis tile 3", QuickTiles.tileLabel(null, 2))
+        // An empty slot's own words are checked by
+        // aSlotLabelSaysWhatEachTileDoesAndNeverAPlaceholder, added 2026-10-11
+        // when "Jarvis tile 3" turned out to be the label the owner saw.
         // ...and the words the owner reads elsewhere were corrected with it.
         assertFalse("the lock note still promises a briefing",
             QuickTiles.LOCK_NOTE.contains("\"Brief me\""))
@@ -229,6 +230,141 @@ class QuickTilesTest {
         val strings = repoFile("jarvis-client/app/src/main/res/values/strings.xml").readText()
         assertTrue("and that string is the same label",
             strings.contains("<string name=\"link_tile_label\">${QuickTiles.LINK_TILE_LABEL}</string>"))
+    }
+
+    /**
+     * The owner's own test of 2026-10-11, on his phone: the Quick Settings
+     * panel offered "Jarvis Live" beside three tiles literally named "Jarvis
+     * tile 1", "Jarvis tile 2" and "Jarvis tile 3". He could not tell what any
+     * of them did before adding one, and no test in the repository could fail
+     * on it, because "Jarvis tile 1" - a shape and a number - says nothing to
+     * test. It was the one phone label that could never be tested.
+     *
+     * This test is that test. It fails if a slot-named label comes back (any
+     * `tile \d+` or `Jarvis tile N`), and it holds every one of the five
+     * actions to the action it is really for.
+     *
+     * WHICH LABELS THE OWNER ACTUALLY SEES, and why there are two of them:
+     *  - Android's tile EDITOR reads the MANIFEST `android:label`
+     *    (`res/values/strings.xml`), fixed when the app is built. It cannot
+     *    know which of the five actions a slot will be given later, so all
+     *    three slots carry [QuickTiles.UNASSIGNED_LABEL], which names the one
+     *    thing an unchosen slot's tap really does: opens the chooser
+     *    ([Decision.OpenChooser]).
+     *  - The tile in the SHADE reads `tile.label`, which is
+     *    [QuickTiles.tileLabel]: the chosen action's own name.
+     */
+    @Test
+    fun aSlotLabelSaysWhatEachTileDoesAndNeverAPlaceholder() {
+        // 1. The label the owner reads in the tile editor: what an unchosen
+        // slot's tap does. It is the chooser's own word, so the label and the
+        // second line ("Tap to choose") cannot drift apart.
+        assertEquals(QuickTiles.SUB_CHOOSE, QuickTiles.UNASSIGNED_LABEL)
+        assertEquals("Tap to choose", QuickTiles.UNASSIGNED_LABEL)
+
+        // 2. No placeholder anywhere. `tile \d+` is what the owner was shown;
+        // `isNotBlank()` keeps a blank label from passing it by being empty.
+        val placeholder = Regex("""tile\s+\d+""", RegexOption.IGNORE_CASE)
+        val labels = buildList {
+            add(QuickTiles.UNASSIGNED_LABEL)
+            for (slot in 0 until QuickTiles.SLOTS) {
+                // An unchosen slot is the shape and number case itself.
+                add(QuickTiles.tileLabel(null, slot))
+                for (a in TileAction.entries) add(QuickTiles.tileLabel(a, slot))
+            }
+        }
+        for (label in labels) {
+            assertTrue("a tile label must not be blank", label.isNotBlank())
+            assertFalse("no tile label may be a placeholder: \"$label\"",
+                placeholder.containsMatchIn(label))
+        }
+
+        // 3. Every unchosen slot draws the same words, and they are the ones
+        // the manifest promises: Android's editor and the shade must agree.
+        for (slot in 0 until QuickTiles.SLOTS) {
+            assertEquals("slot ${slot + 1}", QuickTiles.UNASSIGNED_LABEL, QuickTiles.tileLabel(null, slot))
+        }
+
+        // 4. A label corresponds to its slot's real purpose, which is the
+        // action the owner gave it. Every one of the five, on every slot, is
+        // exactly the name that action's own tap is for - and never another
+        // action's name, so no two can be swapped.
+        val purpose = mapOf(
+            TileAction.FOCUS to "Focus session",
+            TileAction.TIMER to "10-min timer",
+            TileAction.BRIEF_ME to "Open briefing",
+            TileAction.STOP_EVERYTHING to "Stop everything",
+            TileAction.PC_PLAY_PAUSE to "Play/pause PC",
+        )
+        assertEquals("every action has exactly one label", TileAction.entries.toSet(), purpose.keys)
+        for (slot in 0 until QuickTiles.SLOTS) {
+            for (a in TileAction.entries) {
+                assertEquals(a.wire, purpose.getValue(a), QuickTiles.tileLabel(a, slot))
+            }
+        }
+        assertEquals("five actions, five different labels", 5, purpose.values.toSet().size)
+
+        // The naming quirk that was already right, kept here so a later
+        // "tidy-up" cannot undo it: the briefing tile's own words differ from
+        // the PC's shared button word, because tapping only opens the app.
+        assertEquals("the tile's own words", "Open briefing", QuickTiles.tileLabel(TileAction.BRIEF_ME, 0))
+        assertEquals("the PC's shared word, untouched", "Brief me", TileAction.BRIEF_ME.tileLabel)
+        // The Settings chooser says the same as the tile.
+        assertEquals(QuickTiles.tileLabel(TileAction.BRIEF_ME, 0), TileAction.BRIEF_ME.choiceLabel)
+
+        // 5. And the app cannot go on BUILDING the placeholder. Comment lines
+        // are dropped first: this file names the old label on purpose, to
+        // explain what was wrong with it, and prose is not a label.
+        val source = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/data/QuickTiles.kt").readText()
+        val code = source.lineSequence()
+            .map { it.trim() }
+            .filterNot { it.startsWith("//") || it.startsWith("*") || it.startsWith("/*") }
+            .joinToString("\n")
+        assertFalse("no line of code may build a placeholder tile label",
+            placeholder.containsMatchIn(code))
+        assertFalse("nothing may assemble a label out of a slot number",
+            code.contains("tile \" + ") || code.contains("\"Jarvis tile"))
+        // The one label an unchosen slot has is the chooser's own words.
+        assertTrue("that label is the chooser's", code.contains("const val UNASSIGNED_LABEL = SUB_CHOOSE"))
+
+        // The hint the owner reads in Settings quotes the tile he will find in
+        // Android's editor, so the two cannot send him looking for different
+        // things. Quoted, because that is how the file writes it.
+        assertTrue("the hint quotes the tile the owner finds in the editor",
+            QuickTiles.HINT.contains("\"${QuickTiles.UNASSIGNED_LABEL}\""))
+        assertFalse("the hint must not send the owner looking for a number",
+            placeholder.containsMatchIn(QuickTiles.HINT))
+
+        val strings = repoFile("jarvis-client/app/src/main/res/values/strings.xml").readText()
+        for (n in 1..QuickTiles.SLOTS) {
+            assertTrue("tile_slot_$n must be the chooser's own words",
+                strings.contains("<string name=\"tile_slot_$n\">${QuickTiles.UNASSIGNED_LABEL}</string>"))
+        }
+    }
+
+    /**
+     * The manifest is what Android's tile editor reads, so the editor's labels
+     * are only as good as these three declarations - a fix in Kotlin alone
+     * would leave the panel the owner complained about exactly as it was.
+     */
+    @Test
+    fun everySlotIsDeclaredWithTheChooserLabelAndItsOwnDescription() {
+        // Mirrors everyTileLabelSaysWhatItsTapDoes's use of the same helper.
+        val manifest = repoFile("jarvis-client/app/src/main/AndroidManifest.xml").readText()
+        val services = listOf("QuickTileOneService", "QuickTileTwoService", "QuickTileThreeService")
+        assertEquals(QuickTiles.SLOTS, services.size)
+        for ((index, name) in services.withIndex()) {
+            val at = manifest.indexOf(".service.$name\"")
+            assertTrue("$name is declared", at >= 0)
+            val block = manifest.substring(at, manifest.indexOf("</service>", at))
+            assertTrue("slot ${index + 1} must carry the chooser label, not a number:\n$block",
+                block.contains("android:label=\"@string/tile_slot_${index + 1}\""))
+        }
+
+        // A screen reader gets the label and the state, as the Live tile does.
+        val tile = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/service/QuickTileService.kt").readText()
+        assertTrue("the tile says what it is to a screen reader",
+            tile.contains("tile.contentDescription = \"\$label, \$subtitle\""))
     }
 
     /** Walks up from Gradle's working folder (`jarvis-client/app`) to the repository. */
