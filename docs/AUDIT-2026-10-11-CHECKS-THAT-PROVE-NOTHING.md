@@ -20,7 +20,7 @@ checks are good.
 |---|---|
 | `python tools/check_vacuous_checks.py` | **313 suite files read, 21,350 `check()` call sites examined: "no check is a fake skip, none has a string or defaulted condition."** |
 | `git show origin/main:.github/workflows/ci.yml` | the backend job runs `python backend/run_suites.py` (`:213`), then **re-runs each suite on its own** and reports only the first 10 (`:221-226`); the desktop job runs `for f in tests/*.mjs` (`:145`), skipping `uikit.mjs` and `shots.mjs` (`:147`) |
-| Playwright | **not installed in this environment** (`jarvis-desktop/node_modules` absent). The desktop `.mjs` suites therefore could **not** be mutated or run here. That is a fact about this audit, not about them |
+| Playwright | **installed in the scratch test-bed worktree `.dsh-scratch/wt-suites`**, so the desktop `.mjs` suites CAN be run from there. **Two of 182 were run** (`hud.mjs`, `progress.mjs`) at main `40f58fcf`; **none was mutated**, so the desktop side is run but not cleared - see section 3.1 |
 | `cargo test` | not run - it OOMs on this machine, as the brief says |
 
 **The 21,350-check number is the strongest single fact in this document**, and
@@ -103,12 +103,26 @@ it is a one-file change.
 
 ## 3. What I could not do, and why - so no reader fills the gap with optimism
 
-1. **No desktop `.mjs` suite was run or mutated**: Playwright is absent here
-   (`jarvis-desktop/node_modules` does not exist). The CI glob `tests/*.mjs`
-   (`ci.yml:145`) is therefore **un-audited by mutation** in this document. The
-   five incidents in the brief include at least two that live on that side
-   (`initiallyOpen`, `rows` -> `composed`), so this is the largest gap - and it
-   is a gap in *my evidence*, not a statement that those suites are sound.
+1. **The desktop `.mjs` suites - PARTLY CLOSED, and this paragraph replaces the
+   earlier "Playwright is absent" limit.** Playwright is now installed in a
+   scratch worktree sitting at `origin/main` (`.dsh-scratch/wt-suites`; a test
+   bed, not a branch, and nothing is committed from it). Two of the **182**
+   suites in `jarvis-desktop/tests/*.mjs` were run there, at main `40f58fcf`:
+   - `node tests/hud.mjs` - **all checks passed**; this is where the
+     `rows` -> `composed` incident lives (`hud.mjs:309`, asserted `:367-373`);
+   - `node tests/progress.mjs` - **passed** ("the progress pictures hold"; its
+     own `composed` ramp is built and asserted at `:400-425`).
+   **A pass is not the finding, and this is the honest limit: I ran them, I did
+   not mutate them.** The audit's test is *"does the check still pass when its
+   subject is broken"*, and for these two suites that mutation has **not** been
+   done - so they are **run, not cleared**. What to mutate, named exactly, for
+   whoever has the budget: in `hud.mjs`, break the HUD title's value so
+   `composed.title` no longer equals `composed.button` and confirm `:373` goes
+   red (it should - `:372` pins `composed.button` to the literal); in
+   `progress.mjs`, corrupt one level of the ramp at `:400-406` and confirm
+   `:425`'s fixture comparison goes red. **Two of 182 is not the desktop side**:
+   the rest of the glob is un-run *and* un-mutated, so nothing here should be
+   read as clearing it.
 2. **`cargo test` was not run** (it OOMs here, per the brief), so the Rust-side
    assertions are not covered either.
 3. **The mutations I would run next, in order, with budget:** (a) make
@@ -176,6 +190,8 @@ whose condition is the literal `True` while its only real evidence is "the call
 did not crash", at `backend/test_agent.py:786` - and it is worth fixing because
 its failure mode is a **hang**, which CI reports as a timeout rather than as
 that check failing. **One checker gap** follows from it: the tool built to catch
-this class does not look at it. **The largest gap is in my evidence, not in the
-repository**: the desktop `.mjs` suites could not be run or mutated here because
-Playwright is absent, so they remain unaudited and should not be read as cleared.
+this class does not look at it. **The largest remaining gap is in my evidence,
+not in the repository:** the desktop `.mjs` suites CAN now be run - Playwright is
+installed in the test bed - and **two of 182 were run and passed**, but **none
+was mutated**, so they are *run, not cleared*, and the other 180 are neither.
+Section 3.1 names the exact mutations to run next.
