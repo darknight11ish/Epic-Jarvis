@@ -167,6 +167,26 @@ def md_open_ids(path, problems):
     return ids
 
 
+def check_open_rows_do_not_name_a_fix(tsv, rows, problems):
+    """An OPEN row whose own evidence says it is fixed contradicts itself.
+
+    The one stale-row shape a script CAN see: the evidence reads "fixed by
+    #255" while `status` still says `open` - exactly how DEF-004 and DEF-005
+    sat stale. NOT checked, and not to be faked: whether an open row's
+    DESCRIPTION still matches the code. That needs a reader, not a pattern.
+    """
+    names_a_fix = re.compile(r"\bfixed\s+(?:by|in)\s+(?:PR\s*)?#\d+", re.I)
+    for row in rows:
+        if row.get("status") != "open":
+            continue
+        found = names_a_fix.search(row.get("evidence") or "")
+        if found:
+            problems.append(
+                f"{tsv}: {row.get('id')}: is open, but its own evidence names a fix "
+                f"({found.group(0)!r}) - close the row or correct the evidence"
+            )
+
+
 def main(argv=None):
     here = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(
@@ -195,6 +215,7 @@ def main(argv=None):
     problems = []
     rows = parse_tsv(tsv, problems)
     check_open_files(tsv, root, rows, problems)
+    check_open_rows_do_not_name_a_fix(tsv, rows, problems)
 
     tsv_open = {row["id"] for row in rows if row["status"] == "open"}
     listed = md_open_ids(md, problems)
