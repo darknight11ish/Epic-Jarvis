@@ -35,6 +35,9 @@ SKIPPED OFF THE OWNER'S PC. A bare run needs this machine's Task Scheduler and i
 lanes on 127.0.0.1, so on any other host (a CI runner included) it prints the
 reason and exits 0 rather than reporting NOT HEALTHY - see THE HOST GUARD in
 main(). `--tasks-file` supplies the task list yourself and is never skipped.
+A claim about CI has to be tested where CI runs, or it is a claim about the owner's
+desk: the skip above is proven by running the Linux branch on his PC with
+sys.platform monkeypatched, not by waiting for a runner.
 
 READ-ONLY. It opens a socket to 127.0.0.1 and prints. It starts nothing, stops
 nothing, loads no model and writes no file. It never reads or prints the pairing
