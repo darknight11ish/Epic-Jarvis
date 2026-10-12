@@ -24,6 +24,12 @@ class JarvisApp : Application() {
             }.getOrNull()
         }
 
+        // And the other half of the same question: a hang raises nothing, so
+        // the handler above never runs and the owner is told nothing at all.
+        // Android's own record of it is turned into the same note, before any
+        // screen reads it. On this phone only; nothing leaves the device.
+        CrashLog.recordHangIfAny(this)
+
         // Asks the graphics driver what it is, on a background thread, so a
         // software renderer (an emulator) has the face at Low before it first
         // draws. Once per process; see GpuProbe.

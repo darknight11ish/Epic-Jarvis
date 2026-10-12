@@ -178,14 +178,20 @@ once**, and the patcher's loop (`:4058`, `:4169`) filters it and never reorders;
 `backend/_stack.py:285 order()` - the list the suites read - ends
 `big-coder.patch`, `pictures.patch`, `plugin-loader.patch`; and
 `plugins/registry.json` (`patch_count: 142`), `plugins/loader/README.md:68` and
-the patcher's own comments (`:1337-1340`, `:1436`, `:1459`) agree. **The rule is
+the patcher's own comments (`:1337-1340`, `:1436`, `:1459`) agree. `backend/patch-history/index.tsv` is **not an order list** - it is per-patch
+version history, newest first per patch, so it carries no position and can
+neither agree nor disagree. A name to be careful with: the *suite* is
+`backend/test_patch_history.py` (the 25/0 above); the tool that writes that
+history is `tools/build_patch_history.py`; **there is no
+`tools/check_patch_history.py`.** **The rule is
 asserted, not only written down:** `tools/check_plugins.py:243-244`
 (`listed[-1] == "plugin-loader.patch"`), `backend/test_gate_touches.py:608-609`,
-`test_big_coder.py:610-612`, `test_work.py:697-698`, and four more singles; and
+`test_big_coder.py:610-612`, `test_work.py:697-698`, and four more singles (`test_picture_card.py:426`, `test_devices.py:689`, `test_gate_risk_rows.py:126`, `test_referee.py:725`); and
 the five allow-lists (`test_devices`, `test_gate_risk_rows`, `test_gate_touches`,
 `test_referee`, `test_screen_attach`) each report "patches after the guard NOT
 named: NONE". A second agent checked it read-only at `origin/main` `c66d494d`,
-18 of 18 files read with `git show origin/main:<path>` and hash-verified; my own
+18 of 18 files read with `git show origin/main:<path>` and hash-verified. **The four extra singles, the `index.tsv` point and the name
+correction above are that agent's findings, not re-run by me**; my own
 run of the suites agrees - `test_gate_touches.py` 80/0 ("still last of all"),
 `test_big_coder.py` 94/0, `test_devices.py` 329/0, **all 0 skipped**, so this is
 a rule CI can enforce rather than one that holds only on the owner's PC.
