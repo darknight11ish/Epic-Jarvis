@@ -234,6 +234,15 @@ fun ScrollToKeyOnce(
         // against a list that no longer moves under it. It is also the honest
         // place to land when the item turns out not to be drawn at all.
         var anchored = false
+        // What the list looked like BEFORE anything was touched: rows composed,
+        // and the viewport. This is the baseline a controlled pair needs - with
+        // it, "the anchor moved the list" is a measurement rather than an
+        // inference from two runs on different builds.
+        trace("before rows=${state.layoutInfo.totalItemsCount} " +
+            "viewport=[${state.layoutInfo.visibleItemsInfo.firstOrNull()?.key}" +
+            "..${state.layoutInfo.visibleItemsInfo.lastOrNull()?.key}] " +
+            "first=${state.layoutInfo.visibleItemsInfo.firstOrNull()?.index} " +
+            "last=${state.layoutInfo.visibleItemsInfo.lastOrNull()?.index}")
         if (anchor != null) {
             anchored = anchorNow()
             // The anchor's OWN result. Without this the previous device run could

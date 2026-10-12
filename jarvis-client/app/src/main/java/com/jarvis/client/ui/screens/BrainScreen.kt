@@ -429,9 +429,9 @@ fun BrainScreen(
 
         // One diagnosable line per jump (the Galaxy button defect of
         // 2026-10-11): what was asked for, which key the walk looks up, which
-        // heading should hold it, and the heading that starts open. A green
-        // suite could not see the device, so this is what a device dump reads
-        // afterwards - `adb logcat -s JarvisBrain`.
+        // heading should hold it, and - `openKey` - what was actually open. A
+        // green suite could not see the device, so this is what a device dump
+        // reads afterwards - `adb logcat -s JarvisBrain`.
         LaunchedEffect(initialSection) {
             if (initialSection != null) {
                 val target = plateKeyAt(initialSection)
@@ -439,7 +439,14 @@ fun BrainScreen(
                     "JarvisBrain",
                     "jump asked=${initialSection} key=$target " +
                         "holder=${BrainSections.sectionOf(target)?.key ?: "none"} " +
-                        "initiallyOpen=${BrainSections.toOpen(initialSection) ?: "none"} " +
+                        // NOT "initiallyOpen": this is a function of the ASKED-FOR
+                        // section alone (`toOpen` is `sectionOf(key)?.key`), so it
+                        // can only ever equal `holder`. It says nothing about what
+                        // was open before the jump, and the old name said it did -
+                        // which would have made a controlled pair unreadable, both
+                        // runs printing the same value whatever the real state was.
+                        // `openKey` is the field that answers that question.
+                        "jumpOpens=${BrainSections.toOpen(initialSection) ?: "none"} " +
                         "openKey=$openKey",
                 )
             }
