@@ -722,9 +722,29 @@ internal fun LazyListScope.brainSection(
      * defect from a walk that cannot reach its item (2026-10-11, Coming up).
      */
     rows: (() -> Unit)? = null,
+    /**
+     * One line per section, for a screen that has to know where its own rows
+     * went.
+     *
+     * It exists because two counts disagreed on the device (2026-10-11):
+     * `declared=19` against `composed=11`, on the artifact this app resolves to,
+     * where `composed` is `MutableIntervalList.getSize()` - the number of
+     * intervals the CONTENT LAMBDA registered. Eight rows the screen declares
+     * are therefore not registered, and only a per-section account can say which
+     * section loses them and whether the loss is in the WRITING (the section's
+     * own `plates` lambda asked for them but the visibility rule dropped them)
+     * or in the EMITTING.
+     *
+     * Called with the section key, whether its heading is open, how many plate
+     * rows were written, and how many were emitted.
+     */
+    log: ((String, Boolean, Int, Int) -> Unit)? = null,
 ): Int {
     val plateList = LazyPlateList(this, visible)
     plateList.write(plates)
+    // What the section ASKED for after the visibility rule had its say - the same
+    // number a shut heading shows as "N inside".
+    val writtenCount = plateList.keys.size
     // The heading's own key, in its own namespace: a plate's key can never be
     // this (PlateList refuses one that is), so the two items cannot collide.
     item(key = BrainSections.headingKey(section)) {
@@ -732,10 +752,12 @@ internal fun LazyListScope.brainSection(
     }
     rows?.invoke()
     if (!open) {
+        log?.invoke(section.key, false, writtenCount, 0)
         drawn.clear()
         return 0
     }
     plateList.emit(plates, drawn)
+    log?.invoke(section.key, true, writtenCount, drawn.size)
     repeat(drawn.size) { rows?.invoke() }
     return drawn.size
 }

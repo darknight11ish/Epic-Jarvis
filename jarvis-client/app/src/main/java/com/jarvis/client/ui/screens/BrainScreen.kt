@@ -650,6 +650,12 @@ fun BrainScreen(
         }
     }
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
+            },
         )
 
             // What Jarvis knows about the owner: the facts, and the lists built from them.
@@ -826,6 +832,12 @@ fun BrainScreen(
                 }
 
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
+            },
         )
 
             // What Jarvis is doing right now: live state, and the jobs that steer it.
@@ -977,6 +989,12 @@ fun BrainScreen(
                 }
 
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
+            },
         )
 
             // Money and time: the briefing, the day's cards, timers, alarms, reminders, spending.
@@ -1073,6 +1091,12 @@ fun BrainScreen(
                     }
                 }
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
+            },
         )
 
             // Your projects and goals: the projects, their progress, and the goals.
@@ -1144,6 +1168,12 @@ fun BrainScreen(
                     }
                 }
             },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
+            },
         )
 
             // Your learning: the quizzes, and the study decks kept from them.
@@ -1182,6 +1212,12 @@ fun BrainScreen(
                         )
                     }
                 }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
             },
         )
 
@@ -1397,6 +1433,12 @@ fun BrainScreen(
         if (onOpenSettings != null) {
             plate("settings-entry") { SettingsEntrySection(onOpen = onOpenSettings) }
         }
+            },
+            log = { section, open, written, emitted ->
+                android.util.Log.i(
+                    "JarvisBrain",
+                    "section=$section open=$open written=$written emitted=$emitted",
+                )
             },
         )
 
