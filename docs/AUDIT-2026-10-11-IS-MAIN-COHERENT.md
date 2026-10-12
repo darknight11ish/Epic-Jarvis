@@ -14,7 +14,11 @@ read from `origin/main` with `git show origin/main:<path>` or
 `git ls-tree -r origin/main`, never from the working tree and never with
 `git grep`.** The working tree in this worktree is a clean checkout of that
 same tip, but the discipline is the point: today's lesson was a clean merge
-that nobody could catch by reading a diff.
+that nobody could catch by reading a diff. A second agent's report supplies the
+sharpest example: in the main clone, whose working tree sat on another branch
+with 22 changed files, **`git grep` would have found no
+`tools/check_plugins.py` at all** - the file that asserts the rule - and would
+have reported the rule as unasserted.
 
 ---
 
@@ -167,9 +171,24 @@ rule to all 17 `.ps1` files**, not just the one the brief named.
 **What I did not verify here, honestly:** that `plugin-loader.patch` is **LAST**
 in the apply order. I read its byte offset (89,134 of 318,145, so about 28% in)
 and I found the files that mention it, but the order is defined by an allow-list
-inside the patch machinery and I did not isolate the list and compare it. This
-is a real gap in this audit, named rather than papered over, and it is the one
-item in the brief I could not answer.
+inside the patch machinery and I did not isolate the list and compare it. **SETTLED, and not by this audit:** the apply order is **written, not computed**.
+`scripts/apply-patches.ps1`'s `$PATCHES` is a literal ordered array of **144
+entries, 0 duplicates, `plugin-loader.patch` at index 143 of 143, exactly
+once**, and the patcher's loop (`:4058`, `:4169`) filters it and never reorders;
+`backend/_stack.py:285 order()` - the list the suites read - ends
+`big-coder.patch`, `pictures.patch`, `plugin-loader.patch`; and
+`plugins/registry.json` (`patch_count: 142`), `plugins/loader/README.md:68` and
+the patcher's own comments (`:1337-1340`, `:1436`, `:1459`) agree. **The rule is
+asserted, not only written down:** `tools/check_plugins.py:243-244`
+(`listed[-1] == "plugin-loader.patch"`), `backend/test_gate_touches.py:608-609`,
+`test_big_coder.py:610-612`, `test_work.py:697-698`, and four more singles; and
+the five allow-lists (`test_devices`, `test_gate_risk_rows`, `test_gate_touches`,
+`test_referee`, `test_screen_attach`) each report "patches after the guard NOT
+named: NONE". A second agent checked it read-only at `origin/main` `c66d494d`,
+18 of 18 files read with `git show origin/main:<path>` and hash-verified; my own
+run of the suites agrees - `test_gate_touches.py` 80/0 ("still last of all"),
+`test_big_coder.py` 94/0, `test_devices.py` 329/0, **all 0 skipped**, so this is
+a rule CI can enforce rather than one that holds only on the owner's PC.
 
 ### 6. Generated files against their sources: coherent where a checker exists
 
@@ -200,7 +219,7 @@ list**, so the phone half of that pairing is checked only by hand.
   design; `backend/run_suites.py` skips them by name.
 - **`tools/check_obscura.py`, `tools/check_work_claims.py`,
   `tools/check_apk_16kb.py`**: cannot pass in a source checkout, as above.
-- **The patch apply-order question** (finding 5).
+- ~~The patch apply-order question~~ **settled independently - see finding 5**.
 
 ---
 
@@ -228,9 +247,10 @@ list**, so the phone half of that pairing is checked only by hand.
 ## The one-line answer, restated
 
 **Main is coherent where it is checked, and less checked than it looks:** four
-checkers that pass today are run by nothing, the twins checker among them; three
-more cannot run outside the owner's PC; and the patch apply-order question -
-the single item in the brief I could not answer - is still open.
+checkers that pass today are run by nothing, the twins checker among them, and
+three more cannot run outside the owner's PC. The patch apply-order question -
+the one item this audit could not answer - has since been settled independently
+(finding 5), and the "no `git grep`" rule earned its keep in the process.
 
 *(Written 2026-10-11 against `origin/main` `64381c0d`. This audit fixes nothing:
 findings only, per the brief.)*
