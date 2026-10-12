@@ -83,6 +83,43 @@ FIXED_EXPIRES_IN = 170
 FIXED_TOOK = 0.84
 HOME_WORDS = "~/.openjarvis"
 
+#: The stand-in folder every "these files are not on this PC yet" case points at,
+#: instead of a folder under this run's temporary directory. It is never created
+#: and never read - the case is about the files being ABSENT - and its LENGTH is
+#: fixed, and the same on Windows and on the runner.
+#:
+#: WHY THAT LENGTH IS THE WHOLE FIX, and why scrubbing harder cannot do it. The
+#: backend CLIPS these sentences to a character budget (jarvis_voice_enroll.py's
+#: [:140]/[:160]/[:200] family, and jarvis_voice_flow.py's fallback[:300]) and
+#: ONLY THEN does this tool's scrub() rewrite the folder to `~/.openjarvis`. So
+#: the cut lands at a byte offset that already contains the folder, and a
+#: redaction applied afterwards cannot undo a cut that has already happened: with
+#: a long enough temporary directory the fixture read `looked in
+#: ~/.openjarvis/voice-mode` on one machine and the whole sentence on another.
+#:
+#: Measured 2026-10-11 on this branch, which is what found it:
+#:   * `python backend/test_voice_contract.py` here: 736 passed, 2 failed
+#:     (voice-training and voice-status out of date) - this branch's own
+#:     direct-run staging root puts ~20 more characters in front of %TEMP%;
+#:   * the same suite on CI: 737 passed, 1 failed (training only);
+#:   * a 150-character %TEMP%: the training and status files move again;
+#:   * `scrub` made unconditional plus all three fixtures regenerated: STILL
+#:     fails on a long %TEMP%, because the cut is upstream of the scrub.
+#: Pinning the folder fixes the cause: the cut now falls on the same byte on
+#: every machine, so the file a fresh run produces is the same one everywhere.
+#:
+#: NOTHING MAY WRITE HERE. `jarvis_wakeword.model_dir()` and
+#: `jarvis_voices.zipvoice_dir()` are only ever READ (their files' absence is the
+#: answer), so a stand-in that does not exist is exactly right. The one place
+#: that really creates model files - the "models installed" cases below - keeps
+#: writing into this run's own temporary folder.
+MISSING_MODELS_ROOT = "C:/jv"
+
+
+def missing_models(*parts: str):
+    """A fixed, non-existent model folder: see MISSING_MODELS_ROOT."""
+    return Path(MISSING_MODELS_ROOT).joinpath(*parts)
+
 #: The stand-in for the PC's own graphics cards, used by every case that does
 #: not name its own.
 #:
@@ -263,7 +300,8 @@ class World:
         self.patches = [
             mock.patch.object(S, "_config_dir", return_value=d),
             mock.patch.object(V, "PROFILE_PATH", profile),
-            mock.patch.object(W, "model_dir", return_value=d / "voice-models" / "wakeword"),
+            mock.patch.object(W, "model_dir",
+                              return_value=missing_models("voice-models", "wakeword")),
             mock.patch.object(T, "model_path", return_value=d / "voice-models" / "turn" / "x.onnx"),
             # WHERE THE SPEAKER MODELS ARE, pinned like every other folder
             # here: jarvis_voice.status() reports the stronger models from
@@ -272,10 +310,22 @@ class World:
             # the fixture's "installed": false and "warm": "waiting" became
             # this PC's answers instead - "warming" with REAL millisecond
             # steps, which no fixture can hold (measured 2026-10-10).
+            #
+            # They are the FIXED stand-in, not this run's temporary folder:
+            # jarvis_voice's own "not installed (looked for ...)" sentence
+            # carries the path and is clipped before scrub() can rewrite it. See
+            # MISSING_MODELS_ROOT.
             mock.patch.object(V, "speaker_model_path",
-                              lambda: d / "voice-models" / "speaker" / "model.onnx"),
+                              lambda: missing_models("voice-models", "speaker", "model.onnx")),
             mock.patch.object(V, "strong_model_path",
-                              lambda: d / "voice-models" / "speaker" / "strong.onnx"),
+                              lambda: missing_models("voice-models", "speaker", "strong.onnx")),
+            # jarvis_voices.zipvoice_state() builds its "the ZipVoice model
+            # files are not on this PC yet (missing ... in <folder>)" sentence
+            # from zipvoice_dir(), and jarvis_voice_flow clips that sentence to
+            # 300 characters before this run's scrub() ever sees it - so this
+            # folder has to be the same fixed stand-in for the same reason.
+            mock.patch.object(VO, "zipvoice_dir",
+                              lambda: missing_models("voice-models", "zipvoice")),
             mock.patch.object(VO, "_config_dir", return_value=d),
             mock.patch.object(VO, "_cfg", side_effect=lambda k, default=None: default),
             mock.patch.object(VO, "_audit", side_effect=lambda e, det: None),
@@ -386,7 +436,13 @@ def scrub(value, folders: list):
 
 
 def folders_of(world: World) -> list:
-    found = {str(world.dir), str(Path.home() / ".openjarvis")}
+    # `str(Path(MISSING_MODELS_ROOT))` is the stand-in in the spelling the
+    # sentences actually carry - `C:\jv` on Windows, `C:/jv` on the runner, the
+    # same five characters either way - so scrub() rewrites it to `~/.openjarvis`
+    # and the sentences read exactly as they did when the folder lived under
+    # %TEMP%. Five characters, fixed, on every machine: see MISSING_MODELS_ROOT.
+    found = {str(world.dir), str(Path.home() / ".openjarvis"),
+             str(Path(MISSING_MODELS_ROOT))}
     for key in ("OPENJARVIS_CONFIG_DIR", "JARVIS_CONFIG_DIR"):
         if os.environ.get(key):
             found.add(os.environ[key])
